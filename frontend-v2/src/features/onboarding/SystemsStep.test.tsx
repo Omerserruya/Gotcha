@@ -10,27 +10,50 @@ import onboardingEn from '@/i18n/messages/en/onboarding.json';
 import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
 /** Step 2. Mocked: nothing connects; the launcher is a marker. */
-vi.mock('@/features/capabilities/ConnectFor', async (original) => ({
-  // The real rule for what can connect from here; only the launcher is a marker.
-  isLaunchable: (await original<{ isLaunchable: unknown }>()).isLaunchable,
-  ConnectFor: ({
+vi.mock('./SystemsConnect', () => ({
+  SystemsConnect: ({
     integration,
     reconnect,
-    formLabel,
-    drawn,
+    name,
+    store,
+    variant,
   }: {
     integration: { slug: string };
     reconnect?: boolean;
-    formLabel?: string;
-    drawn: { connect: string };
+    name: string;
+    store: string | null;
+    variant: string;
   }) => (
     <span
       data-testid={`launcher-${integration.slug}`}
-      data-form-label={formLabel}
-      data-drawn={drawn.connect}
+      data-name={name}
+      data-store={store ?? ''}
+      data-variant={variant}
     >
       {reconnect ? 'reconnect' : 'connect'}
     </span>
+  ),
+}));
+/* Studio's own Shopify way-back components, as markers: their behaviour is shopify.test's. */
+vi.mock('@/features/capabilities/ShopifyConnect', () => ({
+  ShopifyBillingVerify: ({
+    shop,
+    needsReconnect,
+  }: {
+    shop: string | null;
+    needsReconnect: boolean;
+  }) => (
+    <span
+      data-testid="billing-verify"
+      data-shop={shop ?? ''}
+      data-reconnect={String(needsReconnect)}
+    />
+  ),
+  ShopifyPending: ({ shopDomain, replace }: { shopDomain: string; replace: boolean }) => (
+    <span data-testid="shopify-pending" data-shop={shopDomain} data-replace={String(replace)} />
+  ),
+  ShopifyPendingGone: ({ read }: { read: boolean }) => (
+    <span data-testid="shopify-pending-gone" data-read={String(read)} />
   ),
 }));
 vi.mock('@/features/capabilities/IntegrationLogo', () => ({ IntegrationLogo: () => null }));
@@ -44,6 +67,7 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
+import { systemsReturn } from './systems-return';
 import { afterSystems, standingOf, SystemsStep } from './SystemsStep';
 
 const integration = (slug: string, connection: object | null = null): Integration =>
@@ -149,11 +173,24 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
     );
   });
 
-  it('★★ connect names the system', () => {
+  it('★★ the platform leads, big; the tool seen on the site is a quiet row under it', () => {
     show();
-    const launcher = screen.getByTestId('launcher-returngo');
-    expect(launcher).toHaveAttribute('data-form-label', 'Connect ReturnGO');
-    expect(launcher).toHaveAttribute('data-drawn', 'Connect ReturnGO');
+    expect(screen.getByTestId('launcher-shopify')).toHaveAttribute('data-variant', 'hero');
+    expect(screen.getByTestId('launcher-shopify')).toHaveAttribute('data-name', 'Shopify');
+    expect(screen.getByTestId('launcher-returngo')).toHaveAttribute('data-variant', 'row');
+    expect(screen.getByTestId('systems-shopify')).toHaveTextContent('Found on your site');
+    expect(screen.getByText('Also on your site')).toBeInTheDocument();
+  });
+
+  it('★★ the card says what connecting gives and what happens: your store admin, approve, back here', () => {
+    show();
+    expect(screen.getByTestId('systems-gives')).toHaveTextContent(
+      'GOTCHA checks the store before every answer about an order',
+    );
+    const how = screen.getByTestId('systems-how');
+    expect(how).toHaveTextContent("You go to your store's admin");
+    expect(how).toHaveTextContent('You approve access for GOTCHA');
+    expect(how).toHaveTextContent('You come back here, and the store is connected');
   });
 
   it('★★ a system that can’t connect from HERE is not shown; one quiet line says more connect later', () => {
@@ -202,7 +239,7 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
   it('★★ the way on: "Continue without connecting" is the QUIET button, with what that costs; Continue is primary once one is connected', () => {
     const { unmount } = show();
     expect(screen.getByTestId('systems-next')).toHaveTextContent('Continue without connecting');
-    expect(screen.getByTestId('systems-next').className).toMatch(/secondary/);
+    expect(screen.getByTestId('systems-next').className).toMatch(/skip/);
     expect(screen.getByTestId('systems-next').className).not.toMatch(/primary/);
     expect(screen.getByTestId('systems-next')).toHaveAttribute('href', afterSystems(false));
     expect(screen.getByTestId('systems-skip-why')).toHaveTextContent("can't check an order");
@@ -242,5 +279,185 @@ describe('★★ step 2: only what the site suggests, each with why and one way 
     expect(standingOf(integration('shopify', { status: 'CONNECTED' }))).toBe('connected');
     expect(standingOf(integration('shopify', { status: 'ERROR', lastError: 'x' }))).toBe('failing');
     expect(standingOf(integration('shopify', { status: 'PENDING' }))).toBe('none');
+  });
+});
+
+describe('★★ the way back to step 2 (flow=onboarding_systems): each return query, said, then tidied', () => {
+  const woo = (connection: object | null = null) =>
+    integrationSchema.parse({
+      id: 'i-woo',
+      slug: 'woocommerce',
+      name: 'WooCommerce',
+      authType: 'OAUTH2',
+      authSchema: { oauth: false, fields: [] },
+      tenantConnection: connection ? { id: 'c-woo', ...connection } : null,
+    });
+  const wooSuggestions = integrationSuggestionsSchema.parse([
+    { slug: 'woocommerce', name: 'WooCommerce', reason: 'platform', connected: false },
+  ]);
+  const back = (
+    query: string,
+    props: Partial<Parameters<typeof SystemsStep>[0]> = {},
+    he = false,
+  ) => {
+    window.history.replaceState(null, '', `/onboarding/systems?${query}`);
+    return show(
+      {
+        suggestions: wooSuggestions,
+        integrations: [woo(), integration('shopify')],
+        returned: systemsReturn(Object.fromEntries(new URLSearchParams(query))),
+        ...props,
+      },
+      he,
+    );
+  };
+
+  it('★★ connected=1: said in the card, the card is connected, Continue is primary, the query is gone', () => {
+    back('system=woocommerce&connected=1&preview=1', {
+      integrations: [woo({ status: 'CONNECTED' })],
+    });
+    const landing = screen.getByTestId('systems-landing-woocommerce');
+    expect(landing).toHaveAttribute('role', 'status');
+    expect(landing).toHaveTextContent('WooCommerce is connected.');
+    expect(screen.getByTestId('systems-woocommerce')).toContainElement(landing);
+    expect(screen.getByTestId('systems-connected-woocommerce')).toBeInTheDocument();
+    expect(screen.queryByTestId('launcher-woocommerce')).toBeNull();
+    expect(screen.getByTestId('systems-next')).toHaveTextContent(/^Continue$/);
+    // Only the way back is taken out of the address; preview stays.
+    expect(window.location.search).toBe('?preview=1');
+  });
+
+  it('★★ error=<code>: what happened and what to do next, beside the button that does it', () => {
+    back('system=woocommerce&error=denied');
+    const landing = screen.getByTestId('systems-landing-woocommerce');
+    expect(landing).toHaveAttribute('role', 'alert');
+    expect(landing).toHaveTextContent('Connecting WooCommerce was cancelled, so nothing changed.');
+    expect(landing).toHaveTextContent('Connect again');
+    expect(screen.getByTestId('launcher-woocommerce')).toHaveTextContent('connect');
+    expect(window.location.search).toBe('');
+  });
+
+  it('★ a code we do not name is said generically, never printed', () => {
+    back('system=woocommerce&error=<script>');
+    expect(screen.getByTestId('systems-landing-woocommerce')).toHaveTextContent(
+      "WooCommerce didn't connect. Try connecting again, or continue without it.",
+    );
+    expect(screen.getByTestId('systems')).not.toHaveTextContent('<script>');
+  });
+
+  it('★ a system the step does not show: the sentence goes above, by its catalogue name', () => {
+    const hubspot = integrationSchema.parse({
+      id: 'i-h',
+      slug: 'hubspot',
+      name: 'HubSpot',
+      authType: 'OAUTH2',
+      authSchema: { oauth: true, fields: [] },
+    });
+    back('system=hubspot&error=insufficient_permissions', {
+      integrations: [woo(), hubspot],
+    });
+    expect(screen.getByTestId('systems-landing-hubspot')).toHaveTextContent(
+      'HubSpot was approved without the access GOTCHA needs. Connect again and approve read and write access.',
+    );
+    expect(screen.getByTestId('systems-woocommerce')).not.toContainElement(
+      screen.getByTestId('systems-landing-hubspot'),
+    );
+  });
+
+  it('★★ system=shopify&error=shop_connected_elsewhere: the store is elsewhere, and the two ways on', () => {
+    back('system=shopify&error=shop_connected_elsewhere', {
+      suggestions: integrationSuggestionsSchema.parse([
+        { slug: 'shopify', name: 'Shopify', reason: 'platform' },
+      ]),
+    });
+    expect(screen.getByTestId('systems-landing-shopify')).toHaveTextContent(
+      'That store is already connected to another GOTCHA workspace. Disconnect it there first, or connect a different store.',
+    );
+  });
+
+  it('★★ system=shopify&pending=1&reason=replace_store: Studio’s claim, as a replace', () => {
+    back('system=shopify&pending=1&reason=replace_store', {
+      shopifyPending: 'avivco.myshopify.com',
+    });
+    const pending = screen.getByTestId('shopify-pending');
+    expect(pending).toHaveAttribute('data-shop', 'avivco.myshopify.com');
+    expect(pending).toHaveAttribute('data-replace', 'true');
+    expect(screen.queryByTestId('systems-landing-shopify')).toBeNull();
+    expect(window.location.search).toBe('');
+  });
+
+  it('★ pending with nothing to claim: said, never silence', () => {
+    back('system=shopify&pending=1', { shopifyPending: 'gone' });
+    expect(screen.getByTestId('shopify-pending-gone')).toHaveAttribute('data-read', 'true');
+  });
+
+  it('★★ system=shopify&billing=verify&shop=: the server is asked (POST /api/billing/shopify/complete), the shop passed on', () => {
+    back('system=shopify&billing=verify&shop=avivco.myshopify.com', {
+      integrations: [woo(), integration('shopify', { status: 'CONNECTED' })],
+    });
+    const verify = screen.getByTestId('billing-verify');
+    expect(verify).toHaveAttribute('data-shop', 'avivco.myshopify.com');
+    expect(verify).toHaveAttribute('data-reconnect', 'true');
+    expect(window.location.search).toBe('');
+  });
+
+  it('★ the store the scan read is WooCommerce’s address, only when the site runs on WooCommerce', () => {
+    back('', { site: 'https://www.avivco.il' });
+    expect(screen.getByTestId('launcher-woocommerce')).toHaveAttribute(
+      'data-store',
+      'https://www.avivco.il',
+    );
+  });
+
+  it('Hebrew: the error and its next action, the prefix joined', () => {
+    back('system=woocommerce&error=denied', {}, true);
+    expect(screen.getByTestId('systems-landing-woocommerce')).toHaveTextContent(
+      'החיבור ל‑WooCommerce בוטל, ושום דבר לא השתנה.',
+    );
+  });
+});
+
+describe('systemsReturn: the query, read the way Studio reads it', () => {
+  it.each([
+    [
+      { system: 'woocommerce', connected: '1' },
+      { kind: 'connected', slug: 'woocommerce' },
+    ],
+    [
+      { system: 'hubspot', error: 'denied' },
+      { kind: 'error', slug: 'hubspot', code: 'denied' },
+    ],
+    [
+      { system: 'hubspot', error: 'whatever' },
+      { kind: 'error', slug: 'hubspot', code: 'other' },
+    ],
+    [
+      { system: 'shopify', error: 'shop_connected_elsewhere' },
+      { kind: 'error', slug: 'shopify', code: 'shop_connected_elsewhere' },
+    ],
+    [
+      { system: 'shopify', pending: '1', reason: 'replace_store' },
+      { kind: 'pending', slug: 'shopify', replace: true },
+    ],
+    [
+      { system: 'shopify', pending: '1' },
+      { kind: 'pending', slug: 'shopify', replace: false },
+    ],
+    [
+      { system: 'shopify', billing: 'verify', shop: 'a.myshopify.com' },
+      { kind: 'billing', slug: 'shopify', shop: 'a.myshopify.com' },
+    ],
+    [
+      { system: 'shopify', billing: 'verify' },
+      { kind: 'billing', slug: 'shopify', shop: null },
+    ],
+    // Pending and billing are Shopify's alone.
+    [{ system: 'hubspot', pending: '1' }, null],
+    [{ system: '../x', connected: '1' }, null],
+    [{ connected: '1' }, null],
+    [{ system: 'hubspot' }, null],
+    [{}, null],
+  ])('%j → %j', (query, expected) => {
+    expect(systemsReturn(query)).toEqual(expected);
   });
 });

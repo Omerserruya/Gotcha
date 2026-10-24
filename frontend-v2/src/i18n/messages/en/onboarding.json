@@ -329,7 +329,7 @@
     "lead": "Connect the systems your site already uses, so GOTCHA checks them before answering about an order.",
     "foot": "You can skip and connect later",
     "title": "Connect your systems",
-    "subtitle": "Only what your site already uses. That way GOTCHA checks the store before every answer about an order, instead of guessing from an old page.",
+    "subtitle": "GOTCHA answers better when it can check your store. Connect what your site already runs on.",
     "why": {
       "platform": "Your site runs on <ltr>{name}</ltr>.",
       "detected_on_site": "We saw <ltr>{name}</ltr> on your site."
@@ -339,14 +339,78 @@
     "failing": "Needs reconnecting",
     "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to let it back in.",
     "notOffered": "Connecting {name} isn't available yet.",
-    "catalogueUnread": "We couldn't check how it connects. Reload the page to try again.",
+    "catalogueUnread": "We couldn't load how {name} connects. Reload the page, or continue and connect it later in Settings.",
     "unread": "We couldn't read what to connect. You can carry on and connect later.",
     "empty": "We didn't find a system on your site to connect. You can connect systems later too.",
     "next": "Continue",
     "skip": "Continue without connecting",
     "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock.",
     "connectName": "Connect {name}",
-    "moreLater": "More systems can be connected later, in Settings."
+    "moreLater": "More systems can be connected later, in Settings.",
+    "detected": "Found on your site",
+    "reconnectName": "Reconnect {name}",
+    "opening": "Opening {name}…",
+    "gives": {
+      "title": "What it gives you",
+      "store": "GOTCHA checks the store before every answer about an order: its status, the shipping and what's in stock. No guessing from an old page.",
+      "other": "GOTCHA can check it before it answers, instead of guessing.",
+      "storeOn": "GOTCHA now checks the store before every answer about an order.",
+      "otherOn": "GOTCHA now checks it before it answers."
+    },
+    "how": {
+      "title": "What happens when you connect",
+      "store": {
+        "one": "You go to your store's admin",
+        "two": "You approve access for GOTCHA",
+        "three": "You come back here, and the store is connected"
+      },
+      "account": {
+        "one": "You go to {name} and sign in",
+        "two": "You approve access for GOTCHA",
+        "three": "You come back here, and it's connected"
+      }
+    },
+    "safe": "You can disconnect it any time in Settings.",
+    "store": {
+      "at": "Store: <ltr>{host}</ltr>",
+      "change": "Different address",
+      "label": "Store address",
+      "placeholder": "yourstore.com"
+    },
+    "startError": {
+      "invalid_store": "We couldn't reach a store at that address. Check it and try again.",
+      "forbidden": "Your role can't connect systems. Continue without connecting, and an admin can connect it later in Settings.",
+      "failed": "{name} didn't open. Try again in a moment.",
+      "not_configured": "This connection isn't set up on our side yet. Continue without it, and connect it later in Settings.",
+      "needs_store": "Install GOTCHA from the Shopify App Store first, then come back here.",
+      "not_here": "This one can't be connected from here. You can connect it later in Settings."
+    },
+    "shopifyUnread": "We couldn't check how Shopify connects right now. Reload the page in a moment, or continue and connect it later.",
+    "shopifyFromAdmin": "The Shopify install starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here.",
+    "shopifyHelp": "How to install",
+    "others": {
+      "title": "Also on your site",
+      "more": "More systems from your site"
+    },
+    "return": {
+      "connected": "{name} is connected. GOTCHA checks it before it answers from now on.",
+      "close": "Close",
+      "error": {
+        "denied": "Connecting {name} was cancelled, so nothing changed. Connect again when you're ready, or continue without it.",
+        "token_exchange_failed": "{name} didn't confirm the connection, so nothing was connected. Try connecting again.",
+        "catalog_missing": "{name} isn't set up on our side yet, so nothing was connected. Continue without it, and connect it later in Settings.",
+        "callback_error": "Something went wrong on the way back from {name}. Nothing was connected. Try connecting again.",
+        "validation_failed": "{name} connected, but our first check against it failed. Try connecting again; if it keeps failing, continue and fix it later in Settings.",
+        "shop_connected_elsewhere": "That store is already connected to another GOTCHA workspace. Disconnect it there first, or connect a different store.",
+        "link_failed": "{name} answered, but the store couldn't be linked to this workspace. Try connecting again.",
+        "not_configured": "This connection isn't set up on our side yet, so nothing was connected. Continue without it, and connect it later in Settings.",
+        "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Connect again and approve read and write access.",
+        "callback_not_received": "{name} didn't send the keys back, so nothing was connected. Try connecting again.",
+        "invalid_state": "That approval couldn't be matched to this workspace. Start again with the connect button.",
+        "invalid_request": "We couldn't confirm the request came from {name}, so nothing was connected. Start again with the connect button.",
+        "other": "{name} didn't connect. Try connecting again, or continue without it."
+      }
+    }
   },
   "channels": {
     "headline": "Where your customers write.",

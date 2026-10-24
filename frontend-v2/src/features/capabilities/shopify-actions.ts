@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
-import { integrationEndpoints } from '@/api/endpoints/registry';
+import { CONNECT_FLOWS, integrationEndpoints, type ConnectFlow } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { cookieFrom, INTENT_COOKIE, PENDING_COOKIE } from './shopify-cookies';
@@ -22,11 +22,15 @@ export type ShopifyStart =
  * browser - same name, `/`, HttpOnly, Lax - or the way back from Shopify
  * would not know which workspace started it.
  */
-export async function startShopifyInstall(): Promise<ShopifyStart> {
+export async function startShopifyInstall(
+  /** Where Shopify's way back lands: Studio (default) or onboarding's step 2. */
+  flow: ConnectFlow = 'redesign_studio',
+): Promise<ShopifyStart> {
+  if (!(CONNECT_FLOWS as readonly unknown[]).includes(flow)) return { ok: false, reason: 'failed' };
   let intent: ReturnType<typeof cookieFrom> = null;
   try {
     const { url } = await serverApi().get({
-      endpoint: integrationEndpoints.shopifyStart(),
+      endpoint: integrationEndpoints.shopifyStart(flow),
       payload: z.object({ url: z.string().url() }),
       raw: true,
       onResponseHeaders: (headers) => {

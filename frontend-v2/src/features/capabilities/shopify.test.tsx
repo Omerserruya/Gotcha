@@ -77,6 +77,17 @@ describe('★★ start - the intent is handed on to the browser, or nothing open
     });
   });
 
+  it('onboarding step 2 asks for its own flow, so Shopify returns there; an unknown one is refused', async () => {
+    answer([`${INTENT_COOKIE}=handle1; Path=/; HttpOnly`]);
+    await startShopifyInstall('onboarding_systems');
+    expect((get.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/connectors/shopify/install/start?flow=onboarding_systems',
+    );
+    get.mockClear();
+    expect(await startShopifyInstall('evil' as never)).toEqual({ ok: false, reason: 'failed' });
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('no intent came back: refused - Shopify would return to a workspace nobody named', async () => {
     answer([]);
     expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'failed' });

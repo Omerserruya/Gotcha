@@ -857,6 +857,14 @@ export const voiceChannelEndpoints = {
 /** Providers whose redesign flow starts at `/api/integrations/oauth/{slug}/init`. */
 const LEGACY_OAUTH_ROUTE = new Set(['zoho_crm', 'google_calendar', 'calendly']);
 
+/**
+ * Where a connect started, so the provider's way back lands there (the
+ * backend signs it into the state): Studio · Capabilities, or onboarding's
+ * step 2 (`/onboarding/systems?system=<slug>&connected=1|error=<code>`).
+ */
+export const CONNECT_FLOWS = ['redesign_studio', 'onboarding_systems'] as const;
+export type ConnectFlow = (typeof CONNECT_FLOWS)[number];
+
 export const integrationEndpoints = {
   list: () => endpoint('/api/integrations'),
   detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
@@ -883,16 +891,17 @@ export const integrationEndpoints = {
    * Salesforce takes the login host; Shopify re-authorises the store already
    * connected and refuses 409 without one.
    */
-  oauthInit: (slug: string, loginHost?: string) =>
+  oauthInit: (slug: string, loginHost?: string, flow: ConnectFlow = 'redesign_studio') =>
     loginHost
-      ? endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio&loginHost={loginHost}', {
+      ? endpoint('/api/connectors/{slug}/oauth/init?flow={flow}&loginHost={loginHost}', {
           slug,
+          flow,
           loginHost,
         })
       : LEGACY_OAUTH_ROUTE.has(slug)
         ? // Zoho, Google Calendar and Calendly start from the older routes (backend e7523379).
-          endpoint('/api/integrations/oauth/{slug}/init?flow=redesign_studio', { slug })
-        : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
+          endpoint('/api/integrations/oauth/{slug}/init?flow={flow}', { slug, flow })
+        : endpoint('/api/connectors/{slug}/oauth/init?flow={flow}', { slug, flow }),
   /**
    * B: WooCommerce through the store's own approval - the store address only,
    * answered `{ url }` (`format=json`); 400 `invalid_store_url`. Lands on
@@ -906,7 +915,8 @@ export const integrationEndpoints = {
    * pending install from the browser's `gotcha_shopify_pending` cookie.
    */
   shopifyAvailability: () => endpoint('/api/connectors/shopify/install/availability'),
-  shopifyStart: () => endpoint('/api/connectors/shopify/install/start?flow=redesign_studio'),
+  shopifyStart: (flow: ConnectFlow = 'redesign_studio') =>
+    endpoint('/api/connectors/shopify/install/start?flow={flow}', { flow }),
   shopifyPending: () => endpoint('/api/connectors/shopify/install/pending'),
   shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
   /**
@@ -917,10 +927,13 @@ export const integrationEndpoints = {
    * changed). Answers the access snapshot.
    */
   shopifyBillingComplete: () => endpoint('/api/billing/shopify/complete'),
-  wooOAuthInit: (storeUrl: string) =>
+  wooOAuthInit: (storeUrl: string, flow: ConnectFlow = 'redesign_studio') =>
     endpoint(
-      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',
-      { storeUrl },
+      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow={flow}&format=json',
+      {
+        storeUrl,
+        flow,
+      },
     ),
   /** The same key flow from the plugin's connect page: it comes back to /connect/woocommerce. */
   wooOAuthInitPlugin: (storeUrl: string) =>
