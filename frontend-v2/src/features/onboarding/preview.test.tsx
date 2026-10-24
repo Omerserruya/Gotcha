@@ -130,8 +130,11 @@ describe('★★ the shell in preview: says what it is, Home one click away, the
       screen.getByText('work').parentElement,
     );
     // Every other step with a screen is a link that stays a preview; this one is where you are.
+    // The way back (to channels) stays a preview too.
     expect(stepLinks(container).sort()).toEqual(
-      ['website', 'systems', 'channels'].map((s) => `/onboarding/${s}?preview=1`).sort(),
+      ['website', 'systems', 'channels', 'channels']
+        .map((s) => `/onboarding/${s}?preview=1`)
+        .sort(),
     );
   });
 
@@ -142,7 +145,8 @@ describe('★★ the shell in preview: says what it is, Home one click away, the
       </OnboardingShell>,
     );
     expect(screen.queryByTestId('onboarding-preview')).toBeNull();
-    expect(stepLinks(container)).toEqual([]);
+    // The steps are not links; only the way back is.
+    expect(stepLinks(container)).toEqual(['/onboarding/channels']);
   });
 });
 

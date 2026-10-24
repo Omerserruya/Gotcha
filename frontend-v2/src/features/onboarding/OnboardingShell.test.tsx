@@ -84,6 +84,37 @@ describe('★★ the column: four steps', () => {
   });
 });
 
+describe('★★ the way back (Omer, 2026-10-24: there was none)', () => {
+  it.each([
+    ['systems', '/onboarding/reading'],
+    ['channels', '/onboarding/systems'],
+    ['live', '/onboarding/channels'],
+  ] as const)('%s goes back to %s', (step, href) => {
+    show({ step, screen: step });
+    const back = screen.getByTestId('onboarding-back');
+    expect(back).toHaveAttribute('href', href);
+    expect(back).toHaveTextContent('Back to the previous step');
+  });
+
+  it('step 1 has none: nothing comes before the website', () => {
+    show({ step: 'learn', screen: 'reading' });
+    expect(screen.queryByTestId('onboarding-back')).toBeNull();
+  });
+
+  it('in preview it stays a preview', () => {
+    show({ step: 'channels', screen: 'channels', preview: true });
+    expect(JSON.parse(screen.getByTestId('onboarding-back').getAttribute('href') ?? '')).toEqual({
+      pathname: '/onboarding/systems',
+      query: { preview: '1' },
+    });
+  });
+
+  it('in Hebrew', () => {
+    show({ step: 'live', screen: 'live' }, true);
+    expect(screen.getByTestId('onboarding-back')).toHaveTextContent('חזרה לשלב הקודם');
+  });
+});
+
 describe('★★ CSS: the phone shows the one line; Hebrew is never letter-spaced', () => {
   const css = readFileSync(
     join(process.cwd(), 'src/features/onboarding/Onboarding.module.css'),

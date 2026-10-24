@@ -182,6 +182,30 @@
     inline-size: 100%;
   }
 
+  /* The way back: above the step, at its width, quiet. The arrow points back in either direction. */
+  .stepBackRow {
+    max-inline-size: var(--step-width);
+    margin-block: 0 18px;
+  }
+
+  .stepBack {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .stepBack:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  .stepBack:dir(rtl) svg {
+    transform: scaleX(-1);
+  }
+
   .title {
     margin: 0;
     font-size: 28px;

@@ -316,6 +316,7 @@
     "missed": "Couldn't check just now. Trying again in a second."
   },
   "stepOf": "Step {n} of {total}: {name}",
+  "back": "Back to the previous step",
   "learn": {
     "headline": "It reads your website so you don't have to explain it.",
     "lead": "Every line here is what it is really doing, right now.",

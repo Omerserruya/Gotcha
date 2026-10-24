@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 
@@ -15,6 +15,19 @@ const STEP_HREF: Readonly<Record<ShellStep, (() => ReturnType<typeof stepHref>) 
   systems: () => stepHref('/onboarding/systems', true),
   channels: () => stepHref('/onboarding/channels', true),
   live: () => stepHref('/onboarding/live', true),
+};
+
+/**
+ * The way back from each step: to the screen the step before ends on. Plain
+ * links - going back saves nothing, so a reload still resumes at the
+ * furthest step. Step 1 has none.
+ */
+const BACK: Readonly<
+  Partial<Record<ShellStep, (preview: boolean) => ReturnType<typeof stepHref>>>
+> = {
+  systems: (preview) => stepHref('/onboarding/reading', preview),
+  channels: (preview) => stepHref('/onboarding/systems', preview),
+  live: (preview) => stepHref('/onboarding/channels', preview),
 };
 
 /**
@@ -46,6 +59,15 @@ export function OnboardingShell({
 }) {
   const t = useTranslations('onboarding');
   const here = SHELL_STEPS.indexOf(step);
+  const backTo = BACK[step];
+  const back = backTo ? (
+    <p className={styles.stepBackRow}>
+      <Link href={backTo(preview)} className={styles.stepBack} data-testid="onboarding-back">
+        <ArrowLeft size={14} aria-hidden="true" />
+        {t('back')}
+      </Link>
+    </p>
+  ) : null;
   return (
     <div className={styles.frame}>
       <aside className={styles.column}>
@@ -106,10 +128,14 @@ export function OnboardingShell({
                   {t('preview.home')}
                 </Link>
               </p>
+              {back}
               {children}
             </div>
           ) : (
-            children
+            <>
+              {back}
+              {children}
+            </>
           )}
         </div>
       </main>
