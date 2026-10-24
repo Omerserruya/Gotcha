@@ -479,16 +479,28 @@
     "ask": {
       "placeholder": "Ask Copilot anything…",
       "label": "Ask Copilot",
-      "title": "GOTCHA answers by writing a reply into the box below. Nothing is sent to the customer.",
+      "title": "A private chat with Copilot about this conversation. Nothing is sent to the customer.",
       "nothingOpen": "Open a conversation to ask about it.",
       "send": "Ask",
-      "asking": "Asking…",
+      "asking": "Sending…",
       "failed": {
         "empty": "Write a question first.",
         "blank": "GOTCHA had nothing to write for that.",
         "units_exhausted": "The workspace has used its AI units. Someone with an admin role can top up.",
-        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent."
-      }
+        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent.",
+        "busy": "The last answer is still on its way. Your message is kept here; try again in a moment.",
+        "too_long": "That message is too long. Up to {max, number} characters.",
+        "no_ai_employee": "There's no AI employee yet. Set one up in Studio, and Copilot can help.",
+        "not_on_plan": "Copilot isn't on this workspace's plan.",
+        "read_failed": "We couldn't load the earlier chat. You can still ask.",
+        "clear_failed": "We couldn't start over. The chat is as it was."
+      },
+      "private": "Only you see this chat. Nothing in it reaches the customer.",
+      "startOver": "Start over",
+      "thinking": "Looking into it…",
+      "draftLabel": "A reply for the customer",
+      "useAsReply": "Use as reply",
+      "retry": "Try again"
     }
   }
 }

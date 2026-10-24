@@ -1804,6 +1804,15 @@ export const inboxEndpoints = {
     endpoint('/api/ai-assist/{conversationId}/customer-memory', { conversationId }),
   suggestionsRefresh: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/suggestions/refresh', { conversationId }),
+  /**
+   * The Copilot side chat (Backend c49f3830), one agent's private thread about
+   * this conversation: GET reads it, POST `{ message, locale? }` adds one
+   * exchange (3 to 15s; 409 COPILOT_CHAT_BUSY while a round runs, 502
+   * COPILOT_CHAT_FAILED stores nothing), DELETE starts over. Gated on
+   * `ai.copilot`. Nothing in it reaches the customer. See `contracts/copilot-chat.ts`.
+   */
+  copilotChat: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/chat', { conversationId }),
 
   /**
    * Drafts or refines ONE outbound message from a plain-language instruction.
