@@ -67,6 +67,21 @@ describe("diagnostics separate tools OFFERED from tools CALLED", () => {
     expect(bot).toMatch(/const toolsOffered: string\[\]/);
   });
 
+  it("★ what it reports is the FINAL surface, and the ai.bot_turn audit keeps it with each stage's drops", () => {
+    // 2026-10-24: the snapshot was taken before the adapter tools joined, so a
+    // turn's woocommerce.* / shopify.* tools were never in it, and nothing on
+    // dev could say whether a stock question had a stock tool behind it.
+    const bot = read("services/ai-bot.service.ts");
+    const finalNames = bot.lastIndexOf("toolFunctionNames = (tools as any[])");
+    const snapshot = bot.indexOf("const toolsOffered: string[] = [...toolFunctionNames];");
+    expect(snapshot).toBeGreaterThan(finalNames);
+    expect(bot.indexOf("// ── Adapter framework tools ──")).toBeLessThan(snapshot);
+    const audit = bot.slice(bot.indexOf('action: "ai.bot_turn"'), bot.indexOf("behaviorState: {", bot.indexOf('action: "ai.bot_turn"')));
+    expect(audit).toMatch(/\btoolsOffered,/);
+    expect(audit).toMatch(/toolSurfaceDrops:/);
+    for (const stage of ["allowedActions", "policy", "otherStore", "cap"]) expect(bot).toContain(`surfaceDrops.${stage} =`);
+  });
+
   it("the sandbox surfaces both", () => {
     // "No tool was called" and "no tool was available" look identical in a
     // transcript and send an operator to completely different places.

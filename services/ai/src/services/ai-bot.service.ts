@@ -2150,10 +2150,10 @@ async function generateAIBotReplyInner(
   // Custom API tools and DB queries, only those on the employee's allowlist.
   tools.push(...(await customToolDefinitions(opts.tenantId, config.id)));
 
-  // Snapshot of what the model was actually offered, for diagnostics.
-  const toolsOffered: string[] = (tools as any[])
-    .map((t) => t?.function?.name)
-    .filter((n): n is string => typeof n === "string");
+  // The tools later stages took OFF the surface, by stage, for the audit. A
+  // stock question with no stock tool behind it is otherwise invisible: the
+  // transcript of "no tool was called" and "no tool was offered" is the same.
+  const surfaceDrops: { allowedActions?: string[]; policy?: string[]; otherStore?: string[]; cap?: string[] } = {};
 
   // ── Adapter framework tools ── (only for tenants with the integration CONNECTED)
   try {
@@ -2366,7 +2366,13 @@ async function generateAIBotReplyInner(
   }
 
   // SINGLE filter - replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
-  tools = filterToolsByAllowedActions(tools, behaviorState);
+  {
+    const before = (tools as any[]).map((t) => String(t?.function?.name ?? ""));
+    tools = filterToolsByAllowedActions(tools, behaviorState);
+    const kept = new Set((tools as any[]).map((t) => String(t?.function?.name ?? "")));
+    const gone = before.filter((n) => !kept.has(n));
+    if (gone.length) surfaceDrops.allowedActions = gone;
+  }
 
   // Diagnostic: surfaced scheduling tools + contract-gate state, so a missing
   // reschedule/cancel is observable instead of inferred.
@@ -2424,6 +2430,7 @@ async function generateAIBotReplyInner(
         `[ai-bot] surface/policy disagreement - dropped ${dropped.length} tool(s) the dispatch gate would deny: ` +
           dropped.map((d) => `${d.name} (${d.reason})`).join("; "),
       );
+      surfaceDrops.policy = dropped.map((d) => `${d.name} (${d.reason})`);
       const keepNames = new Set(decisions.filter((d) => d.keep).map((d) => d.name));
       tools = (tools as any[]).filter((t) => keepNames.has(t?.function?.name));
     }
@@ -2434,7 +2441,13 @@ async function generateAIBotReplyInner(
   // On a web chat whose cards come from the WooCommerce store (W9), the
   // Shopify catalogue is not this conversation's store: its search would hand
   // the model ids that are not on the shelf the widget sits on.
-  tools = withoutOtherStoreTools(tools as any[], wooTurn);
+  {
+    const before = (tools as any[]).map((t) => String(t?.function?.name ?? ""));
+    tools = withoutOtherStoreTools(tools as any[], wooTurn);
+    const kept = new Set((tools as any[]).map((t) => String(t?.function?.name ?? "")));
+    const gone = before.filter((n) => !kept.has(n));
+    if (gone.length) surfaceDrops.otherStore = gone;
+  }
 
   // ── Hard cap: OpenAI rejects a tools array longer than 128 ──
   //
@@ -2482,6 +2495,7 @@ async function generateAIBotReplyInner(
     const room = Math.max(0, OPENAI_MAX_TOOLS - builtIns.length);
     const dropped = integrations.slice(room);
     if (dropped.length) {
+      surfaceDrops.cap = dropped.map(nameOf);
       console.error(
         `[ai-bot] tool surface ${(tools as any[]).length} exceeds OpenAI's ${OPENAI_MAX_TOOLS}-tool limit ` +
           `for tenant=${opts.tenantId} agent=${config.id}. Dropping ${dropped.length} integration tool(s) ` +
@@ -2606,6 +2620,12 @@ async function generateAIBotReplyInner(
   toolFunctionNames = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
+
+  // What the model was actually offered: the FINAL surface, after the adapter
+  // tools joined and every filter above ran. This used to be a snapshot taken
+  // before the adapter tools were added, so the sandbox's "tools offered"
+  // never listed a woocommerce.* or shopify.* tool even when the model had it.
+  const toolsOffered: string[] = [...toolFunctionNames];
 
   // Business skills for the prompt (undefined → the prompt is exactly what it
   // was before skills existed). Watch runs never reach the prompt.
@@ -4692,6 +4712,10 @@ async function generateAIBotReplyInner(
         activeSkillMode: activeSkill?.mode ?? undefined,
         skillRunId: skillRunId ?? undefined,
         toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
+        // The final tool surface this turn offered the model, and what each
+        // stage removed. Names only, never arguments or results.
+        toolsOffered,
+        toolSurfaceDrops: Object.keys(surfaceDrops).length ? surfaceDrops : undefined,
         behaviorState: {
           strategy: behaviorState.strategy,
           userType: behaviorState.userType,
