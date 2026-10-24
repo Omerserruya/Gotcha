@@ -296,6 +296,12 @@
     "slugInvalid": "2 to 50 lowercase letters, digits or dashes.",
     "adminName": "Admin's name",
     "adminEmail": "Admin's email",
+    "language": "Workspace language",
+    "languageHint": "Its emails and its setup are in this language.",
+    "languages": {
+      "he": "עברית",
+      "en": "English"
+    },
     "billingType": "Billing",
     "paid": "Paid plan",
     "poc": "POC",

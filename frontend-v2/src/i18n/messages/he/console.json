@@ -296,6 +296,12 @@
     "slugInvalid": "2 עד 50 אותיות לטיניות קטנות, ספרות או מקפים.",
     "adminName": "שם המנהל",
     "adminEmail": "המייל של המנהל",
+    "language": "שפת הארגון",
+    "languageHint": "המיילים וההקמה יהיו בשפה הזאת.",
+    "languages": {
+      "he": "עברית",
+      "en": "English"
+    },
     "billingType": "חיוב",
     "paid": "תוכנית בתשלום",
     "poc": "POC",

@@ -67,6 +67,8 @@ export interface NewTenant {
   readonly slug: string;
   readonly adminEmail: string;
   readonly adminName: string;
+  /** The workspace's language - its emails and its onboarding. The route defaults to "he". */
+  readonly locale: 'he' | 'en';
   readonly billing: NewTenantBilling;
 }
 

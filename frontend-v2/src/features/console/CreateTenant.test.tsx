@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { provisionablePlansSchema } from '@/api/contracts/console';
 import consoleEn from '@/i18n/messages/en/console.json';
+import consoleHe from '@/i18n/messages/he/console.json';
 
 /** Creating a tenant. Mocked: nothing is created, nothing is quoted for real. */
 const { create, refresh } = vi.hoisted(() => ({
@@ -154,6 +155,7 @@ describe('★★ creating a tenant', () => {
       slug: 'acme-ltd',
       adminEmail: 'dana@acme.co',
       adminName: 'Dana',
+      locale: 'he',
       billing: {
         mode: 'PAID_PLAN',
         planVersionId: 'pv1',
@@ -206,6 +208,38 @@ describe('★★ creating a tenant', () => {
       pocFeatureAreas: ['ai'],
     });
     expect(create.quoteProvisioning).not.toHaveBeenCalled();
+  });
+
+  it('★★ the workspace language: Hebrew unless chosen, and English is sent as "en"', async () => {
+    create.createTenant.mockResolvedValue({ ok: true, tenantId: 't9' });
+    show();
+    fireEvent.click(screen.getByTestId('create-open'));
+    const group = screen.getByRole('radiogroup', { name: 'Workspace language' });
+    expect(group).toHaveTextContent('עבריתEnglish');
+    expect(screen.getByTestId('locale-he')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('locale-en')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByTestId('locale-en'));
+    expect(screen.getByTestId('locale-he')).toHaveAttribute('aria-checked', 'false');
+    fillWho();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('create-plan'), { target: { value: 'pv1' } });
+    });
+    fireEvent.click(screen.getByTestId('create-submit-open'));
+    await act(async () => fireEvent.click(screen.getByTestId('create-submit-yes')));
+    expect(create.createTenant.mock.calls[0]![0].locale).toBe('en');
+  });
+
+  it('the language in Hebrew: its label, and each language named in itself', () => {
+    render(
+      <NextIntlClientProvider locale="he" messages={{ console: consoleHe }}>
+        <CreateTenant plans={plans} domains={[]} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId('create-open'));
+    expect(screen.getByRole('radiogroup', { name: 'שפת הארגון' })).toHaveTextContent(
+      'עבריתEnglish',
+    );
+    expect(screen.getByTestId('locale-en')).toHaveAttribute('lang', 'en');
   });
 
   it('plans or areas unread: said, not an empty picker', () => {
