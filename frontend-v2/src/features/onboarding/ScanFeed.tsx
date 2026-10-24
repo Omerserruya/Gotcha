@@ -104,7 +104,27 @@ const tags = {
 const plainTags = { ltr: (chunks: string) => chunks, user: (chunks: string) => chunks };
 
 /** A line, and what it says in words: two events that say the same are one line. */
-export type FeedLine = { readonly text: ReactNode; readonly says: string };
+export type FeedLine = {
+  readonly text: ReactNode;
+  /** The same line once it is over, in the past tense ("Read a page about returns"). */
+  readonly doneText: ReactNode;
+  readonly says: string;
+};
+
+/**
+ * The lines that say something is GOING ON, and so have a done form: once a
+ * line is checked it reads as done ("קראנו", not "קוראים"; supervisor,
+ * 2026-10-24). Every other line already says what was found.
+ */
+export const DONE_FORMS: ReadonlySet<string> = new Set([
+  'job.started',
+  'job.retrying',
+  'site.opening',
+  'products.reading',
+  'sitemap.reading',
+  'page.reading',
+  'extract.reading',
+]);
 
 /**
  * One feed line, in the screen's language, from a KEY and its params. Never
@@ -145,6 +165,9 @@ export function useFeedLine(): (event: JobEvent) => FeedLine | null {
     else if (event.key.startsWith('extract.')) values.kind = kind('extract');
     return {
       text: t.rich(`feed.${event.key}`, { ...values, ...tags }),
+      doneText: DONE_FORMS.has(event.key)
+        ? t.rich(`feedDone.${event.key}`, { ...values, ...tags })
+        : t.rich(`feed.${event.key}`, { ...values, ...tags }),
       says: `${event.kind} ${t.markup(`feed.${event.key}`, { ...values, ...plainTags })}`,
     };
   };
@@ -261,12 +284,19 @@ export function ScanFeed({
   }, [shown]);
 
   return (
-    <section className={styles.feed} aria-label={t('feedLabel')} data-testid="scan-feed">
-      <span className={styles.feedHead}>{t('feedLabel')}</span>
+    <section
+      className={styles.feed}
+      aria-label={live ? t('feedLabel') : t('feedLabelDone')}
+      data-testid="scan-feed"
+    >
+      {/* Over: what we did, not what is happening. */}
+      <span className={styles.feedHead}>{live ? t('feedLabel') : t('feedLabelDone')}</span>
       <div className={styles.feedView} ref={view} data-testid="scan-view">
         <ul className={styles.feedRows} aria-live="polite" aria-relevant="additions">
-          {rows.slice(0, shown).map(({ event, text }, index) => {
+          {rows.slice(0, shown).map(({ event, text, doneText }, index) => {
             const now = index === shown - 1;
+            // Only the line in progress speaks in the present tense.
+            const going = now && live;
             const mark =
               now && live
                 ? MARK[event.kind]
@@ -283,7 +313,7 @@ export function ScanFeed({
                 data-testid="scan-line"
               >
                 <span className={styles.feedMark}>{mark}</span>
-                <span className={styles.feedText}>{text}</span>
+                <span className={styles.feedText}>{going ? text : doneText}</span>
               </li>
             );
           })}

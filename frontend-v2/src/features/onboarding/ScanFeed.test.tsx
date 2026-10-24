@@ -13,6 +13,7 @@ import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
 import {
   collapseFeed,
+  DONE_FORMS,
   FEED_KEYS,
   REVEAL_BACKLOG,
   REVEAL_FAST_MS,
@@ -61,6 +62,65 @@ const feedOf = (locale: 'en' | 'he', key: string, params = PARAMS) =>
       />
     </NextIntlClientProvider>,
   );
+
+/** One line, then "done": the job is over, so the first line is checked. */
+const overOf = (locale: 'en' | 'he', key: string) =>
+  render(
+    <NextIntlClientProvider
+      locale={locale}
+      messages={{ onboarding: locale === 'he' ? onboardingHe : onboardingEn }}
+    >
+      <ScanFeed
+        live={false}
+        events={[
+          jobEventSchema.parse({
+            seq: 1,
+            at: '',
+            stage: null,
+            kind: 'progress',
+            key,
+            params: PARAMS,
+          }),
+          jobEventSchema.parse({ seq: 2, at: '', stage: 'done', kind: 'found', key: 'job.done' }),
+        ]}
+      />
+    </NextIntlClientProvider>,
+  );
+
+describe('★★ a checked line reads as done (supervisor, 2026-10-24)', () => {
+  it.each(
+    [...DONE_FORMS].flatMap((key) =>
+      (['he', 'en'] as const).map((locale) => [key, locale] as const),
+    ),
+  )('%s in %s: present while it runs, past once checked', (key, locale) => {
+    const running = feedOf(locale, key);
+    const now = screen.getByTestId('scan-line').textContent ?? '';
+    running.unmount();
+    overOf(locale, key);
+    const [done] = screen.getAllByTestId('scan-line');
+    expect(done!.textContent).not.toBe(now);
+    expect(done!.textContent?.trim().length).toBeGreaterThan(0);
+  });
+
+  it('★ in Hebrew: "קראנו עמוד על", "מיפינו", never "קוראים" on a checked line', () => {
+    overOf('he', 'page.reading');
+    expect(screen.getAllByTestId('scan-line')[0]).toHaveTextContent('קראנו עמוד על');
+    expect(screen.getByTestId('scan-feed')).not.toHaveTextContent(/קוראים|ממפים/);
+  });
+
+  it('★ the box says "What we did" once the job is over, "What is happening now" while it runs', () => {
+    const running = feedOf('he', 'page.reading');
+    expect(screen.getByTestId('scan-feed')).toHaveTextContent('מה קורה עכשיו');
+    running.unmount();
+    overOf('he', 'page.reading');
+    expect(screen.getByTestId('scan-feed')).toHaveTextContent('מה עשינו');
+    expect(screen.getByTestId('scan-feed')).not.toHaveTextContent('מה קורה עכשיו');
+  });
+
+  it('every key with a done form is a key Backend named', () => {
+    for (const key of DONE_FORMS) expect(FEED_KEYS).toContain(key);
+  });
+});
 
 describe('★★ the feed catalogue: every key Backend named, in both languages', () => {
   it.each(
@@ -150,7 +210,7 @@ describe('★★ the stream: in time order, one line at a time, no repeats', () 
         ]}
       />,
     );
-    expect(lines()).toEqual(['Opening avivco.il', 'Found Shopify', '40 pages to read']);
+    expect(lines()).toEqual(['Opened avivco.il', 'Found Shopify', '40 pages to read']);
   });
 
   it('★★ only the newest line is happening now; a progress line before it shows as done', () => {
@@ -195,7 +255,7 @@ describe('★★ the stream: in time order, one line at a time, no repeats', () 
       />,
     );
     expect(lines()).toEqual([
-      'Reading a page about returns',
+      'Read a page about returns',
       'Found Shopify',
       'Reading a page about shipping',
     ]);
@@ -222,7 +282,7 @@ describe('★★ the stream: in time order, one line at a time, no repeats', () 
     const { rerender } = render(<Stream events={first} />);
     rerender(<Stream events={[...first, ev(3, 'page.reading', { kind: 'returns' })]} />);
     await tick(REVEAL_MS * 3);
-    expect(lines()).toEqual(['Reading a page about returns', 'Found 2 FAQs']);
+    expect(lines()).toEqual(['Read a page about returns', 'Found 2 FAQs']);
     expect(screen.getAllByTestId('scan-line')[1]).toHaveAttribute('data-state', 'now');
   });
 
@@ -252,7 +312,7 @@ describe('★★ the stream: in time order, one line at a time, no repeats', () 
     // Three arrived in one poll: none is drawn at once.
     expect(lines()).toHaveLength(1);
     await tick(REVEAL_MS);
-    expect(lines()).toEqual(['Opening avivco.il', 'Found Shopify']);
+    expect(lines()).toEqual(['Opened avivco.il', 'Found Shopify']);
     await tick(REVEAL_MS);
     expect(lines()).toHaveLength(3);
     await tick(REVEAL_MS);
