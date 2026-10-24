@@ -12,7 +12,7 @@
  * store.
  */
 import { safeFetch } from "@chatcenter/shared";
-import { GOTCHA_CRAWLER_UA } from "../site-crawl.service";
+import { GOTCHA_CRAWLER_UA, decodeEntities } from "../site-crawl.service";
 
 export interface FetchResult { ok: boolean; status: number; text: string; contentType?: string }
 export type Fetcher = (url: string, opts?: { timeoutMs?: number; accept?: string }) => Promise<FetchResult | null>;
@@ -186,13 +186,15 @@ export async function harvestWoo(origin: string, fetch: Fetcher = defaultFetcher
     summary = {
       count: products.length,
       more,
-      categories: topCategories(products.flatMap((p) => (Array.isArray(p.categories) ? p.categories.map((c: any) => String(c?.name ?? "")) : []))),
+      // The Store API returns names as HTML ("Hoodies &amp; Sweatshirts"); they
+      // are shown and taught as text.
+      categories: topCategories(products.flatMap((p) => (Array.isArray(p.categories) ? p.categories.map((c: any) => decodeEntities(String(c?.name ?? ""))) : []))),
       priceRange: prices.length
         ? { min: Math.min(...prices), max: Math.max(...prices), currency: products.find((p) => p?.prices?.currency_code)?.prices?.currency_code ?? null }
         : null,
       inStock: products.filter((p) => p?.is_in_stock !== false).length,
       highlights: products.slice(0, 8).map((p) => ({
-        title: String(p.name ?? "").slice(0, 120),
+        title: decodeEntities(String(p.name ?? "")).slice(0, 120),
         url: typeof p.permalink === "string" ? p.permalink : null,
         price: price(p),
       })),

@@ -171,6 +171,18 @@ describe("WooCommerce Store API", () => {
       priceRange: { min: 49.9, max: 129, currency: "ILS" }, source: "woo_store_api",
     });
   });
+
+  it("the Store API's HTML-encoded names arrive as text (omer-onb-1, 2026-10-24)", async () => {
+    const f = site({
+      [`${O}/wp-json/wc/store/v1/products?per_page=100&page=1`]: JSON.stringify([
+        { name: "Tom &amp; Jerry Hoodie", categories: [{ name: "Hoodies &amp; Sweatshirts" }], prices: {} },
+        { name: "Rain Coat &#8211; Long", categories: [{ name: "Jackets &amp; Coats" }, { name: "Hoodies &amp; Sweatshirts" }], prices: {} },
+      ]),
+    });
+    const h = await harvestWoo(O, f);
+    expect(h.products!.categories).toEqual(["Hoodies & Sweatshirts", "Jackets & Coats"]);
+    expect(h.products!.highlights.map((x) => x.title)).toEqual(["Tom & Jerry Hoodie", "Rain Coat - Long"]);
+  });
 });
 
 describe("platform detection: the data endpoint is the proof", () => {
