@@ -835,6 +835,14 @@ describe("GET /connectors/shopify/billing/return", () => {
     expect(r.headers.location).toMatch(new RegExp(`/integrations/shopify/billing/complete\\?plan_handle=pro&shop=${SHOP.replace(/\./g, "\\.")}$`));
   });
 
+  it("★ an onboarding start is remembered and its billing return lands on the systems step", async () => {
+    await request(app()).get("/api/connectors/shopify/install/start?flow=onboarding_systems");
+    expect(H.settings.get("tenant-A|shopify.returnFlow")).toBe("onboarding_systems");
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    const r = await ret(`plan_handle=pro&shop=${SHOP}`);
+    expect(r.headers.location).toMatch(/\/v2\/onboarding\/systems\?system=shopify&billing=verify&shop=urban-supply-dev\.myshopify\.com$/);
+  });
+
   it("an unknown shop, or no shop, gets today's page - never a guess", async () => {
     expect((await ret(`plan_handle=pro&shop=nobody.myshopify.com`)).headers.location).toContain("/integrations/shopify/billing/complete?");
     expect((await ret(`plan_handle=pro`)).headers.location).toContain("/integrations/shopify/billing/complete?plan_handle=pro");

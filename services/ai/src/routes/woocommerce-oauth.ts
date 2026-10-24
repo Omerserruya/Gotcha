@@ -36,6 +36,7 @@ import {
   assertPublicUrl,
   getRedis,
 } from "@chatcenter/shared";
+import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import { findCatalog, upsertConnection } from "../services/connector-connection.service";
 import { normalizeStoreUrl, validateWooKeys } from "../services/connectors/woocommerce.adapter";
 
@@ -51,7 +52,7 @@ const resultKey = (jti: string) => `woo_oauth:result:${jti}`;
 
 // wp_plugin: the "GOTCHA for WooCommerce" plugin's Connect page (docs/api/
 // woocommerce-plugin-v1.md §2) runs the key flow first and comes back to it.
-const WOO_FLOWS = new Set(["redesign_studio", "wp_plugin"]);
+const WOO_FLOWS = new Set(["redesign_studio", "onboarding_systems", "wp_plugin"]);
 function parseWooFlow(raw: unknown): string | undefined {
   return typeof raw === "string" && WOO_FLOWS.has(raw) ? raw : undefined;
 }
@@ -80,11 +81,11 @@ export function wooReturnUrl(flow: string | undefined, result: { error?: string 
     const p = new URLSearchParams(result.error ? { error: WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error" } : { connected: "1" });
     return `${origin}/v2/connect/woocommerce?${p.toString()}`;
   }
-  if (flow === "redesign_studio") {
+  if (isRedesignSystemsFlow(flow)) {
     const p = new URLSearchParams({ system: PROVIDER });
     if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
     else p.set("connected", "1");
-    return `${origin}/v2/studio/capabilities?${p.toString()}`;
+    return `${origin}${redesignSystemsPath(flow)}?${p.toString()}`;
   }
   const p = new URLSearchParams(result.error ? { status: "error", error: result.error } : { status: "connected" });
   return `${origin}/ai-studio/marketplace/${PROVIDER}?${p.toString()}`;

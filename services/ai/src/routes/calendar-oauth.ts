@@ -31,7 +31,7 @@ import {
 } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 
-import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, REDESIGN_FLOW } from "../services/redesign-return";
+import { parseConnectFlow, redesignCapabilitiesUrl, redirectRedesignDenied, isRedesignSystemsFlow } from "../services/redesign-return";
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 const OAUTH_STATE_SECRET = getOAuthStateSecret();
@@ -133,7 +133,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("[GCal OAuth] token exchange failed:", err);
-      if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "token_exchange_failed" })); return; }
+      if (isRedesignSystemsFlow(flow)) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "token_exchange_failed" }, flow)); return; }
       res.status(400).send("Token exchange failed");
       return;
     }
@@ -188,7 +188,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
     res.redirect(connectedRedirect(aiAgentId, "google_calendar", payload.flow));
   } catch (err: any) {
     console.error("[GCal OAuth callback]", err);
-    if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "callback_error" })); return; }
+    if (isRedesignSystemsFlow(flow)) { res.redirect(redesignCapabilitiesUrl("google_calendar", { error: "callback_error" }, flow)); return; }
     res.status(500).json({ error: err?.message || "callback failed" });
   }
 });
@@ -266,7 +266,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
     });
     if (!tokenRes.ok) {
       console.error("[Calendly OAuth] token exchange failed:", await tokenRes.text());
-      if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "token_exchange_failed" })); return; }
+      if (isRedesignSystemsFlow(flow)) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "token_exchange_failed" }, flow)); return; }
       res.status(400).send("Token exchange failed");
       return;
     }
@@ -321,7 +321,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
     res.redirect(connectedRedirect(aiAgentId, "calendly", payload.flow));
   } catch (err: any) {
     console.error("[Calendly OAuth callback]", err);
-    if (flow === REDESIGN_FLOW) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "callback_error" })); return; }
+    if (isRedesignSystemsFlow(flow)) { res.redirect(redesignCapabilitiesUrl("calendly", { error: "callback_error" }, flow)); return; }
     res.status(500).json({ error: err?.message || "callback failed" });
   }
 });
@@ -440,7 +440,7 @@ function connectedRedirect(
     const base = resolveAppPublicUrl(process.env);
     return `${base}/setup?connected=${provider}`;
   }
-  if (flow === REDESIGN_FLOW) return redesignCapabilitiesUrl(provider);
+  if (isRedesignSystemsFlow(flow)) return redesignCapabilitiesUrl(provider, {}, flow);
   const path = `/ai-studio/marketplace/${provider}?calendar=connected&aiAgentId=${aiAgentId}`;
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
 }

@@ -112,6 +112,16 @@ describe.each(CASES)("$name", (c) => {
     expect(r.headers.location).toBe(`${V2}?system=${c.system}&connected=1`);
   });
 
+  it("★ onboarding_systems: init carries it; Cancel, failure and success land on the systems step", async () => {
+    const ONB = "https://app.example.test/v2/onboarding/systems";
+    expect(flowOf((await request(app).get(c.init).query({ flow: "onboarding_systems" })).body.url)).toBe("onboarding_systems");
+    expect((await request(app).get(c.cb).query({ error: "access_denied", state: st(c, "onboarding_systems") })).headers.location).toBe(`${ONB}?system=${c.system}&error=denied`);
+    vi.stubGlobal("fetch", vi.fn(async () => bad));
+    expect((await request(app).get(c.cb).query({ code: "c", state: st(c, "onboarding_systems") })).headers.location).toMatch(new RegExp(`^${ONB}\\?system=${c.system}&error=(token_exchange_failed|callback_error)$`));
+    vi.stubGlobal("fetch", vi.fn(async () => ok({ access_token: "a", refresh_token: "r", expires_in: 3600, email: "x@y.z", resource: { email: "x@y.z" }, api_domain: "https://www.zohoapis.com" })));
+    expect((await request(app).get(c.cb).query({ code: "c", state: st(c, "onboarding_systems") })).headers.location).toBe(`${ONB}?system=${c.system}&connected=1`);
+  });
+
   it("a legacy flow is untouched", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ok({ access_token: "a", refresh_token: "r", expires_in: 3600, email: "x@y.z", resource: { email: "x@y.z" }, api_domain: "https://www.zohoapis.com" })));
     const r = await request(app).get(c.cb).query({ code: "c", state: st(c, "onboarding") });
@@ -126,5 +136,7 @@ describe("the shared landing", () => {
   it("the flow list is closed", () => {
     expect(parseConnectFlow("redesign_studio")).toBe("redesign_studio");
     expect(parseConnectFlow("/v2/anything")).toBeUndefined();
+    expect(parseConnectFlow("onboarding_systems")).toBe("onboarding_systems");
+    expect(redesignCapabilitiesUrl("x", {}, "__proto__")).toBe(`${V2}?system=x&connected=1`);
   });
 });

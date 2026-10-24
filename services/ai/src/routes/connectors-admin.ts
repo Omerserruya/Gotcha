@@ -49,6 +49,7 @@ import {
   singleValue,
   withCrossTenantAccess,
 } from "@chatcenter/shared";
+import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import { markUninstalledByShop } from "../services/shopify-chat-install.service";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
@@ -102,7 +103,7 @@ function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
 // browser-supplied return URL, so an attacker cannot redirect the callback to
 // an arbitrary destination. Unknown values collapse to `undefined` (the
 // default marketplace landing).
-const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio"]);
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems", "redesign_studio", "onboarding_systems"]);
 function parseFlow(raw: unknown): string | undefined {
   return typeof raw === "string" && KNOWN_FLOWS.has(raw) ? raw : undefined;
 }
@@ -117,15 +118,16 @@ function parseFlow(raw: unknown): string | undefined {
 //   • otherwise                 → the provider's marketplace page
 //   • redesign_studio           → /v2/studio/capabilities in the redesigned app,
 //     `system=<slug>&connected=1`, or `system=<slug>&error=<code>` on failure
+//   • onboarding_systems        → /v2/onboarding/systems, the same query
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
   const base = resolveAppPublicUrl(process.env);
-  if (flow === "redesign_studio") {
+  if (isRedesignSystemsFlow(flow)) {
     // The base path is fixed, not read from anywhere a request can reach: it
     // must equal the frontend-v2 build arg NEXT_PUBLIC_BASE_PATH.
     const params = new URLSearchParams(
       query.error ? { system: slug, error: query.error } : { system: slug, connected: "1", ...query },
     );
-    return `${base}${REDESIGN_BASE_PATH}/studio/capabilities?${params.toString()}`;
+    return `${base}${redesignSystemsPath(flow)}?${params.toString()}`;
   }
   if (flow === "onboarding") {
     const params = new URLSearchParams({ connected: slug, ...query });
@@ -187,7 +189,7 @@ function oauthFail(
   code: string,
   legacyBody: string = code,
 ): void {
-  if (flow === "redesign_studio") {
+  if (isRedesignSystemsFlow(flow)) {
     res.redirect(postOAuthRedirect(slug, flow, { error: OAUTH_FAILURE_CODES.has(code) ? code : "callback_error" }));
     return;
   }
@@ -215,12 +217,12 @@ async function redirectIfProviderDenied(
   // Spending the state here is harmless for every other flow: the provider
   // has already ended this round-trip, so nothing could use it afterwards.
   const consumed = await consumeOAuthState<any>(state, slug);
-  if (!consumed.ok || consumed.claims?.flow !== "redesign_studio") {
+  if (!consumed.ok || !isRedesignSystemsFlow(consumed.claims?.flow)) {
     // Exactly what this callback answered before the redesign flow existed.
     res.status(400).send(legacyBody);
     return true;
   }
-  res.redirect(postOAuthRedirect(slug, "redesign_studio", { error: "denied" }));
+  res.redirect(postOAuthRedirect(slug, consumed.claims.flow, { error: "denied" }));
   return true;
 }
 
@@ -457,7 +459,8 @@ router.get(
     if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured", code: "NOT_CONFIGURED" }); return; }
     // Only the redesign flow changes where Stripe lands; every other caller
     // keeps the marketplace landing it always had.
-    const flow = parseFlow(req.query.flow) === "redesign_studio" ? "redesign_studio" : undefined;
+    const asked = parseFlow(req.query.flow);
+    const flow = isRedesignSystemsFlow(asked) ? asked : undefined;
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "stripe", flow, userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
@@ -516,7 +519,7 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
         livemode: j.livemode,
       }),
     });
-    res.redirect(flow === "redesign_studio" ? postOAuthRedirect("stripe", flow) : dashboardRedirect("stripe"));
+    res.redirect(isRedesignSystemsFlow(flow) ? postOAuthRedirect("stripe", flow) : dashboardRedirect("stripe"));
   } catch (err: any) {
     oauthFail(res, "stripe", flow, 500, "callback_error", `stripe_callback_error:${err?.message || ""}`);
   }
@@ -833,12 +836,12 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
       let base = "";
       try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
-      if (flow === "redesign_studio") {
+      if (isRedesignSystemsFlow(flow)) {
         // The redesigned studio asks the same question. The handle stays in
         // the HttpOnly pending cookie - GET /install/pending and POST
         // /install/claim both read it - so it is not put in the URL, where a
         // referrer header or the history could carry the key to a parked token.
-        res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&pending=1&reason=replace_store`);
+        res.redirect(`${base}${redesignSystemsPath(flow)}?system=shopify&pending=1&reason=replace_store`);
         return;
       }
       res.redirect(`${base}/settings/business-systems/shopify/finish?handle=${encodeURIComponent(handle)}`);
@@ -868,7 +871,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         // never reads the param, so the merchant was told nothing.
         let base = "";
         try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
-        res.redirect(`${base}${REDESIGN_BASE_PATH}/studio/capabilities?system=shopify&error=shop_connected_elsewhere`);
+        res.redirect(`${base}${redesignSystemsPath(isRedesignSystemsFlow(flow) ? flow : undefined)}?system=shopify&error=shop_connected_elsewhere`);
         return;
       }
       oauthFail(res, "shopify", flow, 500, "link_failed", `shopify_link_failed:${linked.reason}`);
