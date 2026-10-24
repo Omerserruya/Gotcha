@@ -139,43 +139,50 @@ export function ReadingStep({
 
   return (
     <div className={styles.reading} data-status={status} data-testid="reading">
-      <h1
-        className={styles.title}
-        data-long={host && host.length > LONG_HOST ? '' : undefined}
-        data-testid="reading-title"
-      >
-        {host
-          ? t.rich('title', { host, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
-          : t('titleNoHost')}
-      </h1>
-      <p className={styles.subtitle} role="status" data-testid="reading-stage">
-        {status === 'RUNNING' ? (
-          <>
-            <span className={styles.trackRunning} aria-hidden="true" />{' '}
-            {job?.stage ? t(`stages.${job.stage}`) : t('status.QUEUED')}
-          </>
-        ) : (
-          t(`status.${status}`)
-        )}
-      </p>
-
-      {job && job.counts.pagesPlanned > 0 ? (
-        <p className={styles.quiet} data-testid="reading-counts">
-          {t('counts', { read: job.counts.pagesRead, planned: job.counts.pagesPlanned })}
-          {job.counts.pagesBlocked > 0
-            ? ` · ${t('countsBlocked', { count: job.counts.pagesBlocked })}`
-            : null}
+      <header className={styles.readingHead}>
+        <h1
+          className={styles.title}
+          data-long={host && host.length > LONG_HOST ? '' : undefined}
+          data-testid="reading-title"
+        >
+          {host
+            ? t.rich('title', { host, ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi> })
+            : t('titleNoHost')}
+        </h1>
+        <p className={styles.subtitle} role="status" data-testid="reading-stage">
+          {status === 'RUNNING' ? (
+            <>
+              <span className={styles.trackRunning} aria-hidden="true" />{' '}
+              {job?.stage ? t(`stages.${job.stage}`) : t('status.QUEUED')}
+            </>
+          ) : (
+            t(`status.${status}`)
+          )}
         </p>
-      ) : null}
 
-      <ScanFeed events={events} />
-      {job ? <ScanChips found={job.found} /> : null}
+        {job && job.counts.pagesPlanned > 0 ? (
+          <p className={styles.quiet} data-testid="reading-counts">
+            {t('counts', { read: job.counts.pagesRead, planned: job.counts.pagesPlanned })}
+            {job.counts.pagesBlocked > 0
+              ? ` · ${t('countsBlocked', { count: job.counts.pagesBlocked })}`
+              : null}
+          </p>
+        ) : null}
+      </header>
 
-      {job?.found.blocked ? (
-        <p className={styles.notYet} data-testid="reading-blocked">
-          {t('blocked')}
-        </p>
-      ) : null}
+      {/* The stream across the step's width, and what it found below it (Omer, 2026-10-24). */}
+      <div className={styles.readingBody}>
+        {/* A newer job is a new stream: drawn whole, never paced in from the old one. */}
+        <ScanFeed key={job?.jobId ?? ''} events={events} live={live} />
+        <div className={styles.readingAside}>
+          {job ? <ScanChips found={job.found} /> : null}
+          {job?.found.blocked ? (
+            <p className={styles.notYet} data-testid="reading-blocked">
+              {t('blocked')}
+            </p>
+          ) : null}
+        </div>
+      </div>
 
       {missed && live ? (
         <p className={styles.quiet} data-testid="reading-missed">

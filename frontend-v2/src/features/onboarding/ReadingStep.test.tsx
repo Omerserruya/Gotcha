@@ -31,6 +31,7 @@ import {
   POLL_MS,
   ReadingStep,
 } from './ReadingStep';
+import { REVEAL_MS } from './ScanFeed';
 
 const event = (seq: number, key: string, params = {}, kind = 'progress') => ({
   seq,
@@ -85,7 +86,7 @@ describe('★★ reading the site, as it really goes', () => {
     expect(screen.getByTestId('reading').textContent).not.toMatch(/%/);
   });
 
-  it('★★ polls every second with `since` the last seq; new lines on top, none drawn twice', async () => {
+  it('★★ polls every second with `since` the last seq; new lines below, none drawn twice', async () => {
     scan.readScan.mockResolvedValue({
       ok: true,
       job: job({
@@ -98,7 +99,11 @@ describe('★★ reading the site, as it really goes', () => {
     show(job());
     await tick();
     expect(scan.readScan).toHaveBeenLastCalledWith(1);
-    expect(lines()).toEqual(['40 pages to read', 'Found Shopify']);
+    // The new line enters at its own pace, below the one before it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REVEAL_MS);
+    });
+    expect(lines()).toEqual(['Found Shopify', '40 pages to read']);
     await tick();
     expect(scan.readScan).toHaveBeenLastCalledWith(2);
     expect(lines()).toHaveLength(2);

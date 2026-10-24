@@ -289,7 +289,7 @@
     text-decoration: underline;
   }
 
-  /* 00d and 00e are the design's narrower column; 00f's facts and voice use the width. */
+  /* Each at its step's width (00e's stream and its findings fill theirs, Omer 2026-10-24). */
   .website,
   .reading {
     max-inline-size: var(--step-width);
@@ -530,15 +530,46 @@
     background-color: var(--ai-avatar-text);
   }
 
+  /*
+   * 00e's stream (Omer, 2026-10-24: "think Claude thinking mode"). The step
+   * uses its width: the heading on top, the stream across it, and what was
+   * found below. The stream is a fixed window on the light surface; the
+   * line happening now sits in its middle, and the window's top and bottom
+   * edges fade the lines out (a mask, so the fade is the surface's own).
+   */
+  .readingHead {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .readingHead > .quiet {
+    margin: 6px 0 0;
+  }
+
+  .readingBody {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-block-start: 26px;
+  }
+
+  .readingAside {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-inline-size: 0;
+  }
+
+  /* Across the step's width, so the stream has a place of its own on the panel. */
   .feed {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-block-start: 14px;
-    padding: 18px 20px;
+    gap: 6px;
+    min-inline-size: 0;
+    padding: 16px 22px 6px;
+    border: var(--border-width-thin) solid var(--border-default);
     border-radius: 14px;
-    background-color: var(--copilot-surface);
-    color: var(--frame-text);
+    background-color: var(--panel-field);
   }
 
   .feedHead {
@@ -546,86 +577,89 @@
     gap: 8px;
     align-items: center;
     font-size: 12px;
-    color: var(--ai-avatar-surface);
+    color: var(--text-subtle);
   }
 
-  .feedDot {
-    inline-size: 5px;
-    block-size: 5px;
-    border-radius: 50%;
-    background-color: var(--ai-avatar-surface);
-  }
+  .feedView {
+    --feed-height: 320px;
+    --feed-line: 24px;
 
-  .feedQuiet {
-    margin: 0;
-    font-size: 12.5px;
-    color: var(--frame-text-muted);
+    position: relative;
+    block-size: var(--feed-height);
+    overflow-y: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to bottom, transparent, black 38%, black 62%, transparent);
   }
 
   .feedRows {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 12px;
     margin: 0;
-    padding: 0;
+    /* The first line and the last can both reach the middle. */
+    padding: calc((var(--feed-height) - var(--feed-line)) / 2) 0;
     list-style: none;
   }
 
   .feedRow {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    font-size: 13px;
-  }
-
-  .feedRow[data-gap] {
-    color: var(--frame-text-muted);
-  }
-
-  /* Every feed line's mark in one box, so a dot and an icon line up. */
-  .feedMark {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    inline-size: 13px;
-  }
-
-  /* The site job's feed: the newest line enters, older lines fade back. */
-  .feedRow[data-testid='scan-line'] {
+    min-block-size: var(--feed-line);
+    font-size: 15px;
+    color: var(--text-secondary);
+    opacity: 0.62;
+    transition: opacity var(--duration-panel) var(--easing-standard);
     animation: scan-in var(--duration-panel) ease-out both;
   }
 
-  .feedRow[data-age='0'] {
+  /* The line happening now: in focus. */
+  .feedRow[data-state='now'] {
     font-weight: 500;
-  }
-
-  .feedRow[data-age='4'],
-  .feedRow[data-age='5'] {
-    opacity: 0.7;
-  }
-
-  .feedRow[data-age='6'],
-  .feedRow[data-age='7'] {
-    opacity: 0.45;
+    color: var(--text-primary);
+    opacity: 1;
   }
 
   .feedRow[data-kind='warn'],
   .feedRow[data-kind='error'] {
-    color: var(--frame-text-muted);
+    color: var(--text-subtle);
+  }
+
+  /* Every feed line's mark in one box, so a dot and an icon line up. */
+  .feedMark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 14px;
+  }
+
+  .feedDot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--ai-avatar-text);
+  }
+
+  /* Only the line in progress breathes. */
+  .feedRow[data-going] .feedDot {
+    animation: feed-breathe 1.4s ease-in-out infinite;
+  }
+
+  .feedQuiet {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
   }
 
   /* What was found so far: 00d's detected-fact chips, growing as they come. */
   .found {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-block-start: 14px;
-  }
-
-  /* On the light surface, not the feed's dark panel: its own heading colour, no list indent. */
-  .found .feedHead {
-    color: var(--text-secondary);
+    gap: 10px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background-color: var(--panel-inset);
   }
 
   .found .chips {
@@ -635,20 +669,47 @@
   }
 
   .found .chip {
+    background-color: var(--panel-field);
+    font-size: 12px;
     animation: scan-in var(--duration-panel) ease-out both;
   }
 
   @keyframes scan-in {
     from {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes feed-breathe {
+    50% {
+      opacity: 0.35;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .feedRow[data-testid='scan-line'],
+    .feedRow,
+    .feedRow[data-going] .feedDot,
     .found .chip {
       animation: none;
+    }
+
+    .feedRow {
+      transition: none;
+    }
+  }
+
+  @media (width <= 1000px) {
+    .readingBody {
+      margin-block-start: 20px;
+    }
+
+    .feedView {
+      --feed-height: 280px;
+    }
+
+    .feed {
+      padding-inline: 16px;
     }
   }
 
@@ -665,19 +726,17 @@
     color: var(--signal-done);
   }
 
+  /* A step that is over: done, quieter than a fact found. */
+  .feedPassed {
+    flex: none;
+    color: var(--text-faint);
+  }
+
   .feedGap {
     flex: none;
-    color: var(--frame-text-faint);
+    color: var(--text-faint);
     stroke-dasharray: 3 3;
   }
-
-  .feedPath {
-    flex: none;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--frame-text-faint);
-  }
-
   .actions > a {
     text-decoration: none;
   }
@@ -1126,7 +1185,7 @@
    * The website step sets none: its width is its content's.
    */
   .work[data-step='reading'] {
-    --step-width: 760px;
+    --step-width: 960px;
   }
 
   .work[data-step='learned'] {

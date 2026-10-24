@@ -1,12 +1,25 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { jobEventSchema, jobFoundSchema, SHELL_STEPS } from '@/api/contracts/onboarding-v2';
+import {
+  jobEventSchema,
+  jobFoundSchema,
+  SHELL_STEPS,
+  type JobEvent,
+} from '@/api/contracts/onboarding-v2';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
 import onboardingHe from '@/i18n/messages/he/onboarding.json';
 
-import { FEED_KEYS, FEED_SHOWN, ScanChips, ScanFeed } from './ScanFeed';
+import {
+  collapseFeed,
+  FEED_KEYS,
+  REVEAL_BACKLOG,
+  REVEAL_FAST_MS,
+  REVEAL_MS,
+  ScanChips,
+  ScanFeed,
+} from './ScanFeed';
 
 /* By code point: a literal here is the character the guard forbids. */
 const DASHES = [String.fromCharCode(0x2013), String.fromCharCode(0x2014)];
@@ -107,26 +120,163 @@ describe('★★ the feed catalogue: every key Backend named, in both languages'
     feedOf('en', 'tool.detected', { ...PARAMS, slug: 'brand_new_tool' });
     expect(screen.getByTestId('scan-line')).toHaveTextContent('Saw brand_new_tool on the site');
   });
+});
 
-  it('★ the feed shows the newest lines only, newest first', () => {
-    const events = Array.from({ length: FEED_SHOWN + 3 }, (_, i) =>
-      jobEventSchema.parse({
-        seq: i + 1,
-        at: '',
-        stage: null,
-        kind: 'progress',
-        key: 'pages.read',
-        params: { count: i + 1 },
-      }),
-    );
+const ev = (seq: number, key: string, params: Record<string, unknown> = {}, kind = 'progress') =>
+  jobEventSchema.parse({ seq, at: '', stage: null, kind, key, params });
+const Stream = ({ events, live = true }: { events: JobEvent[]; live?: boolean }) => (
+  <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingEn }}>
+    <ScanFeed events={events} live={live} />
+  </NextIntlClientProvider>
+);
+const lines = () => screen.queryAllByTestId('scan-line').map((li) => li.textContent);
+const tick = async (ms: number) => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
+describe('★★ the stream: in time order, one line at a time, no repeats', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('★★ oldest at the top, newest at the bottom, every line kept: never reordered', () => {
     render(
-      <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingEn }}>
-        <ScanFeed events={events} />
-      </NextIntlClientProvider>,
+      <Stream
+        events={[
+          ev(3, 'pages.planned', { count: 40 }),
+          ev(1, 'site.opening', { domain: 'https://avivco.il' }),
+          ev(2, 'platform.detected', { platform: 'shopify' }, 'found'),
+        ]}
+      />,
     );
-    const shown = screen.getAllByTestId('scan-line');
-    expect(shown).toHaveLength(FEED_SHOWN);
-    expect(shown[0]).toHaveTextContent(`Read ${FEED_SHOWN + 3} pages`);
+    expect(lines()).toEqual(['Opening avivco.il', 'Found Shopify', '40 pages to read']);
+  });
+
+  it('★★ only the newest line is happening now; a progress line before it shows as done', () => {
+    render(
+      <Stream
+        events={[
+          ev(1, 'sitemap.reading'),
+          ev(2, 'platform.detected', { platform: 'shopify' }, 'found'),
+          ev(3, 'page.reading', { kind: 'returns' }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByTestId('scan-line');
+    expect(rows.map((row) => row.getAttribute('data-state'))).toEqual(['done', 'done', 'now']);
+    expect(rows.filter((row) => row.hasAttribute('data-going'))).toEqual([rows[2]]);
+    // The finished progress step carries a check, not the breathing dot.
+    expect(rows[0]!.querySelector('svg')).not.toBeNull();
+    expect(rows[2]!.querySelector('svg')).toBeNull();
+  });
+
+  it('★ a job that stopped has nothing in progress: its last line is done too', () => {
+    render(
+      <Stream
+        live={false}
+        events={[ev(1, 'sitemap.reading'), ev(2, 'pages.read', { count: 3 })]}
+      />,
+    );
+    const rows = screen.getAllByTestId('scan-line');
+    expect(rows.at(-1)).toHaveAttribute('data-state', 'now');
+    expect(rows.some((row) => row.hasAttribute('data-going'))).toBe(false);
+  });
+
+  it("★★ two events that say the same line are one line, in the first one's place", () => {
+    render(
+      <Stream
+        events={[
+          ev(1, 'page.reading', { kind: 'returns', path: 'https://avivco.il/a' }),
+          ev(2, 'platform.detected', { platform: 'shopify' }, 'found'),
+          ev(3, 'page.reading', { kind: 'returns', path: 'https://avivco.il/b' }),
+          ev(4, 'page.reading', { kind: 'shipping' }),
+        ]}
+      />,
+    );
+    expect(lines()).toEqual([
+      'Reading a page about returns',
+      'Found Shopify',
+      'Reading a page about shipping',
+    ]);
+  });
+
+  it('★ the same seq twice is drawn once; lines that differ in words are kept', () => {
+    render(
+      <Stream
+        events={[
+          ev(1, 'pages.read', { count: 3 }),
+          ev(1, 'pages.read', { count: 3 }),
+          ev(2, 'pages.read', { count: 4 }),
+        ]}
+      />,
+    );
+    expect(lines()).toEqual(['Read 3 pages', 'Read 4 pages']);
+  });
+
+  it('★★ a repeat that arrives later never pulls the focus back up the stream', async () => {
+    const first = [
+      ev(1, 'page.reading', { kind: 'returns' }),
+      ev(2, 'faq.found', { count: 2 }, 'found'),
+    ];
+    const { rerender } = render(<Stream events={first} />);
+    rerender(<Stream events={[...first, ev(3, 'page.reading', { kind: 'returns' })]} />);
+    await tick(REVEAL_MS * 3);
+    expect(lines()).toEqual(['Reading a page about returns', 'Found 2 FAQs']);
+    expect(screen.getAllByTestId('scan-line')[1]).toHaveAttribute('data-state', 'now');
+  });
+
+  it('collapseFeed: sorted by seq, first of each wording kept', () => {
+    const row = (seq: number, says: string) => ({ event: ev(seq, 'pages.read'), says });
+    expect(
+      collapseFeed([row(4, 'c'), row(2, 'b'), row(1, 'a'), row(3, 'a'), row(2, 'x')]).map(
+        (r) => `${r.event.seq}${r.says}`,
+      ),
+    ).toEqual(['1a', '2b', '4c']);
+  });
+
+  it('★★ the first render draws the history whole; what arrives after enters one line at a time', async () => {
+    const first = [ev(1, 'site.opening', { domain: 'https://avivco.il' })];
+    const { rerender } = render(<Stream events={first} />);
+    expect(lines()).toHaveLength(1);
+    rerender(
+      <Stream
+        events={[
+          ...first,
+          ev(2, 'platform.detected', { platform: 'shopify' }, 'found'),
+          ev(3, 'sitemap.reading'),
+          ev(4, 'pages.planned', { count: 40 }),
+        ]}
+      />,
+    );
+    // Three arrived in one poll: none is drawn at once.
+    expect(lines()).toHaveLength(1);
+    await tick(REVEAL_MS);
+    expect(lines()).toEqual(['Opening avivco.il', 'Found Shopify']);
+    await tick(REVEAL_MS);
+    expect(lines()).toHaveLength(3);
+    await tick(REVEAL_MS);
+    expect(lines()).toHaveLength(4);
+    expect(screen.getAllByTestId('scan-line')[3]).toHaveAttribute('data-state', 'now');
+  });
+
+  it('★ a long backlog enters faster, so the stream never lags far behind the job', async () => {
+    const first = [ev(1, 'site.opening', { domain: 'https://avivco.il' })];
+    const { rerender } = render(<Stream events={first} />);
+    const more = Array.from({ length: REVEAL_BACKLOG + 3 }, (_, i) =>
+      ev(i + 2, 'pages.read', { count: i + 1 }),
+    );
+    rerender(<Stream events={[...first, ...more]} />);
+    await tick(REVEAL_FAST_MS);
+    expect(lines()).toHaveLength(2);
+  });
+
+  it('★ the job stopped: everything waiting is drawn at once, "done" never waits on the stream', () => {
+    const first = [ev(1, 'site.opening', { domain: 'https://avivco.il' })];
+    const { rerender } = render(<Stream events={first} />);
+    const all = [...first, ev(2, 'sitemap.reading'), ev(3, 'job.done')];
+    rerender(<Stream events={all} live={false} />);
+    expect(lines()).toHaveLength(3);
   });
 });
 

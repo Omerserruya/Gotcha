@@ -320,7 +320,7 @@ describe("★★ the banner is exactly the step column's width - and the column 
   });
 
   it.each([
-    ['reading', 'reading', '760px'],
+    ['reading', 'reading', '960px'],
     ['learned', 'learned', '800px'],
     ['systems', 'systemsStep', '760px'],
     ['channels', 'systemsStep', '760px'],
