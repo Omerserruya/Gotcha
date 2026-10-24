@@ -309,13 +309,31 @@ export interface AgentChatParams extends ConversationContext {
     lastMessageAt?: string;
     isHandedOver: boolean;
   };
+  /**
+   * The side chat (copilot-chat.service): only READ tools on the surface, and
+   * a `propose_reply` terminator so an answer can carry a draft for the
+   * customer, written in `draftLocale`.
+   */
+  sidePanel?: { draftLocale?: string };
+}
+
+/** A side-chat answer. `failed` answers are shown, never stored. */
+export interface AgentChatResult {
+  text: string;
+  draft?: string;
+  toolsCalled: string[];
+  failed?: boolean;
 }
 
 export async function chatWithAgent(params: AgentChatParams): Promise<string> {
+  return (await chatWithAgentStructured(params)).text;
+}
+
+export async function chatWithAgentStructured(params: AgentChatParams): Promise<AgentChatResult> {
   if ("chatWithAgent" in provider && typeof (provider as any).chatWithAgent === "function") {
     return (provider as any).chatWithAgent(params);
   }
-  return "AI Chat is not available. Please configure an AI provider.";
+  return { text: "AI Chat is not available. Please configure an AI provider.", toolsCalled: [], failed: true };
 }
 
 // Re-export for callers that previously imported from this module.

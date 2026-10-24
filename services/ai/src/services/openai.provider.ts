@@ -3,7 +3,7 @@
  * Reads BehaviorState for output contract + KB gating + tool surface.
  */
 
-import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams, CopilotConfigData } from "./ai-assist.service";
+import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams, AgentChatResult, CopilotConfigData } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import { isAbortError } from "./turn-cancellation.service";
@@ -24,7 +24,7 @@ import {
 } from "./behavior-engine.service";
 import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
 import { assemblePlanContext, type AssembledPlanContext } from "./plan-context.service";
-import { routeCopilotTool } from "./capabilities";
+import { routeCopilotTool, classifyToolEffect } from "./capabilities";
 import { assembleCopilotToolSurface } from "./copilot-tool-surface.service";
 // CALENDAR capability execution - the ONE runtime pipeline, advisory mode. The
 // Copilot no longer has its own calendar execution logic.
@@ -776,9 +776,10 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async chatWithAgent(params: AgentChatParams): Promise<string> {
+  async chatWithAgent(params: AgentChatParams): Promise<AgentChatResult> {
     const config = params.copilotConfig;
-    if (config && !config.isActive) return "Co-Pilot is disabled.";
+    if (config && !config.isActive) return { text: "Co-Pilot is disabled.", toolsCalled: [], failed: true };
+    const toolsCalled: string[] = [];
 
     const model = config?.model || this.defaultModel;
 
@@ -861,8 +862,14 @@ export class OpenAIProvider implements AIProvider {
       contactId: chatContactId,
       customerExternalId: params.customerData?.externalId,
     });
-    const chatTools = surface.tools;
-    const chatToolFnNames = surface.toolFunctionNames;
+    // The side chat only reads: an action the Copilot "recommends" through a
+    // tool would look like something it did. It can still suggest one in words.
+    const chatTools = params.sidePanel
+      ? [...surface.tools.filter((t: any) => classifyToolEffect(String(t?.function?.name ?? "")) === "read"), PROPOSE_REPLY_TOOL]
+      : surface.tools;
+    const chatToolFnNames = params.sidePanel
+      ? chatTools.map((t: any) => String(t?.function?.name ?? "")).filter(Boolean)
+      : surface.toolFunctionNames;
     const calendarBookable = surface.calendarBookable;
     const hasActiveBooking = surface.hasActiveBooking;
 
@@ -952,6 +959,8 @@ export class OpenAIProvider implements AIProvider {
       messages.push({ role: msg.role === "user" ? "user" : "assistant", content: msg.content });
     }
 
+    if (params.sidePanel) messages.push({ role: "user", content: proposeReplyInstruction(params.sidePanel.draftLocale) });
+
     messages.push({ role: "user", content: params.agentMessage });
 
 
@@ -980,6 +989,10 @@ export class OpenAIProvider implements AIProvider {
           maxTokens: config?.maxTokens ?? 1024,
           metadata: { type: "chat", conversationId: params.conversationId },
           tools,
+          // The side chat's last round must answer, not look up one more thing.
+          ...(params.sidePanel && round === 2
+            ? { toolChoice: { type: "function", function: { name: PROPOSE_REPLY_TOOL.function.name } } }
+            : {}),
         });
 
         const toolCalls = result.toolCalls;
@@ -987,7 +1000,18 @@ export class OpenAIProvider implements AIProvider {
           // Turn-level decision when no READ/ACTION tool ran: pure reply (NO_TOOL)
           // or blocked on a planner-named required input (MISSING_INFORMATION).
           if (dispatchedToolCount === 0) logCopilotTool(noToolDecision(plan), diag);
-          return result.content || "I couldn't generate a response. Please try again.";
+          return result.content
+            ? { text: result.content, toolsCalled }
+            : { text: "I couldn't generate a response. Please try again.", toolsCalled, failed: true };
+        }
+
+        // The side chat's terminator: the answer, and maybe a draft. Read
+        // before any other call in the same round runs, so a round that also
+        // asked for a lookup ends here rather than spending another call.
+        const proposal = params.sidePanel ? toolCalls.find((tc: any) => tc.function?.name === PROPOSE_REPLY_TOOL.function.name) : undefined;
+        if (proposal) {
+          const parsed = parseProposeReply(proposal.function?.arguments);
+          if (parsed) return { ...parsed, toolsCalled };
         }
 
         messages.push({
@@ -1002,6 +1026,18 @@ export class OpenAIProvider implements AIProvider {
           // ACTIONS are recommended to the human, never executed.
           const toolName = tc.function?.name || "";
           dispatchedToolCount++;
+          toolsCalled.push(toolName);
+
+          // A malformed propose_reply: tell the model, never dispatch it.
+          if (toolName === PROPOSE_REPLY_TOOL.function.name) {
+            messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: false, error: "propose_reply needs a non-empty message" }) } as any);
+            continue;
+          }
+          // Read-only means read-only at dispatch too, not only on the surface.
+          if (params.sidePanel && classifyToolEffect(toolName) !== "read") {
+            messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ ok: false, error: "Not available in the side chat." }) } as any);
+            continue;
+          }
 
           // CALENDAR → the ONE runtime pipeline (ADVISORY), identical to suggest.
           if (isCalendarTool(toolName)) {
@@ -1067,10 +1103,10 @@ export class OpenAIProvider implements AIProvider {
           }, diag);
         }
       }
-      return "I couldn't finalize a response after using tools. Please try again.";
+      return { text: "I couldn't finalize a response after using tools. Please try again.", toolsCalled, failed: true };
     } catch (err: any) {
       console.error("OpenAI agent chat error:", err.message);
-      return "Failed to get AI response. Please check API configuration.";
+      return { text: "Failed to get AI response. Please check API configuration.", toolsCalled, failed: true };
     }
   }
 
@@ -1118,4 +1154,51 @@ function humanizeQuickAction(toolName: string, args: Record<string, unknown>): s
     .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join(", ");
   return preview ? `${verb} - ${preview}` : verb;
+}
+
+
+// ─── Copilot side chat: the propose_reply terminator ─────────────────────────
+
+export const PROPOSE_REPLY_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "propose_reply",
+    description:
+      "Answer the agent. Always end your turn with this. `message` is what you say to the agent. " +
+      "Add `draft` only when the agent asked for a reply to send the customer, or one clearly helps: " +
+      "it is the exact text the customer would receive, ready to send.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "Your answer to the agent, in the agent's language." },
+        draft: { type: "string", description: "Optional. A reply to the customer, ready to send as is." },
+      },
+      required: ["message"],
+      additionalProperties: false,
+    },
+  },
+};
+
+const LANGUAGE_NAMES: Record<string, string> = { he: "Hebrew", en: "English", ar: "Arabic", ru: "Russian" };
+
+export function proposeReplyInstruction(draftLocale?: string): string {
+  const lang = draftLocale ? LANGUAGE_NAMES[draftLocale.slice(0, 2).toLowerCase()] ?? draftLocale : undefined;
+  return [
+    "## Side chat rules",
+    "You are talking privately with the human agent who handles this customer. The customer never sees this chat.",
+    "You can look things up with the read tools. You cannot act on the customer's account or send anything.",
+    "Finish every answer by calling propose_reply.",
+    `A draft is a message TO THE CUSTOMER${lang ? `, written in ${lang}` : ", in the customer's language"}, with no preamble, no quotes and no notes to the agent.`,
+    "Never claim that you did something. Say what the agent can do.",
+  ].join("\n");
+}
+
+/** `{message, draft?}` from the tool call; null when there is no usable message. */
+export function parseProposeReply(raw: string | undefined): { text: string; draft?: string } | null {
+  let args: any;
+  try { args = JSON.parse(raw || "{}"); } catch { return null; }
+  const text = typeof args?.message === "string" ? args.message.trim() : "";
+  if (!text) return null;
+  const draft = typeof args?.draft === "string" ? args.draft.trim() : "";
+  return draft ? { text, draft } : { text };
 }

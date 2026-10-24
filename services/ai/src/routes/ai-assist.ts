@@ -15,6 +15,7 @@ import {
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
+import * as copilotChat from "../services/copilot-chat.service";
 import {
   generateAndStore,
   readStoredSuggestions,
@@ -838,19 +839,55 @@ router.get("/:conversationId/summary", requireEntitlement("communication.crm_sum
   } catch (err) { console.error("AI summary error:", err); res.status(500).json({ error: "Failed to get summary" }); }
 });
 
-// ─── Agent Chat with AI (CHAT mode) ──────────────────────────
-router.post("/:conversationId/chat", async (req: Request, res: Response) => {
-  try {
-    const convId = req.params.conversationId as string;
-    const { message, history, locale } = req.body;
+// ─── Copilot side chat (CHAT mode) ───────────────────────────
+//
+// A private conversation between the agent and the Copilot about this
+// customer conversation; see services/copilot-chat.service.ts. The thread is
+// stored per agent on the server: GET reads it, POST adds one exchange, DELETE
+// starts over. The client's `history` is ignored: it was the old panel's, and a
+// client-held history let anyone script the Copilot's previous answers.
+//
+// Paid feature, like the suggestions. Read-only tools; an answer may carry a
+// `draft`, which reaches the composer only through "use as reply" in the UI.
 
-    if (!message || typeof message !== "string") {
-      res.status(400).json({ error: "message is required" });
+/** The transcript the side chat reasons over: the newest messages, oldest first. */
+const SIDE_CHAT_TRANSCRIPT = 50;
+
+router.get("/:conversationId/chat", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
+  try {
+    const turns = await copilotChat.readThread(req.tenantId!, req.params.conversationId as string, req.user!.userId);
+    res.json({ data: { turns, maxTurns: copilotChat.MAX_TURNS } });
+  } catch (err: any) {
+    console.error("copilot chat read error:", err?.message ?? err);
+    res.status(500).json({ error: "Failed to read the Copilot chat" });
+  }
+});
+
+router.delete("/:conversationId/chat", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
+  try {
+    await copilotChat.clearThread(req.tenantId!, req.params.conversationId as string, req.user!.userId);
+    res.json({ data: { turns: [] } });
+  } catch (err: any) {
+    console.error("copilot chat clear error:", err?.message ?? err);
+    res.status(500).json({ error: "Failed to clear the Copilot chat" });
+  }
+});
+
+router.post("/:conversationId/chat", requireEntitlement("ai.copilot"), async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!;
+  const convId = req.params.conversationId as string;
+  const userId = req.user!.userId;
+  let release: (() => Promise<void>) | null = null;
+  try {
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!message) { res.status(400).json({ error: "message is required", code: "MESSAGE_REQUIRED" }); return; }
+    if (message.length > copilotChat.MAX_MESSAGE_CHARS) {
+      res.status(400).json({ error: `message is longer than ${copilotChat.MAX_MESSAGE_CHARS} characters`, code: "MESSAGE_TOO_LONG" });
       return;
     }
 
     const conversation = await prisma.conversation.findFirst({
-      where: { id: convId, tenantId: req.tenantId! },
+      where: { id: convId, tenantId },
       include: {
         department: { select: { id: true, name: true } },
         assignedAgent: { select: { name: true } },
@@ -858,30 +895,43 @@ router.post("/:conversationId/chat", async (req: Request, res: Response) => {
     });
     if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
 
-    const messages = await prisma.message.findMany({
-      where: { conversationId: convId, tenantId: req.tenantId! },
-      orderBy: { createdAt: "asc" },
-      select: { direction: true, body: true, senderName: true, createdAt: true },
-    });
-
-    const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
-
+    const copilotConfig = await aiService.getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
     if (!copilotConfig) {
-      res.status(400).json({ error: "No AI Employee configured. Set up an AI Employee in AI Studio." });
+      res.status(400).json({ error: "No AI Employee configured. Set up an AI Employee in AI Studio.", code: "NO_AI_EMPLOYEE" });
       return;
     }
 
-    const reply = await aiService.chatWithAgent({
-      tenantId: req.tenantId!,
+    release = await copilotChat.acquireRound(tenantId, convId, userId);
+    if (!release) {
+      res.status(409).json({ error: "The Copilot is still answering your previous message.", code: "COPILOT_CHAT_BUSY" });
+      return;
+    }
+
+    const [recent, thread, draftLocale] = await Promise.all([
+      prisma.message.findMany({
+        where: { conversationId: convId, tenantId },
+        orderBy: { createdAt: "desc" },
+        take: SIDE_CHAT_TRANSCRIPT,
+        select: { direction: true, body: true, senderName: true, createdAt: true },
+      }),
+      copilotChat.readThread(tenantId, convId, userId),
+      // A draft is for the customer, so it is in the CUSTOMER's language.
+      resolveConversationLocale({ tenantId, conversationId: convId, fallbackUserId: userId }).catch(() => undefined),
+    ]);
+    const agentLocale = (typeof req.body?.locale === "string" && req.body.locale) || undefined;
+
+    const answer = await aiService.chatWithAgentStructured({
+      tenantId,
       conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
-      messages: messages.map((m: any) => ({
+      messages: recent.reverse().map((m: any) => ({
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
       copilotConfig,
-      locale: locale || undefined,
+      locale: agentLocale,
       agentMessage: message,
-      chatHistory: Array.isArray(history) ? history : [],
+      chatHistory: copilotChat.asModelHistory(thread),
+      sidePanel: { draftLocale: draftLocale || undefined },
       customerData: {
         externalId: conversation.customerExternalId,
         name: conversation.customerName || undefined,
@@ -895,10 +945,43 @@ router.post("/:conversationId/chat", async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ data: { reply } });
+    // Names and sizes only: the words stay in the agent's thread.
+    prisma.auditLog.create({
+      data: {
+        tenantId, actorType: "user", actorId: userId, action: "ai.copilot_chat",
+        targetType: "conversation", targetId: convId,
+        metadata: {
+          toolsCalled: answer.toolsCalled, hasDraft: !!answer.draft, failed: !!answer.failed,
+          messageChars: message.length, threadTurns: thread.length,
+        },
+      },
+    }).catch((err: any) => console.warn("[copilot-chat] audit failed:", err?.message));
+
+    // A failed round is shown, not stored: it would be history the model then
+    // reads as something it said.
+    if (answer.failed) {
+      res.status(502).json({ error: answer.text, code: "COPILOT_CHAT_FAILED" });
+      return;
+    }
+
+    const agentTurn = copilotChat.newTurn("agent", message);
+    const copilotTurn = copilotChat.newTurn("copilot", answer.text, answer.draft);
+    const turns = await copilotChat.appendTurns(tenantId, convId, userId, [agentTurn, copilotTurn]);
+    res.json({
+      data: {
+        // `reply` is the old panel's field.
+        reply: answer.text,
+        text: answer.text,
+        ...(answer.draft ? { draft: answer.draft } : {}),
+        turn: copilotTurn,
+        turns,
+      },
+    });
   } catch (err) {
     console.error("AI chat error:", err);
-    res.status(500).json({ error: "Failed to get AI response" });
+    if (!res.headersSent) res.status(500).json({ error: "Failed to get AI response" });
+  } finally {
+    if (release) await release().catch(() => undefined);
   }
 });
 
