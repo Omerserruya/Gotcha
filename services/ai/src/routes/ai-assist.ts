@@ -20,6 +20,8 @@ import {
   readStoredSuggestions,
   latestInboundId,
   isGenerating,
+  isCopilotConversation,
+  type ModeFields,
 } from "../services/copilot-suggestions.service";
 import { getCustomerMemory } from "../services/customer-memory.service";
 import { getAiActivity } from "../services/ai-activity.service";
@@ -711,8 +713,21 @@ router.post("/:conversationId/suggestions/refresh", requireEntitlement("ai.copil
   const tenantId = req.tenantId!;
   const startedAt = Date.now();
   try {
-    const exists = await prisma.conversation.findFirst({ where: { id: convId, tenantId }, select: { id: true } });
+    const exists = await prisma.conversation.findFirst({
+      where: { id: convId, tenantId },
+      select: { id: true, status: true, channel: true, assignedAgentId: true, isHandedOver: true, handledBy: true, chatbotNodeId: true, assignedAiAgentId: true },
+    });
     if (!exists) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    // The same rule as the inbound trigger: a conversation the AI employee, a
+    // flow or the sandbox answers gets no suggestions, asked for or not. The
+    // read shape is unchanged; `skipped` says why nothing was generated.
+    if (!isCopilotConversation(exists as unknown as ModeFields)) {
+      const out = await readSuggestionsPayload(tenantId, convId);
+      console.log(JSON.stringify({ tag: "copilot.suggestions.refresh", tenantId, conversationId: convId, requestInstanceId, skipped: "ai_or_closed" }));
+      res.status(out.status).json(out.status === 200 ? { ...out.body, skipped: "ai_or_closed" } : out.body);
+      return;
+    }
 
     const wait = await refreshRateLimit(tenantId, convId, req.user?.userId);
     if (wait !== null) {

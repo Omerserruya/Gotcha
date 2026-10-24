@@ -219,6 +219,10 @@ describe("★ no generation when nobody would read it", () => {
     ["a flow is answering", { assignedAgentId: null, handledBy: "flow" }],
     ["a flow is parked on a reply", { assignedAgentId: null, handledBy: null, chatbotNodeId: "n1" }],
     ["the conversation is closed", { status: "CLOSED" }],
+    // ★ 2026-10-23: the automation names the employee before its first turn and
+    // writes handledBy only after it, so the debounce fired inside that gap.
+    ["★ the employee's first turn is still running (handledBy not written yet)", { assignedAgentId: null, handledBy: null, assignedAiAgentId: "emp1" }],
+    ["a sandbox test chat", { assignedAgentId: null, handledBy: "sandbox", assignedAiAgentId: "emp1" }],
   ];
   for (const [name, o] of cases) {
     it(`${name}: zero calls`, async () => {
@@ -244,6 +248,8 @@ describe("★ no generation when nobody would read it", () => {
 
   it("an AI conversation handed to a person DOES get suggestions", () => {
     expect(isCopilotConversation(conv({ handledBy: "ai_agent", isHandedOver: true, assignedAgentId: null }))).toBe(true);
+    expect(isCopilotConversation(conv({ handledBy: "ai_agent", isHandedOver: true, assignedAgentId: null, assignedAiAgentId: "emp1" }))).toBe(true);
+    expect(isCopilotConversation(conv({ handledBy: "human", assignedAgentId: "agent1", assignedAiAgentId: "emp1" }))).toBe(true);
     expect(isCopilotConversation(conv({ handledBy: null, assignedAgentId: null }))).toBe(true); // waiting for pickup
   });
 });
@@ -261,6 +267,16 @@ describe("★ Try again", () => {
     expect(again.body.code).toBe("REFRESH_RATE_LIMITED");
     expect(again.headers["retry-after"]).toBeDefined();
     expect(H.getSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it("★ an AI-owned conversation: the read shape with skipped, no model call, no budget spent", async () => {
+    H.db.conversations = [conv({ assignedAgentId: null, handledBy: "ai_agent", assignedAiAgentId: "emp1" })];
+    inbound("m1");
+    const r = await request(app).post("/api/ai-assist/c1/suggestions/refresh");
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ data: [], skipped: "ai_or_closed" });
+    expect(H.getSuggestions).not.toHaveBeenCalled();
+    expect([...H.store.keys()].some((k) => k.startsWith("copilot:refresh:"))).toBe(false);
   });
 
   it("404 for a conversation in another tenant, without calling the model", async () => {

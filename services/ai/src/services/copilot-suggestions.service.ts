@@ -72,6 +72,8 @@ export interface ModeFields {
   isHandedOver: boolean;
   handledBy: string | null;
   chatbotNodeId: string | null;
+  /** Optional so older callers keep compiling; runIfEligible always selects it. */
+  assignedAiAgentId?: string | null;
 }
 
 /**
@@ -85,14 +87,23 @@ export interface ModeFields {
  * in the inbox for pickup).
  *
  * VOICE is excluded because it has its own live pipeline (voice-assist).
+ *
+ * An employee named on the conversation with no person on it is the AI's too,
+ * whatever handledBy says. The automation writes assignedAiAgentId BEFORE the
+ * employee's first turn and handledBy="ai_agent" only AFTER it
+ * (flow-executor routeToTarget), and that turn outlasts the 4s debounce: every
+ * new AI conversation used to pay for one suggestion on its first message
+ * (2026-10-23, both urban conversations, about 16k tokens each). Sandbox test
+ * chats are the employee's by definition.
  */
 export function isCopilotConversation(c: ModeFields): boolean {
   const status = String(c.status);
   if (status === "CLOSED" || status === "RESOLVED") return false;
   if (String(c.channel) === "VOICE") return false;
   if (c.assignedAgentId || c.isHandedOver) return true;
-  if (c.handledBy === "ai_agent" || c.handledBy === "awaiting_approval" || c.handledBy === "flow") return false;
+  if (c.handledBy === "ai_agent" || c.handledBy === "awaiting_approval" || c.handledBy === "flow" || c.handledBy === "sandbox") return false;
   if (c.chatbotNodeId) return false;
+  if (c.assignedAiAgentId) return false;
   return true;
 }
 
@@ -290,7 +301,7 @@ export function scheduleSuggestionsOnInbound(tenantId: string, conversationId: s
 export async function runIfEligible(tenantId: string, conversationId: string): Promise<GenerateOutcome | { status: "skipped"; reason: string }> {
   const conv = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
-    select: { status: true, channel: true, assignedAgentId: true, isHandedOver: true, handledBy: true, chatbotNodeId: true },
+    select: { status: true, channel: true, assignedAgentId: true, isHandedOver: true, handledBy: true, chatbotNodeId: true, assignedAiAgentId: true },
   });
   if (!conv) return { status: "skipped", reason: "not_found" };
   if (!isCopilotConversation(conv as unknown as ModeFields)) return { status: "skipped", reason: "ai_or_closed" };
