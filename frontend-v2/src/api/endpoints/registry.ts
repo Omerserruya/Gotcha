@@ -584,10 +584,13 @@ export const channelEndpoints = {
    * session, answers `200 { url }` - the provider's page - or `409
    * { error: 'not_configured' }`, or 403 for a non-admin. The way back lands
    * on `/v2/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
+   * `onboarding_channels` (backend 2c1653b0) lands the same query on
+   * `/v2/onboarding/channels` instead.
    */
-  oauthInitUrl: (platform: string) =>
-    endpoint('/api/channels/oauth/init-url?platform={platform}&flow=redesign_studio', {
+  oauthInitUrl: (platform: string, flow: 'redesign_studio' | 'onboarding_channels' = 'redesign_studio') =>
+    endpoint('/api/channels/oauth/init-url?platform={platform}&flow={flow}', {
       platform,
+      flow,
     }),
   /** Creates the widget as PENDING - a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),

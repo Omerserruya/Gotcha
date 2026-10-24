@@ -1,9 +1,43 @@
-import type { Channel } from '@/api/contracts/channels';
+import type { Channel, ChannelType } from '@/api/contracts/channels';
 import type { WidgetInstall } from '@/api/contracts/website-widget';
 
-/** The channels onboarding offers, in this order (Omer, 2026-10-23). */
-export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'EMAIL'] as const;
+/**
+ * The channels onboarding offers, in this order (Omer, 2026-10-23). Messenger
+ * joined beside Instagram (2026-10-24): its connect comes back to the step
+ * too, with its Page picker.
+ */
+export const ONBOARDING_CHANNELS = ['WEBCHAT', 'WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL'] as const;
 export type OnboardingChannel = (typeof ONBOARDING_CHANNELS)[number];
+
+/** The platform types each row stands for: email is a mailbox on a server, Gmail or Outlook. */
+const ROW_TYPES: Record<Exclude<OnboardingChannel, 'WEBCHAT'>, readonly ChannelType[]> = {
+  WHATSAPP: ['WHATSAPP'],
+  INSTAGRAM: ['INSTAGRAM'],
+  MESSENGER: ['MESSENGER'],
+  EMAIL: ['EMAIL', 'GMAIL', 'OUTLOOK'],
+};
+
+/** The row a platform's account (or its way back) belongs on; `null`: onboarding has none. */
+export function rowOf(type: ChannelType): OnboardingChannel | null {
+  if (type === 'WEBCHAT' || type === 'SHOPIFY_LIVE_CHAT') return 'WEBCHAT';
+  for (const [row, types] of Object.entries(ROW_TYPES)) {
+    if (types.includes(type)) return row as OnboardingChannel;
+  }
+  return null;
+}
+
+/** The accounts a row stands for (never the website's: it is its install, not a list). */
+export const accountsOf = (
+  channel: OnboardingChannel,
+  channels: readonly Channel[] | null,
+): readonly Channel[] =>
+  channel === 'WEBCHAT'
+    ? []
+    : (channels ?? []).filter((each) => ROW_TYPES[channel].includes(each.channel));
+
+/** An account a customer can write to now: active and CONNECTED. */
+export const answers = (each: Channel) =>
+  each.isActive !== false && each.connectionStatus === 'CONNECTED';
 
 type Shop = WidgetInstall['shopify'][number];
 /** A Shopify shop's chat is live: the app is enabled and its theme embed loaded recently. */
@@ -26,10 +60,7 @@ export function reaches(
   }
   // Backend's go-live counts active accounts only; CONNECTED is ours on top (an
   // account in ERROR answers nobody).
-  return (channels ?? []).some(
-    (each) =>
-      each.channel === channel && each.isActive !== false && each.connectionStatus === 'CONNECTED',
-  );
+  return accountsOf(channel, channels).some(answers);
 }
 
 /**

@@ -20,6 +20,17 @@ describe('★★ where a customer can write now', () => {
     expect(reachableChannels([off], install())).toEqual([]);
   });
 
+  it('★ Gmail and Outlook are the email row; Messenger is its own', () => {
+    expect(
+      reachableChannels(
+        [channel('GMAIL', 'CONNECTED'), channel('MESSENGER', 'CONNECTED')],
+        install(),
+      ),
+    ).toEqual(['MESSENGER', 'EMAIL']);
+    expect(reachableChannels([channel('OUTLOOK', 'CONNECTED')], install())).toEqual(['EMAIL']);
+    expect(reachableChannels([channel('SLACK', 'CONNECTED')], install())).toEqual([]);
+  });
+
   it('a CONNECTED channel reaches; any other status does not', () => {
     expect(
       reachableChannels(

@@ -1,21 +1,35 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { channelSchema } from '@/api/contracts/channels';
+import { channelLandingOf } from '@/features/channels/landing';
 import channelsEn from '@/i18n/messages/en/channels.json';
 import onboardingEn from '@/i18n/messages/en/onboarding.json';
 
 /** Step 3. Mocked: nothing connects, no number, page or mailbox is touched. */
-const { actions, router } = vi.hoisted(() => ({
+const { actions, messenger, router } = vi.hoisted(() => ({
   actions: { startChannelConnect: vi.fn() },
-  router: { refresh: vi.fn(), push: vi.fn() },
+  messenger: { selectMessengerPages: vi.fn() },
+  router: { refresh: vi.fn(), push: vi.fn(), replace: vi.fn() },
 }));
 vi.mock('@/features/channels/actions', () => actions);
+vi.mock('@/features/channels/messenger-actions', () => messenger);
 vi.mock('@/features/channels/ConnectWhatsApp', () => ({
-  ConnectWhatsApp: ({ closeHref }: { closeHref: string }) => (
-    <div data-testid="whatsapp-wizard" data-close={closeHref} />
+  ConnectWhatsApp: ({
+    closeHref,
+    onCancel,
+    onDone,
+  }: {
+    closeHref: string;
+    onCancel?: () => void;
+    onDone?: () => void;
+  }) => (
+    <div data-testid="whatsapp-wizard" data-close={closeHref}>
+      <button type="button" data-testid="wizard-cancel" onClick={onCancel} />
+      <button type="button" data-testid="wizard-done" onClick={onDone} />
+    </div>
   ),
 }));
 vi.mock('@/features/channels/ConnectPanel', () => ({
@@ -43,7 +57,7 @@ import { afterChannels, ChannelsStep } from './ChannelsStep';
 const configured = { configured: true, appId: 'a', configId: 'c' };
 const config = (over: object = {}) => ({
   launches: { coexistence: configured, newNumber: null },
-  providers: { instagram: true },
+  providers: { instagram: true, messenger: true, gmail: true, outlook: true },
   ...over,
 });
 const code = (status: 'live' | 'not_seen') => ({
@@ -53,166 +67,121 @@ const code = (status: 'live' | 'not_seen') => ({
     status,
     firstSeenAt: null,
     lastSeenAt: null,
-    lastHost: null,
+    lastHost: status === 'live' ? 'avivco.il' : null,
   },
   shopify: [],
   woocommerce: { sites: [] },
 });
-const show = (props: Partial<Parameters<typeof ChannelsStep>[0]> = {}) =>
-  render(
-    <NextIntlClientProvider
-      locale="en"
-      messages={{ onboarding: onboardingEn, channels: channelsEn }}
-    >
-      <ChannelsStep
-        channels={[]}
-        install={code('not_seen') as never}
-        config={config() as never}
-        {...props}
-      />
-    </NextIntlClientProvider>,
-  );
-const channel = (type: string, status = 'CONNECTED') =>
-  channelSchema.parse({ id: `c-${type}`, channel: type, connectionStatus: status });
+const noCode = { code: null, shopify: [], woocommerce: { sites: [] } };
+type Props = Parameters<typeof ChannelsStep>[0];
+const tree = (props: Partial<Props> = {}) => (
+  <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingEn, channels: channelsEn }}>
+    <ChannelsStep
+      channels={[]}
+      install={code('not_seen') as never}
+      config={config() as never}
+      {...props}
+    />
+  </NextIntlClientProvider>
+);
+const show = (props: Partial<Props> = {}) => render(tree(props));
+const channel = (type: string, status = 'CONNECTED', over: object = {}) =>
+  channelSchema.parse({ id: `c-${type}`, channel: type, connectionStatus: status, ...over });
+const row = (name: string) => screen.getByTestId(`channels-${name}`);
+/** A way back, read the way the page reads it. */
+const back = (query: Record<string, string>) => channelLandingOf(query);
 
+const assign = vi.fn();
 beforeEach(() => {
   actions.startChannelConnect.mockReset();
+  messenger.selectMessengerPages.mockReset();
   router.refresh.mockClear();
+  router.replace.mockClear();
+  assign.mockReset();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...window.location, assign },
+  });
 });
 
-describe('★★ step 3: where customers write - connect here, or skip', () => {
-  it('★ the four channels, in order, each with what it is', () => {
-    show();
-    expect(screen.getAllByRole('listitem').map((li) => li.getAttribute('data-testid'))).toEqual([
+describe('★★ step 3: one list, one row per channel', () => {
+  it('★ the five channels, in order, each with its line, where it stands and ONE action', () => {
+    show({ install: noCode as never });
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.map((li) => li.getAttribute('data-testid'))).toEqual([
       'channels-WEBCHAT',
       'channels-WHATSAPP',
       'channels-INSTAGRAM',
+      'channels-MESSENGER',
       'channels-EMAIL',
     ]);
-    expect(screen.getByTestId('channels-WEBCHAT')).toHaveTextContent('Paste the code once.');
+    expect(row('WEBCHAT')).toHaveTextContent('Paste the code once.');
+    expect(row('MESSENGER')).toHaveTextContent("Messages to your business's Facebook Page");
+    for (const li of rows) {
+      expect(within(li).getAllByRole('button')).toHaveLength(1);
+      expect(li).toHaveAttribute('data-state', 'none');
+    }
+    expect(screen.getByTestId('channels-status-WHATSAPP')).toHaveTextContent('Not connected');
+    expect(screen.getByTestId('channels-open-WEBCHAT')).toHaveTextContent('Install');
+    expect(screen.getByTestId('channels-open-INSTAGRAM')).toHaveTextContent(/^Connect$/);
   });
 
-  it('★★ website: the code shown and copied HERE; "ready, not seen" until it is seen on the site', () => {
+  it('★★ connected looks done: the identifier, no action; the website "live" with its host', () => {
+    show({
+      channels: [
+        channel('WHATSAPP', 'CONNECTED', { displayName: '+972 50-123-4567' }),
+        channel('GMAIL', 'CONNECTED', { externalId: 'hi@avivco.il' }),
+      ],
+      install: code('live') as never,
+    });
+    expect(screen.getByTestId('channels-connected-WHATSAPP')).toHaveTextContent('Connected');
+    expect(screen.getByTestId('channels-identity-WHATSAPP')).toHaveTextContent('+972 50-123-4567');
+    expect(screen.queryByTestId('channels-open-WHATSAPP')).toBeNull();
+    // Gmail is the email row's.
+    expect(row('EMAIL')).toHaveAttribute('data-state', 'connected');
+    expect(screen.getByTestId('channels-identity-EMAIL')).toHaveTextContent('hi@avivco.il');
+    expect(screen.getByTestId('channels-connected-WEBCHAT')).toHaveTextContent('Live on your site');
+    expect(screen.getByTestId('channels-identity-WEBCHAT')).toHaveTextContent('avivco.il');
+    expect(screen.queryByTestId('channels-open-WEBCHAT')).toBeNull();
+  });
+
+  it('★★ needs attention: an account in ERROR or not finished; its action connects again', () => {
+    show({ channels: [channel('INSTAGRAM', 'PENDING'), channel('OUTLOOK', 'ERROR')] });
+    expect(row('INSTAGRAM')).toHaveAttribute('data-state', 'attention');
+    expect(screen.getByTestId('channels-status-INSTAGRAM')).toHaveTextContent('Needs attention');
+    expect(screen.getByTestId('channels-open-INSTAGRAM')).toHaveTextContent('Connect again');
+    expect(screen.getByTestId('channels-attention-INSTAGRAM')).toBeInTheDocument();
+    expect(row('EMAIL')).toHaveAttribute('data-state', 'attention');
+    // Neither answers: Continue stays quiet.
+    expect(screen.getByTestId('channels-next')).toHaveTextContent('Continue without a channel');
+  });
+});
+
+describe('★★ each channel connects from its row', () => {
+  it('★★ website: Install opens the code HERE, copied whole; "ready, not seen" until seen', () => {
     show();
-    expect(screen.getByTestId('channels-code-snippet')).toHaveTextContent('<script>chat</script>');
-    expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', '<script>chat</script>');
     expect(screen.getByTestId('channels-code-ready-WEBCHAT')).toHaveTextContent(
       'The code is ready. Once you paste it into your site, the chat starts answering.',
     );
-    expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
-  });
-
-  it('★★ website seen on the site: live, never claimed before', () => {
-    show({ install: code('live') as never });
-    expect(screen.getByTestId('channels-connected-WEBCHAT')).toHaveTextContent('Live on your site');
+    expect(screen.getByTestId('channels-status-WEBCHAT')).toHaveTextContent('Not live yet');
+    expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.getByTestId('channels-code-snippet')).toHaveTextContent('<script>chat</script>');
+    expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', '<script>chat</script>');
+    // The same action closes it.
+    expect(screen.getByTestId('channels-open-WEBCHAT')).toHaveTextContent('Close');
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
   });
 
   it('website with no code yet: the one press that makes it; unread is said', () => {
-    const { unmount } = show({
-      install: { code: null, shopify: [], woocommerce: { sites: [] } } as never,
-    });
+    const { unmount } = show({ install: noCode as never });
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
     expect(screen.getByTestId('get-the-code')).toBeInTheDocument();
     unmount();
     show({ install: null });
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
     expect(screen.getByTestId('channels-code-unread')).toBeInTheDocument();
-  });
-
-  it('★★ email: the same form, inline, without the Studio link; done re-reads the page', async () => {
-    show();
-    fireEvent.click(screen.getByTestId('channels-open-EMAIL'));
-    const form = screen.getByTestId('email-form');
-    expect(form).toHaveAttribute('data-note', 'false');
-    // One way back only: the form's own.
-    expect(screen.queryByTestId('channels-close-EMAIL')).toBeNull();
-    await act(async () => fireEvent.click(form));
-    expect(router.refresh).toHaveBeenCalled();
-    expect(screen.queryByTestId('email-form')).toBeNull();
-  });
-
-  it('★★ WhatsApp: the wizard inline, coming back to THIS step', () => {
-    show();
-    fireEvent.click(screen.getByTestId('channels-open-WHATSAPP'));
-    expect(screen.getByTestId('whatsapp-wizard')).toHaveAttribute(
-      'data-close',
-      '/onboarding/channels',
-    );
-    fireEvent.click(screen.getByTestId('channels-close-WHATSAPP'));
-    expect(screen.queryByTestId('whatsapp-wizard')).toBeNull();
-  });
-
-  it('★ WhatsApp not set up on this platform: said in words, no wizard', () => {
-    show({ config: config({ launches: { coexistence: null, newNumber: null } }) as never });
-    fireEvent.click(screen.getByTestId('channels-open-WHATSAPP'));
-    expect(screen.getByTestId('channels-whatsapp-unavailable')).toHaveTextContent(
-      "This channel can't be connected from here yet.",
-    );
-    expect(screen.queryByTestId('whatsapp-wizard')).toBeNull();
-  });
-
-  it('★★ Instagram: to Meta and back; a refusal is said', async () => {
-    const assign = vi.fn();
-    vi.stubGlobal('location', { ...window.location, assign });
-    actions.startChannelConnect.mockResolvedValueOnce({
-      ok: true,
-      url: 'https://meta.example/oauth',
-    });
-    show();
-    fireEvent.click(screen.getByTestId('channels-open-INSTAGRAM'));
-    await act(async () => fireEvent.click(screen.getByTestId('channels-instagram-go')));
-    expect(actions.startChannelConnect).toHaveBeenCalledWith('INSTAGRAM');
-    expect(assign).toHaveBeenCalledWith('https://meta.example/oauth');
-    actions.startChannelConnect.mockResolvedValueOnce({ ok: false, reason: 'failed' });
-    await act(async () => fireEvent.click(screen.getByTestId('channels-instagram-go')));
-    expect(screen.getByTestId('channels-instagram-problem')).toHaveTextContent(
-      "We couldn't open Meta.",
-    );
-    vi.unstubAllGlobals();
-  });
-
-  it('★ Instagram not set up: said, no button', () => {
-    show({ config: config({ providers: { instagram: false } }) as never });
-    fireEvent.click(screen.getByTestId('channels-open-INSTAGRAM'));
-    expect(screen.getByTestId('channels-instagram-unavailable')).toBeInTheDocument();
-    expect(screen.queryByTestId('channels-instagram-go')).toBeNull();
-  });
-
-  it('★★ connected: said, and no way to connect it twice; a PENDING row is not connected', () => {
-    show({ channels: [channel('WHATSAPP'), channel('INSTAGRAM', 'PENDING')] });
-    expect(screen.getByTestId('channels-connected-WHATSAPP')).toHaveTextContent('Connected');
-    expect(screen.queryByTestId('channels-open-WHATSAPP')).toBeNull();
-    expect(screen.getByTestId('channels-open-INSTAGRAM')).toBeInTheDocument();
-  });
-
-  it('★★ the way on: the QUIET "Continue without a channel" with its cost; primary Continue once one is connected or live', () => {
-    const { unmount } = show({
-      install: { code: null, shopify: [], woocommerce: { sites: [] } } as never,
-    });
-    const next = screen.getByTestId('channels-next');
-    expect(next).toHaveTextContent('Continue without a channel');
-    expect(next.className).toMatch(/secondary/);
-    expect(next).toHaveAttribute('href', afterChannels(false));
-    expect(screen.getByTestId('channels-skip-why')).toHaveTextContent("won't answer customers");
-    unmount();
-    show({
-      channels: [channel('EMAIL')],
-      install: { code: null, shopify: [], woocommerce: { sites: [] } } as never,
-    });
-    expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
-    expect(screen.getByTestId('channels-next').className).toMatch(/primary/);
-  });
-
-  it('★★ code that exists but was never SEEN is not connected: Continue stays quiet', () => {
-    show();
-    expect(screen.getByTestId('channels-code-ready-WEBCHAT')).toHaveTextContent(
-      'Once you paste it into your site, the chat starts answering.',
-    );
-    expect(screen.getByTestId('channels-next')).toHaveTextContent('Continue without a channel');
-    expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
-  });
-
-  it('★★ the code seen on the site is connected: primary Continue', () => {
-    show({ install: code('live') as never });
-    expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
   });
 
   it('★★ the server’s snippet is shown VERBATIM, loader line included, and copied whole', () => {
@@ -221,71 +190,304 @@ describe('★★ step 3: where customers write - connect here, or skip', () => {
     const install = code('not_seen');
     install.code.snippet = real;
     show({ install: install as never });
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
     expect(screen.getByTestId('channels-code-snippet').textContent).toBe(real);
     expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', real);
   });
 
-  describe('★★ a Shopify shop: the theme toggle, above the code', () => {
-    const shop = (over: object) => ({
-      channelId: 'sh1',
-      shopDomain: 'avivco.myshopify.com',
-      status: 'active',
-      embedLive: false,
-      lastHeartbeatAt: null,
-      themeEditorUrl: 'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
-      ...over,
-    });
-    const withShop = (over: object) => ({ ...code('not_seen'), shopify: [shop(over)] });
-
-    it('★★ off in the theme: ONE action (the editor), the code under a quiet toggle, the line naming the theme', () => {
-      show({ install: withShop({ status: 'not_enabled' }) as never });
-      expect(screen.getByTestId('channels-shop-theme-sh1')).toHaveAttribute(
-        'href',
-        'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
-      );
-      expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
-      expect(screen.getByTestId('channels-shop-waiting-WEBCHAT')).toHaveTextContent(
-        'Once you turn it on in the theme, it starts answering.',
-      );
-      expect(screen.queryByTestId('channels-code-ready-WEBCHAT')).toBeNull();
-      fireEvent.click(screen.getByTestId('channels-show-code'));
-      expect(screen.getByTestId('channels-code-snippet')).toBeInTheDocument();
-      expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
-    });
-
-    it('★ live in the shop (enabled, embed seen): connected, no editor link', () => {
-      show({ install: withShop({ status: 'active', embedLive: true }) as never });
-      expect(screen.getByTestId('channels-shop-sh1')).toHaveTextContent(
-        'The chat is live in your shop',
-      );
-      expect(screen.queryByTestId('channels-shop-theme-sh1')).toBeNull();
-      expect(screen.getByTestId('channels-connected-WEBCHAT')).toBeInTheDocument();
-      // Live: no waiting line, and the code is plain to see (no toggle).
-      expect(screen.queryByTestId('channels-shop-waiting-WEBCHAT')).toBeNull();
-      expect(screen.queryByTestId('channels-show-code')).toBeNull();
-    });
-
-    it('★ enabled but its theme embed never seen: NOT connected, the editor link stays', () => {
-      show({ install: withShop({ status: 'active', embedLive: false }) as never });
-      expect(screen.getByTestId('channels-shop-theme-sh1')).toBeInTheDocument();
-      expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
-      expect(screen.getByTestId('channels-next').className).toMatch(/secondary/);
-    });
-
-    it('an uninstalled shop is not offered', () => {
-      show({ install: withShop({ status: 'uninstalled' }) as never });
-      expect(screen.queryByTestId('channels-shop-sh1')).toBeNull();
-    });
+  it('★★ WhatsApp: the wizard inline; its Cancel and its last Continue both close HERE and re-read', async () => {
+    show();
+    fireEvent.click(screen.getByTestId('channels-open-WHATSAPP'));
+    expect(screen.getByTestId('whatsapp-wizard')).toHaveAttribute(
+      'data-close',
+      '/onboarding/channels',
+    );
+    await act(async () => fireEvent.click(screen.getByTestId('wizard-done')));
+    expect(screen.queryByTestId('whatsapp-wizard')).toBeNull();
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('channels-open-WHATSAPP'));
+    await act(async () => fireEvent.click(screen.getByTestId('wizard-cancel')));
+    expect(screen.queryByTestId('whatsapp-wizard')).toBeNull();
+    expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('★ WhatsApp not set up on this platform: said in words, no action', () => {
+    show({ config: config({ launches: { coexistence: null, newNumber: null } }) as never });
+    expect(screen.queryByTestId('channels-open-WHATSAPP')).toBeNull();
+    expect(screen.getByTestId('channels-unavailable-WHATSAPP')).toHaveTextContent(
+      "This channel can't be connected from here yet.",
+    );
+  });
+
+  it.each(['INSTAGRAM', 'MESSENGER'] as const)(
+    '★★ %s: the row’s action goes to Meta, coming back to THIS step; a refusal is said on the row',
+    async (name) => {
+      actions.startChannelConnect.mockResolvedValueOnce({ ok: true, url: 'https://meta.example/o' });
+      show();
+      await act(async () => fireEvent.click(screen.getByTestId(`channels-open-${name}`)));
+      expect(actions.startChannelConnect).toHaveBeenCalledWith(name, 'onboarding_channels');
+      expect(assign).toHaveBeenCalledWith('https://meta.example/o');
+      actions.startChannelConnect.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+      await act(async () => fireEvent.click(screen.getByTestId(`channels-open-${name}`)));
+      expect(screen.getByTestId(`channels-problem-${name}`)).toHaveTextContent(
+        "We couldn't open Meta.",
+      );
+    },
+  );
+
+  it('★ Instagram not set up: said, no action', () => {
+    show({ config: config({ providers: { instagram: false } }) as never });
+    expect(screen.queryByTestId('channels-open-INSTAGRAM')).toBeNull();
+    expect(screen.getByTestId('channels-unavailable-INSTAGRAM')).toBeInTheDocument();
+  });
+
+  it('★★ email: Gmail and Outlook at the provider (back HERE); another server inline, without the Studio link', async () => {
+    actions.startChannelConnect.mockResolvedValueOnce({ ok: true, url: 'https://google.example/o' });
+    show();
+    fireEvent.click(screen.getByTestId('channels-open-EMAIL'));
+    await act(async () => fireEvent.click(screen.getByTestId('channels-email-GMAIL')));
+    expect(actions.startChannelConnect).toHaveBeenCalledWith('GMAIL', 'onboarding_channels');
+    expect(assign).toHaveBeenCalledWith('https://google.example/o');
+    actions.startChannelConnect.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    await act(async () => fireEvent.click(screen.getByTestId('channels-email-OUTLOOK')));
+    expect(screen.getByTestId('channels-problem-email')).toHaveTextContent(
+      "We couldn't open Outlook.",
+    );
+    fireEvent.click(screen.getByTestId('channels-email-server'));
+    const form = screen.getByTestId('email-form');
+    expect(form).toHaveAttribute('data-note', 'false');
+    await act(async () => fireEvent.click(form));
+    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.queryByTestId('email-form')).toBeNull();
+  });
+
+  it('email: a provider not set up is not offered', () => {
+    show({ config: config({ providers: { gmail: false } }) as never });
+    fireEvent.click(screen.getByTestId('channels-open-EMAIL'));
+    expect(screen.queryByTestId('channels-email-GMAIL')).toBeNull();
+    expect(screen.getByTestId('channels-email-OUTLOOK')).toBeInTheDocument();
+  });
+});
+
+describe('★★ back from the provider: on its own row, then the URL is tidied', () => {
+  it('★★ connected=&count=: said on that row, and it holds after the URL is tidied', () => {
+    const { rerender } = show({
+      channels: [channel('INSTAGRAM', 'CONNECTED', { displayName: '@avivco' })],
+      landing: back({ connected: 'instagram', count: '1' }),
+    });
+    const said = screen.getByTestId('channels-landing-INSTAGRAM');
+    expect(said).toHaveTextContent('One account connected.');
+    expect(said).toHaveAttribute('data-outcome', 'ok');
+    expect(row('INSTAGRAM')).toHaveAttribute('data-state', 'connected');
+    expect(router.replace).toHaveBeenCalledWith('/onboarding/channels', { scroll: false });
+    // The tidied URL renders with no landing: the sentence stays.
+    rerender(tree({ channels: [channel('INSTAGRAM', 'CONNECTED', { displayName: '@avivco' })] }));
+    expect(screen.getByTestId('channels-landing-INSTAGRAM')).toBeInTheDocument();
+    expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
+  });
+
+  it('★ connected=gmail: the email row says it', () => {
+    show({ landing: back({ connected: 'gmail', count: '1' }) });
+    expect(screen.getByTestId('channels-landing-EMAIL')).toHaveTextContent('One account connected');
+  });
+
+  it('★★ pending=1&reason=SUBSCRIBE_FAILED: connected but deaf, so the row needs attention', () => {
+    show({
+      channels: [channel('MESSENGER', 'CONNECTED', { displayName: 'Aviv & Co.' })],
+      landing: back({
+        connected: 'messenger',
+        count: '1',
+        pending: '1',
+        platform: 'messenger',
+        reason: 'SUBSCRIBE_FAILED',
+      }),
+    });
+    expect(row('MESSENGER')).toHaveAttribute('data-state', 'attention');
+    expect(screen.getByTestId('channels-landing-MESSENGER')).toHaveTextContent(
+      "messages aren't arriving",
+    );
+    expect(screen.getByTestId('channels-landing-MESSENGER')).toHaveAttribute(
+      'data-outcome',
+      'problem',
+    );
+    expect(screen.getByTestId('channels-open-MESSENGER')).toHaveTextContent('Connect again');
+  });
+
+  it('★ pending=1 with no known reason, on WhatsApp: its own sentence', () => {
+    show({ landing: back({ connected: 'whatsapp', pending: '1' }) });
+    expect(screen.getByTestId('channels-landing-WHATSAPP')).toHaveTextContent(
+      "Meta's approval isn't finished yet",
+    );
+  });
+
+  it('★★ platform=&error=: the refusal in words on that row; its action tries again', () => {
+    show({ landing: back({ platform: 'instagram', error: 'no_instagram_account' }) });
+    const said = screen.getByTestId('channels-landing-INSTAGRAM');
+    expect(said).toHaveTextContent('No Instagram business account is linked to that Page.');
+    expect(said).toHaveAttribute('data-outcome', 'problem');
+    expect(screen.getByTestId('channels-open-INSTAGRAM')).toBeInTheDocument();
+    expect(router.replace).toHaveBeenCalledWith('/onboarding/channels', { scroll: false });
+  });
+
+  it('★ an unknown code is "didn’t connect", never the raw text; v1’s with no platform is said over the list', () => {
+    const { unmount } = show({
+      landing: back({ platform: 'outlook', error: 'AADSTS50020: weird' }),
+    });
+    expect(screen.getByTestId('channels-landing-EMAIL')).toHaveTextContent(
+      "That didn't connect. You can try again.",
+    );
+    expect(screen.getByTestId('channels-landing-EMAIL')).not.toHaveTextContent('AADSTS');
+    unmount();
+    show({ landing: back({ error: 'access_denied' }) });
+    expect(screen.getByTestId('channels-landing')).toHaveTextContent('You cancelled');
+  });
+
+  it('★★ pick=1&platform=messenger&session=: the Page picker on Messenger’s row; the URL tidied to this step', async () => {
+    messenger.selectMessengerPages.mockResolvedValue({
+      ok: true,
+      results: [{ id: 'p1', name: 'Shop', status: 'connected', subscribed: true }],
+    });
+    show({
+      pick: {
+        session: 's1',
+        read: {
+          ok: true,
+          pages: [
+            { id: 'p1', name: 'Shop', category: null, connectedHere: false, takenElsewhere: false },
+          ],
+        },
+      },
+    });
+    const picker = within(row('MESSENGER')).getByTestId('messenger-pick');
+    expect(picker).toHaveTextContent('Shop');
+    expect(router.replace).toHaveBeenCalledWith('/onboarding/channels', { scroll: false });
+    fireEvent.click(screen.getByTestId('messenger-pick-p1'));
+    await act(async () => fireEvent.click(screen.getByTestId('messenger-pick-confirm')));
+    expect(messenger.selectMessengerPages).toHaveBeenCalledWith('s1', ['p1']);
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('★ an expired pick connects Messenger again, coming back to THIS step', async () => {
+    actions.startChannelConnect.mockResolvedValue({ ok: true, url: 'https://meta.example/o' });
+    show({ pick: { session: 's1', read: { ok: false, reason: 'expired' } } });
+    await act(async () => fireEvent.click(screen.getByTestId('messenger-pick-again')));
+    expect(actions.startChannelConnect).toHaveBeenCalledWith('MESSENGER', 'onboarding_channels');
+  });
+
+  it('no way back: the URL is left alone', () => {
+    show();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ the way on', () => {
+  it('★★ "Continue without a channel" is QUIET, with its cost; primary Continue once one answers', () => {
+    const { unmount } = show({ install: noCode as never });
+    const next = screen.getByTestId('channels-next');
+    expect(next).toHaveTextContent('Continue without a channel');
+    expect(next.className).toMatch(/channelSkip/);
+    expect(next.className).not.toMatch(/primary/);
+    expect(next).toHaveAttribute('href', afterChannels(false));
+    expect(screen.getByTestId('channels-skip-why')).toHaveTextContent("won't answer customers");
+    unmount();
+    show({ channels: [channel('EMAIL')], install: noCode as never });
+    expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
+    expect(screen.getByTestId('channels-next').className).toMatch(/primary/);
+    expect(screen.queryByTestId('channels-skip-why')).toBeNull();
+  });
+
+  it('★★ code that exists but was never SEEN is not connected: Continue stays quiet', () => {
+    show();
+    expect(screen.getByTestId('channels-next')).toHaveTextContent('Continue without a channel');
+  });
+
+  it('★★ the code seen on the site is connected: primary Continue', () => {
+    show({ install: code('live') as never });
+    expect(screen.getByTestId('channels-next')).toHaveTextContent(/^Continue$/);
+  });
+});
+
+describe('★★ a Shopify shop: the theme toggle, above the code', () => {
+  const shop = (over: object) => ({
+    channelId: 'sh1',
+    shopDomain: 'avivco.myshopify.com',
+    status: 'active',
+    embedLive: false,
+    lastHeartbeatAt: null,
+    themeEditorUrl: 'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
+    ...over,
+  });
+  const withShop = (over: object) => ({ ...code('not_seen'), shopify: [shop(over)] });
+
+  it('★★ off in the theme: ONE action (the editor), the code under a quiet toggle, the line naming the theme', () => {
+    show({ install: withShop({ status: 'not_enabled' }) as never });
+    expect(screen.getByTestId('channels-shop-waiting-WEBCHAT')).toHaveTextContent(
+      'Once you turn it on in the theme, it starts answering.',
+    );
+    expect(screen.queryByTestId('channels-code-ready-WEBCHAT')).toBeNull();
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.getByTestId('channels-shop-theme-sh1')).toHaveAttribute(
+      'href',
+      'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
+    );
+    expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
+    fireEvent.click(screen.getByTestId('channels-show-code'));
+    expect(screen.getByTestId('channels-code-snippet')).toBeInTheDocument();
+    expect(screen.getByTestId('channels-next').className).toMatch(/channelSkip/);
+  });
+
+  it('★ live in the shop (enabled, embed seen): connected, named by the shop, no action', () => {
+    show({ install: withShop({ status: 'active', embedLive: true }) as never });
+    expect(screen.getByTestId('channels-connected-WEBCHAT')).toBeInTheDocument();
+    expect(screen.getByTestId('channels-identity-WEBCHAT')).toHaveTextContent(
+      'avivco.myshopify.com',
+    );
+    expect(screen.queryByTestId('channels-open-WEBCHAT')).toBeNull();
+    expect(screen.queryByTestId('channels-shop-waiting-WEBCHAT')).toBeNull();
+  });
+
+  it('★ enabled but its theme embed never seen: NOT connected, the editor link stays', () => {
+    show({ install: withShop({ status: 'active', embedLive: false }) as never });
+    expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.getByTestId('channels-shop-theme-sh1')).toBeInTheDocument();
+  });
+
+  it('an uninstalled shop is not offered', () => {
+    show({ install: withShop({ status: 'uninstalled' }) as never });
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.queryByTestId('channels-shop-sh1')).toBeNull();
+  });
+});
+
+describe('reads and preview', () => {
   it('channels unread: said, never "none connected"', () => {
     show({ channels: null });
     expect(screen.getByTestId('channels-unread')).toBeInTheDocument();
   });
 
-  it('★ preview: every connect is a status, never a control', () => {
+  it('★ preview: every connect is a status, never a control; no picker', () => {
     show({ preview: true });
     expect(screen.queryByTestId('channels-open-EMAIL')).toBeNull();
+    expect(screen.queryByTestId('channels-open-INSTAGRAM')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
+  });
+
+  it('★ Hebrew: every row’s words are in the catalogue (no raw key)', async () => {
+    const he = (await import('@/i18n/messages/he/onboarding.json')).default;
+    const heChannels = (await import('@/i18n/messages/he/channels.json')).default;
+    render(
+      <NextIntlClientProvider locale="he" messages={{ onboarding: he, channels: heChannels }}>
+        <ChannelsStep
+          channels={[channel('INSTAGRAM', 'ERROR')]}
+          install={code('not_seen') as never}
+          config={config() as never}
+          landing={back({ connected: 'messenger', count: '2' })}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(document.body.textContent).not.toMatch(/onboarding\.channels|channels\.\w+\./);
+    expect(screen.getByTestId('channels-landing-MESSENGER')).toHaveTextContent('2 חשבונות חוברו');
   });
 });

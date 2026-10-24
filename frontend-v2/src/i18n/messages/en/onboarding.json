@@ -444,23 +444,21 @@
       "WEBCHAT": "A chat window on your site. Paste the code once.",
       "WHATSAPP": "Your business's WhatsApp number, through Meta.",
       "INSTAGRAM": "Direct messages to your Instagram account, through Meta.",
-      "EMAIL": "Your service mailbox, with its server details."
+      "MESSENGER": "Messages to your business's Facebook Page, through Meta.",
+      "EMAIL": "Your service mailbox, in Gmail, Outlook or on your own server."
     },
     "connected": "Connected",
     "live": "Live on your site",
     "codeReady": "The code is ready. Once you paste it into your site, the chat starts answering.",
-    "connectName": "Connect {name}",
     "close": "Close",
     "pasteCode": "Paste this code into your site, before the closing body tag. Once it appears on your site, you'll see it here.",
     "codeUnread": "We couldn't read the chat code just now. Reload the page to try again.",
     "notSetUp": "This channel can't be connected from here yet.",
-    "atMeta": "Connect {name} at Meta",
-    "opening": "Opening Meta…",
-    "metaNote": "You approve at Meta, then come back here.",
+    "opening": "Opening {place}…",
     "refused": {
       "not_configured": "This channel can't be connected from here yet.",
       "forbidden": "Only owners can connect channels.",
-      "failed": "We couldn't open Meta. Try again in a moment."
+      "failed": "We couldn't open {place}. Try again in a moment."
     },
     "unread": "We couldn't check which channels are already connected. You can connect, and the page will update.",
     "next": "Continue",
@@ -472,7 +470,50 @@
     "shopThemeHow": "In the theme editor: App embeds, switch GOTCHA on, and save.",
     "shopWaiting": "Waiting for the first visit to your shop. The status changes by itself.",
     "shopNotLive": "We haven't seen the chat in your shop yet. Once you turn it on in the theme, it starts answering.",
-    "pasteYourself": "Paste the code yourself"
+    "pasteYourself": "Paste the code yourself",
+    "status": {
+      "none": "Not connected",
+      "waiting": "Not live yet",
+      "attention": "Needs attention"
+    },
+    "action": {
+      "connect": "Connect",
+      "again": "Connect again",
+      "install": "Install"
+    },
+    "attention": "Messages on this channel aren't arriving right now. Connect it again to fix it.",
+    "email": {
+      "lead": "Which mailbox do you use?",
+      "server": "A mailbox on another server",
+      "opening": "Taking you to sign in…"
+    },
+    "landing": {
+      "connected": "Connected. GOTCHA answers here from the moment you go live.",
+      "connectedCount": "{count, plural, =0 {No account came back, so nothing was connected. You can try again.} one {One account connected. GOTCHA answers on it from the moment you go live.} other {# accounts connected. GOTCHA answers on them from the moment you go live.}}",
+      "pending": "The account is connected, but it isn't ready to receive messages yet. You can connect it again from here.",
+      "pendingWhatsApp": "The number is connected, and Meta's approval isn't finished yet. You can continue meanwhile.",
+      "pendingReason": {
+        "subscribe_failed": "The account is connected, but messages aren't arriving: the platform didn't let GOTCHA receive them. You can connect it again from here."
+      },
+      "error": {
+        "denied": "You cancelled, so nothing was connected.",
+        "token_exchange_failed": "The connection wasn't approved, so nothing was connected. You can try again.",
+        "state_already_used": "This sign-in has expired. Start again from here.",
+        "invalid_state": "This sign-in has expired. Start again from here.",
+        "not_configured": "This channel can't be connected from here yet.",
+        "already_connected": "This account is already connected to this workspace.",
+        "gmail_no_email": "Google didn't share an email address, so Gmail wasn't connected.",
+        "outlook_no_email": "Microsoft didn't share an email address, so Outlook wasn't connected.",
+        "no_pages": "No Facebook Page was chosen. Choose a Page you manage and try again.",
+        "no_instagram_account": "No Instagram business account is linked to that Page. Link one at Meta and try again.",
+        "no_whatsapp_numbers": "Meta didn't share a WhatsApp number, so nothing was connected.",
+        "slack_no_team": "Slack didn't say which workspace. You can try again.",
+        "callback_error": "Something went wrong on the way back, so nothing was connected. You can try again.",
+        "limit_reached": "Your plan has no room for another channel, so nothing was connected.",
+        "picker_failed": "We couldn't keep your Pages to choose from, so nothing was connected. You can try again.",
+        "other": "That didn't connect. You can try again."
+      }
+    }
   },
   "live": {
     "headline": "Check, then go live.",

@@ -1082,6 +1082,225 @@
     white-space: pre;
   }
 
+  /*
+   * Step 3: one list, one row per channel (Omer, 2026-10-24: not four cards
+   * far apart). Rows share one card and a hairline; a connected row reads as
+   * done (a green status, its identifier, no action).
+   */
+  .channelList {
+    display: flex;
+    flex-direction: column;
+    margin: 24px 0 0;
+    padding: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+    list-style: none;
+    overflow: hidden;
+  }
+
+  .channelRow {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px;
+  }
+
+  .channelRow + .channelRow {
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .channelRow[data-open] {
+    background-color: var(--panel-base);
+  }
+
+  .channelLine {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .channelText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .channelName {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .channelWhy {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .channelEnd {
+    display: flex;
+    flex-shrink: 0;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .channelStatus {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text-subtle);
+  }
+
+  .channelStatus::before {
+    content: '';
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--border-muted);
+  }
+
+  .channelStatus[data-state='connected'] {
+    color: var(--signal-done-text);
+  }
+
+  .channelStatus[data-state='connected']::before {
+    background-color: var(--signal-done);
+  }
+
+  .channelStatus[data-state='attention'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .channelStatus[data-state='attention']::before {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .channelStatus[data-state='waiting']::before {
+    background-color: var(--signal-waiting);
+  }
+
+  .channelIdentity {
+    max-inline-size: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-muted);
+  }
+
+  .channelAction {
+    padding: 6px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 8px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12.5px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .channelAction:hover:not(:disabled) {
+    border-color: var(--text-subtle);
+  }
+
+  .channelAction[aria-pressed='true'] {
+    border-color: var(--text-primary);
+  }
+
+  .channelAction:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* What a row says under its line: aligned with its name, past the mark. */
+  .channelSays {
+    margin: 0;
+    padding-inline-start: 48px;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .channelSays[data-outcome='ok'] {
+    color: var(--signal-done-text);
+  }
+
+  .channelSays[data-outcome='problem'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .channelPanel,
+  .channelPick {
+    margin-inline-start: 48px;
+  }
+
+  .channelPick:empty {
+    display: none;
+  }
+
+  .channelChoices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .channelServer {
+    align-self: stretch;
+  }
+
+  .channelsFoot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    margin-block-start: 18px;
+  }
+
+  .channelsFoot > .quiet {
+    margin: 0;
+  }
+
+  /* No channel yet: going on is allowed, and said quietly (a link, not a button). */
+  .channelSkip {
+    padding: 0;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  @media (width <= 640px) {
+    .channelRow {
+      padding: 14px;
+    }
+
+    .channelLine {
+      flex-wrap: wrap;
+      gap: 10px 12px;
+    }
+
+    .channelText {
+      flex-basis: calc(100% - 46px);
+    }
+
+    /* Under the name on a phone: status at the start, the action at the end. */
+    .channelEnd {
+      flex-basis: 100%;
+      justify-content: space-between;
+      padding-inline-start: 46px;
+    }
+
+    .channelSays {
+      padding-inline-start: 46px;
+    }
+
+    .channelPanel,
+    .channelPick {
+      margin-inline-start: 0;
+    }
+  }
+
   /* Step 2: 00g's card, once per suggestion. */
   .suggestions {
     display: flex;
