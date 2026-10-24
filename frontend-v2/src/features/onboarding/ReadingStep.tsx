@@ -81,6 +81,9 @@ export function ReadingStep({
   const since = useRef(Math.max(0, ...(initial?.events ?? []).map((event) => event.seq)));
   const jobId = useRef(initial?.jobId ?? null);
   const live = job === null || isLiveJob(job);
+  // Finished while you watched: it moves on. Finished before you came (the way back
+  // from step 2 lands here): it stays, with Continue - it never bounces you forward.
+  const arrivedLive = useRef(initial === null || isLiveJob(initial));
 
   useEffect(() => {
     if (!live) return;
@@ -105,7 +108,7 @@ export function ReadingStep({
 
   const done = job?.status === 'COMPLETE';
   useEffect(() => {
-    if (!done || preview) return;
+    if (!done || preview || !arrivedLive.current) return;
     // Saved first, so a reload after the move resumes at systems.
     const timer = setTimeout(() => {
       void saveStep('systems')

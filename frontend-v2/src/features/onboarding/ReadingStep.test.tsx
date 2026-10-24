@@ -67,6 +67,8 @@ const lines = () => screen.queryAllByTestId('scan-line').map((li) => li.textCont
 beforeEach(() => {
   vi.useFakeTimers();
   for (const each of [...Object.values(scan), ...Object.values(router)]) each.mockReset();
+  // Cleared, not reset: its resolved `true` is the implementation.
+  stepSave.saveStep.mockClear();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -140,8 +142,10 @@ describe('★★ reading the site, as it really goes', () => {
     expect(router.replace).toHaveBeenCalledWith('/onboarding/website');
   });
 
-  it('★★ finished: "Done", Continue, and it moves on by itself after a beat', async () => {
-    show(job({ status: 'COMPLETE', stage: 'done' }));
+  it('★★ finished while you watch: "Done", Continue, and it moves on by itself after a beat', async () => {
+    scan.readScan.mockResolvedValue({ ok: true, job: job({ status: 'COMPLETE', stage: 'done' }) });
+    show(job());
+    await tick();
     expect(screen.getByTestId('reading-stage')).toHaveTextContent('Done. Here is what we learned.');
     expect(screen.getByTestId('reading-next')).toHaveAttribute('href', nextStep(false));
     expect(router.push).not.toHaveBeenCalled();
@@ -149,6 +153,15 @@ describe('★★ reading the site, as it really goes', () => {
     // Saved first, so a reload after the move resumes at systems.
     expect(stepSave.saveStep).toHaveBeenCalledWith('systems');
     expect(router.push).toHaveBeenCalledWith(nextStep(false));
+  });
+
+  it('★★ already finished when you arrive (back from step 2): it stays, with Continue', async () => {
+    show(job({ status: 'COMPLETE', stage: 'done' }));
+    expect(screen.getByTestId('reading-stage')).toHaveTextContent('Done. Here is what we learned.');
+    expect(screen.getByTestId('reading-next')).toHaveAttribute('href', nextStep(false));
+    await tick(ADVANCE_MS * 3);
+    expect(router.push).not.toHaveBeenCalled();
+    expect(stepSave.saveStep).not.toHaveBeenCalled();
     expect(scan.readScan).not.toHaveBeenCalled();
   });
 

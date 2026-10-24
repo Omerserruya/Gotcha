@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -94,6 +95,12 @@ describe('★★ the way back (Omer, 2026-10-24: there was none)', () => {
     const back = screen.getByTestId('onboarding-back');
     expect(back).toHaveAttribute('href', href);
     expect(back).toHaveTextContent('Back to the previous step');
+  });
+
+  it('★ the first stop for the keyboard: one Tab reaches it', async () => {
+    show({ step: 'systems', screen: 'systems' });
+    await userEvent.tab();
+    expect(screen.getByTestId('onboarding-back')).toHaveFocus();
   });
 
   it('step 1 has none: nothing comes before the website', () => {
