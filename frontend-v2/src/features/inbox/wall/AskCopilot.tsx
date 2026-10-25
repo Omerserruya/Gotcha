@@ -205,7 +205,7 @@ function Turn({ turn }: { readonly turn: CopilotTurn }) {
           {/* The only way a draft reaches the composer: this click. Nothing is sent. */}
           <button
             type="button"
-            className={styles.useButton}
+            className={styles.chatUse}
             onClick={() => fillComposer(turn.draft ?? '', { select: true })}
             data-testid="wall-chat-use"
           >
