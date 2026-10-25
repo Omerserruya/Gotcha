@@ -163,9 +163,9 @@ describe("adapting the interview to the store", () => {
     expect(byKey("riding_style")).toBeTruthy();
   });
 
-  it("never demotes category or budget", () => {
+  it("never demotes category; budget is never required in a shop (eval R1)", () => {
     expect(byKey("product_category")!.required).toBe(true);
-    expect(byKey("budget")!.required).toBe(true);
+    expect(byKey("budget")!.required).toBe(false);
   });
 
   it("adds a fact for each real option, as optional", () => {
@@ -183,8 +183,10 @@ describe("adapting the interview to the store", () => {
     expect(kept.required).toBe(true);
   });
 
-  it("changes nothing when the catalogue could not be read", () => {
-    expect(profileForStore(PROFILE, null)).toBe(PROFILE);
+  it("with no catalogue, only budget changes: it becomes optional", () => {
+    const bare = profileForStore(PROFILE, null);
+    expect(bare.facts.map((f) => [f.key, f.key === "budget" ? false : f.required])).toEqual(PROFILE.facts.map((f) => [f.key, f.key === "budget" ? false : f.required]));
+    expect(bare.facts.find((f) => f.key === "budget")?.required).toBe(false);
   });
 
   it("does not duplicate a fact the profile already has", () => {
