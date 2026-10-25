@@ -120,7 +120,7 @@ import {
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -926,6 +926,13 @@ function renderCustomerInfoBlock(
   return lines.join("\n");
 }
 
+const PRODUCT_SEARCH_TOOL = /^(woocommerce\.list_products|shopify\.search_products)$/;
+const EMPTY_SEARCH_NOTE =
+  "No product TITLE matched this search. That does NOT mean the store lacks it, and it says nothing about stock. " +
+  "If you have not yet, search once more with a single English word in the singular (\"coat\", \"hoodie\"). " +
+  "If that is empty too, tell the customer you could not find it by that name (\"לא מצאתי\") and offer another way to look. " +
+  "Never say it is out of stock, and never say the store does not carry it.";
+
 /**
  * What to say when the turn produced nothing.
  *
@@ -954,8 +961,11 @@ export function deliverableReply(t: {
   awaitingApproval: boolean;
   toolCallLog: Array<{ tool: string; decision?: string }>;
   locale: string;
+  /** The short close when the customer only thanked or said goodbye. */
+  closing?: string | null;
 }): string {
   if (t.safeReply?.trim()) return t.safeReply;
+  if (t.closing && !t.pendingEscalation && !t.awaitingApproval) return t.closing;
   const simulatedEscalation = t.toolCallLog.some((c) => c.tool === "escalate_to_human" && c.decision === "simulated");
   if (t.pendingEscalation || t.awaitingApproval || simulatedEscalation) return t.safeReply ?? "";
   return silentTurnFallback(t.locale);
@@ -1836,7 +1846,16 @@ async function generateAIBotReplyInner(
   })();
 
   const agentToolCtx: AgentToolContext = {
-    sendShopifyProducts: productTurn?.sendShopifyProducts,
+    // The model names products by the key it was shown (PRODUCT_1), and the
+    // card staging takes the store's own id (eval e5: "no_products: pass the
+    // store's numeric product ids", and the model told the customer a technical
+    // fault stopped the card). Keys resolve here, as they do for store reads.
+    sendShopifyProducts: productTurn?.sendShopifyProducts
+      ? (args) => productTurn.sendShopifyProducts!({
+          ...args,
+          products: (args.products ?? []).map((p: any) => ({ ...p, productId: resolveProductRef(productEnvelope, p?.productId) as string })),
+        })
+      : undefined,
     tenantId: opts.tenantId,
     aiAgentId: config.id,
     conversationId: opts.conversationId,
@@ -2148,6 +2167,12 @@ async function generateAIBotReplyInner(
         }
       } catch (err: any) {
         console.warn("[ai-bot] notification emit failed:", err?.message);
+      }
+      // An empty search is not "we don't have it" (eval e5 S1: "אין לנו מעילים
+      // במלאי" with six coats in stock). The model reads the empty result with
+      // this, so it says it could not find it, never that the store lacks it.
+      if (result.ok && Array.isArray((result as any).result) && (result as any).result.length === 0 && PRODUCT_SEARCH_TOOL.test(toolFunctionName)) {
+        return { ...result, note: EMPTY_SEARCH_NOTE } as typeof result;
       }
       return result;
     },
@@ -4604,7 +4629,9 @@ async function generateAIBotReplyInner(
         `[ai-bot] INTERIM-ONLY reply with no finding conv=${opts.conversationId} - ` +
           `tools=${toolCallLog.map((t) => t.tool).filter(Boolean).join(",") || "none"}`,
       );
-      replyText = null;
+      // After a bare thank-you there is nothing to look up: the close, not the
+      // failure fallback (eval e5 E04 sent "לא הצלחתי להשלים את הבדיקה" to "תודה רבה!").
+      replyText = closingReplyFor(opts.incomingMessage ?? "", replyLocale);
     }
   } catch (err: any) {
     console.warn("[ai-bot] outcome contract check failed:", err?.message);
@@ -4871,6 +4898,10 @@ async function generateAIBotReplyInner(
         shopFloor: isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }),
         toolsOffered: toolFunctionNames,
         customerClosing: customerIsClosing(opts.incomingMessage),
+        searchesAllEmpty: (() => {
+          const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
+          return searches.length > 0 && searches.every((t) => /"result":\[\]/.test(String(t.result ?? "")));
+        })(),
       });
       if (violations.length) {
         console.warn(`[ai-bot] reply checker: ${violations.map((v) => `${v.kind}(${v.match})`).join(", ")}. Regenerating once. conv=${opts.conversationId}`);
@@ -5125,7 +5156,7 @@ async function generateAIBotReplyInner(
   // An escalation or an approval pause is a different case: both already owe
   // the customer a message from another path, and adding one here would make
   // two.
-  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale });
+  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale, closing: closingReplyFor(opts.incomingMessage ?? "", replyLocale) });
   if (deliverable === silentTurnFallback(replyLocale)) {
     console.error(
       `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +

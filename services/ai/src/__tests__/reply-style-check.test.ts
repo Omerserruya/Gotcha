@@ -132,3 +132,13 @@ describe("★ after a bare thank-you: only a short warm close", () => {
     expect(buildStyleCorrective([{ kind: "question_after_thanks", match: "x" }], "he")).toContain("No offer, no product, no next step.");
   });
 });
+
+describe("★ e5 S1: an empty search is never 'we don't have it'", () => {
+  it.each(["אין לנו כרגע מעילים במלאי", "אין לנו קפוצ'ונים", "לא נמצאו תיקים", "השמלה אזלה"])("%s", (t) => {
+    expect(kinds(t, { searchesAllEmpty: true })).toContain("false_absence");
+  });
+  it("allowed when a search did find the product out of stock, and 'לא מצאתי' is fine", () => {
+    expect(kinds("השמלה אזלה במידה M", { searchesAllEmpty: false })).not.toContain("false_absence");
+    expect(kinds("לא מצאתי מעיל בשם הזה, אפשר לחפש לפי צבע?", { searchesAllEmpty: true })).not.toContain("false_absence");
+  });
+});

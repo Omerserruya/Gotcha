@@ -23,7 +23,8 @@ export type StyleViolationKind =
   | "ungrounded_attribute"
   | "promise"
   | "two_questions"
-  | "question_after_thanks";
+  | "question_after_thanks"
+  | "false_absence";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -46,6 +47,8 @@ export interface StyleCheckContext {
   toolsOffered: string[];
   /** The customer just said thanks or goodbye. */
   customerClosing: boolean;
+  /** Every product search this turn came back empty (no title matched). */
+  searchesAllEmpty?: boolean;
 }
 
 const HE = "\\u0590-\\u05FF";
@@ -77,6 +80,9 @@ const STOCK = w("במלאי|אזל|אזלה|אזלו|נגמר|זמין|זמינ�
 const RESERVE = w("נשמור לך|אשמור לך|לשמור לך|לשמור עבורך|נשמור עבורך|אשמור עבורך|נשמור את המידה|לשריין|נשריין|אשריין");
 const FOLLOW_UP = w("אחזור אליך|נחזור אליך|אחזור אלייך|אעדכן אותך|נעדכן אותך|אבדוק ואחזור|נבדוק ונחזור|אבדוק מול|נבדוק מול|אצור קשר|ניצור קשר|נתקשר|אתקשר");
 const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך");
+
+/** Saying the store lacks something, or has none in stock. */
+const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
 
 /** The model writes its own Latin name in Hebrew, and gets it wrong. */
 const NAME_MISSPELLINGS: Record<string, RegExp> = {
@@ -129,6 +135,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   const canHandOff = ctx.toolsOffered.some((t) => /escalate|handoff|hand_off/.test(t));
   if (!canHandOff) hit("promise", plain.match(HANDOFF_PROMISE));
 
+  // "We don't have it" on an empty TITLE search is false (eval e5 S1).
+  if (ctx.searchesAllEmpty) hit("false_absence", plain.match(ABSENCE));
+
   const questions = (plain.match(/[?؟]/g) ?? []).length;
   if (questions > 1) hit("two_questions", `${questions} questions`);
   if (ctx.customerClosing && questions > 0) hit("question_after_thanks", "a question after a thank-you");
@@ -148,6 +157,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
+  false_absence: { he: "The search found no product TITLE by that word; that does not mean the store lacks it. Never say it is out of stock or that we don't have it: say you could not find it by that name (\"לא מצאתי\") and offer another way to look.", en: "Never say it is out of stock or not carried: say you could not find it by that name." },
   question_after_thanks: { he: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"בכיף 🙂\", \"בשמחה, יום טוב!\"). No offer, no product, no next step.", en: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"Anytime 🙂\"). No offer, no product, no next step." },
 };
 
@@ -205,7 +215,13 @@ function isShortClose(reply: string): boolean {
  * product card). Deterministic: anything more is replaced by the close.
  */
 export function closeAfterThanks(reply: string, incomingMessage: string, locale: "he" | "en"): string {
-  if (!ONLY_CLOSING.test(incomingMessage ?? "") || isShortClose(reply)) return reply;
+  if (!ONLY_CLOSING.test(incomingMessage ?? "") || (reply.trim() && isShortClose(reply))) return reply;
+  return closingReplyFor(incomingMessage, locale) ?? reply;
+}
+
+/** The short close for a message that is only thanks or goodbye; null for anything else. */
+export function closingReplyFor(incomingMessage: string, locale: "he" | "en"): string | null {
+  if (!ONLY_CLOSING.test(incomingMessage ?? "")) return null;
   const bye = /ביי|להתראות|יום טוב|bye|مع السلامة|باي/i.test(incomingMessage);
   // The customer's own script decides: the turn's locale is only he or en.
   if (/[\u0600-\u06FF]/.test(incomingMessage)) return bye ? "مع السلامة!" : "العفو 🙂";

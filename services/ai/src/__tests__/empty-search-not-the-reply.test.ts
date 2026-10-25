@@ -30,8 +30,16 @@ describe("★ the bot keeps the model's reply when the search is empty", () => {
     expect(src).toContain('const emptySearch = !!productEnvelope && productEnvelope.status === "no_results" && productEnvelope.candidates.length === 0;');
     expect(src).toContain("if (emptySearch && replyText?.trim()) {");
   });
-  it("the adapter retries at most 3 words", () => {
+  it("the adapter retries the category, then at most 3 singular words", () => {
     const src = readFileSync(join(__dirname, "../services/connectors/woocommerce.adapter.ts"), "utf8");
-    expect(src).toContain("for (const w of words.slice(0, 3)) {");
+    expect(src).toContain("/products/categories?per_page=5&search=");
+    expect(src).toContain("const stems = Array.from(new Set(words.map(singular))).slice(0, 3);");
+  });
+
+  it("★ e5 S1: plurals become the singular a title contains", async () => {
+    const { singular } = await import("../services/connectors/woocommerce.adapter");
+    expect(["hoodies", "chinos", "coats", "jackets", "dresses", "bags", "dress", "glass"].map(singular))
+      .toEqual(["hoodie", "chino", "coat", "jacket", "dress", "bag", "dress", "glass"]);
+    expect(rankByTitleWords([{ id: 1, name: "Cropped Hoodie" }, { id: 2, name: "Chino Pants" }], ["hoodie"]).map((p) => p.id)).toEqual([1]);
   });
 });

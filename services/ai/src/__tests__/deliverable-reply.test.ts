@@ -28,3 +28,22 @@ describe("deliverableReply", () => {
     expect(deliverableReply({ ...base, toolCallLog: [{ tool: "woocommerce.update_order_status", decision: "simulated" }] })).toMatch(/לא הצלחתי/);
   });
 });
+
+describe("★ e5 S2: a silent turn after a bare thank-you closes warmly, never the failure line", () => {
+  it("the close, not 'לא הצלחתי להשלים את הבדיקה'", async () => {
+    const { deliverableReply } = await import("../services/ai-bot.service");
+    const { closingReplyFor } = await import("../services/reply-style-check.service");
+    const out = deliverableReply({ safeReply: null, pendingEscalation: false, awaitingApproval: false, toolCallLog: [], locale: "he", closing: closingReplyFor("תודה רבה!", "he") });
+    expect(out).toBe("בכיף 🙂");
+  });
+  it("anything but a bare closing still gets the honest fallback", async () => {
+    const { closingReplyFor } = await import("../services/reply-style-check.service");
+    expect(closingReplyFor("תודה, ומתי זה יגיע?", "he")).toBeNull();
+  });
+  it("an interim-only reply after thanks becomes the close", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain('replyText = closingReplyFor(opts.incomingMessage ?? "", replyLocale);');
+  });
+});

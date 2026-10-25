@@ -336,6 +336,13 @@ export function searchWords(query: unknown): string[] {
   return Array.from(new Set(words)).sort((a, b) => b.length - a.length);
 }
 
+/** "hoodies" -> "hoodie", "dresses" -> "dress", "chinos" -> "chino"; anything else unchanged. */
+export function singular(word: string): string {
+  if (/(ss|sh|ch|x)es$/i.test(word)) return word.slice(0, -2);
+  if (/[^s]s$/i.test(word) && word.length > 3) return word.slice(0, -1);
+  return word;
+}
+
 /** Products whose TITLE carries a query word, most words first; the rest are noise from a body match. */
 export function rankByTitleWords(products: any[], words: string[]): any[] {
   const hits = (p: any) => words.filter((w) => new RegExp(`\\b${w}`, "i").test(String(p?.name ?? ""))).length;
@@ -495,18 +502,31 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (/^\d{1,12}$/.test(String(args.category ?? ""))) params.set("category", String(args.category));
         const visible = (l: any) => (Array.isArray(l) ? l.filter((p: any) => p?.catalog_visibility !== "hidden") : l);
         const list: any = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
-        // Woo searches the whole phrase: "black tank top" finds nothing in a
-        // store whose product is "Organic Rib Tank" (2026-10-25, eval H02). An
-        // empty multi-word search is retried word by word, at most 3 requests.
+        // Woo matches the whole phrase as a substring of the title: "black tank
+        // top" misses "Organic Rib Tank" (eval H02), and a plural or a category
+        // name misses everything: "hoodies" vs "Cropped Hoodie", "chinos" vs
+        // "Chino Pants", "Jackets & Coats" (eval e5 S1). An empty search is
+        // retried: the store's category of that name, then each word in its
+        // singular form. At most 4 more requests.
         const words = searchWords(args.query);
-        if (Array.isArray(list) && list.length === 0 && words.length > 1) {
+        if (Array.isArray(list) && list.length === 0 && words.length) {
           const seen = new Map<string, any>();
-          for (const w of words.slice(0, 3)) {
-            params.set("search", w);
-            const more = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
-            if (Array.isArray(more)) for (const p of more) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p);
+          const add = (l: any) => { if (Array.isArray(l)) for (const p of l) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p); };
+          const cats: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=5&search=${encodeURIComponent(String(args.query))}`).catch(() => []);
+          const cat = Array.isArray(cats) ? cats.find((c: any) => c?.count > 0) : null;
+          if (cat?.id) {
+            const byCat = new URLSearchParams(params);
+            byCat.delete("search");
+            byCat.set("category", String(cat.id));
+            add(visible(await wooRequest(auth, "GET", `${base}/products?${byCat}`)));
+            if (seen.size) return Array.from(seen.values());
           }
-          return rankByTitleWords(Array.from(seen.values()), words);
+          const stems = Array.from(new Set(words.map(singular))).slice(0, 3);
+          for (const w of stems) {
+            params.set("search", w);
+            add(visible(await wooRequest(auth, "GET", `${base}/products?${params}`)));
+          }
+          return rankByTitleWords(Array.from(seen.values()), stems);
         }
         return list;
       }
