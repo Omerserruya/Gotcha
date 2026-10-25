@@ -387,13 +387,39 @@ export interface PlanAutoRecommendationInput {
 }
 
 /**
+ * The candidates a draft names: PRODUCT_n keys first, then exact titles, each
+ * once, in the order the text mentions them.
+ */
+export function namedCandidates(modelText: string | null | undefined, candidates: ProductCandidate[]): ProductCandidate[] {
+  const text = String(modelText ?? "");
+  if (!text.trim() || !candidates.length) return [];
+  const hits: Array<{ at: number; c: ProductCandidate }> = [];
+  for (const m of text.matchAll(/PRODUCT_(\d+)/gi)) {
+    const c = candidates[Number(m[1]) - 1];
+    if (c) hits.push({ at: m.index ?? 0, c });
+  }
+  const lower = text.toLowerCase();
+  for (const c of candidates) {
+    const at = c.title ? lower.indexOf(c.title.toLowerCase()) : -1;
+    if (at >= 0) hits.push({ at, c });
+  }
+  const seen = new Set<ProductCandidate>();
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.c).filter((c) => (seen.has(c) ? false : (seen.add(c), true)));
+}
+
+/**
  * Pure. Decides what goes out; sends nothing.
  */
 export function planAutoRecommendation(
   input: PlanAutoRecommendationInput,
 ): AutoRecommendationPlan {
   const { envelope } = input;
-  const budget = applyBudgetPolicy(envelope, input.budget, input.maxProducts);
+  const policy = applyBudgetPolicy(envelope, input.budget, input.maxProducts);
+  // The cards are the products the reply talks about (2026-10-25, eval R5:
+  // asked about a linen shirt, the customer saw five tees). When the draft
+  // names candidates, by key or by exact title, those go out, in its order.
+  const named = namedCandidates(input.modelText, envelope.candidates).slice(0, input.maxProducts);
+  const budget: BudgetVerdict = named.length ? { ...policy, selected: named } : policy;
 
   const base = { selected: budget.selected, budget };
 
