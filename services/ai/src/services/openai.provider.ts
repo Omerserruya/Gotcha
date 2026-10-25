@@ -1001,7 +1001,7 @@ export class OpenAIProvider implements AIProvider {
           // or blocked on a planner-named required input (MISSING_INFORMATION).
           if (dispatchedToolCount === 0) logCopilotTool(noToolDecision(plan), diag);
           return result.content
-            ? { text: result.content, toolsCalled }
+            ? { text: params.sidePanel ? noWideDash(result.content) : result.content, toolsCalled }
             : { text: "I couldn't generate a response. Please try again.", toolsCalled, failed: true };
         }
 
@@ -1193,12 +1193,15 @@ export function proposeReplyInstruction(draftLocale?: string): string {
   ].join("\n");
 }
 
+/** The wide dash is the clearest written-by-AI tell; a draft goes to a customer (same rule as plainDashes). */
+const noWideDash = (s: string) => s.replace(/[\u2013\u2014\u2015]/g, "-");
+
 /** `{message, draft?}` from the tool call; null when there is no usable message. */
 export function parseProposeReply(raw: string | undefined): { text: string; draft?: string } | null {
   let args: any;
   try { args = JSON.parse(raw || "{}"); } catch { return null; }
-  const text = typeof args?.message === "string" ? args.message.trim() : "";
+  const text = typeof args?.message === "string" ? noWideDash(args.message.trim()) : "";
   if (!text) return null;
-  const draft = typeof args?.draft === "string" ? args.draft.trim() : "";
+  const draft = typeof args?.draft === "string" ? noWideDash(args.draft.trim()) : "";
   return draft ? { text, draft } : { text };
 }

@@ -79,6 +79,13 @@ const BUILTIN_TOOL_CAPABILITY: Record<string, string> = {
 // their name (their description isn't available in the pure prompt builder).
 const BUILTIN_TOOL_SUMMARY: Record<string, string> = {
   check_availability: "see real open times / working hours",
+  // The store's live catalogue: price AND stock, read now, not from documents.
+  "woocommerce.list_products": "search the store's products: live price and stock (in_stock: true for available only)",
+  "woocommerce.get_product": "one product, live: price, stock status and quantity",
+  "woocommerce.list_product_variations": "a product's sizes / colours, each with live stock",
+  "shopify.search_products": "search the store's products: live price and stock",
+  "shopify.get_product": "one product, live: price and stock",
+  "shopify.inventory_status": "live stock for a product or variant",
   schedule_meeting: "book a time the customer chose",
   reschedule_meeting: "move an existing meeting",
   cancel_meeting: "cancel an existing meeting",

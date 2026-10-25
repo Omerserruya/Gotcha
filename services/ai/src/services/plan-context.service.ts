@@ -149,7 +149,7 @@ export async function loadToolCapabilityHints(
       where: { tenantId, aiAgentId, isAllowed: true },
       select: {
         tenantTool: {
-          select: { catalogTool: { select: { slug: true, integration: { select: { category: true } } } } },
+          select: { catalogTool: { select: { slug: true, integration: { select: { slug: true, category: true } } } } },
         },
       },
     });
@@ -157,7 +157,16 @@ export async function loadToolCapabilityHints(
     for (const r of rows) {
       const ct = r?.tenantTool?.catalogTool;
       const cat = ct?.integration?.category;
-      if (ct?.slug && cat) hints[`integration_${ct.slug}`] = String(cat);
+      if (ct?.slug && cat) {
+        hints[`integration_${ct.slug}`] = String(cat);
+        // The adapter name the bot is actually offered (woocommerce.get_product).
+        // Keyed only as integration_<slug>, a store's reads fell through to
+        // "Custom actions - Tenant-defined custom actions" in the prompt, and on
+        // 2026-10-23 the urban widget told a customer it had no live stock
+        // access with woocommerce.get_product on its surface.
+        const sys = ct.integration?.slug;
+        if (sys) hints[`${sys}.${ct.slug}`] = String(cat);
+      }
     }
     return hints;
   } catch (err: any) {
