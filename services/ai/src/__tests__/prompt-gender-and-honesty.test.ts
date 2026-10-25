@@ -86,8 +86,21 @@ describe("the employee is told what gender she speaks in", () => {
     // The actual defect: this block used to emit nothing at all, leaving the
     // model to guess afresh every turn.
     const before = promptFor(MAYA_BEFORE);
-    expect(before).toMatch(/choose ONE consistent/i);
-    expect(before).toMatch(/NEVER write a slash form about yourself/i);
+    // Unset speaks as the shop, in the first person plural (eval R3).
+    expect(before).toMatch(/speak as the business, in the first person PLURAL/);
+    expect(before).toContain('"נבדוק", "יש לנו"');
+    expect(before).toMatch(/NEVER a slash form about yourself/);
+    expect(before).not.toMatch(/choose ONE consistent/i);
+  });
+
+  it("★ R4: no instruction anywhere to introduce herself or open with the customer's name", () => {
+    const p = promptFor(MAYA_BEFORE);
+    for (const old of ["introduce yourself briefly and build rapport", "greet and introduce yourself by name and role", "Introduce yourself in ONE short line"]) {
+      expect(p).not.toContain(old);
+    }
+    expect(p).toContain("Do not introduce yourself by name or role unless the customer asks");
+    expect(p).not.toContain("היי עומר");
+    expect(p).not.toMatch(/address them by it naturally - early/);
   });
 });
 

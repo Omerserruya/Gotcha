@@ -1030,11 +1030,11 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     lines.push("");
     lines.push("## Addressing the customer");
     lines.push(
-      "When the customer's first name is available in the **Context** block, address them by it naturally - early in the conversation (e.g. \"היי עומר\" / \"Hi Omer\"). Use the name once or twice; do not over-use it. Never use placeholders like \"customer\" or \"sir/ma'am\".",
+      "You may know the customer's first name from the **Context** block. Do not make a habit of using it: at most once, at a natural moment, never as an opener in every reply. Never use placeholders like \"customer\" or \"sir/ma'am\".",
     );
     lines.push("");
     lines.push(
-      "**Mirror their greeting**: if the customer says \"היי\" reply \"היי עומר!\" - not \"תודה עומר\". \"Thanks\" is for after they did something. Match their register (formal/casual).",
+      "**Mirror their greeting**: if the customer says \"היי\" reply \"היי!\" - not \"תודה\". \"Thanks\" is for after they did something. Match their register (formal/casual). If they did not greet, do not greet: answer.",
     );
   }
 
@@ -1086,11 +1086,13 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
         `pick the form and hold it for the whole conversation.`,
       );
     } else {
+      // Unset (2026-10-25, eval R3): "pick one" gave Noa "שמח", "אני לא יכול",
+      // "מצטער" in one chat and feminine forms in the next. Speaking as the
+      // shop is natural in Israeli retail and needs no gender at all.
       personaLines.push(
-        `- Gender: not configured. In a gendered language, choose ONE consistent ` +
-        `first-person grammatical gender for yourself (match your name if it ` +
-        `suggests one) and use it for the entire conversation. NEVER write a ` +
-        `slash form about yourself ("מציע/ה", "יכול/ה") and never switch mid-chat.`,
+        `- Gender: not configured. In a gendered language, speak as the business, in the first person ` +
+        `PLURAL: "נבדוק", "יש לנו", "אנחנו שולחים", "מצטערים על זה", never a singular verb or adjective ` +
+        `about yourself ("אני בודק", "אני בודקת", "שמח", "מצטער"). NEVER a slash form about yourself.`,
       );
     }
     const traits = asRecord(persona.traits);
@@ -1231,7 +1233,9 @@ function renderBehaviorStateBlock(s: BehaviorState): string {
 // relationship" sections of personality.md against this turn's reads.
 function relationshipCue(level: BehaviorState["relationshipStrength"]["level"]): string {
   if (level === "high") return " - long-term; be warm, skip reintroductions and basics they know";
-  if (level === "low") return " - first-time; introduce yourself briefly and build rapport";
+  // No self-introduction (2026-10-25, eval R4): the chat window already says
+  // who answers, and "היי, אני נועה מצוות..." opened 7 of 10 replies.
+  if (level === "low") return " - first-time; be warm and answer, without introducing yourself";
   return "";
 }
 
@@ -1477,7 +1481,7 @@ const CORE_CONVERSATION_FLOW = `## Core conversation flow (always applies)
 
 This is the backbone of EVERY customer conversation, whatever the active strategy. The strategy and any playbooks below shape your tone, priorities and which moves to emphasize - they never remove these steps. Adapt naturally to where the conversation actually is; never march it as a rigid checklist, and never stall in endless clarification.
 
-1. **Understand the need.** Read what the customer actually wants - across the whole thread, not just the last word. On the first inbound, greet and introduce yourself by name and role in one short line in their language.
+1. **Understand the need.** Read what the customer actually wants - across the whole thread, not just the last word. On the first inbound, answer it. Do not introduce yourself by name or role unless the customer asks who they are talking to (the chat already shows it); greet briefly only if they greeted.
 2. **Clarify if required.** If the need is genuinely ambiguous, ask ONE focused question. If they already stated it - or the Context/CRM block already answers it - skip ahead; never re-ask for something already on file.
 3. **Take action.** Apply the active strategy and run the needed tool(s) silently (look up / create / update / note / schedule). Use the pre-loaded Context/CRM as ground truth before any external lookup.
 4. **Confirm the real outcome.** Report the action's TRUE state per the Action Outcome Contract: confirm as done only when a tool actually succeeded this turn; if it's pending approval or failed, say so honestly instead of implying success.
