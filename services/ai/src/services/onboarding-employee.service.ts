@@ -56,6 +56,25 @@ export const ORDER_READ_TOOLS: Record<string, string[]> = {
   woocommerce: ["get_order", "list_orders", "list_customer_orders", "get_shipment_tracking", "list_refunds"],
 };
 
+/**
+ * The catalogue READ tools: live price, stock and sizes. Without them a store
+ * employee cannot show a product card and has nothing to ground a colour or a
+ * size in (2026-10-25: Noa on omer-onb-2 got the five order reads only, kept
+ * asking questions and invented four colours for a coat sold in Beige).
+ * Connect-time provisioning does not cover this: onboarding connects the
+ * store BEFORE the employee exists, and provisioning grants only to employees
+ * that already exist.
+ */
+export const PRODUCT_READ_TOOLS: Record<string, string[]> = {
+  shopify: ["search_products", "get_product", "variant_information", "inventory_status"],
+  woocommerce: ["list_products", "get_product", "list_product_variations"],
+};
+
+/** Order and catalogue reads, per platform. */
+export const PLATFORM_READ_TOOLS: Record<string, string[]> = Object.fromEntries(
+  Object.keys(ORDER_READ_TOOLS).map((slug) => [slug, [...ORDER_READ_TOOLS[slug], ...(PRODUCT_READ_TOOLS[slug] ?? [])]]),
+);
+
 /** A customer-visible order number in a tool result: Shopify "name" ("#1043"), Woo "number", or order_number. */
 export function orderNumberIn(result: string): string | null {
   let data: any;
@@ -318,7 +337,7 @@ export async function goLiveEmployee(input: { tenantId: string; actor?: string |
     });
   }
 
-  // ── the platform's order READ tools ──
+  // ── the platform's order and catalogue READ tools ──
   const tools = await grantOrderReadTools(tenantId, agent.id);
 
   // ── routing ──
@@ -372,10 +391,10 @@ async function customizedResult(tenantId: string, agentId: string, name: string,
   };
 }
 
-/** Grant the connected platform's order READ tools (category READ only), read-then-create. */
+/** Grant the connected platform's order and catalogue READ tools (category READ only), read-then-create. */
 export async function grantOrderReadTools(tenantId: string, agentId: string): Promise<{ platform: string | null; granted: string[] }> {
   const connected = await prisma.tenantIntegration.findMany({
-    where: { tenantId, status: "CONNECTED", integration: { slug: { in: Object.keys(ORDER_READ_TOOLS) } } },
+    where: { tenantId, status: "CONNECTED", integration: { slug: { in: Object.keys(PLATFORM_READ_TOOLS) } } },
     select: { id: true, integration: { select: { slug: true } } },
   });
   if (!connected.length) return { platform: null, granted: [] };
@@ -385,7 +404,7 @@ export async function grantOrderReadTools(tenantId: string, agentId: string): Pr
     const slug = ti.integration.slug;
     platform ??= slug;
     const tools = await prisma.tenantTool.findMany({
-      where: { tenantId, tenantIntegrationId: ti.id, isEnabled: true, catalogTool: { slug: { in: ORDER_READ_TOOLS[slug] ?? [] }, category: "READ" } },
+      where: { tenantId, tenantIntegrationId: ti.id, isEnabled: true, catalogTool: { slug: { in: PLATFORM_READ_TOOLS[slug] ?? [] }, category: "READ" } },
       select: { id: true, catalogTool: { select: { slug: true } } },
     });
     for (const t of tools) {

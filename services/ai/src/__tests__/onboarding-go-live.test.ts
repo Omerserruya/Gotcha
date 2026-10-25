@@ -148,6 +148,27 @@ describe("go-live", () => {
     expect(H.perms.map((p) => p.tenantToolId).sort()).toEqual(["t1", "t2"]);
   });
 
+  it("a Woo store's employee also gets the catalogue reads: live price, stock and sizes (Noa, 2026-10-25)", async () => {
+    H.integrations = [{ id: "ti-woo", integration: { slug: "woocommerce" } }];
+    H.tools = [
+      tool("w1", "get_order", "READ", "ti-woo"), tool("w2", "list_products", "READ", "ti-woo"),
+      tool("w3", "get_product", "READ", "ti-woo"), tool("w4", "list_product_variations", "READ", "ti-woo"),
+      tool("w5", "create_refund", "WRITE", "ti-woo"), tool("w6", "cancel_order", "WRITE", "ti-woo"), tool("w7", "list_coupons", "READ", "ti-woo"),
+    ];
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(r.tools).toEqual({
+      platform: "woocommerce",
+      granted: ["woocommerce.get_order", "woocommerce.get_product", "woocommerce.list_product_variations", "woocommerce.list_products"],
+    });
+  });
+
+  it("the catalogue reads are pinned per platform, and every one is a READ in the list it is granted from", async () => {
+    const { PRODUCT_READ_TOOLS, PLATFORM_READ_TOOLS, ORDER_READ_TOOLS } = await import("../services/onboarding-employee.service");
+    expect(PRODUCT_READ_TOOLS.woocommerce).toEqual(["list_products", "get_product", "list_product_variations"]);
+    expect(PRODUCT_READ_TOOLS.shopify).toEqual(["search_products", "get_product", "variant_information", "inventory_status"]);
+    for (const slug of Object.keys(ORDER_READ_TOOLS)) expect(PLATFORM_READ_TOOLS[slug]).toEqual([...ORDER_READ_TOOLS[slug], ...PRODUCT_READ_TOOLS[slug]]);
+  });
+
   it("an owner's explicit 'no' on a tool stays a no", async () => {
     H.perms.push({ id: "px", tenantId: "T", aiAgentId: "ag1", tenantToolId: "t1", isAllowed: false });
     const r = await goLiveEmployee({ tenantId: "T" });
