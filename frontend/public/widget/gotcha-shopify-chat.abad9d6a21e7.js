@@ -825,7 +825,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".opt-l{font-size:12px;font-weight:600;color:#334155;}",
     // Chips that read as choices: a firmer edge, and firmer still while one is needed.
     ".opts[data-need='1'] .chip{border-color:#94a3b8;}",
-    ".pick-hint{padding:0 12px 8px;font-size:12px;color:#475569;}",
+    ".opts[data-need='1'] .opt-l{color:#0f172a;}",
     ".chips{display:flex;flex-wrap:wrap;gap:6px;}",
     ".chip{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
     ".chip[aria-pressed='true']{border-color:" + brand + ";background:" + brand + ";color:" + onBrand + ";}",
@@ -1104,7 +1104,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
     ".panel[data-look='gotcha'] .chip{border-color:#CFC4B6;}",
     ".panel[data-look='gotcha'] .opts[data-need='1'] .chip{border-color:#A99C8E;}",
-    ".panel[data-look='gotcha'] .opt-l,.panel[data-look='gotcha'] .pick-hint{color:#5C5047;}",
+    ".panel[data-look='gotcha'] .opt-l{color:#5C5047;}",
+    ".panel[data-look='gotcha'] .opts[data-need='1'] .opt-l{color:#2B2622;}",
     ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n"); }
@@ -2248,9 +2249,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       if (needsChoice && !compactNow) {
         var opts = el("div", "opts");
         if (mustPick) attr(opts, { "data-need": "1" });
-        opts.appendChild(el("div", "opt-l", T.chooseOption));
+        // One line over the chips that says what to pick ("בחרו מידה וצבע"),
+        // never a generic label plus a second hint saying the same.
+        var pickWords = optionWords(product).pick;
+        opts.appendChild(el("div", "opt-l", pickWords));
         var chips = el("div", "chips");
-        attr(chips, { role: "group", "aria-label": T.chooseOption });
+        attr(chips, { role: "group", "aria-label": pickWords });
         product.variants.forEach(function (v) {
           var chip = el("button", "chip", v.title);
           attr(chip, {
@@ -2305,9 +2309,6 @@ window.__gotchaShopifyChatApp = function (boot) {
       // nothing left to choose. Otherwise the button would either lie or
       // pick a size for the shopper.
       var offerAdd = addToCartAllowed && features.addToCart && (!compactNow || canAdd);
-      if (offerAdd && mustPick && !compactNow) {
-        card.appendChild(el("div", "pick-hint", optionWords(product).pick));
-      }
       var anyBuyable = (product.variants || []).some(function (v) { return v.available && !v.requiresSellingPlan; });
       if (!offerAdd && compactNow && needsChoice && addToCartAllowed && features.addToCart && anyBuyable && product.published !== false) {
         var choose = el("button", "btn btn-p", optionWords(product).open);

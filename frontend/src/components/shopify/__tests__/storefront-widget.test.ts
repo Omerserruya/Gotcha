@@ -1096,11 +1096,11 @@ describe("carousel", () => {
     (first.querySelector("[data-act='choose-options']") as HTMLButtonElement).click();
     expect(first.querySelectorAll(".chip")).toHaveLength(2);
     expect(first.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
-    expect(first.querySelector(".pick-hint")!.textContent).toBe("Pick a size");
+    expect(first.querySelector(".opt-l")!.textContent).toBe("Pick a size");
     const add = Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart")!;
     expect(add.disabled).toBe(true);
     (first.querySelector(".chip") as HTMLButtonElement).click();
-    expect(first.querySelector(".pick-hint")).toBeNull();
+    expect(first.querySelector(".opts")!.hasAttribute("data-need")).toBe(false);
     expect((Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart") as HTMLButtonElement).disabled).toBe(false);
     // The other cards are untouched.
     expect(shadow.querySelectorAll(".car-tr .card")[2].querySelectorAll(".chip")).toHaveLength(0);
@@ -1124,7 +1124,7 @@ describe("carousel", () => {
       const open = card.querySelector("[data-act='choose-options']") as HTMLButtonElement;
       const label = open.textContent;
       open.click();
-      return [label, card.querySelector(".pick-hint")!.textContent];
+      return [label, card.querySelector(".opt-l")!.textContent];
     };
     expect(await words(["Size"])).toEqual(["בחירת מידה", "בחרו מידה"]);
     expect(await words(["Size", "Color"])).toEqual(["בחירת מידה", "בחרו מידה וצבע"]);
@@ -1822,13 +1822,14 @@ describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () =>
     const { shadow } = await boot({
       messages: [{ ...card, commerce: { addToCartEnabled: true, products: [makeProduct({ optionNames: ["Size", "Colour"] })] } }],
     });
-    expect(shadow.querySelector(".pick-hint")!.textContent).toBe("Pick a size and colour");
+    expect(shadow.querySelector(".opt-l")!.textContent).toBe("Pick a size and colour");
+    // One line, not a generic label plus a hint repeating it.
+    expect(shadow.querySelectorAll(".opts .opt-l")).toHaveLength(1);
     expect(shadow.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
     expect(addBtn(shadow).disabled).toBe(true);
     const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
     expect(sheet).toContain(".opts[data-need='1'] .chip{border-color:");
     (shadow.querySelector(".chip") as HTMLButtonElement).click();
-    expect(shadow.querySelector(".pick-hint")).toBeNull();
     expect(shadow.querySelector(".opts")!.hasAttribute("data-need")).toBe(false);
   });
 
