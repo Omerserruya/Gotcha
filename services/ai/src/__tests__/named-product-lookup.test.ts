@@ -282,9 +282,13 @@ describe("★ a lookup turn's reply is the answer, with the product attached", (
     expect(out).toBe(`כן, יש במידה M ובמידה L.\n\n${rendered.message}`);
   });
 
-  it("★ a recommendation turn is unchanged: the introduction above cards, the rendering as text", async () => {
+  it("★ e7 T1: a recommendation turn with cards leads with the model's own short answer, grounded; the introduction only as fallback", async () => {
     const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
-    expect(finalProductReply({ lookup: false, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:", modelText: "כן, יש" })).toBe("הנה כמה אפשרויות:");
+    expect(finalProductReply({ lookup: false, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:", modelText: "כן, יש את PRODUCT_1 בבז', ₪799" }))
+      .toBe("כן, יש את Cotton Trench Coat בבז', ₪799");
+    expect(finalProductReply({ lookup: false, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:", modelText: "" })).toBe("הנה כמה אפשרויות:");
+    const list = Array.from({ length: 5 }, (_, i) => `${i + 1}. PRODUCT_1`).join("\n");
+    expect(finalProductReply({ lookup: false, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:", modelText: list })).toBe("הנה כמה אפשרויות:");
     expect(finalProductReply({ lookup: false, cards: false, envelope: env, introduction: "", rendered, modelText: "כן, יש" })).toBe(rendered.message);
   });
 

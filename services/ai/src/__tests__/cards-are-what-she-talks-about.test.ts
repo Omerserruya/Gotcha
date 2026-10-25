@@ -51,3 +51,19 @@ describe("★ e5 S5: a title said twice prints once, in any language", () => {
     expect(polishReply("Wool Blend Overcoat, Wool Blend Overcoat in grey", { locale: "en", productTitles: titles })).toBe("Wool Blend Overcoat in grey");
   });
 });
+
+describe("★ e7 T5: a colour question about two or three matches gets their live options", () => {
+  it("variations of up to three candidates ride along on a lookup", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("for (let i = 0; i < Math.min(3, envlp.candidates.length); i++) {");
+    expect(src).toContain("VARIATIONS of PRODUCT_${i + 1} (live, already read)");
+  });
+  it("a complaint or a shipping question gets no unnamed cards", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain('!["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? "")');
+  });
+});

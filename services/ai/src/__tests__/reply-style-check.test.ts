@@ -218,3 +218,30 @@ describe("★ e6: no phantom add-to-cart", () => {
     expect(kinds("אפשר להוסיף לסל ישר מהכרטיס")).not.toContain("promise");
   });
 });
+
+describe("★ e7 T4: no repeated or narrating parentheticals", () => {
+  it.each([
+    ["Heavyweight Hoodie במלאי (Heavyweight Hoodie)", "Heavyweight Hoodie במלאי"],
+    ["יש בצבע בז' (בז')", "יש בצבע בז'"],
+    ["יש בצבע אפור פחם (אפור פחם) במידה M", "יש בצבע אפור פחם במידה M"],
+    ["יש צ'ינו בזית (ראוי למטה: Chino Pants)", "יש צ'ינו בזית"],
+  ])("%s", async (input, want) => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    expect(polishReply(input, { locale: "he", productTitles: ["Heavyweight Hoodie", "Chino Pants"] })).toBe(want);
+  });
+  it("a parenthetical that adds something stays", async () => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    expect(polishReply("משלוח רגיל (2-4 ימי עסקים)", { locale: "he" })).toBe("משלוח רגיל (2-4 ימי עסקים)");
+  });
+  it("narrating the card, and saving a place, are caught", () => {
+    expect(kinds("כן, ראו למטה את הכרטיס")).toContain("banned_phrase");
+    expect(kinds("או לשמור מקום לאיסוף?")).toContain("promise");
+  });
+});
+
+describe("★ e7 T3: cards the model sent itself, and no text", () => {
+  it("a short line, never the failure fallback", async () => {
+    const { deliverableReply } = await import("../services/ai-bot.service");
+    expect(deliverableReply({ safeReply: null, pendingEscalation: false, awaitingApproval: false, toolCallLog: [], locale: "he", cardsShown: true })).toBe("בבקשה 🙂");
+  });
+});

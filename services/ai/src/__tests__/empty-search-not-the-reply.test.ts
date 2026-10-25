@@ -43,3 +43,14 @@ describe("★ the bot keeps the model's reply when the search is empty", () => {
     expect(rankByTitleWords([{ id: 1, name: "Cropped Hoodie" }, { id: 2, name: "Chino Pants" }], ["hoodie"]).map((p) => p.id)).toEqual([1]);
   });
 });
+
+describe("★ e7 T2: title words decide, not a description match", () => {
+  it("'shirt' keeps the shirts, drops hoodies matched by their copy", () => {
+    const list = [{ id: 1, name: "Heavyweight Hoodie" }, { id: 2, name: "Relaxed Linen Shirt" }, { id: 3, name: "Poplin Overshirt" }];
+    expect(rankByTitleWords(list, ["shirt"]).map((p) => p.id)).toEqual([2, 3]);
+  });
+  it("the adapter filters a non-empty result by title words when any match", () => {
+    const src = readFileSync(join(__dirname, "../services/connectors/woocommerce.adapter.ts"), "utf8");
+    expect(src).toContain("const byTitle = rankByTitleWords(list, Array.from(new Set(words.map(singular))));");
+  });
+});

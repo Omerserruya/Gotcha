@@ -345,7 +345,8 @@ export function singular(word: string): string {
 
 /** Products whose TITLE carries a query word, most words first; the rest are noise from a body match. */
 export function rankByTitleWords(products: any[], words: string[]): any[] {
-  const hits = (p: any) => words.filter((w) => new RegExp(`\\b${w}`, "i").test(String(p?.name ?? ""))).length;
+  // A substring: "Overshirt" is a shirt.
+  const hits = (p: any) => words.filter((w) => String(p?.name ?? "").toLowerCase().includes(w.toLowerCase())).length;
   return products.map((p) => ({ p, n: hits(p) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).map((x) => x.p);
 }
 
@@ -527,6 +528,13 @@ const WooCommerceAdapter: ProviderAdapter = {
             add(visible(await wooRequest(auth, "GET", `${base}/products?${params}`)));
           }
           return rankByTitleWords(Array.from(seen.values()), stems);
+        }
+        // Woo also matches descriptions: "shirt" returned hoodies whose copy says
+        // "sweatshirt" (eval e7 T2). When some titles carry a query word, only
+        // those; otherwise the store's answer as it came.
+        if (Array.isArray(list) && list.length && words.length) {
+          const byTitle = rankByTitleWords(list, Array.from(new Set(words.map(singular))));
+          if (byTitle.length) return byTitle;
         }
         return list;
       }

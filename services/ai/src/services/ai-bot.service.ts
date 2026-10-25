@@ -120,6 +120,7 @@ import {
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
+import { classifySituation } from "./historical-intelligence/brand-voice";
 import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -963,9 +964,14 @@ export function deliverableReply(t: {
   locale: string;
   /** The short close when the customer only thanked or said goodbye. */
   closing?: string | null;
+  /** Product cards went out this turn. */
+  cardsShown?: boolean;
 }): string {
   if (t.safeReply?.trim()) return t.safeReply;
   if (t.closing && !t.pendingEscalation && !t.awaitingApproval) return t.closing;
+  // The model sent the card itself and wrote nothing (eval e7 T3): the card IS
+  // the answer, so a short line goes with it, never the failure fallback.
+  if (t.cardsShown && !t.pendingEscalation && !t.awaitingApproval) return t.locale?.startsWith("he") ? "בבקשה 🙂" : "Here you go 🙂";
   const simulatedEscalation = t.toolCallLog.some((c) => c.tool === "escalate_to_human" && c.decision === "simulated");
   if (t.pendingEscalation || t.awaitingApproval || simulatedEscalation) return t.safeReply ?? "";
   return silentTurnFallback(t.locale);
@@ -3394,6 +3400,23 @@ async function generateAIBotReplyInner(
               if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length === 1) {
                 const variations = await singleProductVariations(opts.tenantId, result.content, compactWooVariations).catch(() => null);
                 if (variations) toolContent += `\n\nVARIATIONS of PRODUCT_1 (live, already read; do not call list_product_variations for it):\n${variations}`;
+              } else if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length > 1) {
+                // Two or three matches (eval e7 T5: "the heavy hoodie in red?" found
+                // two hoodies and the colour went unanswered): each one's live
+                // options ride along, so the answer can name what exists.
+                for (let i = 0; i < Math.min(3, envlp.candidates.length); i++) {
+                  const id = envlp.candidates[i].productId;
+                  if (!/^\d{1,12}$/.test(String(id))) continue;
+                  const got = await executeAdapterTool({
+                    tenantId: opts.tenantId,
+                    toolFunctionName: "woocommerce.list_product_variations",
+                    args: { product_id: String(id), per_page: 50 },
+                    accessScope: opts.onboardingTest ? "internal" : "customer",
+                  }).catch(() => null);
+                  if (got?.ok && Array.isArray(got.result) && got.result.length) {
+                    toolContent += `\n\nVARIATIONS of PRODUCT_${i + 1} (live, already read):\n${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}`;
+                  }
+                }
               }
             }
           } catch (err: any) {
@@ -4974,7 +4997,9 @@ async function generateAIBotReplyInner(
     const canStage = !!productTurn?.sendShopifyProducts && cardsMatchTurn(productEnvelope.provider, wooTurn);
 
     const recoPlan = planAutoRecommendation({
-      unnamedAllowed: discoveryRecommend || discoveryLookup,
+      // A complaint or a shipping/returns question is not shopping (eval e7
+      // T2: a complaint got five tees): no cards unless the reply names one.
+      unnamedAllowed: (discoveryRecommend || discoveryLookup) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
       unnamedMax: discoveryRecommend ? undefined : 1,
       envelope: productEnvelope,
       // Staging is Shopify Live Chat's mechanism. A channel that renders
@@ -5172,7 +5197,7 @@ async function generateAIBotReplyInner(
   // An escalation or an approval pause is a different case: both already owe
   // the customer a message from another path, and adding one here would make
   // two.
-  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale, closing: closingReplyFor(opts.incomingMessage ?? "", replyLocale) });
+  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale, closing: closingReplyFor(opts.incomingMessage ?? "", replyLocale), cardsShown: (productTurn?.staged.length ?? 0) > 0 });
   if (deliverable === silentTurnFallback(replyLocale)) {
     console.error(
       `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +

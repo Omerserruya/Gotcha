@@ -715,8 +715,17 @@ export function finalProductReply(opts: {
   /** What the model was given this turn (system blocks, tool results): an amount stated there is grounded. */
   context?: string;
 }): string {
+  if (opts.cards) {
+    // With cards, the model's own short answer leads on EVERY turn (eval e7
+    // T1): the introduction strips every title and price ("the cards are the
+    // list"), so "יש שתיים בשחור: Knit Slip Dress ב-₪299" fell to the canned
+    // "מצאתי כמה אפשרויות שיכולות להתאים:". Grounded the same way as a lookup;
+    // the introduction is the fallback for no text or a long list.
+    const prose = renderLookupProse(opts.modelText, opts.envelope, opts.context);
+    const short = prose && prose.split(/\n+/).filter((l) => l.trim()).length <= 3 && prose.length <= 400;
+    return short ? prose : opts.introduction;
+  }
   const prose = opts.lookup ? renderLookupProse(opts.modelText, opts.envelope, opts.context) : "";
-  if (opts.cards) return prose || opts.introduction;
   const r = opts.rendered!;
   return prose && r.usedFallback ? `${prose}\n\n${r.message}` : r.message;
 }
