@@ -42,7 +42,9 @@ export type SuggestionView =
         /** Nothing stored, and a customer message waits: they come when it is answered. */
         | 'waiting'
         /** …and a generation is running now: the event follows. */
-        | 'writing';
+        | 'writing'
+        /** "Try again" generated nothing: the AI or a flow has it now, or it is closed. */
+        | 'aiOrClosed';
       /** Only where asking again could change the answer. */
       readonly retry: boolean;
     };
@@ -66,7 +68,7 @@ export function suggestionView(read: CopilotRead): SuggestionView {
       retry: false,
     };
   }
-  const { data: suggestions, copilotMode, stale, generating } = read.response;
+  const { data: suggestions, copilotMode, stale, generating, skipped } = read.response;
   if (copilotMode.trim().toUpperCase() !== 'READY_MESSAGE') {
     return { kind: 'note', note: 'otherMode', retry: false };
   }
@@ -75,6 +77,10 @@ export function suggestionView(read: CopilotRead): SuggestionView {
   if (sentinel === 'no_provider') return { kind: 'note', note: 'noProvider', retry: false };
   if (sentinel === 'switched_off') return { kind: 'note', note: 'switchedOff', retry: false };
   if (sentinel === 'no_employee') return { kind: 'note', note: 'noEmployee', retry: false };
+  // Asking again cannot change it: no button, and why.
+  if (skipped === 'ai_or_closed' && (suggestions.length === 0 || sentinel !== null)) {
+    return { kind: 'note', note: 'aiOrClosed', retry: false };
+  }
   if (suggestions.length === 0 && generating)
     return { kind: 'note', note: 'writing', retry: false };
   if (suggestions.length === 0 && stale) return { kind: 'note', note: 'waiting', retry: true };
