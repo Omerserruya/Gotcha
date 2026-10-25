@@ -52,7 +52,7 @@ vi.mock('./WidgetFrame', async (load) => {
 const booted = () =>
   JSON.parse(screen.getByTestId('webchat-preview-widget').textContent ?? '{}') as {
     welcome: { assistantName: string; suggestedQuestions: string[] };
-    appearance: { showPoweredBy: boolean };
+    appearance: { showPoweredBy: boolean; language: string };
     features: { whatsappHandoff: boolean };
     brand: { name: string; initial: string } | null;
   };
@@ -1378,6 +1378,45 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     const bubble = screen.getByTestId('webchat-preview-bubble');
     expect(bubble).toHaveTextContent(/^AAviv assistantreplies right away✕Hi$/);
     expect(screen.getByTestId('webchat-preview-popup-message')).toHaveTextContent(/^Hi$/);
+  });
+
+  it('★ one logo (Omer, 2026-10-25): the bubble and the pop-up draw it on white, the initial without one', () => {
+    const logo = 'https://dev.gotcha.co.il/api/uploads/widget/logo.png';
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, logoUrl: logo } },
+    });
+    for (const id of ['webchat-preview-launcher', 'webchat-preview-bubble']) {
+      const img = screen.getByTestId(id).querySelector('img')!;
+      expect(img).toHaveAttribute('src', logo);
+      expect(img.parentElement).toHaveAttribute('data-logo');
+    }
+    expect(screen.getByTestId('webchat-preview-launcher')).not.toHaveTextContent('A');
+    // And the real widget is booted with it, for its header and disc.
+    expect(
+      JSON.parse(screen.getByTestId('webchat-preview-widget').textContent!).appearance.logoUrl,
+    ).toBe(logo);
+  });
+
+  it('★ "in the customer\'s language": the merchant picks which language to preview, and is told the page decides', () => {
+    show('appearance');
+    const pick = screen.getByTestId('webchat-preview-language');
+    expect(pick).toHaveTextContent('follows the language of the page the customer is on');
+    // This screen's language first.
+    expect(screen.getByTestId('webchat-preview-language-en')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(booted().appearance).toMatchObject({ language: 'en' });
+    fireEvent.click(screen.getByTestId('webchat-preview-language-he'));
+    expect(booted().appearance).toMatchObject({ language: 'he' });
+  });
+
+  it('a fixed language previews in it, with no choice to make', () => {
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, language: 'he' } },
+    });
+    expect(screen.queryByTestId('webchat-preview-language')).toBeNull();
+    expect(booted().appearance).toMatchObject({ language: 'he' });
   });
 });
 

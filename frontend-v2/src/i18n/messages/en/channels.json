@@ -671,7 +671,7 @@
       "codeHint": "Paste any hex code",
       "codeBad": "A hex code looks like #C96A4B",
       "logo": "Logo",
-      "logoHint": "Shown at the top of the chat",
+      "logoHint": "Shown at the top of the chat, on the chat button and on the pop-up",
       "cover": "Cover image",
       "coverHint": "Shown at the top of the widget",
       "position": "Position",
@@ -939,7 +939,13 @@
       "replies": "replies right away",
       "frameTitle": "Widget preview",
       "frameLoading": "Loading the widget…",
-      "frameFailed": "We couldn't load the widget. The preview shows the real widget, so there is no drawn stand-in."
+      "frameFailed": "We couldn't load the widget. The preview shows the real widget, so there is no drawn stand-in.",
+      "languageLabel": "Preview in",
+      "languages": {
+        "he": "עברית",
+        "en": "English"
+      },
+      "languageHint": "On your site, the chat follows the language of the page the customer is on. For Hebrew on every page, choose \"Always Hebrew\" under Language."
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",

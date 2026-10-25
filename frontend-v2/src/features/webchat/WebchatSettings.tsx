@@ -1685,13 +1685,16 @@ function Preview({
 }) {
   const t = useTranslations('channels.webchat.preview');
   const locale = useLocale();
-  // The widget's own language; "auto" previews in the language of this screen.
-  const language =
-    config.appearance.language === 'auto'
-      ? locale === 'he'
-        ? 'he'
-        : 'en'
-      : config.appearance.language;
+  /*
+    ★ "In the customer's language": the live widget follows the language of
+    the store page it is on (its <html lang>), which this screen cannot know.
+    So the merchant picks which of the two to look at - starting from this
+    screen's - and is told what decides it on the site (Omer, 2026-10-25:
+    a Hebrew preview, an English en-US store).
+  */
+  const auto = config.appearance.language === 'auto';
+  const [shown, setShown] = useState<'he' | 'en'>(locale === 'he' ? 'he' : 'en');
+  const language = config.appearance.language === 'auto' ? shown : config.appearance.language;
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
   const name =
     (config.nameSource === 'employee' ? employeeName : config.ux.welcome.assistantName)?.trim() ||
@@ -1699,6 +1702,8 @@ function Preview({
   // The bubble's and the pop-up's mark: the brand's initial, as the live widget draws it.
   const initial = brandInitial(business ?? name);
   const ink = inkOn(colour);
+  // ★ One logo (Omer, 2026-10-25): the bubble and the pop-up draw it as the live widget does.
+  const logo = config.appearance.logoUrl;
   const whatsapp = config.ux.kind === 'whatsapp' || config.ux.look === 'whatsapp';
   const teaser = config.ux.proactive.enabled ? config.ux.proactive.message.trim() : '';
   const greeting = config.ux.welcome.title.trim();
@@ -1712,6 +1717,27 @@ function Preview({
           </span>
         ) : null}
       </span>
+      {auto ? (
+        <div className={styles.previewLanguage} data-testid="webchat-preview-language">
+          <span className={styles.segments} role="radiogroup" aria-label={t('languageLabel')}>
+            {(['he', 'en'] as const).map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                role="radio"
+                aria-checked={shown === lang}
+                className={styles.segment}
+                onClick={() => setShown(lang)}
+                lang={lang}
+                data-testid={`webchat-preview-language-${lang}`}
+              >
+                {t(`languages.${lang}`)}
+              </button>
+            ))}
+          </span>
+          <span className={styles.rowHint}>{t('languageHint')}</span>
+        </div>
+      ) : null}
       {/*
         ★★ W2 (design 7): a store page with the widget on it - the widget at
         the top, its pop-up and button at the bottom, on its side.
@@ -1785,10 +1811,17 @@ function Preview({
               <span className={styles.popHead}>
                 <span
                   className={styles.popAvatar}
-                  style={{ backgroundColor: colour, color: ink }}
+                  style={logo ? undefined : { backgroundColor: colour, color: ink }}
+                  data-logo={logo ? '' : undefined}
                   aria-hidden="true"
                 >
-                  {initial}
+                  {logo ? (
+                    // The merchant's own logo, re-hosted by the platform.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className={styles.logoMark} src={logo} alt="" />
+                  ) : (
+                    initial
+                  )}
                   <span className={styles.popDot} />
                 </span>
                 <span className={styles.popNames}>
@@ -1818,10 +1851,17 @@ function Preview({
         ) : (
           <span
             className={`${styles.pin} ${styles.launcher}`}
-            style={{ backgroundColor: colour, color: ink }}
+            style={logo ? undefined : { backgroundColor: colour, color: ink }}
+            data-logo={logo ? '' : undefined}
             data-testid="webchat-preview-launcher"
           >
-            {initial}
+            {logo ? (
+              // The merchant's own logo, re-hosted by the platform.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={styles.logoMark} src={logo} alt="" />
+            ) : (
+              initial
+            )}
             {/* Someone answers: design 7's green dot. */}
             <span className={styles.launcherDot} aria-hidden="true" />
           </span>

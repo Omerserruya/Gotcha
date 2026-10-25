@@ -981,6 +981,12 @@
     inline-size: 340px;
   }
 
+  .previewLanguage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   .previewHead {
     display: flex;
     justify-content: space-between;
@@ -1310,6 +1316,23 @@
     font-size: 20px;
     font-weight: 500;
     line-height: 1;
+  }
+
+  /* The merchant's logo on the bubble and the pop-up, on white (the live widget's .mark-img). */
+  .launcher[data-logo],
+  .popAvatar[data-logo] {
+    background-color: var(--widget-look-logo-ground);
+  }
+
+  .popAvatar[data-logo] {
+    box-shadow: 0 0 0 1px var(--widget-look-rule);
+  }
+
+  .logoMark {
+    display: block;
+    max-inline-size: 62%;
+    max-block-size: 62%;
+    object-fit: contain;
   }
 
   .launcherDot {

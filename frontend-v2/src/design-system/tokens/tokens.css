@@ -552,6 +552,8 @@
     --widget-look-online: #5fa578;
     --widget-look-bubble: #f4efe8;
     --widget-look-arrow: #b3a698;
+    /* A merchant's logo sits on white, as the live widget draws it: a mark is made for a light ground. */
+    --widget-look-logo-ground: #fff;
 
     /*
      * A settled conversation's avatar - quieter than a live one. 02 draws a
