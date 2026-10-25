@@ -315,3 +315,23 @@ export function lastShownProduct(rows: Array<{ direction: string; messageType?: 
 export function asksSize(text: string | null | undefined): boolean {
   return /(?<![A-Za-z])(?:XXS|XS|S|M|L|XL|XXL)(?![A-Za-z])|מידה|מידות|\bsize\b/i.test(String(text ?? ""));
 }
+
+/**
+ * The product mentioned most recently by us: a card (its store id), or a store
+ * title named in our own text ("Canvas Tote", eval e9 W2: the tote never had a
+ * card, so its colour was answered from nothing and contradicted a turn later).
+ */
+export function lastProductMention(rows: Array<{ direction: string; body?: string | null; messageType?: string | null; metadata?: any; senderName?: string | null }>): { productId?: string; title: string } | null {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r.direction !== "OUTBOUND") continue;
+    if (/product/.test(String(r.messageType ?? ""))) {
+      const p = Array.isArray(r.metadata?.commerce?.products) ? r.metadata.commerce.products[0] : null;
+      if (p && /^\d{1,12}$/.test(String(p.productId ?? ""))) return { productId: String(p.productId), title: String(p.title ?? "") };
+      continue;
+    }
+    const m = String(r.body ?? "").match(/\b(?:[A-Z][a-z]+(?:[- ](?:[A-Z][a-z]+|\d+-Pack))){1,3}\b/g);
+    if (m && m.length) return { title: m[m.length - 1] };
+  }
+  return null;
+}

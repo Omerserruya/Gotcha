@@ -682,7 +682,11 @@ async function checkEscalationThresholds(
       tenantId,
       direction: "OUTBOUND",
       metadata: { path: ["source"], equals: "ai_bot" },
-      NOT: { metadata: { path: ["kind"], equals: "bridge_ack_for_approval" } },
+      NOT: [
+        { metadata: { path: ["kind"], equals: "bridge_ack_for_approval" } },
+        // Replies, not the product cards that go with them (eval e9 W4).
+        { messageType: { contains: "product" } },
+      ],
     },
   });
 

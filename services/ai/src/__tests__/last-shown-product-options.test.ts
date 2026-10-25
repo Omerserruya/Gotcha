@@ -30,9 +30,23 @@ describe("★ a size question", () => {
 describe("★ wired: one live read, on a colour or size turn, before the state note", () => {
   const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
   it("the options of the last shown product ride along", () => {
-    const at = src.indexOf("const last = lastShownProduct(messages as any[]);");
+    const at = src.indexOf("const mention = lastProductMention(messages as any[]);");
     expect(at).toBeGreaterThan(0);
     expect(at).toBeLessThan(src.indexOf('markStage("prompt_ready");'));
     expect(src).toContain("if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage))) {");
+  });
+});
+
+describe("★ e9 W2: a product named only in our text", () => {
+  it("the latest mention wins: a title in our words after a card", async () => {
+    const { lastProductMention } = await import("../services/woo-chat-turn.service");
+    expect(lastProductMention([card("1", "Ribbed Beanie"), { direction: "OUTBOUND", messageType: "text", body: "יש גם את Canvas Tote בשחור" }]))
+      .toEqual({ title: "Canvas Tote" });
+    expect(lastProductMention([{ direction: "OUTBOUND", messageType: "text", body: "יש את Canvas Tote" }, card("2", "Wool Scarf")]))
+      .toEqual({ productId: "2", title: "Wool Scarf" });
+  });
+  it("Hebrew text with no store title: nothing", async () => {
+    const { lastProductMention } = await import("../services/woo-chat-turn.service");
+    expect(lastProductMention([{ direction: "OUTBOUND", messageType: "text", body: "יש לנו תיקים יפים" }])).toBeNull();
   });
 });

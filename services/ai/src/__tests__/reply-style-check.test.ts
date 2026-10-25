@@ -303,3 +303,33 @@ describe("★ e8", () => {
     expect(variationsOfferColour([{ attributes: [{ option: "Grey Melange" }] }], ["grey", "gray"])).toBe(true);
   });
 });
+
+describe("★ e9", () => {
+  it("W3: never offer the card", () => {
+    expect(kinds("רוצים שאציג אותו ככרטיס מוצר?")).toContain("banned_phrase");
+  });
+  it("W5: phantom pickup and checkout help", () => {
+    expect(kinds("רוצים שאשלח לאיסוף בסטודיו?")).toContain("promise");
+    expect(kinds("רוצים שאעזור להשלים את ההזמנה?")).toContain("promise");
+  });
+  it("W5: collecting a phone or a time for a callback, with no handoff", () => {
+    expect(kinds("קיבלנו את 0521234567. מתי נוח לשיחה?")).toContain("promise");
+    expect(kinds("קיבלנו את 0521234567. מתי נוח לשיחה?", { handedOff: true })).not.toContain("promise");
+    expect(kinds("מתי נוח לך לשיחה? ציין שעה")).toContain("gendered_address");
+  });
+  it("W7: 'שמח לשמוע', the 'רואים למטה' tic, formal 'יש לשלוח'", () => {
+    expect(kinds("שמח לשמוע!")).toContain("self_gender");
+    expect(kinds("כן, רואים למטה")).toContain("banned_phrase");
+    expect(kinds("יש לשלוח את מספר ההזמנה")).toContain("banned_phrase");
+  });
+});
+
+describe("★ e9 W1: the numbered list is never the text on a card channel", () => {
+  it("the fallback list is skipped where cards render", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("if (delivery.useTextFallback && channelSupportsCards) {");
+    expect(src).toContain('NOT: { messageType: { contains: "product" } },');
+  });
+});

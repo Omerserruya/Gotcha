@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastShownProduct, asksSize } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -523,6 +523,9 @@ async function evaluateEscalationGates(opts: {
         tenantId: opts.tenantId,
         direction: "OUTBOUND",
         metadata: { path: ["source"], equals: "ai_bot" },
+        // Replies, not the product cards that go with them (eval e9 W4: a card
+        // every turn reached the cap in half the turns).
+        NOT: { messageType: { contains: "product" } },
       },
     });
     if (aiMessageCount >= hardCeiling) {
@@ -3111,7 +3114,20 @@ async function generateAIBotReplyInner(
   // right after the beanie, answered "אין אישור לצבע"): its live options come
   // with the turn, so the answer needs no search and no guess.
   if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage))) {
-    const last = lastShownProduct(messages as any[]);
+    const mention = lastProductMention(messages as any[]);
+    let last: { productId: string; title: string } | null = mention?.productId ? { productId: mention.productId, title: mention.title } : null;
+    if (mention && !mention.productId) {
+      // Named in our text, never shown as a card: find it by its exact title.
+      const found = await executeAdapterTool({
+        tenantId: opts.tenantId,
+        toolFunctionName: "woocommerce.list_products",
+        args: { query: mention.title, per_page: 5 },
+        accessScope: opts.onboardingTest ? "internal" : "customer",
+      }).catch(() => null);
+      const list: any[] = found?.ok && Array.isArray(found.result) ? (found.result as any[]) : [];
+      const hit = list.find((p) => String(p?.name ?? "").toLowerCase() === mention.title.toLowerCase());
+      if (hit?.id) last = { productId: String(hit.id), title: String(hit.name) };
+    }
     if (last) {
       const got = await executeAdapterTool({
         tenantId: opts.tenantId,
@@ -3123,7 +3139,7 @@ async function generateAIBotReplyInner(
         chatMessages.push({
           role: "system",
           content:
-            `The product shown to the customer most recently: "${last.title}" (store id ${last.productId}). Its LIVE options, already read: ` +
+            `The product mentioned to the customer most recently: "${last.title}" (store id ${last.productId}). Its LIVE options, already read: ` +
             `${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}\n` +
             `If the customer is asking about this product, answer from these options: say plainly which colour or size exists and which does not. ` +
             `If they named a different product, look that one up instead.`,
@@ -5112,7 +5128,12 @@ async function generateAIBotReplyInner(
       .filter((m: any) => (m.role === "system" || m.role === "tool") && typeof m.content === "string")
       .map((m: any) => m.content as string)
       .join("\n");
-    if (!delivery.useTextFallback) {
+    // On a channel that shows cards, the numbered text list (titles, prices,
+    // URLs) is never the customer's text (eval e9 W1: "הנה מה שמצאתי: 1. Cropped
+    // Hoodie ₪299 במלאי https://..."). The model's own grounded words go out.
+    if (delivery.useTextFallback && channelSupportsCards) {
+      replyText = finalProductReply({ lookup: true, modelText, envelope: productEnvelope, cards: true, introduction: "", context: groundingContext }) || replyText;
+    } else if (!delivery.useTextFallback) {
       // The products are in the cards. The text is a lead-in and nothing
       // else - no numbered list, no URLs, no "shall I send a card?".
       replyText = finalProductReply({ lookup: discoveryLookup || recoPlan.skipReason === "not_named", modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction, context: groundingContext });
