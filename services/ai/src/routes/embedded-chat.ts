@@ -233,6 +233,21 @@ router.post("/bootstrap", initLimiter, async (req: Request, res: Response) => {
  * the merchant turned it on AND its number can take it (connected, phone
  * known). The number itself never reaches the page.
  */
+/**
+ * The language the widget opens in (2026-10-25): the merchant's choice, else
+ * the business's own (Tenant.defaultLocale), never the page's. A theme left at
+ * lang="en-US" opened a Hebrew shop's widget in English. The customer's first
+ * message still switches it to the language they wrote in (W10).
+ */
+async function openingLanguage(tenantId: string, config: WebchatConfig): Promise<"he" | "en"> {
+  const chosen = config.appearance.language;
+  if (chosen === "he" || chosen === "en") return chosen;
+  const tenant = await withCrossTenantAccess(async () =>
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }),
+  ).catch(() => null);
+  return /^he/i.test(String(tenant?.defaultLocale ?? "")) ? "he" : "en";
+}
+
 async function withHandoff(tenantId: string, config: WebchatConfig, offline = false) {
   // Products and promotions only while the store they come from is connected (W9).
   const wantsStore = config.commerce.productMessagingEnabled || config.commerce.promotions.couponIds.length > 0;
@@ -250,7 +265,7 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
     ? (await withCrossTenantAccess(() => resolveWooCurrency(tenantId)).catch(() => ({ currency: undefined }))).currency ?? null
     : null;
   const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
-  const lang = config.appearance.language === "he" ? "he" : "en";
+  const lang = await openingLanguage(tenantId, config);
   if (config.ux.kind === "whatsapp" && !target) return null;
   // The business's wordmark on the bubble and pop-up (design 7).
   const brand = await withCrossTenantAccess(() => brandOf(tenantId)).catch(() => null);
@@ -263,6 +278,7 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   const assistantName = employeeName ?? base.welcome.assistantName;
   return {
     ...base,
+    appearance: { ...base.appearance, language: lang },
     welcome: { ...base.welcome, assistantName },
     ux: { ...base.ux, welcome: { ...base.ux.welcome, assistantName } },
     nameSource: employeeName ? "employee" : "custom",
@@ -322,7 +338,7 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
       await redis.set(handoffConversationKey(conv.id), ref, "EX", HANDOFF_TTL_SECONDS);
     }
     const asked = req.body?.locale;
-    const locale = asked === "he" || asked === "en" ? asked : config.appearance.language === "he" ? "he" : "en";
+    const locale = asked === "he" || asked === "en" ? asked : await openingLanguage(conv.tenantId, config);
     const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
     if (text) {
       // Recorded, not queued: no website answer to a question asked on WhatsApp.
@@ -377,7 +393,7 @@ router.post("/whatsapp-start", messageLimiter, async (req: Request, res: Respons
     const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
     if (!ref) { res.status(503).json({ error: "try_again" }); return; }
     const asked = req.body?.locale;
-    const locale = asked === "he" || asked === "en" ? asked : config.appearance.language === "he" ? "he" : "en";
+    const locale = asked === "he" || asked === "en" ? asked : await openingLanguage(account.tenantId, config);
     const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
     const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
