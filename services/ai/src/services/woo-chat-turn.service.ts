@@ -268,3 +268,30 @@ export async function webchatStorefrontBlock(tenantId: string, conversationId: s
     'If they say "this", "it" or "this one" without naming a product, they mean the product above.',
   ].join("\n");
 }
+
+/**
+ * A size / colour question whose search found exactly ONE variable product:
+ * its variations, read now and attached to that same tool result, so the model
+ * answers in the next round instead of spending one on list_product_variations
+ * (2026-10-25: three rounds for "is the trench coat in M?"). Null when the
+ * search found zero or several products, the product has no variations, or
+ * the read fails; the model then reads them itself, as before.
+ */
+export async function singleProductVariations(
+  tenantId: string,
+  rawSearchContent: string,
+  compact: (raw: string) => string,
+): Promise<string | null> {
+  let parsed: any;
+  try { parsed = JSON.parse(rawSearchContent); } catch { return null; }
+  const list = Array.isArray(parsed?.result) ? parsed.result : Array.isArray(parsed) ? parsed : null;
+  if (!list || list.length !== 1 || list[0]?.type !== "variable" || !/^\d{1,12}$/.test(String(list[0]?.id ?? ""))) return null;
+  const got = await executeAdapterTool({
+    tenantId,
+    toolFunctionName: "woocommerce.list_product_variations",
+    args: { product_id: String(list[0].id), per_page: 50 },
+    accessScope: "internal",
+  }).catch(() => null);
+  if (!got?.ok) return null;
+  return compact(JSON.stringify({ ok: true, result: got.result }));
+}

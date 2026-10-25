@@ -237,7 +237,8 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts } from "./woo-chat-turn.service";
+import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3014,6 +3015,8 @@ async function generateAIBotReplyInner(
   let awaitingApproval: AIBotReplyResult["awaitingApproval"] = null;
   let replyText: string | null = null;
   let totalTokens = 0;
+  // What the turn's input really cost: tokens not served from the prefix cache.
+  let uncachedInputTokens = 0;
   // Pre-tool acks ("one moment, checking") to send as their OWN bubble(s)
   // BEFORE the final reply. Populated when the model acks alongside a calendar
   // tool call. The worker sends these first, then the reply (two-bubble flow).
@@ -3075,7 +3078,7 @@ async function generateAIBotReplyInner(
       signal,
     });
 
-    totalTokens += response.usage.total_tokens || 0;
+    totalTokens += response.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(response.usage);
     budget.addUsage(response.usage.total_tokens || 0);
     if (budget.exceededTurnCap()) {
       auditBudgetAbort({
@@ -3339,6 +3342,12 @@ async function generateAIBotReplyInner(
               productEnvelope = envlp;
               productBudget = envlp.budget ?? null;
               toolContent = buildKeyedModelSummary(envlp, replyLocale);
+              // A size / colour question about the one product found: its
+              // variations ride along, so the answer needs no extra round.
+              if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length === 1) {
+                const variations = await singleProductVariations(opts.tenantId, result.content, compactWooVariations).catch(() => null);
+                if (variations) toolContent += `\n\nVARIATIONS of PRODUCT_1 (live, already read; do not call list_product_variations for it):\n${variations}`;
+              }
             }
           } catch (err: any) {
             console.warn("[ai-bot] typed product path failed (using raw result):", err?.message);
@@ -3429,7 +3438,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_retry", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
       signal,
     });
-    totalTokens += retryResponse.usage.total_tokens || 0;
+    totalTokens += retryResponse.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(retryResponse.usage);
     budget.addUsage(retryResponse.usage.total_tokens || 0);
 
     const retryToolCalls = retryResponse.toolCalls;
@@ -3519,7 +3528,7 @@ async function generateAIBotReplyInner(
           metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
           signal,
         });
-        totalTokens += finalResp.usage.total_tokens || 0;
+        totalTokens += finalResp.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(finalResp.usage);
         budget.addUsage(finalResp.usage.total_tokens || 0);
         if (finalResp.content?.trim()) replyText = finalResp.content.trim();
       }
@@ -3636,7 +3645,7 @@ async function generateAIBotReplyInner(
         metadata: { type: "ai_bot_action_preference", conversationId: opts.conversationId, aiAgentId: config.id },
         signal,
       });
-      totalTokens += apResponse.usage.total_tokens || 0;
+      totalTokens += apResponse.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(apResponse.usage);
       budget.addUsage(apResponse.usage.total_tokens || 0);
 
       const apToolCalls = apResponse.toolCalls;
@@ -3735,7 +3744,7 @@ async function generateAIBotReplyInner(
             metadata: { type: "ai_bot_action_preference_final", conversationId: opts.conversationId, aiAgentId: config.id },
             signal,
           });
-          totalTokens += apFinal.usage.total_tokens || 0;
+          totalTokens += apFinal.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(apFinal.usage);
           budget.addUsage(apFinal.usage.total_tokens || 0);
           if (apFinal.content?.trim()) replyText = apFinal.content.trim();
         } else if (apResponse.content?.trim()) {
@@ -3855,7 +3864,7 @@ async function generateAIBotReplyInner(
           metadata: { type: "ai_bot_recovery", conversationId: opts.conversationId, aiAgentId: config.id },
           signal,
         });
-        totalTokens += recResponse.usage.total_tokens || 0;
+        totalTokens += recResponse.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(recResponse.usage);
         budget.addUsage(recResponse.usage.total_tokens || 0);
 
         const recToolCalls = recResponse.toolCalls;
@@ -3951,7 +3960,7 @@ async function generateAIBotReplyInner(
               metadata: { type: "ai_bot_recovery_final", conversationId: opts.conversationId, aiAgentId: config.id },
               signal,
             });
-            totalTokens += recFinal.usage.total_tokens || 0;
+            totalTokens += recFinal.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(recFinal.usage);
             budget.addUsage(recFinal.usage.total_tokens || 0);
             if (recFinal.content?.trim()) replyText = recFinal.content.trim();
           } else if (recResponse.content?.trim()) {
@@ -4073,7 +4082,7 @@ async function generateAIBotReplyInner(
         metadata: { type: "ai_bot_guaranteed_bg", conversationId: opts.conversationId, aiAgentId: config.id },
         signal,
       });
-      totalTokens += bgResp.usage.total_tokens || 0;
+      totalTokens += bgResp.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(bgResp.usage);
       budget.addUsage(bgResp.usage.total_tokens || 0);
       for (const tc of bgResp.toolCalls || []) {
         const toolName = tc.function?.name || "unknown";
@@ -4189,7 +4198,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_objective_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
-    totalTokens += regen.usage.total_tokens || 0;
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
     budget.addUsage(regen.usage.total_tokens || 0);
     if (regen.content?.trim()) replyText = regen.content.trim();
     passiveCloseRegenerated = true;
@@ -4243,7 +4252,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_booking_failsafe_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
-    totalTokens += regen.usage.total_tokens || 0;
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
     budget.addUsage(regen.usage.total_tokens || 0);
     if (regen.content?.trim()) replyText = regen.content.trim();
     bookingFailsafeRegenerated = true;
@@ -4335,7 +4344,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_booking_grounding_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
-    totalTokens += regen.usage.total_tokens || 0;
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
     budget.addUsage(regen.usage.total_tokens || 0);
     const regenToolCalls = regen.toolCalls;
     if (regenToolCalls && regenToolCalls.length > 0) {
@@ -4393,7 +4402,7 @@ async function generateAIBotReplyInner(
         metadata: { type: "ai_bot_booking_grounding_final", conversationId: opts.conversationId, aiAgentId: config.id },
         signal,
       });
-      totalTokens += finalResp.usage.total_tokens || 0;
+      totalTokens += finalResp.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(finalResp.usage);
       budget.addUsage(finalResp.usage.total_tokens || 0);
       if (finalResp.content?.trim()) replyText = finalResp.content.trim();
     } else if (regen.content?.trim()) {
@@ -4458,7 +4467,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_unconfirmed_commit_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
-    totalTokens += regen.usage.total_tokens || 0;
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
     budget.addUsage(regen.usage.total_tokens || 0);
     if (regen.content?.trim()) replyText = regen.content.trim();
     unconfirmedCommitRegenerated = true;
@@ -4497,7 +4506,7 @@ async function generateAIBotReplyInner(
       metadata: { type: "ai_bot_redundant_info_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
-    totalTokens += regen.usage.total_tokens || 0;
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
     budget.addUsage(regen.usage.total_tokens || 0);
     if (regen.content?.trim()) replyText = regen.content.trim();
     redundantContactRegenerated = true;
@@ -4728,6 +4737,11 @@ async function generateAIBotReplyInner(
       metadata: {
         model,
         tokens: totalTokens,
+        uncachedInputTokens,
+        uncachedOverBudget: alertIfOverBudget({
+          tenantId: opts.tenantId, conversationId: opts.conversationId, aiAgentId: config.id,
+          uncachedInputTokens, totalTokens,
+        }) || undefined,
         source: "ai_bot",
         escalated: !!pendingEscalation,
         // WHY the turn escalated - machine case + human summary, so the owner
