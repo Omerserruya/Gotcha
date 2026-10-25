@@ -206,3 +206,24 @@ describe("(c) and (d)", () => {
     expect(src).toContain("A question about a product they named (its stock, size, colour or price) is not a moment to qualify");
   });
 });
+
+describe("★ a product the model knows by its key is called by its id", () => {
+  it("PRODUCT_1 -> the first candidate's real id; anything else unchanged", async () => {
+    const { resolveProductRef } = await vi.importActual<any>("../services/product-search.service");
+    const env = { candidates: [{ productId: "364" }, { productId: "329" }] } as any;
+    expect(resolveProductRef(env, "PRODUCT_1")).toBe("364");
+    expect(resolveProductRef(env, " product_2 ")).toBe("329");
+    expect(resolveProductRef(env, "PRODUCT_9")).toBe("PRODUCT_9");
+    expect(resolveProductRef(env, "364")).toBe("364");
+    expect(resolveProductRef(null, "PRODUCT_1")).toBe("PRODUCT_1");
+  });
+
+  it("applied before every gate in runAdapterTool", () => {
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf-8");
+    const start = src.indexOf("runAdapterTool: async ({ toolFunctionName, args: rawArgs }) => {");
+    expect(start).toBeGreaterThan(0);
+    const body = src.slice(start, start + 2500);
+    expect(body.indexOf("resolveProductRef(productEnvelope")).toBeGreaterThan(0);
+    expect(body.indexOf("resolveProductRef(productEnvelope")).toBeLessThan(body.indexOf("assertMatchesResolvedFlow"));
+  });
+});

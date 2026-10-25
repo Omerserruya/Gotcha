@@ -603,3 +603,18 @@ export function renderCandidatesForWhatsApp(
 
   return [header, ...lines].join("\n\n");
 }
+
+/**
+ * The model only ever sees PRODUCT_1..N (buildKeyedModelSummary), so a
+ * follow-up call names a product by its key: on 2026-10-25 urban's bot asked
+ * WooCommerce for the variations of product "PRODUCT_1" and got a 404, and the
+ * size question went unanswered. The key resolves to the candidate's real id;
+ * anything else is passed through unchanged.
+ */
+export function resolveProductRef(envelope: ProductSearchEnvelope | null | undefined, value: unknown): unknown {
+  if (typeof value !== "string" || !envelope) return value;
+  const m = value.trim().match(/^PRODUCT_(\d{1,3})$/i);
+  if (!m) return value;
+  const c = envelope.candidates[Number(m[1]) - 1];
+  return c?.productId ?? value;
+}

@@ -33,7 +33,7 @@ import {
 } from "@chatcenter/shared";
 import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
 import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
-import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
+import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
   reasonForCandidate,
@@ -1994,7 +1994,12 @@ async function generateAIBotReplyInner(
         return { ok: false, reason: "verification_failed" };
       }
     },
-    runAdapterTool: async ({ toolFunctionName, args }) => {
+    runAdapterTool: async ({ toolFunctionName, args: rawArgs }) => {
+      // A product the model knows only by its key (PRODUCT_1) is called by its
+      // real id, before any gate reads the arguments.
+      const args: Record<string, unknown> = rawArgs && typeof (rawArgs as any).product_id === "string"
+        ? { ...rawArgs, product_id: resolveProductRef(productEnvelope, (rawArgs as any).product_id) }
+        : rawArgs;
       // ── Resolved-flow gate ───────────────────────────────────────────
       // The flow controller decided this turn's move from verified facts. This
       // is what makes that decision binding rather than advisory: a critical
