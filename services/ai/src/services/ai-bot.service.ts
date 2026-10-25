@@ -118,8 +118,9 @@ import {
   type SkillContext,
   type SkillCandidate,
 } from "./skill-runtime.service";
-import { mergeKnowledgeFields } from "./prompt-builder.service";
+import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -4172,6 +4173,9 @@ async function generateAIBotReplyInner(
     !committedActionThisTurn &&
     !customerIsClosing(opts.incomingMessage) &&
     !decisionDisqualified &&
+    // A shop's employee may answer and stop (P2): the forward-move corrective
+    // is a sales rep's. Passive closers there are the reply checker's.
+    !isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }) &&
     // Closing out a finished skill ("anything else?") is not the objective
     // chain's passive close; the skill, not the chain, owns this turn.
     !skillOwnsTurn &&
@@ -4831,6 +4835,63 @@ async function generateAIBotReplyInner(
   // renderer resolves them, blocks invented refs, and strips any URL/price the
   // model tried to emit. On any failure it still renders from the canonical
   // envelope (never generic model inventory) and logs loudly.
+  // ── The reply checker (2026-10-25, P3) ────────────────────────
+  // Deterministic checks on the draft (slash and gendered forms, a greeting or
+  // self-intro after the first reply, filler, her own gender and name, a
+  // product fact with nothing behind it, a promise no tool keeps, two
+  // questions, a question after a thank-you). Any violation: ONE regeneration,
+  // without tools, naming exactly what to fix; whatever comes back is sent.
+  if (replyText && !awaitingApproval && !pendingEscalation) {
+    try {
+      const persona: any = (config as any).persona ?? {};
+      const g = String(persona.grammaticalGender ?? persona.gender ?? "").toLowerCase();
+      const priorOutbound = (messages as any[]).filter((m) => m.direction === "OUTBOUND" && (m.messageType ?? "text") !== "system");
+      const PRODUCT_TOOL = /^(woocommerce\.(list_products|get_product|list_product_variations)|shopify\.(search_products|get_product|variant_information|inventory_status)|search_products)$/;
+      const violations = checkReplyStyle(replyText, {
+        locale: replyLocale,
+        isFirstReply: priorOutbound.length === 0,
+        incomingMessage: opts.incomingMessage ?? "",
+        customerForm: ctxSlot.grammaticalAddress ?? null,
+        employeeGender: /^(f|female|feminine|woman)/.test(g) ? "feminine" : /^(m|male|masculine|man)/.test(g) ? "masculine" : null,
+        employeeName: config.name,
+        productFactsAvailable: !!productEnvelope
+          || toolCallLog.some((t) => PRODUCT_TOOL.test(t.tool))
+          || priorOutbound.some((m) => /product/.test(String(m.messageType ?? ""))),
+        shopFloor: isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }),
+        toolsOffered: toolFunctionNames,
+        customerClosing: customerIsClosing(opts.incomingMessage),
+      });
+      if (violations.length) {
+        console.warn(`[ai-bot] reply checker: ${violations.map((v) => `${v.kind}(${v.match})`).join(", ")}. Regenerating once. conv=${opts.conversationId}`);
+        chatMessages.push({ role: "assistant", content: replyText });
+        chatMessages.push({ role: "user", content: buildStyleCorrective(violations, replyLocale) + INTERNAL_NUDGE_LANGUAGE_PIN });
+        const regen = await generateResponse({
+          tenantId: opts.tenantId,
+          sessionId: opts.conversationId,
+          model,
+          messages: chatMessages,
+          temperature: config.temperature ?? 0.7,
+          maxTokens: config.maxTokens ?? 1024,
+          metadata: { type: "ai_bot_style_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+          signal,
+        });
+        totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
+        budget.addUsage(regen.usage.total_tokens || 0);
+        if (regen.content?.trim()) replyText = regen.content.trim();
+        toolCallLog.push({
+          tool: "__style_check__",
+          args: { violations: violations.map((v) => v.kind) },
+          result: "regenerated_once",
+          decision: "style_violation",
+          sideEffect: "style_regenerated",
+        });
+      }
+    } catch (err: any) {
+      // A checker that throws must not cost the customer their reply.
+      console.error(`[ai-bot] reply checker failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+
   // An empty search is data the model already read, not the reply (2026-10-25,
   // eval R2): "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a
   // complaint's included. With nothing to show, the model's own words stand;
@@ -4934,6 +4995,8 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // Safe touches in code: a colour said in Hebrew (not inside a title), ₪ not ILS.
+  if (replyText) replyText = polishReply(replyText, { locale: replyLocale, productTitles: productEnvelope?.candidates.map((c) => c.title) });
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).
   replyText = humanizeReply(replyText);
 

@@ -1085,9 +1085,13 @@ export function isNonAdvancingReply(reply: string | null | undefined): boolean {
 // Note: "לא" / "no" is NOT a farewell - it's a non-answer the agent must lead past.
 const CUSTOMER_FAREWELL = /\b(bye|goodbye|that'?s all|thanks,? bye|no thanks)\b|ביי|להתראות|יום טוב|תודה רבה ביי|סגור תודה|זהו תודה/i;
 
+// A bare thank-you closes the exchange too (2026-10-25, eval E04): after
+// "תודה רבה!" the gate forced another question. A human says "בכיף 🙂" and stops.
+const BARE_THANKS = /^\s*(?:(?:ממש |אחלה |מעולה,? |סבבה,? |סופר )?תודה(?: רבה| ענקית| לך| לכם)?|thanks?(?: a lot| so much)?|thank you(?: so much)?|ty)[\s!.,🙏❤️🙂😊🌸]*$/iu;
+
 export function customerIsClosing(lastCustomerMessage: string | null | undefined): boolean {
   if (!lastCustomerMessage) return false;
-  return CUSTOMER_FAREWELL.test(lastCustomerMessage);
+  return CUSTOMER_FAREWELL.test(lastCustomerMessage) || BARE_THANKS.test(lastCustomerMessage);
 }
 
 /**
