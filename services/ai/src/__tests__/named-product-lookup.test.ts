@@ -227,3 +227,61 @@ describe("★ a product the model knows by its key is called by its id", () => {
     expect(body.indexOf("resolveProductRef(productEnvelope")).toBeLessThan(body.indexOf("assertMatchesResolvedFlow"));
   });
 });
+
+describe("★ a lookup turn's reply is the answer, with the product attached", () => {
+  const env = { status: "ok", candidates: [{ productId: "364", title: "Cotton Trench Coat", price: "799", currency: "ILS", url: "https://shop/p/364", inventoryState: "in_stock" }] } as any;
+  const rendered = { message: "הנה מה שמצאתי:\n\n1. Cotton Trench Coat\nILS 799\nבמלאי\nhttps://shop/p/364", usedFallback: true };
+
+  it("lookup + cards: the model's answer, grounded (no price, no URL, no wide dash), not the introduction", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    const out = finalProductReply({
+      lookup: true, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:",
+      modelText: "כן — PRODUCT_1 במידה M במלאי, ₪799 בלבד https://shop/p/364",
+    });
+    expect(out).toBe("כן - Cotton Trench Coat במידה M במלאי, בלבד");
+  });
+
+  it("lookup + text channel: the answer first, the product block after it", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    const out = finalProductReply({ lookup: true, cards: false, envelope: env, introduction: "", rendered, modelText: "כן, יש במידה M ובמידה L." });
+    expect(out).toBe(`כן, יש במידה M ובמידה L.\n\n${rendered.message}`);
+  });
+
+  it("★ a recommendation turn is unchanged: the introduction above cards, the rendering as text", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    expect(finalProductReply({ lookup: false, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:", modelText: "כן, יש" })).toBe("הנה כמה אפשרויות:");
+    expect(finalProductReply({ lookup: false, cards: false, envelope: env, introduction: "", rendered, modelText: "כן, יש" })).toBe(rendered.message);
+  });
+
+  it("a lookup whose text grounds to nothing falls back as before", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "₪799 https://x.y" })).toBe("הנה:");
+  });
+
+  it("Hebrew amounts are stripped too", async () => {
+    const { renderLookupProse } = await vi.importActual<any>("../services/product-search.service");
+    expect(renderLookupProse("המחיר 799 ש״ח והוא במלאי", env)).toBe("המחיר והוא במלאי");
+  });
+
+  it("PRODUCT_n in a variations call resolves (the proof-turn 404)", async () => {
+    const { resolveProductRef } = await vi.importActual<any>("../services/product-search.service");
+    expect({ per_page: 50, product_id: resolveProductRef(env, "PRODUCT_1") }).toEqual({ per_page: 50, product_id: "364" });
+  });
+});
+
+describe("the model reads a compact variations result", () => {
+  it("options, stock and price per variation; nothing else", async () => {
+    const { compactWooVariations } = await vi.importActual<any>("../services/product-search.service");
+    const raw = JSON.stringify({ ok: true, result: [
+      { id: 1, attributes: [{ name: "Size", option: "M" }], stock_status: "instock", stock_quantity: 3, price: "799", description: "x".repeat(2000), image: { src: "y" } },
+      { id: 2, attributes: [{ name: "Size", option: "L" }], stock_status: "outofstock", price: "799", purchasable: false },
+    ] });
+    const out = JSON.parse(compactWooVariations(raw));
+    expect(out.result).toEqual([
+      { id: 1, options: { Size: "M" }, stock_status: "instock", stock_quantity: 3, price: "799", purchasable: true },
+      { id: 2, options: { Size: "L" }, stock_status: "outofstock", price: "799", purchasable: false },
+    ]);
+    expect(compactWooVariations('{"ok":false,"reason":"x"}')).toBe('{"ok":false,"reason":"x"}');
+    expect(compactWooVariations("not json")).toBe("not json");
+  });
+});

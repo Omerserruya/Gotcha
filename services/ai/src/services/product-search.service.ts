@@ -618,3 +618,74 @@ export function resolveProductRef(envelope: ProductSearchEnvelope | null | undef
   const c = envelope.candidates[Number(m[1]) - 1];
   return c?.productId ?? value;
 }
+
+/**
+ * The model's own answer on a LOOKUP turn ("is the trench coat in M?",
+ * 2026-10-25): the answer is the text and the product is the attachment, so
+ * the prose is kept rather than replaced by a lead-in or a canned list. It goes
+ * through the same grounding as recommendation prose: keys become the real
+ * titles, any URL or price the model wrote is removed (the card and the list
+ * carry the exact ones), and a wide dash becomes a plain hyphen. Empty when
+ * nothing usable is left; the caller then renders as before.
+ */
+export function renderLookupProse(modelText: string | null | undefined, env: ProductSearchEnvelope): string {
+  const prose = String(modelText ?? "")
+    .replace(/PRODUCT_(\d+)/gi, (_, d) => {
+      const n = Number(d);
+      return n >= 1 && n <= env.candidates.length ? env.candidates[n - 1].title : "";
+    })
+    .replace(URL_RE, "")
+    .replace(MONEY_RE, "")
+    // Hebrew amounts MONEY_RE does not know ("799 ש״ח", "799 שקל").
+    .replace(/\d[\d.,]*\s?(?:ש["״']?ח|שקלים|שקל)/g, "")
+    .replace(/[\u2013\u2014\u2015]/g, "-")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ +([.,:;!?])/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return prose.length >= 3 ? prose : "";
+}
+
+/**
+ * The reply on a product turn, once the cards were (or were not) staged.
+ * Recommendation turns: unchanged (the introduction above the cards, or the
+ * grounded rendering as text). Lookup turns: the model's grounded answer
+ * leads, with the cards, or the product block when the channel has no cards.
+ */
+export function finalProductReply(opts: {
+  lookup: boolean;
+  modelText: string | null | undefined;
+  envelope: ProductSearchEnvelope;
+  /** Cards were staged: the text sits above them. */
+  cards: boolean;
+  introduction: string;
+  /** The grounded text rendering (text channels only). */
+  rendered?: { message: string; usedFallback: boolean };
+}): string {
+  const prose = opts.lookup ? renderLookupProse(opts.modelText, opts.envelope) : "";
+  if (opts.cards) return prose || opts.introduction;
+  const r = opts.rendered!;
+  return prose && r.usedFallback ? `${prose}\n\n${r.message}` : r.message;
+}
+
+/**
+ * A WooCommerce variations result, as the MODEL needs it: which option values
+ * exist and whether each is in stock, at what price. The raw REST objects
+ * (descriptions, images, dimensions, meta) cost thousands of tokens per call
+ * and answer nothing a size question asks (2026-10-25: a 64k-token turn).
+ */
+export function compactWooVariations(rawContent: string): string {
+  let parsed: any;
+  try { parsed = JSON.parse(rawContent); } catch { return rawContent; }
+  const list = Array.isArray(parsed?.result) ? parsed.result : Array.isArray(parsed) ? parsed : null;
+  if (!list) return rawContent;
+  const variations = list.map((v: any) => ({
+    id: v?.id,
+    options: Object.fromEntries((Array.isArray(v?.attributes) ? v.attributes : []).map((a: any) => [String(a?.name ?? ""), String(a?.option ?? "")])),
+    stock_status: v?.stock_status,
+    ...(typeof v?.stock_quantity === "number" ? { stock_quantity: v.stock_quantity } : {}),
+    price: v?.price,
+    purchasable: v?.purchasable !== false,
+  }));
+  return JSON.stringify({ ok: parsed?.ok ?? true, result: variations });
+}

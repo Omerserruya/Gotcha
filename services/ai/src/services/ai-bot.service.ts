@@ -33,7 +33,7 @@ import {
 } from "@chatcenter/shared";
 import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
 import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
-import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, type ProductSearchEnvelope } from "./product-search.service";
+import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, finalProductReply, compactWooVariations, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
   reasonForCandidate,
@@ -2735,6 +2735,9 @@ async function generateAIBotReplyInner(
   // real product tool is offered, force the search this turn; when ready but
   // the tool is absent, steer to an honest handoff instead of a fake search.
   let discoveryForceTool: string | null = null;
+  // This turn answers a question about a product the customer named: the
+  // reply is the model's answer, with the product attached (not replaced).
+  let discoveryLookup = false;
   // Canonical typed product envelope for this turn (set when a Shopify product
   // search runs); drives deterministic grounded rendering of the final reply.
   let productEnvelope: ProductSearchEnvelope | null = null;
@@ -2771,6 +2774,7 @@ async function generateAIBotReplyInner(
         // The named product's stock / size / price: the first round calls the
         // store, so the answer is a live one and never a question back.
         discoveryForceTool = disc.decision.tool;
+        discoveryLookup = true;
         // Shopify's variant_information has its own directive below.
         if (disc.decision.tool.startsWith("woocommerce.")) {
           chatMessages.push({ role: "system", content: buildWooLookupDirective(disc.decision.inquiry, replyLocale) });
@@ -3319,7 +3323,7 @@ async function generateAIBotReplyInner(
         // Normalize the raw result into the canonical envelope, stash it for
         // deterministic rendering, and give the MODEL only a safe keyed summary
         // (PRODUCT_1..N, no URLs/prices to copy). Generic tools are untouched.
-        let toolContent = result.content;
+        let toolContent = toolName === "woocommerce.list_product_variations" ? compactWooVariations(result.content) : result.content;
         if (
           process.env.DISCOVERY_TYPED_PRODUCT_RENDER !== "off" &&
           isProductSearchTool(toolName)
@@ -4868,10 +4872,13 @@ async function generateAIBotReplyInner(
       });
     }
 
+    // A lookup turn keeps the model's answer ("כן, יש במידה M"), grounded;
+    // a recommendation turn is unchanged below.
+    const modelText = replyText;
     if (!delivery.useTextFallback) {
       // The products are in the cards. The text is a lead-in and nothing
       // else - no numbered list, no URLs, no "shall I send a card?".
-      replyText = recoPlan.introduction;
+      replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction });
     } else {
       // Genuine fallback: this channel cannot render cards, or staging
       // failed. The legacy deterministic renderer is exactly right here,
@@ -4884,7 +4891,9 @@ async function generateAIBotReplyInner(
         if (rendered.usedFallback) {
           console.warn(`[ai-bot] grounded render used deterministic fallback (canonical envelope) conv=${opts.conversationId}`);
         }
-        replyText = rendered.message;
+        // On a lookup turn the answer leads and the product block follows it;
+        // with keys in the prose the renderer already kept it.
+        replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: false, introduction: recoPlan.introduction, rendered });
       } catch (err: any) {
         console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
         try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }
