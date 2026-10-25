@@ -57,7 +57,7 @@ vi.mock("axios", () => {
   return { default: axiosMock, ...axiosMock };
 });
 
-const DB = vi.hoisted(() => ({ rows: [] as any[], seq: 0 }));
+const DB = vi.hoisted(() => ({ rows: [] as any[], seq: 0, locale: "en" }));
 
 const isPlain = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
 const cond = (actual: unknown, v: any): boolean => {
@@ -109,6 +109,7 @@ vi.mock("@chatcenter/shared", async () => {
           return { ...row };
         },
       },
+      tenant: { findUnique: async () => ({ defaultLocale: DB.locale }) },
       conversation: { groupBy: async () => [] },
       routerRule: { findMany: async () => [], create: async (a: any) => a.data, update: async (a: any) => a.data },
       $transaction: async (ops: any[]) => Promise.all(ops),
@@ -184,6 +185,7 @@ function expectNoSecrets(body: unknown) {
 
 beforeEach(() => {
   DB.rows = [];
+  DB.locale = "en";
   DB.seq = 0;
   G.user = { userId: "u_admin", tenantId: "tenant_a", role: "ADMIN" };
 });
@@ -348,6 +350,26 @@ describe("★ W: the website widget survives a disconnect", () => {
     expectNoSecrets(r.body);
     expect(DB.rows).toHaveLength(1);
     expect((await request(app).get(`/api/channels/webchat/${w.id}/settings`)).body.data).toEqual(w.settings);
+  });
+
+  it("★ a Hebrew workspace's new widget speaks Hebrew; an English one is created exactly as before (2026-10-25)", async () => {
+    const { normalizeWebchatConfig, WEBCHAT_COPY } = await vi.importActual<any>("@chatcenter/shared");
+    DB.locale = "he";
+    const he = await request(app).post("/api/channels/webchat/create").send({});
+    expect(he.status).toBe(201);
+    const row = DB.rows.find((r) => r.id === he.body.data.id);
+    expect(row.displayName).toBe(WEBCHAT_COPY.he.channelName);
+    const cfg = normalizeWebchatConfig(row.credentials);
+    expect(cfg.ux.welcome).toMatchObject({ title: WEBCHAT_COPY.he.welcome.title, assistantName: WEBCHAT_COPY.he.welcome.assistantName, suggestedQuestions: WEBCHAT_COPY.he.welcome.suggestedQuestions });
+    expect(cfg.ux.proactive).toMatchObject({ title: WEBCHAT_COPY.he.proactive.title, enabled: false });
+    expect(cfg.offline.message).toBe(WEBCHAT_COPY.he.offline);
+    expect(cfg.nameSource).toBe("employee");
+    expect(cfg.commerce.addToCartEnabled).toBe(false);
+
+    DB.rows = []; DB.locale = "en";
+    const en = await request(app).post("/api/channels/webchat/create").send({});
+    const enRow = DB.rows.find((r) => r.id === en.body.data.id);
+    expect(enRow).toMatchObject({ displayName: "Website Chat Widget", credentials: {} });
   });
 
   it("a live widget is returned as it is, never re-set to PENDING", async () => {

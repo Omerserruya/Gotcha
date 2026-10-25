@@ -34,6 +34,8 @@ import {
   assertWithinLimit,
   handleEntitlementError,
   EntitlementDeniedError,
+  webchatSeedConfig,
+  WEBCHAT_COPY,
 } from "@chatcenter/shared";
 import { startPageSession, readPageSession, endPageSession, type PageCandidate } from "../services/messenger/page-session";
 
@@ -2695,14 +2697,18 @@ router.post("/webchat/create", authenticate, resolveTenant, requirePermission("c
     // runtime flips it to CONNECTED on the first real widget load - that is
     // the installation verification, and only then does it count as a
     // connected channel anywhere in the product.
+    // Its copy in the workspace's language: a Hebrew workspace's widget was
+    // created all in English, and the first Settings save stored it (2026-10-25).
+    const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { defaultLocale: true } });
+    const locale = tenant?.defaultLocale;
     const account = await prisma.channelAccount.create({
       data: {
         tenantId: req.tenantId!,
         channel: "WEBCHAT",
         externalId: widgetId,
-        displayName: req.body.name || "Website Chat Widget",
+        displayName: req.body.name || (locale === "he" ? WEBCHAT_COPY.he.channelName : "Website Chat Widget"),
         connectionStatus: "PENDING",
-        credentials: {},
+        credentials: webchatSeedConfig(locale) as any,
       },
     });
 

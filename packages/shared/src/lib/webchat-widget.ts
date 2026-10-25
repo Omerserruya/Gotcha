@@ -158,6 +158,76 @@ export function defaultWebchatConfig(): WebchatConfig {
 }
 
 /**
+ * The widget's own copy in the workspace's language (2026-10-25: onboarding
+ * created a Hebrew workspace's widget with every text in English, and the
+ * first Settings save stored that English for good).
+ *
+ * Only what the merchant reads as "my widget's words": the name, the welcome,
+ * the three questions, the offline line and the teaser. English is the
+ * built-in default, so it has no entry here.
+ */
+export const WEBCHAT_COPY: Record<"he", {
+  displayName: string; channelName: string;
+  welcome: { title: string; subtitle: string; assistantName: string; suggestedQuestions: string[] };
+  proactive: { title: string; message: string; actionLabel: string };
+  offline: string;
+}> = {
+  he: {
+    displayName: "\u05e6'\u05d0\u05d8 \u05d1\u05d0\u05ea\u05e8",
+    channelName: "\u05e6'\u05d0\u05d8 \u05d1\u05d0\u05ea\u05e8",
+    welcome: {
+      title: "\u05d1\u05de\u05d4 \u05d0\u05e4\u05e9\u05e8 \u05dc\u05e2\u05d6\u05d5\u05e8?",
+      subtitle: "\u05d0\u05e4\u05e9\u05e8 \u05dc\u05e9\u05d0\u05d5\u05dc \u05d0\u05d5\u05ea\u05e0\u05d5 \u05db\u05dc \u05d3\u05d1\u05e8 \u05e2\u05dc \u05d4\u05de\u05d5\u05e6\u05e8\u05d9\u05dd, \u05d5\u05e0\u05e2\u05d6\u05d5\u05e8 \u05dc\u05d1\u05d7\u05d5\u05e8.",
+      assistantName: "\u05e6\u05d5\u05d5\u05ea \u05d4\u05d7\u05e0\u05d5\u05ea",
+      suggestedQuestions: [
+        "\u05d0\u05d9\u05d6\u05d4 \u05de\u05d5\u05e6\u05e8 \u05de\u05ea\u05d0\u05d9\u05dd \u05dc\u05d9?",
+        "\u05d0\u05e4\u05e9\u05e8 \u05d4\u05de\u05dc\u05e6\u05d4 \u05e2\u05dc \u05de\u05e9\u05d4\u05d5 \u05e9\u05d9\u05ea\u05d0\u05d9\u05dd \u05dc\u05d9?",
+        "\u05de\u05d4 \u05d9\u05e9 \u05db\u05e8\u05d2\u05e2 \u05d1\u05de\u05dc\u05d0\u05d9?",
+      ],
+    },
+    proactive: {
+      title: "\u05d9\u05e9 \u05e9\u05d0\u05dc\u05d4?",
+      message: "\u05d0\u05e4\u05e9\u05e8 \u05dc\u05e9\u05d0\u05d5\u05dc \u05d0\u05d5\u05ea\u05e0\u05d5 \u05e2\u05dc \u05db\u05dc \u05de\u05d5\u05e6\u05e8 \u05e9\u05de\u05e2\u05e0\u05d9\u05d9\u05df \u05d0\u05ea\u05db\u05dd.",
+      actionLabel: "\u05dc\u05e9\u05d9\u05d7\u05d4 \u05d0\u05d9\u05ea\u05e0\u05d5",
+    },
+    offline: "\u05d0\u05e0\u05d7\u05e0\u05d5 \u05dc\u05d0 \u05d6\u05de\u05d9\u05e0\u05d9\u05dd \u05db\u05e8\u05d2\u05e2. \u05d0\u05e4\u05e9\u05e8 \u05dc\u05d4\u05e9\u05d0\u05d9\u05e8 \u05d4\u05d5\u05d3\u05e2\u05d4 \u05d5\u05e0\u05d7\u05d6\u05d5\u05e8 \u05d1\u05d4\u05e7\u05d3\u05dd.",
+  },
+};
+
+/**
+ * The credentials a new widget is created with: its copy in the workspace's
+ * language, and nothing else (every other field keeps its default). English,
+ * or any other locale: `{}`, exactly as before. Carries `v: 2` so it is never
+ * read as a legacy blob, and `nameSource: "employee"` because a non-empty
+ * stored blob without one reads as "custom".
+ */
+export function webchatSeedConfig(locale: unknown): Record<string, unknown> {
+  const c = locale === "he" ? WEBCHAT_COPY.he : null;
+  if (!c) return {};
+  return {
+    v: 2,
+    nameSource: "employee",
+    displayName: c.displayName,
+    ux: { welcome: { ...c.welcome, suggestedQuestions: [...c.welcome.suggestedQuestions] }, proactive: { ...c.proactive } },
+    offline: { message: c.offline },
+  };
+}
+
+/**
+ * The one-click "my widget's words in Hebrew": a patch over the CURRENT
+ * config that sets only the copy fields above. Appearance, hero, logo,
+ * commerce, behaviour and the name source are left exactly as they are.
+ */
+export function webchatCopyResetPatch(current: WebchatConfig, locale: "he"): WebchatConfig {
+  const c = WEBCHAT_COPY[locale];
+  return normalizeWebchatConfig({
+    displayName: c.displayName,
+    ux: { ...current.ux, welcome: { ...current.ux.welcome, ...c.welcome }, proactive: { ...current.ux.proactive, ...c.proactive } },
+    offline: { message: c.offline },
+  }, current);
+}
+
+/**
  * The settings this widget had before it shared an experience with the
  * storefront one: a flat blob stored straight into `credentials`.
  *
