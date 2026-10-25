@@ -27,7 +27,8 @@ export type StyleViolationKind =
   | "false_absence"
   | "offer_to_check"
   | "foreign_script"
-  | "repeated_question";
+  | "repeated_question"
+  | "push_after_ack";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -66,7 +67,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -77,9 +78,13 @@ const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}]
 /** Second-person forms that choose a gender, addressed to the customer. */
 const MASC_TO_CUSTOMER = w("שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
 const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
+/** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
+const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל)(?![${HE}])`, "u");
+const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל)(?![${HE}])`, "u");
+
 /** The employee about itself, by gender. */
-const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה|בטוח)|בודק רגע|שמח לעזור|מצטער על|לא בטוח(?! לי)");
-const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה|בטוחה)|בודקת רגע|שמחה לעזור|מצטערת על|לא בטוחה");
+const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה|בטוח)|בודק רגע|שמח לעזור|מצטער על|לא בטוח(?! לי)|אני מעביר|מעביר את השיחה|מעביר אותך");
+const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה|בטוחה)|בודקת רגע|שמחה לעזור|מצטערת על|לא בטוחה|אני מעבירה|מעבירה את השיחה|מעבירה אותך");
 
 const COLOUR = /(?<![A-Za-z])(?:black|white|navy|beige|camel|oat|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])|(?<![\u0590-\u05FF])[ובה]?(?:שחור|שחורה|לבן|לבנה|נייבי|בז'|קאמל|אפור|אפורה|זית|שמנת|חום|חומה|אדום|אדומה|כחול|כחולה|ירוק|ירוקה|ורוד|ורודה)(?![֐-׿])/iu;
 const SIZE = /(?:מידה|מידות|size|sizes)\s*(?:XXS|XS|S|M|L|XL|XXL|\d{2})(?![A-Za-z])/i;
@@ -95,6 +100,9 @@ const FOLLOW_UP = w("אחזור אליך|נחזור אליך|אחזור אליי
 const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך|העברנו|העברתי|העברנו לצוות|להעביר לצוות|מעבירים לצוות");
 /** Ending on an offer to go and check what a tool could check now: "לבדוק אם יש בחום?". */
 const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
+
+/** A customer message that only acknowledges: "מגניב", "סבבה", "אוקיי", "אחלה". */
+const ACK_ONLY = /^\s*(?:אוקיי?|אוקי|אוקיי סבבה|סבבה|מגניב|אחלה|יופי|מעולה|טוב|הבנתי|ok(?:ay)?|cool|great|got it|nice)[\s!.,👍🙂😊]*$/iu;
 
 /** Saying the store lacks something, or has none in stock. */
 const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
@@ -128,7 +136,14 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   };
 
   const detailAsked = /פרט|תפרט|הסבר|תסביר|איך (?:עושים|מחזירים|מזמינים)|explain|details|step/i.test(ctx.incomingMessage);
-  if (!detailAsked && (sentences(plain) > 3 || plain.length > 360)) hit("too_long", `${sentences(plain)} sentences, ${plain.length} chars`);
+  // A one-line question gets a short answer (eval e8 U7: "כמה עולה משלוח?" got
+  // every rate there is): two sentences, not three.
+  const oneLine = ctx.incomingMessage.trim().length <= 60 && !/\n/.test(ctx.incomingMessage.trim());
+  const maxSentences = oneLine ? 2 : 3;
+  if (!detailAsked && (sentences(plain) > maxSentences || plain.length > (oneLine ? 240 : 360))) hit("too_long", `${sentences(plain)} sentences, ${plain.length} chars`);
+  // After a plain acknowledgement ("מגניב", "סבבה", "אוקיי") no push and no
+  // offer (eval L01 L-3: a cart nudge after every one).
+  if (ACK_ONLY.test(ctx.incomingMessage) && /[?؟]/.test(plain)) hit("push_after_ack", "a question after an acknowledgement");
 
   if (!ctx.isFirstReply) hit("greeting_after_first", plain.match(GREETING_START));
   hit("self_intro", plain.match(SELF_INTRO));
@@ -141,8 +156,8 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   hit("slash_form", plain.match(SLASH));
   const f = ctx.customerForm;
   const known = f && (f.confidence === "explicit" || f.confidence === "strong_context") ? f.form : null;
-  if (known !== "masculine") hit("gendered_address", plain.match(MASC_TO_CUSTOMER));
-  if (known !== "feminine") hit("gendered_address", plain.match(FEM_TO_CUSTOMER));
+  if (known !== "masculine") hit("gendered_address", plain.match(MASC_TO_CUSTOMER) ?? plain.match(IMPERATIVE_MASC));
+  if (known !== "feminine") hit("gendered_address", plain.match(FEM_TO_CUSTOMER) ?? plain.match(IMPERATIVE_FEM));
 
   if (ctx.employeeGender === "feminine") hit("self_gender", plain.match(SELF_MASC));
   else if (ctx.employeeGender === "masculine") hit("self_gender", plain.match(SELF_FEM));
@@ -190,6 +205,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
   foreign_script: { he: "A word in another script slipped in. Write the whole reply in Hebrew.", en: "A word in another script slipped in; keep one language." },
+  push_after_ack: { he: "The customer only acknowledged. Reply with a short, warm acknowledgement and no question, no offer, no next step.", en: "The customer only acknowledged: a short acknowledgement, no question or offer." },
   repeated_question: { he: "You already asked exactly this. Do not repeat it: answer what they said, or move on.", en: "You already asked exactly this; do not repeat it." },
   offer_to_check: { he: "Do not end by offering to check: either you know it now (say it) or nothing needs asking. Remove the offer; end on the answer.", en: "Do not end by offering to check; end on the answer." },
   false_absence: { he: "The search found no product TITLE by that word; that does not mean the store lacks it. Never say it is out of stock or that we don't have it: say you could not find it by that name (\"לא מצאתי\") and offer another way to look.", en: "Never say it is out of stock or not carried: say you could not find it by that name." },
@@ -232,7 +248,14 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     const t = `\u0000${i}\u0000`;
     out = out.split(`${t} (${t})`).join(t).split(`${t}, ${t}`).join(t).split(`${t} ${t}`).join(t);
   }
-  // A parenthetical that repeats what the sentence already says, or narrates
+  // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
+  out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
+  if (opts.locale === "he") out = out
+    .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
+    .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")
+    .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1");
+  // After the colours are Hebrew, so "אפור פחם (Charcoal)" is seen as a repeat
+  // (eval e8 U6). A parenthetical that repeats what the sentence already says, or narrates
   // the card (eval e7 T4: "Heavyweight Hoodie במלאי (Heavyweight Hoodie)",
   // "בז' (בז')", "(ראו מטה: Chino Pants)"), is dropped.
   out = out.replace(/\s*\(([^()\n]{1,80})\)/g, (m, inner: string, at: number, whole: string) => {
@@ -241,13 +264,6 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     const before = whole.slice(0, at).replace(/\u0000(\d+)\u0000/g, (_x, i) => held[Number(i)]);
     return raw && before.toLowerCase().includes(raw.toLowerCase()) ? "" : m;
   });
-  // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
-  out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
-  if (opts.locale !== "he") return out.replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
-  out = out
-    .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
-    .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")
-    .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1");
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
 }
 
@@ -296,4 +312,57 @@ export function stripStrayClose(reply: string, incomingMessage: string): string 
   if (own !== reply.trim() && own.length >= 3) return own;
   const out = reply.replace(/[\s,]*(?:בכיף|anytime)\s*[🙂😊❤️🙏]*\s*$/iu, "").trim();
   return out.length >= 3 ? out : reply;
+}
+
+/** Colour words a customer may use, to the English the store's options are written in. */
+const COLOUR_ASK: Array<[RegExp, string[]]> = [
+  [/שחור|שחורה|שחורים|שחורות|black/i, ["black"]],
+  [/לבן|לבנה|לבנים|לבנות|white/i, ["white"]],
+  [/אפור|אפורה|אפורים|grey|gray/i, ["grey", "gray", "charcoal"]],
+  [/נייבי|navy/i, ["navy"]],
+  [/כחול|כחולה|כחולים|blue/i, ["blue", "navy", "sky"]],
+  [/תכלת|sky/i, ["sky"]],
+  [/בז'|בז׳|beige/i, ["beige", "sand", "oat"]],
+  [/חום|חומה|חומים|brown/i, ["brown", "camel", "chocolate"]],
+  [/קאמל|camel/i, ["camel"]],
+  [/ירוק|ירוקה|green/i, ["green", "olive", "sage"]],
+  [/זית|olive/i, ["olive"]],
+  [/אדום|אדומה|אדומים|red/i, ["red", "burgundy"]],
+  [/בורדו|burgundy/i, ["burgundy"]],
+  [/ורוד|ורודה|pink/i, ["pink", "rose"]],
+  [/שמנת|קרם|cream|ecru|ivory/i, ["cream", "ecru", "ivory", "natural"]],
+  [/חאקי|khaki/i, ["khaki"]],
+];
+
+/** The colours a customer message asks for, as option words to look for; empty when none. */
+export function askedColours(text: string | null | undefined): string[] {
+  const t = String(text ?? "");
+  const out = new Set<string>();
+  for (const [re, words] of COLOUR_ASK) if (re.test(t)) words.forEach((w) => out.add(w));
+  return Array.from(out);
+}
+
+/** Does a variations result (raw REST list) offer one of these colours? */
+export function variationsOfferColour(variations: any[], colours: string[]): boolean {
+  return variations.some((v) =>
+    (Array.isArray(v?.attributes) ? v.attributes : []).some((a: any) => {
+      const opt = String(a?.option ?? "").toLowerCase();
+      return colours.some((c) => opt.includes(c));
+    }),
+  );
+}
+
+/**
+ * The last sentence, when it is only an offer to go and check (eval e8 U1, D02:
+ * regenerating over it lost the price, or came back as nothing but "נבדוק?").
+ * Removed in code; the rest of the reply stands. Unchanged when nothing remains.
+ */
+export function stripTrailingOffer(reply: string): string {
+  const t = reply.trim();
+  const parts = t.split(/(?<=[.!?؟\n])\s+/);
+  if (parts.length < 2) return reply;
+  const last = parts[parts.length - 1];
+  if (!OFFER_TO_CHECK.test(" " + last)) return reply;
+  const rest = parts.slice(0, -1).join(" ").trim();
+  return rest.length >= 3 ? rest : reply;
 }

@@ -51,6 +51,8 @@ describe("★ e7 T2: title words decide, not a description match", () => {
   });
   it("the adapter filters a non-empty result by title words when any match", () => {
     const src = readFileSync(join(__dirname, "../services/connectors/woocommerce.adapter.ts"), "utf8");
-    expect(src).toContain("const byTitle = rankByTitleWords(list, Array.from(new Set(words.map(singular))));");
+    // A result with no title carrying a query word counts as empty (e8 U2), English queries only.
+    expect(src).toContain("const titleHits = Array.isArray(list) && list.length && words.length && latin");
+    expect(src).toContain("(list.length === 0 || (titleHits && !titleHits.length))");
   });
 });

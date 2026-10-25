@@ -392,6 +392,8 @@ export interface PlanAutoRecommendationInput {
   unnamedAllowed?: boolean;
   /** How many unnamed products may go out (a lookup: the one best match). */
   unnamedMax?: number;
+  /** Store ids never to show (they lack the colour the customer asked for). */
+  excludeIds?: Set<string>;
 }
 
 /**
@@ -421,12 +423,16 @@ export function namedCandidates(modelText: string | null | undefined, candidates
 export function planAutoRecommendation(
   input: PlanAutoRecommendationInput,
 ): AutoRecommendationPlan {
-  const { envelope } = input;
+  const excluded = input.excludeIds ?? new Set<string>();
+  const envelope = excluded.size
+    ? { ...input.envelope, candidates: input.envelope.candidates.filter((c) => !excluded.has(String(c.productId))) }
+    : input.envelope;
   const policy = applyBudgetPolicy(envelope, input.budget, input.maxProducts);
   // The cards are the products the reply talks about (2026-10-25, eval R5:
   // asked about a linen shirt, the customer saw five tees). When the draft
   // names candidates, by key or by exact title, those go out, in its order.
-  const named = namedCandidates(input.modelText, envelope.candidates).slice(0, input.maxProducts);
+  // Keys refer to the model's list (the full one); the named set drops excluded ids.
+  const named = namedCandidates(input.modelText, input.envelope.candidates).filter((c) => !excluded.has(String(c.productId))).slice(0, input.maxProducts);
   if (!named.length && input.unnamedAllowed === false && envelope.status === "ok" && envelope.candidates.length) {
     return { selected: [], budget: { ...policy, selected: [] }, shouldSendStructured: false, introduction: "", skipReason: "not_named" };
   }

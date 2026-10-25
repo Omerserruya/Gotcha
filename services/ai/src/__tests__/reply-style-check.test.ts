@@ -265,3 +265,41 @@ describe("★ voice runs: the brand's close is not tacked onto a non-thanks repl
     expect(kinds("לא בטוחים איזה מהן")).not.toContain("self_gender");
   });
 });
+
+describe("★ e8", () => {
+  it("U4: imperatives to an unknown customer, not ordinary words", () => {
+    for (const t of ["ראה למטה את הכרטיס", "שלח שם המוצר", "תאר בקצרה מה קרה", "ותראה אותו מטה", "הוסף לסל מהכרטיס"]) {
+      expect(kinds(t), t).toContain("gendered_address");
+    }
+    for (const t of ["יש לנו מבחר גדול", "המעיל מראה טוב", "הנה הקישור"]) expect(kinds(t), t).not.toContain("gendered_address");
+  });
+  it("U7: a one-line question gets two sentences at most", () => {
+    expect(kinds("משלוח בארץ 2-4 ימים ב-₪29. איסוף מהסטודיו בחינם. לחו\"ל 5-8 ימים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
+    expect(kinds("משלוח בארץ 2-4 ימי עסקים ב-₪29.", { incomingMessage: "כמה עולה משלוח?" })).not.toContain("too_long");
+  });
+  it("L-2: 'מעביר את השיחה' from an ungendered employee", () => {
+    expect(kinds("מעביר את השיחה לנציג אנושי", { handedOff: true })).toContain("self_gender");
+  });
+  it("L-3: no question after a plain acknowledgement", () => {
+    expect(kinds("רוצים שאשלח שוב את כרטיס הסוודר?", { incomingMessage: "מגניב" })).toContain("push_after_ack");
+    expect(kinds("מעולה 🙂", { incomingMessage: "אוקיי סבבה" })).not.toContain("push_after_ack");
+  });
+  it("U1/D02: a trailing offer is removed in code, the answer stays", async () => {
+    const { stripTrailingOffer } = await import("../services/reply-style-check.service");
+    expect(stripTrailingOffer("ה-Chunky Cardigan עולה ₪529. לבדוק אם יש גם בחום?")).toBe("ה-Chunky Cardigan עולה ₪529.");
+    expect(stripTrailingOffer("לבדוק אם יש גם בחום?")).toBe("לבדוק אם יש גם בחום?");
+  });
+  it("U6: a translated colour and its raw form in brackets print once", async () => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    expect(polishReply("יש בצבע אפור פחם (Charcoal)", { locale: "he" })).toBe("יש בצבע אפור פחם");
+  });
+  it("U3: asked colours map to the store's option words", async () => {
+    const { askedColours, variationsOfferColour } = await import("../services/reply-style-check.service");
+    expect(askedColours("מכנסיים שחורים?")).toEqual(["black"]);
+    expect(askedColours("יש בצבע בז'?")).toEqual(["beige", "sand", "oat"]);
+    expect(askedColours("כמה זה עולה?")).toEqual([]);
+    const chino = [{ attributes: [{ name: "Colour", option: "Olive" }] }, { attributes: [{ name: "Colour", option: "Sand" }] }];
+    expect(variationsOfferColour(chino, ["black"])).toBe(false);
+    expect(variationsOfferColour([{ attributes: [{ option: "Grey Melange" }] }], ["grey", "gray"])).toBe(true);
+  });
+});

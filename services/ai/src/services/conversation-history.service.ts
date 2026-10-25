@@ -20,8 +20,12 @@
 import { prisma } from "@chatcenter/shared";
 
 export const BOT_HISTORY_LIMIT = 50;
-/** Messages the model reads verbatim. Older ones still feed the turn's other signals. */
-export const HISTORY_WINDOW = 30;
+/**
+ * Messages the model reads verbatim. 40, not 30 (eval L01: the size asked in
+ * turn 1 had fallen out and the model answered with a later one). Older ones
+ * become a short note (earlierNote) and still feed the turn's other signals.
+ */
+export const HISTORY_WINDOW = 40;
 /** A silence this long gets a note in the transcript. */
 export const GAP_NOTE_MS = 6 * 60 * 60_000;
 export const DEFAULT_TIME_ZONE = "Asia/Jerusalem";
@@ -133,8 +137,11 @@ export function historyChatMessages(
   opts: { window?: number; timeZone?: string } = {},
 ): ChatTurn[] {
   const timeZone = opts.timeZone || DEFAULT_TIME_ZONE;
-  const shown = rows.slice(-(opts.window ?? HISTORY_WINDOW));
+  const window = opts.window ?? HISTORY_WINDOW;
+  const shown = rows.slice(-window);
   const out: ChatTurn[] = [];
+  const earlier = earlierNote(rows.slice(0, Math.max(0, rows.length - window)));
+  if (earlier) out.push({ role: "system", content: earlier });
   let prevAt: number | null = null;
   for (const row of shown) {
     const turn = render(row);
@@ -147,6 +154,31 @@ export function historyChatMessages(
     out.push(turn);
   }
   return out;
+}
+
+/**
+ * What fell out of the window, kept as facts: the products shown, and the
+ * customer's own short messages there (a size, a colour, a yes).
+ */
+export function earlierNote(older: HistoryRow[]): string | null {
+  if (!older.length) return null;
+  const cards: string[] = [];
+  const said: string[] = [];
+  for (const r of older) {
+    const body = (r.body ?? "").trim();
+    if (!body) continue;
+    if (r.direction === "OUTBOUND" && /product/.test(String(r.messageType ?? ""))) {
+      for (const l of body.split("\n").map((x) => x.trim()).filter(Boolean)) if (!cards.includes(l)) cards.push(l);
+    } else if (r.direction === "INBOUND" && body.length <= 60 && (r.messageType ?? "text") === "text") {
+      said.push(body);
+    }
+  }
+  if (!cards.length && !said.length) return null;
+  const lines = ["[Earlier in this conversation, before the messages below:"];
+  if (cards.length) lines.push(`- products shown: ${cards.slice(-8).join("; ")}`);
+  if (said.length) lines.push(`- the customer said, in order: ${said.slice(-12).map((x) => `"${x}"`).join(", ")}`);
+  lines.push("Use these as facts; a size or colour said there belongs to the product being discussed then.]");
+  return lines.join("\n");
 }
 
 // ── The per-turn state note ─────────────────────────────────────────────

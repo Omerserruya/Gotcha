@@ -53,11 +53,16 @@ describe("★ time", () => {
     expect(chat.map((m) => m.role)).toEqual(["user", "assistant", "system", "user"]);
     expect(chat[2].content).toMatch(/^\[3 days passed with no messages\. The next message is from /);
   });
-  it("the model reads the last 30 verbatim", () => {
+  it("the model reads the last 40 verbatim; what is older becomes a note of facts", () => {
     const rows = Array.from({ length: 45 }, (_, i) => row({ body: `m${i + 1}`, createdAt: new Date(T + i * 1000) }));
+    rows[0] = row({ body: "יש מעיל במידה M?", createdAt: new Date(T) });
+    rows[1] = row({ direction: "OUTBOUND", senderName: "AI Bot", messageType: "woo_product", body: "Cotton Trench Coat - 799 ILS", createdAt: new Date(T + 500) });
     const chat = historyChatMessages(rows);
-    expect(chat).toHaveLength(HISTORY_WINDOW);
-    expect(chat[0].content).toBe("m16");
+    expect(chat).toHaveLength(HISTORY_WINDOW + 1);
+    expect(chat[0].role).toBe("system");
+    expect(chat[0].content).toContain("- products shown: Cotton Trench Coat - 799 ILS");
+    expect(chat[0].content).toContain('"יש מעיל במידה M?"');
+    expect(chat[1].content).toBe("m6");
     expect(chat.at(-1)!.content).toBe("m45");
   });
 });

@@ -510,7 +510,17 @@ const WooCommerceAdapter: ProviderAdapter = {
         // retried: the store's category of that name, then each word in its
         // singular form. At most 4 more requests.
         const words = searchWords(args.query);
-        if (Array.isArray(list) && list.length === 0 && words.length) {
+        // Title words decide only for a query in the store's language (English
+        // titles): a Hebrew word is never in a title (eval e8 U2).
+        const latin = /[a-z]/i.test(String(args.query ?? "")) && !/[\u0590-\u05FF]/.test(String(args.query ?? ""));
+        // Woo also matches descriptions: "Shirts" returned only Cropped Hoodie
+        // (its copy says "sweatshirt"). A result with no title carrying a query
+        // word is treated as empty, so the retries below run.
+        const titleHits = Array.isArray(list) && list.length && words.length && latin
+          ? rankByTitleWords(list, Array.from(new Set(words.map(singular))))
+          : null;
+        if (titleHits && titleHits.length) return titleHits;
+        if (Array.isArray(list) && (list.length === 0 || (titleHits && !titleHits.length)) && words.length) {
           const seen = new Map<string, any>();
           const add = (l: any) => { if (Array.isArray(l)) for (const p of l) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p); };
           const cats: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=5&search=${encodeURIComponent(String(args.query))}`).catch(() => []);
@@ -528,13 +538,6 @@ const WooCommerceAdapter: ProviderAdapter = {
             add(visible(await wooRequest(auth, "GET", `${base}/products?${params}`)));
           }
           return rankByTitleWords(Array.from(seen.values()), stems);
-        }
-        // Woo also matches descriptions: "shirt" returned hoodies whose copy says
-        // "sweatshirt" (eval e7 T2). When some titles carry a query word, only
-        // those; otherwise the store's answer as it came.
-        if (Array.isArray(list) && list.length && words.length) {
-          const byTitle = rankByTitleWords(list, Array.from(new Set(words.map(singular))));
-          if (byTitle.length) return byTitle;
         }
         return list;
       }

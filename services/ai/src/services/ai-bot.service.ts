@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -1529,7 +1529,12 @@ async function generateAIBotReplyInner(
     /(reschedul|postpone|\bmove\b|cancel|book|schedule|לקבוע|לתאם|להזיז|לדחות|לבטל|לשנות|פגיש|דמו|demo|meeting)/i.test(
       opts.incomingMessage || "",
     );
-  const escalationGoalViable = (hasReachPath && customerEngaged) || schedulingIntentForGate;
+  // In a live chat the open conversation IS the way to reach the customer: a web
+  // chat shopper has no email or phone, so an engaged one was handed to a person
+  // at the 30-message soft cap mid-conversation (eval L01). The hard ceiling
+  // (2x the cap) still applies.
+  const liveChat = ["WEBCHAT", "SHOPIFY_LIVE_CHAT"].includes(String(conversation.channel ?? ""));
+  const escalationGoalViable = ((hasReachPath || liveChat) && customerEngaged) || schedulingIntentForGate;
 
   // Start of the CURRENT autonomous burst for the time-based escalation cap.
   // A burst is broken by a quiet gap (≥ BURST_RESET): a customer returning after
@@ -2782,6 +2787,8 @@ async function generateAIBotReplyInner(
   // A recommendation search this turn (discovery "execute"): only then may
   // cards go out for products the reply does not name.
   let discoveryRecommend = false;
+  // Store ids the customer's asked colour rules out (their variations lack it).
+  const colourMisses = new Set<string>();
   // Canonical typed product envelope for this turn (set when a Shopify product
   // search runs); drives deterministic grounded rendering of the final reply.
   let productEnvelope: ProductSearchEnvelope | null = null;
@@ -2835,7 +2842,7 @@ async function generateAIBotReplyInner(
           role: "system",
           content:
             `Enough information exists to search. Call ${disc.decision.tool} NOW. ` +
-            `The query argument matches product TITLE and is in ENGLISH, so set it to the English category noun ONLY ("snowboard") and put nothing else in it - no price, no colour, no Hebrew. ` +
+            `The query argument matches product TITLE and is in ENGLISH, so set it to the singular English noun for what the customer asked ("shirt", "tank top", "coat"; never a store category name or another shop's example) and put nothing else in it - no price, no colour, no Hebrew. ` +
             // This used to end "apply budget/length/flex yourself when choosing
             // which products to present", which was the only option back when
             // the tool took a query and nothing else. It is now the bug: a
@@ -3400,11 +3407,14 @@ async function generateAIBotReplyInner(
               if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length === 1) {
                 const variations = await singleProductVariations(opts.tenantId, result.content, compactWooVariations).catch(() => null);
                 if (variations) toolContent += `\n\nVARIATIONS of PRODUCT_1 (live, already read; do not call list_product_variations for it):\n${variations}`;
-              } else if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length > 1) {
-                // Two or three matches (eval e7 T5: "the heavy hoodie in red?" found
-                // two hoodies and the colour went unanswered): each one's live
-                // options ride along, so the answer can name what exists.
-                for (let i = 0; i < Math.min(3, envlp.candidates.length); i++) {
+              } else if (toolName === "woocommerce.list_products" && envlp.candidates.length > 0 && (discoveryLookup || askedColours(opts.incomingMessage).length > 0)) {
+                // The live options of the top matches ride along (eval e7 T5: "the
+                // heavy hoodie in red?" went unanswered; e8 U3: "two black pants:
+                // Chino Pants..." and chinos come in no black). When the customer
+                // named a colour, each one is marked has / lacks it, and the ones
+                // that lack it are kept off the cards.
+                const colours = askedColours(opts.incomingMessage);
+                for (let i = 0; i < Math.min(colours.length ? 4 : 3, envlp.candidates.length); i++) {
                   const id = envlp.candidates[i].productId;
                   if (!/^\d{1,12}$/.test(String(id))) continue;
                   const got = await executeAdapterTool({
@@ -3414,7 +3424,13 @@ async function generateAIBotReplyInner(
                     accessScope: opts.onboardingTest ? "internal" : "customer",
                   }).catch(() => null);
                   if (got?.ok && Array.isArray(got.result) && got.result.length) {
-                    toolContent += `\n\nVARIATIONS of PRODUCT_${i + 1} (live, already read):\n${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}`;
+                    let mark = "";
+                    if (colours.length) {
+                      const has = variationsOfferColour(got.result as any[], colours);
+                      if (!has) colourMisses.add(String(id));
+                      mark = has ? ` (HAS the colour the customer asked for)` : ` (does NOT come in the colour the customer asked for: never offer it in that colour)`;
+                    }
+                    toolContent += `\n\nVARIATIONS of PRODUCT_${i + 1}${mark} (live, already read):\n${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}`;
                   }
                 }
               }
@@ -4932,7 +4948,16 @@ async function generateAIBotReplyInner(
           return searches.length > 0 && searches.every((t) => /"result":\[\]/.test(String(t.result ?? "")));
         })(),
       });
-      if (violations.length) {
+      // A trailing offer to check is removed in code, no regeneration: rewriting
+      // over it lost the price (eval e8 U1) or came back as only "נבדוק?" (D02).
+      if (violations.length && violations.every((v) => v.kind === "offer_to_check")) {
+        const stripped = stripTrailingOffer(replyText);
+        if (stripped !== replyText) {
+          console.warn(`[ai-bot] reply checker: removed a trailing offer to check conv=${opts.conversationId}`);
+          replyText = stripped;
+        }
+      } else if (violations.length) {
+        const draftBeforeRegen = replyText;
         console.warn(`[ai-bot] reply checker: ${violations.map((v) => `${v.kind}(${v.match})`).join(", ")}. Regenerating once. conv=${opts.conversationId}`);
         chatMessages.push({ role: "assistant", content: replyText });
         // As SYSTEM, with the language named: as a user message the rewrite request
@@ -4956,7 +4981,8 @@ async function generateAIBotReplyInner(
         });
         totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
         budget.addUsage(regen.usage.total_tokens || 0);
-        if (regen.content?.trim()) replyText = regen.content.trim();
+        if (regen.content?.trim() && !isInterimOnlyReply(regen.content)) replyText = regen.content.trim();
+        else replyText = stripTrailingOffer(draftBeforeRegen);
         toolCallLog.push({
           tool: "__style_check__",
           args: { violations: violations.map((v) => v.kind) },
@@ -5001,6 +5027,7 @@ async function generateAIBotReplyInner(
       // T2: a complaint got five tees): no cards unless the reply names one.
       unnamedAllowed: (discoveryRecommend || discoveryLookup) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
       unnamedMax: discoveryRecommend ? undefined : 1,
+      excludeIds: colourMisses,
       envelope: productEnvelope,
       // Staging is Shopify Live Chat's mechanism. A channel that renders
       // cards but has no staging path (web chat today) still takes the
