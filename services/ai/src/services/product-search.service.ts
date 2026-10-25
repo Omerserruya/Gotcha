@@ -626,17 +626,33 @@ export function resolveProductRef(envelope: ProductSearchEnvelope | null | undef
  * read "ה-Chunky Cardigan עולה." because every amount was stripped, the true
  * one included).
  */
-function groundedAmount(written: string, env: ProductSearchEnvelope): string {
+function groundedAmount(written: string, env: ProductSearchEnvelope, context = ""): string {
   // The amount patterns also swallow a sentence's closing "." or "," ("₪799.").
   const tail = /\d([.,]+)$/.exec(written)?.[1] ?? "";
   const value = Number(written.slice(0, written.length - tail.length).replace(/[^\d.,]/g, "").replace(/,/g, ""));
   if (!Number.isFinite(value) || value <= 0) return tail;
   const c = env.candidates.find((x) => x.price !== undefined && Math.abs(Number(x.price) - value) < 0.005);
-  if (!c) return tail;
+  // Not a product price, but stated in this turn's context (a shipping cost in
+  // the store policy, a fee a tool returned): it is grounded, keep it as written
+  // (eval E05: "משלוח סטנדרטי (2-4 ימי עסקים, עלות )" lost its ₪29).
+  if (!c) return inContext(written.slice(0, written.length - tail.length), context) ? written : tail;
   const n = Number.isInteger(value) ? value.toLocaleString("en-US") : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const sign: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€", GBP: "£" };
   const cur = (c.currency ?? "").toUpperCase();
   return (sign[cur] ? `${sign[cur]}${n}` : cur ? `${n} ${cur}` : n) + tail;
+}
+
+/**
+ * The amount appears AS AN AMOUNT in the context the model was given: the same
+ * number next to a currency ("₪29", "29 ILS", "29 ש״ח"). A bare number is not
+ * enough: "2" is in "2-4 business days".
+ */
+function inContext(amount: string, context: string): boolean {
+  const digits = amount.replace(/[^\d.,]/g, "").replace(/[.,]+$/, "");
+  if (!digits || !context) return false;
+  const n = digits.replace(/[.,]/g, (c) => `\\${c}`);
+  const cur = `(?:[$₪€£]|USD|ILS|NIS|EUR|GBP|ש["״']?ח|שקלים|שקל)`;
+  return new RegExp(`(?:${cur}\\s?${n}(?![\\d]|[.,]\\d))|(?:(?:^|[^\\d.,])${n}\\s?${cur})`, "i").test(context);
 }
 
 /**
@@ -662,8 +678,8 @@ function dedupeTitleEcho(text: string, env: ProductSearchEnvelope): string {
  * carry the exact ones), and a wide dash becomes a plain hyphen. Empty when
  * nothing usable is left; the caller then renders as before.
  */
-export function renderLookupProse(modelText: string | null | undefined, env: ProductSearchEnvelope): string {
-  const keep = (m: string) => groundedAmount(m, env);
+export function renderLookupProse(modelText: string | null | undefined, env: ProductSearchEnvelope, context = ""): string {
+  const keep = (m: string) => groundedAmount(m, env, context);
   const prose = dedupeTitleEcho(String(modelText ?? "")
     .replace(/PRODUCT_(\d+)/gi, (_, d) => {
       const n = Number(d);
@@ -696,8 +712,10 @@ export function finalProductReply(opts: {
   introduction: string;
   /** The grounded text rendering (text channels only). */
   rendered?: { message: string; usedFallback: boolean };
+  /** What the model was given this turn (system blocks, tool results): an amount stated there is grounded. */
+  context?: string;
 }): string {
-  const prose = opts.lookup ? renderLookupProse(opts.modelText, opts.envelope) : "";
+  const prose = opts.lookup ? renderLookupProse(opts.modelText, opts.envelope, opts.context) : "";
   if (opts.cards) return prose || opts.introduction;
   const r = opts.rendered!;
   return prose && r.usedFallback ? `${prose}\n\n${r.message}` : r.message;

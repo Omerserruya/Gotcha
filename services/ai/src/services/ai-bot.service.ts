@@ -67,6 +67,7 @@ import {
   detectVariantIntent,
   buildVariantIntentDirective,
   buildWooLookupDirective,
+  buildBudgetRule,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
   buildCouponPromotionsDirective,
@@ -2770,6 +2771,10 @@ async function generateAIBotReplyInner(
     });
     if (disc.active && disc.snapshot) {
       chatMessages.push({ role: "system", content: disc.snapshot });
+      chatMessages.push({
+        role: "system",
+        content: buildBudgetRule(messages.filter((m: any) => m.direction === "OUTBOUND"), disc.decision?.kind === "lookup"),
+      });
       if (disc.decision?.kind === "lookup") {
         // The named product's stock / size / price: the first round calls the
         // store, so the answer is a live one and never a question back.
@@ -4892,10 +4897,14 @@ async function generateAIBotReplyInner(
     // A lookup turn keeps the model's answer ("כן, יש במידה M"), grounded;
     // a recommendation turn is unchanged below.
     const modelText = replyText;
+    const groundingContext = chatMessages
+      .filter((m: any) => (m.role === "system" || m.role === "tool") && typeof m.content === "string")
+      .map((m: any) => m.content as string)
+      .join("\n");
     if (!delivery.useTextFallback) {
       // The products are in the cards. The text is a lead-in and nothing
       // else - no numbered list, no URLs, no "shall I send a card?".
-      replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction });
+      replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction, context: groundingContext });
     } else {
       // Genuine fallback: this channel cannot render cards, or staging
       // failed. The legacy deterministic renderer is exactly right here,
@@ -4910,7 +4919,7 @@ async function generateAIBotReplyInner(
         }
         // On a lookup turn the answer leads and the product block follows it;
         // with keys in the prose the renderer already kept it.
-        replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: false, introduction: recoPlan.introduction, rendered });
+        replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: false, introduction: recoPlan.introduction, rendered, context: groundingContext });
       } catch (err: any) {
         console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
         try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }

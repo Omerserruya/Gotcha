@@ -161,7 +161,8 @@ describe("★ (b) the store describes itself", () => {
   it("the clothing store's interview: riding style demoted, size and colour offered as optional", () => {
     const p = profileForStore(PRODUCT_RECOMMENDATION_PROFILE, deriveWooFacets(H.wooProducts));
     const req = p.facts.filter((f) => f.required).map((f) => f.key);
-    expect(req).toEqual(["product_category", "budget"]);
+    // Budget is never required in a shop (eval R1).
+    expect(req).toEqual(["product_category"]);
     expect(p.facts.find((f) => f.key === "size")).toMatchObject({ required: false, enumValues: ["S", "M", "L"] });
   });
 
@@ -173,8 +174,11 @@ describe("★ (b) the store describes itself", () => {
     // The board store's other questions stay askable; the coat store's do not.
     expect(profileForStore(PRODUCT_RECOMMENDATION_PROFILE, deriveFacets(shopifyBoards)).facts.find((f) => f.key === "flex")?.askable).not.toBe(false);
     expect(profileForStore(PRODUCT_RECOMMENDATION_PROFILE, deriveWooFacets(H.wooProducts)).facts.find((f) => f.key === "flex")?.askable).toBe(false);
-    // And with no catalogue to read, the profile is the snowboard one, unchanged.
-    expect(profileForStore(PRODUCT_RECOMMENDATION_PROFILE, null)).toBe(PRODUCT_RECOMMENDATION_PROFILE);
+    // And with no catalogue to read, the profile is the snowboard one, with budget optional.
+    const bare = profileForStore(PRODUCT_RECOMMENDATION_PROFILE, null);
+    expect(bare.facts.map((f) => f.key)).toEqual(PRODUCT_RECOMMENDATION_PROFILE.facts.map((f) => f.key));
+    expect(bare.facts.find((f) => f.key === "budget")?.required).toBe(false);
+    expect(bare.facts.find((f) => f.key === "riding_style")?.required).toBe(true);
   });
 
   it("a connected Shopify store still describes itself from Shopify", async () => {
@@ -253,6 +257,17 @@ describe("★ a lookup turn's reply is the answer, with the product attached", (
     const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
     expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "PRODUCT_1 עולה ₪699 במבצע." }))
       .toBe("Cotton Trench Coat עולה במבצע.");
+  });
+
+  it("★ E05: an amount stated in the turn's context (policy, KB, a tool) stays as written; a near miss does not", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    const context = "Store policy (shipping): Standard delivery in Israel takes 2-4 business days for a cost of ₪29.";
+    const reply = (t: string) => finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: t, context });
+    expect(reply("משלוח סטנדרטי (2-4 ימי עסקים, עלות ₪29)")).toBe("משלוח סטנדרטי (2-4 ימי עסקים, עלות ₪29)");
+    expect(reply("משלוח סטנדרטי עולה ₪30")).toBe("משלוח סטנדרטי עולה");
+    expect(reply("משלוח סטנדרטי עולה ₪2")).toBe("משלוח סטנדרטי עולה");
+    // No context: only a product price survives, as before.
+    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "משלוח עולה ₪29 והמעיל ₪799" })).toBe("משלוח עולה והמעיל ₪799");
   });
 
   it("★ A02: a key followed by its own title in brackets prints the name once", async () => {
