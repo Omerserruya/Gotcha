@@ -460,3 +460,99 @@ export function renderVoiceStats(stats: BrandVoiceStats): string {
     `${pct(stats.questionShare)} contain a question, ${pct(stats.exclamationShare)} an exclamation mark.`,
   ].join("\n");
 }
+
+// ── Per-situation evidence (2026-10-25, P4) ─────────────────────────────
+//
+// How this business handles the moments that matter in a shop: the opening, a
+// price question, an item out of stock, shipping, a complaint, the close. The
+// learner sees anonymised customer -> agent pairs grouped by situation and
+// writes RULES; the runtime prompt never carries a real message (Omer's
+// decision: rules only, no quotes).
+
+export type VoiceSituation = "opening" | "price" | "out_of_stock" | "shipping" | "complaint" | "closing";
+
+export const VOICE_SITUATIONS: VoiceSituation[] = ["opening", "price", "out_of_stock", "shipping", "complaint", "closing"];
+
+export interface VoicePair {
+  customer: string;
+  agent: string;
+  /** The agent's first message in that conversation. */
+  firstOfConversation: boolean;
+}
+
+const SITUATION_RE: Array<[VoiceSituation, RegExp]> = [
+  ["complaint", /לא הגיע|לא קיבלתי|פגום|קרוע|שבור|מבאס|מאוכזב|מאוכזבת|תלונה|נורא|גרוע|בעיה עם|טעות ב|damaged|broken|never arrived|complain|refund/i],
+  ["out_of_stock", /אזל|נגמר|אין במלאי|חסר במלאי|מתי יחזור|יחזור למלאי|out of stock|sold out|back in stock|restock/i],
+  ["shipping", /משלוח|מתי (?:זה )?(?:יגיע|מגיע)|זמן אספקה|שליח|איסוף|מעקב|tracking|shipping|delivery|deliver/i],
+  ["price", /כמה (?:זה )?(?:עולה|עולים)|מה המחיר|מחיר|הנחה|קופון|מבצע|how much|price|discount|coupon/i],
+  ["closing", /^\s*(?:תודה|תודה רבה|סבבה|מעולה|אחלה|ביי|להתראות|thanks|thank you|bye)[\s!.,🙏❤️🙂😊]*$/iu],
+];
+
+/** The situation a customer message is, or null for anything else. */
+export function classifySituation(customer: string, firstOfConversation: boolean): VoiceSituation | null {
+  for (const [s, re] of SITUATION_RE) if (re.test(customer)) return s;
+  return firstOfConversation ? "opening" : null;
+}
+
+/** Words that follow a greeting and are NOT a name: endearments are the brand's register. */
+const ENDEARMENTS = new Set(["אהובה", "אהוב", "יקרה", "יקר", "מתוקה", "מתוק", "חמודה", "חמוד", "מותק", "נשמה", "יפה", "חברה", "חבר", "גבר", "אחי", "אחותי", "לכם", "לך", "dear", "there", "love"]);
+
+/** Contact details, links, long numbers and the name after a greeting, removed. */
+export function stripPii(text: string): string {
+  return String(text ?? "")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "[email]")
+    .replace(/https?:\/\/\S+/g, "[link]")
+    .replace(/\+?\d[\d\s-]{7,}\d/g, "[phone]")
+    .replace(/#?\d{4,}/g, "[number]")
+    .replace(/^((?:היי|הי|שלום|אהלן|בוקר טוב|ערב טוב|hi|hey|hello)[\s,!]+)([^\s,!.?]+)/iu, (m, g, word) =>
+      ENDEARMENTS.has(String(word).toLowerCase()) ? m : `${g}[name]`)
+    .trim();
+}
+
+/**
+ * Pair each agent message with the customer message before it, per
+ * conversation. `messages` is any mix of inbound and the agents' outbound.
+ */
+export function pairAgentReplies(messages: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; conversationId: string; at: Date }>): VoicePair[] {
+  const byConv = new Map<string, typeof messages>();
+  for (const m of messages) {
+    if (!byConv.has(m.conversationId)) byConv.set(m.conversationId, []);
+    byConv.get(m.conversationId)!.push(m);
+  }
+  const pairs: VoicePair[] = [];
+  for (const list of byConv.values()) {
+    list.sort((a, b) => a.at.getTime() - b.at.getTime());
+    let lastCustomer: string | null = null;
+    let agentSpoke = false;
+    for (const m of list) {
+      if (m.direction === "INBOUND") { lastCustomer = m.body; continue; }
+      if (lastCustomer !== null && m.body.trim()) {
+        pairs.push({ customer: lastCustomer, agent: m.body, firstOfConversation: !agentSpoke });
+        lastCustomer = null;
+      }
+      agentSpoke = true;
+    }
+  }
+  return pairs;
+}
+
+/** The learner's evidence: up to `perSituation` anonymised pairs per situation, and how many there were. */
+export function renderSituationEvidence(pairs: VoicePair[], perSituation = 6): string {
+  const grouped = new Map<VoiceSituation, VoicePair[]>();
+  for (const p of pairs) {
+    const s = classifySituation(p.customer, p.firstOfConversation);
+    if (!s) continue;
+    if (!grouped.has(s)) grouped.set(s, []);
+    grouped.get(s)!.push(p);
+  }
+  const lines = ["HOW THE AGENTS HANDLED EACH SITUATION (anonymised customer -> agent pairs; write RULES from them, never quote them):"];
+  for (const s of VOICE_SITUATIONS) {
+    const list = grouped.get(s) ?? [];
+    lines.push("", `## ${s} (${list.length} seen)`);
+    if (!list.length) { lines.push("  (no evidence: leave this situation empty)"); continue; }
+    for (const p of list.slice(-perSituation)) {
+      lines.push(`  customer: ${stripPii(p.customer).slice(0, 160)}`, `  agent: ${stripPii(p.agent).slice(0, 240)}`);
+    }
+  }
+  return lines.join("\n");
+}

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma, withHistoricalRecords } from "@chatcenter/shared";
 import { structuredCall } from "./llm";
-import { analyzeBrandVoice, renderVoiceStats, type VoiceMessage } from "./brand-voice";
+import { analyzeBrandVoice, renderVoiceStats, pairAgentReplies, renderSituationEvidence, type VoiceMessage } from "./brand-voice";
 import {
   recordEvent,
   tenantPromptLanguage,
@@ -68,6 +68,22 @@ export const VoiceSchema = z.object({
   greetingExample: z.string().max(600).describe("One opening line in the business's own voice"),
   /** A sign-off in their voice. */
   closingExample: z.string().max(600).describe("One closing line in the business's own voice"),
+  /**
+   * How the agents handle each moment (P4), as rules. Empty where the evidence
+   * shows nothing. Never a quoted message: the runtime prompt carries rules only.
+   */
+  situations: z
+    .object({
+      opening: z.string().max(300).default(""),
+      price: z.string().max(300).default(""),
+      out_of_stock: z.string().max(300).default(""),
+      shipping: z.string().max(300).default(""),
+      complaint: z.string().max(300).default(""),
+      closing: z.string().max(300).default(""),
+    })
+    .partial()
+    .default({})
+    .describe("One rule per situation, from the agents' own replies; empty when there is no evidence"),
 });
 
 export const VOICE_SYSTEM_PROMPT = `You are given MEASURED statistics about how one business writes to its customers: which emoji it uses and how often, how it opens and closes conversations, which phrases it repeats, and the length and rhythm of its messages. Every number was counted over the business's own sent messages.
@@ -82,8 +98,10 @@ RULES
 - Some counted lines are automated templates rather than a person writing (an away-message, an order confirmation). Say so when the numbers suggest it, and separate "how the automation sounds" from "how a person here sounds".
 - If a phrase is a fragment of a longer canned message, quote the useful part rather than the fragment.
 - greetingExample and closingExample must be written in the business's own language and style, reusing its actual words where the counts show them.
+- situations: when the input has a section of customer -> agent pairs, write ONE rule per situation (opening, price, out_of_stock, shipping, complaint, closing) describing what these agents DO in it: what they say first, how long, which words, whether they ask anything. A rule, never a quoted message (two or three of their words are fine). Leave a situation empty when it has no evidence.
+- Register is the brand's: warmth, endearments, emoji, slang, length, whatever the agents actually do. The grammatical gender of address is not: the business addresses customers neutrally, so describe endearments and warmth without turning them into gendered verbs.
 
-Reply with ONLY a JSON object: {"guidance":"- ...\\n- ...","summary":"...","emojiPalette":["..."],"greetingExample":"...","closingExample":"..."}`;
+Reply with ONLY a JSON object: {"guidance":"- ...\\n- ...","summary":"...","emojiPalette":["..."],"greetingExample":"...","closingExample":"...","situations":{"opening":"...","price":"...","out_of_stock":"...","shipping":"...","complaint":"...","closing":"..."}}`;
 
 /** Below this there is not enough writing to characterise anyone. */
 export const MIN_VOICE_MESSAGES = 50;
@@ -130,6 +148,17 @@ export async function runBrandVoiceStage(args: {
     conversationId: m.conversationId!,
     at: m.createdAt,
   }));
+  // The customer message before each reply: the per-situation evidence (P4).
+  const inbound = await withHistoricalRecords(() =>
+    prisma.message.findMany({
+      where: { tenantId, conversationId: { in: conversationIds }, direction: "INBOUND", NOT: { body: "" } },
+      select: { body: true, conversationId: true, createdAt: true },
+    }),
+  );
+  const pairs = pairAgentReplies([
+    ...messages.map((m) => ({ ...m, direction: "OUTBOUND" as const })),
+    ...inbound.map((m) => ({ body: m.body, conversationId: m.conversationId!, at: m.createdAt, direction: "INBOUND" as const })),
+  ]);
   const stats = analyzeBrandVoice(messages, 15);
 
   if (stats.messagesAnalyzed < MIN_VOICE_MESSAGES) {
@@ -153,7 +182,7 @@ export async function runBrandVoiceStage(args: {
     importId,
     schema: VoiceSchema,
     system: VOICE_SYSTEM_PROMPT + languageDirective(language),
-    user: renderVoiceStats(stats),
+    user: `${renderVoiceStats(stats)}\n\n${renderSituationEvidence(pairs)}`,
     feature: "historical_brand_voice",
     maxTokens: 2000,
   });
@@ -225,18 +254,25 @@ export function renderObservedVoice(voice: {
   guidance: string;
   summary: string;
   emojiPalette: string[];
-  greetingExample: string;
-  closingExample: string;
+  greetingExample?: string;
+  closingExample?: string;
+  situations?: Partial<Record<"opening" | "price" | "out_of_stock" | "shipping" | "complaint" | "closing", string>>;
 }): string {
+  // Rules only (2026-10-25, Omer): the example opening and closing were real
+  // lines quoted into every prompt, and the agent opened every chat with them.
+  // They stay in the schema as the learner's own working, never rendered.
   const lines = [voice.summary.trim(), "", voice.guidance.trim()];
   if (voice.emojiPalette.length) {
     lines.push(`- Emoji this business actually uses: ${voice.emojiPalette.join(" ")}. Use only these, and only as often as the guidance says.`);
   }
-  if (voice.greetingExample.trim()) {
-    lines.push(`- Example opening in their voice: "${voice.greetingExample.trim()}"`);
+  const LABEL: Record<string, string> = {
+    opening: "Opening a conversation", price: "A price question", out_of_stock: "Out of stock",
+    shipping: "Shipping and delivery", complaint: "A complaint", closing: "The close",
+  };
+  const situations = Object.entries(voice.situations ?? {}).filter(([, v]) => typeof v === "string" && v.trim());
+  if (situations.length) {
+    lines.push("", "How this business handles each moment (its agents' practice, as rules):");
+    for (const [k, v] of situations) lines.push(`- ${LABEL[k] ?? k}: ${String(v).trim()}`);
   }
-  if (voice.closingExample.trim()) {
-    lines.push(`- Example closing in their voice: "${voice.closingExample.trim()}"`);
-  }
-  return lines.join("\n").trim();
+  return lines.join("\n");
 }

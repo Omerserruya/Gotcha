@@ -126,8 +126,10 @@ describe("analyzeBrandVoice", () => {
   });
 });
 
-describe("renderObservedVoice", () => {
-  it("labels the examples and lists only the counted emoji", async () => {
+describe("renderObservedVoice", { timeout: 20_000 }, () => {
+  // The first test pays for importing the stage module, which runs past the
+  // 5s default under a full parallel run.
+  it("lists only the counted emoji, and renders no quoted example", async () => {
     const { renderObservedVoice } = await import("../services/historical-intelligence/brand-voice.stage");
     const out = renderObservedVoice({
       summary: "Warm, short, heart-heavy.",
@@ -139,10 +141,23 @@ describe("renderObservedVoice", () => {
     expect(out).toContain("Warm, short, heart-heavy.");
     expect(out).toContain("- Open with היי");
     expect(out).toContain("❤️ 🩷");
-    // Examples must read as examples. An unlabelled line in a system prompt is
-    // an instruction, and the agent would open every chat with that exact text.
-    expect(out).toContain('Example opening in their voice: "היי אהובה ❤️"');
-    expect(out).toContain('Example closing in their voice: "באהבה"');
+    // Rules only (2026-10-25, Omer): a real line quoted into the prompt is what
+    // the agent opened every chat with. The examples are no longer rendered.
+    expect(out).not.toContain("היי אהובה ❤️");
+    expect(out).not.toContain("Example opening");
+    expect(out).not.toContain("Example closing");
+  });
+
+  it("★ P4: renders the per-situation rules, labelled, skipping empty ones", async () => {
+    const { renderObservedVoice } = await import("../services/historical-intelligence/brand-voice.stage");
+    const out = renderObservedVoice({
+      summary: "Warm, short.", guidance: "- Short replies", emojiPalette: [],
+      situations: { price: "Give the price first, then one detail; no question.", complaint: "Apologise in two words, then the fix.", shipping: "" },
+    });
+    expect(out).toContain("How this business handles each moment (its agents' practice, as rules):");
+    expect(out).toContain("- A price question: Give the price first, then one detail; no question.");
+    expect(out).toContain("- A complaint: Apologise in two words, then the fix.");
+    expect(out).not.toContain("Shipping and delivery");
   });
 
   it("omits empty parts instead of emitting blank labels", async () => {

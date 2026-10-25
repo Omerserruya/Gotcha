@@ -68,7 +68,10 @@ import { structuredCall } from "./historical-intelligence/llm";
 import {
   analyzeBrandVoice,
   renderVoiceStats,
+  pairAgentReplies,
+  renderSituationEvidence,
   type VoiceMessage,
+  type VoicePair,
 } from "./historical-intelligence/brand-voice";
 import {
   VoiceSchema,
@@ -113,6 +116,8 @@ const MAX_CORPUS = 2000;
 async function collectLiveWriting(tenantId: string): Promise<{
   human: VoiceMessage[];
   machineWritten: number;
+  /** The customer message before each human reply (P4 situation evidence). */
+  pairs: VoicePair[];
 }> {
   const base = {
     tenantId,
@@ -148,12 +153,24 @@ async function collectLiveWriting(tenantId: string): Promise<{
     prisma.message.count({ where: { ...base, senderName: { contains: "@" } } }),
   ]);
 
-  return {
-    human: human
-      .filter((m) => m.conversationId)
-      .map((m) => ({ body: m.body, conversationId: m.conversationId!, at: m.createdAt })),
-    machineWritten: total - humanCount,
-  };
+  const humanMsgs = human
+    .filter((m) => m.conversationId)
+    .map((m) => ({ body: m.body, conversationId: m.conversationId!, at: m.createdAt }));
+  const conversationIds = Array.from(new Set(humanMsgs.map((m) => m.conversationId))).slice(0, 500);
+  const inbound = conversationIds.length
+    ? await prisma.message.findMany({
+        where: { tenantId, origin: "LIVE", direction: "INBOUND", conversationId: { in: conversationIds }, NOT: { body: "" } },
+        select: { body: true, conversationId: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: MAX_CORPUS * 2,
+      })
+    : [];
+  const pairs = pairAgentReplies([
+    ...humanMsgs.map((m) => ({ ...m, direction: "OUTBOUND" as const })),
+    ...inbound.filter((m) => m.conversationId).map((m) => ({ body: m.body, conversationId: m.conversationId!, at: m.createdAt, direction: "INBOUND" as const })),
+  ]);
+
+  return { human: humanMsgs, machineWritten: total - humanCount, pairs };
 }
 
 /**
@@ -173,7 +190,7 @@ export async function learnVoiceFromLiveWriting(tenantId: string): Promise<Learn
     select: { id: true, observedVoiceEditedAt: true },
   });
 
-  const { human, machineWritten } = await collectLiveWriting(tenantId);
+  const { human, machineWritten, pairs } = await collectLiveWriting(tenantId);
   const counts = { humanWritten: human.length, machineWritten, required: MIN_VOICE_MESSAGES };
 
   if (!profile) return { status: "no_profile", ...counts };
@@ -194,7 +211,7 @@ export async function learnVoiceFromLiveWriting(tenantId: string): Promise<Learn
     tenantId,
     schema: VoiceSchema,
     system: VOICE_SYSTEM_PROMPT + languageDirective(language),
-    user: renderVoiceStats(stats),
+    user: `${renderVoiceStats(stats)}\n\n${renderSituationEvidence(pairs)}`,
     // Its own feature name, not the import stage's. These are two different
     // populations and the cost of each should be answerable separately.
     feature: "live_brand_voice",
