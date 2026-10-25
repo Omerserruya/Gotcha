@@ -295,3 +295,23 @@ export async function singleProductVariations(
   if (!got?.ok) return null;
   return compact(JSON.stringify({ ok: true, result: got.result }));
 }
+
+/**
+ * The product the customer saw most recently, from the conversation's own card
+ * messages (their metadata holds the store id). Null when no card was shown.
+ */
+export function lastShownProduct(rows: Array<{ direction: string; messageType?: string | null; metadata?: any }>): { productId: string; title: string } | null {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r.direction !== "OUTBOUND" || !/product/.test(String(r.messageType ?? ""))) continue;
+    const products = r.metadata?.commerce?.products;
+    const p = Array.isArray(products) ? products[0] : null;
+    if (p && /^\d{1,12}$/.test(String(p.productId ?? ""))) return { productId: String(p.productId), title: String(p.title ?? "") };
+  }
+  return null;
+}
+
+/** A customer message that asks about a size. */
+export function asksSize(text: string | null | undefined): boolean {
+  return /(?<![A-Za-z])(?:XXS|XS|S|M|L|XL|XXL)(?![A-Za-z])|מידה|מידות|\bsize\b/i.test(String(text ?? ""));
+}

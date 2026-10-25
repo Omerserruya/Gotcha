@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastShownProduct, asksSize } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3107,6 +3107,30 @@ async function generateAIBotReplyInner(
     }
   };
 
+  // A colour or size asked about the product just shown (eval L01: "בשחור?"
+  // right after the beanie, answered "אין אישור לצבע"): its live options come
+  // with the turn, so the answer needs no search and no guess.
+  if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage))) {
+    const last = lastShownProduct(messages as any[]);
+    if (last) {
+      const got = await executeAdapterTool({
+        tenantId: opts.tenantId,
+        toolFunctionName: "woocommerce.list_product_variations",
+        args: { product_id: last.productId, per_page: 50 },
+        accessScope: opts.onboardingTest ? "internal" : "customer",
+      }).catch(() => null);
+      if (got?.ok && Array.isArray(got.result) && got.result.length) {
+        chatMessages.push({
+          role: "system",
+          content:
+            `The product shown to the customer most recently: "${last.title}" (store id ${last.productId}). Its LIVE options, already read: ` +
+            `${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}\n` +
+            `If the customer is asking about this product, answer from these options: say plainly which colour or size exists and which does not. ` +
+            `If they named a different product, look that one up instead.`,
+        });
+      }
+    }
+  }
   markStage("prompt_ready");
   // The per-turn state note (2026-10-25): the facts the model should not have
   // to infer from the transcript, last before it writes (recency wins).
