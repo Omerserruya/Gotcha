@@ -335,6 +335,8 @@
   },
   "wall": {
     "name": "Copilot",
+    "hide": "Hide Copilot",
+    "show": "Show Copilot",
     "previous": "Previous",
     "next": "Next",
     "carousel": "carousel",

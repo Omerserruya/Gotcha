@@ -335,6 +335,8 @@
   },
   "wall": {
     "name": "Copilot",
+    "hide": "הסתרת Copilot",
+    "show": "הצגת Copilot",
     "previous": "הקודם",
     "next": "הבא",
     "carousel": "קרוסלה",
