@@ -134,3 +134,25 @@ describe("★★ the code snippet's bubble (gotcha-site.js)", () => {
     expect(av.querySelector(".pav-on")).toBeTruthy();
   });
 });
+
+describe("★★ Add to cart on the store's own page (gotcha-site.js, W9c)", () => {
+  it("★ after a same-origin add, the chat offers the store's cart page: its home plus cart/", async () => {
+    mountSite(widget());
+    const opts = (window as any).__gotchaShopifyChatApp.mock.calls[0][0];
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    (globalThis as any).fetch = fetchMock;
+    const home = window.location.origin + "/shop/";
+    // Backend's wooCartLine: the store's home with ?add-to-cart=. Stubbed: nothing reaches a real cart.
+    const done = await opts.addToCart({ cartUrl: home + "?add-to-cart=12&quantity=1" });
+    expect(fetchMock).toHaveBeenCalledWith(home + "?add-to-cart=12&quantity=1", expect.objectContaining({ credentials: "same-origin" }));
+    expect(done).toEqual({ cartPage: home + "cart/" });
+  });
+
+  it("a store at the root: /cart/", async () => {
+    mountSite(widget());
+    const opts = (window as any).__gotchaShopifyChatApp.mock.calls[0][0];
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: true }));
+    const done = await opts.addToCart({ cartUrl: window.location.origin + "/?add-to-cart=7" });
+    expect(done).toEqual({ cartPage: window.location.origin + "/cart/" });
+  });
+});

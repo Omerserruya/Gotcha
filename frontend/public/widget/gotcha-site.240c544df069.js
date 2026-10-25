@@ -569,6 +569,22 @@ window.__gotchaSiteMount = function (opts) {
     return out;
   }
 
+  /**
+   * The store's cart page, for "View cart" after a line is added (Omer,
+   * 2026-10-25). The add link is the store's home with `?add-to-cart=`
+   * (Backend's wooCartLine: storeUrl + "/"), so the cart is that path plus
+   * "cart/": WooCommerce's default, a store in a subfolder included.
+   */
+  function wooCartPage(addLink) {
+    try {
+      var base = new URL(addLink.toString());
+      base.search = "";
+      base.hash = "";
+      if (!/\/$/.test(base.pathname)) base.pathname += "/";
+      return new URL("cart/", base).toString();
+    } catch (e) { return null; }
+  }
+
   /** The WhatsApp kind: the shared widget, with this channel's start (POST /whatsapp-start). */
   function mountWhatsapp(widget) {
     launcherButton = window.__gotchaWhatsappWidget({
@@ -639,7 +655,7 @@ window.__gotchaSiteMount = function (opts) {
             if (!res.ok) throw new Error("unavailable");
             // WooCommerce themes refresh their mini-cart on this event.
             try { if (window.jQuery) window.jQuery(document.body).trigger("wc_fragment_refresh"); } catch (e) {}
-            return { cartPage: null };
+            return { cartPage: wooCartPage(target) };
           });
         }
         try { window.top.location.href = target.toString(); } catch (e) { window.location.href = target.toString(); }

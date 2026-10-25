@@ -1083,11 +1083,69 @@ describe("carousel", () => {
     const labels = cards.map((c) =>
       Array.from(c.querySelectorAll(".btn")).map((b) => b.textContent),
     );
-    // Card 1 has real sizes to pick, so it links out rather than
-    // pretending it can add something.
-    expect(labels[0]).toEqual(["View product"]);
+    // Card 1 has real sizes to pick: no Add to Cart that would pick one
+    // for the shopper, but a way into the sizes (Omer, 2026-10-25).
+    expect(labels[0]).toEqual(["Choose a size", "View product"]);
     // Cards 2 and 3 are single-variant: Add to Cart is honest there.
     expect(labels[1]).toContain("Add to cart");
+  });
+
+  it("★ \"Choose a size\" opens that card's sizes in place, and Add to Cart waits for one", async () => {
+    const { shadow } = await carouselHarness();
+    const first = shadow.querySelector(".car-tr .card")!;
+    (first.querySelector("[data-act='choose-options']") as HTMLButtonElement).click();
+    expect(first.querySelectorAll(".chip")).toHaveLength(2);
+    expect(first.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
+    expect(first.querySelector(".pick-hint")!.textContent).toBe("Pick a size");
+    const add = Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart")!;
+    expect(add.disabled).toBe(true);
+    (first.querySelector(".chip") as HTMLButtonElement).click();
+    expect(first.querySelector(".pick-hint")).toBeNull();
+    expect((Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart") as HTMLButtonElement).disabled).toBe(false);
+    // The other cards are untouched.
+    expect(shadow.querySelectorAll(".car-tr .card")[2].querySelectorAll(".chip")).toHaveLength(0);
+  });
+
+  it("★ in Hebrew, by what the store asks for: size, colour, both, or an option", async () => {
+    const words = async (optionNames: string[]) => {
+      const { shadow } = await boot({
+        appearance: { language: "he" },
+        messages: [
+          {
+            id: "c9",
+            direction: "OUTBOUND",
+            body: "x",
+            createdAt: new Date().toISOString(),
+            commerce: { addToCartEnabled: true, products: [makeProduct({ optionNames }), makeProduct({ productId: "444", optionNames })] },
+          },
+        ],
+      });
+      const card = shadow.querySelector(".car-tr .card")!;
+      const open = card.querySelector("[data-act='choose-options']") as HTMLButtonElement;
+      const label = open.textContent;
+      open.click();
+      return [label, card.querySelector(".pick-hint")!.textContent];
+    };
+    expect(await words(["Size"])).toEqual(["בחירת מידה", "בחרו מידה"]);
+    expect(await words(["Size", "Color"])).toEqual(["בחירת מידה", "בחרו מידה וצבע"]);
+    expect(await words(["צבע"])).toEqual(["בחירת צבע", "בחרו צבע"]);
+    expect(await words(["Material"])).toEqual(["בחירת אפשרות", "בחרו אפשרות"]);
+  });
+
+  it("no way in when nothing can be bought, or the store's cart is off", async () => {
+    const soldOut = makeProduct({
+      variants: makeProduct().variants.map((v: any) => ({ ...v, available: false })),
+    });
+    const { shadow } = await boot({
+      messages: [{ id: "c8", direction: "OUTBOUND", body: "x", createdAt: new Date().toISOString(), commerce: { addToCartEnabled: true, products: [soldOut, makeProduct({ productId: "555" })] } }],
+    });
+    const cards = shadow.querySelectorAll(".car-tr .card");
+    expect(cards[0].querySelector("[data-act='choose-options']")).toBeNull();
+    expect(cards[1].querySelector("[data-act='choose-options']")).toBeTruthy();
+    const off = await boot({
+      messages: [{ id: "c7", direction: "OUTBOUND", body: "x", createdAt: new Date().toISOString(), commerce: { addToCartEnabled: false, products: [makeProduct(), makeProduct({ productId: "555" })] } }],
+    });
+    expect(off.shadow.querySelector("[data-act='choose-options']")).toBeNull();
   });
 
   it("keeps Add to Cart on a shortlist entry whose first variant is sold out", async () => {
@@ -1748,6 +1806,30 @@ describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () =>
     expect(shadow.textContent).toContain("Added to cart");
     expect(Array.from(shadow.querySelectorAll("a")).some((a) => a.textContent === "View cart")).toBe(false);
     expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Keep shopping")).toBe(true);
+  });
+
+  it("★ a cart page the host names is offered after the add (a WooCommerce store's /cart/)", async () => {
+    const addToCart = vi.fn(async () => ({ cartPage: "https://shop.example/cart/" }));
+    const { shadow } = await boot({ messages: [card], addToCart });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    const view = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart")!;
+    expect(view.getAttribute("href")).toBe("https://shop.example/cart/");
+    expect(view.getAttribute("target")).toBe("_top");
+  });
+
+  it("★ a single card with nothing chosen says what to pick, over chips that read as choices", async () => {
+    const { shadow } = await boot({
+      messages: [{ ...card, commerce: { addToCartEnabled: true, products: [makeProduct({ optionNames: ["Size", "Colour"] })] } }],
+    });
+    expect(shadow.querySelector(".pick-hint")!.textContent).toBe("Pick a size and colour");
+    expect(shadow.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
+    expect(addBtn(shadow).disabled).toBe(true);
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".opts[data-need='1'] .chip{border-color:");
+    (shadow.querySelector(".chip") as HTMLButtonElement).click();
+    expect(shadow.querySelector(".pick-hint")).toBeNull();
+    expect(shadow.querySelector(".opts")!.hasAttribute("data-need")).toBe(false);
   });
 
   it("the storefront keeps its cart page", async () => {

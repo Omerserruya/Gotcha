@@ -228,6 +228,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       unavailable: "Unavailable",
       notPublished: "Not published",
       chooseOption: "Choose an option",
+      // A carousel card's way into the options; the line under a single card's chips.
+      openSize: "Choose a size", openColour: "Choose a colour", openOption: "Choose an option",
+      pickSizeColour: "Pick a size and colour", pickSize: "Pick a size", pickColour: "Pick a colour", pickOption: "Pick an option",
       quantity: "Quantity",
       poweredBy: "Powered by GOTCHA",
       name: "Name",
@@ -289,6 +292,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       unavailable: "לא זמין",
       notPublished: "לא מפורסם",
       chooseOption: "בחרו אפשרות",
+      openSize: "בחירת מידה", openColour: "בחירת צבע", openOption: "בחירת אפשרות",
+      pickSizeColour: "בחרו מידה וצבע", pickSize: "בחרו מידה", pickColour: "בחרו צבע", pickOption: "בחרו אפשרות",
       quantity: "כמות",
       poweredBy: "מופעל על ידי GOTCHA",
       name: "שם",
@@ -817,9 +822,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".tag-dr{background:#fef3c7;color:#92400e;}",
     ".why{font-size:12.5px;color:#475569;padding:0 12px 10px;text-align:start;}",
     ".opts{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px;}",
-    ".opt-l{font-size:11.5px;color:#64748b;}",
+    ".opt-l{font-size:12px;font-weight:600;color:#334155;}",
+    // Chips that read as choices: a firmer edge, and firmer still while one is needed.
+    ".opts[data-need='1'] .chip{border-color:#94a3b8;}",
+    ".pick-hint{padding:0 12px 8px;font-size:12px;color:#475569;}",
     ".chips{display:flex;flex-wrap:wrap;gap:6px;}",
-    ".chip{border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
+    ".chip{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
     ".chip[aria-pressed='true']{border-color:" + brand + ";background:" + brand + ";color:" + onBrand + ";}",
     ".chip:disabled{opacity:.4;cursor:not-allowed;text-decoration:line-through;}",
     ".chip:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
@@ -1094,7 +1102,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
     ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
     ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
-    ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
+    ".panel[data-look='gotcha'] .chip{border-color:#CFC4B6;}",
+    ".panel[data-look='gotcha'] .opts[data-need='1'] .chip{border-color:#A99C8E;}",
+    ".panel[data-look='gotcha'] .opt-l,.panel[data-look='gotcha'] .pick-hint{color:#5C5047;}",
     ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n"); }
@@ -2124,6 +2134,21 @@ window.__gotchaShopifyChatApp = function (boot) {
   // ── Product card ────────────────────────────────────────────────
 
   /**
+   * What the shopper has to choose, in words: size, colour, both, or an
+   * option, from the store's own option names (WooCommerce attributes,
+   * Shopify options), in any of the languages a store names them in.
+   */
+  function optionWords(product) {
+    var names = product.optionNames || [];
+    var size = names.some(function (n) { return /size|מידה|גודל|taille|talla|größe|grösse/i.test(String(n)); });
+    var colour = names.some(function (n) { return /colou?r|צבע|couleur|farbe/i.test(String(n)); });
+    return {
+      open: size ? T.openSize : colour ? T.openColour : T.openOption,
+      pick: size && colour ? T.pickSizeColour : size ? T.pickSize : colour ? T.pickColour : T.pickOption,
+    };
+  }
+
+  /**
    * @param compact  Rendered inside a carousel. A shortlist entry is a
    *   choice between products, not a configurator: the variant picker
    *   and quantity stepper are dropped, and Add to Cart only appears
@@ -2138,6 +2163,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     // to the other side mid-conversation. Only the text inside it -
     // title, reason - resolves per string.
     attr(card, { dir: dir });
+    // ★ A carousel card that needs a choice opens its own options in place
+    // (Omer, 2026-10-25: a variable product showed no way to buy at all).
+    var expanded = false;
     var vState = {
       variantId: initialVariant(product),
       quantity: 1,
@@ -2148,6 +2176,7 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     function paint() {
       clear(card);
+      var compactNow = compact && !expanded;
       var variant = findVariant(product, vState.variantId);
 
       var top = el("div", "card-top");
@@ -2214,8 +2243,11 @@ window.__gotchaShopifyChatApp = function (boot) {
       // that could ever enable it. The variant titles are always present,
       // so there is always something to label the chips with.
       var needsChoice = product.variants.length > 1;
-      if (needsChoice && !compact) {
+      // Nothing chosen yet on a card that sells: the chips are the way in, and say so.
+      var mustPick = needsChoice && !variant && addToCartAllowed && features.addToCart;
+      if (needsChoice && !compactNow) {
         var opts = el("div", "opts");
+        if (mustPick) attr(opts, { "data-need": "1" });
         opts.appendChild(el("div", "opt-l", T.chooseOption));
         var chips = el("div", "chips");
         attr(chips, { role: "group", "aria-label": T.chooseOption });
@@ -2250,7 +2282,7 @@ window.__gotchaShopifyChatApp = function (boot) {
         !variant.requiresSellingPlan &&
         product.published !== false;
 
-      if (canAdd && !compact) {
+      if (canAdd && !compactNow) {
         var qtyRow = el("div", "qty");
         var minus = el("button", "qty-b", "−");
         attr(minus, { type: "button", "aria-label": T.quantity + " −" });
@@ -2272,7 +2304,20 @@ window.__gotchaShopifyChatApp = function (boot) {
       // In a carousel, only offer Add to Cart when there is genuinely
       // nothing left to choose. Otherwise the button would either lie or
       // pick a size for the shopper.
-      var offerAdd = addToCartAllowed && features.addToCart && (!compact || canAdd);
+      var offerAdd = addToCartAllowed && features.addToCart && (!compactNow || canAdd);
+      if (offerAdd && mustPick && !compactNow) {
+        card.appendChild(el("div", "pick-hint", optionWords(product).pick));
+      }
+      var anyBuyable = (product.variants || []).some(function (v) { return v.available && !v.requiresSellingPlan; });
+      if (!offerAdd && compactNow && needsChoice && addToCartAllowed && features.addToCart && anyBuyable && product.published !== false) {
+        var choose = el("button", "btn btn-p", optionWords(product).open);
+        attr(choose, { type: "button", "data-act": "choose-options" });
+        on(choose, "click", function () {
+          expanded = true;
+          paint();
+        });
+        acts.appendChild(choose);
+      }
       if (offerAdd) {
         var add = el("button", "btn btn-p", vState.busy ? T.adding : T.addToCart);
         attr(add, { type: "button" });
@@ -2294,8 +2339,8 @@ window.__gotchaShopifyChatApp = function (boot) {
         ok.appendChild(el("span", null, "✓ " + T.added));
         card.appendChild(ok);
         var after = el("div", "acts");
-        // Only where the cart page is known (the storefront's; a web chat
-        // store's is not, so it offers none rather than a guess).
+        // Only where the cart page is known: the storefront's, or the one a
+        // web chat host names (gotcha-site.js: a WooCommerce store's /cart/).
         if (vState.cartPage) {
           var cart = el("a", "btn btn-s", T.viewCart);
           attr(cart, { href: vState.cartPage, target: "_top" });
