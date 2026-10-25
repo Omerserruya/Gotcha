@@ -285,19 +285,18 @@ async function buildDiscoveryEnrichment(tenantId: string): Promise<DiscoveryEnri
   const products = strArr(business.products, 10);
   if (products.length) guidelines.push(`What we offer: ${products.join(", ")}`);
 
-  // Brand voice → persona attributes (rendered as "Persona:" bullets in prompt).
+  // The website → persona attributes (rendered as "Persona:" bullets in the
+  // prompt): facts and vocabulary ONLY (2026-10-25). A site is marketing copy,
+  // not how the shop talks in a chat: its hero line became "Greeting style
+  // (open conversations like this)" and Noa opened a Hebrew chat with
+  // "Designed in Copenhagen. Worn everywhere." Voice, tone, greeting, CTA and
+  // languages stay in toneConfig (settings-visible) and never reach the prompt
+  // as instructions; how the shop talks comes from its agents (observedVoice).
   const putP = (k: string, v: unknown) => { if (typeof v === "string" && v.trim()) persona[k] = v.trim(); };
-  putP("Brand voice", brand.voice);
-  putP("Tone of voice", brand.tone);
-  putP("Brand personality", brand.personality);
-  putP("Greeting style (open conversations like this)", brand.greetingExample);
   putP("Positioning", brand.positioning);
-  putP("How we speak to our audience", brand.audience);
-  putP("Call-to-action style", brand.ctaStyle);
   const preferred = [...strArr(brand.preferredTerminology, 10), ...strArr(brand.vocabulary, 10)];
   if (preferred.length) persona["Preferred words & phrases"] = Array.from(new Set(preferred)).join(", ");
   const langs = strArr(brand.languages, 4);
-  if (langs.length) persona["Languages we speak"] = langs.join(", ");
 
   // Forbidden words → hard guardrails (the AI never says them).
   for (const w of strArr(brand.forbiddenWords, 10)) guardrails.push(`Never use the word or phrase "${w}" - it is off-brand.`);

@@ -697,6 +697,22 @@ function languageSkillBlock(locale: string | undefined): string | null {
 // before the model generates. Mitigates model under-compliance (passive
 // closers, fabricated actions, strategy regression, !-spam) that prompt
 // statements alone don't stop - see the behavioral simulation audit.
+/**
+ * Persona keys the website enrichment wrote from marketing copy (until
+ * 2026-10-25, agent-config-generator). Rendered as instructions they made the
+ * site's slogan the employee's opening line, in English, in a Hebrew chat.
+ * Skipped for rows written before the generator stopped producing them.
+ */
+const WEBSITE_VOICE_KEYS = new Set([
+  "Greeting style (open conversations like this)",
+  "Tone of voice",
+  "Brand voice",
+  "Brand personality",
+  "How we speak to our audience",
+  "Call-to-action style",
+  "Languages we speak",
+]);
+
 const QUALITY_CONTRACT = `# Response Quality Contract (MANDATORY - final self-review)
 
 Before sending, silently review your draft against these. If it fails any, rewrite ONCE, then send.
@@ -1085,6 +1101,7 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     const custom = asRecord(persona.customAttributes);
     if (custom) {
       for (const [k, v] of Object.entries(custom)) {
+        if (WEBSITE_VOICE_KEYS.has(k)) continue;
         if (typeof v === "string" && v.trim()) personaLines.push(`- ${k}: ${v.trim()}`);
       }
     }
