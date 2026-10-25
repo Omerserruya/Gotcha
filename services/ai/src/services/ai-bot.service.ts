@@ -118,7 +118,8 @@ import {
   type SkillCandidate,
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields } from "./prompt-builder.service";
-import { loadRecentHistory, historyChatMessages } from "./conversation-history.service";
+import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
+import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
@@ -2983,7 +2984,11 @@ async function generateAIBotReplyInner(
   // model still sees the same instruction - just once, in the system
   // prompt - so behavior is unchanged.
 
-  chatMessages.push(...historyChatMessages(messages as any));
+  // The workspace's own zone; with no business hours set it reads "UTC", and
+  // these are Israeli shops, so the default zone stands in.
+  const zone = await tenantTimeZone(opts.tenantId).catch(() => "UTC");
+  const historyTimeZone = zone && zone !== "UTC" ? zone : DEFAULT_TIME_ZONE;
+  chatMessages.push(...historyChatMessages(messages as any, { timeZone: historyTimeZone }));
 
   // When a meeting is already on the calendar for this conversation, tell the
   // model so a "move it" / "cancel it" request routes to reschedule_meeting /
@@ -3045,6 +3050,13 @@ async function generateAIBotReplyInner(
       lastOutcomeBlock = block;
     }
   };
+
+  // The per-turn state note (2026-10-25): the facts the model should not have
+  // to infer from the transcript, last before it writes (recency wins).
+  chatMessages.push({
+    role: "system",
+    content: buildStateNote({ rows: messages as any, now: Date.now(), timeZone: historyTimeZone, customerForm: ctxSlot.grammaticalAddress ?? null }),
+  });
 
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
