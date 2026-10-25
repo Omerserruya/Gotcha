@@ -1,4 +1,5 @@
 import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
+import { localizedFallback } from "./escalation-language";
 import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
@@ -1046,6 +1047,7 @@ async function generateEscalationHandoff(
   outsideBusinessHours = false,
 ): Promise<string> {
   if (!aiAgentId) return fallback;
+  let inboundSample = "";
   try {
     const recentInbound = await prisma.message.findMany({
       where: { tenantId, conversationId, direction: "INBOUND" },
@@ -1053,7 +1055,7 @@ async function generateEscalationHandoff(
       take: 5,
       select: { body: true },
     });
-    const inboundSample = recentInbound
+    inboundSample = recentInbound
       .map((m) => m.body?.trim())
       .filter((s): s is string => !!s)
       .reverse()
@@ -1087,7 +1089,7 @@ async function generateEscalationHandoff(
   } catch (err: any) {
     console.warn("[AI-Bot] escalation oneshot failed; falling back to static:", err?.message);
   }
-  return fallback;
+  return localizedFallback(fallback, inboundSample);
 }
 
 // ─── One-shot reply (delegated to AI service) ──────────────
