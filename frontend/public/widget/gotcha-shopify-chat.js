@@ -853,7 +853,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".cart-err{font-size:12.5px;color:#b91c1c;padding:0 12px 12px;}",
 
     // Carousel
-    ".car{position:relative;max-width:100%;}",
+    // Full width: cards sized as halves of a shrink-to-fit strip collapse to their minimum.
+    ".car{position:relative;width:100%;max-width:100%;}",
     ".car-tr{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;",
     "  scrollbar-width:thin;-webkit-overflow-scrolling:touch;}",
     // Two whole cards share the strip (Omer, 2026-10-25): a 186px card

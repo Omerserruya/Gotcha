@@ -1153,6 +1153,8 @@ describe("carousel", () => {
     const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
     expect(sheet).toContain(".car-tr>*{box-sizing:border-box;flex:0 0 calc((100% - 10px) / 2);max-width:calc((100% - 10px) / 2);");
     expect(sheet).not.toContain("flex:0 0 186px");
+    // Halves of a full-width strip, not of a shrink-to-fit one.
+    expect(sheet).toContain(".car{position:relative;width:100%;");
     // An <a> is content-box by default: width:100% plus padding cut its edge.
     expect(sheet).toMatch(/\.btn\{box-sizing:border-box;/);
   });
