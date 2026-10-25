@@ -221,7 +221,7 @@ export function buildWooLookupDirective(kind: ProductInquiryKind, locale: "he" |
     `The customer is asking about the ${kind === "price" ? "PRICE" : kind === "stock" ? "STOCK" : "SIZE / COLOUR availability"} of a product they named. This is a catalogue LOOKUP:\n` +
     `- Call woocommerce.list_products with query set to the product's name as the store titles it (the titles are in English: "trench coat", not "טרנץ'").\n` +
     `- For a size or colour, then call woocommerce.list_product_variations with that product's id and answer from its variations: which sizes / colours exist and which are in stock.\n` +
-    `- Answer the question in one or two short sentences from the results (yes / no, which sizes are in stock). The product card shows its price and link, so do not write a price or a URL. If several products match, name them briefly and ask which one.\n` +
+    `- Answer the question in one or two short sentences from the results (yes / no, which sizes are in stock). Never write a URL: the product card carries the link. Write a price only when the customer asked for it, and then exactly as the result gives it, in the store's currency (\"₪529\"); otherwise leave the price to the card. If several products match, name them briefly and ask which one.\n` +
     `- Do NOT ask about budget, use or style first, and do NOT say you will check: check in this turn.\n` +
     (locale === "he" ? `Reply in Hebrew, naturally ("במידה M יש", not "עליי לבדוק").\n` : "")
   );

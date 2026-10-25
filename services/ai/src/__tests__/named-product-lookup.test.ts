@@ -232,13 +232,33 @@ describe("★ a lookup turn's reply is the answer, with the product attached", (
   const env = { status: "ok", candidates: [{ productId: "364", title: "Cotton Trench Coat", price: "799", currency: "ILS", url: "https://shop/p/364", inventoryState: "in_stock" }] } as any;
   const rendered = { message: "הנה מה שמצאתי:\n\n1. Cotton Trench Coat\nILS 799\nבמלאי\nhttps://shop/p/364", usedFallback: true };
 
-  it("lookup + cards: the model's answer, grounded (no price, no URL, no wide dash), not the introduction", async () => {
+  it("lookup + cards: the model's answer, grounded (its true price kept, no URL, no wide dash), not the introduction", async () => {
     const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
     const out = finalProductReply({
       lookup: true, cards: true, envelope: env, introduction: "הנה כמה אפשרויות:",
       modelText: "כן — PRODUCT_1 במידה M במלאי, ₪799 בלבד https://shop/p/364",
     });
-    expect(out).toBe("כן - Cotton Trench Coat במידה M במלאי, בלבד");
+    expect(out).toBe("כן - Cotton Trench Coat במידה M במלאי, ₪799 בלבד");
+  });
+
+  it("★ A02: asked the price, the store's own price stays, written ₪799, whatever form the model used", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    for (const said of ["₪799", "799 ש״ח", "799 שקל", "ILS 799", "799.00₪"]) {
+      const out = finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: `PRODUCT_1 עולה ${said}.` });
+      expect(out, said).toBe("Cotton Trench Coat עולה ₪799.");
+    }
+  });
+
+  it("★ an amount that is not the store's price is removed", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "PRODUCT_1 עולה ₪699 במבצע." }))
+      .toBe("Cotton Trench Coat עולה במבצע.");
+  });
+
+  it("★ A02: a key followed by its own title in brackets prints the name once", async () => {
+    const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
+    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "כן, יש את PRODUCT_1 (Cotton Trench Coat) במידה M." }))
+      .toBe("כן, יש את Cotton Trench Coat במידה M.");
   });
 
   it("lookup + text channel: the answer first, the product block after it", async () => {
@@ -255,12 +275,13 @@ describe("★ a lookup turn's reply is the answer, with the product attached", (
 
   it("a lookup whose text grounds to nothing falls back as before", async () => {
     const { finalProductReply } = await vi.importActual<any>("../services/product-search.service");
-    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "₪799 https://x.y" })).toBe("הנה:");
+    expect(finalProductReply({ lookup: true, cards: true, envelope: env, introduction: "הנה:", modelText: "₪500 https://x.y" })).toBe("הנה:");
   });
 
-  it("Hebrew amounts are stripped too", async () => {
+  it("Hebrew amounts are grounded too: the store's price written ₪799, any other removed", async () => {
     const { renderLookupProse } = await vi.importActual<any>("../services/product-search.service");
-    expect(renderLookupProse("המחיר 799 ש״ח והוא במלאי", env)).toBe("המחיר והוא במלאי");
+    expect(renderLookupProse("המחיר 799 ש״ח והוא במלאי", env)).toBe("המחיר ₪799 והוא במלאי");
+    expect(renderLookupProse("המחיר 650 ש״ח והוא במלאי", env)).toBe("המחיר והוא במלאי");
   });
 
   it("PRODUCT_n in a variations call resolves (the proof-turn 404)", async () => {

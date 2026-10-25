@@ -620,6 +620,40 @@ export function resolveProductRef(envelope: ProductSearchEnvelope | null | undef
 }
 
 /**
+ * An amount the model wrote on a lookup turn, kept only when it IS a
+ * candidate's own store price, and then written the store's way ("₪529").
+ * Any other amount is removed (2026-10-25, A02: asked "כמה עולה?", the reply
+ * read "ה-Chunky Cardigan עולה." because every amount was stripped, the true
+ * one included).
+ */
+function groundedAmount(written: string, env: ProductSearchEnvelope): string {
+  // The amount patterns also swallow a sentence's closing "." or "," ("₪799.").
+  const tail = /\d([.,]+)$/.exec(written)?.[1] ?? "";
+  const value = Number(written.slice(0, written.length - tail.length).replace(/[^\d.,]/g, "").replace(/,/g, ""));
+  if (!Number.isFinite(value) || value <= 0) return tail;
+  const c = env.candidates.find((x) => x.price !== undefined && Math.abs(Number(x.price) - value) < 0.005);
+  if (!c) return tail;
+  const n = Number.isInteger(value) ? value.toLocaleString("en-US") : value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sign: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€", GBP: "£" };
+  const cur = (c.currency ?? "").toUpperCase();
+  return (sign[cur] ? `${sign[cur]}${n}` : cur ? `${n} ${cur}` : n) + tail;
+}
+
+/**
+ * "Chunky Cardigan (Chunky Cardigan)": the model wrote a key and then its
+ * title in brackets, so once the key becomes the title the name prints twice.
+ */
+function dedupeTitleEcho(text: string, env: ProductSearchEnvelope): string {
+  let out = text;
+  for (const { title } of env.candidates) {
+    if (!title) continue;
+    const t = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp(`${t}\\s*\\(\\s*${t}\\s*\\)`, "g"), title);
+  }
+  return out;
+}
+
+/**
  * The model's own answer on a LOOKUP turn ("is the trench coat in M?",
  * 2026-10-25): the answer is the text and the product is the attachment, so
  * the prose is kept rather than replaced by a lead-in or a canned list. It goes
@@ -629,15 +663,16 @@ export function resolveProductRef(envelope: ProductSearchEnvelope | null | undef
  * nothing usable is left; the caller then renders as before.
  */
 export function renderLookupProse(modelText: string | null | undefined, env: ProductSearchEnvelope): string {
-  const prose = String(modelText ?? "")
+  const keep = (m: string) => groundedAmount(m, env);
+  const prose = dedupeTitleEcho(String(modelText ?? "")
     .replace(/PRODUCT_(\d+)/gi, (_, d) => {
       const n = Number(d);
       return n >= 1 && n <= env.candidates.length ? env.candidates[n - 1].title : "";
-    })
+    }), env)
     .replace(URL_RE, "")
-    .replace(MONEY_RE, "")
+    .replace(MONEY_RE, keep)
     // Hebrew amounts MONEY_RE does not know ("799 ש״ח", "799 שקל").
-    .replace(/\d[\d.,]*\s?(?:ש["״']?ח|שקלים|שקל)/g, "")
+    .replace(/\d[\d.,]*\s?(?:ש["״']?ח|שקלים|שקל)/g, keep)
     .replace(/[\u2013\u2014\u2015]/g, "-")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ +([.,:;!?])/g, "$1")
