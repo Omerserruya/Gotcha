@@ -376,3 +376,13 @@ describe("★ e10 X1/X2: no template where an answer can be", () => {
     expect(src).toContain('metadata: { type: "ai_bot_empty_reask"');
   });
 });
+
+describe("★ L01c Y4", () => {
+  it("the same reply again, word for word, is a repeat", () => {
+    expect(kinds("מעולה, שמחים שזה מתאים.", { previousReplies: ["מעולה, שמחים שזה מתאים."], incomingMessage: "סבבה" })).toContain("repeated_reply");
+    expect(kinds("מעולה 🙂", { previousReplies: ["מעולה, שמחים שזה מתאים."], incomingMessage: "סבבה" })).not.toContain("repeated_reply");
+  });
+  it("'לרצונך' is banned", () => {
+    expect(kinds("לרצונך שאציג את הכרטיס?")).toContain("banned_phrase");
+  });
+});

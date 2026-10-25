@@ -335,3 +335,20 @@ export function lastProductMention(rows: Array<{ direction: string; body?: strin
   }
   return null;
 }
+
+/**
+ * Does a customer message name a product or a category ("סוודר", "צעיף",
+ * "Canvas Tote")? Then it is about THAT, not the product shown last (eval L01c:
+ * "הכותנה נשמעת טוב, יש בנייבי?" was answered about the cardigan).
+ */
+export function namesProduct(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  if (/\b[A-Z][a-z]+(?: [A-Z][a-z]+)+\b/.test(t)) return true;
+  return /סוודר|סריג|קרדיגן|חולצ|טישירט|טי-שירט|גופי|מעיל|ז'קט|ג'קט|שמל|חצאית|מכנס|ג'ינס|צעיף|כובע|תיק|גרב|נעל|קפוצ'ון|הודי|טרנץ'|כותנה|צמר|פשתן|עור|ארנק|חגורה|\b(?:tee|t-shirt|shirt|top|coat|jacket|dress|skirt|pants|jeans|scarf|beanie|hat|bag|tote|socks?|hoodie|sweater|cardigan|knit)\b/i.test(t);
+}
+
+/** Hebrew shop words and the English the store's titles use (eval L01c: "תיק בד" is a canvas tote). */
+export const HEBREW_PRODUCT_GLOSSARY =
+  "Hebrew to the English titles use: תיק בד = canvas tote; תיק עור = leather bag; כובע גרב = beanie; קפוצ'ון / הודי = hoodie; " +
+  "סוודר / סריג = sweater, knit; קרדיגן = cardigan; גופיה = tank top; טישירט = tee, t-shirt; חולצה מכופתרת = shirt; " +
+  "מכנסיים = pants; ג'ינס = jeans; שמלה = dress; חצאית = skirt; מעיל = coat; טרנץ' = trench coat; ז'קט = jacket; צעיף = scarf; גרביים = socks.";

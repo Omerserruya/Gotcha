@@ -1,5 +1,6 @@
 import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
 import { localizedFallback } from "./escalation-language";
+import { emitEscalated } from "./notifications-emit";
 import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
@@ -219,15 +220,20 @@ export async function processAIBot(
       return false;
     }
     console.error("[AI-Bot] AI service /reply call failed:", err.response?.data || err.message);
+    // Our AI units ran out: a billing block, labelled as one, so whoever picks
+    // the conversation up sees why (eval L01c: it read as an AI failure).
+    const unitsOut = /^ai_units:/.test(String(err.response?.data?.error ?? ""));
     // NEVER leave the customer in silence: an AI-service failure/timeout hands
     // the conversation to a human with the warm handoff line. (The handoff
     // copy generator also lives in the AI service - escalateToHuman already
     // falls back to the agent's static escalationMessage when it's down.)
     try {
-      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
-        case: "ai_service_failure",
-        summary: "The AI could not produce a reply (service error or timeout), so the conversation was handed to a human.",
-      });
+      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, unitsOut
+        ? { case: `billing_blocked:${String(err.response?.data?.error).slice("ai_units:".length)}`, summary: "The workspace's AI units are used up, so the AI could not reply and the conversation was handed to a person." }
+        : {
+            case: "ai_service_failure",
+            summary: "The AI could not produce a reply (service error or timeout), so the conversation was handed to a human.",
+          });
       return true;
     } catch (escErr: any) {
       console.error("[AI-Bot] failure-escalation also failed:", escErr?.message);
@@ -360,6 +366,9 @@ export async function processAIBot(
     await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
       case: result.escalation.reason || "ai_decided",
       summary: result.escalation.summary,
+      // The AI announces the escalations it decides in a turn; a billing block
+      // returns before that, so the worker announces it.
+      notify: /^billing_blocked/.test(String(result.escalation.reason ?? "")),
     });
     return true;
   }
@@ -910,7 +919,7 @@ async function escalateToHuman(
   sendContext: SendContext,
   fallbackMessage: string,
   aiAgentId?: string,
-  reason?: { case: string; summary?: string },
+  reason?: { case: string; summary?: string; notify?: boolean },
 ): Promise<void> {
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
@@ -1031,6 +1040,12 @@ async function escalateToHuman(
     tenantId,
     data: { id: conversationId, isHandedOver: true, status: "WAITING", ...(reason ? { escalationCase: reason.case } : {}) },
   });
+
+  // Tell the team (the notifications service routes it), unless the AI turn
+  // that decided this escalation already did.
+  if (reason?.notify !== false) {
+    emitEscalated({ tenantId, conversationId, agentId: aiAgentId, reason: reason?.case ?? "handoff", summary: reason?.summary });
+  }
 }
 
 /**

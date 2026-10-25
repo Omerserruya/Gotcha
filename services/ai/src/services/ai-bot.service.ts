@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2847,7 +2847,7 @@ async function generateAIBotReplyInner(
           role: "system",
           content:
             `Enough information exists to search. Call ${disc.decision.tool} NOW. ` +
-            `The query argument matches product TITLE and is in ENGLISH, so set it to the singular English noun for what the customer asked ("shirt", "tank top", "coat"; never a store category name or another shop's example) and put nothing else in it - no price, no colour, no Hebrew. ` +
+            `The query argument matches product TITLE and is in ENGLISH, so set it to the singular English noun for what the customer asked ("shirt", "tank top", "coat"; never a store category name or another shop's example) and put nothing else in it (${HEBREW_PRODUCT_GLOSSARY}) - no price, no colour, no Hebrew. ` +
             // This used to end "apply budget/length/flex yourself when choosing
             // which products to present", which was the only option back when
             // the tool took a query and nothing else. It is now the bug: a
@@ -3115,7 +3115,10 @@ async function generateAIBotReplyInner(
   // A colour or size asked about the product just shown (eval L01: "בשחור?"
   // right after the beanie, answered "אין אישור לצבע"): its live options come
   // with the turn, so the answer needs no search and no guess.
-  if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage))) {
+  // Only when the message names no other product or category ("בשחור?", "ב-L?").
+  // A message that names one is about THAT product, and is searched instead
+  // (eval L01c: "הכותנה ... בנייבי?" got the cardigan's colours).
+  if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage)) && !namesProduct(opts.incomingMessage)) {
     const mention = lastProductMention(messages as any[]);
     let last: { productId: string; title: string } | null = mention?.productId ? { productId: mention.productId, title: mention.title } : null;
     if (mention && !mention.productId) {
