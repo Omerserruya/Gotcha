@@ -4897,6 +4897,7 @@ async function generateAIBotReplyInner(
           || priorOutbound.some((m) => /product/.test(String(m.messageType ?? ""))),
         shopFloor: isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }),
         toolsOffered: toolFunctionNames,
+        handedOff: !!pendingEscalation || toolCallLog.some((t) => t.tool === "escalate_to_human"),
         customerClosing: customerIsClosing(opts.incomingMessage),
         searchesAllEmpty: (() => {
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));

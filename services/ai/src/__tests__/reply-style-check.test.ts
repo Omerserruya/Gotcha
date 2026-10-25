@@ -40,7 +40,9 @@ describe("★ the eval's failures are caught", () => {
     expect(kinds("רוצה שנשמור לך את המידה?")).toContain("promise");
     expect(kinds("אבדוק מול הסטודיו ואחזור אליך")).toContain("promise");
     expect(kinds("נציג יחזור אליך", { toolsOffered: [] })).toContain("promise");
-    expect(kinds("נציג יחזור אליך", { toolsOffered: ["escalate_to_human"] })).not.toContain("promise");
+    // Offering the tool is not enough: only a handoff that happened this turn.
+    expect(kinds("נציג יחזור אליך", { toolsOffered: ["escalate_to_human"] })).toContain("promise");
+    expect(kinds("נציג יחזור אליך", { toolsOffered: ["escalate_to_human"], handedOff: true })).not.toContain("promise");
   });
   it("Noa's invented colours: an attribute with no product result, only on a shop floor", () => {
     expect(kinds("יש אותו בשחור ובנייבי", { productFactsAvailable: false })).toContain("ungrounded_attribute");
@@ -140,5 +142,24 @@ describe("★ e5 S1: an empty search is never 'we don't have it'", () => {
   it("allowed when a search did find the product out of stock, and 'לא מצאתי' is fine", () => {
     expect(kinds("השמלה אזלה במידה M", { searchesAllEmpty: false })).not.toContain("false_absence");
     expect(kinds("לא מצאתי מעיל בשם הזה, אפשר לחפש לפי צבע?", { searchesAllEmpty: true })).not.toContain("false_absence");
+  });
+});
+
+describe("★ e5 S4: past-tense phantom actions", () => {
+  it.each(["שמרנו את המידה S ונשלח את כרטיס המוצר", "שריינתי לך את הזוג", "רשמתי לנציג שיחזור אליך", "העברנו לצוות הסטודיו"])("%s", (t) => {
+    expect(kinds(t)).toContain("promise");
+  });
+  it("a real handoff this turn may be stated", () => {
+    expect(kinds("העברנו לצוות, הם ימשיכו מכאן", { handedOff: true })).not.toContain("promise");
+  });
+});
+
+describe("★ e5 S3: ending on an offer to check", () => {
+  it.each(["במידה M יש בבז'. לבדוק זמינות בצבע אחר?", "יש ב-S. רוצה שאבדוק אם יש בחום במידה M?", "אפשר לבדוק את זה?"])("%s", (t) => {
+    expect(kinds(t)).toContain("offer_to_check");
+  });
+  it("a real question to the customer is fine", () => {
+    expect(kinds("איזו מידה מחפשים?")).not.toContain("offer_to_check");
+    expect(kinds("יש ב-S ו-M בבז'.")).not.toContain("offer_to_check");
   });
 });

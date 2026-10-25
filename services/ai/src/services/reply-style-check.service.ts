@@ -24,7 +24,8 @@ export type StyleViolationKind =
   | "promise"
   | "two_questions"
   | "question_after_thanks"
-  | "false_absence";
+  | "false_absence"
+  | "offer_to_check";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -43,8 +44,10 @@ export interface StyleCheckContext {
   productFactsAvailable: boolean;
   /** A shop's employee: only there are size, colour, price and stock product facts. */
   shopFloor: boolean;
-  /** Tools offered this turn (a handoff tool licenses "a person will pick it up"). */
+  /** Tools offered this turn. */
   toolsOffered: string[];
+  /** A handoff to a person actually happened this turn (only that licenses "a person will get back to you"). */
+  handedOff?: boolean;
   /** The customer just said thanks or goodbye. */
   customerClosing: boolean;
   /** Every product search this turn came back empty (no title matched). */
@@ -77,9 +80,11 @@ const PRICE = /[₪$€]\s?\d|\d\s?(?:₪|ש["״']?ח|שקל|ILS)/i;
 const STOCK = w("במלאי|אזל|אזלה|אזלו|נגמר|זמין|זמינה|זמינים") ;
 
 /** Commitments with no tool behind them on a shop floor. */
-const RESERVE = w("נשמור לך|אשמור לך|לשמור לך|לשמור עבורך|נשמור עבורך|אשמור עבורך|נשמור את המידה|לשריין|נשריין|אשריין");
+const RESERVE = w("נשמור לך|אשמור לך|לשמור לך|לשמור עבורך|נשמור עבורך|אשמור עבורך|נשמור את המידה|לשריין|נשריין|אשריין|שמרנו|שמרתי|שריינו|שריינתי|רשמנו לך|רשמתי לך|רשמתי לנציג|רשמנו לנציג");
 const FOLLOW_UP = w("אחזור אליך|נחזור אליך|אחזור אלייך|אעדכן אותך|נעדכן אותך|אבדוק ואחזור|נבדוק ונחזור|אבדוק מול|נבדוק מול|אצור קשר|ניצור קשר|נתקשר|אתקשר");
-const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך");
+const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך|העברנו|העברתי|העברנו לצוות|להעביר לצוות|מעבירים לצוות");
+/** Ending on an offer to go and check what a tool could check now: "לבדוק אם יש בחום?". */
+const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
 
 /** Saying the store lacks something, or has none in stock. */
 const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
@@ -132,8 +137,8 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   }
 
   hit("promise", plain.match(RESERVE) ?? plain.match(FOLLOW_UP));
-  const canHandOff = ctx.toolsOffered.some((t) => /escalate|handoff|hand_off/.test(t));
-  if (!canHandOff) hit("promise", plain.match(HANDOFF_PROMISE));
+  if (!ctx.handedOff) hit("promise", plain.match(HANDOFF_PROMISE));
+  if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK));
 
   // "We don't have it" on an empty TITLE search is false (eval e5 S1).
   if (ctx.searchesAllEmpty) hit("false_absence", plain.match(ABSENCE));
@@ -157,6 +162,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
+  offer_to_check: { he: "Do not end by offering to check: either you know it now (say it) or nothing needs asking. Remove the offer; end on the answer.", en: "Do not end by offering to check; end on the answer." },
   false_absence: { he: "The search found no product TITLE by that word; that does not mean the store lacks it. Never say it is out of stock or that we don't have it: say you could not find it by that name (\"לא מצאתי\") and offer another way to look.", en: "Never say it is out of stock or not carried: say you could not find it by that name." },
   question_after_thanks: { he: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"בכיף 🙂\", \"בשמחה, יום טוב!\"). No offer, no product, no next step.", en: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"Anytime 🙂\"). No offer, no product, no next step." },
 };
