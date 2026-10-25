@@ -936,7 +936,10 @@
       "waContinue": "Continue on WhatsApp",
       "waType": "Type a message",
       "now": "now",
-      "replies": "replies right away"
+      "replies": "replies right away",
+      "frameTitle": "Widget preview",
+      "frameLoading": "Loading the widget…",
+      "frameFailed": "We couldn't load the widget. The preview shows the real widget, so there is no drawn stand-in."
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",

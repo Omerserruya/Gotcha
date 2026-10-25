@@ -1012,6 +1012,39 @@
     inset-inline: auto 14px;
   }
 
+  /*
+   * The real widget (WidgetFrame): its own panel, drawn by the chat bundle in
+   * a window of a visitor's size, above the launcher. The window is
+   * transparent; the panel inside it is the widget's own.
+   */
+  .frame {
+    inset-block: 0 76px;
+    inline-size: min(400px, 100%);
+  }
+
+  /* With a pop-up on the stage, the widget stops above it: nothing drawn over the composer. */
+  .stage[data-teaser] .frame {
+    inset-block-end: 176px;
+  }
+
+  .frameWindow {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+    background: transparent;
+  }
+
+  .frameNote {
+    position: absolute;
+    inset-block-start: 40%;
+    inset-inline: 16px;
+    margin: 0;
+    font-size: 12.5px;
+    text-align: center;
+    color: var(--text-subtle);
+  }
+
   /* The chat widget: 270 × 520, radius 18. */
   .widget {
     display: flex;

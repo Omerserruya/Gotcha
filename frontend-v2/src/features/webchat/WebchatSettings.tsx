@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ArrowLeft,
   Globe,
   ImageIcon,
   MessageCircle,
@@ -10,7 +9,7 @@ import {
   SendHorizontal,
   ShoppingBag,
 } from 'lucide-react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import {
   useEffect,
   useSyncExternalStore,
@@ -54,7 +53,7 @@ import type { ShopifyAvailability } from '@/features/capabilities/load-capabilit
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { appPath } from '@/lib/base-path';
-import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-mark';
+import { brandInitial, initials, inkOn } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
 import {
@@ -72,6 +71,7 @@ import {
 } from './website-widget-actions';
 import styles from './Webchat.module.css';
 import { WidgetAssignmentCard } from './WidgetAssignment';
+import { WidgetFrame } from './WidgetFrame';
 import { WooPlugin } from './WooPlugin';
 
 /** How long the editor waits after the last change before saving it. */
@@ -1684,17 +1684,21 @@ function Preview({
   readonly employeeName: string | null;
 }) {
   const t = useTranslations('channels.webchat.preview');
+  const locale = useLocale();
+  // The widget's own language; "auto" previews in the language of this screen.
+  const language =
+    config.appearance.language === 'auto'
+      ? locale === 'he'
+        ? 'he'
+        : 'en'
+      : config.appearance.language;
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
   const name =
     (config.nameSource === 'employee' ? employeeName : config.ux.welcome.assistantName)?.trim() ||
     t('assistant');
-  const mark = brandMark(business ?? name);
   // The bubble's and the pop-up's mark: the brand's initial, as the live widget draws it.
   const initial = brandInitial(business ?? name);
   const ink = inkOn(colour);
-  // Sized by its longest word, never broken inside one; initials when none fits.
-  const fit = logoFit(mark.logo);
-  const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
   const whatsapp = config.ux.kind === 'whatsapp' || config.ux.look === 'whatsapp';
   const teaser = config.ux.proactive.enabled ? config.ux.proactive.message.trim() : '';
   const greeting = config.ux.welcome.title.trim();
@@ -1712,7 +1716,11 @@ function Preview({
         ★★ W2 (design 7): a store page with the widget on it - the widget at
         the top, its pop-up and button at the bottom, on its side.
       */}
-      <div className={styles.stage} data-side={config.ux.launcher.position}>
+      <div
+        className={styles.stage}
+        data-side={config.ux.launcher.position}
+        data-teaser={teaser ? '' : undefined}
+      >
         {whatsapp ? (
           /*
             The WhatsApp widget: WhatsApp's panel - its greeting, a composer
@@ -1750,70 +1758,14 @@ function Preview({
             </span>
           </div>
         ) : (
-          <div className={`${styles.pin} ${styles.widget}`} data-testid="webchat-preview-widget">
-            <div className={styles.hero} data-testid="webchat-preview-cover">
-              {config.ux.hero.mediaUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
-              ) : (
-                <ImageIcon size={16} aria-hidden="true" />
-              )}
-              {handoff ? (
-                // Design 7: the WhatsApp action on the cover, when the button will show.
-                <span
-                  className={styles.heroWa}
-                  title={t('waContinue')}
-                  data-testid="webchat-preview-wa-button"
-                >
-                  <MessageCircle size={13} aria-hidden="true" />
-                </span>
-              ) : null}
-            </div>
-            <span className={styles.logoRow}>
-              <span
-                className={styles.logo}
-                data-fit={config.appearance.logoUrl ? undefined : fit}
-                data-testid="webchat-preview-logo"
-              >
-                {config.appearance.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={config.appearance.logoUrl} alt="" />
-                ) : fit === 'initials' ? (
-                  initials(business ?? name)
-                ) : (
-                  mark.logo
-                )}
-              </span>
-            </span>
-            <span className={styles.assistant} data-testid="webchat-preview-name">
-              <bdi dir="auto">{name}</bdi>
-            </span>
-            <ul className={styles.questions} data-testid="webchat-preview-questions">
-              {questions.map((q, i) => (
-                <li key={i}>
-                  <bdi dir="auto">{q}</bdi>
-                  {/* The live widget's rows carry an arrow (supervisor, dev). */}
-                  <ArrowLeft size={12} aria-hidden="true" />
-                </li>
-              ))}
-            </ul>
-            <div className={styles.composerArea}>
-              <span className={styles.composer}>
-                <span>{t('type')}</span>
-                <span
-                  className={styles.send}
-                  style={{ backgroundColor: colour, color: ink }}
-                  aria-hidden="true"
-                  data-testid="webchat-preview-send"
-                >
-                  <ArrowLeft size={14} />
-                </span>
-              </span>
-              <span className={styles.powered} data-testid="webchat-preview-powered">
-                <PoweredBy />
-              </span>
-            </div>
-          </div>
+          /* The real widget: the chat bundle the site loads, booted on this draft. */
+          <WidgetFrame
+            config={config}
+            employeeName={employeeName}
+            handoff={handoff}
+            language={language}
+            business={business}
+          />
         )}
         {teaser ? (
           whatsapp ? (

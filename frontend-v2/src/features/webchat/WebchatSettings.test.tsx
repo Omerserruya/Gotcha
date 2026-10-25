@@ -32,6 +32,30 @@ const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn(), loadWidgetPromot
 const browser = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('@/api/client/browser-api', () => ({ browserApi: browser }));
 vi.mock('./website-widget-actions', () => actions);
+/*
+ * The real widget runs in an iframe jsdom cannot boot. In its place: exactly
+ * what the settings would boot it with (previewWidget), so a test reads the
+ * draft the merchant would see in the real widget.
+ */
+vi.mock('./WidgetFrame', async (load) => {
+  const real = await load<typeof Frame>();
+  return {
+    ...real,
+    WidgetFrame: (props: Parameters<typeof real.WidgetFrame>[0]) => (
+      <pre data-testid="webchat-preview-widget">
+        {JSON.stringify(real.previewWidget(props.config, props))}
+      </pre>
+    ),
+  };
+});
+/** What the real widget would be booted with, as read from the stub. */
+const booted = () =>
+  JSON.parse(screen.getByTestId('webchat-preview-widget').textContent ?? '{}') as {
+    welcome: { assistantName: string; suggestedQuestions: string[] };
+    appearance: { showPoweredBy: boolean };
+    features: { whatsappHandoff: boolean };
+    brand: { name: string; initial: string } | null;
+  };
 const channelActions = vi.hoisted(() => ({ connectWebChat: vi.fn() }));
 vi.mock('@/features/channels/actions', () => channelActions);
 // The existing install (10 / 00g), tested where it lives: here, only that it is the one used.
@@ -49,6 +73,7 @@ import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-m
 
 import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
+import type * as Frame from './WidgetFrame';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
   data: {
@@ -240,7 +265,7 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     fireEvent.change(screen.getByTestId('webchat-question-1'), {
       target: { value: 'Can I exchange?' },
     });
-    expect(screen.getByTestId('webchat-preview-questions')).toHaveTextContent('Can I exchange?');
+    expect(booted().welcome.suggestedQuestions).toContain('Can I exchange?');
     await pause();
     expect(bodyOfWidget(sentAt()).ux.welcome.suggestedQuestions).toEqual([
       'Where is my order?',
@@ -608,11 +633,13 @@ describe("★ the preview's marks come from one name - the business's", () => {
     show('appearance');
     // The launcher carries the initial now (design 7; supervisor, 2026-10-14).
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^A$/);
-    expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
+    // The widget draws its own wordmark from the brand it is booted with.
+    expect(booted().brand).toEqual({ name: 'Aviv & Co.', initial: 'A' });
   });
 
   it('★★ the logo is sized by its longest word, never broken in one; initials when none fits', () => {
-    // dev: "URBAN SUPPL / Y" across three lines in the circle.
+    // dev: "URBAN SUPPL / Y" across three lines in the circle. The rules the
+    // drawn launcher and pop-up still use; the widget's own logo is the widget's.
     expect(logoFit('AVIV & CO.')).toBe('l');
     expect(logoFit('URBAN SUPPLY')).toBe('m');
     expect(logoFit('LUMIÈRE')).toBe('s');
@@ -620,36 +647,6 @@ describe("★ the preview's marks come from one name - the business's", () => {
     expect(initials('Urban Supply - GOTCHA demo store')).toBe('US');
     expect(initials('Aviv & Co.')).toBe('AC');
     expect(initials('Lumièreparis')).toBe('LU');
-    const { unmount } = render(
-      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
-        <WebchatSettings
-          initial={config}
-          assigned={null}
-          install={install()}
-          shopifyData="ok"
-          shopifyAvailability={null}
-          business="Urban Supply - GOTCHA demo store"
-          tab="appearance"
-        />
-      </NextIntlClientProvider>,
-    );
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveAttribute('data-fit', 'm');
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent('URBAN SUPPLY');
-    unmount();
-    render(
-      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
-        <WebchatSettings
-          initial={config}
-          assigned={null}
-          install={install()}
-          shopifyData="ok"
-          shopifyAvailability={null}
-          business="Lumièreparis"
-          tab="appearance"
-        />
-      </NextIntlClientProvider>,
-    );
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent(/^LU$/);
   });
 
   it('★ the mark sits ABOVE the cover it overlaps (dev: "URBAN" was under the cover, 4cbbcc0)', () => {
@@ -890,11 +887,11 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
   it('the preview shows the WhatsApp action only when the button will show', () => {
     const { unmount } = show('behaviour', { numbers: [NUMBERS[1]!] });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
-    expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
+    expect(booted().features.whatsappHandoff).toBe(false);
     unmount();
     show('behaviour', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
-    expect(screen.getByTestId('webchat-preview-wa-button')).toBeInTheDocument();
+    expect(booted().features.whatsappHandoff).toBe(true);
   });
 
   it('★ a stored choice of a number that cannot take it: no button in the preview, and said', () => {
@@ -966,9 +963,8 @@ describe('★★ W8 (2026-10-14) - "Powered by GOTCHA" is always on, with our lo
     show('appearance', {
       initial: { ...config, appearance: { ...config.appearance, showPoweredBy: false } },
     });
-    const line = screen.getByTestId('webchat-preview-powered');
-    expect(line).toHaveTextContent('Powered by');
-    expect(line.querySelector('img')).toHaveAttribute('alt', 'GOTCHA');
+    // The real widget is booted with it on (W8), whatever the server once said.
+    expect(booted().appearance.showPoweredBy).toBe(true);
   });
 });
 
@@ -1305,16 +1301,11 @@ describe('★ dev, 2026-10-14: after an upload, Remove is still there - and the 
 });
 
 describe('★★ W2 (2026-10-14) - the preview is design 7’s', () => {
-  it('★ the chat widget: cover, logo disc, name, the questions as rows with the live widget’s arrow, the composer and powered-by', () => {
+  it('★★ the chat widget is the real one, booted on the draft; the pop-up and the button stay on the stage', () => {
     show('appearance');
     const widget = screen.getByTestId('webchat-preview-widget');
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-cover'));
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-logo'));
-    expect(screen.getByTestId('webchat-preview-questions').querySelectorAll('li')).toHaveLength(1);
-    // The live widget's rows carry an arrow; the preview matches it (supervisor, dev).
-    const rows = screen.getByTestId('webchat-preview-questions').querySelectorAll('li');
-    expect(Array.from(rows).every((li) => li.querySelector('svg') !== null)).toBe(true);
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-powered'));
+    expect(booted().welcome.assistantName).toBe(config.ux.welcome.assistantName);
+    expect(booted().welcome.suggestedQuestions).toHaveLength(1);
     // The pop-up and the button sit on the stage, outside the widget.
     expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-bubble'));
     expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-launcher'));
@@ -1375,10 +1366,6 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     const launcher = screen.getByTestId('webchat-preview-launcher');
     expect(launcher).toHaveTextContent(/^A$/);
     expect(launcher).toHaveStyle({ backgroundColor: '#f5e6c8', color: '#2B2622' });
-    expect(screen.getByTestId('webchat-preview-send')).toHaveStyle({
-      backgroundColor: '#f5e6c8',
-      color: '#2B2622',
-    });
     expect(launcher.querySelector('span[aria-hidden="true"]')).not.toBeNull();
   });
 
