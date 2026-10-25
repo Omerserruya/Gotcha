@@ -798,22 +798,26 @@ export function styleContract(locale: string | null | undefined): string {
         filler: '"אשמח לעזור", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "אל תהסס", "יש לך שאלות נוספות?", "המוצר זמין במלאי", "תודה על פנייתך"',
         plain: '"יש ב-M", "כדי", "אם"',
         passive: '"אני כאן אם צריך", "במה אוכל לעזור?"',
+        reflex: 'No reflex opener word ("אז", "סבבה", "מעולה", "תכלס") unless something was really agreed, no sign-off ("בברכה"), no small talk ("מה נשמע?") with someone who came for an answer.',
       }
     : {
         close: '"Anytime 🙂", "Glad to help, have a good one"',
         filler: '"Happy to help", "Absolutely", "Great question", "I hope this helps", "Please don\'t hesitate", "Do you have any other questions?", "Thank you for reaching out"',
         plain: '"We have it in M"',
         passive: '"I\'m here if you need anything", "How can I help you today?"',
+        reflex: 'No reflex opener word ("So", "Great", "Perfect") unless something was really agreed, and no email-style sign-off.',
       };
   return [
     "# Style (read last, follow exactly)",
     "- Length: one or two short sentences. More only when the customer asked for detail or steps.",
     "- Answer exactly what was asked, then stop. Never dump a whole policy; quote only the part that answers the question.",
     "- At most ONE question, and only when you need the answer to help. Answering and stopping is fine.",
+    "- When they share a problem or a feeling, acknowledge it in a few words first, then the fix.",
     `- After a thank-you or a goodbye: a short warm close and no question (${ex.close}).`,
     "- After the first reply never open with a greeting, your name, or a reflex \"כן\"/\"yes\" (see the state note). Start with the substance.",
     `- Don't restate what the customer said. No filler or translated phrases: ${ex.filler}. Say it like a person: ${ex.plain}.`,
-    `- No passive opener or closer: ${ex.passive}.`,
+    `- No passive opener or closer: ${ex.passive}. ${ex.reflex}`,
+    "- Vary your wording: never reuse an opener or a phrase from your recent replies. At most one \"!\" in a message.",
     "- Address the customer neutrally (no gendered verbs, no slash forms) unless the state note gives their form; don't use their name as a habit.",
     "- Prices as \"₪529\". Plain hyphens only; never a dash between clauses.",
     "- Before sending: would a good human agent at THIS business send exactly this, this short? If not, rewrite once.",
@@ -1104,15 +1108,16 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     lines.push(
       "You may know the customer's first name from the **Context** block. Do not make a habit of using it: at most once, at a natural moment, never as an opener in every reply. Never use placeholders like \"customer\" or \"sir/ma'am\".",
     );
-    lines.push("");
-    lines.push(
-      "**Mirror their greeting**: if the customer says \"היי\" reply \"היי!\" - not \"תודה\". \"Thanks\" is for after they did something. Match their register (formal/casual). If they did not greet, do not greet: answer.",
-    );
+    // Greeting rules live in the state note and the Style block (one place).
   }
 
   // Identity block (free-form override from agent config).
   const identityObj = asRecord(a.identity);
   if (identityObj) {
+    // Its own heading: without one, the store's policies read as part of the
+    // section before them ("Addressing the customer").
+    lines.push("");
+    lines.push("## Your role and this business's policies");
     if (typeof identityObj.role === "string" && identityObj.role.trim()) {
       lines.push(`Role: ${identityObj.role.trim()}`);
     }

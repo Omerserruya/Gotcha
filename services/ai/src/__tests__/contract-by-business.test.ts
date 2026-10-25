@@ -76,7 +76,7 @@ describe("★ style is the last thing the model reads, about ten lines, in the b
     const style = p.lastIndexOf("# Style (read last, follow exactly)");
     expect(style).toBeGreaterThan(p.lastIndexOf("# The shop floor"));
     expect(style).toBeGreaterThan(p.lastIndexOf("# Response Quality Contract"));
-    expect(p.slice(style).split("\n").filter((l) => l.startsWith("- ")).length).toBeLessThanOrEqual(11);
+    expect(p.slice(style).split("\n").filter((l) => l.startsWith("- ")).length).toBeLessThanOrEqual(13);
   });
   it("Hebrew examples for a Hebrew business: a warm close after a thank-you, the Hebrew tells", () => {
     expect(p).toContain('"בכיף 🙂"');
