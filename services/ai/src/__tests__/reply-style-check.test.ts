@@ -163,3 +163,58 @@ describe("★ e5 S3: ending on an offer to check", () => {
     expect(kinds("יש ב-S ו-M בבז'.")).not.toContain("offer_to_check");
   });
 });
+
+describe("★ e5 S6", () => {
+  it("another script inside a Hebrew reply", () => {
+    expect(kinds("אם تريد אפשר לראות עוד")).toContain("foreign_script");
+    expect(kinds("יש Chunky Cardigan ב-M")).not.toContain("foreign_script");
+  });
+  it("her own question, word for word, again", () => {
+    expect(kinds("מה מספר ההזמנה?", { previousReplies: ["אוי, מבאס. מה מספר ההזמנה?"] })).toContain("repeated_question");
+    expect(kinds("מה מספר ההזמנה?", { previousReplies: ["איזו מידה?"] })).not.toContain("repeated_question");
+  });
+  it.each(["עשה רושם שזה מתאים", "חקרתי במלאי וזיהיתי", "טוב שאלה"])("odd phrasing: %s", (t) => {
+    expect(kinds(t)).toContain("banned_phrase");
+  });
+  it("semicolons become commas, an HTML entity is left alone", async () => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    expect(polishReply("יש ב-S ו-M; L אזל", { locale: "he" })).toBe("יש ב-S ו-M, L אזל");
+    expect(polishReply("Jackets &amp; Coats", { locale: "en" })).toBe("Jackets &amp; Coats");
+  });
+  it("a 'בכיף 🙂' tacked onto a non-thanks reply is removed", async () => {
+    const { stripStrayClose } = await import("../services/reply-style-check.service");
+    expect(stripStrayClose("יש במידה M בשחור. בכיף 🙂", "יש בשחור?")).toBe("יש במידה M בשחור.");
+    expect(stripStrayClose("בכיף 🙂", "תודה!")).toBe("בכיף 🙂");
+  });
+});
+
+describe("★ e6 regressions", () => {
+  it("R-a: 'יש גרביים?' is not a goodbye", async () => {
+    const { customerIsClosing } = await import("../services/objectives");
+    expect(customerIsClosing("יש גרביים?")).toBe(false);
+    expect(customerIsClosing("ביי!")).toBe(true);
+    expect(customerIsClosing("תודה, יום טוב")).toBe(true);
+  });
+  it("R-c: two words with a slash are a list, not a gender form", () => {
+    expect(kinds("משלוח לאירופה/בריטניה לוקח 5-8 ימים")).not.toContain("slash_form");
+    expect(kinds("תרצה/י לראות?")).toContain("slash_form");
+    expect(kinds("אתה/את מעדיף/ה כותנה?")).toContain("slash_form");
+  });
+  it("R-b, R-c: the regen corrective is a system message that names the language", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    const at = src.indexOf("buildStyleCorrective(violations, replyLocale) +");
+    expect(src.slice(at - 200, at)).toContain('role: "system"');
+    expect(src.slice(at, at + 300)).toContain('Write the reply in ${replyLocale === "he" ? "Hebrew" : "English"}');
+  });
+});
+
+describe("★ e6: no phantom add-to-cart", () => {
+  it.each(["נוסיף אותו לסל עבורך?", "רוצים שאוסיף לך את המידה M לעגלה?"])("%s", (t) => {
+    expect(kinds(t)).toContain("promise");
+  });
+  it("pointing at the card's button is fine", () => {
+    expect(kinds("אפשר להוסיף לסל ישר מהכרטיס")).not.toContain("promise");
+  });
+});

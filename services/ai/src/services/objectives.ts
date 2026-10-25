@@ -1083,7 +1083,9 @@ export function isNonAdvancingReply(reply: string | null | undefined): boolean {
 
 // Genuine customer farewell → a close is legitimate, do NOT force a regenerate.
 // Note: "לא" / "no" is NOT a farewell - it's a non-answer the agent must lead past.
-const CUSTOMER_FAREWELL = /\b(bye|goodbye|that'?s all|thanks,? bye|no thanks)\b|ביי|להתראות|יום טוב|תודה רבה ביי|סגור תודה|זהו תודה/i;
+// Hebrew alternatives as whole words: "גרביים" (socks) contains "ביי", and "יש
+// גרביים?" was read as a goodbye (eval e6 A05: answered "בכיף 🙂").
+const CUSTOMER_FAREWELL = /\b(bye|goodbye|that'?s all|thanks,? bye|no thanks)\b|(?<![\u0590-\u05FF])(?:ביי|להתראות|יום טוב|תודה רבה ביי|סגור תודה|זהו תודה)(?![\u0590-\u05FF])/i;
 
 // A bare thank-you closes the exchange too (2026-10-25, eval E04): after
 // "תודה רבה!" the gate forced another question. A human says "בכיף 🙂" and stops.

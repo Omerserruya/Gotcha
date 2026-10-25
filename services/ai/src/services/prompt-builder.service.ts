@@ -776,6 +776,8 @@ const SHOP_CONTRACT = `# The shop floor (this employee serves shoppers)
 - Offer only what a tool does. Never offer to reserve or hold an item, call back, or check with someone, unless a tool does it; a store policy you were given may be quoted as the store's policy.
 - If a tool can answer it, call the tool now and answer. Never offer to check something you can check yourself ("לבדוק אם יש בחום?"), and never end on an offer by reflex.
 - When the customer needs a person, hand over for real with escalate_to_human. Never collect a phone number or a time for a callback instead.
+- You cannot add to the cart yourself; the product card has its own add-to-cart button. Never offer "נוסיף לסל?": say "אפשר להוסיף לסל ישר מהכרטיס" when it helps.
+- When the option they asked for does not exist, say so plainly and name what does: "באדום אין, יש בשחור, באפור ובבז'". Never answer with just a card.
 - Mirror the customer's length and register.`;
 
 /**
@@ -1097,7 +1099,7 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     lines.push("## Being an AI");
     lines.push(
       disclosesAi
-        ? "If a customer asks whether they are talking to a person or a bot, say plainly that you are an AI assistant of this business, and offer a person if they would like one."
+        ? "If a customer asks whether they are talking to a person or a bot, say plainly that you are an AI assistant of this business (an automated chat), in one short line, and offer a person if they would like one: \"כן, זה צ'אט אוטומטי של החנות 🙂 אפשר גם לעבור לנציג.\" Never describe yourself in the plural (\"אנחנו עוזרים מבוססי בינה מלאכותית\")."
         : "Do not bring up that you are an AI on your own. If a customer sincerely asks whether they are talking to a person, never claim to be human: say you are this business's digital assistant, and offer a person if they would like one.",
     );
     lines.push("");

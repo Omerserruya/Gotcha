@@ -25,7 +25,9 @@ export type StyleViolationKind =
   | "two_questions"
   | "question_after_thanks"
   | "false_absence"
-  | "offer_to_check";
+  | "offer_to_check"
+  | "foreign_script"
+  | "repeated_question";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -52,6 +54,8 @@ export interface StyleCheckContext {
   customerClosing: boolean;
   /** Every product search this turn came back empty (no title matched). */
   searchesAllEmpty?: boolean;
+  /** The employee's own last replies, newest last. */
+  previousReplies?: string[];
 }
 
 const HE = "\\u0590-\\u05FF";
@@ -62,11 +66,14 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
-/** "תרצה/י", "אתה/את", "מעדיף/ה": a slash inside or between Hebrew words. */
-const SLASH = new RegExp(`[${HE}]{1,12}\\/[${HE}]{1,6}`, "u");
+/**
+ * "תרצה/י", "אתה/את", "מעדיף/ה": a gender ending after a slash, 1-3 letters.
+ * Two whole words ("אירופה/בריטניה", eval e6 F02) are a list, not a form.
+ */
+const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}])|(?<![${HE}])(?:אתה\\/את|את\\/ה)(?![${HE}])`, "u");
 /** Second-person forms that choose a gender, addressed to the customer. */
 const MASC_TO_CUSTOMER = w("שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
 const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
@@ -81,6 +88,9 @@ const STOCK = w("במלאי|אזל|אזלה|אזלו|נגמר|זמין|זמינ�
 
 /** Commitments with no tool behind them on a shop floor. */
 const RESERVE = w("נשמור לך|אשמור לך|לשמור לך|לשמור עבורך|נשמור עבורך|אשמור עבורך|נשמור את המידה|לשריין|נשריין|אשריין|שמרנו|שמרתי|שריינו|שריינתי|רשמנו לך|רשמתי לך|רשמתי לנציג|רשמנו לנציג");
+/** Adding to the cart: the card's button does it, never the employee (eval e6 A01, A02, A04). */
+const ADD_TO_CART = w("אוסיף|נוסיף|שאוסיף|שנוסיף|להוסיף לך|להוסיף עבורך");
+const CART = /לסל|לעגלה|לסלסלה|to (?:your |the )?cart/i;
 const FOLLOW_UP = w("אחזור אליך|נחזור אליך|אחזור אלייך|אעדכן אותך|נעדכן אותך|אבדוק ואחזור|נבדוק ונחזור|אבדוק מול|נבדוק מול|אצור קשר|ניצור קשר|נתקשר|אתקשר");
 const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך|העברנו|העברתי|העברנו לצוות|להעביר לצוות|מעבירים לצוות");
 /** Ending on an offer to go and check what a tool could check now: "לבדוק אם יש בחום?". */
@@ -93,6 +103,15 @@ const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?
 const NAME_MISSPELLINGS: Record<string, RegExp> = {
   noa: w("נועא|נואה|נוע'ה|נועע"),
 };
+
+/** The last question in a text, normalised, or null. */
+function lastQuestion(text: string): string | null {
+  const parts = String(text ?? "").split(/(?<=[?؟])/);
+  const q = parts.filter((p) => /[?؟]\s*$/.test(p)).pop();
+  if (!q) return null;
+  const n = q.split(/[.!\n]/).pop()!.replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+  return n.length >= 6 ? n : null;
+}
 
 function sentences(text: string): number {
   return text.split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter((s) => s.length > 1).length;
@@ -137,11 +156,19 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   }
 
   hit("promise", plain.match(RESERVE) ?? plain.match(FOLLOW_UP));
+  if (CART.test(plain)) hit("promise", plain.match(ADD_TO_CART));
   if (!ctx.handedOff) hit("promise", plain.match(HANDOFF_PROMISE));
   if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK));
 
   // "We don't have it" on an empty TITLE search is false (eval e5 S1).
   if (ctx.searchesAllEmpty) hit("false_absence", plain.match(ABSENCE));
+
+  // Another script inside a Hebrew reply: "אם تريد" (eval e5 H01).
+  if (ctx.locale === "he") hit("foreign_script", plain.match(/[\u0600-\u06FF\u0400-\u04FF]+/u));
+
+  // Asking again, word for word, what she already asked (eval e5 D02, D03).
+  const ask = lastQuestion(plain);
+  if (ask && (ctx.previousReplies ?? []).some((r) => lastQuestion(r) === ask)) hit("repeated_question", ask);
 
   const questions = (plain.match(/[?؟]/g) ?? []).length;
   if (questions > 1) hit("two_questions", `${questions} questions`);
@@ -162,6 +189,8 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
+  foreign_script: { he: "A word in another script slipped in. Write the whole reply in Hebrew.", en: "A word in another script slipped in; keep one language." },
+  repeated_question: { he: "You already asked exactly this. Do not repeat it: answer what they said, or move on.", en: "You already asked exactly this; do not repeat it." },
   offer_to_check: { he: "Do not end by offering to check: either you know it now (say it) or nothing needs asking. Remove the offer; end on the answer.", en: "Do not end by offering to check; end on the answer." },
   false_absence: { he: "The search found no product TITLE by that word; that does not mean the store lacks it. Never say it is out of stock or that we don't have it: say you could not find it by that name (\"לא מצאתי\") and offer another way to look.", en: "Never say it is out of stock or not carried: say you could not find it by that name." },
   question_after_thanks: { he: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"בכיף 🙂\", \"בשמחה, יום טוב!\"). No offer, no product, no next step.", en: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"Anytime 🙂\"). No offer, no product, no next step." },
@@ -203,6 +232,8 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     const t = `\u0000${i}\u0000`;
     out = out.split(`${t} (${t})`).join(t).split(`${t}, ${t}`).join(t).split(`${t} ${t}`).join(t);
   }
+  // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
+  out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
   if (opts.locale !== "he") return out.replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
   out = out
     .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
@@ -239,4 +270,14 @@ export function closingReplyFor(incomingMessage: string, locale: "he" | "en"): s
   if (/[\u0600-\u06FF]/.test(incomingMessage)) return bye ? "مع السلامة!" : "العفو 🙂";
   if (locale === "he") return bye ? "בשמחה, יום טוב!" : "בכיף 🙂";
   return bye ? "Anytime, have a good one!" : "Anytime 🙂";
+}
+
+/**
+ * "בכיף 🙂" tacked onto a reply that was not answering a thank-you (eval e5
+ * A05): removed. Only a trailing close, and only when something else precedes it.
+ */
+export function stripStrayClose(reply: string, incomingMessage: string): string {
+  if (ONLY_CLOSING.test(incomingMessage ?? "") || /תודה|thanks|thank you/i.test(incomingMessage ?? "")) return reply;
+  const out = reply.replace(/[\s,]*(?:בכיף|anytime)\s*[🙂😊❤️🙏]*\s*$/iu, "").trim();
+  return out.length >= 3 ? out : reply;
 }

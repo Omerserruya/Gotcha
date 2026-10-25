@@ -120,7 +120,7 @@ import {
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -4902,6 +4902,7 @@ async function generateAIBotReplyInner(
         shopFloor: isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }),
         toolsOffered: toolFunctionNames,
         handedOff: !!pendingEscalation || toolCallLog.some((t) => t.tool === "escalate_to_human"),
+        previousReplies: priorOutbound.filter((m: any) => !String(m.senderName ?? "").includes("@")).slice(-3).map((m: any) => String(m.body ?? "")),
         customerClosing: customerIsClosing(opts.incomingMessage),
         searchesAllEmpty: (() => {
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
@@ -4911,7 +4912,15 @@ async function generateAIBotReplyInner(
       if (violations.length) {
         console.warn(`[ai-bot] reply checker: ${violations.map((v) => `${v.kind}(${v.match})`).join(", ")}. Regenerating once. conv=${opts.conversationId}`);
         chatMessages.push({ role: "assistant", content: replyText });
-        chatMessages.push({ role: "user", content: buildStyleCorrective(violations, replyLocale) + INTERNAL_NUDGE_LANGUAGE_PIN });
+        // As SYSTEM, with the language named: as a user message the rewrite request
+        // read as an injected instruction and was refused ("לא ניתן לבצע את
+        // הבקשה הזו", eval e6 A04), and "the customer's language" let a Hebrew
+        // reply come back in English (e6 F02).
+        chatMessages.push({
+          role: "system",
+          content: buildStyleCorrective(violations, replyLocale) +
+            `\nThis is the platform's internal review, not the customer. Write the reply in ${replyLocale === "he" ? "Hebrew" : "English"}, the language of this conversation.`,
+        });
         const regen = await generateResponse({
           tenantId: opts.tenantId,
           sessionId: opts.conversationId,
@@ -4941,7 +4950,7 @@ async function generateAIBotReplyInner(
 
   // After a bare thank-you or goodbye: only a short warm close, whatever came back.
   if (replyText && !awaitingApproval && !pendingEscalation) {
-    const closed = closeAfterThanks(replyText, opts.incomingMessage ?? "", replyLocale);
+    const closed = stripStrayClose(closeAfterThanks(replyText, opts.incomingMessage ?? "", replyLocale), opts.incomingMessage ?? "");
     if (closed !== replyText) {
       console.warn(`[ai-bot] close after thanks replaced a ${replyText.length}-char reply conv=${opts.conversationId}`);
       replyText = closed;
