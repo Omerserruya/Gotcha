@@ -129,7 +129,7 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   const canHandOff = ctx.toolsOffered.some((t) => /escalate|handoff|hand_off/.test(t));
   if (!canHandOff) hit("promise", plain.match(HANDOFF_PROMISE));
 
-  const questions = (plain.match(/\?/g) ?? []).length;
+  const questions = (plain.match(/[?؟]/g) ?? []).length;
   if (questions > 1) hit("two_questions", `${questions} questions`);
   if (ctx.customerClosing && questions > 0) hit("question_after_thanks", "a question after a thank-you");
 
@@ -190,13 +190,13 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
 }
 
 /** The customer's whole message is a thank-you or a goodbye, nothing asked. */
-const CLOSING_PHRASE = "(?:(?:ממש |אחלה |מעולה,? |סבבה,? |סופר )?תודה(?: רבה| ענקית| לך| לכם)?|thanks?(?: a lot| so much)?|thank you(?: so much)?|ty|ביי|להתראות|יום טוב|bye|goodbye)";
+const CLOSING_PHRASE = "(?:(?:ממש |אחלה |מעולה,? |סבבה,? |סופר )?תודה(?: רבה| ענקית| לך| לכם)?|thanks?(?: a lot| so much)?|thank you(?: so much)?|ty|ביי|להתראות|יום טוב|bye|goodbye|شكرا|شكراً|شكرا جزيلا|شكرًا|مع السلامة|باي)";
 const ONLY_CLOSING = new RegExp(`^\\s*${CLOSING_PHRASE}(?:[\\s,!.]+${CLOSING_PHRASE})*[\\s!.,🙏❤️🙂😊🌸]*$`, "iu");
 
 /** A reply that is only a short warm close: a few words, no question, no link. */
 function isShortClose(reply: string): boolean {
   const t = reply.trim();
-  return t.length <= 40 && !t.includes("?") && !/https?:\/\//.test(t) && t.split(/\s+/).length <= 6;
+  return t.length <= 40 && !/[?؟]/.test(t) && !/https?:\/\//.test(t) && t.split(/\s+/).length <= 6;
 }
 
 /**
@@ -206,7 +206,9 @@ function isShortClose(reply: string): boolean {
  */
 export function closeAfterThanks(reply: string, incomingMessage: string, locale: "he" | "en"): string {
   if (!ONLY_CLOSING.test(incomingMessage ?? "") || isShortClose(reply)) return reply;
-  const bye = /ביי|להתראות|יום טוב|bye/i.test(incomingMessage);
+  const bye = /ביי|להתראות|יום טוב|bye|مع السلامة|باي/i.test(incomingMessage);
+  // The customer's own script decides: the turn's locale is only he or en.
+  if (/[\u0600-\u06FF]/.test(incomingMessage)) return bye ? "مع السلامة!" : "العفو 🙂";
   if (locale === "he") return bye ? "בשמחה, יום טוב!" : "בכיף 🙂";
   return bye ? "Anytime, have a good one!" : "Anytime 🙂";
 }

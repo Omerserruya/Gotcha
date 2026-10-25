@@ -112,6 +112,17 @@ describe("★ after a bare thank-you: only a short warm close", () => {
     expect(closeAfterThanks("רוצה שאשלח קישור?", "תודה, ביי", "he")).toBe("בשמחה, יום טוב!");
     expect(closeAfterThanks("שמחים לעזור, ומה עוד?", "להתראות", "he")).toBe("בשמחה, יום טוב!");
   });
+  it("in the customer's language: English, Arabic", async () => {
+    const { closeAfterThanks } = await import("../services/reply-style-check.service");
+    expect(closeAfterThanks("Would you like me to send the link again?", "thanks!", "en")).toBe("Anytime 🙂");
+    expect(closeAfterThanks("هل تريد رابط المنتج مرة أخرى؟", "شكرا جزيلا", "en")).toBe("العفو 🙂");
+  });
+
+  it("the model's own short close stays, register and all", async () => {
+    const { closeAfterThanks } = await import("../services/reply-style-check.service");
+    expect(closeAfterThanks("בכיף אהובה ❤️", "תודה רבה!", "he")).toBe("בכיף אהובה ❤️");
+  });
+
   it("a short close stays; a thank-you with a question is not a close", async () => {
     const { closeAfterThanks } = await import("../services/reply-style-check.service");
     expect(closeAfterThanks("בשמחה! יום נהדר 🙂", "תודה רבה!", "he")).toBe("בשמחה! יום נהדר 🙂");
