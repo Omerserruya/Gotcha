@@ -87,12 +87,6 @@ export const suggestionsResponseSchema = z.object({
   stale: z.boolean().catch(false).default(false),
   /** A generation is scheduled or running; `copilot.suggestions.updated` follows. */
   generating: z.boolean().catch(false).default(false),
-  /**
-   * Backend (copilot-widget): "Try again" on a conversation the AI, a flow or
-   * the sandbox owns now, or a closed one, generates nothing and answers the
-   * usual read with `skipped: "ai_or_closed"`. Anything else reads as none.
-   */
-  skipped: z.enum(['ai_or_closed']).nullable().catch(null).default(null),
   basedOnMessageId: z.string().nullable().catch(null).default(null),
   generatedAt: z.string().nullable().catch(null).default(null),
 });
