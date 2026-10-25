@@ -55,9 +55,9 @@
   // bootstrap can only ever load the exact bundle it was built against -
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.79ae5ec9f2f7.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.f36267807274.js";
   // The shared WhatsApp widget (the WhatsApp kind), stamped the same way.
-  var SITE_BUNDLE = "gotcha-site.462a873622ee.js";
+  var SITE_BUNDLE = "gotcha-site.b17420c74f84.js";
 
   // The App Proxy subpath on the MERCHANT's domain. Must match `subpath`
   // and `prefix` in shopify.app.toml, or the request 404s and every
@@ -219,10 +219,31 @@
     return letter.toUpperCase();
   }
 
+  /** The merchant's one logo, else a per-place image legacy wrote. Mirrors logoOf() in gotcha-site.js. */
+  function logoOf(widget, override) {
+    var pick = function (raw) {
+      if (typeof raw !== "string" || !raw.trim()) return null;
+      try {
+        var u = new URL(raw, window.location.href);
+        return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+      } catch (e) { return null; }
+    };
+    return pick(override) || pick(widget.appearance && widget.appearance.logoUrl);
+  }
+
+  /** Calls back once the image has loaded: the initial stays until then, and a dead link never replaces it. */
+  function whenLoaded(url, done) {
+    if (!url) return;
+    var probe = new Image();
+    probe.onload = function () { done(url); };
+    probe.src = url;
+  }
+
   var WA_GLYPH = '<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/></svg>';
   var CHEVRON = '<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
   var launcherFace = "";
+  var launcherLogo = false;
   var showDot = false;
   var teaserTyped = false;
   var launcherSide = "right";
@@ -230,6 +251,7 @@
   /** The face, the dot and the badge: repainted whenever the chat opens or closes. */
   function paintFace() {
     launcher.innerHTML = state.open ? CHEVRON : launcherFace;
+    launcher.setAttribute("data-logo", launcherLogo && !state.open ? "1" : "0");
     if (showDot && !state.open) {
       var d = document.createElement("span");
       d.className = "on";
@@ -274,6 +296,10 @@
       ".ldr .chev{width:22px;height:22px;}",
       ".ldr[data-busy='1']{cursor:progress;}",
       ".mark{font:500 24px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;color:inherit;}",
+      // A logo sits on white, as in the chat's disc.
+      ".ldr[data-logo='1']{background:#fff;}",
+      ".ldr[data-logo='1'] .on{border-color:#fff;}",
+      ".mark-img{display:block;max-width:34px;max-height:34px;object-fit:contain;}",
       ".on{position:absolute;top:3px;left:3px;width:11px;height:11px;border-radius:50%;box-sizing:border-box;",
       "  background:#5FA578;border:2px solid " + accent + ";}",
       ".on::after,.pav-on::after{content:'';position:absolute;inset:-2px;border-radius:50%;",
@@ -295,6 +321,8 @@
       ".pop-h{display:flex;align-items:center;gap:10px;}",
       ".pav{position:relative;width:32px;height:32px;border-radius:50%;flex:none;background:" + accent + ";color:" + inkOn(accent) + ";",
       "  display:flex;align-items:center;justify-content:center;font:500 19px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+      ".pav[data-logo='1']{background:#fff;box-shadow:0 0 0 1px #EEE7DC;}",
+      ".pav img{display:block;max-width:22px;max-height:22px;object-fit:contain;}",
       ".pav-on{position:absolute;bottom:-1px;left:-1px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;",
       "  background:#5FA578;border:2px solid #fff;}",
       ".pop-n{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;}",
@@ -331,6 +359,12 @@
       launcherFace = initial
         ? '<span class="mark" dir="ltr" aria-hidden="true">' + escapeAttr(initial) + "</span>"
         : '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS.chat + "</svg>";
+      var L = (widget.ux && widget.ux.launcher) || {};
+      whenLoaded(logoOf(widget, L.iconUrl), function (url) {
+        launcherFace = '<img class="mark-img" alt="" src="' + escapeAttr(url) + '">';
+        launcherLogo = true;
+        paintFace();
+      });
     }
     badge.className = "bdg";
     badge.setAttribute("aria-hidden", "true");
@@ -464,7 +498,15 @@
     var av = document.createElement("span");
     av.className = "pav";
     av.setAttribute("aria-hidden", "true");
-    av.textContent = brandInitial(widget);
+    var face = document.createTextNode(brandInitial(widget));
+    av.appendChild(face);
+    whenLoaded(logoOf(widget, widget.ux && widget.ux.welcome && widget.ux.welcome.avatarUrl), function (url) {
+      var img = document.createElement("img");
+      img.alt = "";
+      img.src = url;
+      if (face.parentNode) av.replaceChild(img, face);
+      av.setAttribute("data-logo", "1");
+    });
     if (online) {
       var dot = document.createElement("span");
       dot.className = "pav-on";

@@ -242,6 +242,21 @@ describe("welcome polish", () => {
     expect(disc.querySelector(".disc-wm")!.getAttribute("data-fit")).toBe("m");
   });
 
+  it("★ one logo: the disc draws appearance.logoUrl; a legacy welcome.avatarUrl still wins; an empty one is no logo", async () => {
+    const logo = await boot({ messages: [], ux: hero(), appearance: { logoUrl: "https://cdn.example.com/logo.png" } });
+    expect(logo.shadow.querySelector(".disc img")!.getAttribute("src")).toBe("https://cdn.example.com/logo.png");
+    const legacy = await boot({
+      messages: [],
+      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/legacy.png" } },
+      appearance: { logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    expect(legacy.shadow.querySelector(".disc img")!.getAttribute("src")).toBe("https://cdn.example.com/legacy.png");
+    // "" is not a link to this page: the wordmark, never an <img> of the storefront's own URL.
+    const empty = await boot({ messages: [], ux: hero(), appearance: { logoUrl: "" }, brand: { name: "Urban Supply", initial: "U" } });
+    expect(empty.shadow.querySelector(".disc img")).toBeNull();
+    expect(empty.shadow.querySelector(".disc-wm")!.textContent).toBe("URBAN SUPPLY");
+  });
+
   it("★ a Hebrew wordmark is never letter-spaced; a Latin one keeps its tracking", async () => {
     const he = await boot({ messages: [], ux: hero(), brand: { name: "נועה", initial: "נ" } });
     const mark = he.shadow.querySelector(".disc-wm")!;
@@ -1537,6 +1552,25 @@ describe("★★ design 7's panel (live widget L2)", () => {
     expect(av.textContent).toBe("U");
     expect(av.querySelector(".hd-dot")).toBeTruthy();
     expect(h.shadow.querySelector(".hd-st")!.textContent).toBe("Replies right away");
+  });
+
+  it("★ one logo (Omer, 2026-10-25): the header draws appearance.logoUrl on white; a dead link falls back to the initial", async () => {
+    const h = await boot({
+      messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello", createdAt: "2026-10-14T08:00:00Z" }],
+      brand: { name: "Urban Supply", initial: "U" },
+      appearance: { logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    const av = h.shadow.querySelector(".hd .hd-av")!;
+    const img = av.querySelector("img")!;
+    expect(img.getAttribute("src")).toBe("https://cdn.example.com/logo.png");
+    expect(av.getAttribute("data-logo")).toBe("1");
+    expect(av.querySelector(".hd-dot")).toBeTruthy();
+    expect(sheetOf(h.shadow)).toContain(".panel[data-look='gotcha'] .hd-av[data-logo]{background:#fff;");
+    img.dispatchEvent(new Event("error"));
+    expect(av.querySelector("img")).toBeNull();
+    expect(av.textContent).toBe("U");
+    expect(av.hasAttribute("data-logo")).toBe(false);
+    expect(av.querySelector(".hd-dot")).toBeTruthy();
   });
 
   it("while a reply is on its way the status says so", async () => {

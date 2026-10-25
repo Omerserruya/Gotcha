@@ -528,6 +528,17 @@ window.__gotchaShopifyChatApp = function (boot) {
     return logo.replace(/[\s\-|·:,;\u2013\u2014]+$/, "");
   }
 
+  /**
+   * The merchant's one logo (Omer, 2026-10-25): the welcome disc, the
+   * header and the site's bubble all draw appearance.logoUrl. A per-place
+   * image the legacy editor wrote (ux.welcome.avatarUrl) still wins where
+   * it is set. An empty string is no logo, never the page's own address.
+   */
+  function logoFor(override) {
+    var pick = function (raw) { return typeof raw === "string" && raw.trim() ? safeUrl(raw) : null; };
+    return pick(override) || pick(appearance.logoUrl);
+  }
+
   // ── Styles ──────────────────────────────────────────────────────
 
   var radius = Math.max(0, Math.min(28, Number(appearance.cornerRadius) || 20));
@@ -980,6 +991,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .hd-av{position:relative;width:38px;height:38px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";",
     "  display:flex;align-items:center;justify-content:center;overflow:visible;",
     "  font:500 22px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+    // A logo sits on white, as on the disc: a merchant's mark is drawn for a light ground.
+    ".panel[data-look='gotcha'] .hd-av[data-logo]{background:#fff;box-shadow:0 0 0 1px #EEE7DC;}",
+    ".panel[data-look='gotcha'] .hd-av img{max-width:26px;max-height:26px;object-fit:contain;}",
     ".panel[data-look='gotcha'] .hd-dot{position:absolute;bottom:0;left:0;width:11px;height:11px;box-sizing:border-box;border-radius:50%;",
     "  background:#5FA578;border:2px solid #FBF8F3;}",
     ".panel[data-look='gotcha'] .hd-nm{font-size:15.5px;font-weight:600;line-height:1.2;letter-spacing:-.005em;color:#2B2622;}",
@@ -1113,8 +1127,23 @@ window.__gotchaShopifyChatApp = function (boot) {
   var headerAvatar;
   if (LOOK === "gotcha") {
     // Design 7: the brand's initial on the main colour, and the dot while someone answers.
-    headerAvatar = el("div", "hd-av", brandInitial());
+    // The logo when there is one; a dead link falls back to the initial.
+    headerAvatar = el("div", "hd-av");
     attr(headerAvatar, { "aria-hidden": "true" });
+    var headLogo = logoFor(widget.ux && widget.ux.welcome && widget.ux.welcome.avatarUrl);
+    if (headLogo) {
+      var headImg = document.createElement("img");
+      headImg.alt = "";
+      headImg.src = headLogo;
+      headImg.onerror = function () {
+        headerAvatar.removeAttribute("data-logo");
+        if (headImg.parentNode) headerAvatar.replaceChild(document.createTextNode(brandInitial()), headImg);
+      };
+      attr(headerAvatar, { "data-logo": "1" });
+      headerAvatar.appendChild(headImg);
+    } else {
+      headerAvatar.appendChild(document.createTextNode(brandInitial()));
+    }
     if (boot.availability !== "offline") headerAvatar.appendChild(el("span", "hd-dot"));
   } else if (logo) {
     headerAvatar = document.createElement("img");
@@ -1837,7 +1866,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       if (/[\u0590-\u05FF\u0600-\u06FF]/.test(text)) attr(span, { "data-script": "rtl" });
       return span;
     };
-    var logoUrl = safeUrl(appearance.logoUrl);
+    var logoUrl = logoFor(W && W.avatarUrl);
     if (logoUrl) {
       var img = document.createElement("img");
       img.alt = "";
