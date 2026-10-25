@@ -26,6 +26,7 @@ import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { prisma } from "@chatcenter/shared";
 import { normalizeShopifyProducts, normalizeWooProducts, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
 import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
+import { detectProductInquiry, type ProductInquiryKind } from "./product-intent.service";
 // STATIC import on purpose. A dynamic `await import(...)` of this module
 // resolved to a second instance whose adapter REGISTRY was empty - the
 // adapters register as an import side-effect of the connectors barrel, which
@@ -274,7 +275,10 @@ export async function groundProductSearchResult(opts: {
 export type DiscoveryDecision =
   | { kind: "collect" }                    // still missing required info - ask ONE
   | { kind: "execute"; tool: string }      // ready AND tool available - force the search
-  | { kind: "blocked_no_tool"; tool: string }; // ready but tool not in surface - honest handoff
+  | { kind: "blocked_no_tool"; tool: string } // ready but tool not in surface - honest handoff
+  // The customer asked about the stock / size / colour / price of a product
+  // they named: look it up now, whatever the recommendation facts say.
+  | { kind: "lookup"; tool: string; inquiry: ProductInquiryKind };
 
 export interface DiscoveryTurnResult {
   active: boolean;
@@ -309,6 +313,31 @@ export function productToolAvailable(availableToolNames: string[]): { available:
   return { available: !!tool, tool: tool || "shopify.search_products" };
 }
 
+/**
+ * The tool that answers "is <named product> in stock / in M / how much", or
+ * null when this turn is not such a question, no product was named, or the
+ * store offers nothing to look it up with. Shopify's variant_information
+ * takes a product NAME; WooCommerce has a search by name (then variations).
+ */
+export async function namedProductLookup(opts: {
+  sessionId: string;
+  message: string | null | undefined;
+  availableToolNames: string[];
+}): Promise<{ tool: string; inquiry: ProductInquiryKind } | null> {
+  const inquiry = detectProductInquiry(opts.message);
+  if (!inquiry) return null;
+  const facts = await (await import("@chatcenter/shared")).activeFacts(opts.sessionId);
+  // "Named" = the extractor found a product in what they said ("the trench
+  // coat"). "Do you have anything in stock?" names nothing and stays discovery.
+  if (!facts.has("product_category")) return null;
+  const names = opts.availableToolNames;
+  const tool =
+    names.find((n) => n.endsWith(".variant_information")) ??
+    names.find((n) => n === "woocommerce.list_products") ??
+    names.find((n) => n === "shopify.search_products" || n.endsWith(".search_products"));
+  return tool ? { tool, inquiry: inquiry.kind } : null;
+}
+
 /** A catalogue search the discovery flow can drive (not a single-product lookup). */
 function isCatalogSearchTool(t: string): boolean {
   return t === "shopify.search_products" || t === "search_products" || t.endsWith(".search_products") || t === "woocommerce.list_products";
@@ -340,6 +369,8 @@ export async function runProductDiscoveryTurn(opts: {
   role: string | null | undefined;
   availableToolNames: string[];
   incomingMessageId?: string | null;
+  /** The customer's message, for the named-product lookup (stock / size / price). */
+  incomingMessage?: string | null;
 }): Promise<DiscoveryTurnResult> {
   try {
     if (!productDiscoveryApplies({ role: opts.role, availableToolNames: opts.availableToolNames })) {
@@ -377,10 +408,23 @@ export async function runProductDiscoveryTurn(opts: {
     if (written.length) await markAnswered({ session, answeredKeys: written, answeredMessageId: opts.incomingMessageId });
 
     const readiness = await computeReadiness(session, profile);
-    const snapshot = await buildDiscoverySnapshot(session, profile);
+    const search = productToolAvailable(opts.availableToolNames);
+    const lookup = await namedProductLookup({
+      sessionId: session.id,
+      message: opts.incomingMessage,
+      availableToolNames: opts.availableToolNames,
+    });
+    const snapshot = await buildDiscoverySnapshot(session, profile, {
+      ...(lookup ? { lookupTool: lookup.tool } : {}),
+      ...(search.available ? { searchTool: search.tool } : {}),
+    });
 
     let decision: DiscoveryDecision;
-    if (!readiness.ready) {
+    if (lookup) {
+      // Before readiness and before "already searched": a lookup about a named
+      // product is answerable now, on any turn, with no recommendation facts.
+      decision = { kind: "lookup", tool: lookup.tool, inquiry: lookup.inquiry };
+    } else if (!readiness.ready) {
       decision = { kind: "collect" };
     } else {
       // Readiness is STICKY - once the session has enough facts it is ready on

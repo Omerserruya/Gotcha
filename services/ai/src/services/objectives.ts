@@ -61,6 +61,8 @@ export interface ObjectiveModule {
   blockPassiveClose: boolean;
   /** The tool whose success truly completes this objective, if any. */
   completionTool?: string;
+  /** Other tools whose success completes it just the same (another store's search). */
+  completionToolAlternatives?: string[];
   /**
    * When true, this objective is NOT complete until its `completionTool` has
    * actually SUCCEEDED this conversation - having the required INFO is not
@@ -238,6 +240,9 @@ const PRODUCT_RECOMMENDATION: ObjectiveModule = {
   failureCriteria: ["Presented generic/imaginary products as store inventory", "Kept asking questions when enough info existed to search"],
   blockPassiveClose: true,
   completionTool: "shopify.search_products",
+  // Any connected store's search: on a WooCommerce store this objective could
+  // never complete, so the engine kept collecting (2026-10-25).
+  completionToolAlternatives: ["search_products", "woocommerce.list_products"],
   // The search IS the outcome: stay active until a real catalog search runs, so
   // the resolver keeps demanding "search now" rather than clarifying forever.
   requiresActionSuccess: true,
@@ -421,7 +426,8 @@ export function commitObjective(
   };
 }
 
-function objectiveComplete(
+/** Exported for tests. */
+export function objectiveComplete(
   obj: ObjectiveModule,
   prospectState: ProspectState,
   factText: string,
@@ -443,7 +449,7 @@ function objectiveComplete(
   // when the agent can't perform the action (falls through to info-complete so a
   // non-bookable agent never stalls).
   if (obj.requiresActionSuccess && canCompleteActions && obj.completionTool) {
-    return completedActionTools.includes(obj.completionTool);
+    return [obj.completionTool, ...(obj.completionToolAlternatives ?? [])].some((t) => completedActionTools.includes(t));
   }
   // Info-mandatory objectives: complete when every required field is present.
   const ledger = computeKnowledgeLedger(obj.requiredInformation, factText);

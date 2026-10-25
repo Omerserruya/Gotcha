@@ -66,6 +66,7 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "./order-
 import {
   detectVariantIntent,
   buildVariantIntentDirective,
+  buildWooLookupDirective,
   detectCouponIntent,
   buildCouponUnsupportedDirective,
   buildCouponPromotionsDirective,
@@ -2757,10 +2758,20 @@ async function generateAIBotReplyInner(
       role: (config as any).role,
       availableToolNames: toolFunctionNames,
       incomingMessageId: (contactRow as any)?.lastInboundMessageId ?? null,
+      incomingMessage: opts.incomingMessage ?? null,
     });
     if (disc.active && disc.snapshot) {
       chatMessages.push({ role: "system", content: disc.snapshot });
-      if (disc.decision?.kind === "execute") {
+      if (disc.decision?.kind === "lookup") {
+        // The named product's stock / size / price: the first round calls the
+        // store, so the answer is a live one and never a question back.
+        discoveryForceTool = disc.decision.tool;
+        // Shopify's variant_information has its own directive below.
+        if (disc.decision.tool.startsWith("woocommerce.")) {
+          chatMessages.push({ role: "system", content: buildWooLookupDirective(disc.decision.inquiry, replyLocale) });
+        }
+        console.log(`[ai-bot][discovery] lookup inquiry=${disc.decision.inquiry} tool=${disc.decision.tool} conv=${opts.conversationId}`);
+      } else if (disc.decision?.kind === "execute") {
         discoveryForceTool = disc.decision.tool;
         chatMessages.push({
           role: "system",

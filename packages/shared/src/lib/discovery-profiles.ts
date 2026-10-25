@@ -26,6 +26,11 @@ export interface FactSpec {
   /** May this fact be promoted to long-term customer memory? Default false
    * (shopping preferences/budgets stay conversation-scoped). */
   promotable?: boolean;
+  /**
+   * false = recorded if the customer volunteers it, never listed as something
+   * to ask (a snowboard fact on a store that sells coats). Default askable.
+   */
+  askable?: boolean;
 }
 
 export interface DiscoveryProfile {

@@ -186,3 +186,43 @@ export function buildVariantIntentDirective(intent: VariantIntent, locale: "he" 
     (locale === "he" ? `Reply in Hebrew.\n` : "")
   );
 }
+
+/** "is it in stock", "sold out", "available". Narrower than AVAILABILITY_RE: a bare "יש לכם" is not about stock. */
+const STOCK_RE = /(במלאי|מלאי|זמין|זמינה|זמינים|זמינות|אזל|נגמר|in stock|out of stock|sold out|available|availability)/i;
+/** "how much is it", "what does it cost". */
+const PRICE_RE = /(כמה\s*(זה\s*|הוא\s*|היא\s*|הם\s*|הן\s*)?עול|מה\s*המחיר|המחיר\s*של|מחיר|how much|what(?:'s| is) the price|price of|\bcost)/i;
+
+export type ProductInquiryKind = "variant" | "stock" | "price";
+
+/**
+ * Is this a question about a product's stock, size, colour or price, as
+ * opposed to "help me choose"? (2026-10-25: "יש במלאי את המעיל?" and "יש את
+ * מעיל הטרנץ' במידה M?" were both answered with a question.) Whether the
+ * customer NAMED a product is the caller's to decide: the discovery engine
+ * knows whether a product was extracted.
+ */
+export function detectProductInquiry(text: string | null | undefined): { kind: ProductInquiryKind; attributeToken?: string } | null {
+  const t = String(text ?? "");
+  if (!t.trim()) return null;
+  const variant = detectVariantIntent(t);
+  if (variant.isVariantQuestion) return { kind: "variant", ...(variant.attributeToken ? { attributeToken: variant.attributeToken } : {}) };
+  if (STOCK_RE.test(t)) return { kind: "stock" };
+  if (PRICE_RE.test(t)) return { kind: "price" };
+  return null;
+}
+
+/**
+ * The WooCommerce counterpart of buildVariantIntentDirective: the store has
+ * no variant_information, so the lookup is a search by name, then the
+ * product's variations when a size or colour is asked about.
+ */
+export function buildWooLookupDirective(kind: ProductInquiryKind, locale: "he" | "en"): string {
+  return (
+    `The customer is asking about the ${kind === "price" ? "PRICE" : kind === "stock" ? "STOCK" : "SIZE / COLOUR availability"} of a product they named. This is a catalogue LOOKUP:\n` +
+    `- Call woocommerce.list_products with query set to the product's name as the store titles it (the titles are in English: "trench coat", not "טרנץ'").\n` +
+    `- For a size or colour, then call woocommerce.list_product_variations with that product's id and answer from its variations: which sizes / colours exist and which are in stock.\n` +
+    `- Answer with the live price and stock from the results. If several products match, name them briefly and ask which one.\n` +
+    `- Do NOT ask about budget, use or style first, and do NOT say you will check: check in this turn.\n` +
+    (locale === "he" ? `Reply in Hebrew, naturally ("במידה M יש", not "עליי לבדוק").\n` : "")
+  );
+}

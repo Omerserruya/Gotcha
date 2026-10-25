@@ -16,7 +16,7 @@
  * Everything is READ. Nothing is inferred that Shopify does not state.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, getRedis } from "@chatcenter/shared";
 import type { DiscoveryProfile, FactSpec } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/index";
 
@@ -49,6 +49,8 @@ export interface CatalogFacets {
   /** Products actually scanned. Small stores are complete; large ones sampled. */
   scanned: number;
   fetchedAt: string;
+  /** Which store this describes. Absent = Shopify (the original). */
+  provider?: "shopify" | "woocommerce";
 }
 
 /** How long a derived catalogue shape is trusted. Catalogues change slowly,
@@ -158,6 +160,94 @@ export function deriveFacets(products: any[], currency?: string): CatalogFacets 
   };
 }
 
+/**
+ * A WooCommerce catalogue's shape, in the same terms (2026-10-25). Categories
+ * are its product types, product attributes its options (Size, Color). Prices
+ * count only for products in stock, like Shopify's buyable variants.
+ */
+export function deriveWooFacets(products: any[], currency?: string): CatalogFacets {
+  const typeAgg = new Map<string, { count: number; prices: number[] }>();
+  const tags = new Map<string, number>();
+  const options = new Map<string, { values: Map<string, number>; types: Set<string> }>();
+  for (const p of Array.isArray(products) ? products : []) {
+    const type = String(p?.categories?.[0]?.name || "").trim();
+    const typeKey = type || "(unspecified)";
+    if (!typeAgg.has(typeKey)) typeAgg.set(typeKey, { count: 0, prices: [] });
+    const agg = typeAgg.get(typeKey)!;
+    agg.count += 1;
+    const price = num(p?.price);
+    if (price !== null && p?.stock_status === "instock") agg.prices.push(price);
+    for (const t of Array.isArray(p?.tags) ? p.tags : []) {
+      const tag = String(t?.name || "").trim();
+      if (tag) tags.set(tag, (tags.get(tag) ?? 0) + 1);
+    }
+    for (const a of Array.isArray(p?.attributes) ? p.attributes : []) {
+      const name = String(a?.name || "").trim();
+      if (!name || NOISE_OPTIONS.has(name.toLowerCase())) continue;
+      if (!options.has(name)) options.set(name, { values: new Map(), types: new Set() });
+      const entry = options.get(name)!;
+      if (type) entry.types.add(type);
+      for (const v of Array.isArray(a?.options) ? a.options : []) {
+        const val = String(v || "").trim();
+        if (val) entry.values.set(val, (entry.values.get(val) ?? 0) + 1);
+      }
+    }
+  }
+  const byCountDesc = (a: [string, number], b: [string, number]) => b[1] - a[1];
+  return {
+    productTypes: [...typeAgg.entries()].map(([type, a]) => ({
+      type, count: a.count,
+      priceMin: a.prices.length ? Math.min(...a.prices) : null,
+      priceMax: a.prices.length ? Math.max(...a.prices) : null,
+    })),
+    vendors: [],
+    tags: [...tags.entries()].sort(byCountDesc).slice(0, MAX_TAGS).map(([t]) => t),
+    options: [...options.entries()].map(([name, e]) => ({
+      name,
+      values: [...e.values.entries()].sort(byCountDesc).slice(0, MAX_OPTION_VALUES).map(([v]) => v),
+      productTypes: [...e.types],
+    })),
+    ...(currency ? { currency } : {}),
+    scanned: Array.isArray(products) ? products.length : 0,
+    fetchedAt: new Date().toISOString(),
+    provider: "woocommerce",
+  };
+}
+
+const wooFacetsKey = (tenantId: string) => `catalog:facets:woocommerce:${tenantId}`;
+
+/**
+ * The WooCommerce store's facets, cached in Redis (never on the integration
+ * row). Null when the store cannot be read: the conversation goes on.
+ */
+async function wooCatalogFacets(tenantId: string, currency?: string): Promise<CatalogFacets | null> {
+  try {
+    const raw = await getRedis().get(wooFacetsKey(tenantId)).catch(() => null);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (isFresh(cached)) return cached as CatalogFacets;
+    }
+    const res = await executeAdapterTool({
+      tenantId,
+      toolFunctionName: "woocommerce.list_products",
+      // Woo pages at 100. A small store is complete; a large one is sampled.
+      args: { per_page: 100 },
+      accessScope: "internal",
+    });
+    if (!res.ok) {
+      console.warn(`[facets] woocommerce catalogue scan denied: ${res.reason}`);
+      return null;
+    }
+    const facets = deriveWooFacets(Array.isArray(res.result) ? (res.result as any[]) : [], currency);
+    await getRedis().set(wooFacetsKey(tenantId), JSON.stringify(facets), "EX", Math.round(TTL_MS / 1000)).catch(() => undefined);
+    console.log(`[facets] ${tenantId} (woocommerce): ${facets.scanned} products, ${facets.productTypes.length} types, ${facets.options.length} options`);
+    return facets;
+  } catch (err: any) {
+    console.warn("[facets] woocommerce derive failed (non-fatal):", err?.message);
+    return null;
+  }
+}
+
 function isFresh(cached: any): cached is CatalogFacets {
   if (!cached || typeof cached !== "object" || !cached.fetchedAt) return false;
   const at = Date.parse(cached.fetchedAt);
@@ -173,11 +263,22 @@ function isFresh(cached: any): cached is CatalogFacets {
  */
 export async function getCatalogFacets(tenantId: string): Promise<CatalogFacets | null> {
   try {
+    // The CONNECTED store. A disconnected Shopify row used to be read first,
+    // its scan failed on every turn, and a WooCommerce store (urban) never got
+    // facets, so the snowboard profile applied to a clothing catalogue.
     const row = await (prisma as any).tenantIntegration.findFirst({
-      where: { tenantId, integration: { slug: "shopify" } },
+      where: { tenantId, status: "CONNECTED", integration: { slug: "shopify" } },
       select: { id: true, config: true },
     });
-    if (!row) return null;
+    if (!row) {
+      const woo = await (prisma as any).tenantIntegration.findFirst({
+        where: { tenantId, status: "CONNECTED", integration: { slug: "woocommerce" } },
+        select: { config: true },
+      });
+      if (!woo) return null;
+      const cur = (woo.config as any)?.storeCurrency ?? (woo.config as any)?.currency;
+      return wooCatalogFacets(tenantId, typeof cur === "string" ? cur : undefined);
+    }
 
     const config = (row.config ?? {}) as Record<string, any>;
     if (isFresh(config.catalogFacets)) return config.catalogFacets as CatalogFacets;
@@ -253,7 +354,10 @@ export function renderFacetsForPrompt(facets: CatalogFacets | null, locale: "he"
     "RULES:",
     "- These are the ONLY things this catalogue can be narrowed by. Never interview the customer about an attribute that is not listed above - you would be collecting an answer you cannot search on.",
     "- Quote budget brackets from the ranges above. Offering \"under 200\" for a category that starts at 600 wastes the customer's answer.",
-    "- Pass what you learn as real arguments (price_max, product_type, vendor, tag, option_name/option_value), not as prose about what you intend to search for.",
+    facets.provider === "woocommerce"
+      // The WooCommerce search takes a title query, a price range and in_stock.
+      ? "- Pass what you learn as real arguments (query with the English title words, price_max / price_min, in_stock), not as prose about what you intend to search for. For a size or colour, read the product's variations."
+      : "- Pass what you learn as real arguments (price_max, product_type, vendor, tag, option_name/option_value), not as prose about what you intend to search for.",
   );
   if (locale === "he") {
     lines.push("- Ask in the customer's language; the values above are the store's own strings and must be passed to the tool verbatim.");
@@ -296,6 +400,8 @@ function storeHasDimension(facets: CatalogFacets, key: string): boolean {
  * query searches and price is filterable in every store there is.
  */
 const ALWAYS_REQUIRED = new Set(["product_category", "budget"]);
+/** Facts that mean something in any store. */
+const GENERIC_FACTS = new Set(["availability"]);
 
 export function profileForStore(
   profile: DiscoveryProfile,
@@ -303,10 +409,14 @@ export function profileForStore(
 ): DiscoveryProfile {
   if (!facets) return profile;
 
+  // A store that sells snowboards keeps the snowboard interview as it was;
+  // anywhere else a fact the store has no dimension for is not something to
+  // ask about (a coat shop was listed "Flex, Boot size, Bindings" to ask).
+  const sellsBoards = facets.productTypes.some((t) => /snowboard/i.test(t.type));
   const facts: FactSpec[] = profile.facts.map((f) => {
-    if (!f.required || ALWAYS_REQUIRED.has(f.key)) return f;
-    if (storeHasDimension(facets, f.key)) return f;
-    return { ...f, required: false };
+    if (ALWAYS_REQUIRED.has(f.key) || GENERIC_FACTS.has(f.key) || storeHasDimension(facets, f.key)) return f;
+    const demoted = f.required ? { ...f, required: false } : f;
+    return sellsBoards ? demoted : { ...demoted, askable: false };
   });
 
   const known = new Set(facts.map((f) => f.key.toLowerCase()));

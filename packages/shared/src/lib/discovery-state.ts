@@ -301,7 +301,19 @@ export async function recordActionAttempt(opts: {
  * (no internal ids / DB shape). Tells the model exactly what is known, what is
  * still needed, and the next action - so it stops re-asking and executes.
  */
-export async function buildDiscoverySnapshot(session: any, profile: DiscoveryProfile): Promise<string> {
+export async function buildDiscoverySnapshot(
+  session: any,
+  profile: DiscoveryProfile,
+  /**
+   * The customer asked about the stock, size, colour or price of a product
+   * they NAMED (2026-10-25). That is a lookup, not a recommendation, so no
+   * missing recommendation fact may hold it: "Ask ONE of these, nothing else"
+   * is exactly how the urban widget answered "do you have the trench coat in
+   * M?" with a question.
+   */
+  /** searchTool: the store's own search when it is not the profile's (a Woo store has no shopify.search_products). */
+  opts: { lookupTool?: string; searchTool?: string } = {},
+): Promise<string> {
   const have = await activeFacts(session.id);
   const readiness = await computeReadiness(session, profile);
   const known: string[] = [];
@@ -309,7 +321,8 @@ export async function buildDiscoverySnapshot(session: any, profile: DiscoveryPro
     const fact = have.get(f.key);
     if (fact) known.push(`- ${labelFor(f.key)}: ${renderValue(fact.valueJson)}`);
   }
-  const unknown = readiness.missingRequired.concat(readiness.missingOptional).map((k) => `- ${labelFor(k)}`);
+  const askable = (k: string) => profile.facts.find((f) => f.key === k)?.askable !== false;
+  const unknown = readiness.missingRequired.concat(readiness.missingOptional).filter(askable).map((k) => `- ${labelFor(k)}`);
   const lines = [
     "DISCOVERY STATE",
     `Goal: ${profile.goalKey}`,
@@ -323,8 +336,10 @@ export async function buildDiscoverySnapshot(session: any, profile: DiscoveryPro
     "Rules:",
     "- Do NOT ask again about anything under Known - it is already answered.",
     "- Optional unknowns must NOT block the action; ask at most ONE required unknown per turn.",
-    readiness.ready
-      ? `- Enough info exists. The next action is a REAL tool call: ${readiness.nextAction?.tool}. Do not narrate a search - execute it.`
+    opts.lookupTool
+      ? `- The customer asked about a product they named (stock, size, colour or price). Look it up NOW with ${opts.lookupTool} and answer from the live result. Ask nothing first; the unknowns above are for recommending, not for this.`
+      : readiness.ready
+      ? `- Enough info exists. The next action is a REAL tool call: ${opts.searchTool ?? readiness.nextAction?.tool}. Do not narrate a search - execute it.`
       : `- Still missing required: ${readiness.missingRequired.map(labelFor).join(", ")}. Ask ONE of these, nothing else.`,
   ];
   return lines.join("\n");
