@@ -1148,6 +1148,50 @@ describe("carousel", () => {
     expect(off.shadow.querySelector("[data-act='choose-options']")).toBeNull();
   });
 
+  it("★ RTL (Omer, 2026-10-25): two whole cards share the strip, and a link button never outgrows its card", async () => {
+    const { shadow } = await carouselHarness();
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".car-tr>*{box-sizing:border-box;flex:0 0 calc((100% - 10px) / 2);max-width:calc((100% - 10px) / 2);");
+    expect(sheet).not.toContain("flex:0 0 186px");
+    // An <a> is content-box by default: width:100% plus padding cut its edge.
+    expect(sheet).toMatch(/\.btn\{box-sizing:border-box;/);
+  });
+
+  it("★ the fade and the arrows only while the strip has somewhere to go", async () => {
+    const { shadow } = await carouselHarness();
+    const car = shadow.querySelector(".car") as HTMLElement;
+    const strip = shadow.querySelector(".car-tr") as HTMLElement;
+    const size = (scroll: number, client: number) => {
+      Object.defineProperty(strip, "scrollWidth", { configurable: true, value: scroll });
+      Object.defineProperty(strip, "clientWidth", { configurable: true, value: client });
+    };
+    size(360, 360);
+    strip.dispatchEvent(new Event("scroll"));
+    expect(car.getAttribute("data-scroll")).toBe("0");
+    expect(car.getAttribute("data-more")).toBe("0");
+    size(545, 360);
+    strip.scrollLeft = 0;
+    strip.dispatchEvent(new Event("scroll"));
+    expect([car.getAttribute("data-scroll"), car.getAttribute("data-more")]).toEqual(["1", "1"]);
+    // Scrolled to the end (negative in RTL: the distance is what counts).
+    strip.scrollLeft = -185;
+    strip.dispatchEvent(new Event("scroll"));
+    expect(car.getAttribute("data-more")).toBe("0");
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".car[data-more='1']::after{");
+    expect(sheet).toContain(".car[data-scroll='0'] .car-nav{display:none;}");
+  });
+
+  it("★ in the GOTCHA look a disabled Add to cart is an outline, never the enabled beige", async () => {
+    const { shadow } = await carouselHarness();
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    const enabled = sheet.indexOf(".panel[data-look='gotcha'] .btn-p{");
+    const disabled = sheet.indexOf(".panel[data-look='gotcha'] .btn-p:disabled{background:#fff;");
+    expect(enabled).toBeGreaterThan(-1);
+    // Same specificity plus the pseudo-class, and after it: it wins.
+    expect(disabled).toBeGreaterThan(enabled);
+  });
+
   it("keeps Add to Cart on a shortlist entry whose first variant is sold out", async () => {
     // A carousel card has no picker, so opening on the server's sold-out
     // first variant did not disable the button - it removed it, and the

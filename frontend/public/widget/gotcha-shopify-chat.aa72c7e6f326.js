@@ -836,7 +836,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".qty-b:disabled{opacity:.4;cursor:not-allowed;}",
     ".qty-v{min-width:22px;text-align:center;font-size:14px;font-variant-numeric:tabular-nums;}",
     ".acts{display:flex;gap:8px;padding:0 12px 12px;}",
-    ".btn{flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
+    // border-box: an <a> is content-box by default, so "View product" at
+    // width:100% overflowed its card by its padding and lost its edge.
+    ".btn{box-sizing:border-box;flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
     "  cursor:pointer;text-align:center;text-decoration:none;border:1px solid transparent;white-space:nowrap;",
     "  overflow:hidden;text-overflow:ellipsis;}",
     ".btn-p{background:" + brand + ";color:" + onBrand + ";}",
@@ -854,7 +856,11 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car{position:relative;max-width:100%;}",
     ".car-tr{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;",
     "  scrollbar-width:thin;-webkit-overflow-scrolling:touch;}",
-    ".car-tr>*{flex:0 0 186px;scroll-snap-align:start;max-width:186px;}",
+    // Two whole cards share the strip (Omer, 2026-10-25): a 186px card
+    // peeking past the end edge cut a Latin title's START in Hebrew
+    // ("…tton Trench") and read as broken. A third is a scroll away, said
+    // by the arrows and the fade.
+    ".car-tr>*{box-sizing:border-box;flex:0 0 calc((100% - 10px) / 2);max-width:calc((100% - 10px) / 2);min-width:150px;scroll-snap-align:start;}",
     ".car-tr .card{max-width:100%;}",
     ".car-tr .card-top{flex-direction:column;gap:9px;padding:10px;}",
     ".car-tr .card-im{width:100%;height:112px;}",
@@ -872,11 +878,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car-tr .btn{font-size:12.5px;padding:8px 8px;flex:0 0 auto;width:100%;}",
     // Right-edge fade: without it a scrollable strip looks like a clipped
     // one, and shoppers do not swipe what they cannot tell is swipeable.
-    ".car::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
+    // Only while there is more to scroll to: over a whole last card it is a smudge.
+    ".car[data-more='1']::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
     "  width:26px;pointer-events:none;background:linear-gradient(to " + (dir === "rtl" ? "left" : "right") + ",rgba(255,255,255,0),#fff);}",
     ".car-nav{display:flex;gap:6px;justify-content:flex-end;padding:0 2px;}",
     ".car-n{width:28px;height:28px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;}",
     ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".car[data-scroll='0'] .car-nav{display:none;}",
 
     // Composer
     // A one-line composer by default. It was 115px of a 640px panel -
@@ -1101,6 +1109,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Product cards (design 7): warm rules, the main colour's ink on its buttons.
     ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
     ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
+    // The rule above outranks .btn-p:disabled: a disabled Add to cart was
+    // the same beige as an enabled one. "Not yet" is an outline here too.
+    ".panel[data-look='gotcha'] .btn-p:disabled{background:#fff;color:#A99C8E;border-color:#E3DACE;}",
     ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
     ".panel[data-look='gotcha'] .chip{border-color:#CFC4B6;}",
     ".panel[data-look='gotcha'] .opts[data-need='1'] .chip{border-color:#A99C8E;}",
@@ -2461,6 +2472,19 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     wrap.appendChild(strip);
     wrap.appendChild(nav);
+    // Whether the strip scrolls at all, and whether more lies past the end
+    // edge (scrollLeft is negative in RTL: its size is the distance).
+    function measure() {
+      var max = strip.scrollWidth - strip.clientWidth;
+      attr(wrap, {
+        "data-scroll": max > 4 ? "1" : "0",
+        "data-more": max - Math.abs(strip.scrollLeft) > 4 ? "1" : "0",
+      });
+    }
+    on(strip, "scroll", measure);
+    // Measured once it is on the page; a strip not laid out yet scrolls nowhere.
+    attr(wrap, { "data-scroll": "1", "data-more": "1" });
+    setTimeout(measure, 0);
     return wrap;
   }
 
