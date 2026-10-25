@@ -74,14 +74,15 @@ export async function extractFieldsLive(params: {
   if (!specs.length) return [];
   const allowedFields = specs.map((s) => s.key);
 
-  const messages = await prisma.message.findMany({
+  // The LAST MAX_MESSAGES, oldest first (2026-10-25: `asc` + `take` read the first).
+  const messages = (await prisma.message.findMany({
     // tenantId is required by the TenantGuard (a conversationId-only query is
     // blocked as a potential cross-tenant read).
     where: { tenantId: params.tenantId, conversationId: params.conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { direction: true, body: true, senderName: true },
     take: MAX_MESSAGES,
-  });
+  })).reverse();
   const transcript = messages
     .filter((m) => m.body && m.body.trim())
     .map((m) => `${m.direction === "INBOUND" ? "Customer" : (m.senderName || "Agent")}: ${m.body}`)

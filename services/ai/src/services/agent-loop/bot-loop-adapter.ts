@@ -38,9 +38,11 @@ export async function runAgentLoopForBotTurn(
     prisma.aIAgent.findUnique({ where: { id: opts.aiAgentId } }),
     // tenant-scoped reads (TenantGuard requires tenantId in findFirst/findMany where).
     prisma.conversation.findFirst({ where: { id: opts.conversationId, tenantId: opts.tenantId }, select: { customerExternalId: true, customerName: true, channel: true } }),
+    // The last 40, newest first; reversed below (2026-10-25: `asc` + `take`
+    // read the FIRST 40, so a long conversation's newest turns were missing).
     prisma.message.findMany({
       where: { conversationId: opts.conversationId, tenantId: opts.tenantId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 40,
       select: { direction: true, body: true, messageType: true },
     }),
@@ -49,7 +51,7 @@ export async function runAgentLoopForBotTurn(
     loadToolGrants(opts.tenantId, opts.aiAgentId),
   ]);
 
-  const transcript = recent
+  const transcript = [...recent].reverse()
     .filter((m) => m.body?.trim() && m.messageType !== "system")
     .map((m) => ({ role: m.direction === "INBOUND" ? ("customer" as const) : ("agent" as const), text: m.body }));
   // Ensure the just-arrived inbound is present even if not yet persisted.

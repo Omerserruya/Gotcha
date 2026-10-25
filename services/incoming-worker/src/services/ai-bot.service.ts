@@ -752,12 +752,14 @@ async function checkEscalationThresholds(
     const BURST_RESET_MS = 30 * 60_000;
     let autonomousSinceMs = conversation.createdAt.getTime();
     try {
-      const recent = await prisma.message.findMany({
+      // The last 50, oldest first (2026-10-25: `asc` + `take` read the first
+      // 50, so a long conversation's burst was measured from its old messages).
+      const recent = (await prisma.message.findMany({
         where: { conversationId, tenantId },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 50,
         select: { createdAt: true },
-      });
+      })).reverse();
       for (let i = 1; i < recent.length; i++) {
         const prev = new Date(recent[i - 1].createdAt).getTime();
         const cur = new Date(recent[i].createdAt).getTime();

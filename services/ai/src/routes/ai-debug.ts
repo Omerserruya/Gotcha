@@ -138,12 +138,13 @@ async function renderAgentMode(opts: {
     });
     if (!conv) throw Object.assign(new Error("Conversation not found"), { status: 404 });
 
-    const msgs = await prisma.message.findMany({
+    // The last 50, oldest first, as the bot loads them.
+    const msgs = (await prisma.message.findMany({
       where: { conversationId: opts.conversationId, tenantId: opts.tenantId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 50,
       select: { direction: true, body: true, messageType: true },
-    });
+    })).reverse();
     history = msgs as any;
     if (!kbProbe) {
       const lastIn = [...msgs].reverse().find((m) => m.direction === "INBOUND" && m.body?.trim());

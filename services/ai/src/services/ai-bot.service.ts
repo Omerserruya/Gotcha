@@ -118,6 +118,7 @@ import {
   type SkillCandidate,
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields } from "./prompt-builder.service";
+import { loadRecentHistory, historyChatMessages } from "./conversation-history.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
@@ -1394,11 +1395,8 @@ async function generateAIBotReplyInner(
     };
   }
 
-  const messages = await prisma.message.findMany({
-    where: { conversationId: opts.conversationId, tenantId: opts.tenantId },
-    orderBy: { createdAt: "asc" },
-    take: 50,
-  });
+  // The LAST 50, oldest first (see conversation-history.service).
+  const messages = await loadRecentHistory<Awaited<ReturnType<typeof prisma.message.findMany>>[number]>(opts.tenantId, opts.conversationId);
 
   // Pending approval lookup.
   let pendingApprovals: Array<{ id: string; tool: string }> = [];
@@ -2985,14 +2983,7 @@ async function generateAIBotReplyInner(
   // model still sees the same instruction - just once, in the system
   // prompt - so behavior is unchanged.
 
-  for (const m of messages) {
-    if (!m.body?.trim()) continue;
-    if ((m as any).messageType === "system") continue;
-    chatMessages.push({
-      role: m.direction === "INBOUND" ? "user" : "assistant",
-      content: m.body,
-    });
-  }
+  chatMessages.push(...historyChatMessages(messages as any));
 
   // When a meeting is already on the calendar for this conversation, tell the
   // model so a "move it" / "cancel it" request routes to reschedule_meeting /
