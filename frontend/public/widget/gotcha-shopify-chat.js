@@ -1016,6 +1016,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .disc-wm[data-fit='m']{font-size:13px;}",
     ".panel[data-look='gotcha'] .disc-wm[data-fit='s']{font-size:11px;letter-spacing:.12em;}",
     ".panel[data-look='gotcha'] .disc-wm[data-fit='initials']{font-size:30px;letter-spacing:.04em;}",
+    // Tracking is for Latin capitals: a Hebrew or Arabic wordmark is never letter-spaced.
+    ".panel[data-look='gotcha'] .disc-wm[data-script='rtl']{letter-spacing:0;}",
     ".panel[data-look='gotcha'] .disc-on{position:absolute;bottom:4px;left:4px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;",
     "  background:#4FB06A;border:3px solid #fff;box-shadow:0 0 0 1px rgba(79,176,106,.35);}",
     ".panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{content:'';position:absolute;inset:-3px;border-radius:50%;",
@@ -1832,6 +1834,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       var text = fit === "initials" ? brandInitial() : mark;
       var span = el("span", "disc-wm", text);
       attr(span, { dir: "auto", "data-fit": fit });
+      if (/[\u0590-\u05FF\u0600-\u06FF]/.test(text)) attr(span, { "data-script": "rtl" });
       return span;
     };
     var logoUrl = safeUrl(appearance.logoUrl);

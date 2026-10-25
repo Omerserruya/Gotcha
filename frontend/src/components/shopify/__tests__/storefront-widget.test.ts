@@ -242,6 +242,16 @@ describe("welcome polish", () => {
     expect(disc.querySelector(".disc-wm")!.getAttribute("data-fit")).toBe("m");
   });
 
+  it("★ a Hebrew wordmark is never letter-spaced; a Latin one keeps its tracking", async () => {
+    const he = await boot({ messages: [], ux: hero(), brand: { name: "נועה", initial: "נ" } });
+    const mark = he.shadow.querySelector(".disc-wm")!;
+    expect(mark.textContent).toBe("נועה");
+    expect(mark.getAttribute("data-script")).toBe("rtl");
+    expect(css(he.shadow)).toContain(".disc-wm[data-script='rtl']{letter-spacing:0;}");
+    const latin = await boot({ messages: [], ux: hero(), brand: { name: "Urban Supply", initial: "U" } });
+    expect(latin.shadow.querySelector(".disc-wm")!.hasAttribute("data-script")).toBe(false);
+  });
+
   it("★ design 7 opens on the questions: no title, the assistant's name under the disc", async () => {
     const h = await boot({ messages: [] });
     expect(h.shadow.querySelector(".wel-h")).toBeNull();
