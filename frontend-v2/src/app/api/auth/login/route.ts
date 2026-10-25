@@ -19,6 +19,7 @@ import {
 import { isLocale } from '@/i18n/locales';
 import { inLocaleOf } from '@/auth/sign-in-url';
 import { serverEnv } from '@/config/env.server';
+import { appUrl } from '@/lib/base-path';
 import { logger } from '@/observability/logger';
 import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 
@@ -94,10 +95,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    *   should be a decision rather than a side effect - the cure is a silent
    *   attempt from the panel itself, which is not built.
    */
+  /*
+   * ★★ AND WITH NO `SIGN_IN_URL` TOO (prod, 2026-10-25). Prod serves sign-in
+   *   on this same host, so `SIGN_IN_URL` is unset there - and this guard was
+   *   written as `if (signInElsewhere && …)`, which skipped it entirely. The
+   *   WooCommerce plugin's "Connect to GOTCHA" reached `/connect` signed out,
+   *   came here from `signInHere()` and was sent straight to the provider's
+   *   page. Our panel is the one way in on every deployment: elsewhere when
+   *   configured, else `/sign-in` on this host. Its own hand-over carries
+   *   `handover=1`, so it still starts OIDC and the two cannot loop.
+   */
   const signInElsewhere = process.env.SIGN_IN_URL;
-  if (signInElsewhere && request.nextUrl.searchParams.get(HANDOVER_PARAM) !== '1') {
+  if (request.nextUrl.searchParams.get(HANDOVER_PARAM) !== '1') {
+    const signIn = new URL(signInElsewhere ?? appUrl('/sign-in', serverEnv().APP_ORIGIN));
     // In the language of where they were, and saying why when it ended.
-    const panel = inLocaleOf(new URL(signInElsewhere), returnTo, isLocale);
+    const panel = inLocaleOf(signIn, returnTo, isLocale);
     panel.searchParams.set('returnTo', returnTo);
     if (request.nextUrl.searchParams.get('error') === 'ended') {
       panel.searchParams.set('error', 'ended');
