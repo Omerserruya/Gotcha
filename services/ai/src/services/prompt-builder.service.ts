@@ -533,8 +533,14 @@ function buildCompanyBlock(opts: BuildPromptOpts): string | null {
  */
 function buildObservedVoiceBlock(opts: BuildPromptOpts): string | null {
   if (opts.behaviorState.mode === "generator") return null;
-  const voice = opts.company?.observedVoice;
-  if (!voice || !voice.trim()) return null;
+  // Rules only (2026-10-25, Omer): voices learned before 60b462ad carry the
+  // quoted example opening and closing the learner wrote; those two lines are
+  // dropped here so a stored voice reads the same as a new one.
+  const voice = (opts.company?.observedVoice ?? "")
+    .split("\n")
+    .filter((l) => !/^- Example (?:opening|closing) in their voice:/.test(l.trim()))
+    .join("\n");
+  if (!voice.trim()) return null;
   return [
     "# How this business writes",
     "Learned by counting this business's own past messages to its customers. Follow it: a correct answer in the wrong voice still reads as a machine.",

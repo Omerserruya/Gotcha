@@ -48,3 +48,22 @@ describe("★ pairs", () => {
     expect(ev).toContain("## complaint (0 seen)\n  (no evidence: leave this situation empty)");
   });
 });
+
+describe("★ a voice stored before rules-only renders without its quoted examples", () => {
+  it("the two example lines are dropped, the rest kept", async () => {
+    const { vi } = await import("vitest");
+    const { buildAgentPrompt } = await import("../services/prompt-builder.service");
+    const { computeBehaviorState } = await import("../services/behavior-engine.service");
+    const p = buildAgentPrompt({
+      behaviorState: computeBehaviorState({ mode: "agent", identity: { hasContact: false, contactLifecycle: null, priorConversationCount: 0 }, request: { lastMessage: "היי", messageCount: 1, recentInboundTexts: ["היי"] } }),
+      agent: { name: "Noa", role: "customer_support", tone: "friendly", style: {}, identity: {}, goals: {}, toneConfig: {}, behavioral: {}, persona: {}, conversationFlow: null, customGuardrails: null, escalationRules: null, behavioralAnchors: null } as any,
+      company: { organizationName: "X", observedVoice: 'Warm.\n\n- Short replies\n- Example opening in their voice: "היי אהובה ❤️"\n- Example closing in their voice: "באהבה"' },
+      context: { customerBlock: "", locale: "he" }, knowledge: {}, toolFunctionNames: [],
+    } as any);
+    void vi;
+    const block = p.slice(p.indexOf("# How this business writes"), p.indexOf("\n# ", p.indexOf("# How this business writes") + 5));
+    expect(block).toContain("- Short replies");
+    expect(block).not.toContain("Example opening in their voice");
+    expect(block).not.toContain("באהבה");
+  });
+});
