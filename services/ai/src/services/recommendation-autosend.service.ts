@@ -371,7 +371,7 @@ export interface AutoRecommendationPlan {
   introduction: string;
   budget: BudgetVerdict;
   /** Why structured was skipped, when it was. */
-  skipReason?: "no_candidates" | "channel_cannot_render" | "already_staged" | "envelope_not_ok";
+  skipReason?: "no_candidates" | "channel_cannot_render" | "already_staged" | "envelope_not_ok" | "not_named";
 }
 
 export interface PlanAutoRecommendationInput {
@@ -384,6 +384,14 @@ export interface PlanAutoRecommendationInput {
   locale: RecoLocale;
   budget?: BudgetConstraint | null;
   maxProducts: number;
+  /**
+   * May cards go out for products the reply does not name? Only on a real
+   * recommendation search (eval e5 S5: a complaint got five cards, a question
+   * about a dress got three before any answer). Absent means yes, as before.
+   */
+  unnamedAllowed?: boolean;
+  /** How many unnamed products may go out (a lookup: the one best match). */
+  unnamedMax?: number;
 }
 
 /**
@@ -419,7 +427,12 @@ export function planAutoRecommendation(
   // asked about a linen shirt, the customer saw five tees). When the draft
   // names candidates, by key or by exact title, those go out, in its order.
   const named = namedCandidates(input.modelText, envelope.candidates).slice(0, input.maxProducts);
-  const budget: BudgetVerdict = named.length ? { ...policy, selected: named } : policy;
+  if (!named.length && input.unnamedAllowed === false && envelope.status === "ok" && envelope.candidates.length) {
+    return { selected: [], budget: { ...policy, selected: [] }, shouldSendStructured: false, introduction: "", skipReason: "not_named" };
+  }
+  const budget: BudgetVerdict = named.length
+    ? { ...policy, selected: named }
+    : input.unnamedMax ? { ...policy, selected: policy.selected.slice(0, input.unnamedMax) } : policy;
 
   const base = { selected: budget.selected, budget };
 
@@ -505,6 +518,11 @@ export function decideDelivery(
   // The model already sent the cards itself. The text still gets reduced,
   // or the customer receives the same products twice.
   if (plan.skipReason === "already_staged") {
+    return { structuredSent: false, useTextFallback: false };
+  }
+  // The reply names no product and this was no recommendation search: no
+  // cards and no list either. The reply is the model's own words.
+  if (plan.skipReason === "not_named") {
     return { structuredSent: false, useTextFallback: false };
   }
   // Nothing was ever going to be staged - the channel cannot render cards,

@@ -190,7 +190,7 @@ const COLOUR_HE: Record<string, string> = {
  * "529 ILS" / "ILS 529" becomes "₪529".
  */
 export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[] }): string {
-  if (!text || opts.locale !== "he") return text;
+  if (!text) return text;
   const titles = (opts.productTitles ?? []).filter(Boolean).sort((a, b) => b.length - a.length);
   const held: string[] = [];
   let out = text;
@@ -198,6 +198,12 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     out = out.split(t).join(`\u0000${held.length}\u0000`);
     held.push(t);
   }
+  // A title said twice: "X (X)" or "X, X" (eval e5 S5), outside lookup turns too.
+  for (let i = 0; i < held.length; i++) {
+    const t = `\u0000${i}\u0000`;
+    out = out.split(`${t} (${t})`).join(t).split(`${t}, ${t}`).join(t).split(`${t} ${t}`).join(t);
+  }
+  if (opts.locale !== "he") return out.replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
   out = out
     .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
     .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")

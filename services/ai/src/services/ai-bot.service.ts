@@ -2773,6 +2773,9 @@ async function generateAIBotReplyInner(
   // This turn answers a question about a product the customer named: the
   // reply is the model's answer, with the product attached (not replaced).
   let discoveryLookup = false;
+  // A recommendation search this turn (discovery "execute"): only then may
+  // cards go out for products the reply does not name.
+  let discoveryRecommend = false;
   // Canonical typed product envelope for this turn (set when a Shopify product
   // search runs); drives deterministic grounded rendering of the final reply.
   let productEnvelope: ProductSearchEnvelope | null = null;
@@ -2820,6 +2823,7 @@ async function generateAIBotReplyInner(
         }
         console.log(`[ai-bot][discovery] lookup inquiry=${disc.decision.inquiry} tool=${disc.decision.tool} conv=${opts.conversationId}`);
       } else if (disc.decision?.kind === "execute") {
+        discoveryRecommend = true;
         discoveryForceTool = disc.decision.tool;
         chatMessages.push({
           role: "system",
@@ -4961,6 +4965,8 @@ async function generateAIBotReplyInner(
     const canStage = !!productTurn?.sendShopifyProducts && cardsMatchTurn(productEnvelope.provider, wooTurn);
 
     const recoPlan = planAutoRecommendation({
+      unnamedAllowed: discoveryRecommend || discoveryLookup,
+      unnamedMax: discoveryRecommend ? undefined : 1,
       envelope: productEnvelope,
       // Staging is Shopify Live Chat's mechanism. A channel that renders
       // cards but has no staging path (web chat today) still takes the
@@ -5024,7 +5030,7 @@ async function generateAIBotReplyInner(
     if (!delivery.useTextFallback) {
       // The products are in the cards. The text is a lead-in and nothing
       // else - no numbered list, no URLs, no "shall I send a card?".
-      replyText = finalProductReply({ lookup: discoveryLookup, modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction, context: groundingContext });
+      replyText = finalProductReply({ lookup: discoveryLookup || recoPlan.skipReason === "not_named", modelText, envelope: productEnvelope, cards: true, introduction: recoPlan.introduction, context: groundingContext });
     } else {
       // Genuine fallback: this channel cannot render cards, or staging
       // failed. The legacy deterministic renderer is exactly right here,

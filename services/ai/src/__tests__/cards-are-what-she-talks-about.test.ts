@@ -25,3 +25,29 @@ describe("★ the named products go out, in the text's order", () => {
     expect(namedCandidates("PRODUCT_9", candidates)).toEqual([]);
   });
 });
+
+describe("★ e5 S5: no unnamed cards outside a recommendation search", () => {
+  const plan2 = (modelText: string, o: any) => planAutoRecommendation({ envelope: env, channelSupportsCards: true, alreadyStaged: false, modelText, locale: "he", maxProducts: 5, ...o });
+  it("a complaint that names nothing: no cards and no list", async () => {
+    const p = plan2("ממש מצטערים על זה, נבדוק מה קרה", { unnamedAllowed: false });
+    expect(p.selected).toEqual([]);
+    expect(p.skipReason).toBe("not_named");
+    const { decideDelivery } = await import("../services/recommendation-autosend.service");
+    expect(decideDelivery(p, null)).toEqual({ structuredSent: false, useTextFallback: false });
+  });
+  it("a lookup that names nothing: the one best match", () => {
+    expect(plan2("כן, יש במידה M", { unnamedAllowed: true, unnamedMax: 1 }).selected.map((x) => x.productId)).toEqual(["1"]);
+  });
+  it("a recommendation search: the policy's choice", () => {
+    expect(plan2("הנה כמה אפשרויות", { unnamedAllowed: true }).selected).toHaveLength(4);
+  });
+});
+
+describe("★ e5 S5: a title said twice prints once, in any language", () => {
+  it("X (X), X, X", async () => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    const titles = ["Cotton Trench Coat", "Wool Blend Overcoat"];
+    expect(polishReply("יש את Cotton Trench Coat (Cotton Trench Coat) בבז'", { locale: "he", productTitles: titles })).toBe("יש את Cotton Trench Coat בבז'");
+    expect(polishReply("Wool Blend Overcoat, Wool Blend Overcoat in grey", { locale: "en", productTitles: titles })).toBe("Wool Blend Overcoat in grey");
+  });
+});
