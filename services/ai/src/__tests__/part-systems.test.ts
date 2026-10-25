@@ -49,18 +49,42 @@ beforeEach(() => {
 });
 
 describe("an unmapped part stays unmapped", () => {
-  it("★ does NOT fall through to whatever is connected", async () => {
-    // Shopify is connected and could serve ecommerce, but nobody chose it.
-    ROWS = [{ config: {}, integration: { slug: "shopify" } }];
+  it("★ the ONLY connected store is inferred, and labelled as nobody's choice (Omer, 2026-10-25)", async () => {
+    // Onboarding connects a store and never elects it: every onboarded store
+    // employee read "no system chosen, do not assume one" with one store connected.
+    ROWS = [{ config: {}, integration: { slug: "woocommerce" } }];
 
     const result = await getSystemForPart("t1", "ecommerce");
 
-    // The guess would be "shopify" and it would be indistinguishable from a
-    // choice. This is the whole point of the mechanism.
+    expect(result).toMatchObject({ slug: "woocommerce", source: "inferred", reasonCode: "inferred_default", reasonParams: { slug: "woocommerce" } });
+    expect(renderBusinessCoreBlock([result])).toContain("- ecommerce: woocommerce (inferred, not chosen by the business)");
+  });
+
+  it("★ does NOT fall through to whatever is connected when two could serve", async () => {
+    ROWS = [{ config: {}, integration: { slug: "shopify" } }, { config: {}, integration: { slug: "woocommerce" } }];
+
+    const result = await getSystemForPart("t1", "ecommerce");
+
+    // A guess between two would be indistinguishable from a choice.
     expect(result.slug).toBeNull();
     expect(result.source).toBe("unmapped");
     expect(result.reason).toMatch(/No system has been chosen/);
     expect(result.reasonCode).toBe("none_chosen");
+  });
+
+  it("a store that is not CONNECTED is never inferred", async () => {
+    ROWS = [{ status: "ERROR", config: {}, integration: { slug: "woocommerce" } }];
+    expect(await getSystemForPart("t1", "ecommerce")).toMatchObject({ slug: null, source: "unmapped", reasonCode: "none_chosen" });
+  });
+
+  it("a choice wins over the inference", async () => {
+    ROWS = [{ config: {}, integration: { slug: "woocommerce" } }, { config: { roles: ["ecommerce"] }, integration: { slug: "shopify" } }];
+    expect(await getSystemForPart("t1", "ecommerce")).toMatchObject({ slug: "shopify", source: "elected" });
+  });
+
+  it("a system that cannot serve the part is not inferred for it", async () => {
+    ROWS = [{ config: {}, integration: { slug: "woocommerce" } }];
+    expect(await getSystemForPart("t1", "payments")).toMatchObject({ slug: null, source: "unmapped" });
   });
 
   it("resolves a part that WAS chosen", async () => {

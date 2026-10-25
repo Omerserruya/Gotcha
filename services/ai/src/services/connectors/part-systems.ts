@@ -38,7 +38,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 import { prisma } from "@chatcenter/shared";
-import { BUSINESS_ROLES, type BusinessRole, roleAvailability } from "./business-roles";
+import { BUSINESS_ROLES, ROLE_CAPABILITIES, type BusinessRole, roleAvailability } from "./business-roles";
 import { resolveCrmVendor } from "./crm-adapter-resolver";
 import { getReturnProvider } from "../return-provider.service";
 
@@ -95,6 +95,18 @@ async function rolesBackedElection(tenantId: string, part: BusinessRole): Promis
     if (roles.includes(part)) return row.integration.slug;
   }
   return null;
+}
+
+/** The one CONNECTED integration that can serve the part, or null when there are none or several. */
+async function soleConnectedCandidate(tenantId: string, part: BusinessRole): Promise<string | null> {
+  const slugs = Object.keys(ROLE_CAPABILITIES).filter((slug) => ROLE_CAPABILITIES[slug].includes(part));
+  if (!slugs.length) return null;
+  const rows = await prisma.tenantIntegration.findMany({
+    where: { tenantId, status: "CONNECTED", integration: { slug: { in: slugs } } },
+    select: { integration: { select: { slug: true } } },
+  });
+  const found = [...new Set(rows.map((r) => r.integration.slug))];
+  return found.length === 1 ? found[0] : null;
 }
 
 /**
@@ -203,17 +215,25 @@ export async function getSystemForPart(tenantId: string, part: BusinessRole): Pr
     }
 
     const elected = await rolesBackedElection(tenantId, part);
-    return elected
-      ? { part, slug: elected, source: "elected", reason: `${elected} was chosen for ${part}.`, reasonCode: "elected", reasonParams: { slug: elected } }
-      : {
-          part,
-          slug: null,
-          source: "unmapped",
-          // Deliberately not "we will use whatever is connected". That guess is
-          // the behaviour screen 14 exists to replace.
-          reason: `No system has been chosen for ${part}.`,
-          reasonCode: "none_chosen",
-        };
+    if (elected) {
+      return { part, slug: elected, source: "elected", reason: `${elected} was chosen for ${part}.`, reasonCode: "elected", reasonParams: { slug: elected } };
+    }
+    // The ONLY connected system that can serve the part is inferred, and says
+    // so (Omer, 2026-10-25). Onboarding connects a store and never writes an
+    // election, so every onboarded store employee read "ecommerce: no system
+    // chosen, do not assume one" with one store connected. Not "whatever is
+    // connected": two candidates stay unmapped, and a choice always wins.
+    const only = await soleConnectedCandidate(tenantId, part);
+    if (only) {
+      return { part, slug: only, source: "inferred", reason: `${only} is the only connected system for ${part}; nobody chose it.`, reasonCode: "inferred_default", reasonParams: { slug: only } };
+    }
+    return {
+      part,
+      slug: null,
+      source: "unmapped",
+      reason: `No system has been chosen for ${part}.`,
+      reasonCode: "none_chosen",
+    };
   } catch (err: any) {
     console.error(`[part-systems] could not resolve ${part} for ${tenantId}:`, err?.message ?? err);
     return { part, slug: null, source: "unmapped", reason: `Could not read the system for ${part}.`, reasonCode: "read_failed" };
