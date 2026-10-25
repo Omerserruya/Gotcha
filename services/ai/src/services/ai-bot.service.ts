@@ -1076,6 +1076,7 @@ export async function generateAIBotReply(opts: {
    */
   onboardingTest?: { actorUserId: string };
 }): Promise<AIBotReplyResult> {
+
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
   // this controller. Every generateResponse() below threads `signal` so the
@@ -1298,6 +1299,11 @@ async function generateAIBotReplyInner(
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
+  // Where the turn's time goes (2026-10-25): milliseconds from the start of the
+  // turn to each milestone, on the ai.bot_turn audit as stageMs.
+  const turnStartedAt = Date.now();
+  const stageMs: Record<string, number> = {};
+  const markStage = (k: string) => { stageMs[k] = Date.now() - turnStartedAt; };
   const config = await prisma.aIAgent.findUnique({ where: { id: opts.aiAgentId } });
   if (!config || config.tenantId !== opts.tenantId) {
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
@@ -1400,6 +1406,7 @@ async function generateAIBotReplyInner(
 
   // The LAST 50, oldest first (see conversation-history.service).
   const messages = await loadRecentHistory<Awaited<ReturnType<typeof prisma.message.findMany>>[number]>(opts.tenantId, opts.conversationId);
+  markStage("history");
 
   // Pending approval lookup.
   let pendingApprovals: Array<{ id: string; tool: string }> = [];
@@ -1591,6 +1598,7 @@ async function generateAIBotReplyInner(
         },
       );
       kbBlock = buildKnowledgeContext(chunks) || undefined;
+      markStage("knowledge");
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
         if (title && !knowledgeUsed.some((k) => k.title === title)) {
@@ -3057,6 +3065,7 @@ async function generateAIBotReplyInner(
     }
   };
 
+  markStage("prompt_ready");
   // The per-turn state note (2026-10-25): the facts the model should not have
   // to infer from the transcript, last before it writes (recency wins).
   chatMessages.push({
@@ -4748,6 +4757,7 @@ async function generateAIBotReplyInner(
       targetId: opts.conversationId,
       metadata: {
         model,
+        stageMs: { ...stageMs, reply_ready: Date.now() - turnStartedAt },
         tokens: totalTokens,
         uncachedInputTokens,
         uncachedOverBudget: alertIfOverBudget({
@@ -4841,6 +4851,7 @@ async function generateAIBotReplyInner(
   // product fact with nothing behind it, a promise no tool keeps, two
   // questions, a question after a thank-you). Any violation: ONE regeneration,
   // without tools, naming exactly what to fix; whatever comes back is sent.
+  markStage("model_done");
   if (replyText && !awaitingApproval && !pendingEscalation) {
     try {
       const persona: any = (config as any).persona ?? {};
@@ -4892,6 +4903,7 @@ async function generateAIBotReplyInner(
     }
   }
 
+  markStage("checker_done");
   // An empty search is data the model already read, not the reply (2026-10-25,
   // eval R2): "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a
   // complaint's included. With nothing to show, the model's own words stand;
