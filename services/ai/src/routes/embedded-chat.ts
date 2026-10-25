@@ -36,11 +36,21 @@ const router = Router();
  * Caps are conservative for the public internet but never block a normal
  * conversation:
  *
- *   /init     - 5 / min / (widgetId, ip)        - usually called once / tab
+ *   /bootstrap, /texts, /init
+ *             - 60 / min / (route, widgetId, ip), and 1200 / min / (route,
+ *               widgetId) as the flood guard
  *   /message  - 20 / min / (sessionId, ip)      - burst-tolerant, denies floods
  *   /messages - 60 / min / (sessionId, ip)      - polling endpoint
  *
- * Overrides via env: AI_WIDGET_INIT_RPM / AI_WIDGET_MESSAGE_RPM / AI_WIDGET_POLL_RPM.
+ * The init cap was 5 / min / (widgetId, ip), shared by all three routes
+ * (2026-10-25). Every page view bootstraps, so one office testing on three
+ * devices, or shoppers behind one carrier NAT, used it up in seconds: 28 of
+ * 46 bootstraps on the dev Woo store answered 429 and the widget did not
+ * draw. A 429 carries `retryAfter` (seconds) in its body, because a
+ * cross-origin script cannot read the Retry-After header.
+ *
+ * Overrides via env: AI_WIDGET_INIT_RPM / AI_WIDGET_INIT_WIDGET_RPM /
+ * AI_WIDGET_MESSAGE_RPM / AI_WIDGET_POLL_RPM.
  */
 function envInt(name: string, fallback: number): number {
   const v = process.env[name];
@@ -49,17 +59,40 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-const initLimiter = rateLimit({
+/** The 429 body, with the wait the widget should honour before retrying. */
+function limitedHandler(error: string) {
+  return (req: Request, res: Response) => {
+    const reset = (req as any).rateLimit?.resetTime as Date | undefined;
+    const retryAfter = reset ? Math.max(1, Math.ceil((reset.getTime() - Date.now()) / 1000)) : 60;
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({ error, retryAfter });
+  };
+}
+
+const initPerVisitor = rateLimit({
   windowMs: 60 * 1000,
-  max: envInt("AI_WIDGET_INIT_RPM", 5),
+  max: envInt("AI_WIDGET_INIT_RPM", 60),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
     const wid = String((req.body as any)?.widgetId ?? "");
-    return `init:${wid}:${req.ip}`;
+    return `init:${req.path}:${wid}:${req.ip}`;
   },
-  message: { error: "Too many initialisation attempts. Please slow down." },
+  handler: limitedHandler("Too many initialisation attempts. Please slow down."),
 });
+
+const initPerWidget = rateLimit({
+  windowMs: 60 * 1000,
+  max: envInt("AI_WIDGET_INIT_WIDGET_RPM", 1200),
+  standardHeaders: false,
+  legacyHeaders: false,
+  keyGenerator: (req) => `initw:${req.path}:${String((req.body as any)?.widgetId ?? "")}`,
+  handler: limitedHandler("Too many initialisation attempts. Please slow down."),
+});
+
+// Per visitor first: a request one address is refused never counts toward
+// the widget's shared cap, so a single flooding address cannot spend it.
+const initLimiter = [initPerVisitor, initPerWidget];
 
 const messageLimiter = rateLimit({
   windowMs: 60 * 1000,

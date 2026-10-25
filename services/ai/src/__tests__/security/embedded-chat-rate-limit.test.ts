@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // hoisted to the top of the file with vi.mock factories).
 vi.hoisted(() => {
   process.env.AI_WIDGET_INIT_RPM = "3";
+  process.env.AI_WIDGET_INIT_WIDGET_RPM = "5";
   process.env.AI_WIDGET_MESSAGE_RPM = "5";
   process.env.AI_WIDGET_POLL_RPM = "5";
 });
@@ -144,6 +145,56 @@ describe("/init - rate limit", () => {
     // Same widget A from a DIFFERENT ip also fresh.
     const okADifferentIp = await request(appIpDifferent).post("/api/embedded-chat/init").send({ widgetId: "wid-A" });
     expect(okADifferentIp.status).not.toBe(429);
+  });
+});
+
+describe("/bootstrap - every page view, from one office or one carrier NAT (2026-10-25)", () => {
+  it("the defaults: 60 / min per visitor, 1200 / min per widget", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(__dirname, "../../routes/embedded-chat.ts"), "utf-8");
+    expect(src).toContain('envInt("AI_WIDGET_INIT_RPM", 60)');
+    expect(src).toContain('envInt("AI_WIDGET_INIT_WIDGET_RPM", 1200)');
+    expect(src).toMatch(/const initLimiter = \[initPerVisitor, initPerWidget\];/);
+  });
+
+  it("bootstrap, texts and init each have their own bucket", async () => {
+    const app = makeApp("10.0.3.1");
+    const widgetId = "wid-routes";
+    for (let i = 0; i < 3; i++) {
+      expect((await request(app).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).not.toBe(429);
+    }
+    expect((await request(app).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).toBe(429);
+    expect((await request(app).post("/api/embedded-chat/init").send({ widgetId })).status).not.toBe(429);
+  });
+
+  it("a 429 says how long to wait, in the body a cross-origin script can read", async () => {
+    const app = makeApp("10.0.3.2");
+    const widgetId = "wid-retry";
+    for (let i = 0; i < 3; i++) await request(app).post("/api/embedded-chat/bootstrap").send({ widgetId });
+    const res = await request(app).post("/api/embedded-chat/bootstrap").send({ widgetId });
+    expect(res.status).toBe(429);
+    expect(res.body.retryAfter).toBeGreaterThanOrEqual(1);
+    expect(res.body.retryAfter).toBeLessThanOrEqual(60);
+    expect(res.headers["retry-after"]).toBe(String(res.body.retryAfter));
+  });
+
+  it("the widget's shared cap stops a flood spread over many addresses", async () => {
+    const widgetId = "wid-flood";
+    for (let i = 0; i < 5; i++) {
+      expect((await request(makeApp(`10.0.4.${i}`)).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).not.toBe(429);
+    }
+    expect((await request(makeApp("10.0.4.99")).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).toBe(429);
+  });
+
+  it("requests refused to one flooding address do not spend the widget's shared cap", async () => {
+    const widgetId = "wid-one-flooder";
+    const flooder = makeApp("10.0.5.1");
+    for (let i = 0; i < 10; i++) await request(flooder).post("/api/embedded-chat/bootstrap").send({ widgetId });
+    // 3 of the 10 counted; two other shoppers still fit under the cap of 5.
+    expect((await request(makeApp("10.0.5.2")).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).not.toBe(429);
+    expect((await request(makeApp("10.0.5.3")).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).not.toBe(429);
+    expect((await request(makeApp("10.0.5.4")).post("/api/embedded-chat/bootstrap").send({ widgetId })).status).toBe(429);
   });
 });
 

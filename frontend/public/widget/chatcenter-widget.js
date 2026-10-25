@@ -17,6 +17,13 @@
  *      the adapter, the bubble, the pop-up) and the chat bundle the
  *      storefront runs too. New bytes are new names, so a pinned loader
  *      still gets the current widget.
+ *
+ * A busy answer (429, a 5xx, the network) must not make the widget vanish
+ * (2026-10-25: 28 of 46 page views on the dev Woo store drew nothing). The
+ * last widget the server answered is kept in localStorage for a day and
+ * drawn at once when the server is busy; with none kept, the loader retries
+ * with backoff, honouring the server's `retryAfter`. An empty answer (the
+ * widget was removed) clears what was kept, so a removed widget still goes.
  */
 (function () {
   "use strict";
@@ -35,11 +42,69 @@
         if (!res.ok) {
           var err = new Error(json.error || "request_failed");
           err.status = res.status;
+          // A cross-origin script cannot read Retry-After; the server puts it in the body too.
+          err.retryAfter = Number(json.retryAfter || res.headers.get("Retry-After")) || 0;
           throw err;
         }
         return json;
       });
     });
+  }
+
+  var KEPT_KEY = "cc_boot_" + WIDGET_ID.slice(-24);
+  var KEPT_MS = 24 * 60 * 60 * 1000;
+  var RETRIES = 4;
+
+  var kept = {
+    get: function () {
+      try {
+        var v = JSON.parse(window.localStorage.getItem(KEPT_KEY) || "null");
+        return v && v.data && v.data.widget && Date.now() - v.at < KEPT_MS ? v.data : null;
+      } catch (e) { return null; }
+    },
+    set: function (data) {
+      try { window.localStorage.setItem(KEPT_KEY, JSON.stringify({ at: Date.now(), data: data })); } catch (e) {}
+    },
+    del: function () {
+      try { window.localStorage.removeItem(KEPT_KEY); } catch (e) {}
+    },
+  };
+
+  /** Busy or unreachable, not "this widget is gone": worth another try. */
+  function transient(err) {
+    return !err || !err.status || err.status === 429 || err.status >= 500;
+  }
+
+  /** The wait before try n (1-based): the server's word, else 2, 4, 8, 16s; plus jitter, capped at 30s. */
+  function backoff(err, n) {
+    var base = err && err.retryAfter > 0 ? err.retryAfter * 1000 : 1000 * Math.pow(2, n);
+    return Math.min(30000, base) + Math.floor(Math.random() * 500);
+  }
+
+  function bootstrap(attempt) {
+    return request("/api/embedded-chat/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ widgetId: WIDGET_ID }),
+      credentials: "omit",
+    }).then(
+      function (res) {
+        var data = (res && res.data) || {};
+        if (data.widget) kept.set(data);
+        else kept.del();
+        return data;
+      },
+      function (err) {
+        if (!transient(err)) throw err;
+        // Draw the widget the server last answered rather than nothing.
+        var last = kept.get();
+        if (last) return last;
+        if (attempt >= RETRIES) throw err;
+        return new Promise(function (resolve) {
+          setTimeout(resolve, backoff(err, attempt + 1));
+        }).then(function () { return bootstrap(attempt + 1); });
+      },
+    );
   }
 
   function loadScript(name, ready) {
@@ -55,14 +120,8 @@
   }
 
   function start() {
-    request("/api/embedded-chat/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ widgetId: WIDGET_ID }),
-      credentials: "omit",
-    })
-      .then(function (res) {
-        var data = (res && res.data) || {};
+    bootstrap(0)
+      .then(function (data) {
         if (!data.widget) return;
         return request("/widget/widget-manifest.json", { credentials: "omit", cache: "no-cache" }).then(function (manifest) {
           if (!manifest || !manifest.site || !manifest.chat) throw new Error("manifest_incomplete");
