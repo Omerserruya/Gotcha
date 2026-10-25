@@ -181,7 +181,7 @@ export async function enrichProductSearchArgs(opts: {
     });
     if (!conn) return opts.args;
 
-    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const profile = profileForStore(getDiscoveryProfile("product_recommendation") as DiscoveryProfile, null);
     const session = await getOrCreateActiveSession({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -254,7 +254,7 @@ export async function groundProductSearchResult(opts: {
       shopCurrency = await resolveShopCurrency(opts.tenantId, conn?.config);
     }
 
-    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const profile = profileForStore(getDiscoveryProfile("product_recommendation") as DiscoveryProfile, null);
     const session = await getOrCreateActiveSession({ tenantId: opts.tenantId, conversationId: opts.conversationId, goalKey: profile.goalKey });
     const facts = await (await import("@chatcenter/shared")).activeFacts(session.id);
     const budget = parseBudget(facts.get("budget")?.valueJson);
@@ -498,7 +498,7 @@ export async function complementaryAnchorAllowed(opts: {
     const wanted = String(opts.productId || "").replace(/^gid:\/\/shopify\/Product\//, "");
     if (!wanted) return { ok: false, reason: "complementary_products needs the product_id of the product the customer chose." };
 
-    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const profile = profileForStore(getDiscoveryProfile("product_recommendation") as DiscoveryProfile, null);
     const session = await getOrCreateActiveSession({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -543,7 +543,7 @@ export async function recordDiscoverySearchOutcome(opts: {
       (t) => typeof t.tool === "string" && (/(^|\.)search_products$/.test(t.tool) || t.tool === "woocommerce.list_products" || t.tool === "woocommerce.get_product"),
     );
     if (!call) return;
-    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const profile = profileForStore(getDiscoveryProfile("product_recommendation") as DiscoveryProfile, null);
     const session = await getOrCreateActiveSession({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,

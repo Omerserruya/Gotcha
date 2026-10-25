@@ -228,11 +228,14 @@ const PRODUCT_RECOMMENDATION: ObjectiveModule = {
   mission: "Understand what the customer wants, then search the connected store and show REAL products with exact links.",
   requiredInformation: [
     { key: "product_category", label: "what kind of product", importance: "required", priority: 1, sourceHints: ["category", "product", "item"] },
-    { key: "budget", label: "approximate budget", importance: "required", priority: 2, sourceHints: ["budget", "price"] },
-    { key: "riding_style", label: "general use / style", importance: "required", priority: 3, sourceHints: ["use", "style", "terrain"] },
+    // Budget and use are never required in a shop (2026-10-25, eval R1): a
+    // named product, a size or a colour is enough to search and show, and
+    // "מה התקציב?" after every answer was the first thing that read as a bot.
+    { key: "budget", label: "approximate budget", importance: "preferred", priority: 2, sourceHints: ["budget", "price"] },
+    { key: "riding_style", label: "general use / style", importance: "preferred", priority: 3, sourceHints: ["use", "style", "terrain"] },
   ],
   completionCriteria: [
-    "The minimum criteria (category, budget, use) are known",
+    "What kind of product they want is known",
     "A real catalog search executed and real candidates were shown with exact links",
   ],
   nextStepLogic:

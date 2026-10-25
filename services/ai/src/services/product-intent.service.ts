@@ -226,3 +226,23 @@ export function buildWooLookupDirective(kind: ProductInquiryKind, locale: "he" |
     (locale === "he" ? `Reply in Hebrew, naturally ("במידה M יש", not "עליי לבדוק").\n` : "")
   );
 }
+
+/** Our own messages that asked about money: "מה התקציב?", "טווח מחיר", "budget". */
+const BUDGET_ASK = /תקציב|טווח (?:ה)?מחיר|טווח מחירים|budget|price range/i;
+
+/**
+ * The budget question, decided here rather than by the model (2026-10-25, eval
+ * R1: "מה התקציב?" after every answer, four times in a row in one chat, and as
+ * a slash menu of brackets). Budget is never required in a shop. It may be
+ * asked once in a conversation, only to help an open recommendation, and never
+ * after the customer named a product, a size or a colour.
+ */
+export function buildBudgetRule(outbound: Array<{ body: string | null }>, lookup: boolean): string {
+  const asked = outbound.some((m) => BUDGET_ASK.test(m.body ?? ""));
+  if (asked || lookup) {
+    return "BUDGET: do NOT ask about budget or a price range in this reply" +
+      (asked ? " - it was already asked in this conversation, and asking again is badgering." : " - the customer named what they want; answer about it.") +
+      " If price matters, the products and their prices speak for themselves.";
+  }
+  return "BUDGET: optional, never a condition for showing products. Ask about it at most once in this conversation, and only when the customer wants a recommendation and the matching products span a wide price range. Never after they named a product, a size or a colour, never as a menu of brackets, never with a slash.";
+}

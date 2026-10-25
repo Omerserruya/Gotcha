@@ -363,7 +363,7 @@ export function renderFacetsForPrompt(facets: CatalogFacets | null, locale: "he"
     "",
     "RULES:",
     "- These are the ONLY things this catalogue can be narrowed by. Never interview the customer about an attribute that is not listed above - you would be collecting an answer you cannot search on.",
-    "- Quote budget brackets from the ranges above. Offering \"under 200\" for a category that starts at 600 wastes the customer's answer.",
+    "- Never offer a menu of price brackets. If a budget question is really needed, ask it openly, once, and keep the ranges above in mind when reading the answer.",
     facets.provider === "woocommerce"
       // The WooCommerce search takes a title query, a price range and in_stock.
       ? "- Pass what you learn as real arguments (query with the English title words, price_max / price_min, in_stock), not as prose about what you intend to search for. For a size or colour, read the product's variations."
@@ -406,10 +406,13 @@ function storeHasDimension(facets: CatalogFacets, key: string): boolean {
  *  - every real option becomes a fact, so a store whose products differ by
  *    Colour gets asked about colour without anyone writing that down here.
  *
- * `product_category` and `budget` are never demoted: a category is what the
- * query searches and price is filterable in every store there is.
+ * `product_category` is never demoted: a category is what the query searches.
+ * `budget` is always optional (2026-10-25, eval R1): price is filterable in
+ * every store, but a shopper who named a product, a size or a colour has said
+ * enough to be shown it, and a required budget was asked after every answer.
  */
-const ALWAYS_REQUIRED = new Set(["product_category", "budget"]);
+const ALWAYS_REQUIRED = new Set(["product_category"]);
+const NEVER_REQUIRED = new Set(["budget"]);
 /** Facts that mean something in any store. */
 const GENERIC_FACTS = new Set(["availability"]);
 
@@ -417,7 +420,10 @@ export function profileForStore(
   profile: DiscoveryProfile,
   facets: CatalogFacets | null,
 ): DiscoveryProfile {
-  if (!facets) return profile;
+  const optionalBudget = (p: DiscoveryProfile): DiscoveryProfile =>
+    ({ ...p, facts: p.facts.map((f) => (NEVER_REQUIRED.has(f.key) && f.required ? { ...f, required: false } : f)) });
+  if (!facets) return optionalBudget(profile);
+  profile = optionalBudget(profile);
 
   // A store that sells snowboards keeps the snowboard interview as it was;
   // anywhere else a fact the store has no dimension for is not something to

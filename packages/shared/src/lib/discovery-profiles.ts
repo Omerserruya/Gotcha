@@ -53,7 +53,7 @@ export const PRODUCT_RECOMMENDATION_PROFILE: DiscoveryProfile = {
   readyAction: { type: "execute_tool", tool: "shopify.search_products" },
   facts: [
     { key: "product_category", type: "string", required: true, aliases: ["category", "product", "item_type", "קטגוריה", "מוצר"], description: "What kind of product (e.g. snowboard, boots)." },
-    { key: "budget", type: "range", required: true, aliases: ["price", "budget_usd", "תקציב", "מחיר"], description: "Approximate budget with currency." },
+    { key: "budget", type: "range", required: false, aliases: ["price", "budget_usd", "תקציב", "מחיר"], description: "Approximate budget with currency." },
     { key: "riding_style", type: "enum", required: true, aliases: ["use", "terrain", "style", "סגנון", "שימוש"], enumValues: ["all_mountain", "freestyle", "freeride", "park", "carving", "powder"], description: "General use / riding style." },
     { key: "height_cm", type: "number", required: false, aliases: ["height", "גובה"], description: "Customer height in cm." },
     { key: "weight_kg", type: "number", required: false, aliases: ["weight", "משקל"], description: "Customer weight in kg." },
