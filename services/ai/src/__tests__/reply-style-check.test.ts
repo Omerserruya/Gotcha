@@ -245,3 +245,23 @@ describe("★ e7 T3: cards the model sent itself, and no text", () => {
     expect(deliverableReply({ safeReply: null, pendingEscalation: false, awaitingApproval: false, toolCallLog: [], locale: "he", cardsShown: true })).toBe("בבקשה 🙂");
   });
 });
+
+describe("★ voice runs: the brand's close is not tacked onto a non-thanks reply", () => {
+  it.each([
+    ["באיזו מידה לחפש? בכיף אהובה ❤️", "באיזו מידה לחפש?"],
+    ["יש בשחור ובאפור. בכיף אהובה ❤️ יום מצוין!", "יש בשחור ובאפור."],
+    ["₪79. בשמחה.", "₪79."],
+  ])("%s", async (input, want) => {
+    const { stripStrayClose } = await import("../services/reply-style-check.service");
+    expect(stripStrayClose(input, "יש גרביים?")).toBe(want);
+  });
+  it("after a thank-you the close stays; 'כן, בשמחה' as an answer stays", async () => {
+    const { stripStrayClose } = await import("../services/reply-style-check.service");
+    expect(stripStrayClose("בכיף אהובה ❤️", "תודה!")).toBe("בכיף אהובה ❤️");
+    expect(stripStrayClose("כן, בשמחה", "אפשר להחליף מידה?")).toBe("כן, בשמחה");
+  });
+  it("V-b: 'לא בטוח' from an ungendered employee", () => {
+    expect(kinds("לא בטוח מאיזה מהן יש גם אדום")).toContain("self_gender");
+    expect(kinds("לא בטוחים איזה מהן")).not.toContain("self_gender");
+  });
+});

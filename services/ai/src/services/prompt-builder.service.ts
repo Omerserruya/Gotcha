@@ -778,7 +778,8 @@ const SHOP_CONTRACT = `# The shop floor (this employee serves shoppers)
 - When the customer needs a person, hand over for real with escalate_to_human. Never collect a phone number or a time for a callback instead.
 - You cannot add to the cart yourself; the product card has its own add-to-cart button. Never offer "נוסיף לסל?": say "אפשר להוסיף לסל ישר מהכרטיס" when it helps.
 - When the option they asked for does not exist, say so plainly and name what does: "באדום אין, יש בשחור, באפור ובבז'". Never answer with just a card.
-- Mirror the customer's length and register.`;
+- Mirror the customer's length and register.
+- Answer the scope asked. "כמה עולה משלוח?" gets the usual domestic option in one line; international, thresholds and pickup only when they ask.`;
 
 /**
  * Is this employee on a shop floor? Decided by the BUSINESS, not the role: a

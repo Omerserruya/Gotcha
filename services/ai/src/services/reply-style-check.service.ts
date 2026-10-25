@@ -78,8 +78,8 @@ const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}]
 const MASC_TO_CUSTOMER = w("שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
 const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
 /** The employee about itself, by gender. */
-const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה)|בודק רגע|שמח לעזור|מצטער על");
-const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה)|בודקת רגע|שמחה לעזור|מצטערת על");
+const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה|בטוח)|בודק רגע|שמח לעזור|מצטער על|לא בטוח(?! לי)");
+const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה|בטוחה)|בודקת רגע|שמחה לעזור|מצטערת על|לא בטוחה");
 
 const COLOUR = /(?<![A-Za-z])(?:black|white|navy|beige|camel|oat|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])|(?<![\u0590-\u05FF])[ובה]?(?:שחור|שחורה|לבן|לבנה|נייבי|בז'|קאמל|אפור|אפורה|זית|שמנת|חום|חומה|אדום|אדומה|כחול|כחולה|ירוק|ירוקה|ורוד|ורודה)(?![֐-׿])/iu;
 const SIZE = /(?:מידה|מידות|size|sizes)\s*(?:XXS|XS|S|M|L|XL|XXL|\d{2})(?![A-Za-z])/i;
@@ -287,6 +287,13 @@ export function closingReplyFor(incomingMessage: string, locale: "he" | "en"): s
  */
 export function stripStrayClose(reply: string, incomingMessage: string): string {
   if (ONLY_CLOSING.test(incomingMessage ?? "") || /תודה|thanks|thank you/i.test(incomingMessage ?? "")) return reply;
+  // A close that is its own sentence after the reply, with the brand's
+  // endearment and emoji (voice run V02: "באיזו מידה לחפש? בכיף אהובה ❤️").
+  const own = reply.replace(
+    /([?!.؟\n])\s*(?:בכיף|בשמחה|anytime|my pleasure)(?:\s+(?:אהובה|אהוב|מותק|יקירה|יקרה|מאמי|נשמה|dear))?[\s!.,🙂😊❤️🥰✨🙏]*(?:יום (?:טוב|מצוין|נפלא)[!.]?)?[\s🙂😊❤️🥰✨]*$/iu,
+    "$1",
+  ).trim();
+  if (own !== reply.trim() && own.length >= 3) return own;
   const out = reply.replace(/[\s,]*(?:בכיף|anytime)\s*[🙂😊❤️🙏]*\s*$/iu, "").trim();
   return out.length >= 3 ? out : reply;
 }
