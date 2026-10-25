@@ -120,7 +120,7 @@ import {
 } from "./skill-runtime.service";
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
-import { checkReplyStyle, buildStyleCorrective, polishReply } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -4903,6 +4903,14 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // After a bare thank-you or goodbye: only a short warm close, whatever came back.
+  if (replyText && !awaitingApproval && !pendingEscalation) {
+    const closed = closeAfterThanks(replyText, opts.incomingMessage ?? "", replyLocale);
+    if (closed !== replyText) {
+      console.warn(`[ai-bot] close after thanks replaced a ${replyText.length}-char reply conv=${opts.conversationId}`);
+      replyText = closed;
+    }
+  }
   markStage("checker_done");
   // An empty search is data the model already read, not the reply (2026-10-25,
   // eval R2): "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a

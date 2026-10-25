@@ -104,3 +104,20 @@ describe("★ wired into the turn", () => {
     expect(src).toContain("!isShopFloor({ toolFunctionNames, company: companyContext ?? undefined }) &&");
   });
 });
+
+describe("★ after a bare thank-you: only a short warm close", () => {
+  it("E04: the regenerated push is replaced", async () => {
+    const { closeAfterThanks } = await import("../services/reply-style-check.service");
+    expect(closeAfterThanks("אפשר לשלוח שוב את כרטיס המוצר של Oversized Cotton T-Shirt כדי להוסיף אותו לסל. בכיף 🙂", "תודה רבה!", "he")).toBe("בכיף 🙂");
+    expect(closeAfterThanks("רוצה שאשלח קישור?", "תודה, ביי", "he")).toBe("בשמחה, יום טוב!");
+    expect(closeAfterThanks("שמחים לעזור, ומה עוד?", "להתראות", "he")).toBe("בשמחה, יום טוב!");
+  });
+  it("a short close stays; a thank-you with a question is not a close", async () => {
+    const { closeAfterThanks } = await import("../services/reply-style-check.service");
+    expect(closeAfterThanks("בשמחה! יום נהדר 🙂", "תודה רבה!", "he")).toBe("בשמחה! יום נהדר 🙂");
+    expect(closeAfterThanks("יש גם ב-L, בשחור.", "תודה! ויש ב-L?", "he")).toBe("יש גם ב-L, בשחור.");
+  });
+  it("the corrective says: only a short close, no offer, no product", () => {
+    expect(buildStyleCorrective([{ kind: "question_after_thanks", match: "x" }], "he")).toContain("No offer, no product, no next step.");
+  });
+});

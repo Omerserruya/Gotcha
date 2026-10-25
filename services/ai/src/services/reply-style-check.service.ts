@@ -148,7 +148,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
-  question_after_thanks: { he: "The customer thanked you: a short warm close and no question (\"בכיף 🙂\").", en: "The customer thanked you: a short warm close and no question." },
+  question_after_thanks: { he: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"בכיף 🙂\", \"בשמחה, יום טוב!\"). No offer, no product, no next step.", en: "The customer thanked you and is closing. Reply with ONLY a short warm close, 2 to 4 words (\"Anytime 🙂\"). No offer, no product, no next step." },
 };
 
 /** The single corrective for the one regeneration, naming each violation. */
@@ -187,4 +187,26 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")
     .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1");
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => held[Number(i)]);
+}
+
+/** The customer's whole message is a thank-you or a goodbye, nothing asked. */
+const CLOSING_PHRASE = "(?:(?:ממש |אחלה |מעולה,? |סבבה,? |סופר )?תודה(?: רבה| ענקית| לך| לכם)?|thanks?(?: a lot| so much)?|thank you(?: so much)?|ty|ביי|להתראות|יום טוב|bye|goodbye)";
+const ONLY_CLOSING = new RegExp(`^\\s*${CLOSING_PHRASE}(?:[\\s,!.]+${CLOSING_PHRASE})*[\\s!.,🙏❤️🙂😊🌸]*$`, "iu");
+
+/** A reply that is only a short warm close: a few words, no question, no link. */
+function isShortClose(reply: string): boolean {
+  const t = reply.trim();
+  return t.length <= 40 && !t.includes("?") && !/https?:\/\//.test(t) && t.split(/\s+/).length <= 6;
+}
+
+/**
+ * After a bare thank-you or goodbye the reply is a short warm close and nothing
+ * else (2026-10-25, eval E04: even the regenerated reply offered to resend a
+ * product card). Deterministic: anything more is replaced by the close.
+ */
+export function closeAfterThanks(reply: string, incomingMessage: string, locale: "he" | "en"): string {
+  if (!ONLY_CLOSING.test(incomingMessage ?? "") || isShortClose(reply)) return reply;
+  const bye = /ביי|להתראות|יום טוב|bye/i.test(incomingMessage);
+  if (locale === "he") return bye ? "בשמחה, יום טוב!" : "בכיף 🙂";
+  return bye ? "Anytime, have a good one!" : "Anytime 🙂";
 }
