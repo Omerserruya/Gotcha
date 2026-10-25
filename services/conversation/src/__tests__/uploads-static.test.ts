@@ -80,6 +80,19 @@ describe("★ widget images load on the merchant's site (2026-10-25)", () => {
     }
   });
 
+  it("★ a cache holding the old same-origin copy gets a full 200 with the new header, not a 304", async () => {
+    const first = await wget("widget/hero.jpg");
+    expect(first.headers.etag).toMatch(/-xo"$/);
+    // The validator a cache stored before this change: express's default.
+    const stat = fs.statSync(path.join(wdir, "widget/hero.jpg"));
+    const old = `W/"${stat.size.toString(16)}-${stat.mtime.getTime().toString(16)}"`;
+    const r = await request(wapp).get("/api/uploads/widget/hero.jpg").set("If-None-Match", old);
+    expect(r.status).toBe(200);
+    expect(r.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+    // ...and its own validator still revalidates cheaply.
+    expect((await request(wapp).get("/api/uploads/widget/hero.jpg").set("If-None-Match", first.headers.etag)).status).toBe(304);
+  });
+
   it("the folder is the one the widget-image route writes to", () => {
     const src = fs.readFileSync(path.join(__dirname, "../routes/widget-images.ts"), "utf-8");
     expect(src).toContain('export const WIDGET_IMAGE_DIR = "widget";');

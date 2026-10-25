@@ -17,9 +17,15 @@ import { uploadServingHeaders } from "@chatcenter/shared/src/lib/upload-safety";
 export function uploadsStatic(dir: string) {
   const root = path.resolve(dir);
   return express.static(dir, {
-    setHeaders(res, filePath) {
+    setHeaders(res, filePath, stat) {
       for (const [k, v] of Object.entries(uploadServingHeaders(path.extname(filePath)))) res.setHeader(k, v);
-      if (isWidgetImage(root, filePath)) res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      if (isWidgetImage(root, filePath)) {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        // Its own validator: the edge revalidates a cached copy, and a 304 on
+        // the old ETag kept the old same-origin header in its cache. `send`
+        // keeps an ETag already set, so this one is what is compared.
+        res.setHeader("ETag", `W/"${stat.size.toString(16)}-${stat.mtime.getTime().toString(16)}-xo"`);
+      }
     },
   });
 }
