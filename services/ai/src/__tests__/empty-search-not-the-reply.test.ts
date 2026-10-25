@@ -1,0 +1,37 @@
+/**
+ * An empty product search is data, not the reply (2026-10-25, eval R2).
+ * "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a complaint's
+ * included, and "black tank top" missed the store's "Organic Rib Tank".
+ */
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { searchWords, rankByTitleWords } from "../services/connectors/woocommerce.adapter";
+
+describe("★ a multi-word search that finds nothing is retried word by word", () => {
+  it("the words worth searching alone, longest first, no filler", () => {
+    expect(searchWords("black tank top")).toEqual(["black", "tank", "top"]);
+    expect(searchWords("linen shirt in size M")).toEqual(["linen", "shirt"]);
+    expect(searchWords("")).toEqual([]);
+  });
+  it("only products whose title carries a query word, best first", () => {
+    const products = [
+      { id: 1, name: "Heavyweight Boxy Tee" },  // matched "black" in its body only
+      { id: 2, name: "Organic Rib Tank" },
+      { id: 3, name: "Rib Tank Top" },
+    ];
+    expect(rankByTitleWords(products, searchWords("black tank top")).map((p) => p.id)).toEqual([3, 2]);
+  });
+});
+
+describe("★ the bot keeps the model's reply when the search is empty", () => {
+  it("the canned line only for a model that said nothing", () => {
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain('const emptySearch = !!productEnvelope && productEnvelope.status === "no_results" && productEnvelope.candidates.length === 0;');
+    expect(src).toContain("if (emptySearch && replyText?.trim()) {");
+  });
+  it("the adapter retries at most 3 words", () => {
+    const src = readFileSync(join(__dirname, "../services/connectors/woocommerce.adapter.ts"), "utf8");
+    expect(src).toContain("for (const w of words.slice(0, 3)) {");
+  });
+});

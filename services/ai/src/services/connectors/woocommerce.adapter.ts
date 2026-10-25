@@ -329,6 +329,19 @@ const TOOLS: ToolDefinition[] = [
 
 const VALIDATE_TIMEOUT_MS = 10_000;
 
+/** The words worth searching alone, longest first ("black tank top" -> tank, black, top). */
+export function searchWords(query: unknown): string[] {
+  const STOP = new Set(["the", "and", "for", "with", "a", "an", "in", "of", "size", "color", "colour"]);
+  const words = String(query ?? "").toLowerCase().split(/[^a-z0-9\u0590-\u05ff]+/).filter((w) => w.length >= 3 && !STOP.has(w));
+  return Array.from(new Set(words)).sort((a, b) => b.length - a.length);
+}
+
+/** Products whose TITLE carries a query word, most words first; the rest are noise from a body match. */
+export function rankByTitleWords(products: any[], words: string[]): any[] {
+  const hits = (p: any) => words.filter((w) => new RegExp(`\\b${w}`, "i").test(String(p?.name ?? ""))).length;
+  return products.map((p) => ({ p, n: hits(p) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).map((x) => x.p);
+}
+
 /**
  * The store address, normalised: scheme + host (+ port) + a sub-directory
  * install path, no query, no fragment, no credentials. https only, except
@@ -480,8 +493,22 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (ids(args.include).length) params.set("include", ids(args.include).join(","));
         if (ids(args.exclude).length) params.set("exclude", ids(args.exclude).join(","));
         if (/^\d{1,12}$/.test(String(args.category ?? ""))) params.set("category", String(args.category));
-        const list: any = await wooRequest(auth, "GET", `${base}/products?${params}`);
-        return Array.isArray(list) ? list.filter((p: any) => p?.catalog_visibility !== "hidden") : list;
+        const visible = (l: any) => (Array.isArray(l) ? l.filter((p: any) => p?.catalog_visibility !== "hidden") : l);
+        const list: any = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
+        // Woo searches the whole phrase: "black tank top" finds nothing in a
+        // store whose product is "Organic Rib Tank" (2026-10-25, eval H02). An
+        // empty multi-word search is retried word by word, at most 3 requests.
+        const words = searchWords(args.query);
+        if (Array.isArray(list) && list.length === 0 && words.length > 1) {
+          const seen = new Map<string, any>();
+          for (const w of words.slice(0, 3)) {
+            params.set("search", w);
+            const more = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
+            if (Array.isArray(more)) for (const p of more) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p);
+          }
+          return rankByTitleWords(Array.from(seen.values()), words);
+        }
+        return list;
       }
       case "create_coupon": {
         const body: any = {

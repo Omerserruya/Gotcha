@@ -4831,7 +4831,14 @@ async function generateAIBotReplyInner(
   // renderer resolves them, blocks invented refs, and strips any URL/price the
   // model tried to emit. On any failure it still renders from the canonical
   // envelope (never generic model inventory) and logs loudly.
-  if (productEnvelope) {
+  // An empty search is data the model already read, not the reply (2026-10-25,
+  // eval R2): "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a
+  // complaint's included. With nothing to show, the model's own words stand;
+  // the canned line is left only for a model that said nothing.
+  const emptySearch = !!productEnvelope && productEnvelope.status === "no_results" && productEnvelope.candidates.length === 0;
+  if (emptySearch && replyText?.trim()) {
+    console.log(`[ai-bot] empty product search: the model's reply stands conv=${opts.conversationId}`);
+  } else if (productEnvelope) {
     // Does this channel have somewhere better to put products than a
     // sentence? The capability map answers, not this file.
     const recoCaps = capabilitiesFor(conversation.channel as string);
