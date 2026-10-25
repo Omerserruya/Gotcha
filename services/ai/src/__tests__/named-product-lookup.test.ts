@@ -206,7 +206,7 @@ describe("(c) and (d)", () => {
 
   it("QUALIFY asks a store about use, fit and budget, and looks up a named product instead of qualifying", () => {
     const src = readFileSync(join(__dirname, "../services/behavior-strategies.ts"), "utf-8");
-    expect(src).toContain("A store (products in the catalogue): what it is for, the size or fit, a budget");
+    expect(src).toContain("A store (products in the catalogue): what it is for or the size or fit, and only when needed to show the right products (never a budget question here");
     expect(src).toContain("A question about a product they named (its stock, size, colour or price) is not a moment to qualify");
   });
 });
