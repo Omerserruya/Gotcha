@@ -245,8 +245,8 @@ export function validateAssistantOutput(
     // A handed-over meeting / join link must be backed by a real booking tool.
     { pattern: /\b(here'?s|join)\b[^.!?\n]*\b(meeting\s+|join\s+)?(link|url)\b/i, needsTool: /(schedule_meeting|reschedule_meeting|book_)/i },
     // Hebrew variants
-    { pattern: /\bזה\s+כבר\s+הוחזר\b/i, needsTool: /refund/i },
-    { pattern: /\bכבר\s+תיאמתי\b/i, needsTool: /(schedule|book_)/i },
+    { pattern: /(?<![\u0590-\u05FF])זה\s+כבר\s+הוחזר(?![\u0590-\u05FF])/, needsTool: /refund/i }, // \b never matched next to Hebrew letters
+    { pattern: /(?<![\u0590-\u05FF])כבר\s+תיאמתי(?![\u0590-\u05FF])/, needsTool: /(schedule|book_)/i },
     { pattern: /הצלחתי\s+לקבוע/, needsTool: /(schedule_meeting|book_)/i },          // "I managed to schedule"
     { pattern: /קבעתי[^.!?\n]*(פגישה|שיחה|מחר|בשעה|דמו|לך)/, needsTool: /(schedule_meeting|book_)/i }, // "I scheduled ..."
     { pattern: /(שלחתי|שולח[ת]?)\s+(לך\s+)?(הזמנה|זימון)/, needsTool: /(schedule_meeting|send_|invite|email|book_)/i }, // "I sent an invite"
@@ -276,10 +276,20 @@ export function validateAssistantOutput(
 
   const onlyLeak = violations.every((v) => v.category === "tool_output_leak" || v.category === "internal_ops_leak");
   const meaningful = working.replace(/\s+/g, "").length >= 8;
+  if (onlyLeak && meaningful) return { ok: false, violations, safeReply: working };
+  // Drop only the sentences that carry a violation (eval e10 X1: one bad clause
+  // replaced a whole answer with a template). The deflection is for a reply
+  // with nothing usable left.
+  const matches = violations.map((v) => v.match).filter((m) => m && m.length >= 2);
+  const kept = working
+    .split(/(?<=[.!?؟\n])\s+/)
+    .filter((sentence) => !matches.some((m) => sentence.includes(m)))
+    .join(" ")
+    .trim();
   return {
     ok: false,
     violations,
-    safeReply: onlyLeak && meaningful ? working : makeDeflection(text),
+    safeReply: kept.replace(/\s+/g, "").length >= 8 ? kept : makeDeflection(text),
   };
 }
 
@@ -289,10 +299,12 @@ export function validateAssistantOutput(
  */
 function makeDeflection(_originalText: string): string {
   // Cheap heuristic: any Hebrew character → Hebrew reply.
+  // Neutral, no dash, no gendered verb, no passive closer (eval e10 X1: "תודה - אם
+  // יש משהו ספציפי שאני יכול לעזור בו, ספר לי בבקשה" was all four).
   if (/[֐-׿]/.test(_originalText)) {
-    return "תודה - אם יש משהו ספציפי שאני יכול לעזור בו, ספר לי בבקשה.";
+    return "סליחה, לא הבנתי עד הסוף. אפשר לפרט קצת?";
   }
-  return "Thanks - let me know if there's something specific I can help with.";
+  return "Sorry, I didn't quite get that. Could you tell me a bit more?";
 }
 
 /**

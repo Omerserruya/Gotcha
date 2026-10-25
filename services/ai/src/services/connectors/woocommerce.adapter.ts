@@ -345,8 +345,9 @@ export function singular(word: string): string {
 
 /** Products whose TITLE carries a query word, most words first; the rest are noise from a body match. */
 export function rankByTitleWords(products: any[], words: string[]): any[] {
-  // A substring: "Overshirt" is a shirt.
-  const hits = (p: any) => words.filter((w) => String(p?.name ?? "").toLowerCase().includes(w.toLowerCase())).length;
+  // A substring: "Overshirt" is a shirt. Longer words weigh more, so "oversized
+  // tee" ranks Oversized Cotton T-Shirt over Boxy Tee (eval e10 X7).
+  const hits = (p: any) => words.filter((w) => String(p?.name ?? "").toLowerCase().includes(w.toLowerCase())).reduce((n, w) => n + w.length, 0);
   return products.map((p) => ({ p, n: hits(p) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).map((x) => x.p);
 }
 

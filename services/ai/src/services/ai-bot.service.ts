@@ -946,9 +946,11 @@ const EMPTY_SEARCH_NOTE =
  * point we genuinely do not know what happened.
  */
 function silentTurnFallback(locale: string): string {
+  // The last resort, after the model was asked once more (eval e10 X2: "לא
+  // הצלחתי להשלים את הבדיקה" kept reaching shoppers). Honest and neutral.
   return locale?.startsWith("he")
-    ? "סליחה, לא הצלחתי להשלים את הבדיקה הזאת עכשיו. אפשר לנסות שוב, או שאעביר אותך לנציג?"
-    : "Sorry - I couldn't finish checking that just now. Shall I try again, or pass you to a person?";
+    ? "סליחה, לא הבנתי עד הסוף. אפשר לפרט קצת?"
+    : "Sorry, I didn't quite get that. Could you tell me a bit more?";
 }
 
 /**
@@ -5066,6 +5068,9 @@ async function generateAIBotReplyInner(
       // A complaint or a shipping/returns question is not shopping (eval e7
       // T2: a complaint got five tees): no cards unless the reply names one.
       unnamedAllowed: (discoveryRecommend || discoveryLookup) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
+      // A complaint gets no cards at all, named or not (eval e10 X7: the rule in
+      // the prompt did not hold).
+      noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint",
       unnamedMax: discoveryRecommend ? undefined : 1,
       excludeIds: colourMisses,
       envelope: productEnvelope,
@@ -5269,7 +5274,45 @@ async function generateAIBotReplyInner(
   // An escalation or an approval pause is a different case: both already owe
   // the customer a message from another path, and adding one here would make
   // two.
-  const deliverable = deliverableReply({ safeReply, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale, closing: closingReplyFor(opts.incomingMessage ?? "", replyLocale), cardsShown: (productTurn?.staged.length ?? 0) > 0 });
+  // An empty turn asks the model once more before any fallback (eval e10 X2):
+  // the canned line reached shoppers whenever the gates left nothing.
+  let deliverableText = safeReply;
+  const closingLine = closingReplyFor(opts.incomingMessage ?? "", replyLocale);
+  const cardsShown = (productTurn?.staged.length ?? 0) > 0;
+  if (!deliverableText?.trim() && !pendingEscalation && !awaitingApproval && !closingLine && !cardsShown) {
+    try {
+      chatMessages.push({
+        role: "system",
+        content:
+          `Your reply came out empty. Answer the customer's last message now, in one or two short sentences, in ${replyLocale === "he" ? "Hebrew" : "English"}, ` +
+          `from what you already know in this conversation. No offer to check, no promise.`,
+      });
+      const again = await generateResponse({
+        tenantId: opts.tenantId,
+        sessionId: opts.conversationId,
+        model,
+        messages: chatMessages,
+        temperature: config.temperature ?? 0.7,
+        maxTokens: 300,
+        metadata: { type: "ai_bot_empty_reask", conversationId: opts.conversationId, aiAgentId: config.id },
+        signal,
+      });
+      totalTokens += again.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(again.usage);
+      const text = again.content?.trim() ? humanizeReply(polishReply(again.content.trim(), { locale: replyLocale })) : "";
+      if (text && !isInterimOnlyReply(text)) {
+        deliverableText = await validateAndPersist(text, {
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          toolCallLog,
+          ledgerCommittedTools: ledger.committed().map((e) => e.tool),
+        });
+        console.warn(`[ai-bot] empty turn: re-asked the model once conv=${opts.conversationId}`);
+      }
+    } catch (err: any) {
+      console.warn(`[ai-bot] empty-turn re-ask failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+  const deliverable = deliverableReply({ safeReply: deliverableText, pendingEscalation: !!pendingEscalation, awaitingApproval: !!awaitingApproval, toolCallLog, locale: replyLocale, closing: closingLine, cardsShown });
   if (deliverable === silentTurnFallback(replyLocale)) {
     console.error(
       `[ai-bot] SILENT TURN: no reply produced conv=${opts.conversationId} ` +

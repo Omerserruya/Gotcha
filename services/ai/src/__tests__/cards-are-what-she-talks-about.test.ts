@@ -74,3 +74,15 @@ describe("★ e8 U3: a product lacking the asked colour is never a card", () => 
     expect(p.selected.map((x) => x.productId)).toEqual(["4"]);
   });
 });
+
+describe("★ e10 X7", () => {
+  it("a complaint: no cards, even named", () => {
+    const p = planAutoRecommendation({ envelope: env, channelSupportsCards: true, alreadyStaged: false, modelText: "מצטערים. יש את PRODUCT_1", locale: "he", maxProducts: 5, noCards: true });
+    expect(p.selected).toEqual([]);
+    expect(p.skipReason).toBe("not_named");
+  });
+  it("longer words weigh more in the title rank", async () => {
+    const { rankByTitleWords } = await import("../services/connectors/woocommerce.adapter");
+    expect(rankByTitleWords([{ id: 1, name: "Heavyweight Boxy Tee" }, { id: 2, name: "Oversized Cotton T-Shirt" }], ["oversized", "tee"]).map((p: any) => p.id)).toEqual([2, 1]);
+  });
+});

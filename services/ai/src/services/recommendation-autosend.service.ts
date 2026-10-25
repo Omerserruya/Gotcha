@@ -394,6 +394,8 @@ export interface PlanAutoRecommendationInput {
   unnamedMax?: number;
   /** Store ids never to show (they lack the colour the customer asked for). */
   excludeIds?: Set<string>;
+  /** No cards this turn, whatever the reply names (a complaint). */
+  noCards?: boolean;
 }
 
 /**
@@ -433,7 +435,7 @@ export function planAutoRecommendation(
   // names candidates, by key or by exact title, those go out, in its order.
   // Keys refer to the model's list (the full one); the named set drops excluded ids.
   const named = namedCandidates(input.modelText, input.envelope.candidates).filter((c) => !excluded.has(String(c.productId))).slice(0, input.maxProducts);
-  if (!named.length && input.unnamedAllowed === false && envelope.status === "ok" && envelope.candidates.length) {
+  if ((input.noCards || (!named.length && input.unnamedAllowed === false)) && envelope.status === "ok" && envelope.candidates.length) {
     return { selected: [], budget: { ...policy, selected: [] }, shouldSendStructured: false, introduction: "", skipReason: "not_named" };
   }
   const budget: BudgetVerdict = named.length

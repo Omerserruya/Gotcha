@@ -14,8 +14,9 @@ describe("deliverableReply", () => {
     expect(deliverableReply({ ...base, safeReply: "שלום" })).toBe("שלום");
   });
   it("an empty turn with nothing pending gets the fallback", () => {
-    expect(deliverableReply(base)).toMatch(/לא הצלחתי להשלים/);
-    expect(deliverableReply({ ...base, locale: "en" })).toMatch(/couldn't finish checking/);
+    // e10 X2: neutral, no dash, no gendered verb, no "couldn't finish checking".
+    expect(deliverableReply(base)).toBe("סליחה, לא הבנתי עד הסוף. אפשר לפרט קצת?");
+    expect(deliverableReply({ ...base, locale: "en" })).toBe("Sorry, I didn't quite get that. Could you tell me a bit more?");
   });
   it("a live escalation or an approval pause owes its own message: no fallback", () => {
     expect(deliverableReply({ ...base, pendingEscalation: true })).toBe("");
@@ -25,7 +26,7 @@ describe("deliverableReply", () => {
     expect(deliverableReply({ ...base, toolCallLog: [{ tool: "escalate_to_human", decision: "simulated" }] })).toBe("");
   });
   it("a simulated write that is not an escalation does not excuse silence", () => {
-    expect(deliverableReply({ ...base, toolCallLog: [{ tool: "woocommerce.update_order_status", decision: "simulated" }] })).toMatch(/לא הצלחתי/);
+    expect(deliverableReply({ ...base, toolCallLog: [{ tool: "woocommerce.update_order_status", decision: "simulated" }] })).toMatch(/לא הבנתי עד הסוף/);
   });
 });
 

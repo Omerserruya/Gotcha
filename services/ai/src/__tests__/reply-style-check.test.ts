@@ -314,7 +314,8 @@ describe("★ e9", () => {
   });
   it("W5: collecting a phone or a time for a callback, with no handoff", () => {
     expect(kinds("קיבלנו את 0521234567. מתי נוח לשיחה?")).toContain("promise");
-    expect(kinds("קיבלנו את 0521234567. מתי נוח לשיחה?", { handedOff: true })).not.toContain("promise");
+    // e10 X4: a time for a call is a promise even after a handoff.
+    expect(kinds("קיבלנו את 0521234567. מתי נוח לשיחה?", { handedOff: true })).toContain("promise");
     expect(kinds("מתי נוח לך לשיחה? ציין שעה")).toContain("gendered_address");
   });
   it("W7: 'שמח לשמוע', the 'רואים למטה' tic, formal 'יש לשלוח'", () => {
@@ -331,5 +332,47 @@ describe("★ e9 W1: the numbered list is never the text on a card channel", () 
     const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     expect(src).toContain("if (delivery.useTextFallback && channelSupportsCards) {");
     expect(src).toContain('NOT: { messageType: { contains: "product" } },');
+  });
+});
+
+describe("★ e10", () => {
+  it("X4: the exact C02 text", () => {
+    expect(kinds("קיבלנו את המספר 0521234567. מתי נוח לקבל שיחה?", { handedOff: true })).toContain("promise");
+  });
+  it("X5: the card offer in its e10 forms", () => {
+    expect(kinds("להציג את כרטיס המוצר כדי לראות תמונות ולהוסיף לסל?")).toContain("banned_phrase");
+    expect(kinds("להציג את כרטיס ה-Cotton Trench Coat?")).toContain("banned_phrase");
+  });
+  it("X3: the refusal templates", () => {
+    expect(kinds("אנחנו לא יכולים לעשות זאת, אבל נשמח לעזור במשהו אחר")).toContain("banned_phrase");
+  });
+  it("X8: 'נחפר', a fitting appointment", () => {
+    expect(kinds("נחפר בזה עכשיו")).toContain("banned_phrase");
+    expect(kinds("אפשר לקבוע תור למדידה בסטודיו")).toContain("promise");
+  });
+  it("X6: a word mixing scripts is removed in code", async () => {
+    const { polishReply } = await import("../services/reply-style-check.service");
+    expect(polishReply("יש שמלת ג'رسي בשחור", { locale: "he" })).toBe("יש שמלת בשחור");
+  });
+});
+
+describe("★ e10 X1/X2: no template where an answer can be", () => {
+  it("the validator drops only the offending sentence", async () => {
+    const { validateAssistantOutput: validateOutput } = await import("../services/output-validator.service");
+    const r = validateOutput("Crew Socks אזלו כרגע. כבר תיאמתי לך שיחה מחר.", { toolCallLog: [] } as any);
+    expect(r.ok).toBe(false);
+    expect(r.safeReply).toBe("Crew Socks אזלו כרגע.");
+  });
+  it("the deflection and the silent fallback are neutral, with no dash and no closer", async () => {
+    const { validateAssistantOutput: validateOutput } = await import("../services/output-validator.service");
+    expect(validateOutput("כבר תיאמתי לך שיחה מחר.", { toolCallLog: [] } as any).safeReply).toBe("סליחה, לא הבנתי עד הסוף. אפשר לפרט קצת?");
+    const { deliverableReply } = await import("../services/ai-bot.service");
+    expect(deliverableReply({ safeReply: null, pendingEscalation: false, awaitingApproval: false, toolCallLog: [], locale: "he" })).toBe("סליחה, לא הבנתי עד הסוף. אפשר לפרט קצת?");
+  });
+  it("an empty turn asks the model once more first", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain('metadata: { type: "ai_bot_empty_reask"');
   });
 });
