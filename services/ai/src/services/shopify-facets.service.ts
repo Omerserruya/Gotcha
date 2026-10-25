@@ -165,12 +165,21 @@ export function deriveFacets(products: any[], currency?: string): CatalogFacets 
  * are its product types, product attributes its options (Size, Color). Prices
  * count only for products in stock, like Shopify's buyable variants.
  */
+/** WooCommerce's REST API returns names HTML-encoded ("Jackets &amp; Coats"). */
+function wooText(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
 export function deriveWooFacets(products: any[], currency?: string): CatalogFacets {
   const typeAgg = new Map<string, { count: number; prices: number[] }>();
   const tags = new Map<string, number>();
   const options = new Map<string, { values: Map<string, number>; types: Set<string> }>();
   for (const p of Array.isArray(products) ? products : []) {
-    const type = String(p?.categories?.[0]?.name || "").trim();
+    const type = wooText(p?.categories?.[0]?.name);
     const typeKey = type || "(unspecified)";
     if (!typeAgg.has(typeKey)) typeAgg.set(typeKey, { count: 0, prices: [] });
     const agg = typeAgg.get(typeKey)!;
@@ -178,17 +187,17 @@ export function deriveWooFacets(products: any[], currency?: string): CatalogFace
     const price = num(p?.price);
     if (price !== null && p?.stock_status === "instock") agg.prices.push(price);
     for (const t of Array.isArray(p?.tags) ? p.tags : []) {
-      const tag = String(t?.name || "").trim();
+      const tag = wooText(t?.name);
       if (tag) tags.set(tag, (tags.get(tag) ?? 0) + 1);
     }
     for (const a of Array.isArray(p?.attributes) ? p.attributes : []) {
-      const name = String(a?.name || "").trim();
+      const name = wooText(a?.name);
       if (!name || NOISE_OPTIONS.has(name.toLowerCase())) continue;
       if (!options.has(name)) options.set(name, { values: new Map(), types: new Set() });
       const entry = options.get(name)!;
       if (type) entry.types.add(type);
       for (const v of Array.isArray(a?.options) ? a.options : []) {
-        const val = String(v || "").trim();
+        const val = wooText(v);
         if (val) entry.values.set(val, (entry.values.get(val) ?? 0) + 1);
       }
     }
@@ -214,7 +223,8 @@ export function deriveWooFacets(products: any[], currency?: string): CatalogFace
   };
 }
 
-const wooFacetsKey = (tenantId: string) => `catalog:facets:woocommerce:${tenantId}`;
+// v2: the v1 entries held HTML-encoded names.
+const wooFacetsKey = (tenantId: string) => `catalog:facets:woocommerce:v2:${tenantId}`;
 
 /**
  * The WooCommerce store's facets, cached in Redis (never on the integration

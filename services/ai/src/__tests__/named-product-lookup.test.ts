@@ -152,6 +152,12 @@ describe("★ (b) the store describes itself", () => {
     expect(H.scans).toHaveLength(1); // the cache answered
   });
 
+  it("WooCommerce's HTML-encoded names are decoded", () => {
+    const f = deriveWooFacets([coat(1, "x", { categories: [{ id: 1, name: "Jackets &amp; Coats" }], attributes: [{ name: "Fit &#038; Size", options: ["S &amp; M"] }] })]);
+    expect(f.productTypes[0].type).toBe("Jackets & Coats");
+    expect(f.options[0]).toMatchObject({ name: "Fit & Size", values: ["S & M"] });
+  });
+
   it("the clothing store's interview: riding style demoted, size and colour offered as optional", () => {
     const p = profileForStore(PRODUCT_RECOMMENDATION_PROFILE, deriveWooFacets(H.wooProducts));
     const req = p.facts.filter((f) => f.required).map((f) => f.key);
