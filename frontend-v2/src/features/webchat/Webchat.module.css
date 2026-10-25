@@ -229,6 +229,13 @@
     color: var(--text-subtle);
   }
 
+  /* A link in a hint: the text's own ink with a thin underline, as on Home - never the browser's blue. */
+  .rowHint a {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
+  }
+
   .rowBody {
     display: flex;
     flex-direction: column;

@@ -12,7 +12,7 @@ import type {
 import { UnavailableItem } from '@/design-system/primitives/unavailable/Unavailable';
 import { automationsLink } from '@/features/employees/WhoAnswers';
 import { Link, useRouter } from '@/i18n/navigation';
-import { initials } from '@/lib/brand-mark';
+import { brandInitial } from '@/lib/brand-mark';
 
 import { saveWidgetAssignment, type AssignmentSave } from './website-widget-actions';
 import styles from './Webchat.module.css';
@@ -97,7 +97,7 @@ function AssignmentBody({
           {assigned ? (
             <>
               <span className={styles.assignedMark} aria-hidden="true">
-                {initials(assigned.name)}
+                {brandInitial(assigned.name)}
               </span>
               <bdi dir="auto">{assigned.name}</bdi>
             </>

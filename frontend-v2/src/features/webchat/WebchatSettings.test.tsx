@@ -370,6 +370,10 @@ describe("★★ who answers is the playbook's - read here, never chosen", () =>
   it('names the employee the playbook routes the website to, and where that is decided', () => {
     show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
     expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent('Maya');
+    // The avatar is the name's first letter, never two letters of one word ("נו" read as one glyph).
+    expect(screen.getByTestId('webchat-employee-who').querySelector('span')).toHaveTextContent(
+      /^M$/,
+    );
     const where = screen.getByTestId('webchat-employee-where');
     expect(where).toHaveTextContent('Studio · Automations');
     expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
