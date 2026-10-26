@@ -246,7 +246,7 @@ export function onboardingEmailHtml(adminName: string, tenantName: string, setup
       ], "he"),
       cta: { label: "בוחרים סיסמה ומתחילים", url: setupUrl },
       fallbackUrl: setupUrl,
-      expiryNote: `הקישור לשימוש חד-פעמי ובתוקף <strong style="color:${EC.strong};">48 שעות</strong>. בדרך תבחרו סיסמה.`,
+      expiryNote: `הקישור בתוקף <strong style="color:${EC.strong};">48 שעות</strong>. בדרך תבחרו סיסמה.`,
       footerNote: "קיבלתם את המייל הזה כי נפתחה עבור הכתובת הזו סביבת עבודה ב\u2011GOTCHA.",
     });
   }
@@ -265,7 +265,7 @@ export function onboardingEmailHtml(adminName: string, tenantName: string, setup
     ]),
     cta: { label: "Set your password and start", url: setupUrl },
     fallbackUrl: setupUrl,
-    expiryNote: `This link works once and expires in <strong style="color:${EC.strong};">48 hours</strong>. You'll choose your password on the way.`,
+    expiryNote: `This link is valid for <strong style="color:${EC.strong};">48 hours</strong>. You'll choose your password on the way.`,
     footerNote: "You're receiving this because a GOTCHA. workspace was created for this address.",
   });
 }
@@ -460,7 +460,7 @@ export async function sendOnboardingEmail(
         `שלום ${adminName},`, "",
         `סביבת העבודה "${tenantName}" נפתחה ב-GOTCHA.`, "",
         "בוחרים סיסמה ומתחילים:", setupUrl, "",
-        "הקישור לשימוש חד-פעמי ובתוקף 48 שעות.", "",
+        "הקישור בתוקף 48 שעות.", "",
         "ארבעה צעדים עד שעולים לאוויר:",
         "1. לומדים את האתר: GOTCHA קוראת את האתר ומראה לכם מה למדה.",
         "2. מחברים מערכות: החנות או ה-CRM, כדי שהתשובות יתבססו על הזמנות ומלאי אמיתיים.",
@@ -472,7 +472,7 @@ export async function sendOnboardingEmail(
         `Hello ${adminName},`, "",
         `Your workspace "${tenantName}" has been created on GOTCHA.`, "",
         "Set your password and start:", setupUrl, "",
-        "This link works once and expires in 48 hours.", "",
+        "This link is valid for 48 hours.", "",
         "Four steps to go live:",
         "1. Learning your site: your employee reads it and shows you what it learned.",
         "2. Connect systems: your store or CRM, for real orders and stock.",

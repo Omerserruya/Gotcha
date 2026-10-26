@@ -80,6 +80,20 @@ describe("the welcome email of a console-created workspace", () => {
   });
 });
 
+describe("the welcome email says what is true of the link", () => {
+  // It is multi-use for 48 hours (setup-link.service markSetupLinkUsed), not single-use.
+  it("valid for 48 hours, never \"works once\"", async () => {
+    for (const lang of ["he", "en"]) {
+      await sendOnboardingEmail("t1", "a@b.c", "Dana", "Acme", "acme", "u1", lang);
+      const { html, text } = sent();
+      for (const body of [html, text]) {
+        expect(body).not.toMatch(/חד-פעמי|works once/);
+        expect(body).toMatch(lang === "he" ? /הקישור בתוקף (<strong[^>]*>)?48 שעות/ : /valid for (<strong[^>]*>)?48 hours/);
+      }
+    }
+  });
+});
+
 describe("the setup-link resend", () => {
   it("speaks Hebrew for a Hebrew workspace, RTL, neutral, no maqaf", () => {
     const { subject, html, text } = setupLinkEmail("דנה", "אקמה", "https://x/setup", "he");
