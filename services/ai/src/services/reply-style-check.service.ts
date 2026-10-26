@@ -66,6 +66,8 @@ export interface StyleCheckContext {
   previousReplies?: string[];
   /** The store titles this turn's search returned (to spot them in the text). */
   productTitles?: string[];
+  /** Tools that actually ran this turn. */
+  toolsCalled?: string[];
 }
 
 const HE = "\\u0590-\\u05FF";
@@ -92,8 +94,8 @@ const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצ
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
 const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:\\n]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
-const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
-const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
+const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
+const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
 /** Collecting a phone number or a time for a callback (eval e9 W5, C02). */
 const CALLBACK_ASK = /טלפון|מספר נייד|מתי נוח|באיזו שעה|שעה נוחה|phone number|what time/i;
 const CALLBACK_WORD = /שיחה|שיחת טלפון|נתקשר|נחזור|יחזרו|יחזור|תחזור|לחזור אליך|יתקשר|call you|call back|callback/i;
@@ -104,10 +106,17 @@ const ORDER_NUMBER_ASK = /מספר (?:ה)?הזמנה|order (?:number|no\.?|#)/i;
 /** Changing an order the customer already placed: no tool edits one (eval e11 C04). */
 const ORDER_CHANGE = w("נשנה|אשנה|שנשנה|שאשנה|נעדכן את ההזמנה|אעדכן את ההזמנה|נחליף לך|אחליף לך|נבטל לך|אבטל לך|לשנות לך את|לבטל לך את");
 /** Gathering measurements for work the store does not do (eval e11 C06). */
+/** Saying a detail was recorded ("רשמנו את המספר", eval e11/e14 C02). */
+const RECORDED = w("רשמנו|רשמתי|שמרנו את|שמרתי את|קיבלנו את המספר|קיבלתי את המספר|העברנו את המספר|העברתי את המספר");
+/** The tools that really record a customer's detail. */
+const RECORD_TOOL = /create_lead|create_contact|update_contact|link_customer_identifier|crm|hubspot|monday|airtable|fireberry/i;
 const CUSTOM_SPEC_ASK = /כמה ס["״']?מ|באיזה אורך|מה האורך|מידות מדויקות|how many (?:cm|centimet)/i;
 const CUSTOM_WORK = /התאמה אישית|בהתאמה|להאריך|להארכה|לקצר|לקיצור|הזמנה אישית|בהזמנה מיוחדת|תפירה|custom|made to (?:order|measure)|alter/i;
 
 /** The employee about itself, by gender. */
+/** "מציג/מציגה" opening a sentence is the employee about itself (eval e14 F01): "הנה" instead. */
+const SELF_SHOW_MASC = new RegExp(`(?:^|[.!?\\n]\\s*)(?:אני )?מציג(?![${HE}])`, "u");
+const SELF_SHOW_FEM = new RegExp(`(?:^|[.!?\\n]\\s*)(?:אני )?מציגה(?![${HE}])`, "u");
 const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה|בטוח)|בודק רגע|שמח לעזור|שמח לשמוע|מצטער על|לא בטוח(?! לי)|אני מעביר|מעביר את השיחה|מעביר אותך");
 const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה|בטוחה)|בודקת רגע|שמחה לעזור|שמחה לשמוע|מצטערת על|לא בטוחה|אני מעבירה|מעבירה את השיחה|מעבירה אותך");
 
@@ -214,10 +223,15 @@ const ORDER_EDIT_TOOL = /update_order|edit_order|cancel_order|change_order|order
  * a restock alert, C04 an order change, C06 measurements for custom work). Each
  * match is a phrase to report; none means the reply asks only for what a tool uses.
  */
-export function phantomActions(text: string, ctx: Pick<StyleCheckContext, "toolsOffered" | "incomingMessage">): string[] {
+export function phantomActions(text: string, ctx: Pick<StyleCheckContext, "toolsOffered" | "incomingMessage" | "toolsCalled"> & { shopFloor?: boolean }): string[] {
   const out: string[] = [];
   const tools = ctx.toolsOffered ?? [];
   const m = (re: RegExp) => text.match(re)?.[0];
+  // "רשמנו" with nothing recorded this turn: on a shop floor, or where no tool
+  // could record it. A sales employee's "רשמתי את המייל" before its CRM write
+  // is the Quality Contract's own 2a, not a phantom.
+  const couldRecord = tools.some((t) => RECORD_TOOL.test(t));
+  if ((ctx.shopFloor || !couldRecord) && !(ctx.toolsCalled ?? []).some((t) => RECORD_TOOL.test(t))) { const r = m(RECORDED); if (r) out.push(r); }
   const restock = m(NOTIFY_RESTOCK);
   if (restock) out.push(restock);
   if (!tools.some((t) => ORDER_READ_TOOL.test(t))) { const o = m(ORDER_NUMBER_ASK); if (o) out.push(o); }
@@ -267,9 +281,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
     hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER));
   }
 
-  if (ctx.employeeGender === "feminine") hit("self_gender", plain.match(SELF_MASC));
-  else if (ctx.employeeGender === "masculine") hit("self_gender", plain.match(SELF_FEM));
-  else hit("self_gender", plain.match(SELF_MASC) ?? plain.match(SELF_FEM));
+  if (ctx.employeeGender === "feminine") hit("self_gender", plain.match(SELF_MASC) ?? plain.match(SELF_SHOW_MASC));
+  else if (ctx.employeeGender === "masculine") hit("self_gender", plain.match(SELF_FEM) ?? plain.match(SELF_SHOW_FEM));
+  else hit("self_gender", plain.match(SELF_MASC) ?? plain.match(SELF_FEM) ?? plain.match(SELF_SHOW_MASC) ?? plain.match(SELF_SHOW_FEM));
 
   const name = (ctx.employeeName ?? "").trim().toLowerCase();
   if (NAME_MISSPELLINGS[name]) hit("own_name", plain.match(NAME_MISSPELLINGS[name]));
@@ -383,7 +397,7 @@ const COLOUR_HE: Record<string, string> = {
  * English becomes Hebrew, except inside a product title the store wrote; and
  * "529 ILS" / "ILS 529" becomes "₪529".
  */
-export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string }): string {
+export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string; cardsShown?: boolean }): string {
   if (!text) return text;
   const titles = (opts.productTitles ?? []).filter(Boolean).sort((a, b) => b.length - a.length);
   const held: string[] = [];
@@ -396,6 +410,15 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
   for (let i = 0; i < held.length; i++) {
     const t = `\u0000${i}\u0000`;
     out = out.split(`${t} (${t})`).join(t).split(`${t}, ${t}`).join(t).split(`${t} ${t}`).join(t);
+  }
+  // With cards out, two or more English titles in the Hebrew sentence (eval e14
+  // B04, K01, F01: "Cotton Trench Coat, טרנץ' כותנה קל, Chunky Cardigan, סריג
+  // עבה"): a title followed by its Hebrew description loses the title. The
+  // regenerated reply is never checked again, so this is the backstop.
+  if (opts.locale === "he" && opts.cardsShown) {
+    const TITLE = "(?:\u0000\\d+\u0000|[A-Z][A-Za-z'’-]+(?: (?:[A-Z0-9][A-Za-z'’-]*|&))+)";
+    const named = (out.match(new RegExp(TITLE, "g")) ?? []).length;
+    if (named >= 2) out = out.replace(new RegExp(`${TITLE}\\s*[,:]\\s*(?=[\u0590-\u05FF])`, "g"), "");
   }
   // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
   out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
@@ -454,7 +477,13 @@ function hebrewTouches(text: string, incoming: string): string {
     // The model's "קל־קל" (Omer's test, 08:18Z) is "קליל"; a maqaf is never sent.
     .replace(/קל[\u05BE\s-]קל/g, "קליל")
     .replace(/\u05BE/g, " ")
-    .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים");
+    .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים")
+    .replace(/(?<![\u0590-\u05FF])([ובלה]?)מכופר(ת|ות|ים)?(?![\u0590-\u05FF])/g, "$1מכופתר$2");
+  // A sentence that narrates the cards (eval e14: "הצגתי אותה עבורך", "מציגים
+  // אותם למטה", "הצגתי כרטיס מוצר עם הווריאנט"): the cards speak for themselves.
+  const narr = out.split(/(?<=[.!?])\s+/);
+  const kept = narr.filter((x) => !/(?:הצגתי|הצגנו|מציגים|מציגה|מציג|שלחתי|שלחנו)[^.!?\n]{0,40}(?:למטה|מטה|עבורך|בשבילך|כרטיס|הווריאנט)/.test(x));
+  if (kept.length && kept.length < narr.length) out = kept.join(" ");
   // Slash lists. URLs and dates are left alone; ו/או is a word.
   out = out.replace(/(?<![\w/:.\u0590-\u05FF])((?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})(?:\/(?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})){1,5})(?![\w/\u0590-\u05FF])/gu, (whole: string) => {
     const parts = whole.split("/");

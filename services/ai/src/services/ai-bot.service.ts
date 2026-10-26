@@ -987,7 +987,10 @@ export function deliverableReply(t: {
   /** Product cards went out this turn. */
   cardsShown?: boolean;
 }): string {
-  if (t.safeReply?.trim()) return t.safeReply;
+  // The validator's deflection is the same words as the fallback: after an order
+  // lookup that found nothing it is no answer either (eval e14 C04).
+  const deflected = !!t.safeReply?.trim() && t.safeReply.trim() === silentTurnFallback(t.locale);
+  if (t.safeReply?.trim() && !(deflected && orderNotFound(t.toolCallLog) !== null)) return t.safeReply;
   if (t.closing && !t.pendingEscalation && !t.awaitingApproval) return t.closing;
   // The model sent the card itself and wrote nothing (eval e7 T3): the card IS
   // the answer, so a short line goes with it, never the failure fallback.
@@ -1036,6 +1039,12 @@ const STRATEGY_TO_LAST_MOVE: Record<string, LastAssistantMove | undefined> = {
   CONVERT: "convert",
   RESOLVE: "resolve",
 };
+
+/** AI_REPLY_REASONING_EFFORT, when it is a value the model accepts; otherwise undefined. */
+export function replyReasoningEffort(raw: string | undefined): "minimal" | "low" | "medium" | "high" | undefined {
+  const v = String(raw ?? "").trim().toLowerCase();
+  return v === "minimal" || v === "low" || v === "medium" || v === "high" ? v : undefined;
+}
 
 /**
  * How many of our latest replies in a row were questions with nothing shown
@@ -1392,6 +1401,9 @@ async function generateAIBotReplyInner(
   const turnStartedAt = Date.now();
   const stageMs: Record<string, number> = {};
   const markStage = (k: string) => { stageMs[k] = Date.now() - turnStartedAt; };
+  // The reply call's reasoning effort, switchable for an A/B without a code
+  // change (2026-10-26). Unset or invalid: the platform default (low).
+  const replyEffort = replyReasoningEffort(process.env.AI_REPLY_REASONING_EFFORT);
   const config = await prisma.aIAgent.findUnique({ where: { id: opts.aiAgentId } });
   if (!config || config.tenantId !== opts.tenantId) {
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
@@ -3264,6 +3276,7 @@ async function generateAIBotReplyInner(
         ? { toolChoice: { type: "function", function: { name: discoveryForceTool } } }
         : {}),
       metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
+      ...(replyEffort ? { reasoningEffort: replyEffort } : {}),
       signal,
     });
 
@@ -4991,6 +5004,7 @@ async function generateAIBotReplyInner(
       metadata: {
         model,
         stageMs: { ...stageMs, reply_ready: Date.now() - turnStartedAt },
+        replyEffort: replyEffort ?? (process.env.OPENAI_REASONING_EFFORT || "low"),
         tokens: totalTokens,
         uncachedInputTokens,
         uncachedOverBudget: alertIfOverBudget({
@@ -5106,6 +5120,7 @@ async function generateAIBotReplyInner(
         handedOff: !!pendingEscalation || toolCallLog.some((t) => t.tool === "escalate_to_human"),
         previousReplies: priorOutbound.filter((m: any) => !String(m.senderName ?? "").includes("@")).slice(-3).map((m: any) => String(m.body ?? "")),
         productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
+        toolsCalled: toolCallLog.map((t) => t.tool),
         customerClosing: customerIsClosing(opts.incomingMessage),
         searchesAllEmpty: (() => {
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
@@ -5307,7 +5322,12 @@ async function generateAIBotReplyInner(
   }
 
   // Safe touches in code: a colour said in Hebrew (not inside a title), ₪ not ILS.
-  if (replyText) replyText = polishReply(replyText, { locale: replyLocale, productTitles: productEnvelope?.candidates.map((c) => c.title), incomingMessage: opts.incomingMessage ?? "" });
+  if (replyText) replyText = polishReply(replyText, {
+    locale: replyLocale,
+    productTitles: productEnvelope?.candidates.map((c) => c.title),
+    incomingMessage: opts.incomingMessage ?? "",
+    cardsShown: (productTurn?.staged.length ?? 0) > 0 || toolCallLog.some((t) => /^send_product_(card|carousel)$/.test(t.tool)),
+  });
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).
   replyText = humanizeReply(replyText);
 
@@ -5463,6 +5483,11 @@ async function generateAIBotReplyInner(
     );
   }
 
+  // One line per turn for the effort A/B: compare p50 / p90 of total_ms per effort.
+  console.log(
+    `[ai-bot][latency] conv=${opts.conversationId} effort=${replyEffort ?? (process.env.OPENAI_REASONING_EFFORT || "low")} ` +
+      `model_done_ms=${stageMs.model_done ?? -1} total_ms=${Date.now() - turnStartedAt}`,
+  );
   return {
     reply: deliverable,
     interimMessages: finalInterim.length > 0 ? finalInterim : undefined,

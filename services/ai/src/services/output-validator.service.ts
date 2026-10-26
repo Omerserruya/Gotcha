@@ -132,7 +132,10 @@ const INTERNAL_OPS_PATTERNS: RegExp[] = [
   // HE: register/create/update/save (any conjugation) + a CRM object/system,
   // plus the locative "in the system / in the CRM" which is itself the leak.
   /(ליצור|יציר[הת]|אצור|נוצר|לרשום|רישום|א?רשום|נרשום|רושמ|לעדכן|עדכון|א?עדכן|נעדכן|מעדכן|לשמור|שמיר[הת]|א?שמור|נשמור|להזין|א?זין)[^.!?\n]{0,30}(ליד|הובלה|איש[\s-]?קשר|עסק[הת]|כרטיס|טיקט|רשומ[הת]|מערכת)/,
-  /(במערכת|אצלנו\s+במערכת|ב-?CRM|ברקע)/,
+  // "במערכת" alone is not a leak: "לא מצאנו את ההזמנה 1043 במערכת שלנו" is a
+  // lookup result (eval e14 C04 was blocked into "לא הבנתי"). Only the CRM, the
+  // background, or recording into the system ("נרשם במערכת", "עודכן במערכת").
+  /(ב-?CRM|ברקע|(?:נרשמ|נשמר|עודכנ|הוזנ|רשמנו|רשמתי|שמרנו|שמרתי|עדכנו|עדכנתי|הזנו|הזנתי)[^.!?\n]{0,20}במערכת)/,
 ];
 
 /**
