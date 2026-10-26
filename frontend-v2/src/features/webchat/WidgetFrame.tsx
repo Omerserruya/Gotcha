@@ -70,7 +70,8 @@ export function previewWidget(
       consentText: '',
     },
     features: {
-      humanHandoff: false,
+      // A WhatsApp widget has no chat to hand over from.
+      humanHandoff: config.ux.kind !== 'whatsapp' && config.handoff.allowHumanHandoff === true,
       productMessaging: config.commerce.productMessagingEnabled,
       addToCart: config.commerce.productMessagingEnabled && config.commerce.addToCartEnabled,
       whatsappHandoff: handoff,

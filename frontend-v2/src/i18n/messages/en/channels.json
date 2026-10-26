@@ -786,6 +786,8 @@
       "when": "When to show",
       "rightAway": "Right away",
       "seconds": "{s}s",
+      "human": "Let shoppers ask for a person",
+      "humanHint": "Shows a \"Talk to a person\" link in the widget",
       "whatsapp": "Continue on WhatsApp",
       "whatsappHint": "A button that continues the same conversation on your WhatsApp",
       "whatsappWhy": "Not available yet: it comes with the next widget update",

@@ -53,7 +53,7 @@ const booted = () =>
   JSON.parse(screen.getByTestId('webchat-preview-widget').textContent ?? '{}') as {
     welcome: { assistantName: string; suggestedQuestions: string[] };
     appearance: { showPoweredBy: boolean; language: string };
-    features: { whatsappHandoff: boolean };
+    features: { whatsappHandoff: boolean; humanHandoff: boolean };
     brand: { name: string; initial: string } | null;
   };
 const channelActions = vi.hoisted(() => ({ connectWebChat: vi.fn() }));
@@ -73,6 +73,7 @@ import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-m
 
 import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
+import { previewWidget } from './WidgetFrame';
 import type * as Frame from './WidgetFrame';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
@@ -301,6 +302,80 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     // Add-ons are product cards too (Backend f7c36959).
     const addOns = { ...odd, commerce: { ...odd.commerce, suggestComplementary: true } };
     expect(bodyOfWidget(addOns).commerce.suggestComplementary).toBe(false);
+  });
+});
+
+describe('★★ "Talk to a person": opt-in, off unless switched on (Omer, 2026-10-26)', () => {
+  const withHandoff = (handoff: unknown): WebchatConfig =>
+    webchatSettingsSchema.parse({ data: { ...config, handoff } }).data;
+
+  it('★★ unset reads as OFF: the switch off, and no link in the preview', () => {
+    show('behaviour');
+    const row = screen.getByTestId('webchat-human');
+    expect(row).toHaveTextContent('Let shoppers ask for a person');
+    expect(row).toHaveTextContent('Shows a "Talk to a person" link in the widget');
+    expect(screen.getByTestId('webchat-human-switch')).not.toBeChecked();
+    expect(booted().features.humanHandoff).toBe(false);
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['unreadable', 'yes'],
+    ['a non-boolean', { allowHumanHandoff: 'true' }],
+  ])(
+    '★ %s reads as off - and a save of something else sends no default for it',
+    async (_name, handoff) => {
+      const read = withHandoff(handoff);
+      expect(read.handoff.allowHumanHandoff).toBeUndefined();
+      show('behaviour', { initial: read });
+      expect(screen.getByTestId('webchat-human-switch')).not.toBeChecked();
+      expect(booted().features.humanHandoff).toBe(false);
+      fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+      await pause();
+      expect(bodyOfWidget(sentAt())).not.toHaveProperty('handoff');
+    },
+  );
+
+  it('★★ switched on: the preview shows the link at once, and it is saved as handoff.allowHumanHandoff', async () => {
+    show('behaviour');
+    fireEvent.click(screen.getByTestId('webchat-human-switch'));
+    expect(booted().features.humanHandoff).toBe(true);
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    await pause();
+    expect(sentAt().handoff).toEqual({ allowHumanHandoff: true });
+    expect(bodyOfWidget(sentAt()).handoff).toEqual({ allowHumanHandoff: true });
+    expect(screen.getByTestId('webchat-human-switch')).toBeChecked();
+
+    fireEvent.click(screen.getByTestId('webchat-human-switch'));
+    expect(booted().features.humanHandoff).toBe(false);
+    await pause();
+    expect(sentAt(1).handoff).toEqual({ allowHumanHandoff: false });
+  });
+
+  it('a widget stored with it on reads on', () => {
+    show('behaviour', { initial: withHandoff({ allowHumanHandoff: true }) });
+    expect(screen.getByTestId('webchat-human-switch')).toBeChecked();
+    expect(booted().features.humanHandoff).toBe(true);
+  });
+
+  it('★ a WhatsApp widget has no chat to hand over from: no switch, no link', () => {
+    const whatsapp = withHandoff({ allowHumanHandoff: true });
+    show('behaviour', {
+      initial: { ...whatsapp, ux: { ...whatsapp.ux, kind: 'whatsapp', look: 'whatsapp' } },
+      numbers: [],
+    });
+    expect(screen.queryByTestId('webchat-human')).toBeNull();
+    // Its preview is not the chat; the chat's boot would carry no link either.
+    const opts = { language: 'en', employeeName: null, handoff: false } as const;
+    const boot = previewWidget({ ...whatsapp, ux: { ...whatsapp.ux, kind: 'whatsapp' } }, opts);
+    expect(boot.features.humanHandoff).toBe(false);
+    expect(previewWidget(whatsapp, opts).features.humanHandoff).toBe(true);
+  });
+
+  it("★ legacy's words, in Hebrew too", () => {
+    const he = heChannelsMessages.webchat.behaviour;
+    expect(he.human).toBe('לאפשר ללקוח לבקש נציג');
+    expect(he.humanHint).toBe('מציג קישור "לדבר עם נציג" בווידג׳ט');
   });
 });
 

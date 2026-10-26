@@ -98,6 +98,8 @@ interface Setters {
   readonly commerce: (patch: Partial<WebchatConfig['commerce']>) => void;
   /** The header's name: the answering employee's, or the one typed (kept while unused). */
   readonly nameSource: (source: WebchatConfig['nameSource']) => void;
+  /** "Talk to a person" in the widget: off unless switched on. */
+  readonly human: (allowHumanHandoff: boolean) => void;
 }
 
 /**
@@ -233,6 +235,7 @@ export function WebchatSettings({
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
     commerce: (patch) => change({ ...config, commerce: { ...config.commerce, ...patch } }),
     nameSource: (nameSource) => change({ ...config, nameSource }),
+    human: (allowHumanHandoff) => change({ ...config, handoff: { allowHumanHandoff } }),
   };
   /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
   const handoff =
@@ -1038,6 +1041,19 @@ function Behaviour({
           </span>
         </Row>
       ) : null}
+      {/*
+        "Talk to a person" (Omer, 2026-10-26): opt-in, legacy's words. A
+        WhatsApp widget has no chat on the site to hand over from.
+      */}
+      {config.ux.kind === 'whatsapp' ? null : (
+        <Toggle
+          label={t('human')}
+          hint={t('humanHint')}
+          on={config.handoff.allowHumanHandoff === true}
+          onChange={set.human}
+          testid="webchat-human"
+        />
+      )}
       {/* W1: the WhatsApp widget IS the hand-off: its number is chosen with its kind. */}
       {config.ux.kind === 'whatsapp' ? null : handoffNumbers === null ? (
         // A stage A service: not there yet, and nothing is sent for it.

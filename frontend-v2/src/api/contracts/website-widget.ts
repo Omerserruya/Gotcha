@@ -45,6 +45,10 @@ export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) 
         settings.commerce.productMessagingEnabled && settings.commerce.suggestComplementary,
       promotions: { couponIds: [...settings.commerce.promotions.couponIds] },
     },
+    // "Talk to a person": only a state somebody chose or the server holds, never a default.
+    ...(typeof settings.handoff.allowHumanHandoff === 'boolean'
+      ? { handoff: { allowHumanHandoff: settings.handoff.allowHumanHandoff } }
+      : {}),
   };
   if (!stageB) return body;
   return {

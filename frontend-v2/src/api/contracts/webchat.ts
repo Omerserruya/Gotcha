@@ -115,6 +115,16 @@ export const webchatConfigSchema = z.object({
     })
     .catch(NO_COMMERCE)
     .default(NO_COMMERCE),
+  /**
+   * The widget's "Talk to a person" link (Omer, 2026-10-26): opt-in. Kept
+   * as read - absent or unreadable is `undefined`, never filled in - and
+   * shown on only when `=== true` (legacy's `!== false` showed it on and
+   * saved true on the first save).
+   */
+  handoff: z
+    .object({ allowHumanHandoff: z.boolean().optional().catch(undefined) })
+    .catch({})
+    .default({}),
 });
 export type WebchatConfig = z.infer<typeof webchatConfigSchema>;
 
