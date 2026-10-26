@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3169,6 +3169,7 @@ async function generateAIBotReplyInner(
   // Only when the message names no other product or category ("בשחור?", "ב-L?").
   // A message that names one is about THAT product, and is searched instead
   // (eval L01c: "הכותנה ... בנייבי?" got the cardigan's colours).
+  let lastOptionsAttached = false;
   if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage)) && !namesProduct(opts.incomingMessage)) {
     const mention = pickLastProduct(lastProductMention(messages as any[]), await lastProductSearch(opts.tenantId, opts.conversationId));
     let last: { productId: string; title: string } | null = mention?.productId ? { productId: mention.productId, title: mention.title } : null;
@@ -3192,6 +3193,7 @@ async function generateAIBotReplyInner(
         accessScope: opts.onboardingTest ? "internal" : "customer",
       }).catch(() => null);
       if (got?.ok && Array.isArray(got.result) && got.result.length) {
+        lastOptionsAttached = true;
         chatMessages.push({
           role: "system",
           content:
@@ -3558,8 +3560,12 @@ async function generateAIBotReplyInner(
 
     // Asking whether to look, with the search tool right there and nothing
     // searched yet (eval e11 L01: "להראות עכשיו צעיפים באפור?"): look, once.
+    // Only when the customer asked about a product and its live options are not
+    // already here (eval e12: the forced look fired on "יש קוד קופון?", "כמה זה?"
+    // and "מעל כמה חינם?", searched the whole catalogue and sent it as cards).
     if (
-      wooTurn && round < 2 && !searchNudged &&
+      wooTurn && round < 2 && !searchNudged && !lastOptionsAttached &&
+      productQuestion(opts.incomingMessage, askedColours(opts.incomingMessage).length, asksSize(opts.incomingMessage)) &&
       toolFunctionNames.includes("woocommerce.list_products") &&
       !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool)) &&
       asksToShowInstead(response.content)
@@ -5162,7 +5168,9 @@ async function generateAIBotReplyInner(
       unnamedAllowed: (discoveryRecommend || discoveryLookup) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
       // A complaint gets no cards at all, named or not (eval e10 X7: the rule in
       // the prompt did not hold).
-      noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint",
+      // ...and neither does a question about the store: a coupon, shipping,
+      // returns, payment (eval e12 C01, C07, C08, C09).
+      noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage),
       unnamedMax: discoveryRecommend ? undefined : 1,
       excludeIds: colourMisses,
       envelope: productEnvelope,
@@ -5371,7 +5379,8 @@ async function generateAIBotReplyInner(
   let deliverableText = safeReply;
   const closingLine = closingReplyFor(opts.incomingMessage ?? "", replyLocale);
   const cardsShown = (productTurn?.staged.length ?? 0) > 0;
-  if (!deliverableText?.trim() && !pendingEscalation && !awaitingApproval && !closingLine && !cardsShown) {
+  // Cards alone answer "show me", not a question (eval e12 F01: "מידה M" got only "בבקשה 🙂").
+  if (!deliverableText?.trim() && !pendingEscalation && !awaitingApproval && !closingLine && (!cardsShown || asksSomething(opts.incomingMessage ?? ""))) {
     try {
       chatMessages.push({
         role: "system",

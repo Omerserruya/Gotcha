@@ -563,7 +563,7 @@ export function renderGroundedProductReply(
   // its own words, appending the canned line says the same thing twice.
   const fxNotice = env.budgetCurrencyMismatch && !prose
     ? locale === "he"
-      ? `שים לב: המחירים בחנות הם ב-${env.budgetCurrencyMismatch.shop}, ולכן לא השוויתי אותם לתקציב שציינת ב-${env.budgetCurrencyMismatch.budget}.`
+      ? `המחירים בחנות הם ב-${env.budgetCurrencyMismatch.shop}, ולכן לא השוויתי אותם לתקציב שציינת ב-${env.budgetCurrencyMismatch.budget}.`
       : `Note: this store prices in ${env.budgetCurrencyMismatch.shop}, so I have not compared these against the budget you gave in ${env.budgetCurrencyMismatch.budget}.`
     : undefined;
   const message = [prose, prose ? "" : header, fxNotice, ...blocks]

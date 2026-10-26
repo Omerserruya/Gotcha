@@ -383,6 +383,23 @@ export function namesProduct(text: string | null | undefined): boolean {
   return /סוודר|סריג|קרדיגן|חולצ|טישירט|טי-שירט|גופי|מעיל|ז'קט|ג'קט|שמל|חצאית|מכנס|ג'ינס|צעיף|כובע|תיק|גרב|נעל|קפוצ'ון|הודי|טרנץ'|כותנה|צמר|פשתן|עור|ארנק|חגורה|\b(?:tee|t-shirt|shirt|top|coat|jacket|dress|skirt|pants|jeans|scarf|beanie|hat|bag|tote|socks?|hoodie|sweater|cardigan|knit)\b/i.test(t);
 }
 
+/**
+ * A question about the store, not about a product: a coupon, shipping, returns,
+ * payment, hours or the shop itself (eval e12: "יש קוד קופון?" got three product
+ * cards and no coupon). It gets the answer and no cards. A message that also
+ * names a product ("יש הנחה על הסוודר?") is about that product.
+ */
+export function storeQuestion(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  if (namesProduct(t)) return false;
+  return /קופון|קוד|הנחה|מבצע|החזר|החזרה|להחזיר|החלפה|להחליף|מדיניות|תשלום|תשלומים|לשלם|ביט|אשראי|פייפאל|משלוח|משלוחים|חינם|אספקה|יגיע|יגיעו|שליח|איסוף|שעות|פתוחים|כתובת|סניף|חנות פיזית|למדוד|לכבס|כביסה|כיבסתי|יום הולדת|הזמנה|הזמנתי|coupon|discount|promo|refund|return|exchange|shipping|delivery|payment|installments|hours|address|store location/i.test(t);
+}
+
+/** A question about a product: it names one, or asks a colour or size. */
+export function productQuestion(text: string | null | undefined, colours: number, size: boolean): boolean {
+  return !storeQuestion(text) && (namesProduct(text) || colours > 0 || size);
+}
+
 /** Hebrew shop words and the English the store's titles use (eval L01c: "תיק בד" is a canvas tote). */
 export const HEBREW_PRODUCT_GLOSSARY =
   "Hebrew to the English titles use: תיק בד = canvas tote; תיק עור = leather bag; כובע גרב = beanie; קפוצ'ון / הודי = hoodie; " +

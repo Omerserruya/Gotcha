@@ -83,10 +83,10 @@ const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכל
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
-const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:\\n]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
+const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:\\n]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
-const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
-const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
+const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
+const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
 /** Collecting a phone number or a time for a callback (eval e9 W5, C02). */
 const CALLBACK_ASK = /טלפון|מספר נייד|מתי נוח|באיזו שעה|שעה נוחה|phone number|what time/i;
 const CALLBACK_WORD = /שיחה|שיחת טלפון|נתקשר|נחזור|יחזרו|יחזור|תחזור|לחזור אליך|יתקשר|call you|call back|callback/i;
@@ -114,7 +114,7 @@ const RESERVE = w("לקבוע תור|נקבע תור|אקבע תור|תור למ
 /** Adding to the cart: the card's button does it, never the employee (eval e6 A01, A02, A04). */
 const ADD_TO_CART = w("אוסיף|נוסיף|שאוסיף|שנוסיף|להוסיף לך|להוסיף עבורך");
 const CART = /לסל|לעגלה|לסלסלה|to (?:your |the )?cart/i;
-const FOLLOW_UP = w("אחזור אליך|נחזור אליך|אחזור אלייך|אעדכן אותך|נעדכן אותך|אבדוק ואחזור|נבדוק ונחזור|אבדוק מול|נבדוק מול|אצור קשר|ניצור קשר|נתקשר|אתקשר");
+const FOLLOW_UP = w("נבדוק (?:את זה )?מי?יד|אבדוק (?:את זה )?מי?יד|נבדוק מי?יד|בודקים מי?יד|אחזור אליך|נחזור אליך|אחזור אלייך|אעדכן אותך|נעדכן אותך|אבדוק ואחזור|נבדוק ונחזור|אבדוק מול|נבדוק מול|אצור קשר|ניצור קשר|נתקשר|אתקשר");
 const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות יחזור|מישהו מהצוות יחזור|יחזרו אליך|העברנו|העברתי|העברנו לצוות|להעביר לצוות|מעבירים לצוות");
 /** Ending on an offer to go and check what a tool could check now: "לבדוק אם יש בחום?". */
 /** Ending on a push to buy or continue: "להמשיך עם הצעיף?", "להוסיף לסל מהכרטיס?", "רוצה שאפתח את כרטיס המוצר?" (eval e11 L01, F01, H01). */
@@ -313,7 +313,10 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
   if (opts.locale === "he") out = out
     .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
     .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")
-    .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1");
+    .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1")
+    // After the colours are Hebrew (eval e12: "ב-Black" became "ב-שחור"): a
+    // prefix before a Hebrew word attaches, "וב‑שחור" included; before Latin it stays.
+    .replace(/(?<![\u0590-\u05FF])([ובלהמש]{1,2})[\u2011\u2010-](?=[\u0590-\u05FF])/gu, "$1");
   // After the colours are Hebrew, so "אפור פחם (Charcoal)" is seen as a repeat
   // (eval e8 U6). A parenthetical that repeats what the sentence already says, or narrates
   // the card (eval e7 T4: "Heavyweight Hoodie במלאי (Heavyweight Hoodie)",
@@ -352,8 +355,8 @@ const ASKS_QUANTITY = /כמה (?:יחידות|נשאר|נשארו|יש במלא�
 function hebrewTouches(text: string, incoming: string): string {
   let out = text
     .replace(/(?<![A-Za-z])off[- ]white(?![A-Za-z])/gi, "אוף וייט")
-    .replace(/(?<![\u0590-\u05FF])([ובלהמש])[\u2011\u2010-](?=[\u0590-\u05FF])/gu, "$1")
-    .replace(/לא נשען/g, "לא נלבש");
+    .replace(/לא נשען/g, "לא נלבש")
+    .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים");
   // Slash lists. URLs and dates are left alone; ו/או is a word.
   out = out.replace(/(?<![\w/:.\u0590-\u05FF])((?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})(?:\/(?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})){1,5})(?![\w/\u0590-\u05FF])/gu, (whole: string) => {
     const parts = whole.split("/");
@@ -387,7 +390,9 @@ function isShortClose(reply: string): boolean {
  * product card). Deterministic: anything more is replaced by the close.
  */
 export function closeAfterThanks(reply: string, incomingMessage: string, locale: "he" | "en"): string {
-  if (!ONLY_CLOSING.test(incomingMessage ?? "") || (reply.trim() && isShortClose(reply))) return reply;
+  // A short close that thanks the customer back ("מעולה, תודה.", eval e12 A04) is not a close.
+  const thanksBack = /תודה|thank/i.test(reply);
+  if (!ONLY_CLOSING.test(incomingMessage ?? "") || (reply.trim() && isShortClose(reply) && !thanksBack)) return reply;
   return closingReplyFor(incomingMessage, locale) ?? reply;
 }
 
@@ -477,6 +482,13 @@ export function stripTrailingPush(reply: string, opts: { incomingMessage: string
   if (!askedSomething && !pushedBefore) return reply;
   const rest = parts.slice(0, -1).join(" ").trim();
   return rest.length >= 3 ? rest : reply;
+}
+
+/** The customer asked something (a question, or a size or colour on its own: "מידה M"). */
+export function asksSomething(incomingMessage: string): boolean {
+  const t = String(incomingMessage ?? "");
+  return /[?؟]/.test(t) || /^\s*(?:כמה|מה|איך|יש|האם|מתי|איפה|באיזה|באיזו|למה|אפשר|ו?יש|how|what|is|are|do|does|can)(?=[\s?,.!]|$)/iu.test(t)
+    || /(?:מידה|מידות|size)\s*(?:XXS|XS|S|M|L|XL|XXL|\d{2})(?![A-Za-z])/i.test(t) || askedColours(t).length > 0;
 }
 
 /** The draft asks whether to look something up instead of looking (eval e11 L01: "להראות עכשיו צעיפים באפור?"). */

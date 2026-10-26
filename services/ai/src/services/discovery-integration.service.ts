@@ -81,20 +81,36 @@ export async function resolveWooCurrency(tenantId: string): Promise<{ storeUrl: 
   return { storeUrl, currency: currency ?? undefined };
 }
 
-/** Parse a budget fact (`"700 USD"`, `700`, or `{target,currency}`) → typed budget. */
-function parseBudget(v: unknown): { target: number; currency: string } | undefined {
+/**
+ * Parse a budget fact (`"700 USD"`, `700`, or `{target,currency}`) → typed budget.
+ * A bare number is in the store's own currency (eval e12 A03: "פחות מ400" read as
+ * USD, so an ILS store told the shopper "המחירים בחנות מוצגים בשקלים").
+ */
+export function parseBudget(v: unknown, storeCurrency?: string): { target: number; currency: string } | undefined {
+  const fallback = storeCurrency || "USD";
   if (v && typeof v === "object" && "target" in (v as any)) {
     const t = Number((v as any).target);
-    if (Number.isFinite(t)) return { target: t, currency: String((v as any).currency ?? "USD") };
+    if (Number.isFinite(t)) return { target: t, currency: String((v as any).currency ?? fallback) };
   }
   const s = String(v ?? "");
   const num = s.match(/\d[\d.,]*/);
   if (!num) return undefined;
   // ש"ח / ש״ח (the usual way to write shekels) and NIS read as ILS too;
   // they used to fall through to USD.
-  const cur = /ILS|NIS|₪|שקל|ש["״']ח/i.test(s) ? "ILS" : /EUR|€/i.test(s) ? "EUR" : "USD";
+  const cur = /ILS|NIS|₪|שקל|ש["״']ח/i.test(s) ? "ILS" : /EUR|€|יורו/i.test(s) ? "EUR" : /USD|\$|דולר/i.test(s) ? "USD" : fallback;
   const t = Number(num[0].replace(/,/g, ""));
   return Number.isFinite(t) ? { target: t, currency: cur } : undefined;
+}
+
+/**
+ * A budget the customer actually gave: its number is in one of their own
+ * messages (eval e12 L01: the extractor read "799" off our trench price, every
+ * later search was capped at ₪799, and "מעל כמה חינם?" got "צעיף אחד בתקציב").
+ */
+export function budgetStatedBy(customerTexts: string[], value: unknown): boolean {
+  const n = String((value as any)?.target ?? value ?? "").match(/\d[\d,]*/)?.[0]?.replace(/,/g, "");
+  if (!n) return false;
+  return customerTexts.some((t) => (String(t).replace(/,/g, "").match(/\d+/g) ?? ([] as string[])).includes(n));
 }
 
 /**
@@ -188,12 +204,13 @@ export async function enrichProductSearchArgs(opts: {
       goalKey: profile.goalKey,
     });
     const facts = await (await import("@chatcenter/shared")).activeFacts(session.id);
-    const budget = parseBudget(facts.get("budget")?.valueJson);
-    if (!budget) return opts.args;
+    if (!facts.get("budget")) return opts.args;
 
     const shopCurrency = provider === "woocommerce"
       ? (await resolveWooCurrency(opts.tenantId)).currency
       : await resolveShopCurrency(opts.tenantId, conn?.config);
+    const budget = parseBudget(facts.get("budget")?.valueJson, shopCurrency);
+    if (!budget) return opts.args;
     if (shopCurrency && budget.currency !== shopCurrency) {
       console.log(
         `[discovery] budget ${budget.currency} vs shop ${shopCurrency} - not passing price_max conv=${opts.conversationId}`,
@@ -257,7 +274,7 @@ export async function groundProductSearchResult(opts: {
     const profile = profileForStore(getDiscoveryProfile("product_recommendation") as DiscoveryProfile, null);
     const session = await getOrCreateActiveSession({ tenantId: opts.tenantId, conversationId: opts.conversationId, goalKey: profile.goalKey });
     const facts = await (await import("@chatcenter/shared")).activeFacts(session.id);
-    const budget = parseBudget(facts.get("budget")?.valueJson);
+    const budget = parseBudget(facts.get("budget")?.valueJson, shopCurrency);
     const requestedFilters = ["query", ...(budget ? ["budget"] : []),
       ...(facts.has("preferred_length_cm") ? ["length"] : []),
       ...(facts.has("flex") ? ["flex"] : []),
@@ -403,7 +420,21 @@ export async function runProductDiscoveryTurn(opts: {
       fields: specs as any,
     }).catch(() => []);
 
-    const proposed = toProposedFacts(extracted as any, opts.incomingMessageId);
+    let proposed = toProposedFacts(extracted as any, opts.incomingMessageId);
+    if (proposed.some((f) => f.key === "budget")) {
+      const inbound = await (prisma as any).message.findMany({
+        where: { conversationId: opts.conversationId, tenantId: opts.tenantId, direction: "INBOUND" },
+        orderBy: { createdAt: "desc" },
+        take: 40,
+        select: { body: true },
+      }).catch(() => []);
+      const texts = [opts.incomingMessage ?? "", ...inbound.map((m: any) => String(m.body ?? ""))];
+      proposed = proposed.filter((f) => {
+        if (f.key !== "budget" || budgetStatedBy(texts, f.value)) return true;
+        console.warn(`[discovery] dropped a budget the customer never wrote (${JSON.stringify(f.value)}) conv=${opts.conversationId}`);
+        return false;
+      });
+    }
     const { written } = await applyExtractedFacts({ session, profile, facts: proposed });
     if (written.length) await markAnswered({ session, answeredKeys: written, answeredMessageId: opts.incomingMessageId });
 

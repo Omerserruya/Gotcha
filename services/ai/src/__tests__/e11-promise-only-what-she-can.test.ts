@@ -159,7 +159,7 @@ describe("Z5: one push at most, never after a factual answer; look instead of as
   it("an answer is not an ask", () => expect(asksToShowInstead("יש צעיף באפור, Lambswool Scarf, ₪159.")).toBe(false));
   it("the loop searches instead, once, only on a Woo turn with nothing searched", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src).toMatch(/wooTurn && round < 2 && !searchNudged &&[\s\S]{0,200}!toolCallLog\.some\(\(t\) => PRODUCT_SEARCH_TOOL\.test\(t\.tool\)\) &&\s*asksToShowInstead\(response\.content\)/);
+    expect(src).toMatch(/wooTurn && round < 2 && !searchNudged &&[\s\S]{0,400}!toolCallLog\.some\(\(t\) => PRODUCT_SEARCH_TOOL\.test\(t\.tool\)\) &&\s*asksToShowInstead\(response\.content\)/);
   });
 });
 
