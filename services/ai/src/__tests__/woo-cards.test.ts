@@ -144,10 +144,12 @@ describe("★ staging cards from the store", () => {
     expect(H.adapterCalls.every((c) => c.accessScope === "internal")).toBe(true);
   });
 
-  it("a non-numeric id is never sent to the store; none left is a refusal", async () => {
+  it("a non-numeric id is never sent to the store as an id (only as a slug to look up); none left is a refusal", async () => {
     const turn = (await prepareWebchatCommerceTurn({ tenantId: "T", conversationId: "conv1" }))!;
     expect(await turn.sendShopifyProducts({ products: [{ productId: "../orders" }, { handle: "oak" }] })).toMatchObject({ ok: false });
-    expect(H.adapterCalls).toEqual([]);
+    // 2026-10-26 (e18): a handle is looked up by slug, a query value, never a path.
+    expect(H.adapterCalls.map((c) => c.args)).toEqual([{ slug: "orders" }, { slug: "oak" }]);
+    H.adapterCalls = [];
     expect(await turn.sendShopifyProducts({ products: [{ productId: "42" }] })).toMatchObject({ ok: false, reason: expect.stringMatching(/no_matching_products/) });
     expect(turn.staged).toEqual([]);
   });

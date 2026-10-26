@@ -466,6 +466,57 @@ export function lookItUpLine(locale: string): string {
     : "To answer that exactly I need to look the product up. What is it called?";
 }
 
+/**
+ * Telling the customer the cards failed (dev 2026-10-26, conv cmvpghp1…: "מצטערים,
+ * לא הצלחנו לשלוח את הקרוסלה כרגע. אפשר לשלוח כרטיס מוצר אחד בכל פעם"). A card that
+ * did not go out is our problem, never the customer's news: the sentence goes,
+ * and the caller resends what was shown or answers in text.
+ */
+const CARD_SEND_TROUBLE = new RegExp(
+  [
+    "(?:לא הצלחנו|לא הצלחתי|לא ניתן|אי אפשר|אין אפשרות|תקלה|בעיה|נכשל)[^.!?؟\\n:]*(?:לשלוח|להציג|קרוסל|כרטיס)",
+    "(?:קרוסל|כרטיס)[^.!?؟\\n:]*(?:לא הצלח|נכשל|תקלה|אחד בכל פעם|אחד אחד)",
+    "(?:couldn'?t|could not|can'?t|cannot|unable to|failed to)[^.!?\\n:]*(?:send|show|display)[^.!?\\n:]*(?:carousel|cards?)",
+    "(?:carousel|cards?)[^.!?\\n:]*(?:failed|didn'?t go|one at a time)",
+  ].join("|"),
+  "iu",
+);
+
+export function cardSendTrouble(text: string | null | undefined): boolean {
+  return CARD_SEND_TROUBLE.test(String(text ?? ""));
+}
+
+/** The reply without its card-trouble sentences; a question after a colon in one stays ("…: מה בא לך?"). */
+export function stripCardSendTrouble(text: string): string {
+  const parts = text.split(/(?<=[.!?؟\n])\s+/);
+  const kept = parts.flatMap((p) => {
+    if (!CARD_SEND_TROUBLE.test(p)) return [p];
+    const after = p.split(/:\s+/).slice(1).join(": ").trim();
+    return after && !CARD_SEND_TROUBLE.test(after) && /[?؟]\s*$/.test(after) ? [after] : [];
+  });
+  return kept.join(" ").replace(/^[,\s]+/, "").trim();
+}
+
+/** A reply that points at cards below it ("שני מעילים למטה", "the cards below"). */
+export function pointsToCardsBelow(text: string | null | undefined): boolean {
+  return /למטה|(?:^|\s)below\b/iu.test(String(text ?? ""));
+}
+
+/** "Below" said when nothing below was sent: the word goes, the sentence stays. */
+export function dropBelow(text: string): string {
+  return text.replace(/\s*(?:כאן |פה )?למטה/gu, "").replace(/\s+(?:right |just )?below\b/giu, "").replace(/\s+([,.!?؟])/g, "$1").trim();
+}
+
+/** When the cards could not be resent: they are still up in the conversation. */
+export function cardsAboveLine(locale: string): string {
+  return locale?.startsWith("he") ? "המוצרים מופיעים למעלה בשיחה. איזה מהם מעניין?" : "The products are up in the conversation. Which one interests you?";
+}
+
+/** Cards resent because a send failed: the line over them. */
+export function cardsAgainLine(locale: string): string {
+  return locale?.startsWith("he") ? "הנה הם שוב:" : "Here they are again:";
+}
+
 /** The kinds that make a reply untrue, not just unpolished. */
 const TRUTH_KINDS: ReadonlySet<StyleViolationKind> = new Set(["ungrounded_price", "ungrounded_attribute", "false_absence", "phantom_action", "promise"]);
 

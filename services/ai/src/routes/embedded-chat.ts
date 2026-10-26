@@ -24,6 +24,7 @@ import { executeAdapterTool } from "../services/connectors/integration-framework
 import { listActivePromotions } from "../services/widget-promotions.service";
 import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { tryEmit } from "../services/notifications-emit";
+import { offerCrossSellAfterCart } from "../services/woo-chat-turn.service";
 
 const router = Router();
 
@@ -544,6 +545,11 @@ router.post("/cart/validate", messageLimiter, async (req: Request, res: Response
     if (!line.ok) { res.status(422).json({ error: line.reason }); return; }
     const { ok: _ok, ...data } = line;
     res.json({ data });
+    // The shopper chose this product: the store's add-ons, once (2a ii). After
+    // the answer, never in its way.
+    withCrossTenantAccess(() => offerCrossSellAfterCart({ tenantId: conv.tenantId, conversationId: conv.id, productId }))
+      .then((r) => console.log(`[embedded-chat][cross-sell] add_to_cart anchor=${productId} ${r} conv=${conv.id}`))
+      .catch((err) => console.error(`[embedded-chat][cross-sell] failed conv=${conv.id}:`, (err as Error)?.message));
   } catch (err) {
     console.error("Embedded chat cart validate error:", (err as Error)?.message);
     res.status(500).json({ error: "unavailable" });

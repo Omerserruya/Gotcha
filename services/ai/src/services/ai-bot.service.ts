@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, crossSellCards, goesWellWithLine, pageProductId } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2176,7 +2176,12 @@ async function generateAIBotReplyInner(
       // not a store endpoint (woo-chat-turn.service).
       if (toolFunctionName === WOO_COMPLEMENTARY_TOOL.function.name) {
         if (!wooTurn?.suggestComplementary) return { ok: false as const, reason: "complementary products are off for this widget" };
-        const out = await wooComplementaryProducts(opts.tenantId, String((args as Record<string, any>)?.product_id ?? ""));
+        // Once per product, whoever offers it: this call, "אני לוקח", or Add to cart.
+        const anchorId = String((args as Record<string, any>)?.product_id ?? "").trim();
+        if (/^\d{1,12}$/.test(anchorId) && !(await claimCrossSell(opts.conversationId, anchorId))) {
+          return { ok: false as const, reason: "the add-ons for this product were already offered in this conversation; do not offer them again" };
+        }
+        const out = await wooComplementaryProducts(opts.tenantId, anchorId);
         if (out.ok) console.log(`[ai-bot][cross-sell] woocommerce anchor=${String((args as any)?.product_id)} linked=${out.sources.linked} sameCategory=${out.sources.sameCategory}`);
         return out.ok ? { ok: true as const, result: out.result } : out;
       }
@@ -5334,6 +5339,40 @@ async function generateAIBotReplyInner(
         console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
         try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }
       }
+    }
+  }
+
+  // A card send that failed is never the customer's news (dev 2026-10-26, conv
+  // cmvpghp1…: "מצטערים, לא הצלחנו לשלוח את הקרוסלה כרגע"). The sentence goes;
+  // the cards shown last are resent when nothing went out this turn.
+  if (replyText && !awaitingApproval && !pendingEscalation && cardSendTrouble(replyText)) {
+    let text = stripCardSendTrouble(replyText);
+    const last = wooTurn?.shown.length ? wooTurn.shown.filter((p) => p.batch === wooTurn.shown[wooTurn.shown.length - 1].batch) : [];
+    if (wooTurn && !wooTurn.staged.length && last.length) {
+      const again = await wooTurn.sendShopifyProducts({ products: last.map((p) => ({ productId: p.productId })) }).catch(() => null);
+      if (again?.ok && !text) text = cardsAgainLine(replyLocale);
+    }
+    console.warn(`[ai-bot] reply told the customer a card send failed: removed${wooTurn?.staged.length ? ", cards resent" : ""} conv=${opts.conversationId}`);
+    replyText = text || (last.length ? cardsAboveLine(replyLocale) : lookItUpLine(replyLocale));
+  }
+  // "Below" with nothing below: the word goes.
+  if (replyText && pointsToCardsBelow(replyText) && !(productTurn?.staged.length)) {
+    replyText = dropBelow(replyText);
+  }
+
+  // The customer settled on a product ("אני לוקח את הטרנץ'"): the answer first,
+  // then one line and the store's add-ons as cards (2026-10-26: the tool was
+  // offered and never called). Once per product; not when this turn already
+  // shows cards; nothing when the store has no add-ons.
+  if (replyText && wooTurn?.suggestComplementary && !awaitingApproval && !pendingEscalation && !wooTurn.staged.length && commitsToBuy(opts.incomingMessage)) {
+    const anchorId = crossSellAnchor(opts.incomingMessage ?? "", wooTurn.shown, await pageProductId(opts.tenantId, opts.conversationId));
+    if (anchorId && (await claimCrossSell(opts.conversationId, anchorId))) {
+      const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId).catch(() => null);
+      if (record) {
+        wooTurn.staged.push(record);
+        replyText = `${replyText.trim()}\n${goesWellWithLine(replyLocale)}`;
+      }
+      console.log(`[ai-bot][cross-sell] chose anchor=${anchorId} cards=${record ? "staged" : "none from the store"} conv=${opts.conversationId}`);
     }
   }
 

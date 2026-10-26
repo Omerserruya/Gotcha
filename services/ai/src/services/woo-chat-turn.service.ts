@@ -11,6 +11,9 @@
  */
 import {
   prisma,
+  getRedis,
+  publishEvent,
+  visitorLocaleOf,
   normalizeWebchatConfig,
   buildWooProductCard,
   summarizeWooCards,
@@ -34,8 +37,11 @@ export interface WooTurn {
   productMessagingEnabled: true;
   /** The widget's "suggest complementary products" (commerce.suggestComplementary). */
   suggestComplementary: boolean;
+  addToCartEnabled: boolean;
   carouselSize: number;
   staged: ProductMessageRecord[];
+  /** The products this conversation's cards showed (store id, slug, title), newest last. */
+  shown: ShownProduct[];
   sendShopifyProducts: (args: SendShopifyProductsArgs) => Promise<SendShopifyProductsResult>;
 }
 
@@ -62,8 +68,10 @@ export async function prepareWebchatCommerceTurn(opts: { tenantId: string; conve
     channelAccountId: account.id,
     productMessagingEnabled: true,
     suggestComplementary: config.commerce.suggestComplementary,
+    addToCartEnabled: config.commerce.addToCartEnabled,
     carouselSize: MAX_CAROUSEL_ITEMS,
     staged: [],
+    shown: await shownProducts(opts.tenantId, opts.conversationId),
     sendShopifyProducts: async () => ({ ok: false, reason: "not_ready" }),
   };
   turn.sendShopifyProducts = (args) => stageWooProducts(turn, opts.tenantId, config.commerce.addToCartEnabled, args);
@@ -82,30 +90,96 @@ async function readCard(tenantId: string, storeUrl: string, currency: string | n
   return buildWooProductCard(raw, variations, { storeUrl, currency, reason });
 }
 
-async function stageWooProducts(turn: WooTurn, tenantId: string, addToCartEnabled: boolean, args: SendShopifyProductsArgs): Promise<SendShopifyProductsResult> {
-  const refs = (args.products ?? [])
-    .filter((r) => typeof r?.productId === "string" && /^\d{1,12}$/.test(r.productId.trim()))
-    .slice(0, turn.carouselSize);
-  if (!refs.length) return { ok: false, reason: "no_products: pass the store's numeric product ids" };
+/** batch: which card message showed it (products of one carousel share it). */
+export interface ShownProduct { productId: string; handle: string | null; title: string; batch: number }
+
+/** The products the conversation's card messages showed, oldest first. */
+export async function shownProducts(tenantId: string, conversationId: string): Promise<ShownProduct[]> {
+  const rows = await prisma.message.findMany({
+    where: { tenantId, conversationId, direction: "OUTBOUND", messageType: { contains: "product" } },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+    select: { metadata: true },
+  }).catch(() => []);
+  const out: ShownProduct[] = [];
+  for (const [batch, r] of rows.entries()) {
+    const products = (r.metadata as any)?.commerce?.products;
+    for (const p of Array.isArray(products) ? products : []) {
+      if (!/^\d{1,12}$/.test(String(p?.productId ?? ""))) continue;
+      out.push({ productId: String(p.productId), handle: typeof p.handle === "string" ? p.handle : null, title: String(p.title ?? ""), batch });
+    }
+  }
+  return out;
+}
+
+const slugOf = (v: string) => v.trim().toLowerCase().replace(/['’"]/g, "").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
+
+/**
+ * The store id a card reference names (dev 2026-10-26, conv cmvpghp1…: "שלח לי"
+ * after cards were shown; the model passed handle "cotton-trench-coat", the
+ * history shows cards by title only, and the carousel failed). An id as it is;
+ * else a handle, slug or title the conversation's cards showed; else the store's
+ * product with that slug. Null when nothing matches.
+ */
+export async function resolveWooRef(
+  tenantId: string,
+  shown: ShownProduct[],
+  ref: { productId?: string | null; handle?: string | null },
+): Promise<string | null> {
+  const id = String(ref.productId ?? "").trim();
+  if (/^\d{1,12}$/.test(id)) return id;
+  const key = slugOf(String(ref.handle ?? "") || id);
+  if (!key) return null;
+  for (let i = shown.length - 1; i >= 0; i--) {
+    const p = shown[i];
+    if ((p.handle && slugOf(p.handle) === key) || (p.title && slugOf(p.title) === key)) return p.productId;
+  }
+  const got = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.get_product", args: { slug: key }, accessScope: "internal" }).catch(() => null);
+  const p: any = got?.ok ? got.result : null;
+  return p && /^\d{1,12}$/.test(String(p.id ?? "")) ? String(p.id) : null;
+}
+
+/** The card message for these refs, every product re-read from the store; null when none is a published product. */
+async function buildWooCards(
+  tenantId: string,
+  where: { storeUrl: string; channelAccountId: string; shown: ShownProduct[]; carouselSize: number },
+  addToCartEnabled: boolean,
+  products: SendShopifyProductsArgs["products"],
+): Promise<{ record: ProductMessageRecord; cards: WooProductCard[] } | { reason: string }> {
+  const resolved = await Promise.all((products ?? []).slice(0, where.carouselSize).map(async (r) => {
+    const productId = await resolveWooRef(tenantId, where.shown, r ?? {});
+    return productId ? { ...r, productId } : null;
+  }));
+  const refs = resolved.filter((r): r is NonNullable<typeof r> => !!r);
+  if (!refs.length) return { reason: "no_products: pass the product_id from a search result" };
   const { currency } = await resolveWooCurrency(tenantId).catch(() => ({ currency: undefined }));
-  const cards = (await Promise.all(refs.map((r) => readCard(tenantId, turn.storeUrl, currency ?? null, r.productId!.trim(), r.reason ?? null))))
+  const cards = (await Promise.all(refs.map((r) => readCard(tenantId, where.storeUrl, currency ?? null, r.productId, r.reason ?? null))))
     .filter((c): c is WooProductCard => !!c);
-  if (!cards.length) return { ok: false, reason: "no_matching_products: none of those ids is a published product in this store" };
+  if (!cards.length) return { reason: "no_matching_products: none of those ids is a published product in this store" };
 
   const payload: WooCommercePayload = {
     kind: "woo_commerce",
-    storeUrl: turn.storeUrl,
-    channelAccountId: turn.channelAccountId,
+    storeUrl: where.storeUrl,
+    channelAccountId: where.channelAccountId,
     products: cards,
     addToCartEnabled,
     source: "ai",
   };
-  turn.staged.push({
-    messageType: cards.length > 1 ? WOO_MESSAGE_TYPES.PRODUCT_CAROUSEL : WOO_MESSAGE_TYPES.PRODUCT,
-    body: summarizeWooCards(cards),
-    metadata: { source: "ai_bot", commerce: payload },
-  });
-  return { ok: true, products: cards.map((c) => ({ title: c.title, price: c.price, currency: c.currency ?? "", available: c.available })) };
+  return {
+    cards,
+    record: {
+      messageType: cards.length > 1 ? WOO_MESSAGE_TYPES.PRODUCT_CAROUSEL : WOO_MESSAGE_TYPES.PRODUCT,
+      body: summarizeWooCards(cards),
+      metadata: { source: "ai_bot", commerce: payload },
+    },
+  };
+}
+
+async function stageWooProducts(turn: WooTurn, tenantId: string, addToCartEnabled: boolean, args: SendShopifyProductsArgs): Promise<SendShopifyProductsResult> {
+  const built = await buildWooCards(tenantId, turn, addToCartEnabled, args.products);
+  if ("reason" in built) return { ok: false, reason: built.reason };
+  turn.staged.push(built.record);
+  return { ok: true, products: built.cards.map((c) => ({ title: c.title, price: c.price, currency: c.currency ?? "", available: c.available })) };
 }
 
 /** Shopify's catalogue tools: not this conversation's store on a web chat whose cards come from WooCommerce. */
@@ -188,6 +262,134 @@ export async function wooComplementaryProducts(
   }
 
   return { ok: true, result: [...linked, ...sameCategory], sources: { linked: linked.length, sameCategory: sameCategory.length } };
+}
+
+// ─── Cross-sell when the customer settles on a product (2026-10-26) ──────────
+//
+// The complementary tool was offered and never called (Omer's urban test: zero
+// calls in 40 minutes). The model only sees text, so the moment the customer
+// chooses is decided here instead: they say they will take or order it, or they
+// press Add to cart on a card. Then one line, "זה הולך מצוין עם:", and the
+// store's add-ons as cards. Once per product, across both signals; only while
+// the widget's toggle is on and the bot has the conversation; nothing when the
+// store has no add-ons; never a product the customer already chose.
+
+export const CROSS_SELL_TTL_SECONDS = 60 * 60 * 24 * 30;
+const crossSellKey = (conversationId: string, anchorId: string) => `woo:cross-sell:${conversationId}:${anchorId}`;
+const crossSellChosenKey = (conversationId: string) => `woo:cross-sell-chosen:${conversationId}`;
+
+/** The line over the add-on cards. */
+export function goesWellWithLine(locale: string): string {
+  return locale?.startsWith("he") ? "זה הולך מצוין עם:" : "This goes great with:";
+}
+
+/**
+ * The customer settles on a product: they will take it, order it, or added it
+ * to the cart. Narrow on purpose: a question ("יש במידה M?") is not a choice,
+ * and neither is a "no".
+ */
+export function commitsToBuy(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  if (!t || /[?؟]/.test(t)) return false;
+  if (/(?:^|\s)(?:לא|אל|בלי)\s+(?:אקח|ניקח|לוקח|לוקחת|אזמין|נזמין|מזמין|מזמינה)|\b(?:won'?t|will not|not|don'?t)\s+(?:take|buy|order|get)\b/iu.test(t)) return false;
+  return /(?:^|[\s,.!])(?:אקח|ניקח|אני לוקח|אני לוקחת|לוקח(?:ת)? (?:את|אותו|אותה|אותם)|אזמין|נזמין|אני מזמין|אני מזמינה|רוצה להזמין|רוצים להזמין|הוספתי (?:\S+ ){0,4}ל(?:סל|עגלה))(?=$|[\s,.!])|\bI(?:'ll| will) (?:take|buy|order|get) (?:it|this|that|the|one|them)\b|\bI(?:'d| would) like to order\b|\b(?:I )?added (?:it|this|that|them|the \S+(?: \S+)?) to (?:the |my )?(?:cart|basket)\b/iu.test(t);
+}
+
+const HEBREW_TITLE_WORDS: Array<[RegExp, string[]]> = [
+  [/טרנץ/u, ["trench"]], [/מעיל/u, ["coat", "overcoat", "parka"]], [/צמר/u, ["wool"]], [/כותנה/u, ["cotton"]],
+  [/פשתן/u, ["linen"]], [/עור/u, ["leather"]], [/סוודר|סריג/u, ["sweater", "knit", "jumper"]], [/קרדיגן/u, ["cardigan"]],
+  [/חולצ/u, ["shirt", "tee", "top", "blouse"]], [/טישירט|טי-שירט/u, ["tee", "t-shirt"]], [/ג'ינס|גינס/u, ["jeans", "denim"]],
+  [/מכנס/u, ["pants", "trousers", "jeans", "chinos"]], [/שמל/u, ["dress"]], [/חצאית/u, ["skirt"]], [/צעיף/u, ["scarf"]],
+  [/כובע/u, ["hat", "beanie", "cap"]], [/תיק/u, ["bag", "tote"]], [/גרב/u, ["socks", "sock"]], [/קפוצ'ון|הודי/u, ["hoodie"]],
+  [/ז'קט|ג'קט/u, ["jacket"]], [/נעל/u, ["shoe", "shoes", "sneakers", "boots"]],
+];
+
+function titleScore(message: string, title: string): number {
+  const words = title.toLowerCase().split(/[^a-z0-9-]+/).filter((w) => w.length > 1);
+  const lower = message.toLowerCase();
+  let score = words.filter((w) => new RegExp(`\\b${w}\\b`).test(lower)).length;
+  for (const [he, en] of HEBREW_TITLE_WORDS) if (he.test(message) && en.some((w) => words.includes(w))) score++;
+  return score;
+}
+
+/**
+ * Which product the customer chose: the one of the last cards their words name
+ * ("אני לוקח את הטרנץ'"), else the product page they wrote from, else the last
+ * cards when they were one product. Several and none named: null, no guess.
+ */
+export function crossSellAnchor(message: string, shown: ShownProduct[], pageProductId?: string | null): string | null {
+  const page = pageProductId && /^\d{1,12}$/.test(pageProductId) ? pageProductId : null;
+  if (!shown.length) return page;
+  const lastBatch = shown[shown.length - 1].batch;
+  const batch = [...new Map(shown.filter((p) => p.batch === lastBatch).map((p) => [p.productId, p])).values()];
+  const scored = batch.map((p) => ({ p, s: titleScore(message, p.title) })).sort((a, b) => b.s - a.s);
+  if (scored[0].s > 0 && scored[0].s > (scored[1]?.s ?? 0)) return scored[0].p.productId;
+  if (page) return page;
+  return batch.length === 1 ? batch[0].productId : null;
+}
+
+/**
+ * Claims the one cross-sell for this product in this conversation. False when
+ * it was already offered (by either signal, or by the model's own call).
+ */
+export async function claimCrossSell(conversationId: string, anchorId: string): Promise<boolean> {
+  try {
+    const redis = getRedis();
+    const ok = await redis.set(crossSellKey(conversationId, anchorId), "1", "EX", CROSS_SELL_TTL_SECONDS, "NX");
+    if (ok !== "OK") return false;
+    await redis.sadd(crossSellChosenKey(conversationId), anchorId);
+    await redis.expire(crossSellChosenKey(conversationId), CROSS_SELL_TTL_SECONDS);
+    return true;
+  } catch {
+    return false; // No way to promise once: none.
+  }
+}
+
+/** The products the customer already chose in this conversation. */
+async function chosenProducts(conversationId: string): Promise<string[]> {
+  try { return await getRedis().smembers(crossSellChosenKey(conversationId)); } catch { return []; }
+}
+
+/**
+ * The add-on cards for a chosen product, or null when the store has none. Every
+ * product the customer chose in this conversation is left out.
+ */
+export async function crossSellCards(
+  tenantId: string,
+  conversationId: string,
+  where: { storeUrl: string; channelAccountId: string; addToCartEnabled: boolean; carouselSize?: number },
+  anchorId: string,
+): Promise<ProductMessageRecord | null> {
+  const chosen = new Set([anchorId, ...(await chosenProducts(conversationId))]);
+  const got = await wooComplementaryProducts(tenantId, anchorId, WOO_COMPLEMENTARY_LIMIT + chosen.size).catch(() => null);
+  if (!got?.ok) return null;
+  const ids = got.result.map((p: any) => String(p?.id ?? "")).filter((id) => /^\d{1,12}$/.test(id) && !chosen.has(id)).slice(0, WOO_COMPLEMENTARY_LIMIT);
+  if (!ids.length) return null;
+  const built = await buildWooCards(
+    tenantId,
+    { storeUrl: where.storeUrl, channelAccountId: where.channelAccountId, shown: [], carouselSize: where.carouselSize ?? MAX_CAROUSEL_ITEMS },
+    where.addToCartEnabled,
+    ids.map((productId) => ({ productId })),
+  );
+  if ("reason" in built) return null;
+  built.record.metadata = { ...built.record.metadata, complementaryFor: anchorId };
+  return built.record;
+}
+
+/** The product page the customer's latest message was written on (its store id), if any. */
+export async function pageProductId(tenantId: string, conversationId: string): Promise<string | null> {
+  const row = await prisma.message.findFirst({
+    where: { tenantId, conversationId, direction: "INBOUND" },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  }).catch(() => null);
+  const id = (row?.metadata as any)?.storefront?.productId;
+  return typeof id === "string" && /^\d{1,12}$/.test(id) ? id : null;
+}
+
+/** The bot has this conversation: open, not handed over, no person on it. */
+export function withTheBot(c: { status?: string | null; isHandedOver?: boolean | null; handledBy?: string | null; assignedAgentId?: string | null } | null): boolean {
+  return !!c && c.status === "OPEN" && !c.isHandedOver && c.handledBy === "ai_agent" && !c.assignedAgentId;
 }
 
 /** The tool surface without the other store's catalogue (unchanged when there is no Woo turn). */
@@ -405,3 +607,63 @@ export const HEBREW_PRODUCT_GLOSSARY =
   "Hebrew to the English titles use: תיק בד = canvas tote; תיק עור = leather bag; כובע גרב = beanie; קפוצ'ון / הודי = hoodie; " +
   "סוודר / סריג = sweater, knit; קרדיגן = cardigan; גופיה = tank top; טישירט = tee, t-shirt; חולצה מכופתרת = shirt; " +
   "מכנסיים = pants; ג'ינס = jeans; שמלה = dress; חצאית = skirt; מעיל = coat; טרנץ' = trench coat; ז'קט = jacket; צעיף = scarf; גרביים = socks.";
+
+/**
+ * Add to cart on a card (2a ii): the store checked the line, so the shopper
+ * chose this product. One line and the add-on cards, written as the bot's own
+ * messages through the normal outbound shape (the inbox sees them; message:new
+ * reaches the widget over its socket, the poll picks them up otherwise). No
+ * customer message, no model. Returns what happened, for the log.
+ */
+export async function offerCrossSellAfterCart(o: { tenantId: string; conversationId: string; productId: string }): Promise<string> {
+  const conv = await prisma.conversation.findFirst({
+    where: { id: o.conversationId, tenantId: o.tenantId },
+    select: { channel: true, channelAccountId: true, status: true, isHandedOver: true, handledBy: true, assignedAgentId: true },
+  });
+  if (!conv || conv.channel !== ("WEBCHAT" as any) || !conv.channelAccountId) return "not_web_chat";
+  if (!withTheBot(conv as any)) return "not_with_the_bot";
+  const account = await prisma.channelAccount.findFirst({
+    where: { id: conv.channelAccountId, tenantId: o.tenantId, channel: "WEBCHAT" as any },
+    select: { credentials: true },
+  });
+  if (!account) return "no_widget";
+  const config = normalizeWebchatConfig(account.credentials);
+  if (!config.commerce.productMessagingEnabled || !config.commerce.suggestComplementary) return "toggle_off";
+  const store = await connectedWooStore(o.tenantId);
+  if (!store) return "no_store";
+  if (!(await claimCrossSell(o.conversationId, o.productId))) return "already_offered";
+  const record = await crossSellCards(o.tenantId, o.conversationId, {
+    storeUrl: store.storeUrl, channelAccountId: conv.channelAccountId, addToCartEnabled: config.commerce.addToCartEnabled,
+  }, o.productId);
+  if (!record) return "no_add_ons";
+
+  const lastInbound = await prisma.message.findFirst({
+    where: { tenantId: o.tenantId, conversationId: o.conversationId, direction: "INBOUND" },
+    orderBy: { createdAt: "desc" },
+    select: { body: true },
+  });
+  const language = config.appearance.language;
+  const locale = visitorLocaleOf(lastInbound?.body) ?? (language === "auto" ? "he" : language);
+  const rows = [
+    { body: goesWellWithLine(locale), messageType: "text", metadata: { source: "ai_bot", crossSell: { trigger: "add_to_cart", anchor: o.productId } } },
+    { body: record.body, messageType: record.messageType, metadata: record.metadata },
+  ];
+  for (const r of rows) {
+    const message = await prisma.message.create({
+      data: {
+        tenantId: o.tenantId,
+        conversationId: o.conversationId,
+        channel: "WEBCHAT" as any,
+        direction: "OUTBOUND",
+        body: r.body,
+        messageType: r.messageType,
+        senderName: "AI Bot",
+        status: "SENT",
+        metadata: r.metadata as any,
+      },
+    });
+    await prisma.conversation.update({ where: { id: o.conversationId }, data: { lastMessageAt: message.createdAt } });
+    await publishEvent({ event: "message:new", tenantId: o.tenantId, data: { message, conversationId: o.conversationId, channel: "WEBCHAT" } });
+  }
+  return "sent";
+}

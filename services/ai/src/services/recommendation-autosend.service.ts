@@ -37,6 +37,7 @@
 
 import { captureError } from "@chatcenter/shared";
 import type { ProductCandidate, ProductSearchEnvelope } from "./product-search.service";
+import { pointsToCardsBelow } from "./reply-style-check.service";
 
 export type RecoLocale = "he" | "en";
 
@@ -435,11 +436,16 @@ export function planAutoRecommendation(
   // names candidates, by key or by exact title, those go out, in its order.
   // Keys refer to the model's list (the full one); the named set drops excluded ids.
   const named = namedCandidates(input.modelText, input.envelope.candidates).filter((c) => !excluded.has(String(c.productId))).slice(0, input.maxProducts);
-  if ((input.noCards || (!named.length && input.unnamedAllowed === false)) && envelope.status === "ok" && envelope.candidates.length) {
+  // A reply that points at cards below ("שני מעילים למטה") gets them, named or
+  // not (dev 2026-10-26, conv cmvpghp1…: it named the coats in Hebrew, none went
+  // out, and the customer had to ask "שלח לי").
+  const pointed = !named.length && pointsToCardsBelow(input.modelText);
+  if ((input.noCards || (!named.length && !pointed && input.unnamedAllowed === false)) && envelope.status === "ok" && envelope.candidates.length) {
     return { selected: [], budget: { ...policy, selected: [] }, shouldSendStructured: false, introduction: "", skipReason: "not_named" };
   }
   const budget: BudgetVerdict = named.length
     ? { ...policy, selected: named }
+    : pointed ? policy
     : input.unnamedMax ? { ...policy, selected: policy.selected.slice(0, input.unnamedMax) } : policy;
 
   const base = { selected: budget.selected, budget };
