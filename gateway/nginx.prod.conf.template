@@ -2667,6 +2667,19 @@ http {
             add_header Cache-Control "no-cache, must-revalidate" always;
         }
 
+        # The setup screen's Terms acceptance (2026-10-26). When /recover is
+        # served on this origin its accept POST is root-relative, so ONLY this
+        # one path of the auth service is opened here: nothing else of /api/auth.
+        location ~ ^/api/auth/setup/[^/]+/accept$ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location / {
             limit_req zone=authentik burst=40 nodelay;
 
