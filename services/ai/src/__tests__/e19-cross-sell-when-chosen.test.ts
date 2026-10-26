@@ -55,7 +55,7 @@ vi.mock("../services/connectors/integration-framework", () => ({
     }
     if (o.toolFunctionName === "woocommerce.list_products") {
       if (o.args.include) return { ok: true, result: all.filter((p) => o.args.include.includes(String(p.id))) };
-      return { ok: true, result: all.filter((p) => p.categories.some((c: any) => String(c.id) === String(o.args.category)) && !(o.args.exclude ?? []).includes(String(p.id))) };
+      return { ok: true, result: all.filter((p) => (o.args.category == null || p.categories.some((c: any) => String(c.id) === String(o.args.category))) && !(o.args.exclude ?? []).includes(String(p.id))) };
     }
     if (o.toolFunctionName === "woocommerce.list_product_variations") return { ok: true, result: [] };
     return { ok: false, reason: "unexpected" };
@@ -120,15 +120,17 @@ describe("once per product, the add-ons from the store", () => {
     expect(await claimCrossSell("c1", "41")).toBe(false);
     expect(await claimCrossSell("c1", "42")).toBe(true);
   });
-  it("linked first, then the category; never the product itself or one already chosen", async () => {
+  it("linked first, then another kind; never the product itself, one already chosen, or one already shown", async () => {
     await claimCrossSell("c1", "42");
     await claimCrossSell("c1", "41");
     const r = await crossSellCards("T", "c1", { storeUrl: STORE, channelAccountId: "ca1", addToCartEnabled: true }, "41");
     const ids = (r!.metadata as any).commerce.products.map((p: any) => p.productId);
-    expect(ids).toEqual(["60", "61"]);
+    // 60 is linked; 42 and 61 share the coat's category (a substitute, never); 70 is another kind.
+    expect(ids).toEqual(["60", "70"]);
     expect((r!.metadata as any).complementaryFor).toBe("41");
   });
-  it("no add-ons in the store: nothing", async () => {
+  it("no add-ons in the store (only the anchor's own kind): nothing", async () => {
+    H.products = { "70": H.products["70"], "71": product(71, "Other Mug", 99) };
     expect(await crossSellCards("T", "c1", { storeUrl: STORE, channelAccountId: "ca1", addToCartEnabled: true }, "70")).toBeNull();
   });
 });
@@ -163,6 +165,7 @@ describe("(ii) add to cart", () => {
       expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "41" })).toBe("not_with_the_bot");
     }
     H.conv = { ...BOT };
+    H.products = { "70": H.products["70"], "71": product(71, "Other Mug", 99) };
     expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "70" })).toBe("no_add_ons");
     expect(H.created).toEqual([]);
   });

@@ -2181,8 +2181,8 @@ async function generateAIBotReplyInner(
         if (/^\d{1,12}$/.test(anchorId) && !(await claimCrossSell(opts.conversationId, anchorId))) {
           return { ok: false as const, reason: "the add-ons for this product were already offered in this conversation; do not offer them again" };
         }
-        const out = await wooComplementaryProducts(opts.tenantId, anchorId);
-        if (out.ok) console.log(`[ai-bot][cross-sell] woocommerce anchor=${String((args as any)?.product_id)} linked=${out.sources.linked} sameCategory=${out.sources.sameCategory}`);
+        const out = await wooComplementaryProducts(opts.tenantId, anchorId, undefined, { exclude: wooTurn.shown.map((p) => p.productId) });
+        if (out.ok) console.log(`[ai-bot][cross-sell] woocommerce anchor=${anchorId} linked=${out.sources.linked} otherKinds=${out.sources.otherKinds}`);
         return out.ok ? { ok: true as const, result: out.result } : out;
       }
 

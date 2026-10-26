@@ -6,8 +6,10 @@
  *     with no approval, never routed to the catalog lookup, and denied for an
  *     employee kept off WooCommerce;
  *   - the add-ons are the store's own cross-sells and upsells first, in the
- *     merchant's order, then in-stock products from the same category; never
- *     the anchor itself, nothing hidden, out of stock or unpublished;
+ *     merchant's order, then in-stock products of OTHER kinds (accessories
+ *     first, then the same audience); never the anchor's own kind, never a
+ *     product already shown, never the anchor itself, nothing hidden, out of
+ *     stock or unpublished; nothing that qualifies is nothing (2026-10-26);
  *   - the result is grounded like a search (cards), Shopify's cross-sell is
  *     hidden on a Woo turn, and a Woo catalogue read counts as "shown".
  */
@@ -18,6 +20,7 @@ import { join } from "path";
 const H = vi.hoisted(() => ({
   access: ["woocommerce"] as string[],
   products: {} as Record<string, any>,
+  cats: null as any[] | null,
   reads: [] as Array<{ tool: string; args: any }>,
 }));
 
@@ -45,6 +48,7 @@ vi.mock("../services/connectors/integration-framework", () => ({
       if (args.in_stock) list = list.filter((p: any) => p.stock_status === "instock");
       return { ok: true, result: list.slice(0, args.per_page ?? 10) };
     }
+    if (toolFunctionName === "woocommerce.list_product_categories") return H.cats ? { ok: true, result: H.cats } : { ok: false, reason: "unknown" };
     return { ok: false, reason: "unknown" };
   },
 }));
@@ -60,7 +64,7 @@ const product = (id: number, o: any = {}) => ({
   categories: [{ id: 7 }], cross_sell_ids: [], upsell_ids: [], ...o,
 });
 
-beforeEach(() => { H.access = ["woocommerce"]; H.reads = []; H.products = {}; });
+beforeEach(() => { H.access = ["woocommerce"]; H.reads = []; H.products = {}; H.cats = null; });
 
 describe("the setting", () => {
   it("off by default; on only with product cards on", () => {
@@ -91,17 +95,15 @@ describe("★ the gate (no CatalogTool row by design)", () => {
 });
 
 describe("★ what goes with the chosen product", () => {
-  it("cross-sells then upsells, in the merchant's order, then the same category to fill", async () => {
+  it("cross-sells then upsells, in the merchant's order, then another kind to fill", async () => {
     H.products = {
       1: product(1, { cross_sell_ids: [5, 3], upsell_ids: [4] }),
       3: product(3), 4: product(4), 5: product(5),
       6: product(6), 9: product(9, { categories: [{ id: 8 }] }),
     };
     const r = await wooComplementaryProducts("T", "1");
-    expect(r.ok && r.result.map((p: any) => p.id)).toEqual([5, 3, 4, 6]);
-    expect(r.ok && r.sources).toEqual({ linked: 3, sameCategory: 1 });
-    const fill = H.reads.find((x) => x.tool === "woocommerce.list_products" && x.args.category);
-    expect(fill!.args).toMatchObject({ category: "7", exclude: ["1", "5", "3", "4"], in_stock: true });
+    expect(r.ok && r.result.map((p: any) => p.id)).toEqual([5, 3, 4, 9]);
+    expect(r.ok && r.sources).toEqual({ linked: 3, otherKinds: 1 });
   });
 
   it("never the anchor, nothing hidden, out of stock or unpublished", async () => {
@@ -116,9 +118,39 @@ describe("★ what goes with the chosen product", () => {
     expect(r.ok && r.result).toEqual([]);
   });
 
-  it("no links: the same category, without the anchor; no category, no add-ons", async () => {
-    H.products = { 1: product(1), 2: product(2), 3: product(3, { categories: [] }) };
-    expect((await wooComplementaryProducts("T", "1") as any).result.map((p: any) => p.id)).toEqual([2]);
+  it("★ no same-category substitutes in the fallback (urban, 2026-10-26: nothing linked, and the old fallback gave the trench other coats)", async () => {
+    // urban's tree: Clothing > Jackets & Coats / Shirts; Accessories; Women and Men across them.
+    H.cats = [
+      { id: 48, name: "Clothing", parent: 0 }, { id: 54, name: "Jackets &amp; Coats", parent: 48 }, { id: 50, name: "Shirts", parent: 48 },
+      { id: 56, name: "Accessories", parent: 0 }, { id: 57, name: "Women", parent: 0 }, { id: 58, name: "Men", parent: 0 },
+    ];
+    const c = (...ids: number[]) => ({ categories: ids.map((id) => ({ id })) });
+    H.products = {
+      364: product(364, c(54, 57)), // Cotton Trench Coat: the anchor
+      329: product(329, c(54, 57, 58)), 343: product(343, c(54, 57, 58)), // other coats
+      140: product(140, c(50, 57, 58)), 117: product(117, c(50, 58)), // shirts: another kind
+      425: product(425, c(56, 57)), 429: product(429, c(56, 57, 58)), 443: product(443, c(56, 58)), // accessories
+      440: product(440, { ...c(56, 57, 58), stock_status: "outofstock" }),
+    };
+    const r: any = await wooComplementaryProducts("T", "364");
+    const ids = r.result.map((p: any) => p.id);
+    expect(ids.some((id: number) => [329, 343].includes(id))).toBe(false);
+    // Room for everything: still no coat.
+    const wide = (await wooComplementaryProducts("T", "364", 20) as any).result.map((p: any) => p.id);
+    expect(wide).toEqual([425, 429, 443, 140, 117]);
+    // Accessories first, the Women's ones before the Men-only belt; then a Women's shirt.
+    expect(ids).toEqual([425, 429, 443, 140]);
+    // Already shown as an alternative: never an add-on.
+    expect((await wooComplementaryProducts("T", "364", 4, { exclude: ["425"] }) as any).result.map((p: any) => p.id)).not.toContain(425);
+  });
+
+  it("only the anchor's kind in the store: nothing, not substitutes; no tree: none of the anchor's categories", async () => {
+    H.cats = [{ id: 48, name: "Clothing", parent: 0 }, { id: 54, name: "Coats", parent: 48 }];
+    H.products = { 1: product(1, { categories: [{ id: 54 }] }), 2: product(2, { categories: [{ id: 54 }] }) };
+    expect((await wooComplementaryProducts("T", "1") as any).result).toEqual([]);
+    H.cats = null;
+    H.products = { 1: product(1), 2: product(2), 9: product(9, { categories: [{ id: 8 }] }), 3: product(3, { categories: [] }) };
+    expect((await wooComplementaryProducts("T", "1") as any).result.map((p: any) => p.id)).toEqual([9]);
     expect((await wooComplementaryProducts("T", "3") as any).result).toEqual([]);
   });
 

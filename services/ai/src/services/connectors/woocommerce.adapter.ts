@@ -698,6 +698,11 @@ const WooCommerceAdapter: ProviderAdapter = {
         }
         return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}`);
       }
+      case "list_product_categories": {
+        // Internal callers only (the web chat's add-ons): not in the model's tools.
+        const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`);
+        return Array.isArray(list) ? list.map((c: any) => ({ id: c?.id, name: c?.name, parent: c?.parent, count: c?.count })) : [];
+      }
       case "list_product_variations": {
         const per = Math.min(100, Number(args.per_page ?? 50));
         return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}`);

@@ -189,10 +189,14 @@ export const WOO_TURN_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["shopify.sear
 //
 // What goes with the product the customer chose, from THIS store: its own
 // cross-sells and upsells first (what the merchant linked in WooCommerce), then,
-// when those are fewer than asked for, in-stock products from the same
-// category. Published, visible and in stock only. The result has the shape of
-// list_products, so the typed product path grounds it and the widget shows
-// cards, exactly as for a search. Offered only while the widget's toggle is on.
+// when those are fewer than asked for, in-stock products from OTHER kinds of
+// product: accessories first, then the same audience (Men / Women). Never the
+// anchor's own kind (2026-10-26: urban links nothing, so the old same-category
+// fill made the trench coat's add-ons other coats), never a product the customer was
+// already shown. Nothing that qualifies: nothing, not substitutes. Published,
+// visible and in stock only. The result has the shape of list_products, so the
+// typed product path grounds it and the widget shows cards, exactly as for a
+// search. Offered only while the widget's toggle is on.
 
 export const WOO_COMPLEMENTARY_LIMIT = 4;
 
@@ -227,11 +231,14 @@ const idList = (v: unknown): string[] =>
 const sellable = (p: any) =>
   p && p.status === "publish" && p.catalog_visibility !== "hidden" && p.stock_status === "instock" && p.purchasable !== false;
 
+const ACCESSORY_CATEGORY = /accessor|אקססור|אביזר/i;
+
 export async function wooComplementaryProducts(
   tenantId: string,
   productId: string,
   limit = WOO_COMPLEMENTARY_LIMIT,
-): Promise<{ ok: true; result: any[]; sources: { linked: number; sameCategory: number } } | { ok: false; reason: string }> {
+  opts: { exclude?: string[] } = {},
+): Promise<{ ok: true; result: any[]; sources: { linked: number; otherKinds: number } } | { ok: false; reason: string }> {
   const id = String(productId ?? "").trim();
   if (!/^\d{1,12}$/.test(id)) return { ok: false, reason: "complementary_products needs the numeric product_id of the product the customer chose." };
   const read = (toolFunctionName: string, args: Record<string, unknown>) =>
@@ -240,8 +247,9 @@ export async function wooComplementaryProducts(
   const anchor = await read("woocommerce.get_product", { product_id: id });
   if (!anchor.ok) return { ok: false, reason: `product ${id} is not in this store` };
   const raw: any = anchor.result;
+  const excluded = new Set([id, ...idList(opts.exclude)]);
 
-  const linkedIds = [...new Set([...idList(raw?.cross_sell_ids), ...idList(raw?.upsell_ids)])].filter((x) => x !== id);
+  const linkedIds = [...new Set([...idList(raw?.cross_sell_ids), ...idList(raw?.upsell_ids)])].filter((x) => !excluded.has(x));
   let linked: any[] = [];
   if (linkedIds.length) {
     const got = await read("woocommerce.list_products", { include: linkedIds, in_stock: true, per_page: Math.min(100, linkedIds.length) });
@@ -250,18 +258,47 @@ export async function wooComplementaryProducts(
     linked = linkedIds.map((x) => byId.get(x)).filter(Boolean).slice(0, limit);
   }
 
-  let sameCategory: any[] = [];
-  const category = idList((raw?.categories ?? []).map((c: any) => c?.id))[0];
-  if (linked.length < limit && category) {
-    const exclude = [id, ...linked.map((p) => String(p.id))];
-    const got = await read("woocommerce.list_products", { category, exclude, in_stock: true, per_page: limit * 2 });
-    sameCategory = (got.ok && Array.isArray(got.result) ? (got.result as any[]) : [])
+  let otherKinds: any[] = [];
+  const catsOf = (p: any) => idList((p?.categories ?? []).map((c: any) => c?.id));
+  const anchorCats = catsOf(raw);
+  if (linked.length < limit && anchorCats.length) {
+    // The anchor's KIND is its categories under a parent ("Clothing > Jackets &
+    // Coats"); a top-level category that cuts across kinds ("Men") is its
+    // audience, a preference. Without the tree, every category of the anchor is
+    // its kind: nothing from any of them.
+    const cats = await read("woocommerce.list_product_categories", {});
+    const tree = cats.ok && Array.isArray(cats.result) ? (cats.result as any[]) : null;
+    const parentOf = new Map((tree ?? []).map((c) => [String(c?.id), String(c?.parent ?? "0")]));
+    const children = tree ? anchorCats.filter((c) => (parentOf.get(c) ?? "0") !== "0") : [];
+    const kind = new Set(children.length ? children : anchorCats);
+    const audience = new Set(anchorCats.filter((c) => !kind.has(c)));
+    const accessories = (tree ?? [])
+      .filter((c) => ACCESSORY_CATEGORY.test(String(c?.name ?? "")) && !kind.has(String(c?.id)))
+      .map((c) => String(c.id));
+    const taken = new Set([...excluded, ...linked.map((p) => String(p.id))]);
+    const pools = await Promise.all([
+      ...accessories.slice(0, 2).map((category) => read("woocommerce.list_products", { category, in_stock: true, per_page: 20 })),
+      read("woocommerce.list_products", { in_stock: true, per_page: 50 }),
+    ]);
+    const seen = new Set<string>();
+    const pool = pools
+      .flatMap((g) => (g.ok && Array.isArray(g.result) ? (g.result as any[]) : []))
+      .filter((p) => (seen.has(String(p?.id)) ? false : (seen.add(String(p?.id)), true)))
       .filter(sellable)
-      .filter((p) => !exclude.includes(String(p.id)))
+      .filter((p) => !taken.has(String(p.id)))
+      // Another kind, known: a product with no category could be a substitute.
+      .filter((p) => catsOf(p).length > 0 && !catsOf(p).some((c) => kind.has(c)));
+    // Accessories first, then the anchor's audience, then the store's order.
+    const rank = (p: any) =>
+      (catsOf(p).some((c) => accessories.includes(c)) ? 0 : 2) + (audience.size && !catsOf(p).some((c) => audience.has(c)) ? 1 : 0);
+    otherKinds = pool
+      .map((p, i) => ({ p, i }))
+      .sort((x, y) => rank(x.p) - rank(y.p) || x.i - y.i)
+      .map((x) => x.p)
       .slice(0, limit - linked.length);
   }
 
-  return { ok: true, result: [...linked, ...sameCategory], sources: { linked: linked.length, sameCategory: sameCategory.length } };
+  return { ok: true, result: [...linked, ...otherKinds], sources: { linked: linked.length, otherKinds: otherKinds.length } };
 }
 
 // ─── Cross-sell when the customer settles on a product (2026-10-26) ──────────
@@ -361,7 +398,8 @@ export async function crossSellCards(
   anchorId: string,
 ): Promise<ProductMessageRecord | null> {
   const chosen = new Set([anchorId, ...(await chosenProducts(conversationId))]);
-  const got = await wooComplementaryProducts(tenantId, anchorId, WOO_COMPLEMENTARY_LIMIT + chosen.size).catch(() => null);
+  const shown = (await shownProducts(tenantId, conversationId)).map((p) => p.productId);
+  const got = await wooComplementaryProducts(tenantId, anchorId, WOO_COMPLEMENTARY_LIMIT, { exclude: [...chosen, ...shown] }).catch(() => null);
   if (!got?.ok) return null;
   const ids = got.result.map((p: any) => String(p?.id ?? "")).filter((id) => /^\d{1,12}$/.test(id) && !chosen.has(id)).slice(0, WOO_COMPLEMENTARY_LIMIT);
   if (!ids.length) return null;
