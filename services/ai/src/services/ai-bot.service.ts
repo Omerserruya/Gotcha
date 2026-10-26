@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, ungroundedPrices, stripPrices } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -961,12 +961,8 @@ function silentTurnFallback(locale: string): string {
  * test chat the fallback ("I couldn't finish checking - shall I pass you to a
  * person?") showed an operator a message live would never send.
  */
-/** What no tool here can arrange, said plainly, with the one thing that can (eval e11 C02, A05, C06). */
-export function cannotArrangeLine(locale: string): string {
-  return locale?.startsWith("he")
-    ? "את זה אין לנו אפשרות לסדר מכאן. אפשר להעביר את השיחה לצוות כאן בצ'אט, להעביר?"
-    : "That isn't something we can arrange from here. I can pass this conversation to the team here in the chat, shall I?";
-}
+/** Moved beside the checker, which now uses it; re-exported for its callers. */
+export { cannotArrangeLine };
 
 /** An order lookup this turn found no such order: the number it tried, or null. */
 export function orderNotFound(toolCallLog: Array<{ tool: string; args?: any; result?: any }>): string | null {
@@ -5182,29 +5178,14 @@ async function generateAIBotReplyInner(
         budget.addUsage(regen.usage.total_tokens || 0);
         if (regen.content?.trim() && !isInterimOnlyReply(regen.content)) replyText = regen.content.trim();
         else replyText = stripTrailingOffer(draftBeforeRegen);
-        // Still collecting details for something no tool does (eval e11 C02:
-        // "רשמנו את המספר", then a time for the call): the honest line, in code.
-        const stillPhantom = checkReplyStyle(replyText, styleCtx).filter((v) => v.kind === "phantom_action" || (v.kind === "promise" && /callback/.test(v.match)));
-        if (stillPhantom.length) {
-          console.warn(`[ai-bot] reply checker: still promising what no tool does (${stillPhantom.map((v) => v.match).join(", ")}): the plain line instead conv=${opts.conversationId}`);
-          replyText = cannotArrangeLine(replyLocale);
+        // The rewrite is checked like the draft, and anything untrue left in it
+        // is fixed in code: titles, "לא נמצאה במלאי" and a made-up ₪389 all came
+        // out of a rewrite nothing checked (eval 2026-10-26). Style may pass.
+        const final = finalizeRewrite(replyText, styleCtx);
+        if (final.fixed.length) {
+          console.warn(`[ai-bot] reply checker: the rewrite still had something untrue: ${final.fixed.join(", ")} conv=${opts.conversationId}`);
+          replyText = final.text;
         }
-        // Still claiming the store lacks it after an empty title search (eval
-        // 2026-10-26: "לא נמצאה חולצה לבנה במלאי"; the white shirt was in stock).
-        else if (checkReplyStyle(replyText, styleCtx).some((v) => v.kind === "false_absence")) {
-          console.warn(`[ai-bot] reply checker: still a stock claim after an empty search: the not-found line instead conv=${opts.conversationId}`);
-          replyText = notFoundByNameLine(replyLocale);
-        }
-        // The rewrite is checked too (dev 2026-10-26: the draft was flagged for
-        // "לשלוח כרטיס", and its rewrite said "ג'ינס... עולה ₪389"; the jeans are
-        // ₪349 and 389 appears nowhere). A made-up price is removed in code, and
-        // a trailing offer to check or to send details is dropped.
-        const made = ungroundedPrices(replyText, styleCtx.groundingText ?? "");
-        if (styleCtx.shopFloor && made.length) {
-          console.warn(`[ai-bot] reply checker: a price in the rewrite nothing grounds (${made.join(", ")}): removed conv=${opts.conversationId}`);
-          replyText = stripPrices(replyText, made) || replyText;
-        }
-        if (styleCtx.shopFloor) replyText = stripTrailingOffer(replyText);
         toolCallLog.push({
           tool: "__style_check__",
           args: { violations: violations.map((v) => v.kind) },

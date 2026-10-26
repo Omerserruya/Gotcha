@@ -156,7 +156,7 @@ export function stripPrices(reply: string, prices: string[]): string {
     // "1290" is written "1,290" too.
     const n = p.split(".").map((part, i) => (i ? part : part.split("").join(",?"))).join("\\.");
     const amount = `(?:[₪$€]\\s?${n}(?:\\.0+)?|${n}(?:\\.0+)?\\s?(?:₪|ש["״']?ח|שקל|ILS))`;
-    out = out.replace(new RegExp(`\\s*,?\\s*(?:(?:ש)?(?:עולה|עולות|עולים|במחיר(?: של)?|ב[-\u2011]?)\\s*)?${amount}`, "gi"), "");
+    out = out.replace(new RegExp(`\\s*,?\\s*(?:(?:(?:ש)?(?:עולה|עולות|עולים|במחיר(?: של)?|ב[-\u2011]?)|costs?|is|are|for|at|priced at)\\s*)?${amount}`, "gi"), "");
   }
   return out.replace(/\s+([.,!?؟])/g, "$1").replace(/,\s*([.!?؟])/g, "$1").replace(/ {2,}/g, " ").trim();
 }
@@ -450,6 +450,85 @@ export function notFoundByNameLine(locale: "he" | "en"): string {
   return locale === "he"
     ? "לא מצאתי את זה בשם הזה. אפשר לנסות לחפש לפי סוג המוצר?"
     : "I couldn't find that by that name. Want to try by the type of product?";
+}
+
+/** What no tool here can arrange, said plainly, with the one thing that can (eval e11 C02, A05, C06). */
+export function cannotArrangeLine(locale: string): string {
+  return locale?.startsWith("he")
+    ? "את זה אין לנו אפשרות לסדר מכאן. אפשר להעביר את השיחה לצוות כאן בצ'אט, להעביר?"
+    : "That isn't something we can arrange from here. I can pass this conversation to the team here in the chat, shall I?";
+}
+
+/** A product fact nothing grounds, when even dropping it leaves nothing true to send. */
+export function lookItUpLine(locale: string): string {
+  return locale?.startsWith("he")
+    ? "כדי לענות על זה בדיוק צריך לחפש את המוצר. איך הוא נקרא?"
+    : "To answer that exactly I need to look the product up. What is it called?";
+}
+
+/** The kinds that make a reply untrue, not just unpolished. */
+const TRUTH_KINDS: ReadonlySet<StyleViolationKind> = new Set(["ungrounded_price", "ungrounded_attribute", "false_absence", "phantom_action", "promise"]);
+
+/** The reply without the sentence that carries this text; unchanged when no sentence does. */
+function dropSentenceWith(text: string, match: string): string {
+  const needle = match.trim();
+  if (!needle) return text;
+  const parts = text.split(/(?<=[.!?؟\n])\s+/);
+  const kept = parts.filter((p) => !p.includes(needle));
+  return kept.length === parts.length ? text : kept.join(" ").trim();
+}
+
+/**
+ * The rewrite, checked like the draft (Omer's eval, 2026-10-26: titles, "לא
+ * נמצאה במלאי" and a made-up ₪389 all came out of a rewrite, which nothing
+ * checked). Style leftovers pass; anything untrue is fixed in code:
+ *   - collecting details for what no tool does: the "can't arrange" line;
+ *   - "out of stock" after an empty title search: the not-found line;
+ *   - a price nothing grounds: removed;
+ *   - a promise, or a size / colour / price / stock with no product facts at
+ *     all: its sentence dropped;
+ *   - and when something untrue is still there, or nothing is left: a plain line.
+ * A trailing offer to check or to send details is dropped on a shop's floor.
+ */
+export function finalizeRewrite(text: string, ctx: StyleCheckContext): { text: string; fixed: string[] } {
+  const untrue = (t: string) => checkReplyStyle(t, ctx).filter((v) => TRUTH_KINDS.has(v.kind));
+  const fixed: string[] = [];
+  let out = text;
+  let left = untrue(out);
+  if (left.some((v) => v.kind === "phantom_action" || (v.kind === "promise" && /callback/.test(v.match)))) {
+    return { text: cannotArrangeLine(ctx.locale), fixed: ["cannot_arrange_line"] };
+  }
+  if (left.some((v) => v.kind === "false_absence")) return { text: notFoundByNameLine(ctx.locale), fixed: ["not_found_line"] };
+  if (ctx.shopFloor && left.some((v) => v.kind === "ungrounded_price")) {
+    // Sentence by sentence: the price comes out, and a sentence left with
+    // fewer than three words ("הג'ינס.", "The jeans.") goes with it.
+    const made = ungroundedPrices(out, ctx.groundingText ?? "");
+    const parts = out.split(/(?<=[.!?؟\n])\s+/).map((p) => {
+      if (!ungroundedPrices(p, ctx.groundingText ?? "").length) return p;
+      const stripped = stripPrices(p, made);
+      return stripped.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length >= 3 ? stripped : "";
+    });
+    const next = parts.filter(Boolean).join(" ").trim();
+    if (next !== out) { out = next; fixed.push("price_removed"); }
+  }
+  for (const v of untrue(out)) {
+    if (v.kind !== "promise" && v.kind !== "ungrounded_attribute") continue;
+    const dropped = dropSentenceWith(out, v.match);
+    if (dropped !== out) { out = dropped; fixed.push(`${v.kind}_dropped`); }
+  }
+  if (ctx.shopFloor) {
+    const trimmed = stripTrailingOffer(out);
+    if (trimmed !== out) { out = trimmed; fixed.push("offer_dropped"); }
+  }
+  left = out.trim() ? untrue(out) : [];
+  // What is left once the untrue part is gone is only an offer ("לשלוח את
+  // פרטי המוצר ותמונות?"): nothing was answered, so say what is needed.
+  const onlyOffer = fixed.length > 0 && OFFER_TO_CHECK.test(" " + out.trim());
+  if (!out.trim() || left.length || onlyOffer) {
+    const promise = left.some((v) => v.kind === "promise" || v.kind === "phantom_action");
+    return { text: promise ? cannotArrangeLine(ctx.locale) : lookItUpLine(ctx.locale), fixed: [...fixed, "plain_line"] };
+  }
+  return { text: out, fixed };
 }
 
 export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string; cardsShown?: boolean }): string {

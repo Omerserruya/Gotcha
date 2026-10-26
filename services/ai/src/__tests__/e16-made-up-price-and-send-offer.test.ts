@@ -103,9 +103,7 @@ describe("wired", () => {
     expect(src).toContain('...chatMessages.filter((m: any) => m.role !== "assistant")');
     expect(src).toContain("...priorOutbound.map((m: any) => String(m.body ?? \"\")),");
   });
-  it("the rewrite is checked: a made-up price removed, a trailing offer dropped", () => {
-    expect(src).toContain("const made = ungroundedPrices(replyText, styleCtx.groundingText ?? \"\");");
-    expect(src).toContain("replyText = stripPrices(replyText, made) || replyText;");
-    expect(src).toContain("if (styleCtx.shopFloor) replyText = stripTrailingOffer(replyText);");
+  it("the rewrite is checked like the draft (finalizeRewrite, e17-rewrite-is-checked)", () => {
+    expect(src).toContain("const final = finalizeRewrite(replyText, styleCtx);");
   });
 });
