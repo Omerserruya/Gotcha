@@ -151,7 +151,9 @@ export function defaultWebchatConfig(): WebchatConfig {
     },
     ux: defaultShopifyChatUx(),
     nameSource: "employee",
-    behaviour: { allowHumanHandoff: true },
+    // The "talk to a person" button is opt-in (Omer, 2026-10-26): unset is off.
+    // The employee's own handoff in the conversation (escalate_to_human) is not this.
+    behaviour: { allowHumanHandoff: false },
     offline: { message: "We are away right now. Leave a message and we will get back to you." },
     commerce: { productMessagingEnabled: false, addToCartEnabled: false, suggestComplementary: false, promotions: { couponIds: [] } },
   };

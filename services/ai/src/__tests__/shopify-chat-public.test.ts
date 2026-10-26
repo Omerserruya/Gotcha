@@ -579,8 +579,13 @@ describe("POST /cart/validate", () => {
 // ─── Handoff ────────────────────────────────────────────────
 
 describe("POST /handoff", () => {
-  it("hands the conversation to a human and marks it waiting", async () => {
-    // (case 20)
+  it("hands the conversation to a human and marks it waiting, when the merchant turned the button on", async () => {
+    // (case 20) The button is opt-in (2026-10-26): on only when stored true.
+    const config = defaultShopifyLiveChatConfig();
+    config.shopDomain = SHOP;
+    config.enabled = true;
+    config.routing.allowHumanHandoff = true;
+    H.channelRow.current = channel({ platformMeta: { shopifyLiveChat: config } });
     H.conversationRow.current = { id: "conv1", tenantId: "t1", status: "OPEN", isHandedOver: false };
     const res = await request(app())
       .post("/api/shopify-chat/handoff")
@@ -605,6 +610,23 @@ describe("POST /handoff", () => {
       .set("Origin", ORIGIN)
       .send({ sessionToken: session() });
     expect(res.status).toBe(403);
+  });
+
+  it("★ is refused when the merchant never set it (unset is off)", async () => {
+    const config = defaultShopifyLiveChatConfig() as any;
+    config.shopDomain = SHOP;
+    config.enabled = true;
+    delete config.routing.allowHumanHandoff;
+    H.channelRow.current = channel({ platformMeta: { shopifyLiveChat: config } });
+
+    const res = await request(app())
+      .post("/api/shopify-chat/handoff")
+      .set("Origin", ORIGIN)
+      .send({ sessionToken: session() });
+    expect(res.status).toBe(403);
+    expect(H.updateConversation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
+    );
   });
 });
 

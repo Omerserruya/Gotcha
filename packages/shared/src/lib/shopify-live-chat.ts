@@ -303,7 +303,8 @@ export function defaultShopifyLiveChatConfig(): ShopifyLiveChatConfig {
       offlineConsentText: "",
     },
     routing: {
-      allowHumanHandoff: true,
+      // Opt-in (Omer, 2026-10-26): unset is off, a stored true stays true.
+      allowHumanHandoff: false,
       allowReturnToAi: true,
     },
     commerce: {
