@@ -343,6 +343,52 @@ export function singular(word: string): string {
   return word;
 }
 
+/**
+ * The colour and size words of a product query, apart from what to search for
+ * (2026-10-26: "white" found nothing though the Oxford shirt comes in white).
+ * Woo's search reads titles and copy, never a variation's attributes, and our
+ * title filter then drops whatever the copy matched. So these words are not
+ * searched: they are matched against each product's own options instead.
+ */
+const COLOUR_WORDS = new Set([
+  "white", "black", "grey", "gray", "charcoal", "navy", "blue", "sky", "beige", "sand", "oat",
+  "brown", "camel", "chocolate", "green", "olive", "sage", "red", "burgundy", "pink", "rose",
+  "cream", "ecru", "ivory", "natural", "khaki", "yellow", "orange", "purple", "lilac", "denim",
+]);
+const SIZE_WORD = /^(xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl)$/;
+
+export function attributeWords(query: unknown): { rest: string; colours: string[]; sizes: string[] } {
+  const tokens = String(query ?? "").toLowerCase().split(/[^a-z0-9\u0590-\u05ff-]+/).filter(Boolean);
+  const colours: string[] = [];
+  const sizes: string[] = [];
+  const rest: string[] = [];
+  for (const t of tokens) {
+    // "off-white" is its own option; a bare "off" is not a word to search.
+    if (t === "off-white" || t === "offwhite") colours.push("off-white");
+    else if (COLOUR_WORDS.has(t)) colours.push(t);
+    else if (SIZE_WORD.test(t)) sizes.push(t);
+    else if (t !== "off" && t !== "size" && t !== "color" && t !== "colour" && t !== "in") rest.push(t);
+  }
+  return { rest: rest.join(" "), colours, sizes };
+}
+
+/**
+ * Does a product come in these? A colour is in its options (any attribute) or
+ * its title ("White Linen Shirt"); a size is an exact option. A product that
+ * names no options at all cannot be ruled in by an option it does not list.
+ */
+export function offersAttributes(product: any, colours: string[], sizes: string[]): boolean {
+  const options: string[] = (Array.isArray(product?.attributes) ? product.attributes : [])
+    .flatMap((a: any) => (Array.isArray(a?.options) ? a.options : a?.option != null ? [a.option] : []))
+    .map((o: any) => String(o).toLowerCase().trim());
+  const title = String(product?.name ?? "").toLowerCase();
+  // A hyphen joins a word: "white" is not "Off-White", which is its own colour.
+  const word = (hay: string, w: string) => new RegExp(`(^|[^a-z-])${w.replace(/[^a-z-]/g, "")}($|[^a-z-])`).test(hay);
+  const colourOk = colours.every((c) => options.some((o) => word(o, c)) || word(title, c));
+  const sizeOk = sizes.every((z) => options.some((o) => o === z));
+  return colourOk && sizeOk;
+}
+
 /** Products whose TITLE carries a query word, most words first; the rest are noise from a body match. */
 export function rankByTitleWords(products: any[], words: string[]): any[] {
   // A substring: "Overshirt" is a shirt. Longer words weigh more, so "oversized
@@ -487,6 +533,21 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/customers?${params}`);
       }
       case "list_products": {
+        // A colour or a size: search the noun, then keep what comes in it.
+        const wanted = attributeWords(args.query);
+        // The inner call's query has no colour or size left, so it cannot recurse.
+        if (wanted.colours.length || wanted.sizes.length) {
+          const per = Math.min(100, Number(args.per_page ?? 10));
+          const found: any = await WooCommerceAdapter.execute({
+            toolName,
+            // No noun ("white"): the catalogue's first 50, matched on options.
+            args: { ...args, query: wanted.rest || undefined, per_page: wanted.rest ? Math.max(per, 20) : 50 },
+            credentials,
+            config,
+          } as any);
+          if (!Array.isArray(found)) return found;
+          return found.filter((p: any) => offersAttributes(p, wanted.colours, wanted.sizes)).slice(0, per);
+        }
         const params = new URLSearchParams();
         params.set("per_page", String(Math.min(100, Number(args.per_page ?? 10))));
         if (args.query) params.set("search", String(args.query));

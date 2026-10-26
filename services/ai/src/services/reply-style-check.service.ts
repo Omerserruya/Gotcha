@@ -143,7 +143,9 @@ const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנ
 const ACK_ONLY = /^\s*(?:אוקיי?|אוקי|אוקיי סבבה|סבבה|מגניב|אחלה|יופי|מעולה|טוב|הבנתי|ok(?:ay)?|cool|great|got it|nice)[\s!.,👍🙂😊]*$/iu;
 
 /** Saying the store lacks something, or has none in stock. */
-const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
+// A stock claim, in any gender or number ("לא נמצאה חולצה לבנה במלאי", eval
+// 2026-10-26: the white Oxford shirt was in stock in every size).
+const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא נמצא[הו]?(?:[^.!?\\n]{0,30})?במלאי|לא (?:(?:זמין|זמינה|זמינים|זמינות) )?במלאי|חסר[הים]? במלאי|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
 
 /** The model writes its own Latin name in Hebrew, and gets it wrong. */
 const NAME_MISSPELLINGS: Record<string, RegExp> = {
@@ -397,6 +399,16 @@ const COLOUR_HE: Record<string, string> = {
  * English becomes Hebrew, except inside a product title the store wrote; and
  * "529 ILS" / "ILS 529" becomes "₪529".
  */
+/**
+ * The honest line after an empty search, when even the rewrite still says the
+ * store lacks it (the regeneration is not re-checked; this is its backstop).
+ */
+export function notFoundByNameLine(locale: "he" | "en"): string {
+  return locale === "he"
+    ? "לא מצאתי את זה בשם הזה. אפשר לנסות לחפש לפי סוג המוצר?"
+    : "I couldn't find that by that name. Want to try by the type of product?";
+}
+
 export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string; cardsShown?: boolean }): string {
   if (!text) return text;
   const titles = (opts.productTitles ?? []).filter(Boolean).sort((a, b) => b.length - a.length);

@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -5169,6 +5169,12 @@ async function generateAIBotReplyInner(
         if (stillPhantom.length) {
           console.warn(`[ai-bot] reply checker: still promising what no tool does (${stillPhantom.map((v) => v.match).join(", ")}): the plain line instead conv=${opts.conversationId}`);
           replyText = cannotArrangeLine(replyLocale);
+        }
+        // Still claiming the store lacks it after an empty title search (eval
+        // 2026-10-26: "לא נמצאה חולצה לבנה במלאי"; the white shirt was in stock).
+        else if (checkReplyStyle(replyText, styleCtx).some((v) => v.kind === "false_absence")) {
+          console.warn(`[ai-bot] reply checker: still a stock claim after an empty search: the not-found line instead conv=${opts.conversationId}`);
+          replyText = notFoundByNameLine(replyLocale);
         }
         toolCallLog.push({
           tool: "__style_check__",
