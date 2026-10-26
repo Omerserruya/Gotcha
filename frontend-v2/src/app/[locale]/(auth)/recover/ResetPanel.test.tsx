@@ -17,6 +17,8 @@ import { CAPTURED } from '@/api/contracts/recovery-capture';
 const startFlow = vi.hoisted(() => vi.fn());
 const submitStage = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/flow-executor', () => ({ startFlow, submitStage }));
+const acceptSetupTerms = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client/setup-consent', () => ({ acceptSetupTerms }));
 
 const { ResetPanel } = await import('./ResetPanel');
 
@@ -25,11 +27,16 @@ const accepted = (raw: unknown) => ({ ok: true, step: step(raw) });
 const TOKEN = 'tok_ABCdef123456';
 const QUERY = `flow_token=${TOKEN}`;
 const GOOD = 'Abcdefgh1!xyz';
+/** Our own setup token: a setup link's, exchanged for TOKEN once the terms are accepted. */
+const SETUP = 'setup_XYZuvw987654';
 
 function show(
   purpose: 'reset' | 'setup' = 'reset',
   locale: 'en' | 'he' = 'en',
   flow = purpose === 'reset' ? 'gotcha-recovery-self' : 'gotcha-recovery',
+  link: { kind: 'flow' | 'setup'; token: string } = purpose === 'setup'
+    ? { kind: 'setup', token: SETUP }
+    : { kind: 'flow', token: TOKEN },
 ) {
   return render(
     <NextIntlClientProvider
@@ -38,7 +45,7 @@ function show(
     >
       <ResetPanel
         flow={flow}
-        token={TOKEN}
+        link={link}
         purpose={purpose}
         loginHref="/api/auth/login?handover=1&finish=1"
         signInHref="/en/sign-in"
@@ -48,7 +55,12 @@ function show(
   );
 }
 
-const open = () => userEvent.click(screen.getByTestId('reset-open'));
+/** Continue; on a setup link, the terms are ticked first, as they must be. */
+const open = async () => {
+  const box = screen.queryByTestId('reset-terms-box');
+  if (box && !(box as HTMLInputElement).checked) await userEvent.click(box);
+  await userEvent.click(screen.getByTestId('reset-open'));
+};
 const fill = async (password: string, repeat = password) => {
   fireEvent.change(await screen.findByTestId('reset-password'), { target: { value: password } });
   fireEvent.change(screen.getByTestId('reset-password_repeat'), { target: { value: repeat } });
@@ -62,6 +74,12 @@ beforeEach(() => {
   });
   submitStage.mockImplementation(async () => {
     throw new Error('the executor must be asked only by a test that says so');
+  });
+  // Recorded, and the provider's token for the setup flow (services/auth setup-link.ts).
+  acceptSetupTerms.mockResolvedValue({
+    kind: 'recovery',
+    flow: 'gotcha-recovery',
+    flowToken: TOKEN,
   });
   window.history.replaceState(
     null,
@@ -357,5 +375,168 @@ describe('the breach row agrees with the breach refusal', () => {
     await save();
     await screen.findByTestId('reset-problem');
     expect(screen.getByTestId('reset-rule-leaked')).toHaveAttribute('data-met', 'unknown');
+  });
+});
+
+describe('★★ a first password accepts the Terms and the Privacy Policy first (Omer, 2026-10-26)', () => {
+  const box = () => screen.getByTestId('reset-terms-box') as HTMLInputElement;
+  const tick = () => userEvent.click(box());
+  const go = () => userEvent.click(screen.getByTestId('reset-open'));
+
+  beforeEach(() => {
+    window.history.replaceState(null, '', `/en/recover?flow=gotcha-recovery&setup=${SETUP}`);
+  });
+
+  it('a setup link shows the box unticked, and Continue cannot be pressed until it is', async () => {
+    show('setup');
+    expect(box()).not.toBeChecked();
+    expect(box()).toBeRequired();
+    expect(screen.getByTestId('reset-open')).toBeDisabled();
+    await go();
+    expect(acceptSetupTerms).not.toHaveBeenCalled();
+    expect(startFlow).not.toHaveBeenCalled();
+    await tick();
+    expect(screen.getByTestId('reset-open')).toBeEnabled();
+    await tick();
+    expect(screen.getByTestId('reset-open')).toBeDisabled();
+  });
+
+  it("the links are the trust site's terms and privacy pages, each in a new tab", () => {
+    show('setup');
+    const terms = screen.getByTestId('reset-terms-link');
+    const privacy = screen.getByTestId('reset-privacy-link');
+    expect(terms).toHaveAttribute('href', 'https://trust.gotcha.co.il/terms-of-service');
+    expect(privacy).toHaveAttribute('href', 'https://trust.gotcha.co.il/privacy-policy');
+    for (const link of [terms, privacy]) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noreferrer');
+    }
+    expect(terms).toHaveTextContent(/^Terms of Service$/);
+    expect(privacy).toHaveTextContent(/^Privacy Policy$/);
+  });
+
+  it('Continue records the acceptance, with the label as shown, BEFORE the flow is started with the token it returns', async () => {
+    startFlow.mockResolvedValueOnce(step(CAPTURED.prompt));
+    show('setup');
+    await tick();
+    await go();
+    expect(await screen.findByTestId('reset-form')).toBeInTheDocument();
+    expect(acceptSetupTerms).toHaveBeenCalledExactlyOnceWith(SETUP, {
+      terms: true,
+      privacy: true,
+      locale: 'en',
+      capturedText: 'I have read and agree to the Terms of Service and the Privacy Policy',
+    });
+    expect(startFlow).toHaveBeenCalledWith('gotcha-recovery', QUERY);
+    expect(acceptSetupTerms.mock.invocationCallOrder[0]).toBeLessThan(
+      startFlow.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('the save carries the token the acceptance returned', async () => {
+    startFlow.mockResolvedValueOnce(step(CAPTURED.prompt));
+    submitStage
+      .mockResolvedValueOnce(accepted(CAPTURED.userLogin))
+      .mockResolvedValueOnce(accepted(CAPTURED.redirect));
+    show('setup');
+    await open();
+    await fill(GOOD);
+    await save();
+    expect(submitStage).toHaveBeenNthCalledWith(
+      1,
+      { component: 'ak-stage-prompt', password: GOOD, password_repeat: GOOD },
+      'gotcha-recovery',
+      QUERY,
+    );
+  });
+
+  it('takes the setup token out of the address bar at once', () => {
+    show('setup');
+    expect(window.location.search).toBe('?flow=gotcha-recovery');
+  });
+
+  it('not reached: says so, the box stays ticked, nothing is started, and Continue tries again', async () => {
+    acceptSetupTerms.mockResolvedValueOnce({ kind: 'unreachable' });
+    show('setup');
+    await tick();
+    await go();
+    expect(await screen.findByTestId('reset-unreachable')).toBeInTheDocument();
+    expect(box()).toBeChecked();
+    expect(screen.getByTestId('reset-open')).toBeEnabled();
+    expect(startFlow).not.toHaveBeenCalled();
+  });
+
+  it('a dead setup link is "expired", with the invite\'s wording and no resend', async () => {
+    acceptSetupTerms.mockResolvedValueOnce({ kind: 'expired' });
+    show('setup');
+    await open();
+    expect(await screen.findByTestId('reset-expired')).toHaveTextContent(
+      'Ask whoever invited you to send a new one.',
+    );
+    expect(screen.queryByTestId('reset-resend')).toBeNull();
+    expect(startFlow).not.toHaveBeenCalled();
+  });
+
+  it('a password already set: says so, and the way on is our own sign-in', async () => {
+    acceptSetupTerms.mockResolvedValueOnce({ kind: 'hasPassword' });
+    show('setup');
+    await open();
+    expect(await screen.findByTestId('reset-has-password')).toHaveTextContent(
+      'You already have a password',
+    );
+    expect(screen.getByTestId('reset-continue')).toHaveAttribute('href', '/en/sign-in');
+    expect(startFlow).not.toHaveBeenCalled();
+  });
+
+  it('a refusal it cannot fix is "unexpected", and nothing is started', async () => {
+    acceptSetupTerms.mockResolvedValueOnce({ kind: 'refused' });
+    show('setup');
+    await open();
+    expect(await screen.findByTestId('reset-unexpected')).toBeInTheDocument();
+    expect(startFlow).not.toHaveBeenCalled();
+  });
+
+  it('★ a setup link carrying the provider\'s token (minted before this) is "expired": no box that records nothing', () => {
+    show('setup', 'en', 'gotcha-recovery', { kind: 'flow', token: TOKEN });
+    expect(screen.getByTestId('reset-expired')).toBeInTheDocument();
+    expect(screen.queryByTestId('reset-terms')).toBeNull();
+    expect(screen.queryByTestId('reset-open')).toBeNull();
+  });
+
+  it('a reset has no box: Continue opens the link as before, and nothing is accepted', async () => {
+    startFlow.mockResolvedValueOnce(step(CAPTURED.consent));
+    submitStage.mockResolvedValueOnce(accepted(CAPTURED.prompt));
+    show('reset');
+    expect(screen.queryByTestId('reset-terms')).toBeNull();
+    expect(screen.getByTestId('reset-open')).toBeEnabled();
+    await go();
+    expect(await screen.findByTestId('reset-form')).toBeInTheDocument();
+    expect(acceptSetupTerms).not.toHaveBeenCalled();
+  });
+
+  it('in Hebrew: the first person, past tense (no gendered form), and the record says so', async () => {
+    startFlow.mockResolvedValueOnce(step(CAPTURED.prompt));
+    show('setup', 'he');
+    expect(screen.getByTestId('reset-terms')).toHaveTextContent(
+      'קראתי ואישרתי את תנאי השירות ואת מדיניות הפרטיות',
+    );
+    expect(screen.getByTestId('reset-terms-link')).toHaveTextContent(/^תנאי השירות$/);
+    expect(screen.getByTestId('reset-privacy-link')).toHaveTextContent(/^מדיניות הפרטיות$/);
+    expect(screen.getByTestId('reset-terms-link')).toHaveAttribute(
+      'href',
+      'https://trust.gotcha.co.il/he/terms-of-service',
+    );
+    expect(screen.getByTestId('reset-privacy-link')).toHaveAttribute(
+      'href',
+      'https://trust.gotcha.co.il/he/privacy-policy',
+    );
+    await open();
+    await screen.findByTestId('reset-form');
+    expect(acceptSetupTerms).toHaveBeenCalledWith(SETUP, {
+      terms: true,
+      privacy: true,
+      locale: 'he',
+      capturedText: 'קראתי ואישרתי את תנאי השירות ואת מדיניות הפרטיות',
+    });
   });
 });

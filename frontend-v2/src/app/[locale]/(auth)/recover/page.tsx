@@ -10,7 +10,7 @@ import { serverEnv } from '@/config/env.server';
 import signIn from '../sign-in/SignIn.module.css';
 import styles from './Recover.module.css';
 import { RecoverPanel } from './RecoverPanel';
-import { ResetPanel, type ResetPurpose } from './ResetPanel';
+import { ResetPanel, type ResetLink, type ResetPurpose } from './ResetPanel';
 
 /**
  * Password recovery - the screen "Forgot it?" now reaches.
@@ -61,18 +61,28 @@ export default async function RecoverPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ flow?: string; flow_token?: string }>;
+  searchParams: Promise<{ flow?: string; flow_token?: string; setup?: string }>;
 }) {
   const { locale } = await params;
-  const { flow, flow_token: flowToken } = await searchParams;
+  const { flow, flow_token: flowToken, setup: setupToken } = await searchParams;
   const t = await getTranslations('auth.recover');
 
   const slug = typeof flow === 'string' && FLOW_SLUG.test(flow) ? flow : null;
   const signInHref = appPath(`/${locale}/sign-in`);
-  // Screen two: the link from the email carries a token.
-  const linked = slug !== null && typeof flowToken === 'string';
-  const token = linked && FLOW_TOKEN.test(flowToken) ? flowToken : null;
   const purpose = slug ? purposeOf(slug) : 'reset';
+  /*
+   * Screen two: the link from the email carries a token - the provider's, or
+   * on a setup link our own (`setup`), exchanged for one once the terms are
+   * accepted. Only a setup flow takes `setup`.
+   */
+  const raw =
+    typeof flowToken === 'string'
+      ? ({ kind: 'flow', token: flowToken } as const)
+      : purpose === 'setup' && typeof setupToken === 'string'
+        ? ({ kind: 'setup', token: setupToken } as const)
+        : null;
+  const linked = slug !== null && raw !== null;
+  const link: ResetLink | null = raw && FLOW_TOKEN.test(raw.token) ? raw : null;
   const recoverHref =
     purpose === 'reset' && slug ? appPath(`/${locale}/recover?flow=${slug}`) : null;
   /*
@@ -119,10 +129,10 @@ export default async function RecoverPage({
 
       <main className={signIn.surface}>
         <div className={signIn.form} data-screen="signIn">
-          {linked && token && slug ? (
+          {linked && link && slug ? (
             <ResetPanel
               flow={slug}
-              token={token}
+              link={link}
               purpose={purpose}
               loginHref={loginHref}
               signInHref={signInHref}

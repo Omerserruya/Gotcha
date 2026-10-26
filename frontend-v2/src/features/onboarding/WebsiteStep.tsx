@@ -13,15 +13,13 @@ import {
 import { InstagramGlyph } from '@/features/inbox/channel-marks';
 import { useRouter } from '@/i18n/navigation';
 import { brandMark, brandName } from '@/lib/brand-mark';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 
 import type { GuessSource } from './load-onboarding';
 import { startScan } from './scan-actions';
 import { saveStep } from './step-actions';
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
-
-/** Terms and privacy, on the marketing site (the app no longer serves /legal). */
-const LEGAL_SITE = 'https://gotcha.co.il/legal';
 
 /** A description longer than this is a paragraph, not the line beside a name. */
 const KIND_MAX = 60;
@@ -235,12 +233,12 @@ export function WebsiteStep({
         {t.rich('consent', {
           // The legal pages live on the marketing site (landing's legal-registry), not in this app.
           terms: (chunks) => (
-            <a href={`${LEGAL_SITE}/terms-of-service`} target="_blank" rel="noreferrer">
+            <a href={TERMS_URL} target="_blank" rel="noreferrer">
               {chunks}
             </a>
           ),
           privacy: (chunks) => (
-            <a href={`${LEGAL_SITE}/privacy-policy`} target="_blank" rel="noreferrer">
+            <a href={PRIVACY_URL} target="_blank" rel="noreferrer">
               {chunks}
             </a>
           ),

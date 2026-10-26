@@ -186,6 +186,33 @@
    * another page, and a person should be able to open it in a new tab or see
    * where it goes before pressing it.
    */
+  /*
+   * The terms, on a first password: a native box in the action colour, as
+   * the channel pickers' (`.pickRow input`), at the notice's size; the links
+   * are underlined in the text's colour, as 00d's consent line.
+   */
+  .terms {
+    display: flex;
+    gap: var(--space-8);
+    align-items: flex-start;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .termsBox {
+    flex-shrink: 0;
+    margin: 0;
+    margin-block-start: var(--space-2);
+    accent-color: var(--action-base);
+  }
+
+  .terms a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .back {
     font-size: var(--font-size-meta);
     color: var(--text-secondary);

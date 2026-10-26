@@ -22,11 +22,14 @@ vi.mock('./RecoverPanel', () => ({
   RecoverPanel: ({ flow }: { flow: string }) => <div data-testid="screen-one" data-flow={flow} />,
 }));
 vi.mock('./ResetPanel', () => ({
-  ResetPanel: (props: Record<string, string | null>) => (
+  ResetPanel: (
+    props: Record<string, string | null> & { link: { kind: string; token: string } },
+  ) => (
     <div
       data-testid="screen-two"
       data-flow={props.flow}
-      data-token={props.token}
+      data-link={props.link.kind}
+      data-token={props.link.token}
       data-purpose={props.purpose}
       data-login={props.loginHref}
       data-recover={props.recoverHref ?? 'none'}
@@ -62,6 +65,35 @@ describe('★ /recover with a token is screen two', () => {
     await page({ flow: 'gotcha-recovery', flow_token: 'tok_ABCdef123456' });
     expect(screen.getByTestId('screen-two')).toHaveAttribute('data-purpose', 'setup');
     expect(screen.getByTestId('screen-two')).toHaveAttribute('data-recover', 'none');
+  });
+
+  it('★ a setup link since the terms: our own `setup` token, handed on as a setup link', async () => {
+    await page({ flow: 'gotcha-recovery', setup: 'setup_XYZuvw987654' });
+    const two = screen.getByTestId('screen-two');
+    expect(two).toHaveAttribute('data-purpose', 'setup');
+    expect(two).toHaveAttribute('data-link', 'setup');
+    expect(two).toHaveAttribute('data-token', 'setup_XYZuvw987654');
+  });
+
+  it("the provider's token is a flow link, and wins over `setup` when both are there", async () => {
+    await page({
+      flow: 'gotcha-recovery',
+      flow_token: 'tok_ABCdef123456',
+      setup: 'setup_XYZuvw987654',
+    });
+    expect(screen.getByTestId('screen-two')).toHaveAttribute('data-link', 'flow');
+  });
+
+  it('`setup` means nothing to a reset flow: that is screen one', async () => {
+    await page({ flow: 'gotcha-recovery-self', setup: 'setup_XYZuvw987654' });
+    expect(screen.queryByTestId('screen-two')).toBeNull();
+    expect(screen.getByTestId('screen-one')).toBeInTheDocument();
+  });
+
+  it('a `setup` token that cannot be one is "incomplete"', async () => {
+    await page({ flow: 'gotcha-recovery', setup: 'short' });
+    expect(screen.queryByTestId('screen-two')).toBeNull();
+    expect(screen.getByTestId('reset-malformed')).toBeInTheDocument();
   });
 
   it('the hand-over goes where the product signs in, when that is another origin', async () => {
