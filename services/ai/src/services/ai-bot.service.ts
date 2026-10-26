@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -961,11 +961,26 @@ function silentTurnFallback(locale: string): string {
  * test chat the fallback ("I couldn't finish checking - shall I pass you to a
  * person?") showed an operator a message live would never send.
  */
+/** What no tool here can arrange, said plainly, with the one thing that can (eval e11 C02, A05, C06). */
+export function cannotArrangeLine(locale: string): string {
+  return locale?.startsWith("he")
+    ? "את זה אין לנו אפשרות לסדר מכאן. אפשר להעביר את השיחה לצוות כאן בצ'אט, להעביר?"
+    : "That isn't something we can arrange from here. I can pass this conversation to the team here in the chat, shall I?";
+}
+
+/** An order lookup this turn found no such order: the number it tried, or null. */
+export function orderNotFound(toolCallLog: Array<{ tool: string; args?: any; result?: any }>): string | null {
+  const miss = toolCallLog.find((c) => /get_order$/.test(c.tool) && /404|invalid_id|not[_ ]found/i.test(String(c.result ?? "")));
+  if (!miss) return null;
+  const n = String(miss.args?.order_id ?? miss.args?.orderId ?? miss.args?.id ?? "").replace(/[^\w-]/g, "");
+  return n || "";
+}
+
 export function deliverableReply(t: {
   safeReply: string | null | undefined;
   pendingEscalation: boolean;
   awaitingApproval: boolean;
-  toolCallLog: Array<{ tool: string; decision?: string }>;
+  toolCallLog: Array<{ tool: string; decision?: string; args?: any; result?: any }>;
   locale: string;
   /** The short close when the customer only thanked or said goodbye. */
   closing?: string | null;
@@ -979,6 +994,14 @@ export function deliverableReply(t: {
   if (t.cardsShown && !t.pendingEscalation && !t.awaitingApproval) return t.locale?.startsWith("he") ? "בבקשה 🙂" : "Here you go 🙂";
   const simulatedEscalation = t.toolCallLog.some((c) => c.tool === "escalate_to_human" && c.decision === "simulated");
   if (t.pendingEscalation || t.awaitingApproval || simulatedEscalation) return t.safeReply ?? "";
+  // The order looked up does not exist (eval e11 C04: "מספר הזמנה 1043" got
+  // "סליחה, לא הבנתי"): say so, and ask for the number again.
+  const missing = orderNotFound(t.toolCallLog);
+  if (missing !== null) {
+    return t.locale?.startsWith("he")
+      ? `לא מצאנו הזמנה${missing ? ` עם המספר ${missing}` : ""}. אפשר לבדוק את המספר ולשלוח שוב?`
+      : `We couldn't find an order${missing ? ` numbered ${missing}` : ""}. Could you check the number and send it again?`;
+  }
   return silentTurnFallback(t.locale);
 }
 
@@ -1013,6 +1036,34 @@ const STRATEGY_TO_LAST_MOVE: Record<string, LastAssistantMove | undefined> = {
   CONVERT: "convert",
   RESOLVE: "resolve",
 };
+
+/**
+ * The newest product search an earlier turn of this conversation ran, from its
+ * `ai.bot_turn` audit (the full results ride there; the per-call audit keeps
+ * 500 characters). Best-effort: null on anything unexpected.
+ */
+async function lastProductSearch(
+  tenantId: string,
+  conversationId: string,
+): Promise<{ at: Date; products: Array<{ productId: string; title: string }> } | null> {
+  try {
+    const rows = await prisma.auditLog.findMany({
+      where: { tenantId, action: "ai.bot_turn", targetId: conversationId },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: { metadata: true, createdAt: true },
+    });
+    for (const r of rows) {
+      const calls: any[] = Array.isArray((r.metadata as any)?.toolCalls) ? (r.metadata as any).toolCalls : [];
+      for (let i = calls.length - 1; i >= 0; i--) {
+        if (!/list_products|get_product$|search_products/.test(String(calls[i]?.tool ?? ""))) continue;
+        const products = productsFromSearch(calls[i]?.result);
+        if (products.length) return { at: new Date(r.createdAt), products };
+      }
+    }
+  } catch { /* best-effort */ }
+  return null;
+}
 
 /**
  * Look up the BehaviorState from the previous `ai.bot_turn` audit row and
@@ -3119,7 +3170,7 @@ async function generateAIBotReplyInner(
   // A message that names one is about THAT product, and is searched instead
   // (eval L01c: "הכותנה ... בנייבי?" got the cardigan's colours).
   if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage)) && !namesProduct(opts.incomingMessage)) {
-    const mention = lastProductMention(messages as any[]);
+    const mention = pickLastProduct(lastProductMention(messages as any[]), await lastProductSearch(opts.tenantId, opts.conversationId));
     let last: { productId: string; title: string } | null = mention?.productId ? { productId: mention.productId, title: mention.title } : null;
     if (mention && !mention.productId) {
       // Named in our text, never shown as a card: find it by its exact title.
@@ -3160,6 +3211,7 @@ async function generateAIBotReplyInner(
     content: buildStateNote({ rows: messages as any, now: Date.now(), timeZone: historyTimeZone, customerForm: ctxSlot.grammaticalAddress ?? null }),
   });
 
+  let searchNudged = false;
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
       tenantId: opts.tenantId,
@@ -3504,6 +3556,25 @@ async function generateAIBotReplyInner(
       continue;
     }
 
+    // Asking whether to look, with the search tool right there and nothing
+    // searched yet (eval e11 L01: "להראות עכשיו צעיפים באפור?"): look, once.
+    if (
+      wooTurn && round < 2 && !searchNudged &&
+      toolFunctionNames.includes("woocommerce.list_products") &&
+      !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool)) &&
+      asksToShowInstead(response.content)
+    ) {
+      searchNudged = true;
+      console.warn(`[ai-bot] asked to show instead of searching: searching now conv=${opts.conversationId}`);
+      chatMessages.push({ role: "assistant", content: response.content || "" });
+      chatMessages.push({
+        role: "system",
+        content:
+          `Do not ask whether to check or show: you have the product search. Search now with woocommerce.list_products ` +
+          `(English words from the product titles) and answer from what it returns, in ${replyLocale === "he" ? "Hebrew" : "English"}.`,
+      });
+      continue;
+    }
     replyText = response.content?.trim() || null;
     break;
   }
@@ -4973,7 +5044,7 @@ async function generateAIBotReplyInner(
       const g = String(persona.grammaticalGender ?? persona.gender ?? "").toLowerCase();
       const priorOutbound = (messages as any[]).filter((m) => m.direction === "OUTBOUND" && (m.messageType ?? "text") !== "system");
       const PRODUCT_TOOL = /^(woocommerce\.(list_products|get_product|list_product_variations)|shopify\.(search_products|get_product|variant_information|inventory_status)|search_products)$/;
-      const violations = checkReplyStyle(replyText, {
+      const styleCtx: Parameters<typeof checkReplyStyle>[1] = {
         locale: replyLocale,
         isFirstReply: priorOutbound.length === 0,
         incomingMessage: opts.incomingMessage ?? "",
@@ -4992,7 +5063,8 @@ async function generateAIBotReplyInner(
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
           return searches.length > 0 && searches.every((t) => /"result":\[\]/.test(String(t.result ?? "")));
         })(),
-      });
+      };
+      const violations = checkReplyStyle(replyText, styleCtx);
       // A trailing offer to check is removed in code, no regeneration: rewriting
       // over it lost the price (eval e8 U1) or came back as only "נבדוק?" (D02).
       if (violations.length && violations.every((v) => v.kind === "offer_to_check")) {
@@ -5028,6 +5100,13 @@ async function generateAIBotReplyInner(
         budget.addUsage(regen.usage.total_tokens || 0);
         if (regen.content?.trim() && !isInterimOnlyReply(regen.content)) replyText = regen.content.trim();
         else replyText = stripTrailingOffer(draftBeforeRegen);
+        // Still collecting details for something no tool does (eval e11 C02:
+        // "רשמנו את המספר", then a time for the call): the honest line, in code.
+        const stillPhantom = checkReplyStyle(replyText, styleCtx).filter((v) => v.kind === "phantom_action" || (v.kind === "promise" && /callback/.test(v.match)));
+        if (stillPhantom.length) {
+          console.warn(`[ai-bot] reply checker: still promising what no tool does (${stillPhantom.map((v) => v.match).join(", ")}): the plain line instead conv=${opts.conversationId}`);
+          replyText = cannotArrangeLine(replyLocale);
+        }
         toolCallLog.push({
           tool: "__style_check__",
           args: { violations: violations.map((v) => v.kind) },
@@ -5039,6 +5118,16 @@ async function generateAIBotReplyInner(
     } catch (err: any) {
       // A checker that throws must not cost the customer their reply.
       console.error(`[ai-bot] reply checker failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+
+  // At most one push to buy per conversation, never right after a factual answer (eval e11).
+  if (replyText && !awaitingApproval && !pendingEscalation && isShopFloor({ toolFunctionNames, company: companyContext ?? undefined })) {
+    const earlier = (messages as any[]).filter((m) => m.direction === "OUTBOUND" && !String(m.senderName ?? "").includes("@")).map((m) => String(m.body ?? ""));
+    const unpushed = stripTrailingPush(replyText, { incomingMessage: opts.incomingMessage ?? "", earlierReplies: earlier });
+    if (unpushed !== replyText) {
+      console.warn(`[ai-bot] reply checker: removed a trailing push conv=${opts.conversationId}`);
+      replyText = unpushed;
     }
   }
 
@@ -5168,7 +5257,7 @@ async function generateAIBotReplyInner(
   }
 
   // Safe touches in code: a colour said in Hebrew (not inside a title), ₪ not ILS.
-  if (replyText) replyText = polishReply(replyText, { locale: replyLocale, productTitles: productEnvelope?.candidates.map((c) => c.title) });
+  if (replyText) replyText = polishReply(replyText, { locale: replyLocale, productTitles: productEnvelope?.candidates.map((c) => c.title), incomingMessage: opts.incomingMessage ?? "" });
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).
   replyText = humanizeReply(replyText);
 
@@ -5301,7 +5390,7 @@ async function generateAIBotReplyInner(
         signal,
       });
       totalTokens += again.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(again.usage);
-      const text = again.content?.trim() ? humanizeReply(polishReply(again.content.trim(), { locale: replyLocale })) : "";
+      const text = again.content?.trim() ? humanizeReply(polishReply(again.content.trim(), { locale: replyLocale, incomingMessage: opts.incomingMessage ?? "" })) : "";
       if (text && !isInterimOnlyReply(text)) {
         deliverableText = await validateAndPersist(text, {
           tenantId: opts.tenantId,

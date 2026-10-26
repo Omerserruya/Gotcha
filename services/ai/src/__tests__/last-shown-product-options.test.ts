@@ -30,7 +30,8 @@ describe("★ a size question", () => {
 describe("★ wired: one live read, on a colour or size turn, before the state note", () => {
   const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
   it("the options of the last shown product ride along", () => {
-    const at = src.indexOf("const mention = lastProductMention(messages as any[]);");
+    // e11 Z8: the newer of the last search and the last product named.
+    const at = src.indexOf("const mention = pickLastProduct(lastProductMention(messages as any[]), await lastProductSearch(opts.tenantId, opts.conversationId));");
     expect(at).toBeGreaterThan(0);
     expect(at).toBeLessThan(src.indexOf('markStage("prompt_ready");'));
     expect(src).toContain("if (wooTurn && (askedColours(opts.incomingMessage).length > 0 || asksSize(opts.incomingMessage)) && !namesProduct(opts.incomingMessage)) {");

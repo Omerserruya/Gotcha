@@ -310,17 +310,20 @@ describe("★ a lookup turn's reply is the answer, with the product attached", (
 });
 
 describe("the model reads a compact variations result", () => {
-  it("options, stock and price per variation; nothing else", async () => {
+  it("options, stock and price per variation; nothing else, and no unit counts (eval e11 Z6)", async () => {
     const { compactWooVariations } = await vi.importActual<any>("../services/product-search.service");
     const raw = JSON.stringify({ ok: true, result: [
       { id: 1, attributes: [{ name: "Size", option: "M" }], stock_status: "instock", stock_quantity: 3, price: "799", description: "x".repeat(2000), image: { src: "y" } },
       { id: 2, attributes: [{ name: "Size", option: "L" }], stock_status: "outofstock", price: "799", purchasable: false },
+      { id: 3, attributes: [{ name: "Size", option: "S" }], stock_status: "instock", stock_quantity: 13, price: "799" },
     ] });
     const out = JSON.parse(compactWooVariations(raw));
     expect(out.result).toEqual([
-      { id: 1, options: { Size: "M" }, stock_status: "instock", stock_quantity: 3, price: "799", purchasable: true },
+      { id: 1, options: { Size: "M" }, stock_status: "instock", last_units: true, price: "799", purchasable: true },
       { id: 2, options: { Size: "L" }, stock_status: "outofstock", price: "799", purchasable: false },
+      { id: 3, options: { Size: "S" }, stock_status: "instock", price: "799", purchasable: true },
     ]);
+    expect(JSON.stringify(out)).not.toMatch(/13/);
     expect(compactWooVariations('{"ok":false,"reason":"x"}')).toBe('{"ok":false,"reason":"x"}');
     expect(compactWooVariations("not json")).toBe("not json");
   });

@@ -16,10 +16,10 @@ describe("★ the eval's failures are caught", () => {
     expect(kinds("תרצה/י לראות עוד?")).toContain("slash_form");
     expect(kinds("אתה/את מעדיף/ה כותנה?")).toContain("slash_form");
   });
-  it("masculine and feminine imperatives to a customer of unknown gender; not once their form is known", () => {
+  it("masculine and feminine imperatives to a customer, even once their form is known (always neutral, Omer 2026-10-26)", () => {
     expect(kinds("שלח לי את מספר ההזמנה")).toContain("gendered_address");
     expect(kinds("תבחרי מידה ונבדוק")).toContain("gendered_address");
-    expect(kinds("שלח לי את מספר ההזמנה", { customerForm: { form: "masculine", confidence: "explicit" } })).not.toContain("gendered_address");
+    expect(kinds("שלח לי את מספר ההזמנה", { customerForm: { form: "masculine", confidence: "explicit" } })).toContain("gendered_address");
   });
   it("R4: a greeting or a self-intro after the first reply", () => {
     expect(kinds("היי! יש ב-M")).toContain("greeting_after_first");
@@ -94,7 +94,7 @@ describe("★ wired into the turn", () => {
   const { join } = require("node:path");
   const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
   it("one regeneration, after the other gates and before the product rendering", () => {
-    const check = src.indexOf("const violations = checkReplyStyle(replyText, {");
+    const check = src.indexOf("const violations = checkReplyStyle(replyText, styleCtx);");
     expect(check).toBeGreaterThan(src.indexOf("── Booking fail-safe gate"));
     expect(check).toBeLessThan(src.indexOf("const emptySearch = !!productEnvelope"));
     expect(src.match(/metadata: \{ type: "ai_bot_style_regen"/g)).toHaveLength(1);

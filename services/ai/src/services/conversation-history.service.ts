@@ -235,12 +235,8 @@ export function buildStateNote(input: StateNoteInput): string {
   }
 
   // The customer's grammatical form, only from their own words.
-  const f = input.customerForm;
-  if (f && (f.form === "feminine" || f.form === "masculine") && (f.confidence === "explicit" || f.confidence === "strong_context")) {
-    lines.push(`- The customer wrote about themselves in the ${f.form} form: address them that way.`);
-  } else {
-    lines.push(`- The customer's grammatical gender is not known from their own words: address them neutrally (no gendered verbs, no slash forms).`);
-  }
+  // Always neutral, even when they wrote "אני מחפשת" (Omer, 2026-10-26; eval e11).
+  lines.push(`- Address the customer neutrally (no gendered verbs, participles or pronouns, no slash forms), whatever form they use about themselves.`);
 
   // Open commitments: things already promised in this conversation.
   const promises = ours.slice(-12).filter((r) => PROMISE.test(r.body ?? "")).slice(-3);

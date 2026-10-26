@@ -90,10 +90,11 @@ describe("★ the state note", () => {
     expect(note).toContain("Nothing was said to the customer yet today");
     expect(note).toContain("previous message was 2 days before this one");
   });
-  it("the customer's form only from their own words, else neutral", () => {
-    expect(buildStateNote({ rows: convo, now: T, customerForm: { form: "feminine", confidence: "explicit" } })).toContain("in the feminine form");
-    expect(buildStateNote({ rows: convo, now: T, customerForm: { form: "feminine", confidence: "unknown" } })).toContain("address them neutrally");
-    expect(buildStateNote({ rows: convo, now: T })).toContain("address them neutrally");
+  it("the customer is addressed neutrally, even after \"אני מחפשת\" (Omer, 2026-10-26)", () => {
+    const fem = buildStateNote({ rows: convo, now: T, customerForm: { form: "feminine", confidence: "explicit" } });
+    expect(fem).toContain("Address the customer neutrally");
+    expect(fem).not.toContain("feminine");
+    expect(buildStateNote({ rows: convo, now: T })).toContain("Address the customer neutrally");
   });
   it("a colleague's commitment is listed as one to honour", () => {
     const note = buildStateNote({ rows: [...convo, row({ direction: "OUTBOUND", senderName: "dana@shop.co.il", body: "אעדכן אותך מחר בבוקר", createdAt: new Date(T + 130_000) })], now: T + 140_000 });

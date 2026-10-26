@@ -745,7 +745,9 @@ export function compactWooVariations(rawContent: string): string {
     id: v?.id,
     options: Object.fromEntries((Array.isArray(v?.attributes) ? v.attributes : []).map((a: any) => [String(a?.name ?? ""), String(a?.option ?? "")])),
     stock_status: v?.stock_status,
-    ...(typeof v?.stock_quantity === "number" ? { stock_quantity: v.stock_quantity } : {}),
+    // No unit counts for the model to repeat ("נשארו 13 יחידות", eval e11 E05):
+    // only that the last few are left, when they are.
+    ...(typeof v?.stock_quantity === "number" && v.stock_quantity > 0 && v.stock_quantity <= 3 ? { last_units: true } : {}),
     price: v?.price,
     purchasable: v?.purchasable !== false,
   }));

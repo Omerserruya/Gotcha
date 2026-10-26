@@ -321,18 +321,54 @@ export function asksSize(text: string | null | undefined): boolean {
  * title named in our own text ("Canvas Tote", eval e9 W2: the tote never had a
  * card, so its colour was answered from nothing and contradicted a turn later).
  */
-export function lastProductMention(rows: Array<{ direction: string; body?: string | null; messageType?: string | null; metadata?: any; senderName?: string | null }>): { productId?: string; title: string } | null {
+export function lastProductMention(rows: Array<{ direction: string; body?: string | null; messageType?: string | null; metadata?: any; senderName?: string | null; createdAt?: Date | string | null }>): { productId?: string; title: string; at?: Date } | null {
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
     if (r.direction !== "OUTBOUND") continue;
+    const at = r.createdAt ? new Date(r.createdAt) : undefined;
     if (/product/.test(String(r.messageType ?? ""))) {
       const p = Array.isArray(r.metadata?.commerce?.products) ? r.metadata.commerce.products[0] : null;
-      if (p && /^\d{1,12}$/.test(String(p.productId ?? ""))) return { productId: String(p.productId), title: String(p.title ?? "") };
+      if (p && /^\d{1,12}$/.test(String(p.productId ?? ""))) return { productId: String(p.productId), title: String(p.title ?? ""), at };
       continue;
     }
     const m = String(r.body ?? "").match(/\b(?:[A-Z][a-z]+(?:[- ](?:[A-Z][a-z]+|\d+-Pack))){1,3}\b/g);
-    if (m && m.length) return { title: m[m.length - 1] };
+    if (m && m.length) return { title: m[m.length - 1], at };
   }
+  return null;
+}
+
+/** The products a product tool returned, from its raw result: [{ productId, title }]. */
+export function productsFromSearch(raw: string | null | undefined): Array<{ productId: string; title: string }> {
+  try {
+    const parsed = JSON.parse(String(raw ?? ""));
+    if (parsed?.ok === false) return [];
+    const list = Array.isArray(parsed?.result) ? parsed.result : parsed?.result && typeof parsed.result === "object" ? [parsed.result] : [];
+    return list
+      .filter((p: any) => /^\d{1,12}$/.test(String(p?.id ?? "")) && p?.name)
+      .map((p: any) => ({ productId: String(p.id), title: String(p.name) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Which product a bare "מידה L" or "בשחור?" is about (eval e11 L01: after a
+ * search found only the Cotton Cable Sweater, but our reply called it "סוודר
+ * כותנה", "מידה L" got the Chunky Cardigan's colours, the last English title in
+ * our text). The newer of the two wins: the last search, or the last product we
+ * named or showed. A search that found several, none of them the one named, is
+ * no answer: null, and the model looks it up.
+ */
+export function pickLastProduct(
+  mention: { productId?: string; title: string; at?: Date } | null,
+  search: { at: Date; products: Array<{ productId: string; title: string }> } | null,
+): { productId?: string; title: string } | null {
+  const SAME_TURN_MS = 60_000;
+  if (!search || !search.products.length) return mention;
+  if (mention?.at && search.at.getTime() < mention.at.getTime() - SAME_TURN_MS) return mention;
+  const named = mention ? search.products.find((p) => p.title.toLowerCase() === mention.title.toLowerCase()) : undefined;
+  if (named) return named;
+  if (search.products.length === 1) return search.products[0];
   return null;
 }
 

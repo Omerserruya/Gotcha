@@ -481,7 +481,8 @@ export interface VoicePair {
 }
 
 const SITUATION_RE: Array<[VoiceSituation, RegExp]> = [
-  ["complaint", /לא הגיע|לא קיבלתי|פגום|קרוע|שבור|מבאס|מאוכזב|מאוכזבת|תלונה|נורא|גרוע|בעיה עם|טעות ב|damaged|broken|never arrived|complain|refund/i],
+  // A defect in what arrived is a complaint too (eval e11 D01: "קיבלתי חולצה עם חור" got five shirt cards).
+  ["complaint", /לא הגיע|לא קיבלתי|פגום|פגומה|פגם|קרוע|קרועה|נקרע|שבור|שבורה|חור|כתם|דהה|נפרם|נפרמה|נשבר|מבאס|מאוכזב|מאוכזבת|תלונה|נורא|גרוע|בעיה עם|טעות ב|הגיע(?:ה)? (?:לא נכון|הפוך|שונה|אחר)|damaged|broken|defect|hole|stain|torn|ripped|never arrived|complain|refund/i],
   ["out_of_stock", /אזל|נגמר|אין במלאי|חסר במלאי|מתי יחזור|יחזור למלאי|out of stock|sold out|back in stock|restock/i],
   ["shipping", /משלוח|מתי (?:זה )?(?:יגיע|מגיע)|זמן אספקה|שליח|איסוף|מעקב|tracking|shipping|delivery|deliver/i],
   ["price", /כמה (?:זה )?(?:עולה|עולים)|מה המחיר|מחיר|הנחה|קופון|מבצע|how much|price|discount|coupon/i],
