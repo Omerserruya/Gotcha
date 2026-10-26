@@ -108,7 +108,7 @@ export async function processAIBot(
   // deleted but assignedAiAgentId still set" without burning a network call.
   const agentLite = await prisma.aIAgent.findUnique({
     where: { id: resolvedAgentId },
-    select: { id: true, tenantId: true, escalationMessage: true, maxAutonomousMessages: true, maxAutonomousMinutes: true, status: true },
+    select: { id: true, tenantId: true, role: true, escalationMessage: true, maxAutonomousMessages: true, maxAutonomousMinutes: true, status: true },
   });
   if (!agentLite || agentLite.tenantId !== tenantId) return false;
 
@@ -663,14 +663,33 @@ export function assessAutonomyBudget(
 }
 
 /**
+ * A shop's floor: an employee that is not sales or booking, in a workspace with
+ * a connected store. Its shoppers are not handed to a person for chatting long
+ * (Omer, 2026-10-26: a webchat shopper was handed off at "כמה?", 15 minutes in).
+ * A failed lookup is not a shop floor: the caps stay.
+ */
+export async function isShopFloorAgent(tenantId: string, role: string | null | undefined): Promise<boolean> {
+  if (role === "sales" || role === "booking") return false;
+  try {
+    const stores = await prisma.tenantIntegration.count({
+      where: { tenantId, status: "CONNECTED", integration: { slug: { in: ["woocommerce", "shopify"] } } },
+    });
+    return stores > 0;
+  } catch (err: any) {
+    console.warn("[AI-Bot] store lookup failed (non-fatal, caps stay):", err?.message);
+    return false;
+  }
+}
+
+/**
  * Deterministic escalation gates. Returns the machine-readable CASE that
  * fired (persisted so owners can see WHY the bot handed off) or null when
  * no gate tripped.
  */
-async function checkEscalationThresholds(
+export async function checkEscalationThresholds(
   conversationId: string,
   tenantId: string,
-  config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null },
+  config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null; role?: string | null },
   incomingText?: string,
 ): Promise<string | null> {
   // WHAT THIS COUNTS, precisely: outbound messages the AI chose to send.
@@ -748,9 +767,15 @@ async function checkEscalationThresholds(
       incomingText || "",
     );
   const goalViable = hasReachPath || schedulingIntent; // engagement implied: runs on an inbound
+  // The soft caps do not apply on a shop's floor; the hard ceiling above does.
+  // Read only when a soft cap would fire, so an ordinary turn costs no query.
+  let shopFloor: boolean | null = null;
+  const onShopFloor = async () => (shopFloor ??= await isShopFloorAgent(tenantId, config.role));
 
   if (aiMessageCount >= maxMsgs) {
-    if (goalViable) {
+    if (await onShopFloor()) {
+      console.log(`[AI-Bot] soft msg cap (${aiMessageCount}/${maxMsgs}) reached on a shop floor - NOT escalating conv=${conversationId}`);
+    } else if (goalViable) {
       console.log(`[AI-Bot] soft msg cap (${aiMessageCount}/${maxMsgs}) reached but objective viable - NOT escalating (goal preservation) conv=${conversationId}`);
     } else {
       console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
@@ -787,7 +812,7 @@ async function checkEscalationThresholds(
     }
     const minutesElapsed = (Date.now() - autonomousSinceMs) / 60000;
     const maxMins = config.maxAutonomousMinutes || 15;
-    if (minutesElapsed >= maxMins && !goalViable) {
+    if (minutesElapsed >= maxMins && !goalViable && !(await onShopFloor())) {
       console.log(`[AI-Bot] Max burst time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
       return "autonomous_time_cap";
     }
