@@ -30,7 +30,12 @@ export type StyleViolationKind =
   | "repeated_question"
   | "push_after_ack"
   | "repeated_reply"
-  | "phantom_action";
+  | "phantom_action"
+  | "mixed_address"
+  | "recap_opener"
+  | "long_menu"
+  | "latin_titles"
+  | "menu_greeting";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -59,6 +64,8 @@ export interface StyleCheckContext {
   searchesAllEmpty?: boolean;
   /** The employee's own last replies, newest last. */
   previousReplies?: string[];
+  /** The store titles this turn's search returned (to spot them in the text). */
+  productTitles?: string[];
 }
 
 const HE = "\\u0590-\\u05FF";
@@ -134,6 +141,57 @@ const NAME_MISSPELLINGS: Record<string, RegExp> = {
   noa: w("נועא|נואה|נוע'ה|נועע"),
 };
 
+/** A plural second person to the customer: the last resort, never beside a singular "לך". */
+const PLURAL_TO_CUSTOMER = new RegExp(`(?<![${HE}])[ושכ]?(?:מחפשים|מעדיפים|רוצים|צריכים|מתכננים|מעוניינים|אוהבים|תרצו|תוכלו|תבחרו)(?![${HE}])`, "u");
+/** A singular "you" suffix, the same for a man and a woman unvocalized: לך, שלך, אשתך. */
+const SINGULAR_SUFFIX = new RegExp(`(?<![${HE}])(?:לך|שלך|בשבילך|אצלך|אותך|ממך|עליך|אשתך|בעלך|לאשתך|לבעלך|לחברה שלך)(?![${HE}])`, "u");
+/** Openers that recap the customer instead of reacting (Omer, 2026-10-26). */
+const RECAP_OPENER = /^\s*(?:נשמע ש|נשמע כמו ש|הבנתי ש|אז את|אז אתה|אז מחפשים|מעולה,? כדי|טוב,? כדי|כדי להציע|כדי שנוכל להציע|כדי שאוכל)/u;
+const GREETING_ONLY = /^\s*(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|hi+|hey+|hello)[\s!.,🙂😊👋]*$/iu;
+
+/** The last question in a text, raw, or null. */
+function lastQuestionRaw(text: string): string | null {
+  const parts = String(text ?? "").split(/(?<=[.!\n])\s+/);
+  const q = parts.filter((p) => /[?؟]\s*\S{0,3}\s*$/.test(p)).pop();
+  return q ?? null;
+}
+
+/** How many options a question lists: "שמלה, סריג, מעיל או אקססוריז" is four. */
+export function menuSize(question: string): number {
+  const OR = /(?<![\u0590-\u05FF])או(?![\u0590-\u05FF])|\bor\b/;
+  const body = question.replace(/\([^()]*\)/g, "");
+  // No "או": a question, not a choice ("היי, איך אפשר לעזור?").
+  if (!OR.test(body)) return 1;
+  const colon = body.lastIndexOf(":");
+  const tail = colon >= 0 ? body.slice(colon + 1) : body;
+  const items = tail.split(/,|(?<![\u0590-\u05FF])או(?![\u0590-\u05FF])|\bor\b/).map((x) => x.trim()).filter((x) => x.length > 1);
+  // Without a colon the first comma part is the question itself ("איזה סוג פריט מעניין, שמלה, ...").
+  return colon < 0 && tail.includes(",") ? Math.max(1, items.length - 1) : items.length;
+}
+
+/** The content words of a question, to compare two questions by what they offer. */
+function questionWords(q: string): Set<string> {
+  return new Set(q.replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 3));
+}
+
+/** The same choice asked again in other words (Omer, 2026-10-26: the category question twice). */
+export function repeatsChoice(draft: string, previous: string[]): string | null {
+  const q = lastQuestionRaw(draft);
+  if (!q || menuSize(q) < 2) return null;
+  const a = questionWords(q);
+  for (const r of previous) {
+    const pq = lastQuestionRaw(r);
+    if (!pq || menuSize(pq) < 2) continue;
+    const b = questionWords(pq);
+    const shared = [...a].filter((w) => b.has(w)).length;
+    if (shared / Math.min(a.size, b.size) >= 0.5) return q.slice(0, 80);
+  }
+  return null;
+}
+
+/** The customer does not mind: stop asking and recommend (Omer, 2026-10-26). */
+export const DONT_MIND = /לא משנה|סתם מסתכל|סתם|לא יודע|לא יודעת|אין לי מושג|תמליצי|תמליץ|תמליצו|מה שתמליצ|מה שבא לך|מה שאת חושבת|מה שאתה חושב|רק שתהיה|רק שיהיה|תפתיע|הפתיעי|whatever|anything|you choose|surprise me|recommend/i;
+
 /** The last question in a text, normalised, or null. */
 function lastQuestion(text: string): string | null {
   const parts = String(text ?? "").split(/(?<=[?؟])/);
@@ -192,7 +250,10 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   hit("self_intro", plain.match(SELF_INTRO));
 
   const lower = plain.toLowerCase();
+  // "היי, איך אפשר לעזור?" is the right answer to a bare hello (Omer, 2026-10-26).
+  const helloBack = ctx.isFirstReply && GREETING_ONLY.test(ctx.incomingMessage);
   for (const b of ctx.locale === "he" ? BANNED_HE : BANNED_EN) {
+    if (helloBack && /אפשר לעזור|how can i help/i.test(b)) continue;
     if (lower.includes(b.toLowerCase())) { hit("banned_phrase", b); break; }
   }
 
@@ -235,12 +296,39 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // Asking again, word for word, what she already asked (eval e5 D02, D03).
   const ask = lastQuestion(plain);
   if (ask && (ctx.previousReplies ?? []).some((r) => lastQuestion(r) === ask)) hit("repeated_question", ask);
+  else hit("repeated_question", repeatsChoice(plain, ctx.previousReplies ?? []));
   // The same reply, word for word, again (eval L01c: "מעולה, שמחים שזה מתאים." twice).
   const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
   if (norm(plain).length >= 6 && (ctx.previousReplies ?? []).some((r) => norm(r) === norm(plain))) hit("repeated_reply", plain.slice(0, 60));
 
   const questions = (plain.match(/[?؟]/g) ?? []).length;
   if (questions > 1) hit("two_questions", `${questions} questions`);
+
+  if (ctx.locale === "he") {
+    // A plural address next to a singular "לך"/"אשתך" in one sentence (Omer,
+    // 2026-10-26: "נשמע שמחפשים מתנה איכותית לאשתך").
+    for (const sentence of plain.split(/(?<=[.!?؟\n])\s+/)) {
+      const pl = sentence.match(PLURAL_TO_CUSTOMER);
+      if (pl && SINGULAR_SUFFIX.test(sentence)) { hit("mixed_address", sentence.trim().slice(0, 80)); break; }
+    }
+    // "נשמע ש...", "הבנתי ש...", "מעולה, כדי להציע": a recap, not a reaction.
+    hit("recap_opener", plain.match(RECAP_OPENER));
+    // A menu of three or more options in the question (eval: "שמלה, סריג, מעיל או אקססוריז").
+    const q = lastQuestionRaw(plain);
+    if (q && menuSize(q) >= 3) hit("long_menu", q.slice(0, 80));
+    // A bare "היי" gets a short hello and one open question, not a menu.
+    if (ctx.isFirstReply && GREETING_ONLY.test(ctx.incomingMessage) && (plain.length > 45 || (q && menuSize(q) >= 2))) hit("menu_greeting", plain.slice(0, 80));
+  }
+  // Store titles in the sentence: two or more, one in parentheses, or a line
+  // that starts with one (Omer: "Cotton Trench Coat, Wool Blend Overcoat. איזה...",
+  // "(כמו Wool Blend Overcoat)"). The cards show the titles; the text describes.
+  if (ctx.locale === "he") {
+    const keys = (text.match(/PRODUCT_\d+/gi) ?? []).length;
+    const titles = (ctx.productTitles ?? []).filter((t) => t && text.includes(t)).length;
+    if (keys + titles >= 2 || /\([^()]*(?:PRODUCT_\d+|[A-Z][a-z]+ [A-Z][a-z]+)[^()]*\)/.test(text) || /(?:^|\n)\s*(?:PRODUCT_\d+|[A-Z][a-z]+ [A-Z])/.test(text)) {
+      hit("latin_titles", text.match(/PRODUCT_\d+|[A-Z][a-z]+(?: [A-Z][a-z]+)+/)?.[0] ?? "titles");
+    }
+  }
   if (ctx.customerClosing && questions > 0) hit("question_after_thanks", "a question after a thank-you");
 
   return out;
@@ -252,7 +340,12 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   self_intro: { he: "Do not introduce yourself; the chat already shows who you are.", en: "Do not introduce yourself; the chat already shows who you are." },
   banned_phrase: { he: "Remove the stock phrase and say it the way a person in a shop would.", en: "Remove the stock phrase and say it the way a person would." },
   slash_form: { he: "No slash forms. Rewrite neutrally: \"אפשר לבחור\", \"מה מחפשים?\", an infinitive or the plural.", en: "No slash forms." },
-  gendered_address: { he: "Address the customer neutrally ALWAYS, even when they wrote about themselves as a man or a woman: no gendered verbs, participles or pronouns to them (not \"תוכל\", \"מעדיפה\", \"את רוצה\"). Use \"אפשר\" + infinitive, the plural (\"מחפשים?\", \"מעדיפים?\") or a noun.", en: "Address the customer neutrally." },
+  gendered_address: { he: "Address the customer neutrally ALWAYS, even when they wrote about themselves as a man or a woman: no gendered verbs, participles or pronouns to them (not \"תוכל\", \"מעדיפה\", \"את רוצה\"). First choice, a לך construction, the same for a man and a woman: \"מה בא לך?\", \"מה חשוב לך?\", \"מתאים לך?\". Next, \"אפשר\" + infinitive. The plural only as a last resort.", en: "Address the customer neutrally." },
+  mixed_address: { he: "You mixed a plural address with a singular \"לך\" in one sentence (\"מחפשים... לאשתך\"). Use the לך construction throughout: \"מה בא לך לקנות לה?\", \"יש לך כיוון?\".", en: "Do not mix plural and singular address." },
+  recap_opener: { he: "Do not open by recapping what they said (\"נשמע ש...\", \"הבנתי ש...\", \"מעולה, כדי להציע...\"). React like a person (\"איזה כיף, מתנה!\") or just answer.", en: "Do not open with a recap of what the customer said; react or answer." },
+  long_menu: { he: "Your question lists three or more options. Ask with at most two, or better, show one or two concrete products.", en: "At most two options in a question." },
+  latin_titles: { he: "Do not write the store's English titles in the Hebrew sentence: the cards show them. Describe the products in Hebrew in a few words (\"מעיל צמר ארוך ואלגנטי, או טרנץ' קליל\"). Never a title in parentheses, never a line that starts with one.", en: "Do not list product titles in the text; the cards show them." },
+  menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
   self_gender: { he: "Your own grammatical form is wrong: follow the Persona's gender, or when it is not configured speak as the business in the plural (\"נבדוק\", \"יש לנו\").", en: "Keep your own grammatical form consistent." },
   own_name: { he: "Your name is misspelled. Leave it out unless asked; if needed write it exactly as configured.", en: "Your name is misspelled; leave it out." },
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
@@ -324,6 +417,8 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
   out = out.replace(/\s*\(([^()\n]{1,80})\)/g, (m, inner: string, at: number, whole: string) => {
     const raw = inner.replace(/\u0000(\d+)\u0000/g, (_x, i) => held[Number(i)]).trim();
     if (/(?:ראו|ראוי|רואים|ראי|see)\s*(?:ל?מטה|below)/i.test(raw)) return "";
+    // A store title in parentheses breaks the line's direction (Omer: "(כמו Wool Blend Overcoat)").
+    if (/\u0000\d+\u0000/.test(inner) || /^(?:כמו |למשל |e\.g\. )?[A-Z][A-Za-z]+(?: [A-Z][A-Za-z-]+)+$/.test(raw)) return "";
     const before = whole.slice(0, at).replace(/\u0000(\d+)\u0000/g, (_x, i) => held[Number(i)]);
     return raw && before.toLowerCase().includes(raw.toLowerCase()) ? "" : m;
   });
@@ -356,6 +451,9 @@ function hebrewTouches(text: string, incoming: string): string {
   let out = text
     .replace(/(?<![A-Za-z])off[- ]white(?![A-Za-z])/gi, "אוף וייט")
     .replace(/לא נשען/g, "לא נלבש")
+    // The model's "קל־קל" (Omer's test, 08:18Z) is "קליל"; a maqaf is never sent.
+    .replace(/קל[\u05BE\s-]קל/g, "קליל")
+    .replace(/\u05BE/g, " ")
     .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים");
   // Slash lists. URLs and dates are left alone; ו/או is a word.
   out = out.replace(/(?<![\w/:.\u0590-\u05FF])((?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})(?:\/(?:[A-Za-z0-9]{1,4}|[\u0590-\u05FF]{3,})){1,5})(?![\w/\u0590-\u05FF])/gu, (whole: string) => {

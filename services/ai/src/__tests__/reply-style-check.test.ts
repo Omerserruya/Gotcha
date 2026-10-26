@@ -57,10 +57,17 @@ describe("★ the eval's failures are caught", () => {
   });
 });
 
+describe("a line that starts with a store title is caught (AC5)", () => {
+  it("Chunky Cardigan עולה ₪529", () => {
+    expect(checkReplyStyle("Chunky Cardigan עולה ₪529", ctx({})).map((v) => v.kind)).toContain("latin_titles");
+  });
+});
+
 describe("★ a natural reply passes", () => {
   it.each([
     "יש ב-M, בשחור ובלבן",
-    "Chunky Cardigan עולה ₪529",
+    // A line that starts with a Latin title breaks RTL (Omer, 2026-10-26): Hebrew first.
+    "ה-Chunky Cardigan עולה ₪529",
     "בכיף 🙂",
     "את הצבעים הזמינים אין לי אפשרות לאשר כרגע. אפשר לבדוק את זה מול הצוות.",
     "איזו מידה מחפשים?",
@@ -243,7 +250,8 @@ describe("★ e7 T3: cards the model sent itself, and no text", () => {
   it("a short line, never the failure fallback", async () => {
     const { deliverableReply } = await import("../services/ai-bot.service");
     expect(deliverableReply({ safeReply: null, pendingEscalation: false, awaitingApproval: false, toolCallLog: [], locale: "he", cardsShown: true })).toBe("בבקשה 🙂");
-  });
+    // The first import of the whole bot module; slow on a cold box.
+  }, 20_000);
 });
 
 describe("★ voice runs: the brand's close is not tacked onto a non-thanks reply", () => {

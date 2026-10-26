@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething } from "./reply-style-check.service";
+import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -1036,6 +1036,22 @@ const STRATEGY_TO_LAST_MOVE: Record<string, LastAssistantMove | undefined> = {
   CONVERT: "convert",
   RESOLVE: "resolve",
 };
+
+/**
+ * How many of our latest replies in a row were questions with nothing shown
+ * (Omer, 2026-10-26: three category questions before a single product).
+ */
+export function discoveryStreak(rows: Array<{ direction: string; body?: string | null; messageType?: string | null; senderName?: string | null }>): number {
+  let n = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r.direction !== "OUTBOUND" || String(r.senderName ?? "").includes("@")) continue;
+    if (/product/.test(String(r.messageType ?? ""))) break;
+    if (/[?؟]\s*\S{0,3}\s*$/.test(String(r.body ?? "").trim())) n++;
+    else break;
+  }
+  return n;
+}
 
 /**
  * The newest product search an earlier turn of this conversation ran, from its
@@ -3213,6 +3229,20 @@ async function generateAIBotReplyInner(
     content: buildStateNote({ rows: messages as any, now: Date.now(), timeZone: historyTimeZone, customerForm: ctxSlot.grammaticalAddress ?? null }),
   });
 
+  // Stop asking and show (Omer, 2026-10-26: "לא משנה האמת" got the same
+  // category question again). After "לא משנה" / "תמליצי", or after two discovery
+  // questions in a row with nothing shown, this turn recommends.
+  const recommendNow = !!wooTurn && toolFunctionNames.includes("woocommerce.list_products")
+    && (DONT_MIND.test(opts.incomingMessage ?? "") || discoveryStreak(messages as any[]) >= 2);
+  if (recommendNow) {
+    chatMessages.push({
+      role: "system",
+      content:
+        `Stop asking. ${DONT_MIND.test(opts.incomingMessage ?? "") ? "The customer said they don't mind." : "You have asked twice already."} ` +
+        `Search now with woocommerce.list_products, using what you know (who it is for, any category or budget they gave), and recommend one or two concrete products ` +
+        `in a few ${replyLocale === "he" ? "Hebrew" : "English"} words each. At most one light question after, with at most two options.`,
+    });
+  }
   let searchNudged = false;
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
@@ -3578,6 +3608,17 @@ async function generateAIBotReplyInner(
         content:
           `Do not ask whether to check or show: you have the product search. Search now with woocommerce.list_products ` +
           `(English words from the product titles) and answer from what it returns, in ${replyLocale === "he" ? "Hebrew" : "English"}.`,
+      });
+      continue;
+    }
+    // Asked again instead of recommending (the note above was ignored): look, once.
+    if (recommendNow && round < 2 && !searchNudged && !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool)) && /[?؟]\s*\S{0,3}\s*$/.test(response.content ?? "")) {
+      searchNudged = true;
+      console.warn(`[ai-bot] asked again instead of recommending: searching now conv=${opts.conversationId}`);
+      chatMessages.push({ role: "assistant", content: response.content || "" });
+      chatMessages.push({
+        role: "system",
+        content: `Do not ask again. Call woocommerce.list_products now and recommend one or two of the results, in ${replyLocale === "he" ? "Hebrew" : "English"}.`,
       });
       continue;
     }
@@ -5064,6 +5105,7 @@ async function generateAIBotReplyInner(
         toolsOffered: toolFunctionNames,
         handedOff: !!pendingEscalation || toolCallLog.some((t) => t.tool === "escalate_to_human"),
         previousReplies: priorOutbound.filter((m: any) => !String(m.senderName ?? "").includes("@")).slice(-3).map((m: any) => String(m.body ?? "")),
+        productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
         customerClosing: customerIsClosing(opts.incomingMessage),
         searchesAllEmpty: (() => {
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));

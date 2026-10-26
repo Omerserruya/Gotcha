@@ -448,8 +448,10 @@ export function grammaticalAddressPromptBlock(
     header,
     "The customer has not used any form about themselves that distinguishes gender in writing, " +
       "so there is nothing to agree with.",
-    "Write NEUTRALLY by RESTRUCTURING the sentence - infinitives, nouns and impersonal phrasing - " +
-      "not by hedging. ❌ \"באיזה מוצר אתה מעוניין?\" ✅ \"איזה מוצר מעניין אותך?\" · " +
+    "Write NEUTRALLY by RESTRUCTURING the sentence, not by hedging. First choice, a לך construction: unvocalized, " +
+      "\"לך\", \"שלך\", \"בשבילך\", \"אותך\" are the same for a man and a woman (\"מה בא לך?\", \"מתאים לך?\"). Then infinitives, " +
+      "nouns and impersonal phrasing. The plural (\"מחפשים?\") only as a last resort, and never beside a singular \"לך\" " +
+      "in one sentence: ❌ \"נשמע שמחפשים מתנה לאשתך\". ❌ \"באיזה מוצר אתה מעוניין?\" ✅ \"איזה מוצר מעניין אותך?\" · " +
       "❌ \"האם תרצה שאבדוק?\" ✅ \"אפשר לבדוק עבורך, להמשיך?\" · " +
       "❌ \"מתלבט/ת?\" ✅ \"אפשר לעזור לבחור?\"",
     common,
