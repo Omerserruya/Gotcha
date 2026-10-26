@@ -57,7 +57,8 @@ describe("★ e7 T5: a colour question about two or three matches gets their liv
     const { readFileSync } = require("node:fs");
     const { join } = require("node:path");
     const src: string = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src).toContain("for (let i = 0; i < Math.min(colours.length ? 4 : 3, envlp.candidates.length); i++) {");
+    expect(src).toContain("const checkedUpTo = Math.min(colours.length ? 4 : 3, envlp.candidates.length);");
+    expect(src).toContain("for (let i = 0; i < checkedUpTo; i++) {");
     expect(src).toContain("VARIATIONS of PRODUCT_${i + 1}${mark} (live, already read)");
   });
   it("a complaint or a shipping question gets no unnamed cards", () => {

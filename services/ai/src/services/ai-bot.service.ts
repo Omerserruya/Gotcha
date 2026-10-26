@@ -3556,7 +3556,12 @@ async function generateAIBotReplyInner(
                 // named a colour, each one is marked has / lacks it, and the ones
                 // that lack it are kept off the cards.
                 const colours = askedColours(opts.incomingMessage);
-                for (let i = 0; i < Math.min(colours.length ? 4 : 3, envlp.candidates.length); i++) {
+                // A colour was asked: only what is checked AND has it gets a card.
+                // Past the ones checked here, a product was carded unchecked (W01,
+                // 2026-10-26: Striped Cotton Shirt, blue only, on "יש חולצה לבנה?").
+                const colourHits = new Set<string>();
+                const checkedUpTo = Math.min(colours.length ? 4 : 3, envlp.candidates.length);
+                for (let i = 0; i < checkedUpTo; i++) {
                   const id = envlp.candidates[i].productId;
                   if (!/^\d{1,12}$/.test(String(id))) continue;
                   const got = await executeAdapterTool({
@@ -3569,11 +3574,15 @@ async function generateAIBotReplyInner(
                     let mark = "";
                     if (colours.length) {
                       const has = variationsOfferColour(got.result as any[], colours);
-                      if (!has) colourMisses.add(String(id));
+                      if (has) colourHits.add(String(id));
+                      else colourMisses.add(String(id));
                       mark = has ? ` (HAS the colour the customer asked for)` : ` (does NOT come in the colour the customer asked for: never offer it in that colour)`;
                     }
                     toolContent += `\n\nVARIATIONS of PRODUCT_${i + 1}${mark} (live, already read):\n${compactWooVariations(JSON.stringify({ ok: true, result: got.result }))}`;
                   }
+                }
+                if (colours.length) {
+                  for (const c of envlp.candidates) if (!colourHits.has(String(c.productId))) colourMisses.add(String(c.productId));
                 }
               }
             }

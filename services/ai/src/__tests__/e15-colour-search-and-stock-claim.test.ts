@@ -134,3 +134,16 @@ describe("the reply may not say it is out of stock after an empty search", () =>
     expect(checkReplyStyle(notFoundByNameLine("en"), { ...ctx(true), locale: "en" }).some((v) => v.kind === "false_absence")).toBe(false);
   });
 });
+
+describe("W01: a colour asked, the cards are only what was checked and has it", () => {
+  // "יש חולצה לבנה?" (dev, 2026-10-26): the model searched "shirt", the first
+  // four results were checked for white, and the fifth, Striped Cotton Shirt
+  // (blue only), was carded unchecked.
+  const src = require("fs").readFileSync(require("path").join(__dirname, "../services/ai-bot.service.ts"), "utf8") as string;
+  it("a checked product with the colour is a hit; every other candidate is kept off the cards", () => {
+    expect(src).toContain("if (has) colourHits.add(String(id));");
+    expect(src).toContain("for (const c of envlp.candidates) if (!colourHits.has(String(c.productId))) colourMisses.add(String(c.productId));");
+    // ...and the misses are what the card plan excludes.
+    expect(src).toContain("excludeIds: colourMisses,");
+  });
+});
