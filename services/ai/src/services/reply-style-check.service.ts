@@ -21,6 +21,7 @@ export type StyleViolationKind =
   | "self_gender"
   | "own_name"
   | "ungrounded_attribute"
+  | "ungrounded_price"
   | "promise"
   | "two_questions"
   | "question_after_thanks"
@@ -68,6 +69,12 @@ export interface StyleCheckContext {
   productTitles?: string[];
   /** Tools that actually ran this turn. */
   toolsCalled?: string[];
+  /**
+   * Everything the reply may take a price from: the prompt (knowledge, policy),
+   * this turn's tool results, the conversation and its cards. A price in the
+   * reply that is in none of it was made up.
+   */
+  groundingText?: string;
 }
 
 const HE = "\\u0590-\\u05FF";
@@ -123,6 +130,36 @@ const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמח�
 const COLOUR = /(?<![A-Za-z])(?:black|white|navy|beige|camel|oat|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])|(?<![\u0590-\u05FF])[ובה]?(?:שחור|שחורה|לבן|לבנה|נייבי|בז'|קאמל|אפור|אפורה|זית|שמנת|חום|חומה|אדום|אדומה|כחול|כחולה|ירוק|ירוקה|ורוד|ורודה)(?![֐-׿])/iu;
 const SIZE = /(?:מידה|מידות|size|sizes)\s*(?:XXS|XS|S|M|L|XL|XXL|\d{2})(?![A-Za-z])/i;
 const PRICE = /[₪$€]\s?\d|\d\s?(?:₪|ש["״']?ח|שקל|ILS)/i;
+/** The prices a text states, as plain numbers ("₪389", "349 ש״ח", "1,290 ILS" -> "389", "349", "1290"). */
+export function statedPrices(text: string): string[] {
+  const out: string[] = [];
+  const re = /[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל|ILS)/gi;
+  for (const m of text.matchAll(re)) out.push(normalPrice(m[1] ?? m[2] ?? ""));
+  return out.filter(Boolean);
+}
+function normalPrice(n: string): string {
+  return n.replace(/,/g, "").replace(/\.0+$/, "");
+}
+/** The prices in a reply that appear nowhere in what grounds it. */
+export function ungroundedPrices(reply: string, grounding: string): string[] {
+  const known = new Set((grounding.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(normalPrice));
+  return statedPrices(reply).filter((p) => !known.has(p));
+}
+/**
+ * A made-up price removed in code, when even the rewrite kept it: the price and
+ * the verb that carries it ("עולה ₪389", "במחיר 389 ש״ח"), then the punctuation
+ * it leaves behind. The rest of the reply stands.
+ */
+export function stripPrices(reply: string, prices: string[]): string {
+  let out = reply;
+  for (const p of prices) {
+    // "1290" is written "1,290" too.
+    const n = p.split(".").map((part, i) => (i ? part : part.split("").join(",?"))).join("\\.");
+    const amount = `(?:[₪$€]\\s?${n}(?:\\.0+)?|${n}(?:\\.0+)?\\s?(?:₪|ש["״']?ח|שקל|ILS))`;
+    out = out.replace(new RegExp(`\\s*,?\\s*(?:(?:ש)?(?:עולה|עולות|עולים|במחיר(?: של)?|ב[-\u2011]?)\\s*)?${amount}`, "gi"), "");
+  }
+  return out.replace(/\s+([.,!?؟])/g, "$1").replace(/,\s*([.!?؟])/g, "$1").replace(/ {2,}/g, " ").trim();
+}
 const STOCK = w("במלאי|אזל|אזלה|אזלו|נגמר|זמין|זמינה|זמינים") ;
 
 /** Commitments with no tool behind them on a shop floor. */
@@ -137,7 +174,7 @@ const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות 
 const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?:ל|את|אותו|אותה)|לסל|לעגלה|בעגלה|כרטיס המוצר|כרטיס|להזמין|לרכישה|לקנות|להשלים (?:את )?ה?הזמנה|להגיע לסכום|לשריין|add (?:it )?to (?:your |the )?cart|checkout|place (?:the|an|your) order)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
-const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
+const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|(?:לשלוח|ש?אשלח|ש?נשלח)(?:\\s+(?:עבורך|לך))?(?:\\s+את)?\\s+(?:ה?פרטי|פרטים|תמונות)|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
 
 /** A customer message that only acknowledges: "מגניב", "סבבה", "אוקיי", "אחלה". */
 const ACK_ONLY = /^\s*(?:אוקיי?|אוקי|אוקיי סבבה|סבבה|מגניב|אחלה|יופי|מעולה|טוב|הבנתי|ok(?:ay)?|cool|great|got it|nice)[\s!.,👍🙂😊]*$/iu;
@@ -292,6 +329,11 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
 
   if (ctx.shopFloor && !ctx.productFactsAvailable) {
     hit("ungrounded_attribute", plain.match(SIZE) ?? plain.match(PRICE) ?? plain.match(COLOUR) ?? plain.match(STOCK));
+  } else if (ctx.shopFloor && ctx.groundingText != null) {
+    // Product facts exist, but not THIS price (dev 2026-10-26: "ג'ינס... עולה
+    // ₪389" with no tool this turn; the jeans are ₪349 and 389 is nowhere).
+    const made = ungroundedPrices(plain, ctx.groundingText);
+    if (made.length) hit("ungrounded_price", `₪${made[0]}`);
   }
 
   hit("promise", plain.match(RESERVE) ?? plain.match(FOLLOW_UP));
@@ -364,6 +406,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
   self_gender: { he: "Your own grammatical form is wrong: follow the Persona's gender, or when it is not configured speak as the business in the plural (\"נבדוק\", \"יש לנו\").", en: "Keep your own grammatical form consistent." },
   own_name: { he: "Your name is misspelled. Leave it out unless asked; if needed write it exactly as configured.", en: "Your name is misspelled; leave it out." },
+  ungrounded_price: { he: "You stated a price that no tool result, card or store information in this conversation shows. Never guess a price: remove it, or search the product first.", en: "You stated a price nothing in this conversation shows. Never guess a price: remove it, or search first." },
   ungrounded_attribute: { he: "You stated a size, colour, price or stock with no tool result behind it. Remove it, or say you cannot confirm it right now.", en: "Remove the size, colour, price or stock you cannot ground in a tool result." },
   promise: { he: "You promised something no tool does (reserving, holding, calling back, checking with someone, a person getting back). Remove it; say plainly what you CAN do, or quote the store's policy if one covers it.", en: "Remove the promise no tool backs; say what you can do." },
   two_questions: { he: "At most one question.", en: "At most one question." },
@@ -490,6 +533,8 @@ function hebrewTouches(text: string, incoming: string): string {
     .replace(/קל[\u05BE\s-]קל/g, "קליל")
     .replace(/\u05BE/g, " ")
     .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים")
+    // "במקטגוריית" (dev 2026-10-26): two prefixes, one of them wrong.
+    .replace(/(?<![\u0590-\u05FF])במקטגורי/g, "בקטגורי")
     .replace(/(?<![\u0590-\u05FF])([ובלה]?)מכופר(ת|ות|ים)?(?![\u0590-\u05FF])/g, "$1מכופתר$2");
   // A sentence that narrates the cards (eval e14: "הצגתי אותה עבורך", "מציגים
   // אותם למטה", "הצגתי כרטיס מוצר עם הווריאנט"): the cards speak for themselves.
