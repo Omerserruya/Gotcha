@@ -97,6 +97,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
+const EMITTED = vi.hoisted(() => [] as any[]);
+vi.mock("../services/notifications-emit", () => ({ tryEmit: (e: any) => EMITTED.push(e) }));
 vi.mock("../services/shopify-catalog.service", () => ({
   validateCartLine: H.validateCartLine,
 }));
@@ -596,6 +598,8 @@ describe("POST /handoff", () => {
     expect(H.updateConversation).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true, status: "WAITING" }) }),
     );
+    // ★ the team is told (2026-10-26)
+    expect(EMITTED).toContainEqual(expect.objectContaining({ type: "conversation.escalated", tenantId: "t1", metadata: { conversationId: "conv1" } }));
   });
 
   it("is refused when the merchant disabled human handoff", async () => {
@@ -618,6 +622,7 @@ describe("POST /handoff", () => {
     config.enabled = true;
     delete config.routing.allowHumanHandoff;
     H.channelRow.current = channel({ platformMeta: { shopifyLiveChat: config } });
+    EMITTED.length = 0;
 
     const res = await request(app())
       .post("/api/shopify-chat/handoff")
@@ -627,6 +632,7 @@ describe("POST /handoff", () => {
     expect(H.updateConversation).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ isHandedOver: true }) }),
     );
+    expect(EMITTED).toEqual([]);
   });
 });
 

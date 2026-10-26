@@ -59,6 +59,7 @@ import {
 import { validateCartLine } from "../services/shopify-catalog.service";
 import { handoffTarget, mintHandoffRef, brandOf } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
+import { tryEmit } from "../services/notifications-emit";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
@@ -831,6 +832,14 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
       event: "conversation:updated",
       tenantId: session.tenantId,
       data: { id: conversation.id, isHandedOver: true, status: "WAITING", channel: "SHOPIFY_LIVE_CHAT" },
+    });
+    // The team is told, not only the inbox socket (2026-10-26: a visitor's
+    // press reached nobody who was not already looking at the inbox).
+    tryEmit({
+      type: "conversation.escalated",
+      tenantId: session.tenantId,
+      data: { reason: "The visitor pressed \"talk to a person\" in the store chat", priority: "high" },
+      metadata: { conversationId: conversation.id },
     });
     trackEvent(session.tenantId, "shopify_chat_handoff_requested", { conversationId: conversation.id });
     res.json({ data: { handedOver: true } });
