@@ -100,3 +100,22 @@ describe("AA5: no \"מייד\" promise", () => {
     expect(checkReplyStyle("מצטערים על זה. אפשר מספר הזמנה כדי שאבדוק?", ctx).map((v) => v.kind)).not.toContain("promise");
   });
 });
+
+describe("AB1: the Hebrew skill agrees with everything else", () => {
+  const he = readFileSync(join(__dirname, "../prompts/hebrew.md"), "utf8");
+  it("always neutral: no follow-their-form rule left", () => {
+    expect(he).toMatch(/Address the customer neutrally, always/);
+    expect(he).not.toMatch(/address them in it|אתה מחפש|את מחפשת"\*\*/);
+  });
+  it("no fixed idiom table and no sales ladder", () => {
+    expect(he).not.toMatch(/על הכיפאק|פיקס|מתי נוח לך לקפוץ|בסיור/);
+  });
+  it("the mechanics the polish enforces are stated: prefixes, slashes, counts", () => {
+    expect(he).toContain("בשחור");
+    expect(he).toContain("נשארו אחרונות");
+    expect(he).toMatch(/Lists without slashes/);
+  });
+  it("no wide dash and no maqaf", () => {
+    expect(he).not.toMatch(/[–—־]/);
+  });
+});
