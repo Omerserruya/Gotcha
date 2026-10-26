@@ -54,10 +54,11 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * action - not "Save", not "OK". A control that sends a stranger a message
  * should read like one.
  *
- * ── NO ENTER-TO-SEND, AND THE REASON IS THE SAME AS ON APPROVALS ──
- * The approvals screen refuses a one-keypress irreversible action because there
- * is no undo. The same argument applies here and more so: Enter is the key a
- * person presses to start a new line. Enter makes a newline; the button sends.
+ * ── ENTER SENDS, SHIFT+ENTER IS A NEW LINE (Omer, 2026-10-26) ──
+ * As legacy's ChatPanel did. Enter submits the form, so it goes through the
+ * button's own path and its own refusals: nothing Enter sends is something the
+ * button would not. While an IME is composing, Enter confirms the candidate
+ * and sends nothing.
  *
  * ── AND NO OPTIMISTIC ECHO ──
  * The reply does not appear in the stream until the server has it and the page
@@ -440,6 +441,14 @@ export function Composer({
         disabled={busy || locked}
         placeholder={t('placeholder')}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.shiftKey) return;
+          // An IME's Enter confirms a candidate (229 where isComposing is missing).
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+          event.preventDefault();
+          // The form's submit, so the same refusals as the button apply.
+          event.currentTarget.form?.requestSubmit();
+        }}
       />
 
       {/* The held files - a picture as itself - each with the way to take it back out. */}

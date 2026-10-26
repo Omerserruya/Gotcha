@@ -124,20 +124,95 @@ describe('★★ it never says "sent"', () => {
   });
 });
 
-describe('★★ what it refuses to do', () => {
-  it('★★ Enter makes a new line and does NOT send', async () => {
-    /*
-     * The approvals screen refuses a one-keypress irreversible action because
-     * this platform has no undo. The same argument applies here and more so:
-     * Enter is the key a person presses to start a new line.
-     */
+describe('★★ Enter sends, Shift+Enter is a new line (Omer, 2026-10-26)', () => {
+  it('★★ Enter sends what is in the box, as the button would', async () => {
     const user = userEvent.setup();
     show();
-    await user.type(screen.getByTestId('composer-body'), 'First line{Enter}second line');
+    await user.type(screen.getByTestId('composer-body'), 'On its way{Enter}');
+    await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', 'On its way', undefined));
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('composer-queued')).toBeInTheDocument();
+  });
+
+  it('★★ Shift+Enter makes a new line and does NOT send', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.type(
+      screen.getByTestId('composer-body'),
+      'First line{Shift>}{Enter}{/Shift}second line',
+    );
     expect(sent).not.toHaveBeenCalled();
     expect(screen.getByTestId('composer-body')).toHaveValue('First line\nsecond line');
   });
 
+  it('★★ an Enter that confirms an IME candidate sends nothing (isComposing, and keyCode 229)', () => {
+    show();
+    const box = screen.getByTestId('composer-body');
+    fireEvent.change(box, { target: { value: 'שלום' } });
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 });
+    expect(sent).not.toHaveBeenCalled();
+    expect(box).toHaveValue('שלום');
+  });
+
+  it('★★ Enter on an empty or whitespace box sends nothing', async () => {
+    const user = userEvent.setup();
+    show();
+    const box = screen.getByTestId('composer-body');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await user.type(box, '   {Enter}');
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('★★ Enter while a send is in flight does not send again', async () => {
+    const user = userEvent.setup();
+    sent.mockImplementation(() => new Promise(() => {}));
+    show();
+    const box = screen.getByTestId('composer-body');
+    await user.type(box, 'Hi{Enter}');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(sent).toHaveBeenCalledTimes(1);
+  });
+
+  it('★★ Enter past the reply window sends nothing, though the draft is there', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer
+          conversationId="c1"
+          channelName="WhatsApp"
+          replyWindow={{ channel: 'WHATSAPP', open: false, closesAt: null, mode: 'template_only' }}
+        />
+      </NextIntlClientProvider>,
+    );
+    const box = screen.getByTestId('composer-body');
+    expect(box).toBeDisabled();
+    // The key reaches the box anyway: the form's own guard is what refuses it.
+    fireEvent.change(box, { target: { value: 'kept draft' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('★★ Enter with a file and a quoted reply sends nothing, as the button would not', async () => {
+    const user = userEvent.setup();
+    show();
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('gotcha:reply-to', { detail: { id: 'm1', who: 'Dana', preview: 'Hi' } }),
+      );
+    });
+    await user.upload(
+      screen.getByTestId('composer-file-input'),
+      new File(['x'], 'a.pdf', { type: 'application/pdf' }),
+    );
+    expect(screen.getByTestId('composer-send')).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId('composer-body'), { key: 'Enter' });
+    expect(sent).not.toHaveBeenCalled();
+    expect(media).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ what it refuses to do', () => {
   it('★★ an empty box cannot be sent, and neither can whitespace', async () => {
     const user = userEvent.setup();
     show();
