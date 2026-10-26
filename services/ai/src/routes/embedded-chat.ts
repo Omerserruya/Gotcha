@@ -4,6 +4,8 @@ import {
   prisma,
   incomingMessageQueue,
   withCrossTenantAccess,
+  recordHandover,
+  publishEvent,
   normalizeWebchatConfig,
   publicWebchatConfig,
   getRedis,
@@ -21,6 +23,7 @@ import { translateWidgetTexts } from "../services/widget-text-translation.servic
 import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { listActivePromotions } from "../services/widget-promotions.service";
 import { resolveWooCurrency } from "../services/discovery-integration.service";
+import { tryEmit } from "../services/notifications-emit";
 
 const router = Router();
 
@@ -300,6 +303,72 @@ async function visitorConversation(conversationId: string, token: unknown) {
   const b = Buffer.from(token);
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? c : null;
 }
+
+/**
+ * POST /handoff { sessionId, sessionToken } -> { handedOver: true }
+ * The widget's "talk to a person" button (2026-10-26). It had no route here:
+ * the site adapter answered it locally with an empty success, so the visitor
+ * saw "handed over" and nobody was told. Mirrors Shopify Live Chat's POST
+ * /handoff, and also tells the team (conversation.escalated), which a waiting
+ * conversation alone does not. 403 unless the merchant turned the button on
+ * (opt-in: unset is off); 404 on a wrong session. The employee's own
+ * escalate_to_human is a different path.
+ */
+router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
+  try {
+    const conv = await withCrossTenantAccess(() => visitorConversation(String(req.body?.sessionId ?? ""), req.body?.sessionToken));
+    if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
+      select: { credentials: true },
+    }));
+    if (!account) { res.status(404).json({ error: "unavailable" }); return; }
+    if (!normalizeWebchatConfig(account.credentials).behaviour.allowHumanHandoff) {
+      res.status(403).json({ error: "handoff_disabled" });
+      return;
+    }
+    await recordHandover({
+      tenantId: conv.tenantId,
+      conversationId: conv.id,
+      to: "human",
+      reason: "takeover",
+      data: { isHandedOver: true, status: "WAITING" },
+    });
+    const marker = await withCrossTenantAccess(() => prisma.message.create({
+      data: {
+        tenantId: conv.tenantId,
+        conversationId: conv.id,
+        channel: "WEBCHAT" as any,
+        direction: "INBOUND",
+        body: "",
+        messageType: "system",
+        senderName: "System",
+        status: "DELIVERED",
+        metadata: { systemEvent: "visitor_requested_human" },
+      },
+    }));
+    // The inbox sorts by lastMessageAt (the same reason as Shopify's route).
+    await withCrossTenantAccess(() => prisma.conversation.updateMany({
+      where: { id: conv.id, tenantId: conv.tenantId },
+      data: { lastMessageAt: marker.createdAt },
+    }));
+    await publishEvent({
+      event: "conversation:updated",
+      tenantId: conv.tenantId,
+      data: { id: conv.id, isHandedOver: true, status: "WAITING", channel: "WEBCHAT" },
+    });
+    tryEmit({
+      type: "conversation.escalated",
+      tenantId: conv.tenantId,
+      data: { reason: "The visitor pressed \"talk to a person\" in the website chat", priority: "high" },
+      metadata: { conversationId: conv.id },
+    });
+    res.json({ data: { handedOver: true } });
+  } catch (err) {
+    console.error("[embedded-chat] handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
 
 /**
  * POST /whatsapp-handoff { sessionId, sessionToken, locale?, text? } -> { url, ref }
