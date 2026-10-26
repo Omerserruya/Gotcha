@@ -105,13 +105,14 @@ function withoutCredentialUrls(text: string, ...urls: (string | null | undefined
     .reduce((acc, u) => acc.split(u).join("[link removed from log]"), text);
 }
 
-async function sendHtmlEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+async function sendHtmlEmail(to: string, subject: string, html: string, text: string, locale?: string): Promise<void> {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@gotcha.app";
   const mail = getTransporter();
   // The HTML half already carries the consent line, because every template here
   // renders through renderBrandEmail. The plain-text half is composed per call
-  // site, so it gets the line at the single point they all pass through.
-  await mail.sendMail({ from, to, subject, html, text: withLegalConsentText(text) });
+  // site, so it gets the line at the single point they all pass through - in
+  // the email's language, or a Hebrew email ends on an English line.
+  await mail.sendMail({ from, to, subject, html, text: withLegalConsentText(text, emailLocale(locale) === "he") });
   console.log(`[EMAIL] Sent to: ${to} | Subject: ${subject}`);
 }
 
@@ -151,33 +152,8 @@ export async function sendSetupLinkEmail(userId: string): Promise<void> {
   if (!user) throw new Error("User not found");
 
   const { url } = await issueSetupLink(userId);
-  const tenantName = user.tenant?.name ?? "your workspace";
-  const subject = "Your new GOTCHA setup link";
-  const html = renderBrandEmail({
-    title: "Set your password - GOTCHA.",
-    preheader: "Here is a fresh link. This one is good for 48 hours.",
-    eyebrow: "New link",
-    icon: "&#128273;",
-    headline: "Here is a fresh link.",
-    subhead: `${escapeHtml(user.name)}, set your password and you are into ${escapeHtml(tenantName)}.`,
-    bodyHtml: emailParagraph(
-      "The previous link had expired. Nothing is wrong with your account and nothing was lost.",
-    ),
-    cta: { label: "Set my password", url },
-    fallbackUrl: url,
-    expiryNote: `This link expires in <strong style="color:${EC.strong};">48 hours</strong>`,
-    footerNote: "You're receiving this because you asked for a new setup link.",
-  });
-  const text = [
-    `Hello ${user.name},`,
-    "",
-    "Here is a fresh link to set your password:",
-    url,
-    "",
-    "This link expires in 48 hours.",
-    "",
-    "The Gotcha. Team",
-  ].join("\n");
+  const lang = emailLocale(await storedLocale(user.tenantId));
+  const { subject, html, text } = setupLinkEmail(user.name, user.tenant?.name ?? null, url, lang);
 
   const payload: NotificationPayload = {
     tenantId: user.tenantId,
@@ -194,7 +170,7 @@ export async function sendSetupLinkEmail(userId: string): Promise<void> {
   };
 
   try {
-    await sendHtmlEmail(user.email, subject, html, text);
+    await sendHtmlEmail(user.email, subject, html, text, lang);
     await logNotification(payload, "sent");
   } catch (err: any) {
     console.error("Failed to send setup link email:", err);
@@ -292,6 +268,60 @@ export function onboardingEmailHtml(adminName: string, tenantName: string, setup
     expiryNote: `This link works once and expires in <strong style="color:${EC.strong};">48 hours</strong>. You'll choose your password on the way.`,
     footerNote: "You're receiving this because a GOTCHA. workspace was created for this address.",
   });
+}
+
+/**
+ * The resend of a setup link, in the workspace's language. Terse on purpose:
+ * the recipient asked for a link that works, and that is all this says.
+ */
+export function setupLinkEmail(
+  userName: string,
+  tenantName: string | null,
+  url: string,
+  locale?: string,
+): { subject: string; html: string; text: string } {
+  const name = escapeHtml(userName);
+  if (emailLocale(locale) === "he") {
+    const where = tenantName ? `לסביבת העבודה ${escapeHtml(tenantName)}` : "לסביבת העבודה";
+    return {
+      subject: "קישור חדש לבחירת סיסמה ב\u2011GOTCHA.",
+      html: renderBrandEmail({
+        locale: "he",
+        title: "קישור חדש לבחירת סיסמה ב\u2011GOTCHA.",
+        preheader: "הנה קישור חדש. הוא בתוקף 48 שעות.",
+        eyebrow: "קישור חדש",
+        icon: "&#128273;",
+        headline: "הנה קישור חדש.",
+        subhead: `${name}, בוחרים סיסמה ונכנסים ${where}.`,
+        bodyHtml: emailParagraph("הקישור הקודם פג. אין שום בעיה בחשבון ושום דבר לא אבד.", "he"),
+        cta: { label: "בוחרים סיסמה", url },
+        fallbackUrl: url,
+        expiryNote: `הקישור בתוקף <strong style="color:${EC.strong};">48 שעות</strong>`,
+        footerNote: "קיבלתם את המייל הזה כי ביקשתם קישור חדש.",
+      }),
+      text: [`שלום ${userName},`, "", "הנה קישור חדש לבחירת סיסמה:", url, "", "הקישור בתוקף 48 שעות.", "", "צוות GOTCHA."].join("\n"),
+    };
+  }
+  const org = escapeHtml(tenantName ?? "your workspace");
+  return {
+    subject: "Your new GOTCHA setup link",
+    html: renderBrandEmail({
+      title: "Set your password - GOTCHA.",
+      preheader: "Here is a fresh link. This one is good for 48 hours.",
+      eyebrow: "New link",
+      icon: "&#128273;",
+      headline: "Here is a fresh link.",
+      subhead: `${name}, set your password and you are into ${org}.`,
+      bodyHtml: emailParagraph(
+        "The previous link had expired. Nothing is wrong with your account and nothing was lost.",
+      ),
+      cta: { label: "Set my password", url },
+      fallbackUrl: url,
+      expiryNote: `This link expires in <strong style="color:${EC.strong};">48 hours</strong>`,
+      footerNote: "You're receiving this because you asked for a new setup link.",
+    }),
+    text: [`Hello ${userName},`, "", "Here is a fresh link to set your password:", url, "", "This link expires in 48 hours.", "", "The Gotcha. Team"].join("\n"),
+  };
 }
 
 export function activationEmailHtml(
@@ -466,7 +496,7 @@ export async function sendOnboardingEmail(
   };
 
   try {
-    await sendHtmlEmail(adminEmail, subject, html, text);
+    await sendHtmlEmail(adminEmail, subject, html, text, lang);
     await logNotification(payload, "sent");
   } catch (err: any) {
     console.error("Failed to send onboarding email:", err);

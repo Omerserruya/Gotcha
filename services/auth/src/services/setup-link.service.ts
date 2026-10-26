@@ -206,6 +206,20 @@ export type RedeemOutcome =
  * were already using.
  */
 export async function redeemForRecoveryUrl(link: ResolvedSetupLink): Promise<RedeemOutcome> {
+  const ready = await identityForSetup(link);
+  if (ready.status !== "ready") return ready;
+  return { status: "recovery", url: await createRecoveryLink(ready.pk) };
+}
+
+/**
+ * Everything a redeem checks, short of minting: the identity exists and has
+ * never signed in. Split out so the accept route can record the Terms
+ * acceptance BETWEEN the check and the mint - nothing is recorded for a link
+ * that cannot set a password, and no token exists before the record does.
+ */
+export async function identityForSetup(
+  link: ResolvedSetupLink,
+): Promise<{ status: "ready"; pk: number } | Exclude<RedeemOutcome, { status: "recovery" }>> {
   const identity = link.authentikSubject
     ? await findIdentityBySubject(link.authentikSubject)
     : await ensureIdentity(link.email, link.name);
@@ -216,7 +230,23 @@ export async function redeemForRecoveryUrl(link: ResolvedSetupLink): Promise<Red
     .catch(() => false);
   if (hasLoggedIn) return { status: "already_has_password" };
 
-  return { status: "recovery", url: await createRecoveryLink(identity.pk) };
+  return { status: "ready", pk: identity.pk };
+}
+
+/**
+ * A minted recovery URL, as the two things the app's /recover screen drives:
+ * the flow slug and its token. Null when Authentik answered with a shape we do
+ * not recognise - better a refusal than a screen that cannot start.
+ */
+export function flowOfRecoveryUrl(url: string): { flow: string; flowToken: string } | null {
+  try {
+    const u = new URL(url);
+    const flow = /\/if\/flow\/([a-z0-9][a-z0-9-]{0,63})\/?$/.exec(u.pathname)?.[1];
+    const flowToken = u.searchParams.get("flow_token");
+    return flow && flowToken ? { flow, flowToken } : null;
+  } catch {
+    return null;
+  }
 }
 
 function constantTimeEquals(a: string, b: string): boolean {

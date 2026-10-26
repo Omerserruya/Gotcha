@@ -255,17 +255,30 @@ function appUrl(): string {
 }
 
 /**
- * Where the public Terms and Privacy Policy live.
- *
- * `/legal/:slug` is served by the same app on every host and is not gated
- * behind the marketing check, so the app origin every other email link is
- * built from is the right base here too.
+ * The version of each document a person accepts, as the document itself states
+ * it: its effective date (docs/legal/<locale>/<slug>.md). Recorded on every
+ * ConsentRecord, because "accepted the Terms" is only evidence when it says
+ * which Terms. A test pins these to the documents.
  */
-export function legalUrls(): { terms: string; privacy: string } {
-  const base = appUrl();
+export const LEGAL_VERSIONS = {
+  terms: "2026-07-27",
+  privacy: "2026-07-18",
+} as const;
+
+/**
+ * Where the public Terms and Privacy Policy live: the Trust Center itself.
+ *
+ * Not `<app>/legal/<slug>`, though that works: it is a 301 to gotcha.co.il and
+ * a second one to the Trust Center (measured 2026-10-26), and it always lands
+ * on the ENGLISH page. A Hebrew email links the Hebrew documents, which are the
+ * authoritative ones.
+ */
+export function legalUrls(locale?: string | null): { terms: string; privacy: string } {
+  const base = (process.env.TRUST_PUBLIC_URL || "https://trust.gotcha.co.il").replace(/\/+$/, "");
+  const prefix = typeof locale === "string" && locale.toLowerCase().startsWith("he") ? "/he" : "";
   return {
-    terms: `${base}/legal/terms-of-service`,
-    privacy: `${base}/legal/privacy-policy`,
+    terms: `${base}${prefix}/terms-of-service`,
+    privacy: `${base}${prefix}/privacy-policy`,
   };
 }
 
@@ -278,19 +291,19 @@ export function legalUrls(): { terms: string; privacy: string } {
  * message, and it should never compete with the thing the email is about.
  */
 export function legalConsentHtml(he = false): string {
-  const { terms, privacy } = legalUrls();
+  const { terms, privacy } = legalUrls(he ? "he" : "en");
   const link = (href: string, label: string) =>
     `<a href="${safeHref(href)}" style="color:${EC.onDarkLink};text-decoration:underline;">${label}</a>`;
   return he
-    ? `ההקמה והחיבור של חשבונות מהווים הסכמה ל${link(terms, "תנאי השימוש")} ול${link(privacy, "מדיניות הפרטיות")} שלנו.`
+    ? `ההקמה והחיבור של חשבונות מהווים הסכמה ל${link(terms, "תנאי השירות")} ול${link(privacy, "מדיניות הפרטיות")} שלנו.`
     : `Setting up your workspace and connecting accounts means you accept our ${link(terms, "Terms of Service")} and ${link(privacy, "Privacy Policy")}.`;
 }
 
 /** The same line for the text/plain part, where a link has to be spelled out. */
 export function legalConsentText(he = false): string {
-  const { terms, privacy } = legalUrls();
+  const { terms, privacy } = legalUrls(he ? "he" : "en");
   return he
-    ? `ההקמה והחיבור של חשבונות מהווים הסכמה לתנאי השימוש (${terms}) ולמדיניות הפרטיות (${privacy}) שלנו.`
+    ? `ההקמה והחיבור של חשבונות מהווים הסכמה לתנאי השירות (${terms}) ולמדיניות הפרטיות (${privacy}) שלנו.`
     : `Setting up your workspace and connecting accounts means you accept our Terms of Service (${terms}) and Privacy Policy (${privacy}).`;
 }
 
@@ -302,7 +315,7 @@ export function legalConsentText(he = false): string {
  */
 export function withLegalConsentText(text: string, he = false): string {
   const line = legalConsentText(he);
-  if (text.includes(legalUrls().terms)) return text;
+  if (text.includes(legalUrls(he ? "he" : "en").terms)) return text;
   return `${text.replace(/\s+$/, "")}\n\n---\n${line}`;
 }
 

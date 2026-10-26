@@ -5,17 +5,30 @@
  * That is the entire point - the token in the URL is what identifies them, and
  * it is the only thing this router will accept as identification.
  *
- * `GET /api/auth/setup/:token` mints a FRESH Authentik recovery link and
- * redirects into it. Nothing here can set a password; Authentik still owns the
- * credential, exactly as it did when we mailed its link directly. What changed
- * is WHEN the IdP's 30-minute window opens: at the click instead of at the send.
+ * `GET /api/auth/setup/:token` sends the person to the app's /recover screen
+ * with our token. `POST /api/auth/setup/:token/accept` records their acceptance
+ * of the Terms and the Privacy Policy and only THEN mints a fresh Authentik
+ * recovery link, answered as the flow and token the screen drives. Nothing here
+ * can set a password; Authentik still owns the credential. What we own is that
+ * no first password can be set without a recorded acceptance: before it, no
+ * token exists to set one with.
  */
 import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { resolveAppPublicUrl, writeAudit, AuditAction, prisma, withCrossTenantAccess } from "@chatcenter/shared";
+import {
+  resolveAppPublicUrl,
+  writeAudit,
+  AuditAction,
+  prisma,
+  withCrossTenantAccess,
+  createRecoveryLink,
+  legalUrls,
+  LEGAL_VERSIONS,
+} from "@chatcenter/shared";
 import {
   resolveSetupLink,
-  redeemForRecoveryUrl,
+  identityForSetup,
+  flowOfRecoveryUrl,
   markSetupLinkUsed,
   ownerOfSetupToken,
 } from "../services/setup-link.service";
@@ -34,6 +47,10 @@ const router = Router();
  */
 const redeemLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 const resendLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5 });
+const acceptLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+
+/** The flow the setup screen names; the slug the token is minted for comes back from Authentik. */
+const SETUP_FLOW = "gotcha-recovery";
 
 /** Where a link that cannot be redeemed sends the person. */
 function expiredPage(reason: string, token?: string): string {
@@ -45,13 +62,6 @@ function expiredPage(reason: string, token?: string): string {
   return token ? `${base}&t=${encodeURIComponent(token)}` : base;
 }
 
-/**
- * Redeem a setup link.
- *
- * Always a redirect, never a JSON body: this URL is opened by a human in a
- * browser straight from an email, and the only useful response is the next
- * screen.
- */
 /**
  * GET /:token/state - the invitation as DATA.
  *
@@ -111,6 +121,14 @@ router.get("/:token/state", redeemLimiter, async (req: Request, res: Response): 
   });
 });
 
+/**
+ * The emailed link: to the app's own setup screen, with our token.
+ *
+ * ★ NOTHING IS MINTED HERE. The Authentik token is minted by `/accept`, after
+ *   the Terms are accepted. A mail scanner that opens this link spends nothing
+ *   and records nothing.
+ * A dead link still goes straight to the expiry page, which can offer a resend.
+ */
 router.get("/:token", redeemLimiter, async (req: Request, res: Response): Promise<void> => {
   const raw = String(req.params.token ?? "");
   const resolution = await resolveSetupLink(raw);
@@ -131,20 +149,110 @@ router.get("/:token", redeemLimiter, async (req: Request, res: Response): Promis
     return;
   }
 
-  const { link } = resolution;
-  try {
-    const outcome = await redeemForRecoveryUrl(link);
+  const query = new URLSearchParams({ flow: SETUP_FLOW, setup: raw }).toString();
+  res.redirect(302, `${resolveAppPublicUrl(process.env)}/recover?${query}`);
+});
 
-    if (outcome.status === "already_has_password") {
-      // Not an error, and deliberately not the expiry page. This person has a
-      // credential already; the honest next screen is the ordinary way in.
-      res.redirect(302, `${resolveAppPublicUrl(process.env)}/api/auth/login?returnTo=${encodeURIComponent("/onboarding")}`);
+/** The first X-Forwarded-For hop (set by the gateway), as account.ts reads it. */
+function clientIp(req: Request): string | null {
+  const fwd = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+  return fwd || req.ip || null;
+}
+
+/**
+ * POST /:token/accept - the Terms and the Privacy Policy accepted, then the
+ * first-password flow minted.
+ *
+ * Body: { terms: true, privacy: true, locale: "he" | "en", capturedText }.
+ * Answers:
+ *   200 { status: "recovery", flow, flowToken }      the screen starts the flow
+ *   200 { status: "already_has_password", next }     the ordinary way in
+ *   200 { status: "expired", reason }                invalid | expired | revoked | identity_missing
+ *   400 { error: "consent_required" }                either box not true; nothing written
+ *   503 { error: "idp_unavailable" }                 the IdP, or the record, failed
+ *
+ * ★ ORDER IS THE GUARANTEE. Link checked, identity checked, then BOTH consent
+ *   rows written in one transaction, then the mint. A failed write mints
+ *   nothing, so there is never a token without its acceptance on file. A failed
+ *   mint after a written acceptance is harmless: the person did accept, and a
+ *   retry writes fresh rows (the ledger is append-only by design).
+ */
+router.post("/:token/accept", acceptLimiter, async (req: Request, res: Response): Promise<void> => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (body.terms !== true || body.privacy !== true) {
+    res.status(400).json({ error: "consent_required" });
+    return;
+  }
+  const locale = typeof body.locale === "string" && body.locale.toLowerCase().startsWith("he") ? "he" : "en";
+  const capturedText = typeof body.capturedText === "string" ? body.capturedText.trim().slice(0, 1000) : null;
+
+  const raw = String(req.params.token ?? "");
+  const resolution = await resolveSetupLink(raw);
+  if (!resolution.ok) {
+    res.json({ data: { status: "expired", reason: resolution.reason } });
+    return;
+  }
+  const { link } = resolution;
+
+  try {
+    const ready = await identityForSetup(link);
+    if (ready.status === "already_has_password") {
+      res.json({
+        data: {
+          status: "already_has_password",
+          next: `${resolveAppPublicUrl(process.env)}/api/auth/login?returnTo=${encodeURIComponent("/onboarding")}`,
+        },
+      });
       return;
     }
-    if (outcome.status === "no_identity") {
-      res.redirect(302, expiredPage("identity_missing", raw));
+    if (ready.status === "no_identity") {
+      res.json({ data: { status: "expired", reason: "identity_missing" } });
       return;
     }
+
+    const urls = legalUrls(locale);
+    const evidence = {
+      ip: clientIp(req),
+      userAgent: (req.headers["user-agent"] as string | undefined)?.slice(0, 500) ?? null,
+      capturedText,
+      locale,
+      channel: "setup",
+      setupLinkId: link.id,
+      acceptedAt: new Date().toISOString(),
+    };
+    const rows = [
+      { purpose: "terms_of_service", document: { url: urls.terms, version: LEGAL_VERSIONS.terms } },
+      { purpose: "privacy_policy", document: { url: urls.privacy, version: LEGAL_VERSIONS.privacy } },
+    ];
+    await withCrossTenantAccess(() =>
+      prisma.$transaction(
+        rows.map((r) =>
+          prisma.consentRecord.create({
+            data: {
+              tenantId: link.tenantId,
+              subjectType: "user",
+              subjectId: link.userId,
+              purpose: r.purpose,
+              granted: true,
+              source: "setup",
+              evidence: { ...evidence, document: r.document },
+            },
+          }),
+        ),
+      ),
+    );
+    void writeAudit({
+      tenantId: link.tenantId,
+      actorType: "user",
+      actorId: link.userId,
+      action: AuditAction.CONSENT_GRANTED,
+      targetType: "user",
+      targetId: link.userId,
+      metadata: { purposes: rows.map((r) => r.purpose), versions: LEGAL_VERSIONS, source: "setup", locale },
+    });
+
+    const flow = flowOfRecoveryUrl(await createRecoveryLink(ready.pk));
+    if (!flow) throw new Error("recovery link in an unrecognised shape");
 
     await markSetupLinkUsed(link.id);
     void writeAudit({
@@ -156,12 +264,12 @@ router.get("/:token", redeemLimiter, async (req: Request, res: Response): Promis
       targetId: link.userId,
       metadata: {},
     });
-    res.redirect(302, outcome.url);
+    res.json({ data: { status: "recovery", flow: flow.flow, flowToken: flow.flowToken } });
   } catch (err: any) {
-    // The IdP being unreachable is not the recipient's fault and must not read
-    // like a dead link, because theirs still works.
-    console.error("[setup-link] redeem failed:", err?.message ?? err);
-    res.redirect(302, expiredPage("idp_unavailable", raw));
+    // The IdP (or the database) being unreachable is not the recipient's fault
+    // and must not read like a dead link, because theirs still works.
+    console.error("[setup-link] accept failed:", err?.message ?? err);
+    res.status(503).json({ error: "idp_unavailable" });
   }
 });
 
