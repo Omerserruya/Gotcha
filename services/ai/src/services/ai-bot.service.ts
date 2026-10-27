@@ -32,7 +32,7 @@ import {
   shouldRegenerateForAddress,
 } from "@chatcenter/shared";
 import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
-import { runProductDiscoveryTurn, prefetchDiscoveryExtraction, productDiscoveryMayApply, preSearchEnabled, mentionsAudience, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
+import { runProductDiscoveryTurn, prefetchDiscoveryExtraction, productDiscoveryMayApply, preSearchEnabled, preSearch2Enabled, mentionsAudience, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, finalProductReply, compactWooVariations, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3332,13 +3332,77 @@ async function generateAIBotReplyInner(
         `in a few ${replyLocale === "he" ? "Hebrew" : "English"} words each. At most one light question after, with at most two options.`,
     });
   }
+  // P1 (dev 2026-10-27): a choice and nothing else ("אני לוקח את מעיל הצמר").
+  // The reply is the acknowledgement and the add-ons; the model's text on such
+  // a turn was always replaced by them, after 10 to 15s of rounds. With any
+  // question or request in the message, or no add-ons to show, the model's
+  // path as before (the add-ons follow its answer).
+  let choiceShortCircuit = false;
+  if (wooTurn?.suggestComplementary && !pendingApprovals.length && pureChoice(opts.incomingMessage)) {
+    const anchorId = crossSellAnchor(opts.incomingMessage ?? "", wooTurn.shown, await pageProductId(opts.tenantId, opts.conversationId));
+    if (anchorId && (await claimCrossSell(opts.conversationId, anchorId))) {
+      const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId).catch(() => null);
+      if (record) {
+        wooTurn.staged.push(record);
+        replyText = `${choiceAckLine(replyLocale)}\n${goesWellWithLine(replyLocale)}`;
+        choiceShortCircuit = true;
+        console.log(`[ai-bot][choice] anchor=${anchorId}: the acknowledgement and the add-ons, no model round conv=${opts.conversationId}`);
+      } else {
+        await releaseCrossSell(opts.conversationId, anchorId);
+      }
+    }
+  }
+
+  // P2 (dev 2026-10-27, AI_PRESEARCH2): a re-search turn ("תראה לי", "לגבר",
+  // "עד 300") predictably runs the last search again with what this message
+  // adds. It runs here, its results go in the prompt, and nothing is forced:
+  // the model answers from them in one round, or searches itself as before.
+  let presearch2: { args: Record<string, unknown>; content: string } | null = null;
+  if (!choiceShortCircuit && preSearch2Enabled() && wooTurn && !discoveryForceTool && !ackOverCards
+    && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)) {
+    const predicted = predictedSearch(opts.incomingMessage, await lastSearchArgs(opts.tenantId, opts.conversationId).catch(() => null), {
+      showMe: SHOW_ME.test(opts.incomingMessage ?? ""),
+      namesProduct: namesProduct(opts.incomingMessage ?? ""),
+    });
+    if (predicted) {
+      try {
+        const args = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", args: predicted });
+        const got = await executeAdapterTool({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          contactId: contactRow?.id,
+          toolFunctionName: "woocommerce.list_products",
+          args,
+          accessScope: opts.onboardingTest ? "internal" : "customer",
+          ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
+        });
+        const content = JSON.stringify(got.ok ? { ok: true, result: got.result } : { ok: false, reason: (got as any).reason });
+        const envlp = got.ok ? await groundProductSearchResult({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", rawContent: content }) : null;
+        if (envlp && envlp.status === "ok" && envlp.candidates.length) {
+          productEnvelope = envlp;
+          productBudget = envlp.budget ?? null;
+          presearch2 = { args, content };
+          chatMessages.push({
+            role: "system",
+            content:
+              `LIVE SEARCH, already run this turn for what the customer just said (${JSON.stringify(args)}). ` +
+              "If these products answer the customer, reply now from them and do NOT call the search again; call a tool only for a different search.\n\n" +
+              buildKeyedModelSummary(envlp, replyLocale, cardChannel),
+          });
+        }
+      } catch (err: any) {
+        console.warn(`[ai-bot][presearch2] the predicted search failed (the model searches as before): ${err?.message} conv=${opts.conversationId}`);
+      }
+    }
+  }
+
   let searchNudged = false;
   // The round after tool results writes the answer from them: AI_ANSWER_EFFORT
   // sets its reasoning effort (unset = unchanged). Never the round that decides
   // what to call.
   const answerEffort = answerRoundEffort();
   let afterTools = false;
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < (choiceShortCircuit ? 0 : 3); round++) {
     const preSearch = round === 0 && discoveryPreSearch ? discoveryPreSearch : null;
     if (preSearch) console.log(`[ai-bot][presearch] ${preSearch.tool} ${JSON.stringify(preSearch.args)} conv=${opts.conversationId}`);
     const response: Awaited<ReturnType<typeof generateResponse>> = preSearch ? {
@@ -5197,6 +5261,12 @@ async function generateAIBotReplyInner(
   // questions, a question after a thank-you). Any violation: ONE regeneration,
   // without tools, naming exactly what to fix; whatever comes back is sent.
   markStage("model_done");
+  // P2's hit or miss: used when the model ran no product search of its own.
+  if (presearch2) {
+    const used = !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
+    if (used) toolCallLog.push({ tool: "woocommerce.list_products", args: presearch2.args, result: presearch2.content, decision: "presearch2", sideEffect: "none" } as any);
+    console.log(`[ai-bot][presearch2] predicted=${JSON.stringify(presearch2.args)} used=${used ? "yes" : "no"} conv=${opts.conversationId}`);
+  }
   // The model's own draft names the products with PRODUCT_n keys; a fix or a
   // rewrite takes the keys out of the sentence, and the cards still follow it.
   // The products to show, from the SHOW line (or the keys in the text when the

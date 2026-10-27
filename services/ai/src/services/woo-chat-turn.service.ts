@@ -332,6 +332,73 @@ export function commitsToBuy(text: string | null | undefined): boolean {
   return /(?:^|[\s,.!])(?:אקח|ניקח|אני לוקח|אני לוקחת|לוקח(?:ת)? (?:את|אותו|אותה|אותם)|אזמין|נזמין|אני מזמין|אני מזמינה|רוצה להזמין|רוצים להזמין|הוספתי (?:\S+ ){0,4}ל(?:סל|עגלה))(?=$|[\s,.!])|\bI(?:'ll| will) (?:take|buy|order|get) (?:it|this|that|the|one|them)\b|\bI(?:'d| would) like to order\b|\b(?:I )?added (?:it|this|that|them|the \S+(?: \S+)?) to (?:the |my )?(?:cart|basket)\b/iu.test(t);
 }
 
+/**
+ * A choice and nothing else (P1, 2026-10-27): "אני לוקח את מעיל הצמר". Any
+ * question or extra request in the same message ("אני לוקח, יש משלוח מהיר")
+ * is not, and goes the model's way with the add-ons after the answer.
+ */
+export function pureChoice(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  if (!commitsToBuy(t) || /[?؟]/.test(t)) return false;
+  if (t.split(/\s+/).length > 8) return false;
+  return !/(?<![\u0590-\u05FF])[ובלהש]{0,2}(?:יש|אפשר|מתי|כמה|איך|האם|מה|איפה|למה|תשלח|תשלחו|שלח|שלחו|תוסיף|תוסיפו|תעדכן|תבדוק|תבדקו|משלוח|החזרה|החזרות|הנחה|קופון|מידה|מידות|צבע|צבעים|מהיר)(?![\u0590-\u05FF])|\b(?:is|are|can|could|when|how|what|ship|shipping|delivery|size|colou?r|discount|coupon)\b/iu.test(t);
+}
+
+/** Who a refinement says it is for, when the words say it outright; null otherwise ("בשבילי" alone says nothing). */
+export function audienceOf(text: string | null | undefined): "men" | "women" | null {
+  const t = String(text ?? "");
+  const men = /(?<![\u0590-\u05FF])[ולבשה]{0,2}(?:גבר|גברים|בעלי|אבא|אבי)(?![\u0590-\u05FF])|\b(?:men|man|husband|dad|father)\b/iu.test(t);
+  const women = /(?<![\u0590-\u05FF])[ולבשה]{0,2}(?:אישה|אשה|נשים|אשתי|אחותי|אמא|אמי)(?![\u0590-\u05FF])|\b(?:women|woman|wife|sister|mom|mother)\b/iu.test(t);
+  return men === women ? null : men ? "men" : "women";
+}
+
+/** A budget the message states ("עד 300", "under 300"); null when none. */
+export function budgetOf(text: string | null | undefined): number | null {
+  const m = /(?:עד|תקציב(?: של)?|under|up to)\s*₪?\s*(\d{2,6})/iu.exec(String(text ?? ""));
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * The search a re-search turn will predictably run (P2): the conversation's
+ * last product search, with the audience or budget this message adds. Only on
+ * "תראה לי", an audience or a budget; never when the message names another
+ * product (that is a new search, the model's). Null when there is nothing to predict.
+ */
+export function predictedSearch(
+  incoming: string | null | undefined,
+  last: Record<string, unknown> | null,
+  o: { showMe: boolean; namesProduct: boolean },
+): Record<string, unknown> | null {
+  if (!last || typeof last.query !== "string" || !last.query.trim() || o.namesProduct) return null;
+  const audience = audienceOf(incoming);
+  const budget = budgetOf(incoming);
+  if (!o.showMe && !audience && budget == null) return null;
+  return {
+    query: last.query,
+    per_page: typeof last.per_page === "number" ? last.per_page : 10,
+    ...(last.in_stock === true ? { in_stock: true } : {}),
+    ...(audience ? { audience } : typeof last.audience === "string" ? { audience: last.audience } : {}),
+    ...(budget != null ? { price_max: budget } : typeof last.price_max === "number" ? { price_max: last.price_max } : {}),
+  };
+}
+
+/** The arguments of this conversation's last product search, from the turn audits; null when none. */
+export async function lastSearchArgs(tenantId: string, conversationId: string): Promise<Record<string, unknown> | null> {
+  const rows = await prisma.auditLog.findMany({
+    where: { tenantId, action: "ai.bot_turn", metadata: { path: ["conversationId"], equals: conversationId } } as any,
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: { metadata: true },
+  }).catch(() => [] as any[]);
+  for (const r of rows as any[]) {
+    const calls = Array.isArray(r?.metadata?.toolCalls) ? r.metadata.toolCalls : [];
+    for (let i = calls.length - 1; i >= 0; i--) {
+      if (calls[i]?.tool === "woocommerce.list_products" && calls[i]?.args && typeof calls[i].args === "object") return calls[i].args;
+    }
+  }
+  return null;
+}
+
 const HEBREW_TITLE_WORDS: Array<[RegExp, string[]]> = [
   [/טרנץ/u, ["trench"]], [/מעיל/u, ["coat", "overcoat", "parka"]], [/צמר/u, ["wool"]], [/כותנה/u, ["cotton"]],
   [/פשתן/u, ["linen"]], [/עור/u, ["leather"]], [/סוודר|סריג/u, ["sweater", "knit", "jumper"]], [/קרדיגן/u, ["cardigan"]],

@@ -535,6 +535,13 @@ export function preSearchEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
   return env.NODE_ENV === "development";
 }
 
+/** P2, the predicted re-search ahead of the model: AI_PRESEARCH2=1/0; unset, on only where NODE_ENV is development. */
+export function preSearch2Enabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.AI_PRESEARCH2 === "1") return true;
+  if (env.AI_PRESEARCH2 === "0") return false;
+  return env.NODE_ENV === "development";
+}
+
 const AUDIENCE_WORDS = /(?<![\u0590-\u05FF])[ולבש]?(?:גבר|גברים|בעלי|אבא|אבי|הבן|אישה|אשה|נשים|אשתי|אמא|אמי|הבת|לבת|ילד|ילדה|ילדים)(?![\u0590-\u05FF])|\b(?:men|man|women|woman|him|her|husband|wife|dad|mom|son|daughter|kids?)\b/iu;
 
 /** Anyone the customer named the purchase for, in any of their messages: the model passes the audience then. */

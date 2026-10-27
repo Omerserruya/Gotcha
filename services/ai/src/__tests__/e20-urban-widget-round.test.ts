@@ -520,7 +520,8 @@ describe("e25: the add-ons win over the model's own cards", () => {
   it("wired: no staged-cards condition, the model's pick replaced", () => {
     const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     expect(bot).toContain("if (replyText && wooTurn?.suggestComplementary && !awaitingApproval && !pendingEscalation && commitsToBuy(opts.incomingMessage)) {");
-    const i = bot.indexOf("const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId)");
+    // The after-the-answer path (P1's no-model path comes earlier in the turn).
+    const i = bot.lastIndexOf("const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId)");
     expect(bot.slice(i, i + 300)).toContain("wooTurn.staged.length = 0;");
   });
 });
