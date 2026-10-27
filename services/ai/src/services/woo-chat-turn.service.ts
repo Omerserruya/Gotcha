@@ -653,7 +653,10 @@ export function productQuestion(text: string | null | undefined, colours: number
 export const HEBREW_PRODUCT_GLOSSARY =
   "Hebrew to the English titles use: תיק בד = canvas tote; תיק עור = leather bag; כובע גרב = beanie; קפוצ'ון / הודי = hoodie; " +
   "סוודר / סריג = sweater, knit; קרדיגן = cardigan; גופיה = tank top; טישירט = tee, t-shirt; חולצה מכופתרת = shirt; " +
-  "מכנסיים = pants; ג'ינס = jeans; שמלה = dress; חצאית = skirt; מעיל = coat; טרנץ' = trench coat; ז'קט = jacket; צעיף = scarf; גרביים = socks.";
+  "מכנסיים = pants; ג'ינס = jeans; שמלה = dress; חצאית = skirt; מעיל = coat; טרנץ' = trench coat; ז'קט = jacket; צעיף = scarf; גרביים = socks. " +
+  // The other way, for describing a card in Hebrew: never transliterate a title
+  // word ("כובע צמר ריב", "ליימבוול", urban-e25/e26).
+  "In Hebrew say: ribbed = בסריגת צלעות; lambswool = צמר כבשים רך; cropped = קצר; overshirt = חולצה עליונה; hoodie = קפוצ'ון; beanie = כובע גרב; crossbody bag = תיק צד; tote = תיק בד. Never write an English title word in Hebrew letters.";
 
 /**
  * Add to cart on a card (2a ii): the store checked the line, so the shopper

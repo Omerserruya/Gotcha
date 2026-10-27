@@ -5579,6 +5579,10 @@ async function generateAIBotReplyInner(
         customerClosing: customerIsClosing(opts.incomingMessage),
         productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
         cardsShown: gateCards,
+        // Our earlier text replies (not the cards' own lines), for the repeat check.
+        previousReplies: (messages as any[])
+          .filter((m) => m.direction === "OUTBOUND" && !/product/.test(String(m.messageType ?? "")) && !String(m.senderName ?? "").includes("@"))
+          .slice(-3).map((m) => String(m.body ?? "")),
       };
       replyText = normalizePunctuation(replyText);
       const issues = finalTextIssues(replyText, gateCtx);

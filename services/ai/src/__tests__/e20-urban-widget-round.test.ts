@@ -524,3 +524,32 @@ describe("e25: the add-ons win over the model's own cards", () => {
     expect(bot.slice(i, i + 300)).toContain("wooTurn.staged.length = 0;");
   });
 });
+
+// ── urban-e26 ────────────────────────────────────────────────────────────────
+describe("e26: a rewrite that repeats the previous reply does not go", () => {
+  const prev = "מעיל צמר ארוך, קלאסי וחם, מתאים ללבוש יומיומי או לעבודה.";
+  it("the final gate sees it", () => {
+    expect(finalTextIssues("מעיל צמר ארוך, קלאסי, חם ומתאים ללבוש יומיומי ולעבודה.", gate({ previousReplies: [prev] }))).toContain("repeated");
+  });
+  it("our own short lines may recur", () => {
+    expect(finalTextIssues("הנה שוב:", gate({ previousReplies: ["הנה שוב:"] }))).toEqual([]);
+  });
+  it("wired with the earlier text replies, not the cards' lines", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain(`.filter((m) => m.direction === "OUTBOUND" && !/product/.test(String(m.messageType ?? "")) && !String(m.senderName ?? "").includes("@"))`);
+  });
+});
+
+describe("e26: wording", () => {
+  it("\"עצם שמתאים כמתנה\" is a calque", () => {
+    expect(kinds("צעיף צמר רך, עצם שמתאים כמתנה נעימה.")).toContain("banned_phrase");
+  });
+  it("invisible direction marks are removed", () => {
+    expect(polishReply("משלוח חינם מעל ‎₪299.", { locale: "he" })).toBe("משלוח חינם מעל ₪299.");
+  });
+  it("the glossary gives the Hebrew for title words, never a transliteration", async () => {
+    const { HEBREW_PRODUCT_GLOSSARY } = await import("../services/woo-chat-turn.service");
+    expect(HEBREW_PRODUCT_GLOSSARY).toContain("ribbed = בסריגת צלעות");
+    expect(HEBREW_PRODUCT_GLOSSARY).toContain("Never write an English title word in Hebrew letters.");
+  });
+});

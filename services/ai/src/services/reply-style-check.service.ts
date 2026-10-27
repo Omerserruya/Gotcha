@@ -89,7 +89,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן", "עצם שמתאים", "עצם שיתאים"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -770,6 +770,11 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
   if (words < 3 && !/:\s*$/.test(t) && !ctx.customerClosing) out.push("too_short");
   if (!ctx.cardsShown && POINTS_AT_PRODUCTS.test(t) && !/[?؟]/.test(t) && words <= 6) out.push("points_at_nothing");
+  // A rewrite is not style-checked again, and urban-e26's came back as the
+  // previous reply nearly word for word.
+  const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
+  // Our own short lines ("הנה שוב:", "בכיף 🙂") may recur; only a real reply counts.
+  if (words >= 5 && (ctx.previousReplies ?? []).some((r) => norm(r) === norm(t) || nearlySame(r, t))) out.push("repeated");
   for (const v of checkReplyStyle(t, ctx)) {
     if (v.kind === "gendered_address" || v.kind === "mixed_address") out.push("gendered");
     if (v.kind === "banned_phrase") out.push("calque");
@@ -809,6 +814,7 @@ export function finalRewriteInstruction(text: string, issues: string[], locale: 
     "- no product key (PRODUCT_1), no store title, no SHOW line: the cards show the products;",
     "- address the customer neutrally (no gendered verb, participle or pronoun);",
     "- no fragment, no dangling word, every question with a verb;",
+    "- never what you already said in an earlier message: if it was a repeat, say something new in one short line (the one open question, or a light nudge);",
     "- one or two short sentences. Reply with the message only.",
   ].join("\n");
 }
@@ -886,6 +892,9 @@ export function finalizeRewrite(text: string, ctx: StyleCheckContext): { text: s
 
 export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string; cardsShown?: boolean }): string {
   if (!text) return text;
+  // Invisible direction marks copied from scraped pages ("‎₪299", urban-e26):
+  // the chat lays out the text itself; a stray mark only shifts it.
+  text = text.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
   const titles = (opts.productTitles ?? []).filter(Boolean).sort((a, b) => b.length - a.length);
   const held: string[] = [];
   let out = text;
