@@ -121,6 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
+import { capped } from "./judgement-cap";
 import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -243,7 +244,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -1374,13 +1375,13 @@ async function buildSessionFactsBlock(opts: {
   const base = parts.length ? parts.join("\n\n") : undefined;
   const full = (async () => {
     if (!opts.knowledgeFields?.length || !inboundMsgs.length) return base;
-    const resolved = await resolveSessionKnowledge({
+    const resolved = await capped(resolveSessionKnowledge({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
       fields: opts.knowledgeFields,
       inboundTexts: inboundMsgs,
       signal: opts.signal,
-    });
+    }), [], "knowledge-resolve", opts.conversationId);
     if (!resolved.length) return base;
     const keyed =
       "## Facts established this conversation (keyed - treat as known, do NOT re-ask)\n" +
@@ -3360,10 +3361,17 @@ async function generateAIBotReplyInner(
   let presearch2: { args: Record<string, unknown>; content: string } | null = null;
   if (!choiceShortCircuit && preSearch2Enabled() && wooTurn && !discoveryForceTool && !ackOverCards
     && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)) {
-    const predicted = predictedSearch(opts.incomingMessage, await lastSearchArgs(opts.tenantId, opts.conversationId).catch(() => null), {
-      showMe: SHOW_ME.test(opts.incomingMessage ?? ""),
-      namesProduct: namesProduct(opts.incomingMessage ?? ""),
+    const last = await lastSearchArgs(opts.tenantId, opts.conversationId).catch((err: any) => {
+      console.warn(`[ai-bot][presearch2] reading the last search failed: ${err?.message} conv=${opts.conversationId}`);
+      return null;
     });
+    const showMe = SHOW_ME.test(opts.incomingMessage ?? "");
+    const predicted = predictedSearch(opts.incomingMessage, last, { showMe, namesProduct: namesProduct(opts.incomingMessage ?? "") });
+    // A turn that looked like a re-search but got no prediction says so, so
+    // the miss rate counts it (urban-e27: zero lines hid a broken read).
+    if (!predicted && (showMe || audienceOf(opts.incomingMessage) || budgetOf(opts.incomingMessage) != null)) {
+      console.log(`[ai-bot][presearch2] predicted=none (${last ? "another product named" : "no earlier search found"}) used=no conv=${opts.conversationId}`);
+    }
     if (predicted) {
       try {
         const args = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", args: predicted });

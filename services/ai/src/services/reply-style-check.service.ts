@@ -204,7 +204,7 @@ const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות 
 const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?:ל|את|אותו|אותה)|לסל|לעגלה|בעגלה|כרטיס המוצר|כרטיס|להזמין|לרכישה|לקנות|להשלים (?:את )?ה?הזמנה|להגיע לסכום|לשריין|add (?:it )?to (?:your |the )?cart|checkout|place (?:the|an|your) order)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
-const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])(?:ה?כרטיס(?:ים|י)?|כפתור|ה?תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
+const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלה]?(?:כרטיס(?:ים|י)?|כפתור|תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
 
 /** Offering to show what the cards already show: "אפשר להראות את הפרטים של שניהם?" (urban-e24). */
 export const OFFER_SHOW_BOTH = /(?:^|[.!?؟\n]\s*)[^.!?؟\n]*(?:להראות|להציג|לשלוח|שאראה|שאציג|שאשלח)[^.!?؟\n]*(?:שניהם|שתיהן|שלושתם|כולם|both|all of them)[^.!?؟\n]*[?؟]\s*$/iu;
@@ -742,8 +742,13 @@ export function normalizePunctuation(text: string): string {
     .replace(/^[\s,:;.–—-]+/u, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+\n/g, "\n")
+    // A blank line between two lines of a chat message reads as a gap (urban-e27).
+    .replace(/\n[ \t]*\n+/g, "\n")
     .trim();
 }
+
+/** A masculine product noun with a feminine adjective in the same phrase: "מעיל ... ארוך וחמימה" (urban-e27). */
+const NOUN_AGREEMENT = /(?<![\u0590-\u05FF])[הוב]?(?:מעיל|צעיף|כובע|סוודר|קרדיגן|ז'קט|תיק|חגור|טרנץ')(?![\u0590-\u05FF])[^.,!?؟\n]{0,30}?(?<![\u0590-\u05FF])ו?(?:חמימה|חמה|ארוכה|קלה|רכה|יפה|קצרה|נוחה|אלגנטית|קלאסית)(?![\u0590-\u05FF])/u;
 
 const DANGLING_END = /(?<![֐-׿])(?:למשל|כמו|כגון|לדוגמה|את|של|עם|על|אל)\s*[.!?؟,:]?\s*$/u;
 /** "באיזו מידה בדרך כלל?": a question with no verb (urban-e23). */
@@ -770,6 +775,10 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
   if (words < 3 && !/:\s*$/.test(t) && !ctx.customerClosing) out.push("too_short");
   if (!ctx.cardsShown && POINTS_AT_PRODUCTS.test(t) && !/[?؟]/.test(t) && words <= 6) out.push("points_at_nothing");
+  // Over new cards, a question and nothing else says nothing about them
+  // ("היי! איזו מידה מתאימה לך?", urban-e27): one line about them first.
+  if (ctx.cardsShown && !/:\s*$/.test(t) && sentencesOf.every((x) => /[?؟]\s*$/.test(x) || GREETING_ONLY.test(x))) out.push("question_only");
+  if (ctx.locale === "he" && NOUN_AGREEMENT.test(t)) out.push("agreement");
   // A rewrite is not style-checked again, and urban-e26's came back as the
   // previous reply nearly word for word.
   const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
@@ -813,7 +822,8 @@ export function finalRewriteInstruction(text: string, issues: string[], locale: 
     `It is not ready (${issues.join(", ")}). Rewrite it once as complete, natural ${locale === "he" ? "Hebrew" : "English"} sentences that keep what it says:`,
     "- no product key (PRODUCT_1), no store title, no SHOW line: the cards show the products;",
     "- address the customer neutrally (no gendered verb, participle or pronoun);",
-    "- no fragment, no dangling word, every question with a verb;",
+    "- no fragment, no dangling word, every question with a verb; adjectives agree with their noun (מעיל חם, not חמה);",
+    "- over cards just shown, one short line about them first, then at most one question;",
     "- never what you already said in an earlier message: if it was a repeat, say something new in one short line (the one open question, or a light nudge);",
     "- one or two short sentences. Reply with the message only.",
   ].join("\n");

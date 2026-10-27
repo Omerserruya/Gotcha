@@ -28,6 +28,8 @@ import { createHash } from "node:crypto";
 import { prisma, getRedis } from "@chatcenter/shared";
 import { evaluateWizardBinding } from "./wizard-binding.service";
 import { addsNothing } from "./reply-style-check.service";
+import { capped } from "./judgement-cap";
+import { EMPTY_WIZARD_FACTS } from "./objectives";
 import type { ActiveGoalSnapshot, WizardRuntimeFacts } from "./objectives";
 import type { CrmStateFlags } from "./prospect-state";
 
@@ -261,7 +263,7 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
     .filter((m) => m.direction === "INBOUND" && m.body?.trim())
     .map((m) => String(m.body).trim());
   const reused = await reusableWizardFacts(input.conversationId, bindingFingerprint, inbound);
-  const wizardFacts: WizardRuntimeFacts = reused ?? await evaluateWizardBinding({
+  const wizardFacts: WizardRuntimeFacts = reused ?? await capped(evaluateWizardBinding({
     tenantId: input.tenantId,
     conversationId: input.conversationId,
     role: input.role,
@@ -272,7 +274,7 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
     // Skill selection rides THIS call - no extra LLM call per turn.
     skills: input.skills,
     openSkillId: input.openSkillId,
-  });
+  }), EMPTY_WIZARD_FACTS, "wizard binding", input.conversationId);
 
   if (reused) console.log(`[plan-context] wizard binding reused: the turn adds nothing it reads conv=${input.conversationId}`);
   else void rememberWizardFacts(input.conversationId, bindingFingerprint, inbound, wizardFacts);

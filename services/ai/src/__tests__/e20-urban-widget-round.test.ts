@@ -317,7 +317,7 @@ describe("e22: the binding verdict is reused when the turn adds nothing it reads
   it("wired around the call, remembered only after a real evaluation", () => {
     const src = readFileSync(join(__dirname, "../services/plan-context.service.ts"), "utf8");
     expect(src).toContain("const reused = await reusableWizardFacts(input.conversationId, bindingFingerprint, inbound);");
-    expect(src).toContain("reused ?? await evaluateWizardBinding({");
+    expect(src).toContain("reused ?? await capped(evaluateWizardBinding({");
     expect(src).toContain("if (!(facts as any)?.evaluated) return;");
   });
 });

@@ -385,7 +385,9 @@ export function predictedSearch(
 /** The arguments of this conversation's last product search, from the turn audits; null when none. */
 export async function lastSearchArgs(tenantId: string, conversationId: string): Promise<Record<string, unknown> | null> {
   const rows = await prisma.auditLog.findMany({
-    where: { tenantId, action: "ai.bot_turn", metadata: { path: ["conversationId"], equals: conversationId } } as any,
+    // The turn audit names its conversation as the target (urban-e27: matching
+    // on metadata.conversationId found no row, so P2 never predicted).
+    where: { tenantId, action: "ai.bot_turn", targetType: "conversation", targetId: conversationId },
     orderBy: { createdAt: "desc" },
     take: 6,
     select: { metadata: true },

@@ -23,6 +23,7 @@ import {
   type DiscoveryProfile,
 } from "@chatcenter/shared";
 import { extractFieldsLive } from "./intelligence-live-extract.service";
+import { capped } from "./judgement-cap";
 import { prisma } from "@chatcenter/shared";
 import { normalizeShopifyProducts, normalizeWooProducts, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
 import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
@@ -343,11 +344,11 @@ export async function prefetchDiscoveryExtraction(opts: { tenantId: string; conv
     description: f.description,
     ...(f.enumValues ? { examples: f.enumValues } : {}),
   }));
-  const extracted = await extractFieldsLive({
+  const extracted = await capped(extractFieldsLive({
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     fields: specs as any,
-  }).catch(() => []);
+  }).catch(() => []), [], "discovery extraction", opts.conversationId);
   return { profile, extracted };
 }
 
