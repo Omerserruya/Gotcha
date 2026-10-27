@@ -89,7 +89,7 @@ describe("AC4: two questions, then show; one question with at most two options",
   });
   it("the turn is wired: a note before generating, and one look if it asks anyway", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src).toMatch(/DONT_MIND\.test\(opts\.incomingMessage \?\? ""\) \|\| discoveryStreak\(messages as any\[\]\) >= 2/);
+    expect(src).toMatch(/DONT_MIND\.test\(opts\.incomingMessage \?\? ""\) \|\| giftWithBudget \|\| discoveryStreak\(messages as any\[\]\) >= 2/);
     expect(src).toMatch(/asked again instead of recommending: searching now/);
   });
 });

@@ -28,7 +28,8 @@ describe("AA1: a question about the store gets the answer, never a forced search
     expect(src).toContain("lastOptionsAttached = true;");
   });
   it("cards stay off on a store question", () => {
-    expect(src).toContain('noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage),');
+    // (+ an acknowledgement over cards already shown, urban-e24)
+    expect(src).toContain('noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage) || ackOverCards,');
   });
 });
 

@@ -36,7 +36,8 @@ export type StyleViolationKind =
   | "recap_opener"
   | "long_menu"
   | "latin_titles"
-  | "menu_greeting";
+  | "menu_greeting"
+  | "echo_opener";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -145,8 +146,25 @@ function normalPrice(n: string): string {
 }
 /** The prices in a reply that appear nowhere in what grounds it. */
 export function ungroundedPrices(reply: string, grounding: string): string[] {
-  const known = new Set((grounding.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(normalPrice));
+  const known = new Set(groundedAmounts(grounding));
   return statedPrices(reply).filter((p) => !known.has(p));
+}
+/**
+ * The amounts the grounding states AS money: with a currency, as a price field,
+ * or as the customer's budget ("עד 300"). Any number used to count (dev
+ * 2026-10-27: "₪29" for shipping passed because "29.5577" sat in a prompt
+ * example; the store charges 25).
+ */
+export function groundedAmounts(grounding: string): string[] {
+  const out = new Set(statedPrices(grounding));
+  const n = "(\\d[\\d,]*(?:\\.\\d+)?)";
+  for (const re of [
+    new RegExp(`"(?:regular_|sale_)?price"\\s*:\\s*"?${n}`, "gi"),
+    new RegExp(`(?:price|מחיר|עולה|עולות|עולים)\\s*[:=]?\\s*${n}`, "gi"),
+    new RegExp(`(?:עד|תקציב(?: של)?|budget(?: of)?|under|up to|מעל|above|over|from|מ-?)\\s*${n}`, "gi"),
+    new RegExp(`${n}\\s*(?:NIS|ש["״']?ח|שקלים)`, "gi"),
+  ]) for (const m of grounding.matchAll(re)) out.add(normalPrice(m[1]));
+  return [...out].filter(Boolean);
 }
 /** The first price in the text, as written, that nothing in the grounding states; null when none. */
 function ungroundedPriceIn(text: string, grounding: string): string | null {
@@ -185,6 +203,8 @@ const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות 
 const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?:ל|את|אותו|אותה)|לסל|לעגלה|בעגלה|כרטיס המוצר|כרטיס|להזמין|לרכישה|לקנות|להשלים (?:את )?ה?הזמנה|להגיע לסכום|לשריין|add (?:it )?to (?:your |the )?cart|checkout|place (?:the|an|your) order)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
+/** Offering to show what the cards already show: "אפשר להראות את הפרטים של שניהם?" (urban-e24). */
+export const OFFER_SHOW_BOTH = /(?:^|[.!?؟\n]\s*)[^.!?؟\n]*(?:להראות|להציג|לשלוח|שאראה|שאציג|שאשלח)[^.!?؟\n]*(?:שניהם|שתיהן|שלושתם|כולם|both|all of them)[^.!?؟\n]*[?؟]\s*$/iu;
 const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|(?:לשלוח|ש?אשלח|ש?נשלח)(?:\\s+(?:עבורך|לך))?(?:\\s+את)?\\s+(?:ה?פרטי|פרטים|תמונות)|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
 
 /** A message that only acknowledges, or carries no words at all (an emoji). */
@@ -246,6 +266,23 @@ export function menuSize(question: string): number {
   return colon < 0 && tail.includes(",") ? Math.max(1, items.length - 1) : items.length;
 }
 
+/** Two replies that say the same with a word or two changed (urban-e24: "סבבה" got the description again). */
+function nearlySame(a: string, b: string): boolean {
+  const words = (t: string) => new Set(t.replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 3));
+  const x = words(a), y = words(b);
+  if (x.size < 5 || y.size < 5) return false;
+  const shared = [...x].filter((w) => y.has(w)).length;
+  return shared / Math.min(x.size, y.size) >= 0.7;
+}
+
+/** The reply's first word when it is the customer's own word echoed back, then a comma or a dash. */
+export function echoOpener(text: string, incoming: string): string | null {
+  const m = /^\s*([\p{L}'׳"]{2,})\s*[,:\u2013\u2014-]/u.exec(text);
+  if (!m) return null;
+  const said = new Set(String(incoming ?? "").replace(/[^\p{L}'׳\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2));
+  return said.has(m[1]) ? m[0] : null;
+}
+
 /** The content words of a question, to compare two questions by what they offer. */
 function questionWords(q: string): Set<string> {
   return new Set(q.replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 3));
@@ -268,6 +305,9 @@ export function repeatsChoice(draft: string, previous: string[]): string | null 
 
 /** The customer asks to see products: "תראה לי", "show me" (dev 2026-10-27: answered in words, no cards). */
 export const SHOW_ME = /(?<![\u0590-\u05FF])(?:תראה|תראי|תראו|הראה|הראי|תציג|תציגי|להראות|להציג)(?![\u0590-\u05FF])|\bshow me\b|\blet me see\b/iu;
+
+/** A gift and a budget in one message: enough to show something. */
+export const GIFT_WITH_BUDGET = /(?=.*(?:מתנה|מתנות|\bgift))(?=.*(?:עד|תקציב|budget|under|up to)\s*₪?\s*\d{2,})/isu;
 
 /** The customer does not mind: stop asking and recommend (Omer, 2026-10-26). */
 export const DONT_MIND = /לא משנה|סתם מסתכל|סתם|לא יודע|לא יודעת|אין לי מושג|תמליצי|תמליץ|תמליצו|מה שתמליצ|מה שבא לך|מה שאת חושבת|מה שאתה חושב|רק שתהיה|רק שיהיה|תפתיע|הפתיעי|whatever|anything|you choose|surprise me|recommend/i;
@@ -388,7 +428,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // place that call (eval e10 X4: "מתי נוח לקבל שיחה" after a real handoff).
   if (CALLBACK_ASK.test(plain) && CALLBACK_WORD.test(plain)) hit("promise", "collecting details for a callback");
   for (const m of phantomActions(plain, ctx)) hit("phantom_action", m);
-  if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK));
+  if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK) ?? plain.match(OFFER_SHOW_BOTH));
+  // "מעיל, הנה..." echoes the customer's own word back (urban-e24).
+  hit("echo_opener", echoOpener(plain, ctx.incomingMessage));
 
   // "We don't have it" on an empty TITLE search is false (eval e5 S1).
   if (ctx.searchesAllEmpty) hit("false_absence", plain.match(ABSENCE));
@@ -402,7 +444,7 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   else hit("repeated_question", repeatsChoice(plain, ctx.previousReplies ?? []));
   // The same reply, word for word, again (eval L01c: "מעולה, שמחים שזה מתאים." twice).
   const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
-  if (norm(plain).length >= 6 && (ctx.previousReplies ?? []).some((r) => norm(r) === norm(plain))) hit("repeated_reply", plain.slice(0, 60));
+  if (norm(plain).length >= 6 && (ctx.previousReplies ?? []).some((r) => norm(r) === norm(plain) || nearlySame(r, plain))) hit("repeated_reply", plain.slice(0, 60));
 
   const questions = (plain.match(/[?؟]/g) ?? []).length;
   if (questions > 1) hit("two_questions", `${questions} questions`);
@@ -448,6 +490,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   recap_opener: { he: "Do not open by recapping what they said (\"נשמע ש...\", \"הבנתי ש...\", \"מעולה, כדי להציע...\"). React like a person (\"איזה כיף, מתנה!\") or just answer.", en: "Do not open with a recap of what the customer said; react or answer." },
   long_menu: { he: "Your question lists three or more options. Ask with at most two, or better, show one or two concrete products.", en: "At most two options in a question." },
   latin_titles: { he: "Do not write the store's English titles in the Hebrew sentence: the cards show them. Describe the products in Hebrew in a few words (\"מעיל צמר ארוך ואלגנטי, או טרנץ' קליל\"). Never a title in parentheses, never a line that starts with one.", en: "Do not list product titles in the text; the cards show them." },
+  echo_opener: { he: "Do not open by echoing the customer's word back (\"מעיל, הנה...\"). Start with the substance.", en: "Do not open by echoing the customer's word back." },
   menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
   self_gender: { he: "Your own grammatical form is wrong: follow the Persona's gender, or when it is not configured speak as the business in the plural (\"נבדוק\", \"יש לנו\").", en: "Keep your own grammatical form consistent." },
   own_name: { he: "Your name is misspelled. Leave it out unless asked; if needed write it exactly as configured.", en: "Your name is misspelled; leave it out." },
@@ -587,7 +630,7 @@ export function cardsAgainLine(locale: string): string {
  * sentence, a greeting after the first reply, a question after a bare
  * acknowledgement, a trailing offer to check.
  */
-export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check"]);
+export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check", "echo_opener"]);
 
 /**
  * What a removed title leaves behind (dev 2026-10-27: "מעיל שמתאים לגבר, למשל."):
@@ -635,7 +678,20 @@ export function fixInCode(text: string, violations: StyleViolation[]): string {
     while (parts.length > 1 && /[?؟]\s*\S{0,3}\s*$/.test(parts[parts.length - 1])) parts.pop();
     out = parts.join(" ").trim();
   }
-  if (kinds.has("offer_to_check")) out = stripTrailingOffer(out);
+  if (kinds.has("offer_to_check")) {
+    // "אפשר להראות את הפרטים של שניהם?" asks to show what the cards show: the
+    // preference is the question (urban-e24).
+    const tokens = out.split(/(?<=[.!?؟\n])(\s+)/);
+    const last = tokens[tokens.length - 1] ?? "";
+    if (tokens.length > 1 && OFFER_SHOW_BOTH.test(last)) {
+      tokens[tokens.length - 1] = /[a-z]/i.test(last) ? "Which one suits you better?" : "מה מתאים לך יותר?";
+      out = tokens.join("");
+    } else out = stripTrailingOffer(out);
+  }
+  if (kinds.has("echo_opener")) {
+    const echo = violations.find((v) => v.kind === "echo_opener")?.match;
+    if (echo && out.startsWith(echo.trimStart())) out = out.slice(echo.trimStart().length).trim();
+  }
   return out;
 }
 
@@ -716,6 +772,9 @@ export function dropBrokenSentences(text: string, ctx: FinalGateContext): string
     return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question");
   });
   if (kept.length === parts.length || !kept.length) return null;
+  // The only question, with nothing on screen, carried the turn: dropping it
+  // leaves "אפשר לעזור לבחור מתנה עד ₪300." (urban-e24). Rewrite instead.
+  if (!ctx.cardsShown && parts.some((p) => /[?؟]\s*$/.test(p)) && !kept.some((p) => /[?؟]\s*$/.test(p))) return null;
   const out = normalizePunctuation(kept.join(" "));
   const words = out.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
   return words >= 4 && !finalTextIssues(out, ctx).length ? out : null;

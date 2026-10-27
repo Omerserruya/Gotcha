@@ -32,7 +32,7 @@ import {
   shouldRegenerateForAddress,
 } from "@chatcenter/shared";
 import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
-import { runProductDiscoveryTurn, prefetchDiscoveryExtraction, productDiscoveryMayApply, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
+import { runProductDiscoveryTurn, prefetchDiscoveryExtraction, productDiscoveryMayApply, preSearchEnabled, mentionsAudience, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, finalProductReply, compactWooVariations, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -1314,6 +1314,14 @@ async function resolveSessionKnowledge(opts: {
     console.warn("[ai-bot] knowledge-resolve failed (fail-soft):", err?.message);
     return [];
   }
+}
+
+/** The answer round's reasoning effort: AI_ANSWER_EFFORT, else "minimal" on dev, else none (unchanged). */
+export function answerRoundEffort(env: NodeJS.ProcessEnv = process.env): "minimal" | "low" | "medium" | "high" | null {
+  const v = String(env.AI_ANSWER_EFFORT ?? "").trim();
+  if (v === "off" || v === "0") return null;
+  if (["minimal", "low", "medium", "high"].includes(v)) return v as any;
+  return env.NODE_ENV === "development" ? "minimal" : null;
 }
 
 async function buildSessionFactsBlock(opts: {
@@ -2893,6 +2901,7 @@ async function generateAIBotReplyInner(
   // real product tool is offered, force the search this turn; when ready but
   // the tool is absent, steer to an honest handoff instead of a fake search.
   let discoveryForceTool: string | null = null;
+  let discoveryPreSearch: { tool: string; args: Record<string, unknown> } | null = null;
   // This turn answers a question about a product the customer named: the
   // reply is the model's answer, with the product attached (not replaced).
   let discoveryLookup = false;
@@ -2951,6 +2960,14 @@ async function generateAIBotReplyInner(
       } else if (disc.decision?.kind === "execute") {
         discoveryRecommend = true;
         discoveryForceTool = disc.decision.tool;
+        // Latency (a), behind AI_PRESEARCH (on by default only on dev): the
+        // forced round only writes this call, so the turn writes it instead,
+        // from the category the customer gave, and the model answers in one
+        // round. Not when anyone was named it is for ("לגבר", "לאשתי"): the
+        // model passes the audience.
+        if (preSearchEnabled() && disc.decision.query && !mentionsAudience(messages as any[], opts.incomingMessage)) {
+          discoveryPreSearch = { tool: disc.decision.tool, args: { query: disc.decision.query, per_page: 10 } };
+        }
         chatMessages.push({
           role: "system",
           content:
@@ -3286,20 +3303,46 @@ async function generateAIBotReplyInner(
   // Stop asking and show (Omer, 2026-10-26: "לא משנה האמת" got the same
   // category question again). After "לא משנה" / "תמליצי", or after two discovery
   // questions in a row with nothing shown, this turn recommends.
+  // A gift with a budget is enough to show something (urban-e24: "מתנה לאחותי עד
+  // 300 שקל" got "אפשר לעזור לבחור מתנה עד ₪300." and nothing else).
+  const giftWithBudget = GIFT_WITH_BUDGET.test(opts.incomingMessage ?? "");
   const recommendNow = !!wooTurn && toolFunctionNames.includes("woocommerce.list_products")
-    && (DONT_MIND.test(opts.incomingMessage ?? "") || discoveryStreak(messages as any[]) >= 2);
+    && (DONT_MIND.test(opts.incomingMessage ?? "") || giftWithBudget || discoveryStreak(messages as any[]) >= 2);
+  // An acknowledgement with the cards just shown: they are on screen. No new
+  // search, no cards again, no description again (urban-e24); one short nudge.
+  const lastOut = [...(messages as any[])].reverse().find((m) => m.direction === "OUTBOUND");
+  const ackOverCards = addsNothing(opts.incomingMessage) && /product/.test(String(lastOut?.messageType ?? ""));
+  if (ackOverCards) {
+    chatMessages.push({
+      role: "system",
+      content:
+        "The customer only acknowledged, and the products are already on screen. Do not search and do not show products again, and do not describe them again. " +
+        `Reply with ONE short line in ${replyLocale === "he" ? "Hebrew" : "English"}: a light nudge on the one open thing (which of them suits, or their size), neutral address.`,
+    });
+  }
   if (recommendNow) {
     chatMessages.push({
       role: "system",
       content:
-        `Stop asking. ${DONT_MIND.test(opts.incomingMessage ?? "") ? "The customer said they don't mind." : "You have asked twice already."} ` +
+        `Stop asking. ${DONT_MIND.test(opts.incomingMessage ?? "") ? "The customer said they don't mind." : giftWithBudget ? "A gift and a budget are enough to show something." : "You have asked twice already."} ` +
         `Search now with woocommerce.list_products, using what you know (who it is for, any category or budget they gave), and recommend one or two concrete products ` +
         `in a few ${replyLocale === "he" ? "Hebrew" : "English"} words each. At most one light question after, with at most two options.`,
     });
   }
   let searchNudged = false;
+  // The round after tool results writes the answer from them: AI_ANSWER_EFFORT
+  // sets its reasoning effort (dev default "minimal", 2026-10-27 urban-e25 trial;
+  // unset elsewhere = unchanged). Never the round that decides what to call.
+  const answerEffort = answerRoundEffort();
+  let afterTools = false;
   for (let round = 0; round < 3; round++) {
-    const response = await generateResponse({
+    const preSearch = round === 0 && discoveryPreSearch ? discoveryPreSearch : null;
+    if (preSearch) console.log(`[ai-bot][presearch] ${preSearch.tool} ${JSON.stringify(preSearch.args)} conv=${opts.conversationId}`);
+    const response: Awaited<ReturnType<typeof generateResponse>> = preSearch ? {
+      content: "",
+      toolCalls: [{ id: `presearch_${shadowTurnId ?? opts.conversationId}`, type: "function" as const, function: { name: preSearch.tool, arguments: JSON.stringify(preSearch.args) } }],
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_tokens: 0 },
+    } as Awaited<ReturnType<typeof generateResponse>> : await generateResponse({
       tenantId: opts.tenantId,
       // Pin every autonomous turn of the SAME conversation to one session so
       // OpenAI's automatic prefix cache routes consistently across turns.
@@ -3318,12 +3361,13 @@ async function generateAIBotReplyInner(
         ? { toolChoice: { type: "function", function: { name: discoveryForceTool } } }
         : {}),
       metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
-      ...(replyEffort ? { reasoningEffort: replyEffort } : {}),
+      ...(afterTools && answerEffort ? { reasoningEffort: answerEffort } : replyEffort ? { reasoningEffort: replyEffort } : {}),
       signal,
     });
 
     totalTokens += response.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(response.usage);
     budget.addUsage(response.usage.total_tokens || 0);
+    afterTools = !!response.toolCalls?.length;
     if (budget.exceededTurnCap()) {
       auditBudgetAbort({
         tenantId: opts.tenantId,
@@ -5316,7 +5360,7 @@ async function generateAIBotReplyInner(
       // the prompt did not hold).
       // ...and neither does a question about the store: a coupon, shipping,
       // returns, payment (eval e12 C01, C07, C08, C09).
-      noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage),
+      noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage) || ackOverCards,
       unnamedMax: discoveryRecommend || SHOW_ME.test(opts.incomingMessage ?? "") ? undefined : 1,
       excludeIds: colourMisses,
       envelope: productEnvelope,
@@ -5432,10 +5476,13 @@ async function generateAIBotReplyInner(
 
   // "שלח לי" with nothing named, after cards were shown: the last cards again,
   // not "which one?" (dev 2026-10-27: the two coats, shown twice, then asked about).
-  if (replyText && wooTurn && !wooTurn.staged.length && !awaitingApproval && !pendingEscalation
+  // It wins over cards the model chose itself this turn (urban-e24: it searched
+  // again and sent only the trench).
+  if (replyText && wooTurn && !awaitingApproval && !pendingEscalation
     && asksToResend(opts.incomingMessage) && !namesProduct(opts.incomingMessage ?? "")) {
     const last = wooTurn.shown.length ? wooTurn.shown.filter((p) => p.batch === wooTurn.shown[wooTurn.shown.length - 1].batch) : [];
     if (last.length) {
+      wooTurn.staged.length = 0;
       const again = await wooTurn.sendShopifyProducts({ products: last.map((p) => ({ productId: p.productId })) }).catch(() => null);
       if (again?.ok) {
         replyText = sendAgainLine(replyLocale);

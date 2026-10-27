@@ -403,3 +403,89 @@ describe("e23: promotions", () => {
     expect(d).toContain("free shipping above an amount");
   });
 });
+
+// ── urban-e24 ────────────────────────────────────────────────────────────────
+import { groundedAmounts, ungroundedPrices, echoOpener, OFFER_SHOW_BOTH, GIFT_WITH_BUDGET } from "../services/reply-style-check.service";
+
+describe("e24: a price is grounded only by an amount stated as money", () => {
+  const grounding = `❌ "ראיתי את המיקום ששלחת, אילת (29.5577, 34.9519)". משלוח רגיל עולה 25 ש״ח, ובהזמנות מעל 299 ש״ח הוא חינם. {"price":"799","regular_price":"899"} הלקוח: מתנה עד 300`;
+  it("₪29 for shipping is made up: 29 is only a coordinate there", () => {
+    expect(ungroundedPrices("משלוח סטנדרטי בישראל עולה ₪29, ומשלוח חינם מעל ₪299.", grounding)).toEqual(["29"]);
+  });
+  it("the store's 25 and 299, a price field, the customer's budget: grounded", () => {
+    expect(groundedAmounts(grounding)).toEqual(expect.arrayContaining(["25", "299", "799", "899", "300"]));
+    expect(ungroundedPrices("משלוח עולה ₪25, חינם מעל ₪299; מעיל ב-₪799, מתנה עד ₪300.", grounding)).toEqual([]);
+  });
+});
+
+describe("e24: an offer to show what the cards already show", () => {
+  const d = "מעולה, יש שני מעילים: טרנץ' קל ומעיל צמר ארוך.\nאפשר להראות את הפרטים של שניהם כדי לבחור?";
+  it("is an offer, and becomes the preference question", () => {
+    expect(OFFER_SHOW_BOTH.test(d)).toBe(true);
+    const v = checkReplyStyle(d, ctx());
+    expect(v.map((x) => x.kind)).toContain("offer_to_check");
+    expect(fixInCode(d, v)).toBe("מעולה, יש שני מעילים: טרנץ' קל ומעיל צמר ארוך.\nמה מתאים לך יותר?");
+  });
+});
+
+describe("e24: the customer's word echoed as the opener", () => {
+  it("\"מעיל, הנה...\" after \"אני מחפש מעיל\": removed in code", () => {
+    const d = "מעיל, הנה שני פריטים שמתאימים. מה בא לך?";
+    expect(echoOpener(d, "אני מחפש מעיל")).toBe("מעיל,");
+    const v = checkReplyStyle(d, ctx({ incomingMessage: "אני מחפש מעיל" }));
+    expect(fixInCode(d, v)).toBe("הנה שני פריטים שמתאימים. מה בא לך?");
+  });
+  it("an opener the customer did not say is not an echo", () => {
+    expect(echoOpener("מעולה, הנה שני פריטים.", "אני מחפש מעיל")).toBeNull();
+  });
+});
+
+describe("e24: \"סבבה\" repeating the last description is a repeat", () => {
+  it("near-identical to the previous reply", () => {
+    const prev = "טרנץ׳ קל מבד כותנה, קל ופרקטי, מעיל צמר ארוך, חם ומחמיא.";
+    const now = "טרנץ׳ קל מבד כותנה, קל ופרקטי לעונות המעבר, מעיל צמר ארוך, חם ומחמיא למזג אוויר קר.";
+    expect(kinds(now, { incomingMessage: "סבבה", previousReplies: [prev] })).toContain("repeated_reply");
+  });
+  it("wired: no new cards and a nudge note when the cards were the last thing sent", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("const ackOverCards = addsNothing(opts.incomingMessage) && /product/.test(String(lastOut?.messageType ?? \"\"));");
+    expect(bot).toContain("|| storeQuestion(opts.incomingMessage) || ackOverCards,");
+  });
+});
+
+describe("e24: \"שלח לי\" wins over the model's own pick", () => {
+  it("the cards the model staged are replaced by the last batch", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    const i = bot.indexOf("asksToResend(opts.incomingMessage) && !namesProduct");
+    expect(bot.slice(i - 200, i)).not.toContain("!wooTurn.staged.length");
+    expect(bot.slice(i, i + 600)).toContain("wooTurn.staged.length = 0;");
+  });
+});
+
+describe("e24: a gift with a budget", () => {
+  it("is enough to show something", () => {
+    expect(GIFT_WITH_BUDGET.test("מחפש מתנה לאחותי עד 300 שקל")).toBe(true);
+    expect(GIFT_WITH_BUDGET.test("a gift under 300")).toBe(true);
+    expect(GIFT_WITH_BUDGET.test("מחפש מתנה לאחותי")).toBe(false);
+  });
+  it("the only question, with nothing on screen, is not dropped: rewritten", () => {
+    const t = "מעולה, אפשר לעזור לבחור מתנה עד ₪300. מעדיף אקססוריז או חולצה?";
+    expect(finalTextIssues(t, gate({ cardsShown: false }))).toContain("gendered");
+    expect(dropBrokenSentences(t, gate({ cardsShown: false }))).toBeNull();
+  });
+});
+
+describe("latency: the answer round's effort", () => {
+  it("AI_ANSWER_EFFORT, else minimal on dev, else unchanged", async () => {
+    const { answerRoundEffort } = await import("../services/ai-bot.service");
+    expect(answerRoundEffort({ NODE_ENV: "development" } as any)).toBe("minimal");
+    expect(answerRoundEffort({ NODE_ENV: "production" } as any)).toBeNull();
+    expect(answerRoundEffort({ NODE_ENV: "development", AI_ANSWER_EFFORT: "off" } as any)).toBeNull();
+    expect(answerRoundEffort({ NODE_ENV: "production", AI_ANSWER_EFFORT: "low" } as any)).toBe("low");
+  });
+  it("only the round after tool results", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("...(afterTools && answerEffort ? { reasoningEffort: answerEffort } : replyEffort ? { reasoningEffort: replyEffort } : {}),");
+    expect(bot).toContain("afterTools = !!response.toolCalls?.length;");
+  });
+});

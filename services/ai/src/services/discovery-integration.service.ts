@@ -291,7 +291,9 @@ export async function groundProductSearchResult(opts: {
 
 export type DiscoveryDecision =
   | { kind: "collect" }                    // still missing required info - ask ONE
-  | { kind: "execute"; tool: string }      // ready AND tool available - force the search
+  // ready AND tool available - force the search. `query`: the category the
+  // customer gave, when it is a plain English noun the search can take as is.
+  | { kind: "execute"; tool: string; query?: string }
   | { kind: "blocked_no_tool"; tool: string } // ready but tool not in surface - honest handoff
   // The customer asked about the stock / size / colour / price of a product
   // they named: look it up now, whatever the recommendation facts say.
@@ -495,10 +497,11 @@ export async function runProductDiscoveryTurn(opts: {
         where: { sessionId: session.id, actionKey: "product_search" },
       }).catch(() => 0);
       const { available, tool } = productToolAvailable(opts.availableToolNames);
+      const query = available && alreadySearched === 0 ? await searchQueryFact(session.id) : null;
       decision = alreadySearched > 0
         ? { kind: "collect" }
         : available
-          ? { kind: "execute", tool }
+          ? { kind: "execute", tool, ...(query ? { query } : {}) }
           : { kind: "blocked_no_tool", tool };
     }
     return { active: true, goalKey: profile.goalKey, snapshot, decision, writtenFacts: written };
@@ -506,6 +509,37 @@ export async function runProductDiscoveryTurn(opts: {
     console.warn("[discovery] turn failed (non-fatal):", err?.message);
     return { active: false };
   }
+}
+
+/**
+ * The category the customer gave, as the search's query: only a plain English
+ * noun of one to three words ("coat", "leather jacket"), the form the search
+ * matches titles with. Anything else (Hebrew, a product title, a phrase): null,
+ * and the model writes the query.
+ */
+export async function searchQueryFact(sessionId: string): Promise<string | null> {
+  const facts = await (await import("@chatcenter/shared")).activeFacts(sessionId).catch(() => null);
+  const raw = facts?.get("product_category")?.valueJson;
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return /^[a-z]+(?:[ -][a-z]+){0,2}$/.test(v) && v.length <= 30 ? v : null;
+}
+
+/**
+ * The forced search written by the turn instead of a model round (latency (a),
+ * dev 2026-10-27). AI_PRESEARCH=1 turns it on, =0 off; unset, it is on only
+ * where NODE_ENV is development.
+ */
+export function preSearchEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.AI_PRESEARCH === "1") return true;
+  if (env.AI_PRESEARCH === "0") return false;
+  return env.NODE_ENV === "development";
+}
+
+const AUDIENCE_WORDS = /(?<![\u0590-\u05FF])[ולבש]?(?:גבר|גברים|בעלי|אבא|אבי|הבן|אישה|אשה|נשים|אשתי|אמא|אמי|הבת|לבת|ילד|ילדה|ילדים)(?![\u0590-\u05FF])|\b(?:men|man|women|woman|him|her|husband|wife|dad|mom|son|daughter|kids?)\b/iu;
+
+/** Anyone the customer named the purchase for, in any of their messages: the model passes the audience then. */
+export function mentionsAudience(messages: Array<{ direction?: string; body?: string | null }>, incoming?: string | null): boolean {
+  return [incoming ?? "", ...messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? ""))].some((t) => AUDIENCE_WORDS.test(t));
 }
 
 /** Extract Shopify product ids from a tool result (typed or JSON-stringified). */

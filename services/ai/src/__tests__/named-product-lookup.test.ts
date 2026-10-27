@@ -191,7 +191,8 @@ describe("★ (b) the store describes itself", () => {
   it("the ready line names the store's own search, not shopify.search_products", async () => {
     H.facts = [fact("product_category", "coat"), fact("budget", { max: 800 })];
     const r = await turn("אני מחפש מעיל עד 800");
-    expect(r.decision).toEqual({ kind: "execute", tool: "woocommerce.list_products" });
+    // The category the customer gave rides along as the search's query (latency (a), 2026-10-27).
+    expect(r.decision).toEqual({ kind: "execute", tool: "woocommerce.list_products", query: "coat" });
     expect(r.snapshot).toContain("REAL tool call: woocommerce.list_products");
   });
 });

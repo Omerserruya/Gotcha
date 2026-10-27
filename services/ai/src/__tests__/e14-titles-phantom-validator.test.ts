@@ -96,7 +96,8 @@ describe("AD6: the reply call's reasoning effort is an env switch", () => {
   });
   it("wired to the main reply call only, recorded on the audit, and logged per turn", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src.match(/\.\.\.\(replyEffort \? \{ reasoningEffort: replyEffort \} : \{\}\)/g)).toHaveLength(1);
+    // The answer round may take AI_ANSWER_EFFORT instead (urban-e25 trial); otherwise replyEffort.
+    expect(src.match(/: replyEffort \? \{ reasoningEffort: replyEffort \} : \{\}\)/g)).toHaveLength(1);
     expect(src).toContain('replyEffort: replyEffort ?? (process.env.OPENAI_REASONING_EFFORT || "low"),');
     expect(src).toMatch(/\[ai-bot\]\[latency\] conv=/);
   });
