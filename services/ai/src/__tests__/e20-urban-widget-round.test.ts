@@ -247,8 +247,8 @@ describe("e21: promotions", () => {
   it("\"קיים קוד\" is said \"יש קוד\"", () => {
     expect(polishReply("קיים קוד WELCOME10, 10% הנחה.", { locale: "he" })).toBe("יש קוד WELCOME10, 10% הנחה.");
   });
-  it("a one-line question that is not about promotions keeps two", () => {
-    expect(kinds("משלוח בארץ 2-4 ימים ב-₪29. איסוף מהסטודיו בחינם. לחו\"ל 5-8 ימים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
+  it("a one-line question that is not about promotions keeps two, past 160 characters", () => {
+    expect(kinds("משלוח בארץ לוקח בין שניים לארבעה ימי עסקים ועולה ₪29 לכל הזמנה רגילה. איסוף מהסטודיו בתל אביב הוא בחינם ומתאפשר כבר למחרת. משלוח לחו\"ל לוקח בין חמישה לשמונה ימי עסקים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
   });
 });
 

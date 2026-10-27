@@ -1328,6 +1328,20 @@ export function answerRoundEffort(env: NodeJS.ProcessEnv = process.env): "minima
   return ["minimal", "low", "medium", "high"].includes(v) ? (v as any) : null;
 }
 
+/**
+ * The customer asked a colour or a size and no product search this turn asked
+ * for it: then "we don't have it" is about a search that never looked (urban-e29).
+ */
+export function attributeUnsearched(incoming: string, calls: Array<{ tool: string; args?: any }>): boolean {
+  const colours = askedColours(incoming);
+  const size = asksSize(incoming);
+  if (!colours.length && !size) return false;
+  // A product's variations (or the product itself) were read: its sizes and colours were checked.
+  if (calls.some((t) => /list_product_variations|\.get_product$|variant_information|inventory_status/.test(t.tool))) return false;
+  const queries = calls.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool)).map((t) => String(t.args?.query ?? "").toLowerCase());
+  return !queries.some((q) => colours.some((c) => q.includes(c)) || (size && /(?<![a-z])(?:xxs|xs|s|m|l|xl|xxl|\d{2})(?![a-z])/.test(q)));
+}
+
 async function buildSessionFactsBlock(opts: {
   tenantId: string;
   conversationId: string;
@@ -2969,7 +2983,11 @@ async function generateAIBotReplyInner(
         // from the category the customer gave, and the model answers in one
         // round. Not when anyone was named it is for ("לגבר", "לאשתי"): the
         // model passes the audience.
-        if (preSearchEnabled() && disc.decision.query && !mentionsAudience(messages as any[], opts.incomingMessage)) {
+        // Nor when the message asks a colour or a size (urban-e29: "יש לכם חולצה
+        // לבנה?" became {"query":"shirts"} and the white shirt was never found):
+        // the model's own call carries them into the attribute search.
+        if (preSearchEnabled() && disc.decision.query && !mentionsAudience(messages as any[], opts.incomingMessage)
+          && !askedColours(opts.incomingMessage ?? "").length && !asksSize(opts.incomingMessage ?? "")) {
           discoveryPreSearch = { tool: disc.decision.tool, args: { query: disc.decision.query, per_page: 10 } };
         }
         chatMessages.push({
@@ -3360,7 +3378,9 @@ async function generateAIBotReplyInner(
   // the model answers from them in one round, or searches itself as before.
   let presearch2: { args: Record<string, unknown>; content: string } | null = null;
   if (!choiceShortCircuit && preSearch2Enabled() && wooTurn && !discoveryForceTool && !ackOverCards
-    && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)) {
+    && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)
+    // A colour or a size goes into the attribute search the model writes (urban-e29).
+    && !askedColours(opts.incomingMessage ?? "").length && !asksSize(opts.incomingMessage ?? "")) {
     const last = await lastSearchArgs(opts.tenantId, opts.conversationId).catch((err: any) => {
       console.warn(`[ai-bot][presearch2] reading the last search failed: ${err?.message} conv=${opts.conversationId}`);
       return null;
@@ -5331,6 +5351,7 @@ async function generateAIBotReplyInner(
           const searches = toolCallLog.filter((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
           return searches.length > 0 && searches.every((t) => /"result":\[\]/.test(String(t.result ?? "")));
         })(),
+        attributeUnsearched: !discoveryLookup && attributeUnsearched(opts.incomingMessage ?? "", toolCallLog),
         // What a price may come from: the prompt (knowledge, policy), this turn's
         // tool results, the conversation and its cards. Taken before any rewrite
         // is pushed, so a draft cannot ground its own rewrite.

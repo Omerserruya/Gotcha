@@ -281,8 +281,9 @@ describe("★ e8", () => {
     }
     for (const t of ["יש לנו מבחר גדול", "המעיל מראה טוב", "הנה הקישור"]) expect(kinds(t), t).not.toContain("gendered_address");
   });
-  it("U7: a one-line question gets two sentences at most", () => {
-    expect(kinds("משלוח בארץ 2-4 ימים ב-₪29. איסוף מהסטודיו בחינם. לחו\"ל 5-8 ימים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
+  it("U7: a one-line question gets two sentences at most, three only when short (urban-e29: ≤160 chars)", () => {
+    expect(kinds("משלוח בארץ לוקח בין שניים לארבעה ימי עסקים ועולה ₪29 לכל הזמנה רגילה. איסוף מהסטודיו בתל אביב הוא בחינם ומתאפשר כבר למחרת. משלוח לחו\"ל לוקח בין חמישה לשמונה ימי עסקים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
+    expect(kinds("משלוח בארץ 2-4 ימים ב-₪29. איסוף מהסטודיו בחינם. לחו\"ל 5-8 ימים.", { incomingMessage: "כמה עולה משלוח?" })).not.toContain("too_long");
     expect(kinds("משלוח בארץ 2-4 ימי עסקים ב-₪29.", { incomingMessage: "כמה עולה משלוח?" })).not.toContain("too_long");
   });
   it("L-2: 'מעביר את השיחה' from an ungendered employee", () => {

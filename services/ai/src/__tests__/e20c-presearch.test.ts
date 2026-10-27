@@ -46,7 +46,8 @@ describe("wired", () => {
   const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
   it("round 0 only, through the same dispatch as the model's own call", () => {
     expect(bot).toContain("const preSearch = round === 0 && discoveryPreSearch ? discoveryPreSearch : null;");
-    expect(bot).toContain("if (preSearchEnabled() && disc.decision.query && !mentionsAudience(messages as any[], opts.incomingMessage)) {");
+    // (+ not on a colour or a size, urban-e29)
+    expect(bot).toContain("if (preSearchEnabled() && disc.decision.query && !mentionsAudience(messages as any[], opts.incomingMessage)\n");
     // The synthesized call goes down the normal tool path: no separate executor.
     expect(bot.indexOf("const preSearch = round === 0")).toBeLessThan(bot.indexOf("const toolCalls = response.toolCalls;"));
   });

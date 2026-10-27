@@ -66,6 +66,8 @@ export interface StyleCheckContext {
   customerClosing: boolean;
   /** Every product search this turn came back empty (no title matched). */
   searchesAllEmpty?: boolean;
+  /** The customer asked a colour or a size and no search this turn ran with it (urban-e29). */
+  attributeUnsearched?: boolean;
   /** The employee's own last replies, newest last. */
   previousReplies?: string[];
   /** Our last text reply asked something the customer has not answered yet. */
@@ -229,7 +231,7 @@ const ACK_ONLY = /^\s*(?:אוקיי?|אוקי|אוקיי סבבה|סבבה|מג�
 /** Saying the store lacks something, or has none in stock. */
 // A stock claim, in any gender or number ("לא נמצאה חולצה לבנה במלאי", eval
 // 2026-10-26: the white Oxford shirt was in stock in every size).
-const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|לא נמצאו|לא נמצא[הו]?(?:[^.!?\\n]{0,30})?במלאי|לא (?:(?:זמין|זמינה|זמינים|זמינות) )?במלאי|חסר[הים]? במלאי|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
+const ABSENCE = w("אין (?:לנו |כרגע |במלאי )?(?:[^.!?\\n]{0,30})?במלאי|אין לנו|אין אצלנו|אין כרגע|(?:אינו|אינה|אינם|אינן) (?:זמין|זמינה|זמינים|זמינות)|לא נמצאו|לא נמצא[הו]?(?:[^.!?\\n]{0,30})?במלאי|לא (?:(?:זמין|זמינה|זמינים|זמינות) )?במלאי|חסר[הים]? במלאי|לא קיים|לא קיימים|אזל|אזלה|אזלו|לא מחזיקים|we don't (?:have|carry)|out of stock|not in stock");
 
 /** The model writes its own Latin name in Hebrew, and gets it wrong. */
 const NAME_MISSPELLINGS: Record<string, RegExp> = {
@@ -377,7 +379,10 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   const maxSentences = oneLine && !PROMOTIONS_ASKED.test(ctx.incomingMessage) ? 2 : 3;
   // A bare "היי!" before the answer is not a sentence of it.
   const counted = sentences(plain.replace(GREETING_START, "").replace(/^[\s,!.🙂😊]+/u, ""));
-  if (!detailAsked && (counted > maxSentences || plain.length > (oneLine ? 240 : 360))) hit("too_long", `${counted} sentences, ${plain.length} chars`);
+  // Three short sentences are not long: up to 160 characters they pass (urban-e29:
+  // too_long was 4 of 7 rewrites, most of them on short replies).
+  const shortEnough = counted <= 3 && plain.length <= 160;
+  if (!detailAsked && ((counted > maxSentences && !shortEnough) || plain.length > (oneLine ? 240 : 360))) hit("too_long", `${counted} sentences, ${plain.length} chars`);
   // After a plain acknowledgement ("מגניב", "סבבה", "אוקיי") no push and no
   // offer (eval L01 L-3: a cart nudge after every one). Not when our last
   // reply asked something still open: "סבבה" to "יום-יומי או פורמלי?" answers
@@ -444,7 +449,10 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   hit("echo_opener", echoOpener(plain, ctx.incomingMessage));
 
   // "We don't have it" on an empty TITLE search is false (eval e5 S1).
-  if (ctx.searchesAllEmpty) hit("false_absence", plain.match(ABSENCE));
+  // ...and neither is it after a search that never asked for the colour or size
+  // the customer named (urban-e29: "אין אצלנו חולצה לבנה" after a search for
+  // "shirts"; the white Oxford shirt was in stock).
+  if (ctx.searchesAllEmpty || ctx.attributeUnsearched) hit("false_absence", plain.match(ABSENCE));
 
   // Another script inside a Hebrew reply: "אם تريد" (eval e5 H01).
   if (ctx.locale === "he") hit("foreign_script", plain.match(/[\u0600-\u06FF\u0400-\u04FF]+/u));
@@ -760,6 +768,8 @@ const DANGLING_END = /(?<![֐-׿])(?:למשל|כמו|כגון|לדוגמה|את|
 /** "באיזו מידה בדרך כלל?": a question with no verb (urban-e23). */
 const VERBLESS_QUESTION = /(?:^|[.!?؟\n]\s*)(?:באיזו|באיזה|איזו|איזה)\s+\S+(?:\s+\S+)?\s+בדרך כלל\s*[?؟]/u;
 const POINTS_AT_PRODUCTS = /(?<![֐-׿])הנה(?![֐-׿])|\bhere (?:are|is)\b/iu;
+/** Saying products are shown, at any length (urban-e29: "מוצגות כמה חלופות קרובות." over no cards). */
+const SAYS_SHOWN = /(?<![\u0590-\u05FF])(?:מוצגות|מוצגים|מוצג|מוצגת|מצורפות|מצורפים|מצורף|מצורפת|הצגתי|הצגנו)(?![\u0590-\u05FF])|\b(?:shown|attached) (?:below|here)\b/iu;
 
 // ─── Transliterated title words (urban-e28: "קרופד הודי", "כובע צמר ריב") ─────
 //
@@ -767,7 +777,7 @@ const POINTS_AT_PRODUCTS = /(?<![֐-׿])הנה(?![֐-׿])|\bhere (?:are|is)\b/iu
 // word that only spells an English title word ("קרופד" = Cropped) is caught by
 // comparing consonant skeletons. Real Hebrew loanwords stay.
 
-const LOANWORDS = new Set(["כותנה", "פופלין", "טרנץ", "קרדיגן", "מרינו", "גינס", "גקט", "זקט", "קפוצון", "סוודר", "טישירט", "דנים", "פשתן", "קשמיר", "סקיני", "וופל", "סווטשירט", "ספורטיבי", "קלאסי", "קלאסית"]);
+const LOANWORDS = new Set(["כותנה", "פופלין", "טרנץ", "קרדיגן", "מרינו", "גינס", "גקט", "זקט", "קפוצון", "סוודר", "טישירט", "דנים", "פשתן", "קשמיר", "סקיני", "וופל", "סווטשירט", "ספורטיבי", "קלאסי", "קלאסית", "אוקספורד", "גרזי", "פליז", "קורדרוי", "צינו", "קשמיר", "טוויד", "פלנל"]);
 // b and v/w are one class: ב is both, and "אוברשירט" spells Overshirt.
 const PRODUCT_OR_MATERIAL = /(?:כובע|חולצ|מעיל|צעיף|תיק|סוודר|שמל|מכנס|גופי|קפוצ'ון|ז'קט|ג'קט|צמר|כותנה|פשתן|עור|ג'ינס|סריג)/u;
 /** Everyday Hebrew words whose consonants happen to spell a title word ("שירות" ~ Shirt). */
@@ -847,7 +857,7 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   if (VERBLESS_QUESTION.test(t)) out.push("verbless_question");
   const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
   if (words < 3 && !/:\s*$/.test(t) && !ctx.customerClosing) out.push("too_short");
-  if (!ctx.cardsShown && POINTS_AT_PRODUCTS.test(t) && !/[?؟]/.test(t) && words <= 6) out.push("points_at_nothing");
+  if (!ctx.cardsShown && ((POINTS_AT_PRODUCTS.test(t) && !/[?؟]/.test(t) && words <= 6) || SAYS_SHOWN.test(t))) out.push("points_at_nothing");
   // Over new cards, a question and nothing else says nothing about them
   // ("היי! איזו מידה מתאימה לך?", urban-e27): one line about them first.
   if (ctx.cardsShown && !/:\s*$/.test(t) && sentencesOf.every((x) => /[?؟]\s*$/.test(x) || GREETING_ONLY.test(x))) out.push("question_only");
@@ -875,7 +885,7 @@ export function dropBrokenSentences(text: string, ctx: FinalGateContext): string
   const parts = text.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
   const kept = parts.filter((p) => {
     const issues = finalTextIssues(p, { ...ctx, customerClosing: true });
-    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question") && !issues.includes("card_narration") && !issues.includes("source_leak");
+    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question") && !issues.includes("card_narration") && !issues.includes("source_leak") && !issues.includes("points_at_nothing");
   });
   if (kept.length === parts.length || !kept.length) return null;
   // The only question, with nothing on screen, carried the turn: dropping it
