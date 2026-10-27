@@ -42,7 +42,8 @@ describe("the side calls' cap", () => {
     const src = (f: string) => readFileSync(join(__dirname, "../services", f), "utf8");
     expect(src("ai-bot.service.ts")).toContain(`}), [], "knowledge-resolve", opts.conversationId);`);
     expect(src("plan-context.service.ts")).toContain(`}), EMPTY_WIZARD_FACTS, "wizard binding", input.conversationId);`);
-    expect(src("discovery-integration.service.ts")).toContain(`}).catch(() => []), [], "discovery extraction", opts.conversationId);`);
+    // The extraction has its own, higher cap (urban-e28).
+    expect(src("discovery-integration.service.ts")).toContain(`}).catch(() => []), [], "discovery extraction", opts.conversationId, extractionCapMs());`);
   });
 });
 

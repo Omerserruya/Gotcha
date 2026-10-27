@@ -38,7 +38,8 @@ export type StyleViolationKind =
   | "latin_titles"
   | "menu_greeting"
   | "echo_opener"
-  | "card_narration";
+  | "card_narration"
+  | "source_leak";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -204,6 +205,9 @@ const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות 
 const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?:ל|את|אותו|אותה)|לסל|לעגלה|בעגלה|כרטיס המוצר|כרטיס|להזמין|לרכישה|לקנות|להשלים (?:את )?ה?הזמנה|להגיע לסכום|לשריין|add (?:it )?to (?:your |the )?cart|checkout|place (?:the|an|your) order)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
+/** Naming our own sources to the customer (urban-e28). */
+const SOURCE_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלהמש]{0,2}(?:מסמכים|מסמך|מסמכי)(?![\u0590-\u05FF])|בסיס (?:ה)?(?:דמו|ידע|נתונים|המידע)|מאגר (?:ה)?(?:ידע|מידע)|דף [A-Z][\w&' -]{2,40}|knowledge base|our (?:documents?|records|files)|demo (?:base|data))[^.!?؟\n]*[.!?؟]?/iu;
+
 const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלה]?(?:כרטיס(?:ים|י)?|כפתור|תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
 
 /** Offering to show what the cards already show: "אפשר להראות את הפרטים של שניהם?" (urban-e24). */
@@ -435,6 +439,7 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // Narrating the cards or their buttons (urban-e25: "מתחת מופיעים הכרטיסים
   // עם הפרטים והוספת סל", "לשניהם יש תמונות וכפתור הוספה לעגלה למטה").
   hit("card_narration", plain.match(CARD_NARRATION));
+  hit("source_leak", plain.match(SOURCE_LEAK));
   // "מעיל, הנה..." echoes the customer's own word back (urban-e24).
   hit("echo_opener", echoOpener(plain, ctx.incomingMessage));
 
@@ -496,6 +501,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   recap_opener: { he: "Do not open by recapping what they said (\"נשמע ש...\", \"הבנתי ש...\", \"מעולה, כדי להציע...\"). React like a person (\"איזה כיף, מתנה!\") or just answer.", en: "Do not open with a recap of what the customer said; react or answer." },
   long_menu: { he: "Your question lists three or more options. Ask with at most two, or better, show one or two concrete products.", en: "At most two options in a question." },
   latin_titles: { he: "Do not write the store's English titles in the Hebrew sentence: the cards show them. Describe the products in Hebrew in a few words (\"מעיל צמר ארוך ואלגנטי, או טרנץ' קליל\"). Never a title in parentheses, never a line that starts with one.", en: "Do not list product titles in the text; the cards show them." },
+  source_leak: { he: "Never name where the information comes from (documents, pages, files, the demo, a knowledge base). If two facts disagree, give them as a range (\"בין ₪25 ל־₪29\") with no source.", en: "Never name where information comes from; if facts disagree, give a range with no source." },
   card_narration: { he: "Do not describe the cards, their pictures or buttons (\"מתחת מופיעים הכרטיסים\", \"כפתור הוספה לעגלה\"): they are on screen. Say only what helps choose.", en: "Do not narrate the cards or their buttons." },
   echo_opener: { he: "Do not open by echoing the customer's word back (\"מעיל, הנה...\"). Start with the substance.", en: "Do not open by echoing the customer's word back." },
   menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
@@ -755,6 +761,73 @@ const DANGLING_END = /(?<![֐-׿])(?:למשל|כמו|כגון|לדוגמה|את|
 const VERBLESS_QUESTION = /(?:^|[.!?؟\n]\s*)(?:באיזו|באיזה|איזו|איזה)\s+\S+(?:\s+\S+)?\s+בדרך כלל\s*[?؟]/u;
 const POINTS_AT_PRODUCTS = /(?<![֐-׿])הנה(?![֐-׿])|\bhere (?:are|is)\b/iu;
 
+// ─── Transliterated title words (urban-e28: "קרופד הודי", "כובע צמר ריב") ─────
+//
+// The store's titles are English; the reply describes them in Hebrew. A Hebrew
+// word that only spells an English title word ("קרופד" = Cropped) is caught by
+// comparing consonant skeletons. Real Hebrew loanwords stay.
+
+const LOANWORDS = new Set(["כותנה", "פופלין", "טרנץ", "קרדיגן", "מרינו", "גינס", "גקט", "זקט", "קפוצון", "סוודר", "טישירט", "דנים", "פשתן", "קשמיר", "סקיני", "וופל", "סווטשירט", "ספורטיבי", "קלאסי", "קלאסית"]);
+// b and v/w are one class: ב is both, and "אוברשירט" spells Overshirt.
+const PRODUCT_OR_MATERIAL = /(?:כובע|חולצ|מעיל|צעיף|תיק|סוודר|שמל|מכנס|גופי|קפוצ'ון|ז'קט|ג'קט|צמר|כותנה|פשתן|עור|ג'ינס|סריג)/u;
+/** Everyday Hebrew words whose consonants happen to spell a title word ("שירות" ~ Shirt). */
+const COMMON_WORDS = new Set(["שירות", "שירותים", "שירותי", "משלוח", "שורה", "שורות", "סרט", "קורס", "בלוג", "קלים", "שלום", "בולט", "בולטת", "בולטים", "בולטות"]);
+const EN_CLASS: Record<string, string> = { b: "B", c: "K", k: "K", q: "K", d: "D", f: "P", p: "P", g: "G", j: "G", h: "H", l: "L", m: "M", n: "N", r: "R", s: "S", z: "Z", t: "T", v: "B", w: "B", x: "KS" };
+const HE_CLASS: Record<string, string> = { "ב": "B", "כ": "K", "ך": "K", "ק": "K", "ד": "D", "פ": "P", "ף": "P", "ג": "G", "ל": "L", "מ": "M", "ם": "M", "נ": "N", "ן": "N", "ר": "R", "ס": "S", "ש": "S", "ז": "Z", "ת": "T", "ט": "T", "צ": "TS", "ץ": "TS" };
+
+function enSkeleton(word: string): string {
+  const w = word.toLowerCase().replace(/ph/g, "f").replace(/ck/g, "k").replace(/[^a-z]/g, "");
+  let out = "";
+  for (const [i, ch] of [...w].entries()) {
+    const c = i === 0 && ch === "h" ? "H" : ch === "h" ? "" : EN_CLASS[ch] ?? "";
+    if (c && !out.endsWith(c)) out += c;
+  }
+  return out;
+}
+
+function heSkeleton(word: string): string {
+  const w = word.replace(/['"׳״]/g, "");
+  let out = "";
+  for (const [i, ch] of [...w].entries()) {
+    // ה, ו, י, א, ע are vowels here, except a ה or ו that opens the word.
+    const c = i === 0 && ch === "ה" ? "H" : i === 0 && ch === "ו" ? "B" : HE_CLASS[ch] ?? "";
+    if (c && !out.endsWith(c)) out += c;
+  }
+  return out;
+}
+
+/** "kpd" in order inside "krpd"? */
+function inOrder(small: string, big: string): boolean {
+  let j = 0;
+  for (const ch of big) if (ch === small[j]) j++;
+  return j === small.length;
+}
+
+/** The first Hebrew word that only spells one of these English title words; null when none. */
+export function transliteratedTitleWord(text: string, titles: string[]): string | null {
+  const words = new Set(titles.flatMap((t) => String(t ?? "").split(/[^A-Za-z]+/)).filter((w) => w.length >= 4).map((w) => w.toLowerCase()));
+  const skeletons = [...words].map(enSkeleton).filter((k) => k.length >= 2);
+  if (!skeletons.length) return null;
+  const tokens = String(text ?? "").match(/[\u0590-\u05FF'׳"]{2,}/g) ?? [];
+  for (const [idx, raw] of tokens.entries()) {
+    if (raw.replace(/['"׳״]/g, "").length < 3) continue;
+    // A short skeleton counts only beside a product or material word ("כובע צמר ריב").
+    const afterProduct = idx > 0 && PRODUCT_OR_MATERIAL.test(tokens[idx - 1]);
+    const unquoted = raw.replace(/['"׳״]/g, "");
+    const bare = unquoted.replace(/^[ובלהמש](?=[\u0590-\u05FF]{3,})/, "");
+    if (LOANWORDS.has(bare) || LOANWORDS.has(unquoted) || COMMON_WORDS.has(bare) || COMMON_WORDS.has(unquoted)) continue;
+    const he = heSkeleton(bare);
+    if (he.length < 2) continue;
+    for (const en of skeletons) {
+      // The whole word (3+ consonants), most of a long one in order, or a short
+      // stem of a short one ("ריב" for Ribbed). Precision over recall: a miss
+      // costs a word, a false hit costs a rewrite of a good reply.
+      if ((he.length >= 4 && he === en) || (he.length === 3 && he === en && afterProduct) || (he.length >= 4 && inOrder(he, en) && he.length / en.length >= 0.75) || (he.length === 2 && afterProduct && bare === unquoted && !/^[ובלהמש]/.test(bare) && en.length === 3 && en.startsWith(he) && bare.length <= 4)) return raw;
+    }
+  }
+  return null;
+}
+
 export interface FinalGateContext extends StyleCheckContext {
   /** Cards go out with this message. */
   cardsShown: boolean;
@@ -779,6 +852,10 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   // ("היי! איזו מידה מתאימה לך?", urban-e27): one line about them first.
   if (ctx.cardsShown && !/:\s*$/.test(t) && sentencesOf.every((x) => /[?؟]\s*$/.test(x) || GREETING_ONLY.test(x))) out.push("question_only");
   if (ctx.locale === "he" && NOUN_AGREEMENT.test(t)) out.push("agreement");
+  if (ctx.locale === "he" && transliteratedTitleWord(t, ctx.productTitles ?? [])) out.push("transliteration");
+  // A store title in the Hebrew sentence with no card under it (urban-e28:
+  // "אצלנו יש Lambswool Scarf במחיר מבצע", answered from the knowledge text).
+  if (ctx.locale === "he" && !ctx.cardsShown && /\b[A-Z][a-z]{2,}(?: [A-Z][a-z]{2,})+\b/.test(t)) out.push("title");
   // A rewrite is not style-checked again, and urban-e26's came back as the
   // previous reply nearly word for word.
   const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
@@ -788,6 +865,7 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
     if (v.kind === "gendered_address" || v.kind === "mixed_address") out.push("gendered");
     if (v.kind === "banned_phrase") out.push("calque");
     if (v.kind === "card_narration") out.push("card_narration");
+    if (v.kind === "source_leak") out.push("source_leak");
   }
   return [...new Set(out)];
 }
@@ -797,7 +875,7 @@ export function dropBrokenSentences(text: string, ctx: FinalGateContext): string
   const parts = text.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
   const kept = parts.filter((p) => {
     const issues = finalTextIssues(p, { ...ctx, customerClosing: true });
-    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question") && !issues.includes("card_narration");
+    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question") && !issues.includes("card_narration") && !issues.includes("source_leak");
   });
   if (kept.length === parts.length || !kept.length) return null;
   // The only question, with nothing on screen, carried the turn: dropping it
@@ -825,12 +903,14 @@ export function finalRewriteInstruction(text: string, issues: string[], locale: 
     "- no fragment, no dangling word, every question with a verb; adjectives agree with their noun (מעיל חם, not חמה);",
     "- over cards just shown, one short line about them first, then at most one question;",
     "- never what you already said in an earlier message: if it was a repeat, say something new in one short line (the one open question, or a light nudge);",
+    "- never name where information comes from (documents, pages, the demo); for two facts that disagree, a range with no source;",
+    "- describe products in plain Hebrew words, never an English title word in Hebrew letters (not \"קרופד הודי\" but \"קפוצ'ון קצר\");",
     "- one or two short sentences. Reply with the message only.",
   ].join("\n");
 }
 
 /** The kinds that make a reply untrue, not just unpolished. */
-const TRUTH_KINDS: ReadonlySet<StyleViolationKind> = new Set(["ungrounded_price", "ungrounded_attribute", "false_absence", "phantom_action", "promise"]);
+const TRUTH_KINDS: ReadonlySet<StyleViolationKind> = new Set(["ungrounded_price", "ungrounded_attribute", "false_absence", "phantom_action", "promise", "source_leak"]);
 
 /** The reply without the sentence that carries this text; unchanged when no sentence does. */
 function dropSentenceWith(text: string, match: string): string {
@@ -875,7 +955,7 @@ export function finalizeRewrite(text: string, ctx: StyleCheckContext): { text: s
     if (next !== out) { out = next; fixed.push("price_removed"); }
   }
   for (const v of untrue(out)) {
-    if (v.kind !== "promise" && v.kind !== "ungrounded_attribute") continue;
+    if (v.kind !== "promise" && v.kind !== "ungrounded_attribute" && v.kind !== "source_leak") continue;
     const dropped = dropSentenceWith(out, v.match);
     if (dropped !== out) { out = dropped; fixed.push(`${v.kind}_dropped`); }
   }

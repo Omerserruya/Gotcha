@@ -33,3 +33,16 @@ export async function capped<T>(work: Promise<T>, fallback: T, label: string, co
     clearTimeout(timer);
   }
 }
+
+/**
+ * The discovery extraction's own cap, higher: past it the turn loses the facts
+ * this message gave (urban-e28: "היא אוהבת צעיפים" never became a category,
+ * capped at 6s on two turns running). AI_EXTRACTION_CAP_MS; unset, 9000 where
+ * the side cap is on, none where it is off.
+ */
+export function extractionCapMs(env: NodeJS.ProcessEnv = process.env): number | null {
+  const v = String(env.AI_EXTRACTION_CAP_MS ?? "").trim();
+  if (v === "0" || v === "off") return null;
+  if (/^\d+$/.test(v)) return Number(v);
+  return judgementCapMs(env) == null ? null : 9000;
+}

@@ -698,7 +698,7 @@ export function pickLastProduct(
 export function namesProduct(text: string | null | undefined): boolean {
   const t = String(text ?? "");
   if (/\b[A-Z][a-z]+(?: [A-Z][a-z]+)+\b/.test(t)) return true;
-  return /סוודר|סריג|קרדיגן|חולצ|טישירט|טי-שירט|גופי|מעיל|ז'קט|ג'קט|שמל|חצאית|מכנס|ג'ינס|צעיף|כובע|תיק|גרב|נעל|קפוצ'ון|הודי|טרנץ'|כותנה|צמר|פשתן|עור|ארנק|חגורה|\b(?:tee|t-shirt|shirt|top|coat|jacket|dress|skirt|pants|jeans|scarf|beanie|hat|bag|tote|socks?|hoodie|sweater|cardigan|knit)\b/i.test(t);
+  return /סוודר|סריג|קרדיגן|חולצ|טישירט|טי-שירט|גופי|מעיל|ז'קט|ג'קט|שמל|חצאית|מכנס|ג'ינס|צעיף|צעיפ|כובע|תיק|גרב|נעל|קפוצ'ון|הודי|טרנץ'|כותנה|צמר|פשתן|עור|ארנק|חגור|\b(?:tee|t-shirt|shirt|top|coat|jacket|dress|skirt|pants|jeans|scarf|beanie|hat|bag|tote|socks?|hoodie|sweater|cardigan|knit)\b/i.test(t);
 }
 
 /**

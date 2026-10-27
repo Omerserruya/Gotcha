@@ -1665,7 +1665,12 @@ function buildKnowledge(opts: BuildPromptOpts): string | null {
   // Wrap as untrusted with a generous cap so the model treats retrieved
   // text as data, not authority.
   const safe = sanitizeUntrusted(block, { wrap: true, source: "knowledge", maxLength: 8000 });
-  return ["# Knowledge", safe].join("\n\n");
+  // The customer never hears where a fact came from (urban-e28: "יש שתי
+  // גרסאות במסמכים: דף Shipping & Returns מציין ₪29 ובבסיס הדמו ₪25").
+  const sources =
+    "Never tell the customer where information comes from: no documents, pages, files, \"knowledge base\", \"system\" or \"demo\". " +
+    "When two passages disagree on a fact (a price, a time), say it plainly as a range or that it varies (\"בין ₪25 ל־₪29\"), with no sources; a person from the team can confirm.";
+  return ["# Knowledge", sources, safe].join("\n\n");
 }
 
 // ─── Section: Guardrails ────────────────────────────────────

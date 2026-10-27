@@ -3404,6 +3404,19 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // The customer names a kind of product and nothing searched for it this turn:
+  // search, so a live card shows (urban-e28: "היא אוהבת צעיפים" was answered from
+  // the knowledge text, a Latin title and a snapshot price, and no card).
+  if (!choiceShortCircuit && !presearch2 && !discoveryForceTool && !ackOverCards && wooTurn
+    && toolFunctionNames.includes("woocommerce.list_products") && namesProduct(opts.incomingMessage ?? "") && !storeQuestion(opts.incomingMessage)) {
+    chatMessages.push({
+      role: "system",
+      content:
+        "The customer named a kind of product. Search for it now with woocommerce.list_products (the English noun) so it shows as a live card; " +
+        "never describe a product or its price from the knowledge text.",
+    });
+  }
+
   let searchNudged = false;
   // The round after tool results writes the answer from them: AI_ANSWER_EFFORT
   // sets its reasoning effort (unset = unchanged). Never the round that decides
@@ -5163,6 +5176,16 @@ async function generateAIBotReplyInner(
     }).catch((err: any) => console.warn("[ai-bot] skill run settle failed:", err?.message));
   }
 
+  // P2's hit or miss: used when the model ran no product search of its own.
+  // Recorded before the turn audit, which is where the next turn reads the
+  // last search from (urban-e28: recorded after it, so "תראה לי" after "לגבר"
+  // predicted from the search before, without the audience).
+  if (presearch2) {
+    const used = !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
+    if (used) toolCallLog.push({ tool: "woocommerce.list_products", args: presearch2.args, result: presearch2.content, decision: "presearch2", sideEffect: "none" } as any);
+    console.log(`[ai-bot][presearch2] predicted=${JSON.stringify(presearch2.args)} used=${used ? "yes" : "no"} conv=${opts.conversationId}`);
+  }
+
   // Audit - full BehaviorState + tool calls.
   prisma.auditLog.create({
     data: {
@@ -5269,17 +5292,14 @@ async function generateAIBotReplyInner(
   // questions, a question after a thank-you). Any violation: ONE regeneration,
   // without tools, naming exactly what to fix; whatever comes back is sent.
   markStage("model_done");
-  // P2's hit or miss: used when the model ran no product search of its own.
-  if (presearch2) {
-    const used = !toolCallLog.some((t) => PRODUCT_SEARCH_TOOL.test(t.tool));
-    if (used) toolCallLog.push({ tool: "woocommerce.list_products", args: presearch2.args, result: presearch2.content, decision: "presearch2", sideEffect: "none" } as any);
-    console.log(`[ai-bot][presearch2] predicted=${JSON.stringify(presearch2.args)} used=${used ? "yes" : "no"} conv=${opts.conversationId}`);
-  }
   // The model's own draft names the products with PRODUCT_n keys; a fix or a
   // rewrite takes the keys out of the sentence, and the cards still follow it.
   // The products to show, from the SHOW line (or the keys in the text when the
   // model wrote them inline); the line itself never reaches the customer.
   traceReply("model");
+  // A wide dash glued between two words ("שמתאימים—אחד") reads as a hyphen once
+  // rendering plain-dashes it (urban-e28): a comma, before anything else.
+  if (replyText) replyText = replyText.replace(/(\p{L})\s*[\u2013\u2014]\s*(\p{L})/gu, "$1, $2");
   const showLine = takeShowLine(replyText);
   let namingDraft = showLine.keys.length ? showLine.keys.join(", ") : replyText;
   if (replyText) replyText = showLine.text;
@@ -5655,7 +5675,8 @@ async function generateAIBotReplyInner(
         shopFloor: false,
         toolsOffered: toolFunctionNames,
         customerClosing: customerIsClosing(opts.incomingMessage),
-        productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
+        // This turn's results and every product the conversation's cards showed.
+        productTitles: [...(productEnvelope?.candidates.map((c) => c.title) ?? []), ...(wooTurn?.shown.map((p) => p.title) ?? [])],
         cardsShown: gateCards,
         // Our earlier text replies (not the cards' own lines), for the repeat check.
         previousReplies: (messages as any[])
