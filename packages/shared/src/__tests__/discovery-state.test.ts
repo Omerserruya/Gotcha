@@ -114,12 +114,12 @@ describe("facts persistence & precedence", () => {
 });
 
 describe("readiness (10/11 - optional never blocks)", () => {
-  it("not ready until the 3 required facts exist", async () => {
+  it("not ready until the 2 required facts exist (a shop never requires a budget)", async () => {
     const s = await session();
     await applyExtractedFacts({ session: s, profile: P, facts: [{ key: "product_category", value: "snowboard", source: "customer_explicit" }] });
     let r = await computeReadiness(s, P);
     expect(r.ready).toBe(false);
-    expect(r.missingRequired.sort()).toEqual(["budget", "riding_style"]);
+    expect(r.missingRequired.sort()).toEqual(["riding_style"]);
     await applyExtractedFacts({ session: s, profile: P, facts: [
       { key: "budget", value: 700, source: "customer_explicit" },
       { key: "riding_style", value: "all_mountain", source: "customer_explicit" },
