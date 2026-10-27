@@ -183,3 +183,78 @@ describe("the cached prefix", () => {
     expect(p.lastIndexOf("# Style (read last, follow exactly)")).toBeGreaterThan(p.lastIndexOf("# Knowledge"));
   });
 });
+
+// ── The rerun (dev 2026-10-27, urban-e21) ────────────────────────────────────
+import { polishReply, asksToResend, sendAgainLine, choiceAckLine } from "../services/reply-style-check.service";
+
+describe("e21: the choice is acknowledged in plain Hebrew", () => {
+  it("the line, then the add-ons; the calque is a banned phrase", () => {
+    expect(choiceAckLine("he")).toBe("בחירה מצוינת!");
+    expect(kinds("מעולה, לקחתי נקודת התחלה: המעיל.")).toContain("banned_phrase");
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("replyText = `${choiceAckLine(replyLocale)}\\n${goesWellWithLine(replyLocale)}`;");
+  });
+});
+
+describe("e21: \"סבבה\" after an open question", () => {
+  const draft = "מעולה, מעדיפים את הטרנץ' הקז'ואלי או את מעיל הצמר הארוך?";
+  it("asking the open thing again is the nudge, not a push", () => {
+    expect(kinds(draft, { incomingMessage: "סבבה", openQuestion: true })).not.toContain("push_after_ack");
+  });
+  it("after an answer that asked nothing, still a push", () => {
+    expect(kinds(draft, { incomingMessage: "סבבה", openQuestion: false })).toContain("push_after_ack");
+  });
+  it("wired from our last text reply, not the cards", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("openQuestion: /[?؟]\\s*\\S{0,3}\\s*$/.test(");
+  });
+});
+
+describe("e21: \"שלח לי\" sends the last cards again", () => {
+  for (const t of ["שלח לי", "תשלח לי", "שלחי לי אותם", "send me"]) it(t, () => expect(asksToResend(t)).toBe(true));
+  for (const t of ["שלח לי פרטים על המשלוח לאילת בבקשה", "אני מחפש מעיל", "משלוח"]) it(`not: ${t}`, () => expect(asksToResend(t)).toBe(false));
+  it("the line, and wired before the add-ons", () => {
+    expect(sendAgainLine("he")).toBe("הנה שוב:");
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot.indexOf("asksToResend(opts.incomingMessage)")).toBeGreaterThan(0);
+    expect(bot.indexOf("asksToResend(opts.incomingMessage)")).toBeLessThan(bot.indexOf("commitsToBuy(opts.incomingMessage)) {"));
+  });
+});
+
+describe("e21: with cards out, the store's titles leave the Hebrew sentence", () => {
+  const titles = ["Cotton Trench Coat", "Wool Blend Overcoat"];
+  const polish = (t: string) => polishReply(t, { locale: "he", productTitles: titles, cardsShown: true });
+  it("after its Hebrew description", () => {
+    expect(polish("מעולה, מצאתי שני מעילים שעשויים להתאים: מעיל טרנץ' קליל, Cotton Trench Coat, ומעיל תערובת צמר ארוך ואלגנטי, Wool Blend Overcoat. איזה צבע או גזרה מעניין אותך?"))
+      .toBe("מעולה, מצאתי שני מעילים שעשויים להתאים: מעיל טרנץ' קליל, ומעיל תערובת צמר ארוך ואלגנטי. איזה צבע או גזרה מעניין אותך?");
+  });
+  it("one title inside the sentence, or leading it", () => {
+    expect(polish("המעיל Wool Blend Overcoat מתאים לגברים. איזו מידה בדרך כלל מתאימה לך?")).toBe("המעיל מתאים לגברים. איזו מידה בדרך כלל מתאימה לך?");
+    expect(polish("הנה אופציה שמתאימה לגברים: Wool Blend Overcoat, גזרה אלגנטית וחמימה.")).toBe("הנה אופציה שמתאימה לגברים: גזרה אלגנטית וחמימה.");
+    expect(polish("Cotton Trench Coat - טרנץ' קל ליום יום.")).toBe("טרנץ' קל ליום יום.");
+  });
+  it("no cards: the titles stay", () => {
+    expect(polishReply("המעיל Wool Blend Overcoat מתאים לגברים.", { locale: "he", productTitles: titles, cardsShown: false })).toContain("Wool Blend Overcoat");
+  });
+});
+
+describe("e21: promotions", () => {
+  it("each of them is the answer: three sentences, a hello not counted", () => {
+    const t = "היי! יש קוד WELCOME10 שמעניק 10% הנחה (בתוקף עד 30.09.2027). בנוסף, משלוח חינם בישראל בהזמנות מעל ₪299. והחזרות חינם עד 30 יום.";
+    expect(kinds(t, { isFirstReply: true, incomingMessage: "איזה מבצעים קיימים היום?", productFactsAvailable: false, groundingText: "₪299" })).not.toContain("too_long");
+  });
+  it("\"קיים קוד\" is said \"יש קוד\"", () => {
+    expect(polishReply("קיים קוד WELCOME10, 10% הנחה.", { locale: "he" })).toBe("יש קוד WELCOME10, 10% הנחה.");
+  });
+  it("a one-line question that is not about promotions keeps two", () => {
+    expect(kinds("משלוח בארץ 2-4 ימים ב-₪29. איסוף מהסטודיו בחינם. לחו\"ל 5-8 ימים.", { incomingMessage: "כמה עולה משלוח?" })).toContain("too_long");
+  });
+});
+
+describe("e21: the knowledge retrieval overlaps the judgement calls", () => {
+  it("started after them, read only later", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot.indexOf("const chunks = await retrieveRelevantChunks(")).toBeGreaterThan(bot.indexOf("discoveryPrefetch?.catch(() => undefined);"));
+    expect(bot.indexOf("const chunks = await retrieveRelevantChunks(")).toBeLessThan(bot.indexOf("const [planContext, fullSessionFacts]"));
+  });
+});

@@ -65,6 +65,8 @@ export interface StyleCheckContext {
   searchesAllEmpty?: boolean;
   /** The employee's own last replies, newest last. */
   previousReplies?: string[];
+  /** Our last text reply asked something the customer has not answered yet. */
+  openQuestion?: boolean;
   /** The store titles this turn's search returned (to spot them in the text). */
   productTitles?: string[];
   /** Tools that actually ran this turn. */
@@ -85,7 +87,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -183,6 +185,9 @@ const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|(?:לשלוח|ש?אשלח|ש?נשלח)(?:\\s+(?:עבורך|לך))?(?:\\s+את)?\\s+(?:ה?פרטי|פרטים|תמונות)|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
+
+/** The customer asks which promotions or coupons there are. */
+const PROMOTIONS_ASKED = /מבצע|הנח|קופון|קוד הנחה|\bsales?\b|promo|discount|coupon/i;
 
 /** A customer message that only acknowledges: "מגניב", "סבבה", "אוקיי", "אחלה". */
 const ACK_ONLY = /^\s*(?:אוקיי?|אוקי|אוקיי סבבה|סבבה|מגניב|אחלה|יופי|מעולה|טוב|הבנתי|ok(?:ay)?|cool|great|got it|nice)[\s!.,👍🙂😊]*$/iu;
@@ -313,11 +318,18 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // A one-line question gets a short answer (eval e8 U7: "כמה עולה משלוח?" got
   // every rate there is): two sentences, not three.
   const oneLine = ctx.incomingMessage.trim().length <= 60 && !/\n/.test(ctx.incomingMessage.trim());
-  const maxSentences = oneLine ? 2 : 3;
-  if (!detailAsked && (sentences(plain) > maxSentences || plain.length > (oneLine ? 240 : 360))) hit("too_long", `${sentences(plain)} sentences, ${plain.length} chars`);
+  // "Which promotions are there?" is answered with each of them (dev 2026-10-27:
+  // the rewrite for length dropped free shipping over ₪299).
+  const maxSentences = oneLine && !PROMOTIONS_ASKED.test(ctx.incomingMessage) ? 2 : 3;
+  // A bare "היי!" before the answer is not a sentence of it.
+  const counted = sentences(plain.replace(GREETING_START, "").replace(/^[\s,!.🙂😊]+/u, ""));
+  if (!detailAsked && (counted > maxSentences || plain.length > (oneLine ? 240 : 360))) hit("too_long", `${counted} sentences, ${plain.length} chars`);
   // After a plain acknowledgement ("מגניב", "סבבה", "אוקיי") no push and no
-  // offer (eval L01 L-3: a cart nudge after every one).
-  if (ACK_ONLY.test(ctx.incomingMessage) && /[?؟]/.test(plain)) hit("push_after_ack", "a question after an acknowledgement");
+  // offer (eval L01 L-3: a cart nudge after every one). Not when our last
+  // reply asked something still open: "סבבה" to "יום-יומי או פורמלי?" answers
+  // nothing, and asking the one open thing again is the nudge (dev 2026-10-27:
+  // the rewrite came back "מעולה, נשמע מצוין.").
+  if (ACK_ONLY.test(ctx.incomingMessage) && /[?؟]/.test(plain) && !ctx.openQuestion) hit("push_after_ack", "a question after an acknowledgement");
 
   if (!ctx.isFirstReply) hit("greeting_after_first", plain.match(GREETING_START));
   hit("self_intro", plain.match(SELF_INTRO));
@@ -536,6 +548,25 @@ export function cardsAboveLine(locale: string): string {
   return locale?.startsWith("he") ? "המוצרים מופיעים למעלה בשיחה. איזה מהם מעניין?" : "The products are up in the conversation. Which one interests you?";
 }
 
+/**
+ * "שלח לי" with nothing named, after cards were shown (dev 2026-10-27: "איזה מהם
+ * לשלוח לך?" about the two coats just shown twice): the last cards again.
+ */
+export function asksToResend(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  return t.split(/\s+/).length <= 4 && /(?<![\u0590-\u05FF])(?:שלח|תשלח|שלחי|תשלחי|שלחו|תשלחו)(?![\u0590-\u05FF])|\bsend (?:me|it|them)\b/iu.test(t);
+}
+
+/** The line over the cards sent again on request. */
+export function sendAgainLine(locale: string): string {
+  return locale?.startsWith("he") ? "הנה שוב:" : "Here you go:";
+}
+
+/** The customer chose a product: a short, natural acknowledgement before the add-ons. */
+export function choiceAckLine(locale: string): string {
+  return locale?.startsWith("he") ? "בחירה מצוינת!" : "Great choice!";
+}
+
 /** Cards resent because a send failed: the line over them. */
 export function cardsAgainLine(locale: string): string {
   return locale?.startsWith("he") ? "הנה הם שוב:" : "Here they are again:";
@@ -666,6 +697,15 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     const TITLE = "(?:\u0000\\d+\u0000|[A-Z][A-Za-z'’-]+(?: (?:[A-Z0-9][A-Za-z'’-]*|&))+)";
     const named = (out.match(new RegExp(TITLE, "g")) ?? []).length;
     if (named >= 2) out = out.replace(new RegExp(`${TITLE}\\s*[,:]\\s*(?=[\u0590-\u05FF])`, "g"), "");
+    // Every store title the search returned, one or many, comes out of the
+    // Hebrew sentence with the punctuation around it: the cards carry it (dev
+    // 2026-10-27: "מעיל טרנץ' קליל, Cotton Trench Coat, ומעיל...", "המעיל Wool
+    // Blend Overcoat מופיע"). Between two separators the first one stays. A
+    // title fused to a Hebrew prefix ("ה-Chunky Cardigan, סריג עבה, עולה ₪529")
+    // is the sentence's subject and stays (eval e14 AD1).
+    out = out.replace(/(?<![\u0590-\u05FF][-\u2010\u2011])(\s*[,:;\u2013\u2014]\s*|\s*-\s+)?(?<![\u0590-\u05FF][-\u2010\u2011])\u0000\d+\u0000(\s*[,:;\u2013\u2014]\s*|\s+-\s*)?/g, (_m, before?: string, after?: string) =>
+      before && after ? `${before.trim()} ` : before || after ? "" : " ");
+    out = out.replace(/^[\s,:;\u2013\u2014-]+/, "").replace(/\s+([.,!?؟:])/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
   }
   // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
   out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
@@ -719,6 +759,8 @@ const ASKS_QUANTITY = /כמה (?:יחידות|נשאר|נשארו|יש במלא�
  */
 function hebrewTouches(text: string, incoming: string): string {
   let out = text
+    // "קיים קוד WELCOME10" reads as a form; a person says "יש" (dev 2026-10-27).
+    .replace(/(^|[.!?\n]\s*)(?:קיים|קיימת|קיימים|קיימות)(?= )/gu, "$1יש")
     .replace(/(?<![A-Za-z])off[- ]white(?![A-Za-z])/gi, "אוף וייט")
     .replace(/לא נשען/g, "לא נלבש")
     // The model's "קל־קל" (Omer's test, 08:18Z) is "קליל"; a maqaf is never sent.

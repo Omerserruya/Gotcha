@@ -187,7 +187,7 @@ describe("wired", () => {
   const route = readFileSync(join(__dirname, "../routes/embedded-chat.ts"), "utf8");
   it("(i) after the answer, when nothing else shows cards this turn", () => {
     expect(bot).toContain("!wooTurn.staged.length && commitsToBuy(opts.incomingMessage)");
-    expect(bot).toContain("replyText = `${replyText.trim()}\\n${goesWellWithLine(replyLocale)}`;");
+    expect(bot).toContain("replyText = `${choiceAckLine(replyLocale)}\\n${goesWellWithLine(replyLocale)}`;");
   });
   it("the model's own call counts toward once", () => {
     expect(bot).toContain("!(await claimCrossSell(opts.conversationId, anchorId))");

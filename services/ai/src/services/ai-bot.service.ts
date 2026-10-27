@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -1684,38 +1684,6 @@ async function generateAIBotReplyInner(
     actionContractProgress,
   });
 
-  // ── KB retrieval - strategy-controlled, NOT regex ──────
-  let kbBlock: string | undefined;
-  // Which sources actually fed this answer. Recorded for the sandbox's "why did
-  // it answer this way?" panel: an operator debugging a wrong answer needs to
-  // know whether the employee read the right document or retrieved nothing at
-  // all, and guessing from the reply text is not good enough.
-  const knowledgeUsed: Array<{ title: string; sourceType: string | null }> = [];
-  if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
-    try {
-      // Scoped to what THIS employee may read - see readableKnowledgeBaseIds.
-      // The live customer path, and the only caller that records gaps: a miss
-      // here is a real question this business could not answer.
-      const chunks = await retrieveRelevantChunks(
-        opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId,
-        {
-          record: shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
-          askerKey: opts.conversationId ?? null,
-        },
-      );
-      kbBlock = buildKnowledgeContext(chunks) || undefined;
-      markStage("knowledge");
-      for (const c of chunks as any[]) {
-        const title = String(c?.documentTitle ?? c?.title ?? "").trim();
-        if (title && !knowledgeUsed.some((k) => k.title === title)) {
-          knowledgeUsed.push({ title, sourceType: c?.sourceType ?? null });
-        }
-      }
-    } catch (err: any) {
-      console.warn("[ai-bot] Knowledge retrieval failed:", err.message);
-    }
-  }
-
   // ── Conversation memory (Task 5) - fact snapshot injected as ground truth ─
   const memory = buildConversationMemory({
     messages: messages.map((m) => ({
@@ -1971,6 +1939,42 @@ async function generateAIBotReplyInner(
     ? prefetchDiscoveryExtraction({ tenantId: opts.tenantId, conversationId: opts.conversationId })
     : null;
   discoveryPrefetch?.catch(() => undefined);
+
+  // The knowledge retrieval (a translation and an embedding, 1 to 3s) runs
+  // while those judgement calls are in flight: nothing before here reads it
+  // (dev 2026-10-27, the urban rerun).
+  // ── KB retrieval - strategy-controlled, NOT regex ──────
+  let kbBlock: string | undefined;
+  // Which sources actually fed this answer. Recorded for the sandbox's "why did
+  // it answer this way?" panel: an operator debugging a wrong answer needs to
+  // know whether the employee read the right document or retrieved nothing at
+  // all, and guessing from the reply text is not good enough.
+  const knowledgeUsed: Array<{ title: string; sourceType: string | null }> = [];
+  if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
+    try {
+      // Scoped to what THIS employee may read - see readableKnowledgeBaseIds.
+      // The live customer path, and the only caller that records gaps: a miss
+      // here is a real question this business could not answer.
+      const chunks = await retrieveRelevantChunks(
+        opts.tenantId, opts.incomingMessage, 5, opts.aiAgentId,
+        {
+          record: shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+          askerKey: opts.conversationId ?? null,
+        },
+      );
+      kbBlock = buildKnowledgeContext(chunks) || undefined;
+      markStage("knowledge");
+      for (const c of chunks as any[]) {
+        const title = String(c?.documentTitle ?? c?.title ?? "").trim();
+        if (title && !knowledgeUsed.some((k) => k.title === title)) {
+          knowledgeUsed.push({ title, sourceType: c?.sourceType ?? null });
+        }
+      }
+    } catch (err: any) {
+      console.warn("[ai-bot] Knowledge retrieval failed:", err.message);
+    }
+  }
+
 
   // Set later in the turn, read by runAdapterTool's gate below. Declared here
   // because the tool context closes over it and is built before the controller
@@ -5156,6 +5160,7 @@ async function generateAIBotReplyInner(
         toolsOffered: toolFunctionNames,
         handedOff: !!pendingEscalation || toolCallLog.some((t) => t.tool === "escalate_to_human"),
         previousReplies: priorOutbound.filter((m: any) => !String(m.senderName ?? "").includes("@")).slice(-3).map((m: any) => String(m.body ?? "")),
+        openQuestion: /[?؟]\s*\S{0,3}\s*$/.test(String([...priorOutbound].reverse().find((m: any) => !/product/.test(String(m.messageType ?? "")))?.body ?? "").trim()),
         productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
         toolsCalled: toolCallLog.map((t) => t.tool),
         customerClosing: customerIsClosing(opts.incomingMessage),
@@ -5401,6 +5406,20 @@ async function generateAIBotReplyInner(
     replyText = dropBelow(replyText);
   }
 
+  // "שלח לי" with nothing named, after cards were shown: the last cards again,
+  // not "which one?" (dev 2026-10-27: the two coats, shown twice, then asked about).
+  if (replyText && wooTurn && !wooTurn.staged.length && !awaitingApproval && !pendingEscalation
+    && asksToResend(opts.incomingMessage) && !namesProduct(opts.incomingMessage ?? "")) {
+    const last = wooTurn.shown.length ? wooTurn.shown.filter((p) => p.batch === wooTurn.shown[wooTurn.shown.length - 1].batch) : [];
+    if (last.length) {
+      const again = await wooTurn.sendShopifyProducts({ products: last.map((p) => ({ productId: p.productId })) }).catch(() => null);
+      if (again?.ok) {
+        replyText = sendAgainLine(replyLocale);
+        console.log(`[ai-bot] "send me": the last ${last.length} card(s) again conv=${opts.conversationId}`);
+      }
+    }
+  }
+
   // The customer settled on a product ("אני לוקח את הטרנץ'"): the answer first,
   // then one line and the store's add-ons as cards (2026-10-26: the tool was
   // offered and never called). Once per product; not when this turn already
@@ -5411,7 +5430,10 @@ async function generateAIBotReplyInner(
       const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId).catch(() => null);
       if (record) {
         wooTurn.staged.push(record);
-        replyText = `${replyText.trim()}\n${goesWellWithLine(replyLocale)}`;
+        // A choice is acknowledged, not answered: the model's own words here
+        // were a calque ("לקחתי נקודת התחלה") and an ask for an email (dev
+        // 2026-10-27). commitsToBuy never matches a question, so nothing is lost.
+        replyText = `${choiceAckLine(replyLocale)}\n${goesWellWithLine(replyLocale)}`;
       } else {
         await releaseCrossSell(opts.conversationId, anchorId);
       }
