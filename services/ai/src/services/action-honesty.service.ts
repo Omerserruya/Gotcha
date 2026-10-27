@@ -60,7 +60,10 @@ const CLAIM_PATTERNS: Array<{ kind: UnsupportedClaimKind; re: RegExp }> = [
     // Active AND passive. Told that "ביצעתי" was being stripped, the model
     // simply switched to "בקשתך עודכנה בהזמנה" - same false claim, no first
     // person. A customer cannot tell the difference and should not have to.
-    re: /((ביצעתי|ביצענו|עשיתי|עשינו|רשמתי|רשמנו|הוספתי|הוספנו|עדכנתי|עדכנו|סימנתי|שמרתי|הזנתי|צירפתי|הגדרתי)|(עודכן|עודכנה|נרשם|נרשמה|נוסף|נוספה|נשמר|נשמרה|הוזן|הוזנה|צורף|צורפה|סומן|סומנה)|\bi(['’]ve| have)?\s*(added|noted|recorded|updated|saved|tagged|set|applied|logged)\b|\b(has|have|was|were)( been)? (added|noted|recorded|updated|saved|tagged|applied)\b)/i,
+    // Whole Hebrew words, one ו/ש prefix allowed: "נוסף" is inside "בנוסף" ("in
+    // addition"), and the store's free-shipping sentence was stripped as a
+    // claimed write (dev 2026-10-27, urban-e22 U2).
+    re: /((?<![\u0590-\u05FF])[וש]?(?:ביצעתי|ביצענו|עשיתי|עשינו|רשמתי|רשמנו|הוספתי|הוספנו|עדכנתי|עדכנו|סימנתי|שמרתי|הזנתי|צירפתי|הגדרתי|עודכן|עודכנה|עודכנו|נרשם|נרשמה|נרשמו|נוסף|נוספה|נוספו|נשמר|נשמרה|נשמרו|הוזן|הוזנה|הוזנו|צורף|צורפה|צורפו|סומן|סומנה|סומנו)(?![\u0590-\u05FF])|\bi(['’]ve| have)?\s*(added|noted|recorded|updated|saved|tagged|set|applied|logged)\b|\b(has|have|was|were)( been)? (added|noted|recorded|updated|saved|tagged|applied)\b)/i,
   },
   {
     kind: "delegated",

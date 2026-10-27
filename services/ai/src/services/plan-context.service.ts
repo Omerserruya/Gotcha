@@ -24,8 +24,10 @@
  * fully fail-soft: every derivation degrades to an empty/neutral value.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { createHash } from "node:crypto";
+import { prisma, getRedis } from "@chatcenter/shared";
 import { evaluateWizardBinding } from "./wizard-binding.service";
+import { addsNothing } from "./reply-style-check.service";
 import type { ActiveGoalSnapshot, WizardRuntimeFacts } from "./objectives";
 import type { CrmStateFlags } from "./prospect-state";
 
@@ -247,7 +249,19 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
   ]
     .filter((s): s is string => !!s && !!s.trim())
     .join("\n");
-  const wizardFacts: WizardRuntimeFacts = await evaluateWizardBinding({
+  // The verdict is reused when the turn adds nothing it reads: the same
+  // configuration and skills, and no customer words since (a "סבבה", an emoji,
+  // a retried turn). Its call was the slowest of the turn's judgement calls on
+  // 3 of 9 rerun turns (dev 2026-10-27).
+  const bindingFingerprint = createHash("sha256").update(JSON.stringify([
+    input.role ?? null, input.goal ?? null, input.salesContext ?? null,
+    (input.skills ?? []).map((k: any) => k?.id ?? k), input.openSkillId ?? null,
+  ])).digest("hex").slice(0, 16);
+  const inbound = input.messages
+    .filter((m) => m.direction === "INBOUND" && m.body?.trim())
+    .map((m) => String(m.body).trim());
+  const reused = await reusableWizardFacts(input.conversationId, bindingFingerprint, inbound);
+  const wizardFacts: WizardRuntimeFacts = reused ?? await evaluateWizardBinding({
     tenantId: input.tenantId,
     conversationId: input.conversationId,
     role: input.role,
@@ -260,6 +274,9 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
     openSkillId: input.openSkillId,
   });
 
+  if (reused) console.log(`[plan-context] wizard binding reused: the turn adds nothing it reads conv=${input.conversationId}`);
+  else void rememberWizardFacts(input.conversationId, bindingFingerprint, inbound, wizardFacts);
+
   // Capability Layer hints: integration tool → Integration.category.
   const toolCapabilityHints = await loadToolCapabilityHints(input.tenantId, input.agentId);
 
@@ -270,4 +287,32 @@ export async function assemblePlanContext(input: AssemblePlanContextInput): Prom
     wizardFacts,
     toolCapabilityHints,
   };
+}
+
+const WIZARD_FACTS_TTL_SECONDS = 6 * 60 * 60;
+const wizardFactsKey = (conversationId: string) => `ai:wizard-binding:${conversationId}`;
+
+/**
+ * The last verdict for this conversation, when nothing it reads has changed
+ * since: the same fingerprint, the customer messages it saw still the first
+ * ones, and every message after them adds nothing. Null otherwise, or on any error.
+ */
+export async function reusableWizardFacts(conversationId: string, fingerprint: string, inbound: string[]): Promise<WizardRuntimeFacts | null> {
+  try {
+    const raw = await getRedis().get(wizardFactsKey(conversationId));
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { fp: string; inbound: string[]; facts: WizardRuntimeFacts };
+    if (cached.fp !== fingerprint || cached.inbound.length > inbound.length) return null;
+    if (cached.inbound.some((t, i) => inbound[i] !== t)) return null;
+    return inbound.slice(cached.inbound.length).every((t) => addsNothing(t)) ? cached.facts : null;
+  } catch {
+    return null;
+  }
+}
+
+async function rememberWizardFacts(conversationId: string, fingerprint: string, inbound: string[], facts: WizardRuntimeFacts): Promise<void> {
+  if (!(facts as any)?.evaluated) return;
+  try {
+    await getRedis().set(wizardFactsKey(conversationId), JSON.stringify({ fp: fingerprint, inbound, facts }), "EX", WIZARD_FACTS_TTL_SECONDS);
+  } catch { /* the next turn evaluates again */ }
 }

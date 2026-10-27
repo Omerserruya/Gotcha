@@ -87,7 +87,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -101,7 +101,8 @@ const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכל
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
-const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:\\n]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
+// After a dash too: "הי — מחפש מעיל?" (dev 2026-10-27, urban-e22).
+const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
 const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
 const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
@@ -185,6 +186,12 @@ const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|(?:לשלוח|ש?אשלח|ש?נשלח)(?:\\s+(?:עבורך|לך))?(?:\\s+את)?\\s+(?:ה?פרטי|פרטים|תמונות)|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
+
+/** A message that only acknowledges, or carries no words at all (an emoji). */
+export function addsNothing(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  return ACK_ONLY.test(t) || !/[\p{L}\p{N}]/u.test(t);
+}
 
 /** The customer asks which promotions or coupons there are. */
 const PROMOTIONS_ASKED = /מבצע|הנח|קופון|קוד הנחה|\bsales?\b|promo|discount|coupon/i;
@@ -580,8 +587,28 @@ export function cardsAgainLine(locale: string): string {
  */
 export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check"]);
 
+/**
+ * What a removed title leaves behind (dev 2026-10-27: "מעיל שמתאים לגבר, למשל."):
+ * a "למשל" / "כמו" with nothing after it goes, a sentence that ends on a word
+ * that needs an object ("את", "של", "עם") goes, and so does a trailing comma.
+ */
+export function tidyFragments(text: string): string {
+  let out = text.replace(/[,\s]*(?<![\u0590-\u05FF])(?:למשל|כמו|כגון|לדוגמה)(?![\u0590-\u05FF])\s*(?=[.!?؟\n]|$)/gu, "");
+  // Sentences with the whitespace after each, so a line break stays one.
+  const tokens = out.split(/(?<=[.!?؟\n])(\s+)/);
+  const pieces: Array<[string, string]> = [];
+  for (let i = 0; i < tokens.length; i += 2) pieces.push([tokens[i], tokens[i + 1] ?? ""]);
+  const kept = pieces.filter(([p]) => !/(?<![\u0590-\u05FF])(?:את|של|עם|על|אל)\s*[.!?؟]?\s*$/u.test(p.trim()));
+  if (kept.length) out = kept.map(([p, sep]) => p + sep).join("");
+  return out.replace(/,\s*(?=[.!?؟]|$)/g, "").trim();
+}
+
 /** The PRODUCT_n keys out of the sentence: the cards show the products. */
 export function stripProductKeys(text: string): string {
+  return tidyFragments(stripKeysOnly(text));
+}
+
+function stripKeysOnly(text: string): string {
   return text
     .replace(/\s*\(\s*PRODUCT_\d+\s*\)/gi, "")
     .replace(/PRODUCT_\d+(?:\s*(?:,|(?<![\u0590-\u05FF])ו[-\u2010\u2011]?|\band\b|&)\s*PRODUCT_\d+)*/gi, "")
@@ -664,6 +691,12 @@ export function finalizeRewrite(text: string, ctx: StyleCheckContext): { text: s
     const trimmed = stripTrailingOffer(out);
     if (trimmed !== out) { out = trimmed; fixed.push("offer_dropped"); }
   }
+  // A gendered address the rewrite kept ("הי, מחפש מעיל?", urban-e22): its
+  // sentence goes when something else is left. Omer's rule, not a style hint.
+  for (const v of checkReplyStyle(out, ctx).filter((x) => x.kind === "gendered_address")) {
+    const dropped = dropSentenceWith(out, v.match);
+    if (dropped !== out && dropped.trim()) { out = dropped; fixed.push("gendered_dropped"); }
+  }
   left = out.trim() ? untrue(out) : [];
   // What is left once the untrue part is gone is only an offer ("לשלוח את
   // פרטי המוצר ותמונות?"): nothing was answered, so say what is needed.
@@ -706,7 +739,12 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
     out = out.replace(/(?<![\u0590-\u05FF][-\u2010\u2011])(\s*[,:;\u2013\u2014]\s*|\s*-\s+)?(?<![\u0590-\u05FF][-\u2010\u2011])\u0000\d+\u0000(\s*[,:;\u2013\u2014]\s*|\s+-\s*)?/g, (_m, before?: string, after?: string) =>
       before && after ? `${before.trim()} ` : before || after ? "" : " ");
     out = out.replace(/^[\s,:;\u2013\u2014-]+/, "").replace(/\s+([.,!?؟:])/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
+    out = tidyFragments(out);
   }
+  // A code and what it gives, joined by a wide dash ("welcome10 — 10% הנחה"):
+  // a colon. Left as a dash, the outbox's number-range guard read "10 — 10"
+  // as a range and sent "welcome10-10%" (dev 2026-10-27, urban-e22).
+  out = out.replace(/([A-Za-z][A-Za-z0-9]*\d)\s*[\u2013\u2014\u2015]\s*(?=\d)/g, "$1: ");
   // A semicolon reads as a document, not a chat (eval e5 S6): a comma.
   out = out.replace(/(?<!&#?[a-z0-9]{1,8})\s*;\s*/gi, ", ");
   // A word in another script inside a Hebrew reply ("ג'رسي", eval e10 X6) is

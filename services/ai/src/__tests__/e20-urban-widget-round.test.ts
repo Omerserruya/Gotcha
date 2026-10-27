@@ -258,3 +258,65 @@ describe("e21: the knowledge retrieval overlaps the judgement calls", () => {
     expect(bot.indexOf("const chunks = await retrieveRelevantChunks(")).toBeLessThan(bot.indexOf("const [planContext, fullSessionFacts]"));
   });
 });
+
+// ── The second rerun (dev 2026-10-27, urban-e22) ─────────────────────────────
+import { tidyFragments, finalizeRewrite, addsNothing } from "../services/reply-style-check.service";
+import { validateActionHonesty, stripUnsupportedDelegation } from "../services/action-honesty.service";
+
+describe("e22: what a removed title leaves behind", () => {
+  it("a dangling \"למשל\" goes", () => {
+    expect(tidyFragments("טוב, יש מעיל שמתאים לגבר, למשל.\nאיזו מידה מתאימה לך?")).toBe("טוב, יש מעיל שמתאים לגבר.\nאיזו מידה מתאימה לך?");
+  });
+  it("a sentence ending on \"את\" goes; a trailing comma goes", () => {
+    expect(tidyFragments("מצאתי מעיל אחד. אפשר לראות את. איזה צבע?")).toBe("מצאתי מעיל אחד. איזה צבע?");
+    expect(tidyFragments("הנה שתי אופציות,")).toBe("הנה שתי אופציות");
+  });
+  it("after the title strip with cards out", () => {
+    expect(polishReply("טוב, יש עכשיו מעיל שמתאים לגבר, למשל Wool Blend Overcoat.", { locale: "he", productTitles: ["Wool Blend Overcoat"], cardsShown: true }))
+      .toBe("טוב, יש עכשיו מעיל שמתאים לגבר.");
+  });
+  it("\"הראינו\" and \"נמצא שני\" are calques: rewritten", () => {
+    expect(kinds("טוב, הראינו עכשיו מעיל שמתאים לגבר.")).toContain("banned_phrase");
+    expect(kinds("היי, נמצא שני מעילים שמתאימים כאן.", { isFirstReply: true })).toContain("banned_phrase");
+    expect(kinds("לא נמצא מעיל במידה הזאת.")).not.toContain("banned_phrase");
+  });
+});
+
+describe("e22: a gendered echo question after a dash", () => {
+  it("\"הי — מחפש מעיל?\" is caught", () => {
+    expect(kinds("הי — מחפש מעיל? יש שתי אופציות.", { isFirstReply: true })).toContain("gendered_address");
+  });
+  it("kept by a rewrite: its sentence goes", () => {
+    const out = finalizeRewrite("הי — מחפש מעיל? יש שתי אופציות: טרנץ' קליל או מעיל צמר חם.", ctx({ isFirstReply: true }));
+    expect(out.text).toBe("יש שתי אופציות: טרנץ' קליל או מעיל צמר חם.");
+    expect(out.fixed).toContain("gendered_dropped");
+  });
+});
+
+describe("e22: promotions keep free shipping and the code's separator", () => {
+  const reply = "כרגע יש קוד מבצע: welcome10 — 10% הנחה. בנוסף האתר מציין משלוח חינם בקנייה מעל ₪299.";
+  it("\"בנוסף\" is not a claimed write (\"נוסף\" inside it)", () => {
+    expect(validateActionHonesty(reply, [] as any, { hasBackgroundJob: false }).unsupported.map((c) => c.kind)).not.toContain("performed");
+    expect(stripUnsupportedDelegation(reply)).toBeNull();
+  });
+  it("a real claimed write still is", () => {
+    expect(validateActionHonesty("הפרטים נוספו להזמנה.", [] as any, { hasBackgroundJob: false }).unsupported.map((c) => c.kind)).toContain("performed");
+    expect(validateActionHonesty("עדכנתי את ההזמנה.", [] as any, { hasBackgroundJob: false }).unsupported.map((c) => c.kind)).toContain("performed");
+  });
+  it("a code and what it gives: a colon, not a dash the outbox reads as a range", () => {
+    expect(polishReply(reply, { locale: "he" })).toContain("welcome10: 10% הנחה");
+  });
+});
+
+describe("e22: the binding verdict is reused when the turn adds nothing it reads", () => {
+  it("an acknowledgement or an emoji adds nothing; words do", () => {
+    for (const t of ["סבבה", "אוקיי", "👍", "תודה!"]) expect(addsNothing(t), t).toBe(t !== "תודה!");
+    expect(addsNothing("לא יודע תראה לי")).toBe(false);
+  });
+  it("wired around the call, remembered only after a real evaluation", () => {
+    const src = readFileSync(join(__dirname, "../services/plan-context.service.ts"), "utf8");
+    expect(src).toContain("const reused = await reusableWizardFacts(input.conversationId, bindingFingerprint, inbound);");
+    expect(src).toContain("reused ?? await evaluateWizardBinding({");
+    expect(src).toContain("if (!(facts as any)?.evaluated) return;");
+  });
+});
