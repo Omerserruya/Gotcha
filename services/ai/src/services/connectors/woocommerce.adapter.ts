@@ -115,6 +115,11 @@ const TOOLS: ToolDefinition[] = [
         price_min: { type: "number", description: "Lowest price, in the store's currency." },
         price_max: { type: "number", description: "Highest price (the customer's budget), in the store's currency." },
         in_stock: { type: "boolean", description: "true = only products in stock." },
+        audience: {
+          type: "string",
+          enum: ["men", "women"],
+          description: "Who it is for, when the customer said (a man / a woman, for himself / for herself): only the store's products for them. Leave out otherwise.",
+        },
       },
     },
   },
@@ -261,6 +266,18 @@ const TOOLS: ToolDefinition[] = [
     parameters: { type: "object", properties: { product_id: { type: "string" } }, required: ["product_id"] },
   },
   {
+    // Internal callers only (the web chat's add-ons read the category tree).
+    // Declared so the framework will run it; no catalog row exists, so the
+    // governance gate never offers it to the model (dev 2026-10-27: undeclared,
+    // it was refused as unknown_tool and the Wool Blend Overcoat got no add-ons).
+    name: "woocommerce.list_product_categories",
+    description: "The store's product categories (id, name, parent).",
+    whenToUse: "Internal: the add-ons read the category tree.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: { type: "object", properties: {} },
+  },
+  {
     name: "woocommerce.list_product_variations",
     description: "The variations of a product (size, color...) with price and stock for each.",
     whenToUse: "The customer asks which sizes or colors are available, or in stock.",
@@ -326,6 +343,28 @@ const TOOLS: ToolDefinition[] = [
   },
 ];
 
+
+const AUDIENCE_NAME: Record<"men" | "women", RegExp> = {
+  men: /^(?:men|mens|men'?s|man|male|גברים|גבר)$/i,
+  women: /^(?:women|womens|women'?s|woman|female|נשים|אישה)$/i,
+};
+const audienceCache = new Map<string, { at: number; ids: Record<string, string | null> }>();
+
+/** The store's top-level category for men or women (its id), or null; cached ten minutes per store. */
+async function audienceCategory(auth: string, base: string, audience: "men" | "women"): Promise<string | null> {
+  const hit = audienceCache.get(base);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.ids[audience] ?? null;
+  const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`).catch(() => null);
+  if (!Array.isArray(list)) return null;
+  const name = (c: any) => String(c?.name ?? "").replace(/&amp;/g, "&").trim();
+  const find = (a: "men" | "women") => {
+    const c = list.find((x: any) => String(x?.parent ?? "0") === "0" && AUDIENCE_NAME[a].test(name(x)));
+    return c ? String(c.id) : null;
+  };
+  const ids = { men: find("men"), women: find("women") };
+  audienceCache.set(base, { at: Date.now(), ids });
+  return ids[audience];
+}
 
 const VALIDATE_TIMEOUT_MS = 10_000;
 
@@ -533,6 +572,22 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/customers?${params}`);
       }
       case "list_products": {
+        // Who it is for (dev 2026-10-27: "בשבילי לגבר" got the women's trench):
+        // the store's own top-level Men / Women category, applied to what the
+        // search finds. A store with no such category: the search as it is.
+        const audience = args.audience === "men" || args.audience === "women" ? args.audience : null;
+        if (audience) {
+          const cat = await audienceCategory(auth, base, audience);
+          const per = Math.min(100, Number(args.per_page ?? 10));
+          const found: any = await WooCommerceAdapter.execute({
+            toolName,
+            args: { ...args, audience: undefined, per_page: Math.max(per, 50) },
+            credentials,
+            config,
+          } as any);
+          if (!cat || !Array.isArray(found)) return Array.isArray(found) ? found.slice(0, per) : found;
+          return found.filter((p: any) => (p?.categories ?? []).some((c: any) => String(c?.id) === cat)).slice(0, per);
+        }
         // A colour or a size: search the noun, then keep what comes in it.
         const wanted = attributeWords(args.query);
         // The inner call's query has no colour or size left, so it cannot recurse.

@@ -382,6 +382,15 @@ export async function claimCrossSell(conversationId: string, anchorId: string): 
   }
 }
 
+/**
+ * Nothing went out after a claim (the store had no add-ons): the once is not
+ * spent (dev 2026-10-27: no_add_ons, then already_offered). The product stays
+ * chosen, so it is never offered as an add-on.
+ */
+export async function releaseCrossSell(conversationId: string, anchorId: string): Promise<void> {
+  try { await getRedis().del(crossSellKey(conversationId, anchorId)); } catch { /* the key expires on its own */ }
+}
+
 /** The products the customer already chose in this conversation. */
 async function chosenProducts(conversationId: string): Promise<string[]> {
   try { return await getRedis().smembers(crossSellChosenKey(conversationId)); } catch { return []; }
@@ -672,8 +681,11 @@ export async function offerCrossSellAfterCart(o: { tenantId: string; conversatio
   if (!(await claimCrossSell(o.conversationId, o.productId))) return "already_offered";
   const record = await crossSellCards(o.tenantId, o.conversationId, {
     storeUrl: store.storeUrl, channelAccountId: conv.channelAccountId, addToCartEnabled: config.commerce.addToCartEnabled,
-  }, o.productId);
-  if (!record) return "no_add_ons";
+  }, o.productId).catch(() => null);
+  if (!record) {
+    await releaseCrossSell(o.conversationId, o.productId);
+    return "no_add_ons";
+  }
 
   const lastInbound = await prisma.message.findFirst({
     where: { tenantId: o.tenantId, conversationId: o.conversationId, direction: "INBOUND" },

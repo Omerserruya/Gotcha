@@ -80,7 +80,7 @@ const BUILTIN_TOOL_CAPABILITY: Record<string, string> = {
 const BUILTIN_TOOL_SUMMARY: Record<string, string> = {
   check_availability: "see real open times / working hours",
   // The store's live catalogue: price AND stock, read now, not from documents.
-  "woocommerce.list_products": "search the store's products: live price and stock (in_stock: true for available only)",
+  "woocommerce.list_products": "search the store's products: live price and stock (in_stock: true for available only; audience: men or women when the customer said who it is for, and when nothing comes back for them say so plainly, never offer the other one's products as if they fit)",
   "woocommerce.get_product": "one product, live: price, stock status and quantity",
   "woocommerce.list_product_variations": "a product's sizes / colours, each with live stock",
   "shopify.search_products": "search the store's products: live price and stock",

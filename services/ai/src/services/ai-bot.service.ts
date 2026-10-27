@@ -32,7 +32,7 @@ import {
   shouldRegenerateForAddress,
 } from "@chatcenter/shared";
 import { getCatalogFacets, renderFacetsForPrompt } from "./shopify-facets.service";
-import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
+import { runProductDiscoveryTurn, prefetchDiscoveryExtraction, productDiscoveryMayApply, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool, enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, resolveProductRef, finalProductReply, compactWooVariations, type ProductSearchEnvelope } from "./product-search.service";
 import {
   planAutoRecommendation,
@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -243,7 +243,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, crossSellCards, goesWellWithLine, pageProductId } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -1323,7 +1323,7 @@ async function buildSessionFactsBlock(opts: {
   /** Role's required-knowledge fields, for per-turn language-aware resolution. */
   knowledgeFields?: Array<{ key: string; label: string }>;
   signal?: AbortSignal;
-}): Promise<string | undefined> {
+}): Promise<{ base: string | undefined; full: Promise<string | undefined> }> {
   const parts: string[] = [];
 
   // (1) Structured facts already extracted/persisted for this person.
@@ -1357,7 +1357,12 @@ async function buildSessionFactsBlock(opts: {
   // (3) Language-aware KEYED resolution of the role's required-knowledge fields.
   // Makes a Hebrew/any-language answer satisfy the (English-keyed) Knowledge
   // Ledger + Objective Engine so objectives actually progress. Fail-soft.
-  if (opts.knowledgeFields?.length && inboundMsgs.length) {
+  // A model call: `base` (1, 2) is ready now, `full` adds (3) when it returns,
+  // so the turn's other judgement calls run beside it (dev 2026-10-27: three
+  // such calls in a row were 7 to 28s of every turn).
+  const base = parts.length ? parts.join("\n\n") : undefined;
+  const full = (async () => {
+    if (!opts.knowledgeFields?.length || !inboundMsgs.length) return base;
     const resolved = await resolveSessionKnowledge({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -1365,15 +1370,15 @@ async function buildSessionFactsBlock(opts: {
       inboundTexts: inboundMsgs,
       signal: opts.signal,
     });
-    if (resolved.length) {
-      parts.push(
-        "## Facts established this conversation (keyed - treat as known, do NOT re-ask)\n" +
-          resolved.map((f) => `- ${f.key}: ${f.value}`).join("\n"),
-      );
-    }
-  }
-
-  return parts.length ? parts.join("\n\n") : undefined;
+    if (!resolved.length) return base;
+    const keyed =
+      "## Facts established this conversation (keyed - treat as known, do NOT re-ask)\n" +
+      resolved.map((f) => `- ${f.key}: ${f.value}`).join("\n");
+    return [base, keyed].filter(Boolean).join("\n\n");
+  })();
+  // Awaited later in the turn; an abort meanwhile must not surface as unhandled.
+  full.catch(() => undefined);
+  return { base, full };
 }
 
 async function generateAIBotReplyInner(
@@ -1762,7 +1767,7 @@ async function generateAIBotReplyInner(
     ? skillCtx.candidates.find((c) => c.id === skillCtx.openRun!.skillId && c.mode === "on")
     : undefined;
 
-  const sessionFactsBlock = await buildSessionFactsBlock({
+  const sessionFacts = await buildSessionFactsBlock({
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     messages,
@@ -1780,7 +1785,8 @@ async function generateAIBotReplyInner(
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
     whatsappWindowBlock: followupFacts.whatsappWindowBlock,
     templatesBlock: followupFacts.templatesBlock,
-    sessionFactsBlock,
+    // The keyed facts join below, once their call returns (beside the plan context's).
+    sessionFactsBlock: sessionFacts.base,
   };
 
   // ── Grammatical address ────────────────────────────────
@@ -1921,6 +1927,51 @@ async function generateAIBotReplyInner(
     });
     if (block) ctxSlot.storefrontBlock = block;
   }
+  // CRM presence flags → Prospect State + Objective Engine. `crmBlock` is set
+  // only when the external CRM returned a record, so its absence is the
+  // authoritative "NEW_PROSPECT" signal (internal Contact rows don't count).
+  const crmFlags = {
+    hasLead: crmHasLead,
+    hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
+    isCustomer: crmHasCustomer,
+  };
+
+  // SHARED BRAIN: assemble the per-turn plan context ONCE. The AI Employee (here)
+  // and the AI Copilot both call assemblePlanContext, so the objective engine sees
+  // identical inputs → an identical Current Plan. Execution mode is the only
+  // difference (the Employee acts; the Copilot recommends). See plan-context.service.
+  // Started now and awaited below: its judgement call runs beside the keyed
+  // session facts and the discovery extraction instead of after them (dev
+  // 2026-10-27). It reads the session facts without the keyed layer, which
+  // restates the customer messages its transcript already carries.
+  const planContextP = assemblePlanContext({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    role: config.role,
+    agentId: config.id,
+    goal: (config as any).goal ?? null,
+    salesContext: config.salesContext,
+    customer: { channel: conversation.channel, externalId: conversation.customerExternalId },
+    crmFlags,
+    contextBlocks: {
+      customerBlock: ctxSlot.customerBlock,
+      crmBlock: ctxSlot.crmBlock,
+      memoryBlock: ctxSlot.memoryBlock,
+      sessionFactsBlock: ctxSlot.sessionFactsBlock,
+    },
+    messages,
+    signal,
+    // Skill selection rides the same judgement call (none offered → identical).
+    skills: skillCtx.candidates.length ? selectionCandidates(skillCtx) : undefined,
+    openSkillId: skillCtx.openRun?.skillId ?? null,
+  });
+  planContextP.catch(() => undefined);
+  // The product discovery's extraction, likewise started now (its own model call).
+  const discoveryPrefetch = productDiscoveryMayApply({ role: (config as any).role, productTurn: !!productTurn })
+    ? prefetchDiscoveryExtraction({ tenantId: opts.tenantId, conversationId: opts.conversationId })
+    : null;
+  discoveryPrefetch?.catch(() => undefined);
+
   // Set later in the turn, read by runAdapterTool's gate below. Declared here
   // because the tool context closes over it and is built before the controller
   // runs; the closure reads it at call time, by which point it is resolved.
@@ -2183,6 +2234,8 @@ async function generateAIBotReplyInner(
         }
         const out = await wooComplementaryProducts(opts.tenantId, anchorId, undefined, { exclude: wooTurn.shown.map((p) => p.productId) });
         if (out.ok) console.log(`[ai-bot][cross-sell] woocommerce anchor=${anchorId} linked=${out.sources.linked} otherKinds=${out.sources.otherKinds}`);
+        // Nothing to offer: the once is not spent.
+        if (!out.ok || !out.result.length) await releaseCrossSell(opts.conversationId, anchorId);
         return out.ok ? { ok: true as const, result: out.result } : out;
       }
 
@@ -2694,40 +2747,10 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] stage resolution failed (non-fatal):", err?.message);
   }
 
-  // CRM presence flags → Prospect State + Objective Engine. `crmBlock` is set
-  // only when the external CRM returned a record, so its absence is the
-  // authoritative "NEW_PROSPECT" signal (internal Contact rows don't count).
-  const crmFlags = {
-    hasLead: crmHasLead,
-    hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
-    isCustomer: crmHasCustomer,
-  };
-
-  // SHARED BRAIN: assemble the per-turn plan context ONCE. The AI Employee (here)
-  // and the AI Copilot both call assemblePlanContext, so the objective engine sees
-  // identical inputs → an identical Current Plan. Execution mode is the only
-  // difference (the Employee acts; the Copilot recommends). See plan-context.service.
-  const planContext = await assemblePlanContext({
-    tenantId: opts.tenantId,
-    conversationId: opts.conversationId,
-    role: config.role,
-    agentId: config.id,
-    goal: (config as any).goal ?? null,
-    salesContext: config.salesContext,
-    customer: { channel: conversation.channel, externalId: conversation.customerExternalId },
-    crmFlags,
-    contextBlocks: {
-      customerBlock: ctxSlot.customerBlock,
-      crmBlock: ctxSlot.crmBlock,
-      memoryBlock: ctxSlot.memoryBlock,
-      sessionFactsBlock: ctxSlot.sessionFactsBlock,
-    },
-    messages,
-    signal,
-    // Skill selection rides the same judgement call (none offered → identical).
-    skills: skillCtx.candidates.length ? selectionCandidates(skillCtx) : undefined,
-    openSkillId: skillCtx.openRun?.skillId ?? null,
-  });
+  // Started beside the keyed session facts and the discovery extraction (above);
+  // the keyed facts join the context here, before anything reads them.
+  const [planContext, fullSessionFacts] = await Promise.all([planContextP, sessionFacts.full]);
+  ctxSlot.sessionFactsBlock = fullSessionFacts;
   const committedActionTools = planContext.completedActionTools;
   const priorGoal = planContext.priorGoal;
   const wizardFacts = planContext.wizardFacts;
@@ -2903,6 +2926,7 @@ async function generateAIBotReplyInner(
       availableToolNames: toolFunctionNames,
       incomingMessageId: (contactRow as any)?.lastInboundMessageId ?? null,
       incomingMessage: opts.incomingMessage ?? null,
+      prefetched: discoveryPrefetch,
     });
     if (disc.active && disc.snapshot) {
       chatMessages.push({ role: "system", content: disc.snapshot });
@@ -5109,6 +5133,9 @@ async function generateAIBotReplyInner(
   // questions, a question after a thank-you). Any violation: ONE regeneration,
   // without tools, naming exactly what to fix; whatever comes back is sent.
   markStage("model_done");
+  // The model's own draft names the products with PRODUCT_n keys; a fix or a
+  // rewrite takes the keys out of the sentence, and the cards still follow it.
+  const namingDraft = replyText;
   if (replyText && !awaitingApproval && !pendingEscalation) {
     try {
       const persona: any = (config as any).persona ?? {};
@@ -5148,15 +5175,27 @@ async function generateAIBotReplyInner(
         ].join("\n"),
       };
       const violations = checkReplyStyle(replyText, styleCtx);
-      // A trailing offer to check is removed in code, no regeneration: rewriting
-      // over it lost the price (eval e8 U1) or came back as only "נבדוק?" (D02).
-      if (violations.length && violations.every((v) => v.kind === "offer_to_check")) {
-        const stripped = stripTrailingOffer(replyText);
-        if (stripped !== replyText) {
-          console.warn(`[ai-bot] reply checker: removed a trailing offer to check conv=${opts.conversationId}`);
-          replyText = stripped;
+      // Fixed in code when that clears everything, no regeneration: a trailing
+      // offer to check (rewriting over it lost the price, eval e8 U1), our own
+      // PRODUCT_n keys, a greeting, a question after a bare acknowledgement.
+      // "Too long" often goes with them ("היי!" and the keys were sentences).
+      // Dev 2026-10-27: a 2 to 11s rewrite on every turn, mostly for these.
+      if (violations.length && violations.some((v) => FIXED_IN_CODE.has(v.kind))) {
+        const fixed = fixInCode(replyText, violations);
+        if (fixed.trim() && fixed !== replyText && !checkReplyStyle(fixed, styleCtx).length) {
+          console.warn(`[ai-bot] reply checker: fixed in code, no regeneration: ${violations.map((v) => v.kind).join(", ")} conv=${opts.conversationId}`);
+          replyText = fixed;
+          violations.length = 0;
+        } else if (violations.every((v) => v.kind === "offer_to_check")) {
+          const stripped = stripTrailingOffer(replyText);
+          if (stripped !== replyText) {
+            console.warn(`[ai-bot] reply checker: removed a trailing offer to check conv=${opts.conversationId}`);
+            replyText = stripped;
+          }
+          violations.length = 0;
         }
-      } else if (violations.length) {
+      }
+      if (violations.length) {
         const draftBeforeRegen = replyText;
         console.warn(`[ai-bot] reply checker: ${violations.map((v) => `${v.kind}(${v.match})`).join(", ")}. Regenerating once. conv=${opts.conversationId}`);
         chatMessages.push({ role: "assistant", content: replyText });
@@ -5243,13 +5282,14 @@ async function generateAIBotReplyInner(
     const recoPlan = planAutoRecommendation({
       // A complaint or a shipping/returns question is not shopping (eval e7
       // T2: a complaint got five tees): no cards unless the reply names one.
-      unnamedAllowed: (discoveryRecommend || discoveryLookup) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
+      // "תראה לי" is a request for cards, whatever turn of the discovery it is.
+      unnamedAllowed: (discoveryRecommend || discoveryLookup || SHOW_ME.test(opts.incomingMessage ?? "")) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
       // A complaint gets no cards at all, named or not (eval e10 X7: the rule in
       // the prompt did not hold).
       // ...and neither does a question about the store: a coupon, shipping,
       // returns, payment (eval e12 C01, C07, C08, C09).
       noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage),
-      unnamedMax: discoveryRecommend ? undefined : 1,
+      unnamedMax: discoveryRecommend || SHOW_ME.test(opts.incomingMessage ?? "") ? undefined : 1,
       excludeIds: colourMisses,
       envelope: productEnvelope,
       // Staging is Shopify Live Chat's mechanism. A channel that renders
@@ -5258,6 +5298,7 @@ async function generateAIBotReplyInner(
       channelSupportsCards: channelSupportsCards && canStage,
       alreadyStaged: (productTurn?.staged.length ?? 0) > 0,
       modelText: replyText,
+      namingText: namingDraft,
       locale: replyLocale,
       budget: productBudget,
       // The limit STAGING will apply, not the channel's theoretical
@@ -5371,6 +5412,8 @@ async function generateAIBotReplyInner(
       if (record) {
         wooTurn.staged.push(record);
         replyText = `${replyText.trim()}\n${goesWellWithLine(replyLocale)}`;
+      } else {
+        await releaseCrossSell(opts.conversationId, anchorId);
       }
       console.log(`[ai-bot][cross-sell] chose anchor=${anchorId} cards=${record ? "staged" : "none from the store"} conv=${opts.conversationId}`);
     }

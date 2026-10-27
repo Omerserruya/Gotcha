@@ -441,6 +441,11 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
   // ── BLOCK 2 - AGENT IDENTITY (per-agent config: persona, brand, goals) ──
   push(stable, buildAgentBlock(opts, strategy));
 
+  // ── BLOCK 2b - FIXED CONTRACTS (the final self-review, the role's floor). Byte-stable per agent and tool surface, so they sit ahead of
+  //    everything per conversation and per turn (dev 2026-10-27: ~4.7k tokens
+  //    rendered after the turn's facts were re-read uncached every turn). ──
+  push(stable, buildFixedContractsBlock(opts, strategy));
+
   // ── BLOCK 3+4 - CUSTOMER + CONVERSATION CONTEXT (per-conversation) ──
   push(stable, buildConversationBlock(opts));
 
@@ -643,9 +648,8 @@ function buildConversationBlock(opts: BuildPromptOpts): string | null {
   if (ctx?.crmBlock?.trim()) {
     ctxBlocks.push(sanitizeUntrusted(ctx.crmBlock.trim(), { wrap: true, source: "crm", maxLength: 6000 }));
   }
-  if (ctx?.memoryBlock?.trim()) {
-    ctxBlocks.push(sanitizeUntrusted(ctx.memoryBlock.trim(), { wrap: true, source: "memory", maxLength: 4000 }));
-  }
+  // The memory block is per TURN (its turn count and known facts grow every
+  // message): it renders in the turn block, or the cache breaks here.
   if (ctx?.templatesBlock?.trim()) {
     ctxBlocks.push(sanitizeUntrusted(ctx.templatesBlock.trim(), { wrap: true, source: "template", maxLength: 4000 }));
   }
@@ -850,8 +854,27 @@ export function styleContract(locale: string | null | undefined): string {
 const CALENDAR_ACK_RULE = `13b. **Calendar checks = a brief ack, THEN the result (two messages).** schedule_meeting / reschedule_meeting / cancel_meeting actually go check the calendar, which takes a moment. So when you call one of these, ALSO write a SHORT one-line ack in the SAME step (e.g. "רגע אחד, בודק 🙏" / "one sec, checking 🙏"). The system sends that ack as its own message; your reply AFTER the tool returns delivers the real result (the open slot + ask to confirm, or the closest alternatives). Keep the ack to a few words: NO result, NO recap of emails/times, and never the "בודק ומעדכן:" + answer crammed into one message. For anything that is NOT a real calendar/tool check (an instant answer), do NOT send a "one moment" placeholder - just answer directly. Never echo the request back like a form ("ובקשתך: 'מחר'").`;
 
 
+/**
+ * The final self-review and the role's floor: fixed per agent and tool surface.
+ * (The Execution Contract and the tools policy name this turn's strategy and
+ * allowed actions, so they stay in the turn block.)
+ */
+function buildFixedContractsBlock(opts: BuildPromptOpts, _strategy: StrategyContract): string | null {
+  const parts: string[] = [];
+  if (opts.behaviorState.mode !== "generator") {
+    push(parts, QUALITY_CONTRACT);
+    if ((opts.toolFunctionNames ?? []).some((t) => CALENDAR_TOOLS.test(t))) push(parts, CALENDAR_ACK_RULE);
+    const shop = isShopFloor(opts);
+    if (shop) push(parts, SHOP_CONTRACT);
+    else if (opts.agent.role === "sales") push(parts, SALES_CONTRACT);
+  }
+  return parts.length ? parts.join("\n\n") : null;
+}
+
 function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): string {
   const parts: string[] = [];
+  const memory = opts.context?.memoryBlock?.trim();
+  if (memory) push(parts, ["# Conversation Memory", sanitizeUntrusted(memory, { wrap: true, source: "memory", maxLength: 4000 })].join("\n\n"));
   push(parts, buildTurnState(opts));
   push(parts, buildPipelineStage(opts));
   // The active business skill sits next to the stage and ahead of the Current
@@ -868,14 +891,8 @@ function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): stri
   push(parts, buildKnowledge(opts));
   push(parts, buildExecutionContract(opts, strategy));
   push(parts, buildToolsPolicy(opts));
-  if (opts.behaviorState.mode !== "generator") {
-    push(parts, QUALITY_CONTRACT);
-    if ((opts.toolFunctionNames ?? []).some((t) => CALENDAR_TOOLS.test(t))) push(parts, CALENDAR_ACK_RULE);
-    const shop = isShopFloor(opts);
-    if (shop) push(parts, SHOP_CONTRACT);
-    else if (opts.agent.role === "sales") push(parts, SALES_CONTRACT);
-    push(parts, styleContract(opts.context?.locale));
-  }
+  // The style rules stay LAST: the latest instruction wins (2026-10-25, P2).
+  if (opts.behaviorState.mode !== "generator") push(parts, styleContract(opts.context?.locale));
   return parts.join("\n\n");
 }
 

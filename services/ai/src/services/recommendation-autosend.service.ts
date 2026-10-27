@@ -382,6 +382,12 @@ export interface PlanAutoRecommendationInput {
   /** The model already called send_product_card this turn. */
   alreadyStaged: boolean;
   modelText: string | null | undefined;
+  /**
+   * The model's first draft, when a fix or a rewrite took its PRODUCT_n keys
+   * out of the sentence: the products it named still go out as cards (dev
+   * 2026-10-27: three turns of "two coats" in words and no cards).
+   */
+  namingText?: string | null;
   locale: RecoLocale;
   budget?: BudgetConstraint | null;
   maxProducts: number;
@@ -435,7 +441,9 @@ export function planAutoRecommendation(
   // asked about a linen shirt, the customer saw five tees). When the draft
   // names candidates, by key or by exact title, those go out, in its order.
   // Keys refer to the model's list (the full one); the named set drops excluded ids.
-  const named = namedCandidates(input.modelText, input.envelope.candidates).filter((c) => !excluded.has(String(c.productId))).slice(0, input.maxProducts);
+  const namedNow = namedCandidates(input.modelText, input.envelope.candidates);
+  const named = (namedNow.length ? namedNow : namedCandidates(input.namingText, input.envelope.candidates))
+    .filter((c) => !excluded.has(String(c.productId))).slice(0, input.maxProducts);
   // A reply that points at cards below ("שני מעילים למטה") gets them, named or
   // not (dev 2026-10-26, conv cmvpghp1…: it named the coats in Hebrew, none went
   // out, and the customer had to ask "שלח לי").

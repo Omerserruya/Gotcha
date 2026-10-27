@@ -24,6 +24,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     ...actual,
     getRedis: () => ({
       set: async (k: string, v: string, ..._o: any[]) => (H.kv.has(k) ? null : (H.kv.set(k, v), "OK")),
+      del: async (k: string) => (H.kv.delete(k) ? 1 : 0),
       sadd: async (k: string, v: string) => { if (!H.sets.has(k)) H.sets.set(k, new Set()); H.sets.get(k)!.add(v); return 1; },
       smembers: async (k: string) => [...(H.sets.get(k) ?? [])],
       expire: async () => 1,
@@ -168,6 +169,12 @@ describe("(ii) add to cart", () => {
     H.products = { "70": H.products["70"], "71": product(71, "Other Mug", 99) };
     expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "70" })).toBe("no_add_ons");
     expect(H.created).toEqual([]);
+  });
+  it("no add-ons: the once is not spent (dev 2026-10-27: no_add_ons, then already_offered)", async () => {
+    H.products = { "70": H.products["70"], "71": product(71, "Other Mug", 99) };
+    expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "70" })).toBe("no_add_ons");
+    H.products["72"] = product(72, "Tea Towel", 98);
+    expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "70" })).toBe("sent");
   });
   it("the bot has it: open, not handed over, the AI handling, no person assigned", () => {
     expect(withTheBot(BOT)).toBe(true);

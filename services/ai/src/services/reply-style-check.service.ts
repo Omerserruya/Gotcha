@@ -145,6 +145,14 @@ export function ungroundedPrices(reply: string, grounding: string): string[] {
   const known = new Set((grounding.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(normalPrice));
   return statedPrices(reply).filter((p) => !known.has(p));
 }
+/** The first price in the text, as written, that nothing in the grounding states; null when none. */
+function ungroundedPriceIn(text: string, grounding: string): string | null {
+  const made = new Set(ungroundedPrices(text, grounding));
+  if (!made.size) return null;
+  const re = /[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל|ILS)/gi;
+  for (const m of text.matchAll(re)) if (made.has(normalPrice(m[1] ?? m[2] ?? ""))) return m[0];
+  return null;
+}
 /**
  * A made-up price removed in code, when even the rewrite kept it: the price and
  * the verb that carries it ("עולה ₪389", "במחיר 389 ש״ח"), then the punctuation
@@ -207,6 +215,15 @@ function lastQuestionRaw(text: string): string | null {
 /** How many options a question lists: "שמלה, סריג, מעיל או אקססוריז" is four. */
 export function menuSize(question: string): number {
   const OR = /(?<![\u0590-\u05FF])או(?![\u0590-\u05FF])|\bor\b/;
+  // A list of sizes is a menu, in parentheses or not: "(XS, S, M, L, XL)",
+  // "מבין XS, S, M, L, XL" (dev 2026-10-27).
+  const sizes = question.match(/(?<![A-Za-z])(?:XXS|XS|S|M|L|XL|XXL|XXXL)(?![A-Za-z])/g) ?? [];
+  if (sizes.length >= 3) return sizes.length;
+  // So is any list of three or more in parentheses.
+  for (const m of question.matchAll(/\(([^()]*)\)/g)) {
+    const items = m[1].split(/,|(?<![\u0590-\u05FF])או(?![\u0590-\u05FF])|\bor\b/).map((x) => x.trim()).filter(Boolean);
+    if (items.length >= 3) return items.length;
+  }
   const body = question.replace(/\([^()]*\)/g, "");
   // No "או": a question, not a choice ("היי, איך אפשר לעזור?").
   if (!OR.test(body)) return 1;
@@ -236,6 +253,9 @@ export function repeatsChoice(draft: string, previous: string[]): string | null 
   }
   return null;
 }
+
+/** The customer asks to see products: "תראה לי", "show me" (dev 2026-10-27: answered in words, no cards). */
+export const SHOW_ME = /(?<![\u0590-\u05FF])(?:תראה|תראי|תראו|הראה|הראי|תציג|תציגי|להראות|להציג)(?![\u0590-\u05FF])|\bshow me\b|\blet me see\b/iu;
 
 /** The customer does not mind: stop asking and recommend (Omer, 2026-10-26). */
 export const DONT_MIND = /לא משנה|סתם מסתכל|סתם|לא יודע|לא יודעת|אין לי מושג|תמליצי|תמליץ|תמליצו|מה שתמליצ|מה שבא לך|מה שאת חושבת|מה שאתה חושב|רק שתהיה|רק שיהיה|תפתיע|הפתיעי|whatever|anything|you choose|surprise me|recommend/i;
@@ -328,7 +348,11 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   if (NAME_MISSPELLINGS[name]) hit("own_name", plain.match(NAME_MISSPELLINGS[name]));
 
   if (ctx.shopFloor && !ctx.productFactsAvailable) {
-    hit("ungrounded_attribute", plain.match(SIZE) ?? plain.match(PRICE) ?? plain.match(COLOUR) ?? plain.match(STOCK));
+    // A price the store's own text states (free shipping over ₪299, a coupon's
+    // minimum) is grounded with no product looked up (dev 2026-10-27: the
+    // promotions answer lost its coupon to "₪299").
+    const price = ctx.groundingText == null ? plain.match(PRICE) : ungroundedPriceIn(plain, ctx.groundingText);
+    hit("ungrounded_attribute", plain.match(SIZE) ?? price ?? plain.match(COLOUR) ?? plain.match(STOCK));
   } else if (ctx.shopFloor && ctx.groundingText != null) {
     // Product facts exist, but not THIS price (dev 2026-10-26: "ג'ינס... עולה
     // ₪389" with no tool this turn; the jeans are ₪349 and 389 is nowhere).
@@ -515,6 +539,44 @@ export function cardsAboveLine(locale: string): string {
 /** Cards resent because a send failed: the line over them. */
 export function cardsAgainLine(locale: string): string {
   return locale?.startsWith("he") ? "הנה הם שוב:" : "Here they are again:";
+}
+
+/**
+ * What can be fixed in code, with no regeneration (dev 2026-10-27: a rewrite on
+ * every turn, 2 to 11s each, mostly for these): our own PRODUCT_n keys in the
+ * sentence, a greeting after the first reply, a question after a bare
+ * acknowledgement, a trailing offer to check.
+ */
+export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check"]);
+
+/** The PRODUCT_n keys out of the sentence: the cards show the products. */
+export function stripProductKeys(text: string): string {
+  return text
+    .replace(/\s*\(\s*PRODUCT_\d+\s*\)/gi, "")
+    .replace(/PRODUCT_\d+(?:\s*(?:,|(?<![\u0590-\u05FF])ו[-\u2010\u2011]?|\band\b|&)\s*PRODUCT_\d+)*/gi, "")
+    .replace(/[:,]\s*(?=[.!?؟]|$)/g, "")
+    .replace(/\s+([.,!?؟:;])/g, "$1")
+    .replace(/ {2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+/**
+ * The draft with the in-code kinds fixed. The caller re-checks it and
+ * regenerates only when something remains.
+ */
+export function fixInCode(text: string, violations: StyleViolation[]): string {
+  const kinds = new Set(violations.map((v) => v.kind));
+  let out = text;
+  if (kinds.has("latin_titles")) out = stripProductKeys(out);
+  if (kinds.has("greeting_after_first")) out = out.replace(GREETING_START, "").replace(/^[\s,!.🙂😊]+/u, "").trim();
+  if (kinds.has("push_after_ack")) {
+    const parts = out.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
+    while (parts.length > 1 && /[?؟]\s*\S{0,3}\s*$/.test(parts[parts.length - 1])) parts.pop();
+    out = parts.join(" ").trim();
+  }
+  if (kinds.has("offer_to_check")) out = stripTrailingOffer(out);
+  return out;
 }
 
 /** The kinds that make a reply untrue, not just unpolished. */

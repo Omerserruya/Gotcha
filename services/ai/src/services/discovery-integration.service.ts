@@ -319,6 +319,45 @@ export function productDiscoveryApplies(opts: {
   return salesish || hasProductTool;
 }
 
+export interface DiscoveryExtraction { profile: DiscoveryProfile; extracted: unknown[] }
+
+/**
+ * The store's profile and what the conversation already says against it: the
+ * discovery's one model call. Started early in the turn, beside the plan
+ * context's (dev 2026-10-27: run in a row they were 7 to 28s of every turn).
+ */
+export async function prefetchDiscoveryExtraction(opts: { tenantId: string; conversationId: string }): Promise<DiscoveryExtraction> {
+  // The profile, adapted to the store actually connected. The static one
+  // demands riding style and flex; a catalogue that records neither turns
+  // those into questions that gate the search and then filter nothing.
+  const profile = profileForStore(
+    getDiscoveryProfile("product_recommendation") as DiscoveryProfile,
+    await getCatalogFacets(opts.tenantId),
+  );
+  // Reuse the existing extractor - NO new framework. Feed it the profile's
+  // fact specs (key + description + enum hints).
+  const specs = profile.facts.map((f) => ({
+    key: f.key,
+    description: f.description,
+    ...(f.enumValues ? { examples: f.enumValues } : {}),
+  }));
+  const extracted = await extractFieldsLive({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    fields: specs as any,
+  }).catch(() => []);
+  return { profile, extracted };
+}
+
+/**
+ * Worth starting the extraction before the tool surface is known: a sales-type
+ * employee, or a turn with a store's cards. The turn still decides with
+ * productDiscoveryApplies; a prefetch it does not use costs one small call.
+ */
+export function productDiscoveryMayApply(opts: { role: string | null | undefined; productTurn: boolean }): boolean {
+  return opts.productTurn || ["sales", "sdr", "customer_success"].includes(String(opts.role || "").toLowerCase());
+}
+
 /** Is the product-search tool actually in this turn's offered surface? */
 export function productToolAvailable(availableToolNames: string[]): { available: boolean; tool: string } {
   // A Shopify-style search first (unchanged), then the WooCommerce catalogue
@@ -388,37 +427,20 @@ export async function runProductDiscoveryTurn(opts: {
   incomingMessageId?: string | null;
   /** The customer's message, for the named-product lookup (stock / size / price). */
   incomingMessage?: string | null;
+  /** The extraction, started earlier in the turn (prefetchDiscoveryExtraction). */
+  prefetched?: Promise<DiscoveryExtraction> | null;
 }): Promise<DiscoveryTurnResult> {
   try {
     if (!productDiscoveryApplies({ role: opts.role, availableToolNames: opts.availableToolNames })) {
       return { active: false };
     }
-    // The profile, adapted to the store actually connected. The static one
-    // demands riding style and flex; a catalogue that records neither turns
-    // those into questions that gate the search and then filter nothing.
-    const profile = profileForStore(
-      getDiscoveryProfile("product_recommendation") as DiscoveryProfile,
-      await getCatalogFacets(opts.tenantId),
-    );
+    const { profile, extracted } = await (opts.prefetched ?? prefetchDiscoveryExtraction(opts)).catch(() => prefetchDiscoveryExtraction(opts));
     const session = await getOrCreateActiveSession({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
       goalKey: profile.goalKey,
       aiAgentId: opts.aiAgentId,
     });
-
-    // Reuse the existing extractor - NO new framework. Feed it the profile's
-    // fact specs (key + description + enum hints).
-    const specs = profile.facts.map((f) => ({
-      key: f.key,
-      description: f.description,
-      ...(f.enumValues ? { examples: f.enumValues } : {}),
-    }));
-    const extracted = await extractFieldsLive({
-      tenantId: opts.tenantId,
-      conversationId: opts.conversationId,
-      fields: specs as any,
-    }).catch(() => []);
 
     let proposed = toProposedFacts(extracted as any, opts.incomingMessageId);
     if (proposed.some((f) => f.key === "budget")) {

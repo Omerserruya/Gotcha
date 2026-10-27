@@ -144,6 +144,7 @@ export const CATALOG_TOOL_HE: Record<string, { name: string; description: string
   "woocommerce:list_coupons": { name: "רשימת קופונים", description: "הקופונים שקיימים בחנות." },
   "woocommerce:list_customer_orders": { name: "הזמנות של לקוח", description: "ההזמנות של לקוח, מהחדשה לישנה." },
   "woocommerce:list_order_notes": { name: "הערות הזמנה", description: "ההערות על הזמנה: מה שהחנות והלקוח כתבו, והערות מערכת." },
+  "woocommerce:list_product_categories": { name: "קטגוריות מוצרים", description: "קטגוריות המוצרים של החנות (פנימי: למוצרים משלימים)." },
   "woocommerce:list_product_variations": { name: "וריאציות מוצר", description: "הוריאציות של מוצר (מידה, צבע ועוד) עם מחיר ומלאי לכל אחת." },
   "woocommerce:list_refunds": { name: "החזרים בהזמנה", description: "ההחזרים שכבר בוצעו על הזמנה, עם סכומים וסיבות." },
   "woocommerce:update_customer": { name: "עדכון פרטי לקוח", description: "עדכון שם, מייל או טלפון של לקוח." },
