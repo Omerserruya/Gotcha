@@ -476,16 +476,51 @@ describe("e24: a gift with a budget", () => {
 });
 
 describe("latency: the answer round's effort", () => {
-  it("AI_ANSWER_EFFORT, else minimal on dev, else unchanged", async () => {
+  it("AI_ANSWER_EFFORT when set; off by default everywhere (urban-e25: minimal wrote non-words)", async () => {
     const { answerRoundEffort } = await import("../services/ai-bot.service");
-    expect(answerRoundEffort({ NODE_ENV: "development" } as any)).toBe("minimal");
+    expect(answerRoundEffort({ NODE_ENV: "development" } as any)).toBeNull();
     expect(answerRoundEffort({ NODE_ENV: "production" } as any)).toBeNull();
-    expect(answerRoundEffort({ NODE_ENV: "development", AI_ANSWER_EFFORT: "off" } as any)).toBeNull();
+    expect(answerRoundEffort({ NODE_ENV: "development", AI_ANSWER_EFFORT: "minimal" } as any)).toBe("minimal");
     expect(answerRoundEffort({ NODE_ENV: "production", AI_ANSWER_EFFORT: "low" } as any)).toBe("low");
   });
   it("only the round after tool results", () => {
     const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     expect(bot).toContain("...(afterTools && answerEffort ? { reasoningEffort: answerEffort } : replyEffort ? { reasoningEffort: replyEffort } : {}),");
     expect(bot).toContain("afterTools = !!response.toolCalls?.length;");
+  });
+});
+
+// ── urban-e25 ────────────────────────────────────────────────────────────────
+describe("e25: narrating the cards or their buttons", () => {
+  for (const t of ["מתחת מופיעים הכרטיסים עם הפרטים והוספת סל.", "לשניהם יש תמונות וכפתור הוספה לעגלה למטה."]) {
+    it(t, () => expect(kinds(`יש מעיל צמר ארוך וחם. ${t}`)).toContain("card_narration"));
+  }
+  it("its sentence goes in code", () => {
+    const d = "יש לנו מעיל צמר ארוך וחם שמתאים למראה רשמי. מתחת מופיעים הכרטיסים עם הפרטים והוספת סל.";
+    expect(fixInCode(d, checkReplyStyle(d, ctx()))).toBe("יש לנו מעיל צמר ארוך וחם שמתאים למראה רשמי.");
+  });
+  it("a credit card or a gift card is not the cards", () => {
+    expect(kinds("אפשר לשלם בכרטיס אשראי.")).not.toContain("card_narration");
+    expect(kinds("יש כרטיס מתנה בחנות.")).not.toContain("card_narration");
+  });
+});
+
+describe("e25: stiff phrases and the conditional address", () => {
+  it("\"קיבלתי את התקציב\", \"להלן\"", () => {
+    expect(kinds("מעולה, קיבלתי את התקציב עד ₪300.", { productFactsAvailable: true })).toContain("banned_phrase");
+    expect(kinds("להלן שתי אופציות.")).toContain("banned_phrase");
+  });
+  it("\"מתאים אם מחפש משהו רשמי\" is gendered", () => {
+    expect(kinds("מתאים אם מחפש משהו רשמי ועדיין אופנתי.")).toContain("gendered_address");
+    expect(kinds("מתאים אם מחפשת משהו רשמי.")).toContain("gendered_address");
+  });
+});
+
+describe("e25: the add-ons win over the model's own cards", () => {
+  it("wired: no staged-cards condition, the model's pick replaced", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("if (replyText && wooTurn?.suggestComplementary && !awaitingApproval && !pendingEscalation && commitsToBuy(opts.incomingMessage)) {");
+    const i = bot.indexOf("const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId)");
+    expect(bot.slice(i, i + 300)).toContain("wooTurn.staged.length = 0;");
   });
 });

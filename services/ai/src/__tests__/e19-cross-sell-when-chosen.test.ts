@@ -185,8 +185,9 @@ describe("(ii) add to cart", () => {
 describe("wired", () => {
   const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
   const route = readFileSync(join(__dirname, "../routes/embedded-chat.ts"), "utf8");
-  it("(i) after the answer, when nothing else shows cards this turn", () => {
-    expect(bot).toContain("!wooTurn.staged.length && commitsToBuy(opts.incomingMessage)");
+  it("(i) after the answer; the add-ons replace any card the model chose this turn (urban-e25)", () => {
+    expect(bot).toContain("!awaitingApproval && !pendingEscalation && commitsToBuy(opts.incomingMessage)) {");
+    expect(bot).not.toContain("!wooTurn.staged.length && commitsToBuy(opts.incomingMessage)");
     expect(bot).toContain("replyText = `${choiceAckLine(replyLocale)}\\n${goesWellWithLine(replyLocale)}`;");
   });
   it("the model's own call counts toward once", () => {

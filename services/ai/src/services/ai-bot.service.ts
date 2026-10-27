@@ -1316,12 +1316,15 @@ async function resolveSessionKnowledge(opts: {
   }
 }
 
-/** The answer round's reasoning effort: AI_ANSWER_EFFORT, else "minimal" on dev, else none (unchanged). */
+/**
+ * The answer round's reasoning effort: AI_ANSWER_EFFORT when set, else none
+ * (the reply's own effort, unchanged). Off by default everywhere: "minimal" on
+ * dev (urban-e25) cut the median to ~9.4s and wrote non-words ("חמיש") and
+ * garbled descriptions.
+ */
 export function answerRoundEffort(env: NodeJS.ProcessEnv = process.env): "minimal" | "low" | "medium" | "high" | null {
   const v = String(env.AI_ANSWER_EFFORT ?? "").trim();
-  if (v === "off" || v === "0") return null;
-  if (["minimal", "low", "medium", "high"].includes(v)) return v as any;
-  return env.NODE_ENV === "development" ? "minimal" : null;
+  return ["minimal", "low", "medium", "high"].includes(v) ? (v as any) : null;
 }
 
 async function buildSessionFactsBlock(opts: {
@@ -3331,8 +3334,8 @@ async function generateAIBotReplyInner(
   }
   let searchNudged = false;
   // The round after tool results writes the answer from them: AI_ANSWER_EFFORT
-  // sets its reasoning effort (dev default "minimal", 2026-10-27 urban-e25 trial;
-  // unset elsewhere = unchanged). Never the round that decides what to call.
+  // sets its reasoning effort (unset = unchanged). Never the round that decides
+  // what to call.
   const answerEffort = answerRoundEffort();
   let afterTools = false;
   for (let round = 0; round < 3; round++) {
@@ -5495,11 +5498,14 @@ async function generateAIBotReplyInner(
   // then one line and the store's add-ons as cards (2026-10-26: the tool was
   // offered and never called). Once per product; not when this turn already
   // shows cards; nothing when the store has no add-ons.
-  if (replyText && wooTurn?.suggestComplementary && !awaitingApproval && !pendingEscalation && !wooTurn.staged.length && commitsToBuy(opts.incomingMessage)) {
+  // It wins over cards the model chose itself (urban-e25: it showed the coat
+  // again and the add-ons never went).
+  if (replyText && wooTurn?.suggestComplementary && !awaitingApproval && !pendingEscalation && commitsToBuy(opts.incomingMessage)) {
     const anchorId = crossSellAnchor(opts.incomingMessage ?? "", wooTurn.shown, await pageProductId(opts.tenantId, opts.conversationId));
     if (anchorId && (await claimCrossSell(opts.conversationId, anchorId))) {
       const record = await crossSellCards(opts.tenantId, opts.conversationId, wooTurn, anchorId).catch(() => null);
       if (record) {
+        wooTurn.staged.length = 0;
         wooTurn.staged.push(record);
         // A choice is acknowledged, not answered: the model's own words here
         // were a calque ("לקחתי נקודת התחלה") and an ask for an email (dev

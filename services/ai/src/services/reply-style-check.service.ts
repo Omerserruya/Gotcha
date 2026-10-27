@@ -37,7 +37,8 @@ export type StyleViolationKind =
   | "long_menu"
   | "latin_titles"
   | "menu_greeting"
-  | "echo_opener";
+  | "echo_opener"
+  | "card_narration";
 
 export interface StyleViolation { kind: StyleViolationKind; match: string }
 
@@ -88,7 +89,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -97,8 +98,8 @@ const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don'
  */
 const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}])|(?<![${HE}])(?:אתה\\/את|את\\/ה)(?![${HE}])`, "u");
 /** Second-person forms that choose a gender, addressed to the customer. */
-const MASC_TO_CUSTOMER = w("שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
-const FEM_TO_CUSTOMER = w("שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
+const MASC_TO_CUSTOMER = w("אם מחפש|אם אתה|כשאתה|שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
+const FEM_TO_CUSTOMER = w("אם מחפשת|אם את מחפשת|כשאת|שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
@@ -203,6 +204,8 @@ const HANDOFF_PROMISE = w("נציג יחזור|נציגה תחזור|הצוות 
 const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?:ל|את|אותו|אותה)|לסל|לעגלה|בעגלה|כרטיס המוצר|כרטיס|להזמין|לרכישה|לקנות|להשלים (?:את )?ה?הזמנה|להגיע לסכום|לשריין|add (?:it )?to (?:your |the )?cart|checkout|place (?:the|an|your) order)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
+const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])(?:ה?כרטיס(?:ים|י)?|כפתור|ה?תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
+
 /** Offering to show what the cards already show: "אפשר להראות את הפרטים של שניהם?" (urban-e24). */
 export const OFFER_SHOW_BOTH = /(?:^|[.!?؟\n]\s*)[^.!?؟\n]*(?:להראות|להציג|לשלוח|שאראה|שאציג|שאשלח)[^.!?؟\n]*(?:שניהם|שתיהן|שלושתם|כולם|both|all of them)[^.!?؟\n]*[?؟]\s*$/iu;
 const OFFER_TO_CHECK = new RegExp(`(?:^|[\\s,.])(?:רוצה ש|שאבדוק|שנבדוק|לבדוק|אפשר לבדוק|נבדוק|אבדוק|(?:לשלוח|ש?אשלח|ש?נשלח)(?:\\s+(?:עבורך|לך))?(?:\\s+את)?\\s+(?:ה?פרטי|פרטים|תמונות)|shall i check|want me to check|should i check)[^.!?؟\\n]*[?؟]\\s*\\S{0,3}\\s*$`, "iu");
@@ -429,6 +432,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   if (CALLBACK_ASK.test(plain) && CALLBACK_WORD.test(plain)) hit("promise", "collecting details for a callback");
   for (const m of phantomActions(plain, ctx)) hit("phantom_action", m);
   if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK) ?? plain.match(OFFER_SHOW_BOTH));
+  // Narrating the cards or their buttons (urban-e25: "מתחת מופיעים הכרטיסים
+  // עם הפרטים והוספת סל", "לשניהם יש תמונות וכפתור הוספה לעגלה למטה").
+  hit("card_narration", plain.match(CARD_NARRATION));
   // "מעיל, הנה..." echoes the customer's own word back (urban-e24).
   hit("echo_opener", echoOpener(plain, ctx.incomingMessage));
 
@@ -490,6 +496,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   recap_opener: { he: "Do not open by recapping what they said (\"נשמע ש...\", \"הבנתי ש...\", \"מעולה, כדי להציע...\"). React like a person (\"איזה כיף, מתנה!\") or just answer.", en: "Do not open with a recap of what the customer said; react or answer." },
   long_menu: { he: "Your question lists three or more options. Ask with at most two, or better, show one or two concrete products.", en: "At most two options in a question." },
   latin_titles: { he: "Do not write the store's English titles in the Hebrew sentence: the cards show them. Describe the products in Hebrew in a few words (\"מעיל צמר ארוך ואלגנטי, או טרנץ' קליל\"). Never a title in parentheses, never a line that starts with one.", en: "Do not list product titles in the text; the cards show them." },
+  card_narration: { he: "Do not describe the cards, their pictures or buttons (\"מתחת מופיעים הכרטיסים\", \"כפתור הוספה לעגלה\"): they are on screen. Say only what helps choose.", en: "Do not narrate the cards or their buttons." },
   echo_opener: { he: "Do not open by echoing the customer's word back (\"מעיל, הנה...\"). Start with the substance.", en: "Do not open by echoing the customer's word back." },
   menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
   self_gender: { he: "Your own grammatical form is wrong: follow the Persona's gender, or when it is not configured speak as the business in the plural (\"נבדוק\", \"יש לנו\").", en: "Keep your own grammatical form consistent." },
@@ -630,7 +637,7 @@ export function cardsAgainLine(locale: string): string {
  * sentence, a greeting after the first reply, a question after a bare
  * acknowledgement, a trailing offer to check.
  */
-export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check", "echo_opener"]);
+export const FIXED_IN_CODE: ReadonlySet<StyleViolationKind> = new Set(["latin_titles", "greeting_after_first", "push_after_ack", "offer_to_check", "echo_opener", "card_narration"]);
 
 /**
  * What a removed title leaves behind (dev 2026-10-27: "מעיל שמתאים לגבר, למשל."):
@@ -687,6 +694,12 @@ export function fixInCode(text: string, violations: StyleViolation[]): string {
       tokens[tokens.length - 1] = /[a-z]/i.test(last) ? "Which one suits you better?" : "מה מתאים לך יותר?";
       out = tokens.join("");
     } else out = stripTrailingOffer(out);
+  }
+  if (kinds.has("card_narration")) {
+    // The sentence that narrates the cards goes; the cards speak for themselves.
+    const parts = out.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
+    const kept = parts.filter((p) => !CARD_NARRATION.test(p));
+    if (kept.length && kept.length < parts.length) out = kept.join(" ");
   }
   if (kinds.has("echo_opener")) {
     const echo = violations.find((v) => v.kind === "echo_opener")?.match;
@@ -760,6 +773,7 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   for (const v of checkReplyStyle(t, ctx)) {
     if (v.kind === "gendered_address" || v.kind === "mixed_address") out.push("gendered");
     if (v.kind === "banned_phrase") out.push("calque");
+    if (v.kind === "card_narration") out.push("card_narration");
   }
   return [...new Set(out)];
 }
@@ -769,7 +783,7 @@ export function dropBrokenSentences(text: string, ctx: FinalGateContext): string
   const parts = text.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
   const kept = parts.filter((p) => {
     const issues = finalTextIssues(p, { ...ctx, customerClosing: true });
-    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question");
+    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question") && !issues.includes("card_narration");
   });
   if (kept.length === parts.length || !kept.length) return null;
   // The only question, with nothing on screen, carried the turn: dropping it
