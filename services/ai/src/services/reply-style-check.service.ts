@@ -336,7 +336,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // reply asked something still open: "סבבה" to "יום-יומי או פורמלי?" answers
   // nothing, and asking the one open thing again is the nudge (dev 2026-10-27:
   // the rewrite came back "מעולה, נשמע מצוין.").
-  if (ACK_ONLY.test(ctx.incomingMessage) && /[?؟]/.test(plain) && !ctx.openQuestion) hit("push_after_ack", "a question after an acknowledgement");
+  // Only a push to buy or to continue counts (urban-e23: dropping a plain
+  // question left "הנה שתי אופציות שמתאימות." and nothing else).
+  if (ACK_ONLY.test(ctx.incomingMessage) && PUSH_QUESTION.test(plain) && !ctx.openQuestion) hit("push_after_ack", "a push after an acknowledgement");
 
   if (!ctx.isFirstReply) hit("greeting_after_first", plain.match(GREETING_START));
   hit("self_intro", plain.match(SELF_INTRO));
@@ -637,6 +639,107 @@ export function fixInCode(text: string, violations: StyleViolation[]): string {
   return out;
 }
 
+/**
+ * The products to show, named on a line of their own (urban-e23): "SHOW:
+ * PRODUCT_1, PRODUCT_2" as the model's last line, never inside a sentence.
+ * The text without that line, and the keys it named.
+ */
+export function takeShowLine(text: string | null | undefined): { text: string; keys: string[] } {
+  const keys: string[] = [];
+  const out = String(text ?? "").replace(/^[ \t]*SHOW[ \t]*:[ \t]*(.*)$/gim, (_m, list: string) => {
+    for (const k of list.match(/PRODUCT_\d+/gi) ?? []) keys.push(k.toUpperCase());
+    return "";
+  });
+  return { text: out.replace(/\n{3,}/g, "\n\n").trim(), keys: [...new Set(keys)] };
+}
+
+// ─── The final gate (urban-e23) ──────────────────────────────────────────────
+//
+// Every transform that removes text left new broken punctuation, and the
+// patches stacked. So the text that leaves is normalised once, at the end, and
+// checked once: a fragment, a key or a store title, a dangling word, a gendered
+// address, a "הנה" over no cards. The caller then drops the sentence, rewrites
+// once, or sends a safe line; it never sends the fragment.
+
+/** Punctuation that removals leave behind: ",:" / "-," / ":," / " ," / a leading comma / double spaces. */
+export function normalizePunctuation(text: string): string {
+  return String(text ?? "")
+    .replace(/[ \t]*([,:;–—-](?:[ \t]*[,:;–—-])+)[ \t]*/g, (m) => {
+      const first = m.match(/[,:;]/)?.[0] ?? ",";
+      return `${first} `;
+    })
+    .replace(/[ \t]*[,:;][ \t]*(?=[.!?؟])/g, "")
+    .replace(/[ \t]+([.,!?؟:;])/g, "$1")
+    .replace(/^[\s,:;.–—-]+/u, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+const DANGLING_END = /(?<![֐-׿])(?:למשל|כמו|כגון|לדוגמה|את|של|עם|על|אל)\s*[.!?؟,:]?\s*$/u;
+/** "באיזו מידה בדרך כלל?": a question with no verb (urban-e23). */
+const VERBLESS_QUESTION = /(?:^|[.!?؟\n]\s*)(?:באיזו|באיזה|איזו|איזה)\s+\S+(?:\s+\S+)?\s+בדרך כלל\s*[?؟]/u;
+const POINTS_AT_PRODUCTS = /(?<![֐-׿])הנה(?![֐-׿])|\bhere (?:are|is)\b/iu;
+
+export interface FinalGateContext extends StyleCheckContext {
+  /** Cards go out with this message. */
+  cardsShown: boolean;
+}
+
+/** What is wrong with the text as it would leave; empty when it may go. */
+export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
+  const t = String(text ?? "").trim();
+  const out: string[] = [];
+  if (!t) return ["empty"];
+  if (/PRODUCT_\d+/i.test(t)) out.push("key");
+  if (/^[ \t]*SHOW[ \t]*:/im.test(t)) out.push("show_line");
+  if (ctx.locale === "he" && ctx.cardsShown && (ctx.productTitles ?? []).some((x) => x && t.includes(x))) out.push("title");
+  const sentencesOf = t.split(/(?<=[.!?؟\n])\s+/).map((x) => x.trim()).filter(Boolean);
+  // A line ending in ":" over the cards ("זה הולך מצוין עם:") introduces them.
+  if (sentencesOf.some((x) => DANGLING_END.test(x) && !(ctx.cardsShown && /:\s*$/.test(x)))) out.push("dangling");
+  if (VERBLESS_QUESTION.test(t)) out.push("verbless_question");
+  const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  if (words < 3 && !/:\s*$/.test(t) && !ctx.customerClosing) out.push("too_short");
+  if (!ctx.cardsShown && POINTS_AT_PRODUCTS.test(t) && !/[?؟]/.test(t) && words <= 6) out.push("points_at_nothing");
+  for (const v of checkReplyStyle(t, ctx)) {
+    if (v.kind === "gendered_address" || v.kind === "mixed_address") out.push("gendered");
+    if (v.kind === "banned_phrase") out.push("calque");
+  }
+  return [...new Set(out)];
+}
+
+/** The text without the sentences that carry a dangling word or a gendered address; null when that leaves too little. */
+export function dropBrokenSentences(text: string, ctx: FinalGateContext): string | null {
+  const parts = text.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
+  const kept = parts.filter((p) => {
+    const issues = finalTextIssues(p, { ...ctx, customerClosing: true });
+    return !issues.includes("dangling") && !issues.includes("gendered") && !issues.includes("verbless_question");
+  });
+  if (kept.length === parts.length || !kept.length) return null;
+  const out = normalizePunctuation(kept.join(" "));
+  const words = out.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  return words >= 4 && !finalTextIssues(out, ctx).length ? out : null;
+}
+
+/** The safe line for the turn, when even one rewrite is not clean. */
+export function safeTurnLine(locale: string, o: { cardsShown: boolean; cardCount: number }): string {
+  const he = locale?.startsWith("he");
+  if (o.cardsShown) return he ? (o.cardCount === 1 ? "הנה אפשרות שיכולה להתאים:" : "הנה כמה אפשרויות שיכולות להתאים:") : (o.cardCount === 1 ? "Here is one that could fit:" : "Here are a few that could fit:");
+  return he ? "אפשר לפרט קצת יותר מה מחפשים?" : "Could you tell me a bit more about what you're looking for?";
+}
+
+/** The one clean rewrite's instruction, naming what was wrong. */
+export function finalRewriteInstruction(text: string, issues: string[], locale: "he" | "en"): string {
+  return [
+    `Your message as it would be sent: «${text}»`,
+    `It is not ready (${issues.join(", ")}). Rewrite it once as complete, natural ${locale === "he" ? "Hebrew" : "English"} sentences that keep what it says:`,
+    "- no product key (PRODUCT_1), no store title, no SHOW line: the cards show the products;",
+    "- address the customer neutrally (no gendered verb, participle or pronoun);",
+    "- no fragment, no dangling word, every question with a verb;",
+    "- one or two short sentences. Reply with the message only.",
+  ].join("\n");
+}
+
 /** The kinds that make a reply untrue, not just unpolished. */
 const TRUTH_KINDS: ReadonlySet<StyleViolationKind> = new Set(["ungrounded_price", "ungrounded_attribute", "false_absence", "phantom_action", "promise"]);
 
@@ -797,6 +900,8 @@ const ASKS_QUANTITY = /כמה (?:יחידות|נשאר|נשארו|יש במלא�
  */
 function hebrewTouches(text: string, incoming: string): string {
   let out = text
+    // "בתוקף עד 2027-09-30": a date as it is written here, 30.09.2027 (urban-e23).
+    .replace(/(?<![\d-])(20\d{2})-(\d{2})-(\d{2})(?![\d-])/g, "$3.$2.$1")
     // "קיים קוד WELCOME10" reads as a form; a person says "יש" (dev 2026-10-27).
     .replace(/(^|[.!?\n]\s*)(?:קיים|קיימת|קיימים|קיימות)(?= )/gu, "$1יש")
     .replace(/(?<![A-Za-z])off[- ]white(?![A-Za-z])/gi, "אוף וייט")

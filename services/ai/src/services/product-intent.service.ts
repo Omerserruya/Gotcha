@@ -90,7 +90,7 @@ export function buildCouponPromotionsDirective(promotions: Array<{
 }>): string {
   const lines = promotions.map((p) => {
     const what = p.discountType === "percent" ? `${p.amount}% off` : p.discountType === "fixed_product" ? `${p.amount} off each eligible product` : `${p.amount} off the cart`;
-    return `  - ${p.code}: ${what}${p.minimumAmount ? `, on orders from ${p.minimumAmount}` : ""}${p.expiresAt ? `, until ${p.expiresAt.slice(0, 10)}` : ""}`;
+    return `  - ${p.code}: ${what}${p.minimumAmount ? `, on orders from ${p.minimumAmount}` : ""}${p.expiresAt ? `, until ${dayMonthYear(p.expiresAt)}` : ""}`;
   });
   return (
     `The customer is asking about a coupon, discount code or promotion.\n` +
@@ -99,8 +99,18 @@ export function buildCouponPromotionsDirective(promotions: Array<{
     `- These are the only codes you may mention. Never invent, guess or alter a code.\n` +
     `- Do NOT create, check or apply any other coupon, and do NOT promise one: that is not supported in this chat.\n` +
     `- Do NOT offer a refund as a substitute, and do NOT transfer to a human just because a discount was requested.\n` +
-    `- The customer applies the code at checkout on the store.\n`
+    `- The customer applies the code at checkout on the store.\n` +
+    // Dev 2026-10-27 (urban-e23): asked "which promotions are there today?", the
+    // reply gave the code and left out the free shipping the store's text states.
+    `- Standing offers the store's own information states (free shipping above an amount, free returns) are promotions too: when asked which promotions there are, name them briefly with the codes.\n` +
+    `- Write dates as day.month.year (30.09.2027), never 2027-09-30.\n`
   );
+}
+
+/** "2027-09-30" (or a full ISO time) as "30.09.2027"; anything else as given. */
+function dayMonthYear(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
 }
 
 /**

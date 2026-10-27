@@ -107,8 +107,8 @@ describe("fixed in code, no regeneration", () => {
     expect(stripProductKeys("הטרנץ' קליל (PRODUCT_1), המעיל ארוך (PRODUCT_2).")).toBe("הטרנץ' קליל, המעיל ארוך.");
     expect(stripProductKeys("מצאנו: PRODUCT_1, PRODUCT_2 ו-PRODUCT_3. מה מתאים?")).toBe("מצאנו. מה מתאים?");
   });
-  it("a question after סבבה is dropped", () => {
-    const d = "מעולה, יש מעיל צמר ארוך. רוצה לראות עוד?";
+  it("a push after סבבה is dropped", () => {
+    const d = "מעולה, יש מעיל צמר ארוך. להוסיף אותו לסל?";
     const v = checkReplyStyle(d, ctx({ incomingMessage: "סבבה" }));
     expect(v.map((x) => x.kind)).toContain("push_after_ack");
     expect(fixInCode(d, v)).toBe("מעולה, יש מעיל צמר ארוך.");
@@ -201,8 +201,9 @@ describe("e21: \"סבבה\" after an open question", () => {
   it("asking the open thing again is the nudge, not a push", () => {
     expect(kinds(draft, { incomingMessage: "סבבה", openQuestion: true })).not.toContain("push_after_ack");
   });
-  it("after an answer that asked nothing, still a push", () => {
-    expect(kinds(draft, { incomingMessage: "סבבה", openQuestion: false })).toContain("push_after_ack");
+  it("after an answer that asked nothing, a push to buy still is; a plain question is not (urban-e23)", () => {
+    expect(kinds("מעולה. להוסיף את המעיל לסל?", { incomingMessage: "סבבה", openQuestion: false })).toContain("push_after_ack");
+    expect(kinds(draft, { incomingMessage: "סבבה", openQuestion: false })).not.toContain("push_after_ack");
   });
   it("wired from our last text reply, not the cards", () => {
     const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
@@ -318,5 +319,87 @@ describe("e22: the binding verdict is reused when the turn adds nothing it reads
     expect(src).toContain("const reused = await reusableWizardFacts(input.conversationId, bindingFingerprint, inbound);");
     expect(src).toContain("reused ?? await evaluateWizardBinding({");
     expect(src).toContain("if (!(facts as any)?.evaluated) return;");
+  });
+});
+
+// ── The third rerun (urban-e23): prevent, then one final gate ─────────────────
+import { takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, type FinalGateContext } from "../services/reply-style-check.service";
+import { buildKeyedModelSummary } from "../services/product-search.service";
+
+const gate = (o: Partial<FinalGateContext> = {}): FinalGateContext => ({ ...ctx({ shopFloor: false, isFirstReply: false }), cardsShown: true, productTitles: ["Cotton Trench Coat", "Wool Blend Overcoat"], ...o });
+
+describe("e23: the products to show ride on a SHOW line, never in a sentence", () => {
+  it("the line goes, its keys stay for the cards", () => {
+    expect(takeShowLine("טרנץ' קליל ליום יום, או מעיל צמר ארוך.\nSHOW: PRODUCT_1, PRODUCT_2")).toEqual({ text: "טרנץ' קליל ליום יום, או מעיל צמר ארוך.", keys: ["PRODUCT_1", "PRODUCT_2"] });
+    expect(takeShowLine("אין שורה כזאת.")).toEqual({ text: "אין שורה כזאת.", keys: [] });
+  });
+  it("the search result tells the model so on a card channel, and only there", () => {
+    const env: any = { status: "ok", provider: "woocommerce", tool: "woocommerce.list_products", appliedFilters: [], unavailableFilters: [], safeModelSummary: "", candidates: [{ ref: "PRODUCT_1", productId: "1", title: "Cotton Trench Coat", price: 799, currency: "ILS", available: true, unknownAttributes: [], attributes: {} }] };
+    expect(buildKeyedModelSummary(env, "he", true)).toContain("SHOW: PRODUCT_1, PRODUCT_2");
+    expect(buildKeyedModelSummary(env, "he", true)).toContain("NEVER write a key (PRODUCT_1) or the store's title inside a sentence");
+    expect(buildKeyedModelSummary(env, "he", false)).not.toContain("SHOW:");
+  });
+  it("wired: read at model_done and after a rewrite, the keys pick the cards", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(bot).toContain("const showLine = takeShowLine(replyText);");
+    expect(bot).toContain("const regenShow = takeShowLine(regen.content.trim());");
+    expect(bot).toContain("buildKeyedModelSummary(envlp, replyLocale, cardChannel)");
+  });
+});
+
+describe("e23: the punctuation removals leave behind is normalised", () => {
+  for (const [a, b] of [
+    ["יש שני מעילים שמתאימים כרגע לצפייה -, האחד בסגנון טרנץ' קל.", "יש שני מעילים שמתאימים כרגע לצפייה, האחד בסגנון טרנץ' קל."],
+    ["שתי אופציות שמתאימות:, טרנץ׳ קלאסי, מעיל תערובת צמר.", "שתי אופציות שמתאימות: טרנץ׳ קלאסי, מעיל תערובת צמר."],
+    [", מעיל צמר ארוך ,.", "מעיל צמר ארוך."],
+    ["מעיל  צמר :.", "מעיל צמר."],
+  ] as const) it(a, () => expect(normalizePunctuation(a)).toBe(b));
+});
+
+describe("e23: what the gate does not let through", () => {
+  it("a verbless question: its sentence goes", () => {
+    const t = "יש שני מעילים שמתאימים כרגע לצפייה, האחד בסגנון טרנץ' קל והשני מעיל צמר כבד. באיזו מידה בדרך כלל?";
+    expect(finalTextIssues(t, gate())).toContain("verbless_question");
+    expect(dropBrokenSentences(t, gate())).toBe("יש שני מעילים שמתאימים כרגע לצפייה, האחד בסגנון טרנץ' קל והשני מעיל צמר כבד.");
+  });
+  it("a gendered question on the final text: its sentence goes", () => {
+    const t = "מעולה, יש מעיל ג'ינס קצר, מעיל קל ומעיל צמר ארוך ואלגנטי. מעדיף סגנון קז'ואל או אלגנטי?";
+    expect(finalTextIssues(t, gate())).toContain("gendered");
+    expect(dropBrokenSentences(t, gate())).toBe("מעולה, יש מעיל ג'ינס קצר, מעיל קל ומעיל צמר ארוך ואלגנטי.");
+  });
+  it("\"הנה\" over no cards; a store title or a key beside cards; a dangling word", () => {
+    expect(finalTextIssues("הנה שתי אופציות שמתאימות.", gate({ cardsShown: false }))).toContain("points_at_nothing");
+    expect(finalTextIssues("הנה שתי אופציות שמתאימות.", gate({ cardsShown: true }))).toEqual([]);
+    expect(finalTextIssues("המעיל Wool Blend Overcoat מתאים.", gate())).toContain("title");
+    expect(finalTextIssues("יש את PRODUCT_1.", gate())).toContain("key");
+    expect(finalTextIssues("יש מעיל שמתאים לגבר, למשל.", gate())).toContain("dangling");
+  });
+  it("our own lines pass", () => {
+    for (const t of ["הנה שוב:", "בחירה מצוינת!\nזה הולך מצוין עם:", "הנה כמה אפשרויות שיכולות להתאים:"]) expect(finalTextIssues(t, gate()), t).toEqual([]);
+    expect(finalTextIssues("בכיף 🙂", gate({ customerClosing: true, cardsShown: false }))).toEqual([]);
+  });
+  it("the safe line for the turn", () => {
+    expect(safeTurnLine("he", { cardsShown: true, cardCount: 2 })).toBe("הנה כמה אפשרויות שיכולות להתאים:");
+    expect(safeTurnLine("he", { cardsShown: true, cardCount: 1 })).toBe("הנה אפשרות שיכולה להתאים:");
+    expect(safeTurnLine("he", { cardsShown: false, cardCount: 0 })).toBe("אפשר לפרט קצת יותר מה מחפשים?");
+  });
+  it("wired after every transform that removes text, before the output validator", () => {
+    const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    const g = bot.indexOf("const issues = finalTextIssues(replyText, gateCtx);");
+    expect(g).toBeGreaterThan(bot.indexOf("const guarded = guardCustomerReply(replyText, {"));
+    expect(g).toBeGreaterThan(bot.indexOf("replyText = humanizeReply(replyText);"));
+    expect(g).toBeLessThan(bot.indexOf("await validateAndPersist(replyText, {"));
+  });
+});
+
+describe("e23: promotions", () => {
+  it("an ISO date in a Hebrew reply is written day.month.year", () => {
+    expect(polishReply("בתוקף עד 2027-09-30.", { locale: "he" })).toBe("בתוקף עד 30.09.2027.");
+  });
+  it("the coupon block: the date as written here, and standing offers count", async () => {
+    const { buildCouponPromotionsDirective } = await import("../services/product-intent.service");
+    const d = buildCouponPromotionsDirective([{ code: "welcome10", amount: "10", discountType: "percent", expiresAt: "2027-09-30T00:00:00", minimumAmount: null }]);
+    expect(d).toContain("welcome10: 10% off, until 30.09.2027");
+    expect(d).toContain("free shipping above an amount");
   });
 });

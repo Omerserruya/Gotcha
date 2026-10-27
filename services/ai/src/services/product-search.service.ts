@@ -395,6 +395,8 @@ export function normalizeWooProducts(
 export function buildKeyedModelSummary(
   env: ProductSearchEnvelope,
   locale: "he" | "en",
+  /** The channel shows these as cards (web chat, Shopify Live Chat). */
+  cards = false,
 ): string {
   if (env.status === "error") {
     return "PRODUCT_SEARCH_FAILED: the live catalog could not be read. Do NOT claim a search ran or that there are no products; tell the customer you can't check the catalog right now and offer a human handoff.";
@@ -470,7 +472,12 @@ export function buildKeyedModelSummary(
     ...thin,
     ...fx,
     "",
-    "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",
+    cards
+      // Cards (dev 2026-10-27, urban-e23): keys and titles written inside the
+      // sentence had to be cut out of it, and every cut left a broken sentence.
+      // So none goes in: the products to show are named on a line of their own.
+      ? `Rules: these products appear as CARDS under your message, each with its name, price and picture. In your sentences describe the ones you mean in a few ${locale === "he" ? "Hebrew" : ""} words ("a light trench", "a long wool coat"): NEVER write a key (PRODUCT_1) or the store's title inside a sentence, and no list. Then, on the LAST line, alone, write which to show: SHOW: PRODUCT_1, PRODUCT_2 (at most three, the ones your sentences describe). Do NOT write URLs, prices or availability. Do NOT mention any product not listed above. Never invent flex, riding style or board length.`
+      : "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values below your text. Do NOT re-list the products as a bulleted catalogue either; that list is already appended, and repeating it just prints every title twice. Write only the short reasoning a person would say out loud, naming at most two or three keys inline. Do NOT mention any product not listed above. Never invent flex, riding style or board length; if the shopper asks for one and it is marked unknown, say that detail is not listed for this product.",
     "",
     "NEVER ASK PERMISSION TO SHOW THE PRODUCTS (CRITICAL). On a channel with product cards the system attaches them to this very message, automatically, without you calling anything. So do NOT write \"would you like me to send a product card?\", \"רוצה שאשלח כרטיסי מוצר?\", \"אפשר להציג לך את המוצרים?\" or any variant. Offering, as a favour, the thing that is already happening reads as a system asking permission to do its job. Write the short lead-in as though the products are already visible below your text, because they are.",
     "BUDGET HONESTY (CRITICAL). Each candidate above is marked either `within budget` or `approximate/over-budget`, computed from the store's own prices. NEVER say or imply that every option matches the budget when any one of them is marked over-budget. If you name an over-budget option, say plainly that it is above what they asked for. Do not do the arithmetic yourself and do not contradict the marking.",

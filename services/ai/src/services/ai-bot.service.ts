@@ -121,7 +121,7 @@ import {
 import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -3263,6 +3263,19 @@ async function generateAIBotReplyInner(
     }
   }
   markStage("prompt_ready");
+  // Products go out as cards on this channel this turn: the search result tells
+  // the model so, and to name them on a SHOW line instead of in its sentences.
+  const cardChannel = !!productTurn?.sendShopifyProducts && (() => {
+    const c = capabilitiesFor(conversation.channel as string);
+    return !!(c.supportsProductCarousel || c.supportsCards);
+  })();
+  // What the reply was after each stage that can change it (dev only, or
+  // AI_REPLY_TRACE=1): which step broke a sentence is a question asked often.
+  const traceReply = (stage: string) => {
+    if (process.env.AI_REPLY_TRACE === "1" || (process.env.AI_REPLY_TRACE !== "0" && process.env.NODE_ENV === "development")) {
+      console.log(`[ai-bot][reply-stage] conv=${opts.conversationId} ${stage}: ${JSON.stringify(String(replyText ?? "").slice(0, 300))}`);
+    }
+  };
   // The per-turn state note (2026-10-25): the facts the model should not have
   // to infer from the transcript, last before it writes (recency wins).
   chatMessages.push({
@@ -3572,7 +3585,7 @@ async function generateAIBotReplyInner(
             if (envlp) {
               productEnvelope = envlp;
               productBudget = envlp.budget ?? null;
-              toolContent = buildKeyedModelSummary(envlp, replyLocale);
+              toolContent = buildKeyedModelSummary(envlp, replyLocale, cardChannel);
               // A size / colour question about the one product found: its
               // variations ride along, so the answer needs no extra round.
               if (discoveryLookup && toolName === "woocommerce.list_products" && envlp.candidates.length === 1) {
@@ -5139,7 +5152,12 @@ async function generateAIBotReplyInner(
   markStage("model_done");
   // The model's own draft names the products with PRODUCT_n keys; a fix or a
   // rewrite takes the keys out of the sentence, and the cards still follow it.
-  const namingDraft = replyText;
+  // The products to show, from the SHOW line (or the keys in the text when the
+  // model wrote them inline); the line itself never reaches the customer.
+  traceReply("model");
+  const showLine = takeShowLine(replyText);
+  let namingDraft = showLine.keys.length ? showLine.keys.join(", ") : replyText;
+  if (replyText) replyText = showLine.text;
   if (replyText && !awaitingApproval && !pendingEscalation) {
     try {
       const persona: any = (config as any).persona ?? {};
@@ -5225,7 +5243,11 @@ async function generateAIBotReplyInner(
         });
         totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
         budget.addUsage(regen.usage.total_tokens || 0);
-        if (regen.content?.trim() && !isInterimOnlyReply(regen.content)) replyText = regen.content.trim();
+        if (regen.content?.trim() && !isInterimOnlyReply(regen.content)) {
+          const regenShow = takeShowLine(regen.content.trim());
+          if (regenShow.keys.length) namingDraft = regenShow.keys.join(", ");
+          replyText = regenShow.text;
+        }
         else replyText = stripTrailingOffer(draftBeforeRegen);
         // The rewrite is checked like the draft, and anything untrue left in it
         // is fixed in code: titles, "לא נמצאה במלאי" and a made-up ₪389 all came
@@ -5268,6 +5290,7 @@ async function generateAIBotReplyInner(
     }
   }
   markStage("checker_done");
+  traceReply("checked");
   // An empty search is data the model already read, not the reply (2026-10-25,
   // eval R2): "לא מצאתי מוצרים שמתאימים לחיפוש הזה." replaced whole answers, a
   // complaint's included. With nothing to show, the model's own words stand;
@@ -5388,6 +5411,7 @@ async function generateAIBotReplyInner(
     }
   }
 
+  traceReply("rendered");
   // A card send that failed is never the customer's news (dev 2026-10-26, conv
   // cmvpghp1…: "מצטערים, לא הצלחנו לשלוח את הקרוסלה כרגע"). The sentence goes;
   // the cards shown last are resent when nothing went out this turn.
@@ -5450,6 +5474,7 @@ async function generateAIBotReplyInner(
   });
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).
   replyText = humanizeReply(replyText);
+  traceReply("polished");
 
   // Deterministic guard: internal narration and unbacked promises.
   //
@@ -5482,6 +5507,55 @@ async function generateAIBotReplyInner(
     } catch (err: any) {
       // A guard that throws must not cost the customer their reply.
       console.error(`[ai-bot] reply guard failed conv=${opts.conversationId}:`, err?.message);
+    }
+  }
+
+  // The final gate (urban-e23): the text as it would leave, normalised once and
+  // checked once. A broken sentence is dropped when what is left stands; else
+  // one clean rewrite; else the turn's safe line. A fragment is never sent.
+  if (replyText && !awaitingApproval && !pendingEscalation) {
+    try {
+      const gateCards = (productTurn?.staged.length ?? 0) > 0;
+      const gateCtx: FinalGateContext = {
+        locale: replyLocale,
+        isFirstReply: !(messages as any[]).some((m) => m.direction === "OUTBOUND"),
+        incomingMessage: opts.incomingMessage ?? "",
+        productFactsAvailable: true,
+        shopFloor: false,
+        toolsOffered: toolFunctionNames,
+        customerClosing: customerIsClosing(opts.incomingMessage),
+        productTitles: productEnvelope?.candidates.map((c) => c.title) ?? [],
+        cardsShown: gateCards,
+      };
+      replyText = normalizePunctuation(replyText);
+      const issues = finalTextIssues(replyText, gateCtx);
+      if (issues.length) {
+        const dropped = dropBrokenSentences(replyText, gateCtx);
+        if (dropped) {
+          console.warn(`[ai-bot] final gate: dropped a broken sentence (${issues.join(", ")}) conv=${opts.conversationId}`);
+          replyText = dropped;
+        } else {
+          const again = await generateResponse({
+            tenantId: opts.tenantId,
+            sessionId: opts.conversationId,
+            model,
+            messages: [...chatMessages, { role: "system", content: finalRewriteInstruction(replyText, issues, replyLocale) }],
+            temperature: 0.3,
+            maxTokens: 300,
+            metadata: { type: "ai_bot_final_rewrite", conversationId: opts.conversationId, aiAgentId: config.id },
+            signal,
+          });
+          totalTokens += again.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(again.usage);
+          const candidate = normalizePunctuation(humanizeReply(polishReply(takeShowLine(again.content ?? "").text, { locale: replyLocale, incomingMessage: opts.incomingMessage ?? "" })) ?? "");
+          const left = finalTextIssues(candidate, gateCtx);
+          const cardCount = (productTurn?.staged ?? []).reduce((n, r: any) => n + (((r?.metadata as any)?.commerce?.products?.length) ?? 1), 0);
+          replyText = left.length ? safeTurnLine(replyLocale, { cardsShown: gateCards, cardCount }) : candidate;
+          console.warn(`[ai-bot] final gate: ${issues.join(", ")} → ${left.length ? `safe line (rewrite still ${left.join(", ")})` : "one clean rewrite"} conv=${opts.conversationId}`);
+        }
+      }
+      traceReply("final");
+    } catch (err: any) {
+      console.error(`[ai-bot] final gate failed conv=${opts.conversationId}:`, err?.message);
     }
   }
 
