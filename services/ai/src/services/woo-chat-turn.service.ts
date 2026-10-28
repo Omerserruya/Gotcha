@@ -190,7 +190,9 @@ export const WOO_TURN_HIDDEN_TOOLS: ReadonlySet<string> = new Set(["shopify.sear
 // What goes with the product the customer chose, from THIS store: its own
 // cross-sells and upsells first (what the merchant linked in WooCommerce), then,
 // when those are fewer than asked for, in-stock products from OTHER kinds of
-// product: accessories first, then the same audience (Men / Women). Never the
+// product: accessories first, then the rest, all for the same person (Men /
+// Women: the conversation's, else the product's); an accessory gets only other
+// accessories, never one of its own kind (a bag with a bag). Never the
 // anchor's own kind (2026-10-26: urban links nothing, so the old same-category
 // fill made the trench coat's add-ons other coats), never a product the customer was
 // already shown. Nothing that qualifies: nothing, not substitutes. Published,
@@ -232,13 +234,24 @@ const sellable = (p: any) =>
   p && p.status === "publish" && p.catalog_visibility !== "hidden" && p.stock_status === "instock" && p.purchasable !== false;
 
 const ACCESSORY_CATEGORY = /accessor|אקססור|אביזר/i;
+// A top-level category that says who a product is for (the adapter's own list, for the audience param).
+const AUDIENCE_CATEGORY: Record<"men" | "women", RegExp> = {
+  men: /^(?:men|mens|men'?s|man|male|גברים|גבר)$/i,
+  women: /^(?:women|womens|women'?s|woman|female|נשים|אישה)$/i,
+};
+
+/** What a product is ("Leather Crossbody Bag" -> "bag"): two accessories with the same one are substitutes. */
+function headNoun(name: unknown): string {
+  const words = String(name ?? "").toLowerCase().replace(/\b\d+-pack\b/g, "").match(/[a-z]+/g) ?? [];
+  return (words[words.length - 1] ?? "").replace(/(?<!s)s$/, "");
+}
 
 export async function wooComplementaryProducts(
   tenantId: string,
   productId: string,
   limit = WOO_COMPLEMENTARY_LIMIT,
-  opts: { exclude?: string[] } = {},
-): Promise<{ ok: true; result: any[]; sources: { linked: number; otherKinds: number } } | { ok: false; reason: string }> {
+  opts: { exclude?: string[]; audience?: "men" | "women" | null } = {},
+): Promise<{ ok: true; result: any[]; anchorName: string; sources: { linked: number; otherKinds: number } } | { ok: false; reason: string }> {
   const id = String(productId ?? "").trim();
   if (!/^\d{1,12}$/.test(id)) return { ok: false, reason: "complementary_products needs the numeric product_id of the product the customer chose." };
   const read = (toolFunctionName: string, args: Record<string, unknown>) =>
@@ -269,16 +282,38 @@ export async function wooComplementaryProducts(
     const cats = await read("woocommerce.list_product_categories", {});
     const tree = cats.ok && Array.isArray(cats.result) ? (cats.result as any[]) : null;
     const parentOf = new Map((tree ?? []).map((c) => [String(c?.id), String(c?.parent ?? "0")]));
-    const children = tree ? anchorCats.filter((c) => (parentOf.get(c) ?? "0") !== "0") : [];
-    const kind = new Set(children.length ? children : anchorCats);
-    const audience = new Set(anchorCats.filter((c) => !kind.has(c)));
-    const accessories = (tree ?? [])
-      .filter((c) => ACCESSORY_CATEGORY.test(String(c?.name ?? "")) && !kind.has(String(c?.id)))
-      .map((c) => String(c.id));
+    const nameOf = new Map((tree ?? []).map((c) => [String(c?.id), String(c?.name ?? "").replace(/&amp;/g, "&").trim()]));
+    // A top-level "Men" / "Women" is who the product is for, never its kind
+    // (Omer 2026-10-28: the crossbody bag is Accessories + Women, both top-level,
+    // so Women was taken for its kind and every women's product was left out:
+    // the add-ons were men's trousers).
+    const audienceCat = (a: "men" | "women") =>
+      (tree ?? []).filter((c) => String(c?.parent ?? "0") === "0" && AUDIENCE_CATEGORY[a].test(nameOf.get(String(c?.id)) ?? "")).map((c) => String(c.id));
+    const audienceCats = { men: audienceCat("men"), women: audienceCat("women") };
+    const isAudience = (c: string) => audienceCats.men.includes(c) || audienceCats.women.includes(c);
+    const rest = anchorCats.filter((c) => !isAudience(c));
+    const children = tree ? rest.filter((c) => (parentOf.get(c) ?? "0") !== "0") : [];
+    const kind = new Set(children.length ? children : rest.length ? rest : anchorCats);
+    const accessoryCats = (tree ?? []).filter((c) => ACCESSORY_CATEGORY.test(nameOf.get(String(c?.id)) ?? "")).map((c) => String(c.id));
+    // An accessory goes with another accessory, never a bag with a bag; it is
+    // not a reason to show clothes.
+    const accessoryAnchor = [...kind].some((c) => accessoryCats.includes(c));
+    const accessories = accessoryAnchor ? accessoryCats : accessoryCats.filter((c) => !kind.has(c));
+    // Who the add-ons are for: the conversation's when the product is for them
+    // too, else the product's own when it has one. A product for someone else
+    // is never an add-on; one for no one in particular is.
+    const anchorFor = (["men", "women"] as const).filter((a) => anchorCats.some((c) => audienceCats[a].includes(c)));
+    const target = opts.audience && (!anchorFor.length || anchorFor.includes(opts.audience)) ? opts.audience : anchorFor.length === 1 ? anchorFor[0] : null;
+    const forTarget = (p: any) => {
+      if (!target) return true;
+      const forWhom = catsOf(p).filter(isAudience);
+      return !forWhom.length || forWhom.some((c) => audienceCats[target].includes(c));
+    };
+    const audience = new Set(target ? audienceCats[target] : anchorCats.filter(isAudience));
     const taken = new Set([...excluded, ...linked.map((p) => String(p.id))]);
     const pools = await Promise.all([
       ...accessories.slice(0, 2).map((category) => read("woocommerce.list_products", { category, in_stock: true, per_page: 20 })),
-      read("woocommerce.list_products", { in_stock: true, per_page: 50 }),
+      ...(accessoryAnchor ? [] : [read("woocommerce.list_products", { in_stock: true, per_page: 50 })]),
     ]);
     const seen = new Set<string>();
     const pool = pools
@@ -286,8 +321,11 @@ export async function wooComplementaryProducts(
       .filter((p) => (seen.has(String(p?.id)) ? false : (seen.add(String(p?.id)), true)))
       .filter(sellable)
       .filter((p) => !taken.has(String(p.id)))
+      .filter(forTarget)
       // Another kind, known: a product with no category could be a substitute.
-      .filter((p) => catsOf(p).length > 0 && !catsOf(p).some((c) => kind.has(c)));
+      .filter((p) => catsOf(p).length > 0 && (accessoryAnchor
+        ? catsOf(p).some((c) => accessoryCats.includes(c)) && headNoun(p.name) !== headNoun(raw?.name)
+        : !catsOf(p).some((c) => kind.has(c))));
     // Accessories first, then the anchor's audience, then the store's order.
     const rank = (p: any) =>
       (catsOf(p).some((c) => accessories.includes(c)) ? 0 : 2) + (audience.size && !catsOf(p).some((c) => audience.has(c)) ? 1 : 0);
@@ -298,7 +336,7 @@ export async function wooComplementaryProducts(
       .slice(0, limit - linked.length);
   }
 
-  return { ok: true, result: [...linked, ...otherKinds], sources: { linked: linked.length, otherKinds: otherKinds.length } };
+  return { ok: true, result: [...linked, ...otherKinds], anchorName: String(raw?.name ?? ""), sources: { linked: linked.length, otherKinds: otherKinds.length } };
 }
 
 // ─── Cross-sell when the customer settles on a product (2026-10-26) ──────────
@@ -318,6 +356,33 @@ const crossSellChosenKey = (conversationId: string) => `woo:cross-sell-chosen:${
 /** The line over the add-on cards. */
 export function goesWellWithLine(locale: string): string {
   return locale?.startsWith("he") ? "זה הולך מצוין עם:" : "This goes great with:";
+}
+
+// A store title's Hebrew name, with its gender for "הוא/היא הולך", most specific first.
+const HEBREW_NAME: Array<[RegExp, string, "m" | "f" | "pl"]> = [
+  [/\bcrossbody\b/, "תיק הצד", "m"], [/\btote\b/, "תיק הבד", "m"], [/\bbag\b/, "התיק", "m"],
+  [/\bbeanie\b/, "כובע הגרב", "m"], [/\bhat\b/, "הכובע", "m"], [/\bscarf\b/, "הצעיף", "m"],
+  [/\bbelt\b/, "החגורה", "f"], [/\bsocks?\b/, "הגרביים", "pl"], [/\bwallet\b/, "הארנק", "m"],
+  [/\btrench\b/, "הטרנץ'", "m"], [/\b(?:over)?coat\b/, "המעיל", "m"], [/\bjacket\b/, "הז'קט", "m"],
+  [/\bhoodie\b/, "הקפוצ'ון", "m"], [/\bcardigan\b/, "הקרדיגן", "m"], [/\bsweater\b/, "הסוודר", "m"],
+  [/\btank top\b/, "הגופייה", "f"], [/\bovershirt\b/, "החולצה העליונה", "f"], [/\b(?:t-shirt|tee|shirt)\b/, "החולצה", "f"],
+  [/\bdress\b/, "השמלה", "f"], [/\bskirt\b/, "החצאית", "f"],
+  [/\b(?:pants|trousers|chinos?|jeans)\b/, "המכנסיים", "pl"],
+];
+
+/**
+ * The line over the add-ons after Add to cart, naming what was added (Omer
+ * 2026-10-28): "ראיתי שהוספת לסל את תיק הצד! הוא הולך מושלם עם:". The
+ * generic line when the title has no safe Hebrew name.
+ */
+export function addedToCartLine(locale: string, title: string | null | undefined): string {
+  const t = String(title ?? "").trim();
+  if (!locale?.startsWith("he")) return t ? `I see you added the ${t} to your cart! It goes great with:` : goesWellWithLine(locale);
+  const hit = HEBREW_NAME.find(([re]) => re.test(t.toLowerCase()));
+  if (!hit) return goesWellWithLine(locale);
+  const [, name, g] = hit;
+  const goes = g === "m" ? "הוא הולך" : g === "f" ? "היא הולכת" : "הם הולכים";
+  return `ראיתי שהוספת לסל את ${name}! ${goes} מושלם עם:`;
 }
 
 /**
@@ -350,6 +415,39 @@ export function audienceOf(text: string | null | undefined): "men" | "women" | n
   const men = /(?<![\u0590-\u05FF])[ולבשה]{0,2}(?:גבר|גברים|בעלי|אבא|אבי)(?![\u0590-\u05FF])|\b(?:men|man|husband|dad|father)\b/iu.test(t);
   const women = /(?<![\u0590-\u05FF])[ולבשה]{0,2}(?:אישה|אשה|נשים|אשתי|אחותי|אמא|אמי)(?![\u0590-\u05FF])|\b(?:women|woman|wife|sister|mom|mother)\b/iu.test(t);
   return men === women ? null : men ? "men" : "women";
+}
+
+/** Who a message says the purchase is for: an audience, or a partner ("מתנה לבת זוגג שלי"). */
+export function recipientAudienceOf(text: string | null | undefined): "men" | "women" | null {
+  const t = String(text ?? "");
+  const said = audienceOf(t);
+  if (said) return said;
+  const women = /(?<![֐-׿])[ול]?(?:בת\s+(?:ה)?זוג\S*|(?:ה)?חברה\s+שלי)|\b(?:girlfriend|wife)\b/iu.test(t);
+  const men = /(?<![֐-׿])[ול]?(?:בן\s+(?:ה)?זוג\S*|(?:ה)?חבר\s+שלי)|\bboyfriend\b/iu.test(t);
+  return men === women ? null : men ? "men" : "women";
+}
+
+/**
+ * Who the customer was shopping for when a product was shown: the last person
+ * they named before the card with it (Omer 2026-10-28: a bag shown for "בת
+ * זוג", added to the cart after "מעיל לגברים", is still for her). All their
+ * messages when no card shows it. Messages oldest first.
+ */
+export function audienceWhenShown(
+  messages: Array<{ direction?: string | null; body?: string | null; metadata?: any }>,
+  productId: string,
+): "men" | "women" | null {
+  const showedIt = (m: { direction?: string | null; metadata?: any }) =>
+    m.direction === "OUTBOUND" && Array.isArray(m.metadata?.commerce?.products) &&
+    m.metadata.commerce.products.some((p: any) => String(p?.productId ?? "") === productId);
+  let end = messages.length;
+  for (let i = messages.length - 1; i >= 0; i--) if (showedIt(messages[i])) { end = i; break; }
+  for (let i = end - 1; i >= 0; i--) {
+    if (messages[i].direction !== "INBOUND") continue;
+    const a = recipientAudienceOf(messages[i].body);
+    if (a) return a;
+  }
+  return null;
 }
 
 /** A budget the message states ("עד 300", "under 300"); null when none. */
@@ -477,7 +575,14 @@ export async function crossSellCards(
 ): Promise<ProductMessageRecord | null> {
   const chosen = new Set([anchorId, ...(await chosenProducts(conversationId))]);
   const shown = (await shownProducts(tenantId, conversationId)).map((p) => p.productId);
-  const got = await wooComplementaryProducts(tenantId, anchorId, WOO_COMPLEMENTARY_LIMIT, { exclude: [...chosen, ...shown] }).catch(() => null);
+  const history = await prisma.message.findMany({
+    where: { tenantId, conversationId },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: { direction: true, body: true, metadata: true },
+  }).catch(() => []);
+  const audience = audienceWhenShown([...(history ?? [])].reverse() as any[], anchorId);
+  const got = await wooComplementaryProducts(tenantId, anchorId, WOO_COMPLEMENTARY_LIMIT, { exclude: [...chosen, ...shown], audience }).catch(() => null);
   if (!got?.ok) return null;
   const ids = got.result.map((p: any) => String(p?.id ?? "")).filter((id) => /^\d{1,12}$/.test(id) && !chosen.has(id)).slice(0, WOO_COMPLEMENTARY_LIMIT);
   if (!ids.length) return null;
@@ -488,7 +593,7 @@ export async function crossSellCards(
     ids.map((productId) => ({ productId })),
   );
   if ("reason" in built) return null;
-  built.record.metadata = { ...built.record.metadata, complementaryFor: anchorId };
+  built.record.metadata = { ...built.record.metadata, complementaryFor: anchorId, complementaryForName: got.anchorName };
   return built.record;
 }
 
@@ -767,7 +872,7 @@ export async function offerCrossSellAfterCart(o: { tenantId: string; conversatio
   const language = config.appearance.language;
   const locale = visitorLocaleOf(lastInbound?.body) ?? (language === "auto" ? "he" : language);
   const rows = [
-    { body: goesWellWithLine(locale), messageType: "text", metadata: { source: "ai_bot", crossSell: { trigger: "add_to_cart", anchor: o.productId } } },
+    { body: addedToCartLine(locale, (record.metadata as any)?.complementaryForName), messageType: "text", metadata: { source: "ai_bot", crossSell: { trigger: "add_to_cart", anchor: o.productId } } },
     { body: record.body, messageType: record.messageType, metadata: record.metadata },
   ];
   for (const r of rows) {

@@ -64,7 +64,7 @@ vi.mock("../services/connectors/integration-framework", () => ({
 }));
 
 import {
-  commitsToBuy, crossSellAnchor, claimCrossSell, crossSellCards, offerCrossSellAfterCart, withTheBot, goesWellWithLine,
+  commitsToBuy, crossSellAnchor, claimCrossSell, crossSellCards, offerCrossSellAfterCart, withTheBot, addedToCartLine,
 } from "../services/woo-chat-turn.service";
 
 const product = (id: number, name: string, cat: number, extra: any = {}) => ({
@@ -142,7 +142,9 @@ describe("(ii) add to cart", () => {
     expect(H.created.map((m) => [m.direction, m.messageType, m.senderName])).toEqual([
       ["OUTBOUND", "text", "AI Bot"], ["OUTBOUND", "woo_product_carousel", "AI Bot"],
     ]);
-    expect(H.created[0].body).toBe(goesWellWithLine("he"));
+    // Names what was added (Omer 2026-10-28); the generic line only without a safe Hebrew name.
+    expect(H.created[0].body).toBe(addedToCartLine("he", "Cotton Trench Coat"));
+    expect(H.created[0].body).toBe("ראיתי שהוספת לסל את הטרנץ'! הוא הולך מושלם עם:");
     expect(H.events.map((e) => [e.event, e.data.channel])).toEqual([["message:new", "WEBCHAT"], ["message:new", "WEBCHAT"]]);
   });
   it("once: a second add of the same product, or after \"אני לוקח\" already offered it, sends nothing", async () => {
@@ -155,7 +157,7 @@ describe("(ii) add to cart", () => {
   it("in English when the customer writes English", async () => {
     H.lastInbound = { body: "looking for a coat please" };
     await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "41" });
-    expect(H.created[0].body).toBe("This goes great with:");
+    expect(H.created[0].body).toBe("I see you added the Cotton Trench Coat to your cart! It goes great with:");
   });
   it("nothing: toggle off, a person has it, handed over, closed, no add-ons", async () => {
     H.account = { credentials: { commerce: { productMessagingEnabled: true, suggestComplementary: false } } };

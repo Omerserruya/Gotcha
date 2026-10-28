@@ -191,7 +191,7 @@ export function stripPrices(reply: string, prices: string[]): string {
     // "1290" is written "1,290" too.
     const n = p.split(".").map((part, i) => (i ? part : part.split("").join(",?"))).join("\\.");
     const amount = `(?:[₪$€]\\s?${n}(?:\\.0+)?|${n}(?:\\.0+)?\\s?(?:₪|ש["״']?ח|שקל|ILS))`;
-    out = out.replace(new RegExp(`\\s*,?\\s*(?:(?:(?:ש)?(?:עולה|עולות|עולים|במחיר(?: של)?|ב[-\u2011]?)|costs?|is|are|for|at|priced at)\\s*)?${amount}`, "gi"), "");
+    out = out.replace(new RegExp(`\\s*,?\\s*(?:(?:(?<![\u0590-\u05FF])(?:ש)?(?:עולה|עולות|עולים|במחיר(?: של)?|ב[-\u2011]?)|\\b(?:costs?|is|are|for|at|priced at))\\s*)?${amount}`, "gi"), "");
   }
   return out.replace(/\s+([.,!?؟])/g, "$1").replace(/,\s*([.!?؟])/g, "$1").replace(/ {2,}/g, " ").trim();
 }
@@ -620,7 +620,7 @@ export function pointsToCardsBelow(text: string | null | undefined): boolean {
 
 /** "Below" said when nothing below was sent: the word goes, the sentence stays. */
 export function dropBelow(text: string): string {
-  return text.replace(/\s*(?:כאן |פה )?למטה/gu, "").replace(/\s+(?:right |just )?below\b/giu, "").replace(/\s+([,.!?؟])/g, "$1").trim();
+  return text.replace(/\s*(?<![\u0590-\u05FF])(?:כאן |פה )?למטה(?![\u0590-\u05FF])/gu, "").replace(/\s+(?:right |just )?below\b/giu, "").replace(/\s+([,.!?؟])/g, "$1").trim();
 }
 
 /** When the cards could not be resent: they are still up in the conversation. */
@@ -1066,8 +1066,8 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
   // a regenerated reply, so never checked again): the cards speak for themselves.
   if (opts.locale === "he") {
     const narrated = out
-      .replace(/\s*שמתי (?:עבורך|לך|לכם)[^.!?\n]*?(?:ל?מטה|חיות)[^.!?\n]*[.!]?/g, "")
-      .replace(/\s*ראו:\s*[^.!?\n]*$/g, "")
+      .replace(/\s*(?<![\u0590-\u05FF])שמתי (?:עבורך|לך|לכם)[^.!?\n]*?(?:ל?מטה|חיות)[^.!?\n]*[.!]?/g, "")
+      .replace(/\s*(?<![\u0590-\u05FF])ראו:\s*[^.!?\n]*$/g, "")
       .replace(/[,\s]+$/, "")
       .trim();
     if (narrated.length >= 2) out = narrated;
@@ -1087,6 +1087,20 @@ const ASKS_QUANTITY = /כמה (?:יחידות|נשאר|נשארו|יש במלא�
  * - "Off-White" is one colour ("Off-לבן" came from translating half of it).
  * - "לא נשען" for unworn is "לא נלבש".
  */
+// Product words without their first letter, none of them a word on its own.
+const EATEN_STEMS: Record<string, string> = {
+  "עיל": "מעיל", "עילים": "מעילים", "ולצה": "חולצה", "ולצות": "חולצות", "כנסיים": "מכנסיים", "וודר": "סוודר",
+  "צאית": "חצאית", "רדיגן": "קרדיגן", "רנץ'": "טרנץ'", "ישירט": "טישירט", "ופייה": "גופייה", "רביים": "גרביים",
+};
+// The whole token: a prefix (ו, ה, ב, ל, ש, כ, מ and their pairs), then the stem.
+const EATEN_FIRST_LETTER = new RegExp(
+  `(?<![\\u0590-\\u05FF'])((?:וה|וב|ול|וש|ומ|וכ|שה|שב|של|מה|כש|ו|ה|ב|ל|ש|כ|מ)?)(${Object.keys(EATEN_STEMS).sort((a, b) => b.length - a.length).join("|")})(?![\\u0590-\\u05FF'])`,
+  "gu",
+);
+// Real words that look like a prefix and a stem ("כאמור לעיל"). A prefix that
+// ends in the missing letter is the word itself ("מעיל", "ומכנסיים").
+const EATEN_KEEP: ReadonlySet<string> = new Set(["לעיל", "כלעיל", "מלעיל"]);
+
 function hebrewTouches(text: string, incoming: string): string {
   let out = text
     // "בתוקף עד 2027-09-30": a date as it is written here, 30.09.2027 (urban-e23).
@@ -1103,7 +1117,10 @@ function hebrewTouches(text: string, incoming: string): string {
     .replace(/(?<![\u0590-\u05FF])למגברים(?![\u0590-\u05FF])/g, "לגברים")
     // "במקטגוריית" (dev 2026-10-26): two prefixes, one of them wrong.
     .replace(/(?<![\u0590-\u05FF])במקטגורי/g, "בקטגורי")
-    .replace(/(?<![\u0590-\u05FF])([ובלה]?)מכופר(ת|ות|ים)?(?![\u0590-\u05FF])/g, "$1מכופתר$2");
+    .replace(/(?<![\u0590-\u05FF])([ובלה]?)מכופר(ת|ות|ים)?(?![\u0590-\u05FF])/g, "$1מכופתר$2")
+    // A product word with its first letter eaten ("טרנץ' קל, ועיל צמר ארוך",
+    // urban-e31: so in the model's own reply): the letter put back.
+    .replace(EATEN_FIRST_LETTER, (whole: string, prefix: string, stem: string) => (EATEN_KEEP.has(whole) || prefix.endsWith(EATEN_STEMS[stem][0]) ? whole : `${prefix}${EATEN_STEMS[stem]}`));
   // A sentence that narrates the cards (eval e14: "הצגתי אותה עבורך", "מציגים
   // אותם למטה", "הצגתי כרטיס מוצר עם הווריאנט"): the cards speak for themselves.
   const narr = out.split(/(?<=[.!?])\s+/);
@@ -1171,7 +1188,7 @@ export function stripStrayClose(reply: string, incomingMessage: string): string 
     "$1",
   ).trim();
   if (own !== reply.trim() && own.length >= 3) return own;
-  const out = reply.replace(/[\s,]*(?:בכיף|anytime)\s*[🙂😊❤️🙏]*\s*$/iu, "").trim();
+  const out = reply.replace(/[\s,]*(?<![\u0590-\u05FF])(?:בכיף|anytime)\s*[🙂😊❤️🙏]*\s*$/iu, "").trim();
   return out.length >= 3 ? out : reply;
 }
 

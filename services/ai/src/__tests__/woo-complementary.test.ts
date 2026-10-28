@@ -137,9 +137,11 @@ describe("★ what goes with the chosen product", () => {
     expect(ids.some((id: number) => [329, 343].includes(id))).toBe(false);
     // Room for everything: still no coat.
     const wide = (await wooComplementaryProducts("T", "364", 20) as any).result.map((p: any) => p.id);
-    expect(wide).toEqual([425, 429, 443, 140, 117]);
-    // Accessories first, the Women's ones before the Men-only belt; then a Women's shirt.
-    expect(ids).toEqual([425, 429, 443, 140]);
+    // The trench is Women's: never the Men-only belt or shirt (Omer 2026-10-28,
+    // a bag for her got men's trousers).
+    expect(wide).toEqual([425, 429, 140]);
+    // Accessories first, then a shirt for her too.
+    expect(ids).toEqual([425, 429, 140]);
     // Already shown as an alternative: never an add-on.
     expect((await wooComplementaryProducts("T", "364", 4, { exclude: ["425"] }) as any).result.map((p: any) => p.id)).not.toContain(425);
   });
