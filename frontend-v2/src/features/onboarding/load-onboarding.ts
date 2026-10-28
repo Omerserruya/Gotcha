@@ -42,6 +42,8 @@ import {
   type ShopifyAvailability,
 } from '@/features/capabilities/load-capabilities';
 import { logger } from '@/observability/logger';
+import { connectorVerdict } from '@/api/contracts/shopify-connector';
+import { loadShopifyConnector } from '@/features/billing/load-connector';
 
 /** Where 00d's guess came from - its line under the title says so. */
 export type GuessSource = 'scan' | 'profile' | 'email';
@@ -175,6 +177,22 @@ export interface TruthRead {
   readonly coreSystem: string | null;
 }
 
+/**
+ * Shopify's listing, and whether GOTCHA Core lets a store be connected yet
+ * (split billing, Omer 2026-10-28): a new merchant or a reviewer must never
+ * meet a 402 as the first thing Connect does. `connectAllowed` is the
+ * server's word (`core.allowsShopifyConnect`); a failed read leaves it unsaid.
+ */
+async function loadShopifyToConnect(): Promise<ShopifyAvailability | null> {
+  const [availability, connector] = await Promise.all([
+    loadShopifyAvailability(),
+    loadShopifyConnector(),
+  ]);
+  return availability
+    ? { ...availability, connectAllowed: connectorVerdict(connector).connectAllowed }
+    : null;
+}
+
 /** 00g: what can be connected, what is, and what the read found on the site. */
 export async function loadTruth(): Promise<TruthRead> {
   const [integrations, shopify, discovery, status] = await Promise.all([
@@ -186,7 +204,7 @@ export async function loadTruth(): Promise<TruthRead> {
         });
         return null;
       }),
-    loadShopifyAvailability(),
+    loadShopifyToConnect(),
     loadDiscovery(),
     serverApi()
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
@@ -261,7 +279,7 @@ export async function loadSystems(): Promise<SystemsRead> {
         });
         return null;
       }),
-    loadShopifyAvailability(),
+    loadShopifyToConnect(),
   ]);
   return { suggestions, integrations, shopify };
 }

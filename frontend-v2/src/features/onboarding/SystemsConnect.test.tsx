@@ -110,6 +110,31 @@ describe('★★ every start from step 2 asks to come back to step 2 (flow=onboa
     expect(assign).toHaveBeenCalledWith('https://apps.shopify.com/gotcha');
   });
 
+  it('★★ split billing: GOTCHA Core not active - said, and no button that would 402', () => {
+    show({
+      integration: shopify,
+      shopify: { mode: 'listing', helpUrl: null, connectAllowed: false },
+    });
+    expect(screen.getByTestId('systems-shopify-core-first')).toHaveTextContent(
+      'Connecting a Shopify store needs an active GOTCHA Core plan first.',
+    );
+    expect(screen.queryByTestId('systems-start-shopify')).toBeNull();
+  });
+
+  it.each([true, null])('Core allowed (%s) or not said: the button stays', (connectAllowed) => {
+    show({ integration: shopify, shopify: { mode: 'listing', helpUrl: null, connectAllowed } });
+    expect(screen.getByTestId('systems-start-shopify')).toBeInTheDocument();
+  });
+
+  it('the server refuses with core_plan_required: said in words', async () => {
+    startShopifyInstall.mockResolvedValue({ ok: false, reason: 'core_plan_required' });
+    show({ integration: shopify });
+    await userEvent.click(screen.getByTestId('systems-start-shopify'));
+    expect(await screen.findByTestId('systems-start-problem-shopify')).toHaveTextContent(
+      'Connecting Shopify needs an active GOTCHA Core plan first. Nothing was connected.',
+    );
+  });
+
   it('★ Shopify not listed yet: a sentence, never a dead button', () => {
     show({ integration: shopify, shopify: { mode: 'not_published', helpUrl: null } });
     expect(screen.getByTestId('systems-shopify-not-here')).toHaveTextContent(

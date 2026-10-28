@@ -97,6 +97,12 @@ export async function loadCapabilities(): Promise<CapabilityData> {
 export interface ShopifyAvailability {
   readonly mode: 'listing' | 'not_published' | string;
   readonly helpUrl: string | null;
+  /**
+   * The server's `core.allowsShopifyConnect` (split billing): `false` means
+   * GOTCHA Core must be paid before a store can be connected. Absent or
+   * `null`: not said - the server's 402 `core_plan_required` is the answer.
+   */
+  readonly connectAllowed?: boolean | null;
 }
 
 /** Before the button (backend 98676242): read-only, no intent minted. `null` when unread. */

@@ -405,7 +405,8 @@
       "failed": "{name} didn't open. Try again in a moment.",
       "not_configured": "This connection isn't set up on our side yet. Continue without it, and connect it later in Settings.",
       "needs_store": "Install GOTCHA from the Shopify App Store first, then come back here.",
-      "not_here": "This one can't be connected from here. You can connect it later in Settings."
+      "not_here": "This one can't be connected from here. You can connect it later in Settings.",
+      "core_plan_required": "Connecting {name} needs an active GOTCHA Core plan first. Nothing was connected."
     },
     "shopifyUnread": "We couldn't check how Shopify connects right now. Reload the page in a moment, or continue and connect it later.",
     "shopifyFromAdmin": "The Shopify install starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here.",
@@ -432,7 +433,8 @@
         "invalid_request": "We couldn't confirm the request came from {name}, so nothing was connected. Start again with the connect button.",
         "other": "{name} didn't connect. Try connecting again, or continue without it."
       }
-    }
+    },
+    "shopifyCoreFirst": "Connecting a Shopify store needs an active GOTCHA Core plan first. Continue without it, and connect Shopify once GOTCHA Core is active."
   },
   "channels": {
     "headline": "Where your customers write.",

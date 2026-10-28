@@ -18,7 +18,13 @@ import styles from './SystemsStep.module.css';
 const FLOW = 'onboarding_systems';
 
 type StartError =
-  'invalid_store' | 'forbidden' | 'failed' | 'not_configured' | 'needs_store' | 'not_here';
+  | 'invalid_store'
+  | 'forbidden'
+  | 'failed'
+  | 'not_configured'
+  | 'needs_store'
+  | 'not_here'
+  | 'core_plan_required';
 
 /**
  * Step 2's connect: one button that goes to the provider and comes back to
@@ -111,6 +117,14 @@ export function SystemsConnect({
               {t('shopifyHelp')}
             </a>
           ) : null}
+        </p>
+      );
+    }
+    // GOTCHA Core first (split billing): said instead of a button that would 402.
+    if (shopify.connectAllowed === false) {
+      return (
+        <p className={styles.note} data-testid="systems-shopify-core-first">
+          {t('shopifyCoreFirst')}
         </p>
       );
     }
