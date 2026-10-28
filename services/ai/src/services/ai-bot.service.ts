@@ -244,7 +244,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2271,12 +2271,24 @@ async function generateAIBotReplyInner(
 
       // A budget the conversation already established is applied to the SEARCH,
       // not to the prose about the search. See enrichProductSearchArgs.
-      const effectiveArgs = await enrichProductSearchArgs({
+      let effectiveArgs = await enrichProductSearchArgs({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         toolName: toolFunctionName,
         args: args as Record<string, any>,
       });
+      // The person the customer is shopping for goes with every store search
+      // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
+      // searched for no one). The model's own audience stands.
+      if (toolFunctionName === "woocommerce.list_products" && wooTurn && effectiveArgs?.audience == null) {
+        const audience = conversationAudience(messages as any[], opts.incomingMessage);
+        if (audience) effectiveArgs = { ...effectiveArgs, audience };
+      }
+      // So does the colour a refinement leaves unsaid ("משהו מכותנה" after "חולצה לבנה", urban-e32).
+      if (toolFunctionName === "woocommerce.list_products" && wooTurn && typeof effectiveArgs?.query === "string") {
+        const colour = carriedColour(messages as any[], opts.incomingMessage, effectiveArgs.query);
+        if (colour) effectiveArgs = { ...effectiveArgs, query: `${colour} ${effectiveArgs.query}` };
+      }
       const result = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,

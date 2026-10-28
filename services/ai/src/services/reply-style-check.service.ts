@@ -132,8 +132,8 @@ const CUSTOM_WORK = /התאמה אישית|בהתאמה|להאריך|להארכ�
 
 /** The employee about itself, by gender. */
 /** "מציג/מציגה" opening a sentence is the employee about itself (eval e14 F01): "הנה" instead. */
-const SELF_SHOW_MASC = new RegExp(`(?:^|[.!?\\n]\\s*)(?:אני )?מציג(?![${HE}])`, "u");
-const SELF_SHOW_FEM = new RegExp(`(?:^|[.!?\\n]\\s*)(?:אני )?מציגה(?![${HE}])`, "u");
+const SELF_SHOW_MASC = new RegExp(`(?:^|[.!?,\\n]\\s*)(?:אני )?מציג(?![${HE}])`, "u");
+const SELF_SHOW_FEM = new RegExp(`(?:^|[.!?,\\n]\\s*)(?:אני )?מציגה(?![${HE}])`, "u");
 const SELF_MASC = w("אני (?:לא )?(?:בודק|יכול|מבין|שמח|מצטער|ממליץ|מציע|חושב|רואה|בטוח)|בודק רגע|שמח לעזור|שמח לשמוע|מצטער על|לא בטוח(?! לי)|אני מעביר|מעביר את השיחה|מעביר אותך");
 const SELF_FEM = w("אני (?:לא )?(?:בודקת|יכולה|מבינה|שמחה|מצטערת|ממליצה|מציעה|חושבת|רואה|בטוחה)|בודקת רגע|שמחה לעזור|שמחה לשמוע|מצטערת על|לא בטוחה|אני מעבירה|מעבירה את השיחה|מעבירה אותך");
 
@@ -210,10 +210,10 @@ const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?
 /** Asking whether to look, when the search tool is right there: "להראות עכשיו צעיפים באפור?" (eval e11 L01). */
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Naming our own sources to the customer (urban-e28). */
-const SOURCE_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלהמש]{0,2}(?:מסמכים|מסמך|מסמכי)(?![\u0590-\u05FF])|בסיס (?:ה)?(?:דמו|ידע|נתונים|המידע)|מאגר (?:ה)?(?:ידע|מידע)|דף [A-Z][\w&' -]{2,40}|knowledge base|our (?:documents?|records|files)|demo (?:base|data))[^.!?؟\n]*[.!?؟]?/iu;
+const SOURCE_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלהמש]{0,2}(?:מסמכים|מסמך|מסמכי)(?![\u0590-\u05FF])|בסיס (?:ה)?(?:דמו|ידע|נתונים|המידע)|מאגר (?:ה)?(?:ידע|מידע)|דף [A-Z][\w&' -]{2,40}|(?<![\u0590-\u05FF])(?:לפי |ב|מ)?(?:ה)?חיפוש (?:ה)?(?:מהיר|שלי|שלנו|שעשיתי|שביצעתי|שערכתי)(?![\u0590-\u05FF])|knowledge base|our (?:documents?|records|files)|demo (?:base|data)|quick search)[^.!?؟\n]*[.!?؟]?/iu;
 const SHOP_DEMO_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])(?:בדמו|לדמו|מהדמו|שבדמו|הדמו)(?![\u0590-\u05FF])|(?:גרסת|סביבת|חנות|אתר) ה?דמו|\bdemo (?:store|site|version)\b)[^.!?؟\n]*[.!?؟]?/iu;
 
-const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלה]?(?:כרטיס(?:ים|י)?|כפתור|תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
+const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלה]?(?:כרטיס(?:ים|י)?|כפתור|תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|(?<![\u0590-\u05FF])ש?מתחת(?![\u0590-\u05FF])(?!\s*ל)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
 
 /** Offering to show what the cards already show: "אפשר להראות את הפרטים של שניהם?" (urban-e24). */
 export const OFFER_SHOW_BOTH = /(?:^|[.!?؟\n]\s*)[^.!?؟\n]*(?:להראות|להציג|לשלוח|שאראה|שאציג|שאשלח)[^.!?؟\n]*(?:שניהם|שתיהן|שלושתם|כולם|both|all of them)[^.!?؟\n]*[?؟]\s*$/iu;
@@ -516,7 +516,7 @@ const CORRECTIVE: Record<StyleViolationKind, { he: string; en: string }> = {
   recap_opener: { he: "Do not open by recapping what they said (\"נשמע ש...\", \"הבנתי ש...\", \"מעולה, כדי להציע...\"). React like a person (\"איזה כיף, מתנה!\") or just answer.", en: "Do not open with a recap of what the customer said; react or answer." },
   long_menu: { he: "Your question lists three or more options. Ask with at most two, or better, show one or two concrete products.", en: "At most two options in a question." },
   latin_titles: { he: "Do not write the store's English titles in the Hebrew sentence: the cards show them. Describe the products in Hebrew in a few words (\"מעיל צמר ארוך ואלגנטי, או טרנץ' קליל\"). Never a title in parentheses, never a line that starts with one.", en: "Do not list product titles in the text; the cards show them." },
-  source_leak: { he: "Never name where the information comes from (documents, pages, files, the demo, a knowledge base). If two facts disagree, give them as a range (\"בין ₪25 ל־₪29\") with no source.", en: "Never name where information comes from; if facts disagree, give a range with no source." },
+  source_leak: { he: "Never name where the information comes from (documents, pages, files, the demo, a knowledge base). If two amounts disagree, give neither: the shipping cost shows at checkout, anything else a person from the team can confirm.", en: "Never name where information comes from; if two amounts disagree, give neither: shipping shows at checkout, anything else the team can confirm." },
   card_narration: { he: "Do not describe the cards, their pictures or buttons (\"מתחת מופיעים הכרטיסים\", \"כפתור הוספה לעגלה\"): they are on screen. Say only what helps choose.", en: "Do not narrate the cards or their buttons." },
   echo_opener: { he: "Do not open by echoing the customer's word back (\"מעיל, הנה...\"). Start with the substance.", en: "Do not open by echoing the customer's word back." },
   menu_greeting: { he: "The customer only said hello. Reply with a short hello and one open question, no menu: \"היי! מה מחפשים?\" or \"היי, איך אפשר לעזור?\".", en: "A short hello and one open question, no menu." },
@@ -551,7 +551,13 @@ const COLOUR_HE: Record<string, string> = {
   grey: "אפור", gray: "אפור", olive: "ירוק זית", cream: "שמנת", ivory: "שנהב", brown: "חום",
   red: "אדום", blue: "כחול", green: "ירוק", pink: "ורוד", ecru: "אקרו", sand: "חול", khaki: "חאקי",
   charcoal: "אפור פחם", burgundy: "בורדו",
+  // The store's other option names (urban-e32 U5: "ב‑Dusty Rose" in a Hebrew reply).
+  "dusty rose": "ורוד מעושן", rose: "ורוד", "washed black": "שחור דהוי", "heather grey": "אפור מלאנז'",
+  "heather gray": "אפור מלאנז'", oat: "בז' בהיר", stone: "אבן", sage: "ירוק מרווה", lilac: "לילך",
+  mustard: "חרדל", tan: "חום בהיר", purple: "סגול", yellow: "צהוב", orange: "כתום", sky: "תכלת",
 };
+// Longest first, so "Dusty Rose" is one colour and not "Dusty" and a rose.
+const COLOUR_EN = new RegExp(`(?<![A-Za-z])(${Object.keys(COLOUR_HE).sort((a, b) => b.length - a.length).map((k) => k.replace(/ /g, "\\s+")).join("|")})(?![A-Za-z])`, "gi");
 
 /**
  * Safe, deterministic touches on the final Hebrew text: a colour written in
@@ -736,10 +742,12 @@ export function fixInCode(text: string, violations: StyleViolation[]): string {
  */
 export function takeShowLine(text: string | null | undefined): { text: string; keys: string[] } {
   const keys: string[] = [];
-  const out = String(text ?? "").replace(/^[ \t]*SHOW[ \t]*:[ \t]*(.*)$/gim, (_m, list: string) => {
-    for (const k of list.match(/PRODUCT_\d+/gi) ?? []) keys.push(k.toUpperCase());
-    return "";
-  });
+  const take = (list: string) => { for (const k of list.match(/PRODUCT_\d+/gi) ?? []) keys.push(k.toUpperCase()); return ""; };
+  const out = String(text ?? "")
+    .replace(/^[ \t]*SHOW[ \t]*:[ \t]*(.*)$/gim, (_m, list: string) => take(list))
+    // Inline at the end of a sentence (urban-e32 U4: "...שכנראה תאהב. SHOW: PRODUCT_1",
+    // and the customer saw "SHOW").
+    .replace(/[ \t]*\bSHOW[ \t]*:[ \t]*(PRODUCT_\d+(?:[ \t]*,[ \t]*PRODUCT_\d+)*)[ \t]*/g, (_m, list: string) => take(list));
   return { text: out.replace(/\n{3,}/g, "\n\n").trim(), keys: [...new Set(keys)] };
 }
 
@@ -845,6 +853,24 @@ export function transliteratedTitleWord(text: string, titles: string[]): string 
   return null;
 }
 
+// An apology or a search's "not found", and nothing else in the sentence that
+// moves on. "אין לנו משלוח לאילת." is an answer, not a dead end.
+const DEAD_END = /^(?:(?:אנחנו |אני )?(?:מצטער|מצטערת|מצטערים|לצערי|סליחה)[,.!\s]*)?(?:(?:לצערי |כרגע |עדיין )?(?:לא (?:מצאנו|מצאתי|נמצאו|נמצא|הצלחנו למצוא|הצלחתי למצוא))(?:(?!אבל|אך |יש |במקום|אולי|אפשר)[^.!?؟])*)?[.!]?$|^(?:(?:i'm|we're) )?sorry[.!]?$|^(?:(?:sorry|unfortunately),? )?(?:we|i) (?:couldn'?t|could not|didn'?t) find(?:(?!but |however|instead|there)[^.!?])*[.!]?$/iu;
+
+// Two amounts for one shipping cost ("עולה כ ₪25, ₪29", "בין ₪25 ל־₪29", urban-e32
+// U4): the knowledge disagrees and the price is undecided, so neither is said.
+const MONEY_RE = String.raw`(?:[₪$€]\s?(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s?(?:₪|ש["״']?ח|ILS|NIS))`;
+const TWO_AMOUNTS = new RegExp(`(?:${MONEY_RE}|(\\d+(?:\\.\\d+)?))\\s*(?:[–—-]|,|או|עד|ל[־-]?|to|or)\\s*${MONEY_RE}`, "giu");
+function twoShippingPrices(sentence: string): boolean {
+  if (!/משלוח|דמי (?:ה)?משלוח|shipping|delivery/iu.test(sentence)) return false;
+  for (const m of sentence.matchAll(TWO_AMOUNTS)) {
+    const first = m[1] ?? m[2] ?? m[3];
+    const second = m[4] ?? m[5];
+    if (first && second && Number(first) !== Number(second)) return true;
+  }
+  return false;
+}
+
 export interface FinalGateContext extends StyleCheckContext {
   /** Cards go out with this message. */
   cardsShown: boolean;
@@ -856,7 +882,8 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   const out: string[] = [];
   if (!t) return ["empty"];
   if (/PRODUCT_\d+/i.test(t)) out.push("key");
-  if (/^[ \t]*SHOW[ \t]*:/im.test(t)) out.push("show_line");
+  // Any SHOW left anywhere, with or without its colon (urban-e32: "...תאהב. SHOW").
+  if (/^[ \t]*SHOW[ \t]*:/im.test(t) || /(?<![A-Za-z])SHOW(?![A-Za-z])/.test(t)) out.push("show_line");
   if (ctx.locale === "he" && ctx.cardsShown && (ctx.productTitles ?? []).some((x) => x && t.includes(x))) out.push("title");
   const sentencesOf = t.split(/(?<=[.!?؟\n])\s+/).map((x) => x.trim()).filter(Boolean);
   // A line ending in ":" over the cards ("זה הולך מצוין עם:") introduces them.
@@ -868,6 +895,11 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   // Over new cards, a question and nothing else says nothing about them
   // ("היי! איזו מידה מתאימה לך?", urban-e27): one line about them first.
   if (ctx.cardsShown && !/:\s*$/.test(t) && sentencesOf.every((x) => /[?؟]\s*$/.test(x) || GREETING_ONLY.test(x))) out.push("question_only");
+  // Only "sorry, we found nothing" with nothing on screen and nothing asked
+  // (urban replay 2026-10-28: the checker cut the question and a bare
+  // apology went out): a dead end, never a reply.
+  if (!ctx.cardsShown && sentencesOf.every((x) => !/[?؟]\s*$/.test(x) && DEAD_END.test(x))) out.push("dead_end");
+  if (sentencesOf.some(twoShippingPrices)) out.push("two_prices");
   if (ctx.locale === "he" && NOUN_AGREEMENT.test(t)) out.push("agreement");
   if (ctx.locale === "he" && transliteratedTitleWord(t, ctx.productTitles ?? [])) out.push("transliteration");
   // A store title in the Hebrew sentence with no card under it (urban-e28:
@@ -920,7 +952,9 @@ export function finalRewriteInstruction(text: string, issues: string[], locale: 
     "- no fragment, no dangling word, every question with a verb; adjectives agree with their noun (מעיל חם, not חמה);",
     "- over cards just shown, one short line about them first, then at most one question;",
     "- never what you already said in an earlier message: if it was a repeat, say something new in one short line (the one open question, or a light nudge);",
-    "- never name where information comes from (documents, pages, the demo); for two facts that disagree, a range with no source;",
+    "- never name where information comes from (documents, pages, the demo, our search);",
+    "- never two prices or a range for one shipping cost: say the exact cost shows at checkout;",
+    "- never only an apology or a \"not found\": say what there is, or ask one short question that moves on;",
     "- describe products in plain Hebrew words, never an English title word in Hebrew letters (not \"קרופד הודי\" but \"קפוצ'ון קצר\");",
     "- one or two short sentences. Reply with the message only.",
   ].join("\n");
@@ -1044,7 +1078,7 @@ export function polishReply(text: string, opts: { locale: "he" | "en"; productTi
   if (opts.locale === "he") out = out.replace(/\S*[\u0600-\u06FF\u0400-\u04FF]\S*/gu, "").replace(/[ \t]{2,}/g, " ");
   if (opts.locale === "he") out = hebrewTouches(out, opts.incomingMessage ?? "");
   if (opts.locale === "he") out = out
-    .replace(/(?<![A-Za-z])(black|white|navy|beige|camel|grey|gray|olive|cream|ivory|brown|red|blue|green|pink|ecru|sand|khaki|charcoal|burgundy)(?![A-Za-z])/gi, (m) => COLOUR_HE[m.toLowerCase()] ?? m)
+    .replace(COLOUR_EN, (m) => COLOUR_HE[m.toLowerCase().replace(/\s+/g, " ")] ?? m)
     .replace(/(\d[\d,]*(?:\.\d+)?)\s?ILS\b/g, "₪$1")
     .replace(/\bILS\s?(\d[\d,]*(?:\.\d+)?)/g, "₪$1")
     // After the colours are Hebrew (eval e12: "ב-Black" became "ב-שחור"): a
@@ -1213,10 +1247,15 @@ const COLOUR_ASK: Array<[RegExp, string[]]> = [
 ];
 
 /** The colours a customer message asks for, as option words to look for; empty when none. */
+// Whole words only, with up to two Hebrew prefixes: "חומר" is not brown, "הלבנה" is white.
+const COLOUR_WORD: Array<[RegExp, string[]]> = COLOUR_ASK.map(([re, words]) => [new RegExp(`^(?:${re.source})$`, "iu"), words]);
+
 export function askedColours(text: string | null | undefined): string[] {
-  const t = String(text ?? "");
   const out = new Set<string>();
-  for (const [re, words] of COLOUR_ASK) if (re.test(t)) words.forEach((w) => out.add(w));
+  for (const token of String(text ?? "").split(/[^\p{L}'׳]+/u).filter(Boolean)) {
+    const forms = [token, token.replace(/^[ובלהשמכ]/, ""), token.replace(/^[ובלהשמכ]{2}/, "")];
+    for (const [re, words] of COLOUR_WORD) if (forms.some((f) => re.test(f))) words.forEach((w) => out.add(w));
+  }
   return Array.from(out);
 }
 

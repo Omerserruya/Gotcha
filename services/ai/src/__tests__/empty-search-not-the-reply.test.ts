@@ -32,7 +32,8 @@ describe("★ the bot keeps the model's reply when the search is empty", () => {
   });
   it("the adapter retries the category, then at most 3 singular words", () => {
     const src = readFileSync(join(__dirname, "../services/connectors/woocommerce.adapter.ts"), "utf8");
-    expect(src).toContain("/products/categories?per_page=5&search=");
+    // By stem against the store's categories: its own search missed "Accessories" for "accessory" (urban replay 2026-10-28).
+    expect(src).toContain("const cat = await categoryForQuery(auth, base, args.query);");
     expect(src).toContain("const stems = Array.from(new Set(words.map(singular))).slice(0, 3);");
   });
 

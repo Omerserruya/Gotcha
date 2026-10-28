@@ -124,7 +124,9 @@ describe("Z4 + Z6 + Z7: deterministic Hebrew touches", () => {
     expect(p("נשארו 13 יחידות.", "כמה יחידות נשארו?")).toBe("נשארו 13 יחידות.");
   });
   it("a Hebrew word after a prefix attaches; Latin keeps its no-break hyphen", () => {
-    expect(p("זמין ב‑חום ו‑Oat.")).toBe("זמין בחום ו‑Oat.");
+    // "Oat" is a colour, and Hebrew since urban-e32; a Latin word that is none keeps the hyphen.
+    expect(p("זמין ב‑חום ו‑Melange.")).toBe("זמין בחום ו‑Melange.");
+    expect(p("זמין ב‑חום ו‑Oat.")).toBe("זמין בחום ובז' בהיר.");
     expect(p("שחור, אפור Melange ו‑חול.")).toBe("שחור, אפור Melange וחול.");
   });
   it("E05: narrating the cards is removed, the answer stays", () => {

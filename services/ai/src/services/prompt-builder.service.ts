@@ -1669,7 +1669,9 @@ function buildKnowledge(opts: BuildPromptOpts): string | null {
   // גרסאות במסמכים: דף Shipping & Returns מציין ₪29 ובבסיס הדמו ₪25").
   const sources =
     "Never tell the customer where information comes from: no documents, pages, files, \"knowledge base\", \"system\" or \"demo\". " +
-    "When two passages disagree on a fact (a price, a time), say it plainly as a range or that it varies (\"בין ₪25 ל־₪29\"), with no sources; a person from the team can confirm.";
+    // Never both amounts (urban-e32 U4: "עולה כ ₪25, ₪29" while the price is undecided).
+    "When two passages disagree on an amount (a price, a fee), give neither number: for shipping, say the exact cost shows at checkout; otherwise that a person from the team can confirm it. " +
+    "Another fact that disagrees (a time): say it varies, with no sources.";
   return ["# Knowledge", sources, safe].join("\n\n");
 }
 

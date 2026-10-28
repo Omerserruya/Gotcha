@@ -366,6 +366,46 @@ async function audienceCategory(auth: string, base: string, audience: "men" | "w
   return ids[audience];
 }
 
+const categoryCache = new Map<string, { at: number; list: any[] }>();
+
+/** A word's stem for matching a category name: "accessory" and "Accessories" are one, "dresses" and "Dress". */
+function categoryStem(word: string): string {
+  const w = word.toLowerCase();
+  if (/ies$/.test(w)) return w.slice(0, -3) + "i";
+  if (/y$/.test(w) && w.length > 3) return w.slice(0, -1) + "i";
+  if (/(ss|sh|ch|x)es$/.test(w)) return w.slice(0, -2);
+  return w.replace(/(?<!s)s$/, "");
+}
+
+/**
+ * The store's category a search names, when its title search found nothing
+ * (urban replay 2026-10-28: "accessory" found no title, and the store's own
+ * search of category names misses "Accessories" too, so the customer was told
+ * there were none). Matched by stem against the store's non-empty categories;
+ * never a Men / Women one, which is the audience param's. Ten minutes' cache.
+ */
+async function categoryForQuery(auth: string, base: string, query: unknown): Promise<{ id: string } | null> {
+  const words = String(query ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? [];
+  if (!words.length) return null;
+  let hit = categoryCache.get(base);
+  if (!hit || Date.now() - hit.at >= 10 * 60_000) {
+    const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`).catch(() => null);
+    if (!Array.isArray(list)) return null;
+    hit = { at: Date.now(), list };
+    categoryCache.set(base, hit);
+  }
+  const wanted = new Set(words.map(categoryStem));
+  let best: { id: string; score: number; size: number } | null = null;
+  for (const c of hit.list) {
+    const name = String(c?.name ?? "").replace(/&amp;/g, "&").trim();
+    if (!(Number(c?.count) > 0) || AUDIENCE_NAME.men.test(name) || AUDIENCE_NAME.women.test(name)) continue;
+    const stems = (name.toLowerCase().match(/[a-z]{3,}/g) ?? []).map(categoryStem);
+    const score = stems.filter((x) => wanted.has(x)).length;
+    if (score && (!best || score > best.score || (score === best.score && stems.length < best.size))) best = { id: String(c.id), score, size: stems.length };
+  }
+  return best ? { id: best.id } : null;
+}
+
 const VALIDATE_TIMEOUT_MS = 10_000;
 
 /** The words worth searching alone, longest first ("black tank top" -> tank, black, top). */
@@ -432,7 +472,12 @@ export function offersAttributes(product: any, colours: string[], sizes: string[
 export function rankByTitleWords(products: any[], words: string[]): any[] {
   // A substring: "Overshirt" is a shirt. Longer words weigh more, so "oversized
   // tee" ranks Oversized Cotton T-Shirt over Boxy Tee (eval e10 X7).
-  const hits = (p: any) => words.filter((w) => String(p?.name ?? "").toLowerCase().includes(w.toLowerCase())).reduce((n, w) => n + w.length, 0);
+  // But a Sweatshirt is not a shirt (urban-e32 U5: "Shirts" came back as hoodies).
+  const nameFor = (p: any, w: string) => {
+    const name = String(p?.name ?? "").toLowerCase();
+    return /^shirts?$/i.test(w) ? name.replace(/sweatshirts?/g, "") : name;
+  };
+  const hits = (p: any) => words.filter((w) => nameFor(p, w).includes(w.toLowerCase())).reduce((n, w) => n + w.length, 0);
   return products.map((p) => ({ p, n: hits(p) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).map((x) => x.p);
 }
 
@@ -640,14 +685,18 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (Array.isArray(list) && (list.length === 0 || (titleHits && !titleHits.length)) && words.length) {
           const seen = new Map<string, any>();
           const add = (l: any) => { if (Array.isArray(l)) for (const p of l) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p); };
-          const cats: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=5&search=${encodeURIComponent(String(args.query))}`).catch(() => []);
-          const cat = Array.isArray(cats) ? cats.find((c: any) => c?.count > 0) : null;
+          const cat = await categoryForQuery(auth, base, args.query);
           if (cat?.id) {
             const byCat = new URLSearchParams(params);
             byCat.delete("search");
             byCat.set("category", String(cat.id));
             add(visible(await wooRequest(auth, "GET", `${base}/products?${byCat}`)));
-            if (seen.size) return Array.from(seen.values());
+            // The category's products, those whose title holds a query word first ("cotton shirts").
+            if (seen.size) {
+              const all = Array.from(seen.values());
+              const first = rankByTitleWords(all, Array.from(new Set(words.map(singular))));
+              return [...first, ...all.filter((p) => !first.includes(p))];
+            }
           }
           const stems = Array.from(new Set(words.map(singular))).slice(0, 3);
           for (const w of stems) {

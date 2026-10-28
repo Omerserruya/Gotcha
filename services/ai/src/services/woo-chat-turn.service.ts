@@ -29,6 +29,7 @@ import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
 import { listActivePromotions, type WidgetPromotion } from "./widget-promotions.service";
+import { askedColours } from "./reply-style-check.service";
 
 export interface WooTurn {
   provider: "woocommerce";
@@ -446,6 +447,40 @@ export function audienceWhenShown(
     if (messages[i].direction !== "INBOUND") continue;
     const a = recipientAudienceOf(messages[i].body);
     if (a) return a;
+  }
+  return null;
+}
+
+/** Who the conversation is shopping for now: the last person the customer named, this message included; null when none. */
+export function conversationAudience(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming?: string | null,
+): "men" | "women" | null {
+  return audienceWhenShown([...messages, { direction: "INBOUND", body: incoming ?? "" }], "");
+}
+
+// A kind of product in Hebrew; a material ("כותנה") refines, it is not a new kind.
+const PRODUCT_KIND_HE = /סוודר|סריג|קרדיגן|חולצ|טישירט|טי-שירט|גופי|מעיל|ז'קט|ג'קט|שמל|חצאית|מכנס|ג'ינס|צעיף|צעיפ|כובע|תיק|גרב|נעל|קפוצ'ון|הודי|טרנץ'|ארנק|חגור/;
+
+/**
+ * The colour a refinement keeps (urban-e32 U5: "יש לכם חולצה לבנה?", then
+ * "משהו מכותנה" was searched as "Shirts" and came back as hoodies with no
+ * white). The colour of the last message that named a kind, when this one
+ * names no kind and no colour, and the query has none. Null otherwise.
+ */
+export function carriedColour(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming: string | null | undefined,
+  query: unknown,
+): string | null {
+  const now = String(incoming ?? "");
+  if (askedColours(now).length || PRODUCT_KIND_HE.test(now) || askedColours(String(query ?? "")).length) return null;
+  const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? ""));
+  if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
+  for (let i = earlier.length - 1; i >= 0; i--) {
+    const colours = askedColours(earlier[i]);
+    if (PRODUCT_KIND_HE.test(earlier[i])) return colours[0] ?? null;
+    if (colours.length) return colours[0];
   }
   return null;
 }
