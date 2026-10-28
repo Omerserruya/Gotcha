@@ -92,7 +92,7 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן", "עצם שמתאים", "עצם שיתאים"];
+const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן", "עצם שמתאים", "עצם שיתאים", "להקפאה"];
 const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
 
 /**
@@ -108,6 +108,8 @@ const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצ
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
 // After a dash too: "הי — מחפש מעיל?" (dev 2026-10-27, urban-e22).
 const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
+/** A participle to the customer opening a clause inside a question, after "או" or a comma: "יותר מתאים לשכבות או מעדיף משהו חם?" (urban-e30). "הבת שלך מחפשת" has its subject. */
+const PARTICIPLE_IN_QUESTION = /(?:(?<![\u0590-\u05FF])או\s+|,\s*)(?:מעדיף|מעדיפה|מחפש|מחפשת|מעוניין|מעוניינת|מתלבט|מתלבטת)(?![\u0590-\u05FF])(?=[^.!?؟\n]*[?؟])/u;
 /** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
 const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
 const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
@@ -209,6 +211,7 @@ const PUSH_QUESTION = /(?:להמשיך|נמשיך|ממשיכים|להוסיף (?
 const ASK_TO_SHOW = /(?:להראות|להציג|לבדוק|שאבדוק|שנבדוק|שאחפש|שנחפש|לחפש)[^.!?؟\n]*[?؟]\s*\S{0,3}\s*$/iu;
 /** Naming our own sources to the customer (urban-e28). */
 const SOURCE_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלהמש]{0,2}(?:מסמכים|מסמך|מסמכי)(?![\u0590-\u05FF])|בסיס (?:ה)?(?:דמו|ידע|נתונים|המידע)|מאגר (?:ה)?(?:ידע|מידע)|דף [A-Z][\w&' -]{2,40}|knowledge base|our (?:documents?|records|files)|demo (?:base|data))[^.!?؟\n]*[.!?؟]?/iu;
+const SHOP_DEMO_LEAK = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])(?:בדמו|לדמו|מהדמו|שבדמו|הדמו)(?![\u0590-\u05FF])|(?:גרסת|סביבת|חנות|אתר) ה?דמו|\bdemo (?:store|site|version)\b)[^.!?؟\n]*[.!?؟]?/iu;
 
 const CARD_NARRATION = /[^.!?؟\n]*(?:(?<![\u0590-\u05FF])[בלה]?(?:כרטיס(?:ים|י)?|כפתור|תמונות)(?![\u0590-\u05FF])(?!\s*(?:אשראי|מתנה|ביקור|חיוב))|הוספ(?:ה|ת) (?:ל)?(?:סל|עגלה)|\b(?:the )?(?:cards?|buttons?) (?:below|above)\b|add to cart button)[^.!?؟\n]*[.!?؟]?/iu;
 
@@ -286,7 +289,8 @@ function nearlySame(a: string, b: string): boolean {
 
 /** The reply's first word when it is the customer's own word echoed back, then a comma or a dash. */
 export function echoOpener(text: string, incoming: string): string | null {
-  const m = /^\s*([\p{L}'׳"]{2,})\s*[,:\u2013\u2014-]/u.exec(text);
+  // The word alone, or with a word of praise ("מעיל טוב,", "מעיל מצוין,", urban-e30).
+  const m = /^\s*([\p{L}'׳"]{2,})(?:\s+(?:טוב|טובה|מצוין|מצוינת|נהדר|נהדרת|מעולה|יפה|אחלה|מושלם|מושלמת))?\s*[,:\u2013\u2014-]/u.exec(text);
   if (!m) return null;
   const said = new Set(String(incoming ?? "").replace(/[^\p{L}'׳\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2));
   return said.has(m[1]) ? m[0] : null;
@@ -410,7 +414,7 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   if (ctx.locale === "he") {
     hit("gendered_address", plain.match(MASC_TO_CUSTOMER) ?? plain.match(IMPERATIVE_MASC));
     hit("gendered_address", plain.match(FEM_TO_CUSTOMER) ?? plain.match(IMPERATIVE_FEM));
-    hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER));
+    hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER) ?? plain.match(PARTICIPLE_IN_QUESTION));
   }
 
   if (ctx.employeeGender === "feminine") hit("self_gender", plain.match(SELF_MASC) ?? plain.match(SELF_SHOW_MASC));
@@ -445,6 +449,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // עם הפרטים והוספת סל", "לשניהם יש תמונות וכפתור הוספה לעגלה למטה").
   hit("card_narration", plain.match(CARD_NARRATION));
   hit("source_leak", plain.match(SOURCE_LEAK));
+  // On a shop's floor "the demo" is our test store, never a meeting (urban-e30:
+  // "זמן הגעה בדמו"). A sales employee's "לקבוע דמו" is untouched.
+  if (ctx.shopFloor) hit("source_leak", plain.match(SHOP_DEMO_LEAK));
   // "מעיל, הנה..." echoes the customer's own word back (urban-e24).
   hit("echo_opener", echoOpener(plain, ctx.incomingMessage));
 
@@ -1084,6 +1091,8 @@ function hebrewTouches(text: string, incoming: string): string {
   let out = text
     // "בתוקף עד 2027-09-30": a date as it is written here, 30.09.2027 (urban-e23).
     .replace(/(?<![\d-])(20\d{2})-(\d{2})-(\d{2})(?![\d-])/g, "$3.$2.$1")
+    // "שני אופציות": the numeral agrees with a feminine noun, "שתי" (urban-e30).
+    .replace(/(?<![\u0590-\u05FF])(ו?)שני(?=\s+(?:אופציות|אפשרויות|חולצות|שמלות|חצאיות|דרכים|מידות|חלופות|הצעות))/gu, "$1שתי")
     // "קיים קוד WELCOME10" reads as a form; a person says "יש" (dev 2026-10-27).
     .replace(/(^|[.!?\n]\s*)(?:קיים|קיימת|קיימים|קיימות)(?= )/gu, "$1יש")
     .replace(/(?<![A-Za-z])off[- ]white(?![A-Za-z])/gi, "אוף וייט")
