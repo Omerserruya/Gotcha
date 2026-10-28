@@ -104,6 +104,22 @@ describe('★ 17b - the plans on offer, side by side', () => {
     );
   });
 
+  it('★★ a Core card never draws a catalogue feature that names Shopify (review 132211)', async () => {
+    const withShopify = catalogPlans([
+      {
+        ...plan('foundation', 'Foundation', '39.00', 750, 94),
+        features: [
+          { key: 's', nameEn: 'Shopify integration', included: true },
+          { key: 'a', nameEn: 'One AI employee', included: true },
+        ],
+      },
+    ]);
+    render(await PlanCards({ catalog: withShopify, currentKey: null, selectedKey: null }));
+    const card = screen.getByTestId('plan-card-foundation');
+    expect(card).toHaveTextContent('One AI employee');
+    expect(card).not.toHaveTextContent(/shopify/i);
+  });
+
   it('a card is price / month, credits and conversations, and only included features', async () => {
     render(await PlanCards({ catalog: CATALOG, currentKey: 'ai_voice', selectedKey: null }));
     const card = screen.getByTestId('plan-card-foundation');

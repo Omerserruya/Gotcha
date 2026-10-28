@@ -494,3 +494,12 @@ export function catalogPlans(raw: unknown): CatalogPlan[] {
     return parsed.success ? [parsed.data] : [];
   });
 }
+
+/**
+ * A plan feature that speaks of Shopify, in either language. GOTCHA Core never
+ * includes Shopify (review 132211), so a Core plan card does not draw one,
+ * whatever the admin-edited catalogue says.
+ */
+export function namesShopify(feature: { readonly nameEn: string; readonly nameHe: string | null }) {
+  return /shopify|שופיפיי/i.test(`${feature.nameEn} ${feature.nameHe ?? ''}`);
+}

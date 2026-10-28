@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { PaymentMethod } from '@/api/contracts/billing-profile';
 import type { Subscription } from '@/api/contracts/billing';
-import { creditsGrantedOnUpgrade, type CatalogPlan } from '@/api/contracts/pricing';
+import { creditsGrantedOnUpgrade, namesShopify, type CatalogPlan } from '@/api/contracts/pricing';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
@@ -67,7 +67,14 @@ export async function PlanCards({
           plan.estimate?.chat?.basis === 'CREDIT_RATIO'
             ? (plan.estimate.chat.monthly ?? null)
             : null;
-        const features = plan.features.filter((f) => f.included).slice(0, FEATURES_SHOWN);
+        /*
+          GOTCHA Core never includes Shopify (review 132211): a catalogue
+          feature that names it is not drawn on a Core card, whatever the
+          admin-edited catalogue says - the Shopify Connector is Shopify's.
+        */
+        const features = plan.features
+          .filter((f) => f.included && !namesShopify(f))
+          .slice(0, FEATURES_SHOWN);
         const body = (
           <>
             {current ? (
