@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { usageFor, type Capability, type ToolUsage } from '@/api/contracts/capabilities';
 import { isIntegrationState, type Integration } from '@/api/contracts/integrations';
 import { platformErrorReason } from '@/api/contracts/platform-errors';
+import { usableShopifyActions, type ConnectorVerdict } from '@/api/contracts/shopify-connector';
 
 import { DisconnectSystem } from './DisconnectSystem';
 import { IntegrationLogo } from './IntegrationLogo';
@@ -19,6 +20,13 @@ import styles from './Capabilities.module.css';
  * "Narrow it for one employee" is drawn, not live: there are no
  * per-employee overrides.
  *
+ * ★★ SHOPIFY READS ITS CONNECTOR, NOT ITS OAUTH ROW (split billing, review
+ *   132211). OAuth alone said "Connected" and "68 actions" for a store with no
+ *   Shopify Connector, where nothing can run. For Shopify the state, the
+ *   action line and "Shopify access" are `connectorVerdict()` - the same
+ *   verdict the Billing page draws: "Authorized" until the server grants
+ *   access, then only the usable actions.
+ *
  * ★★ DISCONNECT LIVES HERE (Omer, 2026-10-11: "why is there no disconnect
  *   for integrations?"). It was drawn after the system's whole action list -
  *   945px down for WooCommerce at 1440x900, further for Shopify - so for a
@@ -30,6 +38,7 @@ export async function SystemHead({
   capabilities,
   usage,
   disconnect = false,
+  connector = null,
 }: {
   /** `null` for the built-in actions, which belong to no provider. */
   readonly integration: Integration | null;
@@ -38,8 +47,12 @@ export async function SystemHead({
   readonly usage: readonly ToolUsage[] | null;
   /** Offer Disconnect in the head: a connected system that is not broken (a broken one has it beside its Reconnect). */
   readonly disconnect?: boolean;
+  /** Shopify only: the Connector verdict. Absent for every other system. */
+  readonly connector?: ConnectorVerdict | null;
 }) {
   const t = await getTranslations('capabilities');
+  const tc = await getTranslations('billing.connector');
+  const shopify = integration?.slug === 'shopify' && connector ? connector : null;
   const format = await getFormatter();
   const runs =
     usage === null
@@ -62,10 +75,37 @@ export async function SystemHead({
       <span className={styles.systemTitle}>
         <span className={styles.systemName}>{integration?.name ?? t('rail.builtIn')}</span>
         <span className={styles.systemLine} data-testid="system-line">
-          {runs === null
-            ? t('system.actions', { count: capabilities.length })
-            : t('system.used', { count: runs, n: format.number(runs) })}
+          {shopify
+            ? shopify.grantsAccess === true
+              ? t('system.usable', {
+                  count: usableShopifyActions(
+                    shopify,
+                    capabilities,
+                    integration?.catalogTools ?? [],
+                  ),
+                })
+              : t('system.noneUsable')
+            : runs === null
+              ? t('system.actions', { count: capabilities.length })
+              : t('system.used', { count: runs, n: format.number(runs) })}
         </span>
+        {shopify ? (
+          // The server's grantsAccess, verbatim - the Billing page's line, word for word.
+          <span
+            className={styles.systemLine}
+            data-testid="system-access"
+            data-access={shopify.grantsAccess === null ? 'unread' : String(shopify.grantsAccess)}
+          >
+            {t('system.access', {
+              state:
+                shopify.grantsAccess === null
+                  ? '-'
+                  : shopify.grantsAccess
+                    ? tc('access.on')
+                    : tc('access.off'),
+            })}
+          </span>
+        ) : null}
         {reason ? (
           <span className={styles.systemError} role="note" data-testid="system-error">
             {reason === 'unknown'
@@ -75,7 +115,11 @@ export async function SystemHead({
         ) : null}
       </span>
       <span className={styles.systemActions}>
-        {integration ? (
+        {shopify && state === 'CONNECTED' ? (
+          <span className={styles.systemState} data-state={shopify.kind} data-testid="system-state">
+            {shopify.kind === 'unread' ? t('rail.stateUnknown') : tc(`kind.${shopify.kind}`)}
+          </span>
+        ) : integration ? (
           <span
             className={styles.systemState}
             data-state={state ?? undefined}
@@ -91,7 +135,11 @@ export async function SystemHead({
         </span>
       </span>
       {disconnect && integration ? (
-        <DisconnectSystem slug={integration.slug} name={integration.name} />
+        <DisconnectSystem
+          slug={integration.slug}
+          name={integration.name}
+          pending={shopify?.kind === 'uninstall_pending'}
+        />
       ) : null}
     </header>
   );

@@ -550,6 +550,21 @@
     line-height: normal;
   }
 
+  /* Under Shopify's head: the Connector's state in words, and its one action. */
+  .connectorNote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-10) var(--space-16);
+    padding-block: var(--space-12);
+    border-block-end: var(--border-width-thin) solid var(--row-divider);
+    line-height: normal;
+  }
+
+  .connectorNote > .connectLead {
+    flex: 1 1 280px;
+  }
+
   .disconnectConfirm {
     display: flex;
     flex-direction: column;

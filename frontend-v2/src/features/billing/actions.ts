@@ -508,7 +508,16 @@ export async function changePlanTo(
     if (cause.status === 409 && code === 'charge_amount_changed')
       return { ok: false, reason: 'moved' };
     if (code === 'upgrade_payment_outcome_unknown') return { ok: false, reason: 'unknown' };
+    /*
+      No card is GOTCHA Core's missing card, said as that - never "declined",
+      and never the code. 402 `payment_method_required` (fix/split-billing-be)
+      refuses before any charge; an older billing said the same thing as
+      `upgrade_payment_failed:no_payment_method`, which Shopify's reviewer
+      read as "redirecting to a third-party billing platform" (132211).
+    */
     if (code === 'payment_method_required') return { ok: false, reason: 'no_card' };
+    if (code === 'upgrade_payment_failed:no_payment_method')
+      return { ok: false, reason: 'no_card' };
     if (code.startsWith('upgrade_payment_failed:')) return { ok: false, reason: 'declined' };
     if (cause.status === 403) return { ok: false, reason: 'forbidden' };
     return { ok: false, reason: 'not_selectable' };

@@ -280,6 +280,22 @@ export const billingEndpoints = {
    */
   changePlanPreview: () => endpoint('/api/billing/subscription/change-plan/preview'),
   /**
+   * The Shopify Connector - a separate subscription, billed and managed ONLY
+   * by Shopify (review 132211). Never part of GOTCHA Core.
+   *
+   * `shopifyState` answers the access snapshot in `{ data }`: the server's own
+   * `connector.status`, `grantsAccess`, `connector.manageUrl` and
+   * `core.allowsShopifyConnect` (see contracts/shopify-connector.ts). Readable
+   * by any member.
+   *
+   * `shopifyPlanSelection` answers `{ data: { url, state } }`: Shopify's plan
+   * page for THIS workspace's store, built server-side - the app never builds
+   * a Shopify URL. Gated on `settings:billing:manage`; 409
+   * `shopify_not_connected`, 503 `shopify_plan_selection_unavailable`.
+   */
+  shopifyState: () => endpoint('/api/billing/shopify/state'),
+  shopifyPlanSelection: () => endpoint('/api/billing/shopify/plan-selection'),
+  /**
    * Invoices - and this route was here the whole time.
    *
    * The registry used to point at `/api/billing/summary`, annotated
@@ -344,16 +360,11 @@ export const billingEndpoints = {
   pricingPackages: () => endpoint('/api/billing/pricing/packages'),
   /** Prices a selection from KEYS. Never accepts a price from the client. */
   pricingQuote: () => endpoint('/api/billing/pricing/quote'),
-  /**
-   * Apply a change. Owner-gated on `settings:billing:manage`.
-   *
-   * `/api/billing/subscription/change-plan` above is the SAME service behind a
-   * second path - identical body, permission and result, differing only in the
-   * error string. Not a dead route this time; a duplicate. This screen uses
-   * one of them and the registry records that they are the same thing, so
-   * nobody later concludes they are two features.
+  /*
+   * `POST /api/billing/pricing/change` is retired (410 `endpoint_retired`,
+   * fix/split-billing-be): GOTCHA Core changes go through `changePlan` above,
+   * the one path that says it is Core (`scope: "gotcha_core"`).
    */
-  pricingChange: () => endpoint('/api/billing/pricing/change'),
   /**
    * Screen 17d - buy a credit pack. REAL MONEY.
    *
@@ -933,6 +944,14 @@ export const integrationEndpoints = {
    * changed). Answers the access snapshot.
    */
   shopifyBillingComplete: () => endpoint('/api/billing/shopify/complete'),
+  /**
+   * Disconnect Shopify for real: asks Shopify to uninstall the app, then
+   * WAITS - `{ data: { state: "awaiting_webhook", shopDomain } }`. Only
+   * Shopify's signed `app/uninstalled` webhook finishes it (the snapshot's
+   * `connector.status` goes `uninstall_pending` -> `uninstalled`). 404
+   * `not_connected`, 409 `no_token` / `no_shop_domain`, 502 `shopify_refused`.
+   */
+  shopifyUninstall: () => endpoint('/api/integrations/shopify/uninstall'),
   wooOAuthInit: (storeUrl: string, flow: ConnectFlow = 'redesign_studio') =>
     endpoint(
       '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow={flow}&format=json',

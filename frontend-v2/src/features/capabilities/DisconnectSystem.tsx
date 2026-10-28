@@ -7,6 +7,7 @@ import { usePathname, useRouter } from '@/i18n/navigation';
 
 import { disconnectSystem, type DisconnectResult } from './connect-actions';
 import { CALENDAR_SYSTEMS } from './oauth';
+import { ShopifyUninstall } from './ShopifyUninstall';
 import styles from './Capabilities.module.css';
 
 /**
@@ -16,10 +17,9 @@ import styles from './Capabilities.module.css';
  * CONNECTED rows) and the stored credentials are emptied; the per-action
  * settings (`TenantTool`) are left alone.
  *
- * Shopify's confirmation says what its route does and does not (ai
- * 9d583f03): the storefront chat stops now; the app stays installed in
- * Shopify, and Shopify keeps billing until it is removed there; connecting
- * again later links the store afresh.
+ * Shopify is not disconnected here: it is UNINSTALLED, through Shopify
+ * (`ShopifyUninstall` - split billing, review 132211). A local disconnect left
+ * the app installed and Shopify billing while it said "disconnected".
  *
  * A calendar's confirmation says every AI employee's calendar is
  * disconnected with it (ai 547ec625): bookings run through each one's
@@ -29,7 +29,21 @@ import styles from './Capabilities.module.css';
  * of it ("the chat in your store is off") is said by the system's landing
  * line, on `disconnected=1[&chat=off]`.
  */
-export function DisconnectSystem({ slug, name }: { readonly slug: string; readonly name: string }) {
+export function DisconnectSystem({
+  slug,
+  name,
+  pending = false,
+}: {
+  readonly slug: string;
+  readonly name: string;
+  /** Shopify only: the server already says `uninstall_pending`. */
+  readonly pending?: boolean;
+}) {
+  if (slug === 'shopify') return <ShopifyUninstall name={name} pending={pending} />;
+  return <DisconnectLocal slug={slug} name={name} />;
+}
+
+function DisconnectLocal({ slug, name }: { readonly slug: string; readonly name: string }) {
   const t = useTranslations('capabilities.disconnect');
   const router = useRouter();
   const pathname = usePathname();
@@ -38,12 +52,7 @@ export function DisconnectSystem({ slug, name }: { readonly slug: string; readon
     null,
   );
   const [isPending, startTransition] = useTransition();
-  const confirm =
-    slug === 'shopify'
-      ? 'confirmShopify'
-      : CALENDAR_SYSTEMS.includes(slug)
-        ? 'confirmCalendar'
-        : 'confirm';
+  const confirm = CALENDAR_SYSTEMS.includes(slug) ? 'confirmCalendar' : 'confirm';
 
   return (
     <section

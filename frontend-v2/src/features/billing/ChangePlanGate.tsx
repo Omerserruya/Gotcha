@@ -22,7 +22,7 @@ import styles from './Billing.module.css';
  * date comes first; the control follows it.
  *
  * ── THE PERMISSION IS `disable`, NOT `hide` ──
- * `/pricing/change` is gated on `settings:billing:manage`. Hiding the control
+ * `/subscription/change-plan` is gated on `settings:billing:manage`. Hiding the control
  * from someone without it leaves them looking for a feature they were told
  * exists; disabling it with the reason lets them ask the right person. That is
  * the distinction `useCapability` was built around, and this is a workflow

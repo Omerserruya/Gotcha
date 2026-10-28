@@ -47,6 +47,16 @@ vi.mock('@/features/billing/Overview', () => ({
   BuyUnavailable: stub('buy-unavailable'),
 }));
 vi.mock('@/features/billing/Credits', () => ({ CreditsSection: stub('credits') }));
+/* The Shopify Connector's snapshot, per test: the server's verdict, as a fixture. */
+const connector = vi.hoisted(() => ({ snapshot: null as unknown }));
+vi.mock('@/features/billing/load-connector', () => ({
+  loadShopifyConnector: async () => connector.snapshot,
+}));
+vi.mock('@/features/billing/ConnectorSection', () => ({
+  ConnectorSection: ({ verdict }: { verdict: { kind: string } }) => (
+    <section data-testid="connector" data-kind={verdict.kind} />
+  ),
+}));
 /* What the page hands the dialog: the charge only when writes are on. */
 const writes = vi.hoisted(() => ({ on: false }));
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
@@ -84,6 +94,33 @@ const open = async (panel?: string) =>
   render(await Page({ searchParams: Promise.resolve(panel ? { panel } : {}) }));
 
 describe('★ 17 - 02’s screen, and 17c/d/e over it', () => {
+  it('★★ two subscriptions: the Connector is its own section after Core, never one of its cards', async () => {
+    const { CONNECTOR_FIXTURES } = await import('@/features/billing/connector-fixtures');
+    connector.snapshot = CONNECTOR_FIXTURES.plan_selection_required;
+    await open();
+    const section = screen.getByTestId('connector');
+    expect(section).toHaveAttribute('data-kind', 'authorized');
+    // Not inside the Core band, and not among the overview's cards.
+    expect(screen.getByTestId('hero').contains(section)).toBe(false);
+    // credits -> its column -> the two-column grid that holds Core's cards.
+    const overview = screen.getByTestId('credits').parentElement!.parentElement!;
+    expect(overview.contains(screen.getByTestId('billing'))).toBe(true);
+    expect(overview.contains(section)).toBe(false);
+    // After Core, in document order.
+    expect(
+      screen.getByTestId('hero').compareDocumentPosition(section) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    connector.snapshot = null;
+  });
+
+  it('a failed Connector read is "unread" - the page still draws, and claims nothing', async () => {
+    connector.snapshot = null;
+    await open();
+    expect(screen.getByTestId('connector')).toHaveAttribute('data-kind', 'unread');
+    expect(screen.getByTestId('hero')).toBeInTheDocument();
+  });
+
   it('17 alone: the hero, both columns, no overlay', async () => {
     await open();
     for (const id of ['hero', 'credits', 'low', 'billing', 'value']) {

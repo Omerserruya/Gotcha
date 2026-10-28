@@ -12,6 +12,9 @@ import { BuyCredits } from '@/features/billing/BuyCredits';
 import { CreditsSection } from '@/features/billing/Credits';
 import { BillingOverlay } from '@/features/billing/BillingOverlay';
 import { loadBilling } from '@/features/billing/load-billing';
+import { ConnectorSection } from '@/features/billing/ConnectorSection';
+import { loadShopifyConnector } from '@/features/billing/load-connector';
+import { connectorVerdict } from '@/api/contracts/shopify-connector';
 import { CreditPackagesSection } from '@/features/billing/Pricing';
 import {
   BillingCard,
@@ -43,6 +46,12 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * The conversations allowance ("Conversations this period") is not on 02's
  * screen and is gone from it: on this tenant it said only that the plan does
  * not cap conversations.
+ *
+ * ★★ TWO SUBSCRIPTIONS (Shopify review 132211, Omer 2026-10-28). Everything
+ * above the Connector is GOTCHA Core, billed by GOTCHA. The Shopify Connector
+ * is its own section, billed and managed by Shopify: its state is the
+ * server's snapshot, its button leads to Shopify's page at the server's
+ * address, and it shows no price and no GOTCHA card.
  */
 export default async function Page({
   searchParams,
@@ -51,16 +60,10 @@ export default async function Page({
 }) {
   const t = await getTranslations('billing');
   const panel = (await searchParams)?.panel;
-  const {
-    subscription,
-    plans,
-    invoices,
-    autoPurchase,
-    profile,
-    paymentMethods,
-    credits,
-    packages,
-  } = await loadBilling();
+  const [
+    { subscription, plans, invoices, autoPurchase, profile, paymentMethods, credits, packages },
+    connector,
+  ] = await Promise.all([loadBilling(), loadShopifyConnector()]);
 
   return (
     <SettingsSection title={t('title')} description={t('description')} fill>
@@ -79,6 +82,12 @@ export default async function Page({
           <CycleValue />
         </div>
       </div>
+
+      {/*
+        The second subscription, in its own section: billed and managed by
+        Shopify, never one of Core's cards (Shopify review 132211).
+      */}
+      <ConnectorSection verdict={connectorVerdict(connector)} />
 
       {panel === 'buy' ? (
         <BillingOverlay kind="dialog" title={t('overview.overlay.buy')} line={t('buy.subline')}>

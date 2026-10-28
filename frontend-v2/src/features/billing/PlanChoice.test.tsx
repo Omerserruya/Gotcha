@@ -200,14 +200,30 @@ describe('★★ 17b Switch - opens its confirm, says what changePlan would do, 
     expect(box).not.toHaveTextContent('1,460');
   });
 
-  it('UP with no card: said that it would be declined', async () => {
+  it('UP with no card: GOTCHA Core has no card - said as that, never "declined"', async () => {
     const box = await confirm({
       target: voice!,
       current: foundation!,
       methods: [],
       subscription: SUB,
     });
-    expect(box).toHaveTextContent("there's no card on file to charge - it would be declined");
+    expect(box).toHaveTextContent(
+      'A move to a bigger GOTCHA Core plan is charged now, and GOTCHA Core has no card on file. Add a card for GOTCHA Core first.',
+    );
+    expect(box).not.toHaveTextContent(/declined|payment_method|upgrade_payment/i);
+  });
+
+  it('★★ the confirm says it changes GOTCHA Core only, before anything else (132211)', async () => {
+    const box = await confirm({
+      target: voice!,
+      current: foundation!,
+      methods: [],
+      subscription: SUB,
+    });
+    const first = box.querySelector('p');
+    expect(first).toHaveTextContent(
+      'This changes GOTCHA Core only. It does not include the Shopify Connector.',
+    );
   });
 
   it('UP on a trial: nothing now', async () => {

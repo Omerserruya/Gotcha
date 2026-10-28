@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
-import { useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import {
   claimShopifyInstall,
@@ -18,18 +18,38 @@ import styles from './Capabilities.module.css';
  * 10's "Connect Shopify" (backend 98676242). No store is typed - Shopify
  * picks it. Read BEFORE the button: a listing that is not public yet is a
  * sentence (and the operator's help link), never a button that does nothing.
+ *
+ * ★ GOTCHA Core first (Omer, 2026-10-28): a store can be connected only once
+ * Core is paid. The server decides (`core.allowsShopifyConnect`, the rule
+ * the claim enforces) and the button waits on its word; if the word was not
+ * read, the button stays and the server's 402 `core_plan_required` is said.
  */
 export function ShopifyConnect({
   mode,
   helpUrl,
+  connectAllowed = null,
 }: {
   /** `null`: availability was not read. */
   readonly mode: string | null;
   readonly helpUrl: string | null;
+  /** `false`: the server says GOTCHA Core must be paid first. `null`: not said. */
+  readonly connectAllowed?: boolean | null;
 }) {
   const t = useTranslations('capabilities.shopify');
-  const [failed, setFailed] = useState<'forbidden' | 'failed' | null>(null);
+  const tc = useTranslations('billing.connector');
+  const [failed, setFailed] = useState<'forbidden' | 'failed' | 'core_plan_required' | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  if (connectAllowed === false) {
+    return (
+      <p className={styles.connectNote} data-testid="shopify-core-first">
+        {tc('coreFirst')}{' '}
+        <Link href="/settings/billing/plan" data-testid="shopify-core-first-link">
+          {tc('coreFirstLink')}
+        </Link>
+      </p>
+    );
+  }
 
   if (mode !== 'listing') {
     return (

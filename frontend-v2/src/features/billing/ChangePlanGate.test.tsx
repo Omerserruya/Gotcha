@@ -80,13 +80,18 @@ describe('★ a scheduled change can be replaced but never cleared', () => {
 });
 
 describe('a missing card is named as a path, not a wall', () => {
-  it('says the upgrade would be declined AND how to fix it', () => {
+  it('says GOTCHA Core has no card AND how to fix it - Core only, never "declined" (132211)', () => {
     renderGate({ hasPaymentMethod: false });
     const note = screen.getByTestId('change-no-card');
-    expect(note).toHaveTextContent(/declined/i);
+    expect(note).toHaveTextContent("There's no card on file for GOTCHA Core");
     // The recovery is real: the idempotency key is scoped to the payment
     // method so a retry after adding a card is not blocked.
-    expect(note).toHaveTextContent(/add a card/i);
+    expect(note).toHaveTextContent(/add a card for GOTCHA Core/i);
+    // The Connector is Shopify's: no card here is ever for it.
+    expect(note).toHaveTextContent(
+      'The Shopify Connector is paid in Shopify and needs no card here.',
+    );
+    expect(note).not.toHaveTextContent(/declined|upgrade/i);
   });
 
   it('says nothing when a card is on file', () => {

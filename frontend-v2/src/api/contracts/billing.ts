@@ -243,6 +243,13 @@ export const planChangePreviewSchema = z
         .default(null),
       /** `false`: the change would fail with no_payment_method - add a card first. */
       hasPaymentMethod: z.boolean().nullable().catch(null).default(null),
+      /**
+       * `true`: a charge is due now and GOTCHA Core has no card - change-plan
+       * would answer 402 `payment_method_required` before charging anything
+       * (fix/split-billing-be). Absent from an older billing: then
+       * `hasPaymentMethod` above says it.
+       */
+      paymentMethodRequired: z.boolean().optional().catch(undefined),
       effectiveAt: z.string().nullable().catch(null).default(null),
       newMonthly: z
         .object({ amount: money, currency: z.string() })

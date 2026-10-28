@@ -33,7 +33,12 @@ export function ConnectFor({
   readonly integration: Integration;
   /** A connected system whose connection broke - the way back, not a first connect. */
   readonly reconnect?: boolean;
-  readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
+  readonly shopify?: {
+    readonly mode: string;
+    readonly helpUrl: string | null;
+    /** The server's `core.allowsShopifyConnect`: `false` waits for GOTCHA Core. */
+    readonly connectAllowed?: boolean | null;
+  } | null;
   /** The drawn button's words - the caller's catalogue (synchronous, so it renders nested). */
   readonly drawn: {
     readonly connect: string;
@@ -49,7 +54,11 @@ export function ConnectFor({
   return (
     <>
       {integration.slug === 'shopify' && !reconnect ? (
-        <ShopifyConnect mode={shopify?.mode ?? null} helpUrl={shopify?.helpUrl ?? null} />
+        <ShopifyConnect
+          mode={shopify?.mode ?? null}
+          helpUrl={shopify?.helpUrl ?? null}
+          connectAllowed={shopify?.connectAllowed ?? null}
+        />
       ) : integration.slug === 'woocommerce' ? (
         // B: the store's own approval replaces the key form.
         <WooConnect name={integration.name} />

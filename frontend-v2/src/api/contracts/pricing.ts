@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Plan, price and changing it - screen 17b.
  *
  * `GET /api/billing/pricing`, `/pricing/current`, `/pricing/packages`,
- * `POST /pricing/quote`, `POST /pricing/change`.
+ * `POST /pricing/quote` (`POST /pricing/change` is retired: 410).
  *
  * ════════════════════════════════════════════════════════════════════════════
  * A CHANGE IS TWO DIFFERENT PROMISES, AND ONLY ONE HAPPENS NOW

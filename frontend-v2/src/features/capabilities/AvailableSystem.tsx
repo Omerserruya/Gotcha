@@ -26,8 +26,12 @@ export async function AvailableSystem({
   shopify = null,
 }: {
   readonly integration: Integration;
-  /** Shopify's install availability, read before the button (98676242). */
-  readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
+  /** Shopify's install availability, read before the button (98676242), and whether Core allows it. */
+  readonly shopify?: {
+    readonly mode: string;
+    readonly helpUrl: string | null;
+    readonly connectAllowed?: boolean | null;
+  } | null;
 }) {
   const t = await getTranslations('capabilities');
   const tp = await getTranslations('common.platformError');

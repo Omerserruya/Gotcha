@@ -82,6 +82,10 @@ describe('★★ every refusal by what it means for the money', () => {
     [409, 'charge_amount_changed', 'moved'],
     [400, 'upgrade_payment_outcome_unknown', 'unknown'],
     [400, 'payment_method_required', 'no_card'],
+    // fix/split-billing-be: no card is a 402 before any charge, for GOTCHA Core.
+    [402, 'payment_method_required', 'no_card'],
+    // An older billing's word for the same thing - never "declined" (review 132211).
+    [400, 'upgrade_payment_failed:no_payment_method', 'no_card'],
     [400, 'upgrade_payment_failed:card_declined', 'declined'],
     [400, 'plan_not_available', 'not_selectable'],
     [500, undefined, 'unknown'],

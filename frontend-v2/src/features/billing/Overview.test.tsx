@@ -83,6 +83,29 @@ describe('★ 17 - "a month" only when the period agrees', () => {
     expect(screen.getByTestId('plan-buy')).toHaveAttribute('href', '/settings/billing?panel=buy');
     expect(screen.getByTestId('plan-change')).toHaveAttribute('href', '/settings/billing/plan');
   });
+
+  it('★★ it is GOTCHA Core: billed by GOTCHA, and it never includes Shopify (review 132211)', async () => {
+    render(
+      await PlanHero({
+        subscription: sub(),
+        plans: [{ key: 'ai_voice', name: 'AI Voice' }],
+        credits: null,
+      }),
+    );
+    expect(screen.getByTestId('core-tag')).toHaveTextContent(/^GOTCHA Core$/);
+    expect(screen.getByTestId('core-billed-by')).toHaveTextContent(/^Billed by GOTCHA$/);
+    expect(screen.getByTestId('core-no-shopify')).toHaveTextContent(
+      /^GOTCHA Core does not include Shopify connection or access to Shopify data\.$/,
+    );
+    expect(screen.getByTestId('plan-change')).toHaveTextContent(/^Change GOTCHA Core plan$/);
+    // No generic "Your plan" / "Change plan" / "Upgrade" left on the band.
+    expect(screen.getByTestId('plan-hero')).not.toHaveTextContent(/your plan|upgrade/i);
+  });
+
+  it('said even when the plan could not be read', async () => {
+    render(await PlanHero({ subscription: null, plans: [], credits: null }));
+    expect(screen.getByTestId('core-no-shopify')).toBeInTheDocument();
+  });
 });
 
 describe('★ 17 - no "Where credits went" (Omer, 2026-10-11)', () => {

@@ -259,6 +259,7 @@ export async function SwitchActions({
 }) {
   const t = await getTranslations('billing.choice');
   const th = await getTranslations('billing.held');
+  const core = await getTranslations('billing.core');
   // On: the live switch (preview, then the exact charge). Off (dev): held, with why.
   const live = billingWritesEnabled();
   const locale = await getLocale();
@@ -316,7 +317,8 @@ export async function SwitchActions({
         <HeldConfirm
           label={t('switchTo', { plan: nameOf(target) })}
           className={styles.switchButton}
-          sentences={sentences(target)}
+          // Before the yes: this is GOTCHA Core, and only Core.
+          sentences={[core('onlyCore'), ...sentences(target)]}
           yes={t('confirm.yes', { plan: nameOf(target) })}
           heldTag={th('tag')}
           heldWhy={th('why')}

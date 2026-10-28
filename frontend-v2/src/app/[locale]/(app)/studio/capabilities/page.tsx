@@ -15,6 +15,9 @@ import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
 import { SystemHead } from '@/features/capabilities/SystemHead';
+import { ShopifyConnectorNote } from '@/features/capabilities/ShopifyConnectorNote';
+import { loadShopifyConnector } from '@/features/billing/load-connector';
+import { connectorVerdict } from '@/api/contracts/shopify-connector';
 import styles from '@/features/capabilities/Capabilities.module.css';
 import {
   loadCapabilities,
@@ -79,13 +82,22 @@ export default async function Page({
     integrations ?? [],
   );
   const onShopify = integration?.slug === 'shopify';
-  const [shopifyAvailability, shopifyPending] = await Promise.all([
+  /*
+    The Shopify Connector's verdict - the Billing page's, from the same read -
+    whenever Shopify is in the rail as connected, or open here. Its OAuth row
+    alone is not "Connected" (split billing, review 132211).
+  */
+  const shopifyEntry = integrations?.find((entry) => entry.slug === 'shopify') ?? null;
+  const wantsConnector = onShopify || (shopifyEntry !== null && isConnected(shopifyEntry));
+  const [shopifyAvailability, shopifyPending, connectorSnapshot] = await Promise.all([
     // Unconnected - or back with an approval, whose banner may need the listing link.
     onShopify && (!isConnected(integration) || params.pending === '1')
       ? loadShopifyAvailability()
       : null,
     onShopify && params.pending === '1' ? loadShopifyPending() : null,
+    wantsConnector ? loadShopifyConnector() : null,
   ]);
+  const shopifyVerdict = wantsConnector ? connectorVerdict(connectorSnapshot) : null;
 
   /*
     10, measured: 02's header - the title over a line that wraps at 720, no
@@ -113,6 +125,7 @@ export default async function Page({
             integrations={integrations}
             capabilities={capabilities}
             selected={selected}
+            shopify={shopifyVerdict}
           />
         }
         detail={
@@ -164,7 +177,17 @@ export default async function Page({
               />
             ) : null}
             {integration !== null && !isConnected(integration) ? (
-              <AvailableSystem integration={integration} shopify={shopifyAvailability} />
+              <AvailableSystem
+                integration={integration}
+                shopify={
+                  shopifyAvailability
+                    ? {
+                        ...shopifyAvailability,
+                        connectAllowed: shopifyVerdict?.connectAllowed ?? null,
+                      }
+                    : null
+                }
+              />
             ) : capabilities === null ? (
               <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
             ) : capabilities.length === 0 ? (
@@ -180,7 +203,11 @@ export default async function Page({
                   usage={usage}
                   // In the head, in view on arrival; a broken system has it on its Reconnect card.
                   disconnect={integration !== null && !needsReconnect(integration)}
+                  connector={onShopify ? shopifyVerdict : null}
                 />
+                {onShopify && shopifyVerdict ? (
+                  <ShopifyConnectorNote verdict={shopifyVerdict} />
+                ) : null}
                 <CapabilityScreen capabilities={actions} usage={usage} integration={integration} />
               </>
             )}
@@ -193,7 +220,11 @@ export default async function Page({
             isConnected(integration) &&
             !needsReconnect(integration) &&
             (capabilities === null || capabilities.length === 0) ? (
-              <DisconnectSystem slug={integration.slug} name={integration.name} />
+              <DisconnectSystem
+                slug={integration.slug}
+                name={integration.name}
+                pending={onShopify && shopifyVerdict?.kind === 'uninstall_pending'}
+              />
             ) : null}
           </>
         }

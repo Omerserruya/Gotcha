@@ -945,6 +945,121 @@
     min-inline-size: 0;
   }
 
+  /*
+   * ── GOTCHA Core and the Shopify Connector: two subscriptions ────────
+   * Core is the dark band; who bills it rides beside its name, and what it
+   * does not include is said under its facts. The Connector is its own
+   * light card under the Core overview - never a card among Core's.
+   */
+  .heroBilled {
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+    border: var(--border-width-thin) solid var(--frame-text-secondary);
+    border-radius: 999px;
+    font-size: var(--font-size-label);
+    color: var(--frame-text-body);
+  }
+
+  .heroScope {
+    margin: 0;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    color: var(--frame-text-body);
+  }
+
+  .connectorCard {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-field);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    overflow: clip;
+    min-inline-size: 0;
+    line-height: normal;
+  }
+
+  .connectorTag {
+    flex: none;
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+    border: var(--border-width-thin) solid var(--border-strong);
+    border-radius: 999px;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+  }
+
+  .connectorWhat {
+    margin: 0;
+    padding-block: var(--space-12) 0;
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
+  .connectorStatus {
+    display: block;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .connectorStatus[data-kind='past_due'],
+  .connectorStatus[data-kind='frozen'],
+  .connectorStatus[data-kind='error'] {
+    color: var(--intent-urgent-text);
+  }
+
+  .connectorDetail {
+    display: block;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    line-height: 1.5;
+    color: var(--text-subtle);
+  }
+
+  .connectorFoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .connectorCta {
+    padding-block: var(--space-8);
+    padding-inline: var(--space-16);
+    border: none;
+    border-radius: 10px;
+    background-color: var(--action-base);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    font-weight: 500;
+    color: var(--action-text);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .connectorCta:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* The plan page's "Core only" line, above the plans. */
+  .coreOnly {
+    margin: 0;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    font-size: var(--font-size-meta);
+    line-height: 1.5;
+    color: var(--text-body);
+  }
+
   /* ── When credits run low ─────────────────────────────────────────── */
   .lowCard {
     display: flex;

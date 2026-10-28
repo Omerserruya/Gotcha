@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '@/api/client/api-error';
+import billingMessages from '@/i18n/messages/en/billing.json';
 import messages from '@/i18n/messages/en/capabilities.json';
 
 const get = vi.hoisted(() => vi.fn());
@@ -14,7 +15,14 @@ vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: async () => jar }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
-vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ refresh }),
+  Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 
 import { claimShopifyInstall, startShopifyInstall, verifyShopifyBilling } from './shopify-actions';
 import {
@@ -132,7 +140,10 @@ describe('★★ claim - the browser’s pending install, sent on', () => {
 
 const intl = (node: React.ReactNode) =>
   render(
-    <NextIntlClientProvider locale="en" messages={{ capabilities: messages }}>
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ capabilities: messages, billing: billingMessages }}
+    >
       {node}
     </NextIntlClientProvider>,
   );
@@ -178,6 +189,51 @@ const another = () =>
     developerMessage: 'another_store_connected',
     errorData: { currentShopDomain: 'old.myshopify.com' },
   });
+
+describe('★★ split billing - a store is connected only after GOTCHA Core (Omer, 2026-10-28)', () => {
+  it('the server says Core is not paid: no Connect, and the way to Core', () => {
+    intl(<ShopifyConnect mode="listing" helpUrl={null} connectAllowed={false} />);
+    expect(screen.queryByTestId('shopify-start')).toBeNull();
+    expect(screen.getByTestId('shopify-core-first')).toHaveTextContent(
+      'Connecting a Shopify store needs an active GOTCHA Core plan first.',
+    );
+    expect(screen.getByTestId('shopify-core-first-link')).toHaveAttribute(
+      'href',
+      '/settings/billing/plan',
+    );
+  });
+
+  it.each([true, null])('allowed (%s) or not said: Connect is offered', (allowed) => {
+    intl(<ShopifyConnect mode="listing" helpUrl={null} connectAllowed={allowed} />);
+    expect(screen.getByTestId('shopify-start')).toBeInTheDocument();
+  });
+
+  it('the server refuses with 402 core_plan_required: said as that', async () => {
+    get.mockRejectedValue(
+      new ApiError({
+        kind: 'tenant_inactive',
+        status: 402,
+        developerMessage: 'core_plan_required',
+      }),
+    );
+    expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'core_plan_required' });
+  });
+
+  it('the claim refuses with core_plan_required: said as that, never "gone"', async () => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockRejectedValue(
+      new ApiError({
+        kind: 'tenant_inactive',
+        status: 402,
+        developerMessage: 'core_plan_required',
+      }),
+    );
+    expect(await claimShopifyInstall(false)).toMatchObject({
+      ok: false,
+      reason: 'core_plan_required',
+    });
+  });
+});
 
 describe('★★ reason=claim - an App Store install, to this workspace', () => {
   it('asks first; another store here → "Replace it?" naming it, and only then replace: true', async () => {
