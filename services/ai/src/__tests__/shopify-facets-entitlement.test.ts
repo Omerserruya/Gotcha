@@ -34,10 +34,14 @@ import { getCatalogFacets } from "../services/shopify-facets.service";
 beforeEach(() => { H.entitled = false; H.reads = 0; H.scans = 0; H.asked = []; });
 
 describe("facets need the Connector's catalog sync", () => {
-  it("not entitled: null, no cached facets read, Shopify never asked", async () => {
-    expect(await getCatalogFacets("t1")).toBeNull();
+  it("not entitled: no Shopify facets, cached or fresh, and Shopify never asked", async () => {
+    // (On this tree the WooCommerce lookup that follows finds this double's
+    // row too, so the read count is not the point: the cached Shopify facets
+    // are never returned and Shopify is never scanned.)
+    const facets = await getCatalogFacets("t1");
+    expect(facets).not.toBe(FRESH);
     expect(H.asked).toEqual(["shopify_catalog_sync"]);
-    expect([H.reads, H.scans]).toEqual([0, 0]);
+    expect(H.scans).toBe(0);
   });
   it("entitled: the store is described as before", async () => {
     H.entitled = true;

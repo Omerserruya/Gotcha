@@ -22,6 +22,7 @@ const H = vi.hoisted(() => {
   const kv = new Map<string, string>();
   const H0 = {
     kv,
+    shopifyEntitled: false,
     facts: [] as any[],
     searched: 0,
     integrations: [] as any[],
@@ -56,6 +57,9 @@ vi.mock("@chatcenter/shared", async () => {
     markAnswered: async () => undefined,
     recordActionAttempt: async () => undefined,
     prisma: H.prisma,
+    // The Connector's catalog sync (split billing 2026-10-28): a Shopify store
+    // describes itself only with it.
+    isShopifyAuthorized: async () => H.shopifyEntitled,
     getRedis: () => ({
       get: async (k: string) => H.kv.get(k) ?? null,
       set: async (k: string, v: string) => { H.kv.set(k, v); return "OK"; },
@@ -84,7 +88,7 @@ const turn = (message: string, tools = WOO) =>
   runProductDiscoveryTurn({ tenantId: "T", conversationId: "c1", aiAgentId: "emp1", role: "sales", availableToolNames: tools, incomingMessage: message });
 
 beforeEach(() => {
-  H.kv.clear(); H.facts = []; H.searched = 0; H.integrationUpdates = 0; H.scans = []; H.extracted = [];
+  H.kv.clear(); H.facts = []; H.searched = 0; H.integrationUpdates = 0; H.scans = []; H.extracted = []; H.shopifyEntitled = false;
   H.integrations = [
     { slug: "shopify", status: "DISCONNECTED", id: "ti_s", config: {} },
     { slug: "woocommerce", status: "CONNECTED", id: "ti_w", config: {} },
@@ -181,11 +185,19 @@ describe("★ (b) the store describes itself", () => {
     expect(bare.facts.find((f) => f.key === "riding_style")?.required).toBe(true);
   });
 
-  it("a connected Shopify store still describes itself from Shopify", async () => {
+  it("a connected Shopify store still describes itself from Shopify, with the Connector's catalog sync", async () => {
     H.integrations = [{ slug: "shopify", status: "CONNECTED", id: "ti_s", config: {} }];
     H.wooProducts = [];
+    H.shopifyEntitled = true;
     await getCatalogFacets("T");
     expect(H.scans).toEqual(["shopify.search_products"]);
+  });
+
+  it("without the Connector a Shopify store is not scanned; a WooCommerce store still is", async () => {
+    H.integrations = [{ slug: "shopify", status: "CONNECTED", id: "ti_s", config: {} }];
+    H.shopifyEntitled = false;
+    expect(await getCatalogFacets("T")).toBeNull();
+    expect(H.scans).toEqual([]);
   });
 
   it("the ready line names the store's own search, not shopify.search_products", async () => {
