@@ -105,9 +105,10 @@ const MASC_TO_CUSTOMER = w("אם מחפש|אם אתה|כשאתה|שלח לי|ת�
 const FEM_TO_CUSTOMER = w("אם מחפשת|אם את מחפשת|כשאת|שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
+// About someone else, "איזה צבע היא מעדיפה?" (urban-e33), is not to the customer.
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
 // After a dash too: "הי — מחפש מעיל?" (dev 2026-10-27, urban-e22).
-const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
+const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?<!(?:היא|הוא|הם|הן|הזוג|זוג|הבת|הבן|שלך|שלו|שלה)\\s)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** A participle to the customer opening a clause inside a question, after "או" or a comma: "יותר מתאים לשכבות או מעדיף משהו חם?" (urban-e30). "הבת שלך מחפשת" has its subject. */
 const PARTICIPLE_IN_QUESTION = /(?:(?<![\u0590-\u05FF])או\s+|,\s*)(?:מעדיף|מעדיפה|מחפש|מחפשת|מעוניין|מעוניינת|מתלבט|מתלבטת)(?![\u0590-\u05FF])(?=[^.!?؟\n]*[?؟])/u;
 /** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
@@ -1154,6 +1155,8 @@ function hebrewTouches(text: string, incoming: string): string {
     .replace(/(?<![\u0590-\u05FF])([ובלה]?)מכופר(ת|ות|ים)?(?![\u0590-\u05FF])/g, "$1מכופתר$2")
     // A product word with its first letter eaten ("טרנץ' קל, ועיל צמר ארוך",
     // urban-e31: so in the model's own reply): the letter put back.
+    // "טרנץ' קל מקטון" (urban-e33 U3): cotton in Hebrew letters is כותנה.
+    .replace(/(?<![\u0590-\u05FF])([ובלהמש]?)(?:קוטון|קטון|כוטון)(?![\u0590-\u05FF])/gu, "$1כותנה")
     .replace(EATEN_FIRST_LETTER, (whole: string, prefix: string, stem: string) => (EATEN_KEEP.has(whole) || prefix.endsWith(EATEN_STEMS[stem][0]) ? whole : `${prefix}${EATEN_STEMS[stem]}`));
   // A sentence that narrates the cards (eval e14: "הצגתי אותה עבורך", "מציגים
   // אותם למטה", "הצגתי כרטיס מוצר עם הווריאנט"): the cards speak for themselves.
