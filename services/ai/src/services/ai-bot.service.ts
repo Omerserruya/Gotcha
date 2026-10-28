@@ -122,7 +122,7 @@ import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
 import { capped } from "./judgement-cap";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -244,7 +244,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2286,8 +2286,12 @@ async function generateAIBotReplyInner(
       }
       // So does the colour a refinement leaves unsaid ("משהו מכותנה" after "חולצה לבנה", urban-e32).
       if (toolFunctionName === "woocommerce.list_products" && wooTurn && typeof effectiveArgs?.query === "string") {
-        const colour = carriedColour(messages as any[], opts.incomingMessage, effectiveArgs.query);
-        if (colour) effectiveArgs = { ...effectiveArgs, query: `${colour} ${effectiveArgs.query}` };
+        const modelQuery = effectiveArgs.query;
+        const colour = carriedColour(messages as any[], opts.incomingMessage, modelQuery);
+        if (colour) effectiveArgs = { ...effectiveArgs, query: `${colour} ${modelQuery}` };
+        // "מעיל" is the whole Jackets & Coats category, ranked by "coat" (urban replay, 2026-10-28).
+        const broad = broadKind(opts.incomingMessage, modelQuery);
+        if (broad) effectiveArgs = { ...effectiveArgs, ...broad };
       }
       const result = await executeAdapterTool({
         tenantId: opts.tenantId,
@@ -5716,6 +5720,12 @@ async function generateAIBotReplyInner(
           .filter((m) => m.direction === "OUTBOUND" && !/product/.test(String(m.messageType ?? "")) && !String(m.senderName ?? "").includes("@"))
           .slice(-3).map((m) => String(m.body ?? "")),
       };
+      // The size question is not asked again after the customer let it pass (urban-e33 U1).
+      const unasked = dropIgnoredSizeQuestion(replyText, gateCtx.previousReplies ?? [], opts.incomingMessage ?? "");
+      if (unasked !== replyText) {
+        console.warn(`[ai-bot] final gate: dropped a size question asked last turn conv=${opts.conversationId}`);
+        replyText = unasked;
+      }
       replyText = normalizePunctuation(replyText);
       const issues = finalTextIssues(replyText, gateCtx);
       if (issues.length) {

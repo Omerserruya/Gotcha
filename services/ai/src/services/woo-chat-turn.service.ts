@@ -485,6 +485,28 @@ export function carriedColour(
   return null;
 }
 
+// A Hebrew word for a whole kind, its store category and the title word to rank by.
+const BROAD_KIND: Array<[RegExp, string, string]> = [
+  [/(?<![\u0590-\u05FF])[ובלהש]?(?:מעיל|מעילים)(?![\u0590-\u05FF])/u, "coats", "coat"],
+];
+
+/**
+ * "מעיל" is every coat and jacket (urban replay 2026-10-28: "ויש מעיל לגברים ?"
+ * searched "Jacket" and the overcoat was ranked out): the store's category,
+ * ranked by "coat" and whatever else the query says ("wool"). Only when this
+ * message names the kind and the model's query is that kind in general; a
+ * specific product ("trench coat", "טרנץ'") stays the model's search.
+ */
+export function broadKind(incoming: string | null | undefined, query: unknown): { kind: string; rank: string } | null {
+  const t = String(incoming ?? "");
+  const q = String(query ?? "").toLowerCase().trim();
+  if (/טרנץ'|trench/i.test(t) || !/^(?:[a-z]+ )?(?:coats?|jackets?|overcoats?)$/.test(q)) return null;
+  for (const [re, kind, word] of BROAD_KIND) {
+    if (re.test(t)) return { kind, rank: [q.replace(/\b(?:over)?coats?\b|\bjackets?\b/g, "").trim(), word].filter(Boolean).join(" ") };
+  }
+  return null;
+}
+
 /** A budget the message states ("עד 300", "under 300"); null when none. */
 export function budgetOf(text: string | null | undefined): number | null {
   const m = /(?:עד|תקציב(?: של)?|under|up to)\s*₪?\s*(\d{2,6})/iu.exec(String(text ?? ""));

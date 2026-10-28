@@ -54,7 +54,7 @@ describe("U5: a refinement keeps the kind and the colour", () => {
   });
   it("wired: the colour goes into the model's search", () => {
     const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(bot).toContain("const colour = carriedColour(messages as any[], opts.incomingMessage, effectiveArgs.query);");
+    expect(bot).toContain("const colour = carriedColour(messages as any[], opts.incomingMessage, modelQuery);");
   });
   it("a Sweatshirt is not a shirt", () => {
     const ps = [{ name: "Crewneck Sweatshirt" }, { name: "Striped Cotton Shirt" }, { name: "Poplin Overshirt" }];

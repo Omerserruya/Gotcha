@@ -872,6 +872,29 @@ function twoShippingPrices(sentence: string): boolean {
   return false;
 }
 
+// Size, in a question ("איזו מידה מתאימה לך?", "יש צבע או מידה מועדפים?").
+const SIZE_WORD = /(?<![\u0590-\u05FF])[בה]?מיד(?:ה|ות)(?![\u0590-\u05FF])|\bsizes?\b/iu;
+const sentencesIn = (t: string) => t.split(/(?<=[.!?؟\n])\s+/).filter((p) => p.trim());
+const asksSizeIn = (sentence: string) => SIZE_WORD.test(sentence) && /[?؟]\s*$/.test(sentence);
+// The customer gave a size.
+const GIVES_SIZE = /(?<![A-Za-z])(?:xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl)(?![A-Za-z])|(?<![\u0590-\u05FF])[בה]?מיד(?:ה|ות)(?![\u0590-\u05FF])|\bsize\b|(?<!\d)\d{2}(?!\d)/iu;
+
+/**
+ * The size question once more, after the customer let it pass (urban-e33 U1:
+ * "יש צבע או מידה מועדפים?", "בשבילי לגבר", "איזה מידה מתאימה לך?"): the
+ * question goes, the rest stays. Unchanged when the last reply asked nothing
+ * about size, the customer gave one, or nothing would be left.
+ */
+export function dropIgnoredSizeQuestion(text: string, previousReplies: string[], incoming: string): string {
+  const last = previousReplies[previousReplies.length - 1] ?? "";
+  if (!sentencesIn(last).some(asksSizeIn) || GIVES_SIZE.test(incoming ?? "")) return text;
+  const parts = sentencesIn(text);
+  const kept = parts.filter((p) => !asksSizeIn(p));
+  if (kept.length === parts.length) return text;
+  const out = kept.join(" ").trim();
+  return out.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length >= 3 ? out : text;
+}
+
 export interface FinalGateContext extends StyleCheckContext {
   /** Cards go out with this message. */
   cardsShown: boolean;

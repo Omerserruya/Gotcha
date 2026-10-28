@@ -664,6 +664,25 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (ids(args.exclude).length) params.set("exclude", ids(args.exclude).join(","));
         if (/^\d{1,12}$/.test(String(args.category ?? ""))) params.set("category", String(args.category));
         const visible = (l: any) => (Array.isArray(l) ? l.filter((p: any) => p?.catalog_visibility !== "hidden") : l);
+        // Internal (the web chat, not in the model's schema): a broad kind the
+        // customer named is the store's whole category, ranked by the kind's
+        // own title word (urban replay 2026-10-28: "מעיל לגברים" searched
+        // "Jacket", and the overcoat was ranked out). No such category: the
+        // search as asked.
+        if (typeof args.kind === "string" && args.kind.trim() && !params.has("category")) {
+          const cat = await categoryForQuery(auth, base, args.kind);
+          if (cat?.id) {
+            const byKind = new URLSearchParams(params);
+            byKind.delete("search");
+            byKind.set("category", cat.id);
+            byKind.set("per_page", "50");
+            const all: any = visible(await wooRequest(auth, "GET", `${base}/products?${byKind}`));
+            if (Array.isArray(all) && all.length) {
+              const first = rankByTitleWords(all, Array.from(new Set(searchWords(args.rank ?? args.kind).map(singular))));
+              return [...first, ...all.filter((p: any) => !first.includes(p))].slice(0, Math.min(100, Number(args.per_page ?? 10)));
+            }
+          }
+        }
         const list: any = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
         // Woo matches the whole phrase as a substring of the title: "black tank
         // top" misses "Organic Rib Tank" (eval H02), and a plural or a category
