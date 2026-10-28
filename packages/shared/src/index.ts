@@ -1071,6 +1071,10 @@ export {
 } from "./lib/billing/shopify-authorization";
 export type { ShopifyAuthorization, ShopifyCapability, ShopifyDenialReason } from "./lib/billing/shopify-authorization";
 export { shopifyCapabilityForTool, SHOPIFY_OPERATION, MAPPED_SHOPIFY_TOOLS } from "./lib/billing/shopify-capability-map";
+export { shopifyConnectorVerdict } from "./lib/billing/shopify-connector-verdict";
+export type { ShopifyConnectorStatus, ShopifyConnectorVerdict, ShopifyConnectorVerdictInput } from "./lib/billing/shopify-connector-verdict";
+export { coreAllowsShopifyConnect, requireCoreForShopifyConnect, CORE_PLAN_REQUIRED } from "./lib/billing/core-shopify-connect";
+export type { CoreShopifyConnect } from "./lib/billing/core-shopify-connect";
 export { requirePlatformPermission } from "./middleware/platform-permission";
 
 // Shared CRM client - used by AI tools, outbound, broadcast, and any

@@ -12,7 +12,7 @@
  * the merchant had removed.
  */
 import { describe, it, expect } from "vitest";
-import { snapshotGrantsShopifyAccess } from "../services/shopify-billing-state.service";
+import { shopifyConnectorVerdict } from "@chatcenter/shared";
 
 const FOUR = [
   "shopify_catalog_sync",
@@ -20,6 +20,11 @@ const FOUR = [
   "shopify_order_actions",
   "shopify_storefront_widget",
 ];
+
+// The verdict is now the one rule (split billing 2026-10-28); these cases are
+// unchanged, with the Connector plan's four entitlements as what it requires.
+const snapshotGrantsShopifyAccess = (x: { state: string; installationStatus: string; uninstalledAt: Date | null; entitlements: string[] }) =>
+  shopifyConnectorVerdict({ ...x, requiredEntitlements: FOUR }).grantsAccess;
 
 /** A live, paid, installed store. Each test breaks exactly one thing. */
 const HEALTHY = {

@@ -289,8 +289,10 @@ const AI: FeatureDef[] = [
     key: "ai.customer_360",
     nameEn: "Customer 360",
     nameHe: "תמונת לקוח מלאה",
-    descriptionEn: "Every fact, order and past conversation about one customer.",
-    descriptionHe: "כל עובדה, הזמנה ושיחה קודמת על לקוח אחד.",
+    // No order or store wording: a Core plan never includes Shopify data, which
+    // is the Shopify Connector's, billed by Shopify (split billing 2026-10-28).
+    descriptionEn: "Every fact and past conversation about one customer, in one place.",
+    descriptionHe: "כל עובדה ושיחה קודמת על לקוח אחד, במקום אחד.",
     category: "AI",
     entitlementType: "BOOLEAN",
     defaultValue: bool(true),
@@ -439,8 +441,9 @@ const MANAGEMENT: FeatureDef[] = [
     key: "manager.integrations",
     nameEn: "Integrations",
     nameHe: "אינטגרציות",
-    descriptionEn: "Connect your CRM, calendar, store and back-office systems.",
-    descriptionHe: "חיבור ה-CRM, היומן, החנות ומערכות הבק-אופיס שלך.",
+    // No store: connecting Shopify is the Shopify Connector, billed by Shopify.
+    descriptionEn: "Connect your CRM, calendar and back-office systems.",
+    descriptionHe: "חיבור ה-CRM, היומן ומערכות הבק-אופיס שלך.",
     category: "MANAGEMENT",
     entitlementType: "BOOLEAN",
     defaultValue: bool(true),

@@ -41,6 +41,8 @@ const H = vi.hoisted(() => {
     createAudit: v.fn(async () => ({})),
     enqueue: v.fn(async () => ({})),
     toolRowsRemoval: v.fn(async () => ({ count: 68 })),
+    /** Does the tenant hold the Connector's order reading? */
+    entitled: { yes: true },
   };
 });
 
@@ -57,7 +59,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         H.seen.add(key);
         return "OK";
       }),
+      del: vi.fn(async (key: string) => (H.seen.delete(key) ? 1 : 0)),
     }),
+    isShopifyAuthorized: vi.fn(async () => H.entitled.yes),
     prisma: {
       auditLog: { create: H.createAudit },
       tenantIntegration: {
@@ -103,6 +107,7 @@ const SHOP = "my-store.myshopify.com";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  H.entitled.yes = true;
   H.seen.clear();
   H.installation.current = { id: "i1", shopDomain: SHOP, tenantId: "t1", status: "ACTIVE" };
   H.markUninstalled.mockResolvedValue({ id: "i1", shopDomain: SHOP, tenantId: "t1", status: "UNINSTALLED" });
@@ -171,12 +176,18 @@ describe("core app/uninstalled", () => {
     expect(H.toolRowsRemoval).toHaveBeenCalledWith({ where: { tenantId: "t1", tenantIntegrationId: "ti1" } });
   });
 
-  it("★ a failed tool removal still disables the storefront chat", async () => {
-    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP } }];
+  it("★ a failed step answers 500 and gives the claim back; Shopify's redelivery finishes the job", async () => {
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP }, status: "CONNECTED" }];
     H.toolRowsRemoval.mockRejectedValueOnce(new Error("db down"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
-    await new Promise((r) => setImmediate(r));
+    const first = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    expect(first.status).toBe(500);
+    expect(H.disableChatOnUninstall).not.toHaveBeenCalled();
+    // The row this run marked DISCONNECTED is found again on the redelivery.
+    H.connections.current = [{ id: "ti1", tenantId: "t1", config: { shopDomain: SHOP }, status: "DISCONNECTED" }];
+    const again = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
+    expect(again.status).toBe(200);
+    expect(H.toolRowsRemoval).toHaveBeenCalledTimes(2);
     expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
     err.mockRestore();
   });
@@ -239,11 +250,22 @@ describe("core app/uninstalled", () => {
     expect(H.disableChatOnUninstall).toHaveBeenCalledWith(SHOP);
   });
 
-  it("an unmatched uninstall whose chat disable throws is still acknowledged", async () => {
+  it("an unmatched uninstall whose chat disable throws is retried, not dropped", async () => {
     H.connections.current = [];
     H.disableChatOnUninstall.mockRejectedValueOnce(new Error("boom"));
-    const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret");
-    expect(res.status).toBe(200);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret")).status).toBe(500);
+    expect((await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret")).status).toBe(200);
+    err.mockRestore();
+  });
+
+  it("a billing failure is a 500 too: the Shopify-funded access is never left behind", async () => {
+    const { notifyShopifyUninstalled } = await import("../services/shopify-billing-bridge.service");
+    (notifyShopifyUninstalled as any).mockRejectedValueOnce(new Error("billing down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret")).status).toBe(500);
+    expect(H.updateConnection).not.toHaveBeenCalled();
+    err.mockRestore();
   });
 });
 
@@ -326,6 +348,14 @@ describe("★ checkouts and orders → cart events", () => {
     await postTopic("/api/connectors/shopify/webhooks/orders-create", "orders/create", { checkout_token: "chk_tok_1" }, "d-2");
     await new Promise((r) => setImmediate(r));
     expect(H.enqueue.mock.calls[1][1]).toMatchObject({ checkoutId: "chk_tok_1", completed: true });
+  });
+
+  it("without the Connector's order reading, acknowledged and never queued (split billing 2026-10-28)", async () => {
+    H.entitled.yes = false;
+    expect((await postTopic("/api/connectors/shopify/webhooks/checkouts-update", "checkouts/update", CHECKOUT, "d-ne")).status).toBe(200);
+    expect((await postTopic("/api/connectors/shopify/webhooks/orders-paid", "orders/paid", { id: 1 }, "d-ne2")).status).toBe(200);
+    await new Promise((r) => setImmediate(r));
+    expect(H.enqueue).not.toHaveBeenCalled();
   });
 
   it("a bad signature is refused; a shop with no connection is acknowledged and ignored", async () => {

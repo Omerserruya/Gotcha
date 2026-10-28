@@ -356,6 +356,8 @@ export interface PlanChangePreview {
   refused: { code: "charge_not_priceable" | "charge_not_taxable"; reason: string } | null;
   /** False: the charge would fail no_payment_method. */
   hasPaymentMethod: boolean | null;
+  /** True when a charge is due now and there is no card: change-plan refuses payment_method_required. */
+  paymentMethodRequired: boolean;
   effectiveAt: string;
   newMonthly: { amount: string; currency: string };
 }
@@ -369,17 +371,23 @@ export async function previewPlanChange(input: ChangePlanInput, now = new Date()
   const d = await decidePlanChange(input);
   const newMonthly = { amount: d.newPrice.toFixed(2), currency: d.q.currency };
   if (!d.goingUp) {
-    return { applied: "scheduled", chargeNow: null, refused: null, hasPaymentMethod: null, effectiveAt: (d.sub.currentPeriodEnd ?? now).toISOString(), newMonthly };
+    return { applied: "scheduled", chargeNow: null, refused: null, hasPaymentMethod: null, paymentMethodRequired: false, effectiveAt: (d.sub.currentPeriodEnd ?? now).toISOString(), newMonthly };
   }
   if (!d.chargeDue) {
-    return { applied: "immediate", chargeNow: null, refused: null, hasPaymentMethod: null, effectiveAt: now.toISOString(), newMonthly };
+    return { applied: "immediate", chargeNow: null, refused: null, hasPaymentMethod: null, paymentMethodRequired: false, effectiveAt: now.toISOString(), newMonthly };
   }
   try {
     const { hasPaymentMethod, ...figures } = await chargeFigures({ entityId: d.entityId, amount: d.proration, currency: d.q.currency, now });
-    return { applied: "immediate", chargeNow: { ...figures, vatIncluded: true }, refused: null, hasPaymentMethod, effectiveAt: now.toISOString(), newMonthly };
+    return { applied: "immediate", chargeNow: { ...figures, vatIncluded: true }, refused: null, hasPaymentMethod, paymentMethodRequired: hasPaymentMethod === false, effectiveAt: now.toISOString(), newMonthly };
   } catch (err) {
-    return { applied: "immediate", chargeNow: null, refused: chargeRefusal(err), hasPaymentMethod: null, effectiveAt: now.toISOString(), newMonthly };
+    return { applied: "immediate", chargeNow: null, refused: chargeRefusal(err), hasPaymentMethod: null, paymentMethodRequired: false, effectiveAt: now.toISOString(), newMonthly };
   }
+}
+
+/** A Core charge is due and there is no card on file. Nothing was charged. */
+export class PaymentMethodRequired extends Error {
+  readonly code = "payment_method_required";
+  constructor() { super("payment_method_required"); this.name = "PaymentMethodRequired"; }
 }
 
 export class ChargeAmountChanged extends Error {
@@ -418,7 +426,12 @@ export async function changePlan(input: ChangePlanInput): Promise<ChangePlanResu
         where: { billableEntityId: entityId },
         include: { paymentMethods: { where: { status: "ACTIVE" }, orderBy: { isDefault: "desc" }, take: 1 } },
       });
-      const pmKey = billingProfile?.paymentMethods[0]?.id ?? "nocard";
+      // No card: refused BEFORE any charge or invoice, with its own code
+      // (split billing 2026-10-28). Reached through the charge it read as
+      // upgrade_payment_failed:no_payment_method, which Shopify's reviewer took
+      // for a failed off-platform payment. Core is GOTCHA's, nothing else.
+      if (!billingProfile?.paymentMethods[0]) throw new PaymentMethodRequired();
+      const pmKey = billingProfile.paymentMethods[0].id;
       const selection = [chatKey, voiceKey].filter(Boolean).join("+") || "base";
       const res = await chargeFor({
         entityId,

@@ -26,6 +26,7 @@ import checkoutRoutes from "./routes/checkout";
 import checkoutSessionRoutes from "./routes/checkout-session";
 import internalRoutes from "./routes/internal";
 import shopifyBillingRoutes from "./routes/shopify-billing";
+import { coreScope, CORE_BILLING_PATHS } from "./lib/core-scope";
 import { assertIcountConfig } from "./providers/icount-config";
 import { assertShopifyBillingConfig, reportShopifyBillingConfig } from "./billing-sources/shopify/config";
 import { runSchedulerTick, tickWasEventful } from "./services/scheduler.service";
@@ -47,6 +48,8 @@ reportShopifyBillingConfig();
 const config = { name: "billing-service", port: parseInt(process.env.PORT || "4009", 10) };
 const app = createServiceApp(config);
 
+// GOTCHA Core billing says so on every JSON object it sends (split billing 2026-10-28).
+app.use(CORE_BILLING_PATHS, coreScope);
 app.use("/api", subscriptionRoutes);
 app.use("/api", paymentMethodRoutes);
 app.use("/api", creditsRoutes);

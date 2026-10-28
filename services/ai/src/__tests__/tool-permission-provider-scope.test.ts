@@ -69,9 +69,18 @@ function matches(row: any, where: any, kind: "catalogTool" | "tenantTool" | "ten
 }
 const withIntegration = (c: any) => ({ ...c, integration: { slug: integ(c.integrationId).slug } });
 
+vi.mock("../services/shopify-billing-bridge.service", () => ({
+  getShopifyConnectorSummary: async () => ({
+    scope: "shopify_connector", billedBy: "shopify", grantsAccess: false, status: "authorized_not_active",
+    capabilities: { shopify_catalog_sync: false, shopify_order_read: false, shopify_order_actions: false, shopify_storefront_widget: false },
+  }),
+}));
+
 vi.mock("@chatcenter/shared", async () => {
   const ta = await vi.importActual<any>("../../../../packages/shared/src/lib/tool-availability");
+  const cap = await vi.importActual<any>("../../../../packages/shared/src/lib/billing/shopify-capability-map");
   return {
+    shopifyCapabilityForTool: cap.shopifyCapabilityForTool,
     riskGroupFor: ta.riskGroupFor,
     mayBeAlwaysAllowed: ta.mayBeAlwaysAllowed,
     isHighRiskGroup: ta.isHighRiskGroup,

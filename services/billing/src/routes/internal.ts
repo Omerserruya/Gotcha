@@ -537,8 +537,15 @@ router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
     return res.json({ data: { tenantId: null, revoked: 0 } });
   }
 
-  const result = await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shopId });
-  return res.json({ data: result });
+  try {
+    const result = await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shopId });
+    return res.json({ data: result });
+  } catch (err: any) {
+    // A 500 reaches the ai webhook, which answers Shopify 500 so the
+    // uninstall is redelivered rather than lost (split billing 2026-10-28).
+    console.error("[billing][uninstall] failed:", err?.message);
+    return res.status(500).json({ error: "uninstall_failed" });
+  }
 });
 
 /** Current Shopify billing state for a workspace. Read-only. */

@@ -1,4 +1,4 @@
-import { reportOperationalFailure, ERROR_CODES } from "@chatcenter/shared";
+import { reportOperationalFailure, ERROR_CODES, shopifyCapabilityForTool } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { enableReadToolsForIntegration } from "../services/integration-provisioning.service";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts, readDurableSetting, writeDurableSetting } from "@chatcenter/shared";
@@ -26,7 +26,8 @@ import { catalogDescription } from "../lib/catalog-descriptions";
 import { catalogTool } from "../lib/catalog-tools-he";
 import { splitErrorCode } from "../lib/error-code";
 import { probeConnectCredentials } from "../services/connect-probe";
-import { requestShopifySelfUninstall } from "../services/connectors/shopify-self-uninstall.service";
+import { shopifyUninstallResponse } from "../services/connectors/shopify-self-uninstall.service";
+import { getShopifyConnectorSummary } from "../services/shopify-billing-bridge.service";
 import { stripLiveConnectionClaims } from "../services/connectors/integration-teardown";
 
 const router = Router();
@@ -125,18 +126,27 @@ router.get("/", async (req: Request, res: Response) => {
     });
 
     const locale = await readerLocale(req);
+    // Shopify's status and its usable actions come from the Connector's one
+    // verdict (billed by Shopify), never from the OAuth row being CONNECTED:
+    // "Connected / N actions" over an unpaid Connector is what review 132211
+    // read as access outside Shopify billing (split billing 2026-10-28).
+    const shopifyConnector = catalog.some((e) => e.slug === "shopify" && e.tenantConnections[0])
+      ? await getShopifyConnectorSummary(req.tenantId!)
+      : null;
     const data = catalog.map((entry) => ({
       ...entry,
       description: catalogDescription(entry.slug, entry.description, locale),
-      catalogTools: entry.catalogTools.map((ct: any) => ({
-        ...catalogTool(entry.slug, ct, locale),
-        tenantTool: ct.tenantTools?.[0] || null,
-        tenantTools: undefined,
-      })),
+      catalogTools: entry.catalogTools.map((ct: any) => {
+        const tool = { ...catalogTool(entry.slug, ct, locale), tenantTool: ct.tenantTools?.[0] || null, tenantTools: undefined };
+        if (entry.slug !== "shopify") return tool;
+        const requiredCapability = shopifyCapabilityForTool(String(ct.slug));
+        return { ...tool, requiredCapability, usable: !!requiredCapability && !!shopifyConnector?.capabilities[requiredCapability] };
+      }),
       authType: entry.authType,
       authSchema: entry.authSchema,
       tenantConnection: boundConnection(entry.tenantConnections[0]),
       tenantConnections: undefined,
+      ...(entry.slug === "shopify" && shopifyConnector ? { shopifyConnector } : {}),
     }));
 
     res.json({ data });
@@ -1132,21 +1142,10 @@ router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response
  */
 router.post("/shopify/uninstall", canManageSystems, async (req: Request, res: Response) => {
   try {
-    const result = await requestShopifySelfUninstall(req.tenantId!);
-    if (!result.ok) {
-      // 502 only for a genuine failure talking to Shopify. The others are
-      // preconditions on our side that the merchant can act on, and returning
-      // "bad gateway" for them sent a confusing signal and buried the cause.
-      const code =
-        result.reason === "not_connected" ? 404
-          : result.reason === "shopify_refused" ? 502
-            : 409;
-      res.status(code).json({ error: result.reason });
-      return;
-    }
     // Deliberately not "disconnected". Nothing is disconnected until Shopify
     // says so, and claiming otherwise is the defect this route exists to fix.
-    res.json({ data: { state: result.state, shopDomain: result.shopDomain } });
+    const out = await shopifyUninstallResponse(req.tenantId!);
+    res.status(out.status).json(out.body);
   } catch (err) {
     console.error("shopify self-uninstall error:", err);
     res.status(500).json({ error: "Failed to request Shopify uninstall" });
@@ -1156,6 +1155,13 @@ router.post("/shopify/uninstall", canManageSystems, async (req: Request, res: Re
 router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
+    // Shopify is disconnected only by uninstalling the app on Shopify (split
+    // billing 2026-10-28); the signed app/uninstalled completes it.
+    if (slug === "shopify") {
+      const out = await shopifyUninstallResponse(req.tenantId!);
+      res.status(out.status).json(out.body);
+      return;
+    }
 
     const entry = await prisma.integrationCatalog.findUnique({ where: { slug } });
     if (!entry) {

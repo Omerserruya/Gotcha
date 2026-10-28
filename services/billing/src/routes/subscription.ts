@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission } from "@chatcenter/shared";
 import { getSubscriptionForTenant } from "../services/billable-entity.service";
-import { changePlan, changeVolume, cancelSubscription, resumeSubscription, previewPlanChange } from "../services/subscription.service";
+import { changePlan, changeVolume, cancelSubscription, resumeSubscription, previewPlanChange, PaymentMethodRequired } from "../services/subscription.service";
 import { listActivePlans } from "../services/plan.service";
 import { migrateFromGrandfathered } from "../services/grandfather.service";
 
@@ -63,6 +63,8 @@ router.post("/billing/subscription/change-plan", authenticate, resolveTenant, re
       const preview = await previewPlanChange(changeInput(req)).catch(() => null);
       return res.status(409).json({ error: "charge_amount_changed", preview });
     }
+    // No card on file: nothing was charged. GOTCHA Core, billed by GOTCHA.
+    if (err instanceof PaymentMethodRequired) return res.status(402).json({ error: "payment_method_required" });
     return res.status(400).json({ error: err?.message ?? "change_plan_failed" });
   }
 });
@@ -79,6 +81,7 @@ router.post("/billing/subscription/change-volume", authenticate, resolveTenant, 
     });
     return res.json({ ok: true, ...result });
   } catch (err: any) {
+    if (err instanceof PaymentMethodRequired) return res.status(402).json({ error: "payment_method_required" });
     return res.status(400).json({ error: err?.message ?? "change_volume_failed" });
   }
 });

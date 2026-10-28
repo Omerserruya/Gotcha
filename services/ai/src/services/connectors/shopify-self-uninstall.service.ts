@@ -155,3 +155,21 @@ export async function requestShopifySelfUninstall(tenantId: string): Promise<Sel
 export function isAwaitingUninstall(config: unknown): boolean {
   return Boolean((config as any)?.[UNINSTALL_REQUESTED_AT]);
 }
+
+/**
+ * The HTTP answer to "uninstall / disconnect Shopify", for every route that
+ * offers it (split billing 2026-10-28: the v2 Disconnect ran a local-only
+ * disconnect, so the app stayed installed in the merchant's admin and nothing
+ * reached Shopify). 502 only for Shopify refusing; the others are
+ * preconditions on our side the merchant can act on. Success is
+ * `awaiting_webhook`: nothing is disconnected until Shopify's signed
+ * app/uninstalled says so.
+ */
+export async function shopifyUninstallResponse(tenantId: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  const result = await requestShopifySelfUninstall(tenantId);
+  if (!result.ok) {
+    const status = result.reason === "not_connected" ? 404 : result.reason === "shopify_refused" ? 502 : 409;
+    return { status, body: { error: result.reason } };
+  }
+  return { status: 200, body: { data: { state: result.state, shopDomain: result.shopDomain } } };
+}

@@ -151,6 +151,39 @@ export interface SyncResult {
  * not ask" and "they are not paying" are different facts, and conflating them
  * would revoke a paying merchant's access during a Shopify outage.
  */
+/** One append-only history row for a provider subscription change. Never blocks the sync. */
+export async function recordProviderSubscriptionChange(input: {
+  tenantId: string;
+  providerSubscriptionRowId: string;
+  from: { status: string; planHandle: string | null; subscriptionId: string | null } | null;
+  to: { status: string; planHandle: string | null; subscriptionId: string | null; rawStatus: string | null };
+  productKey: string;
+  verifiedAt: Date;
+}): Promise<void> {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        tenantId: input.tenantId,
+        actorType: "system",
+        actorId: "billing:shopify-sync",
+        action: "billing.provider_subscription.changed",
+        targetType: "provider_subscription",
+        targetId: input.providerSubscriptionRowId,
+        metadata: {
+          scope: "shopify_connector",
+          billedBy: "shopify",
+          productKey: input.productKey,
+          from: input.from,
+          to: input.to,
+          verifiedAt: input.verifiedAt.toISOString(),
+        } as any,
+      },
+    });
+  } catch (err: any) {
+    console.warn(`[billing][provider-sub] history write failed tenant=${input.tenantId}: ${err?.message}`);
+  }
+}
+
 export async function syncProviderSubscription(input: {
   tenantId: string;
   billableEntityId: string;
@@ -225,6 +258,22 @@ export async function syncProviderSubscription(input: {
   });
 
   const changed = existing?.status !== status;
+
+  // The provider subscription is one mutable row; its history is append-only
+  // in audit_logs, one row per change Shopify reported (split billing
+  // 2026-10-28). A pass that observed nothing new writes nothing.
+  const planHandle = observed?.planHandle ?? null;
+  const subscriptionId = observed?.externalId ?? existing?.providerSubscriptionId ?? null;
+  if (!existing || changed || existing.providerPlanHandle !== planHandle || existing.providerSubscriptionId !== subscriptionId) {
+    await recordProviderSubscriptionChange({
+      tenantId: input.tenantId,
+      providerSubscriptionRowId: row.id,
+      from: existing ? { status: existing.status, planHandle: existing.providerPlanHandle, subscriptionId: existing.providerSubscriptionId } : null,
+      to: { status, planHandle, subscriptionId, rawStatus: observed?.rawStatus ?? null },
+      productKey: input.productKey,
+      verifiedAt: row.lastVerifiedAt ?? new Date(),
+    });
+  }
 
   // The plan is resolved from what Shopify SAID - the observed `planHandle`,
   // which both sources populate - and never from what we hoped it would be.
@@ -475,12 +524,30 @@ export async function handleCommerceUninstall(input: {
   // The Shopify subscription is no longer usable, whatever Shopify last said
   // about it. Marked CANCELLED rather than deleted so the history survives a
   // reinstall and a support question.
+  const cancelling = await prisma.providerSubscription.findMany({
+    where: { commerceConnectionId: conn.id, status: { not: "CANCELLED" } },
+    select: { id: true, status: true, providerPlanHandle: true, providerSubscriptionId: true, productKey: true },
+  });
   await prisma.providerSubscription.updateMany({
     where: { commerceConnectionId: conn.id },
     data: { status: "CANCELLED", cancelledAt: now },
   });
+  for (const ps of cancelling) {
+    await recordProviderSubscriptionChange({
+      tenantId: conn.tenantId,
+      providerSubscriptionRowId: ps.id,
+      from: { status: ps.status, planHandle: ps.providerPlanHandle, subscriptionId: ps.providerSubscriptionId },
+      to: { status: "CANCELLED", planHandle: ps.providerPlanHandle, subscriptionId: ps.providerSubscriptionId, rawStatus: "app_uninstalled" },
+      productKey: ps.productKey,
+      verifiedAt: now,
+    });
+  }
 
-  const revoked = await revokeShopifyEntitlements(conn.tenantId);
+  // Every Shopify-funded row, the grandfather exemption's included: a removed
+  // store holds no Shopify access by any route (split billing 2026-10-28). A
+  // reinstall re-grants what is still owed. The grant itself is kept.
+  const revoked = await revokeShopifyEntitlements(conn.tenantId)
+    + (await prisma.tenantEntitlement.deleteMany({ where: { tenantId: conn.tenantId, source: "SHOPIFY_GRANDFATHERED" } })).count;
 
   console.log(
     `[billing][uninstall] platform=${input.platform} connection=${conn.id} tenant=${conn.tenantId} ` +

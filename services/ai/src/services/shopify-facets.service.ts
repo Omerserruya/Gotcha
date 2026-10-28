@@ -16,7 +16,7 @@
  * Everything is READ. Nothing is inferred that Shopify does not state.
  */
 
-import { prisma, getRedis } from "@chatcenter/shared";
+import { prisma, getRedis, isShopifyAuthorized } from "@chatcenter/shared";
 import type { DiscoveryProfile, FactSpec } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/index";
 
@@ -276,10 +276,14 @@ export async function getCatalogFacets(tenantId: string): Promise<CatalogFacets 
     // The CONNECTED store. A disconnected Shopify row used to be read first,
     // its scan failed on every turn, and a WooCommerce store (urban) never got
     // facets, so the snowboard profile applied to a clothing catalogue.
-    const row = await (prisma as any).tenantIntegration.findFirst({
+    // A Shopify catalogue is the Connector's catalog sync, billed by Shopify
+    // (split billing 2026-10-28): without it, no Shopify facets, cached or
+    // fresh. Shopify only; a WooCommerce store is not the Connector's.
+    const shopifyRow = await (prisma as any).tenantIntegration.findFirst({
       where: { tenantId, status: "CONNECTED", integration: { slug: "shopify" } },
       select: { id: true, config: true },
     });
+    const row = shopifyRow && (await isShopifyAuthorized(tenantId, "shopify_catalog_sync")) ? shopifyRow : null;
     if (!row) {
       const woo = await (prisma as any).tenantIntegration.findFirst({
         where: { tenantId, status: "CONNECTED", integration: { slug: "woocommerce" } },

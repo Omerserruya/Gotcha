@@ -47,10 +47,8 @@ import {
   verifyOAuthCallbackHmac,
   buildShopifyAuthorizeUrl,
   singleValue,
-  withCrossTenantAccess,
 } from "@chatcenter/shared";
 import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
-import { markUninstalledByShop } from "../services/shopify-chat-install.service";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
 import { loadConnection, refreshCapabilityState } from "../services/connectors/integration-framework";
@@ -68,6 +66,7 @@ import {
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
+import { shopifyUninstallResponse } from "../services/connectors/shopify-self-uninstall.service";
 import { shopifyApiVersion } from "@chatcenter/shared";
 import { splitErrorCode } from "../lib/error-code";
 
@@ -267,6 +266,17 @@ router.post(
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
 
+    // Shopify (split billing 2026-10-28): Disconnect uninstalls the app on
+    // Shopify and answers `awaiting_webhook`. Only Shopify's signed
+    // app/uninstalled completes it: the connection, the credentials, the
+    // Shopify-funded entitlements, the tool assignments and the storefront
+    // chat. A local-only disconnect left the app installed and billing running.
+    if (String(cat.slug) === "shopify") {
+      const out = await shopifyUninstallResponse(req.tenantId!);
+      res.status(out.status).json(out.body);
+      return;
+    }
+
     // An EXPLICIT disconnect releases the store. An uninstall does not.
     //
     // Those are different events and were being treated as one. Uninstalling
@@ -289,30 +299,6 @@ router.post(
       where: { tenantId: req.tenantId, integrationId: cat.id },
       select: { id: true, config: true },
     });
-
-    // Shopify: the storefront chat stops with the connection (2026-10-10).
-    // It was served from its own channel and installation, which a disconnect
-    // never touched. Local only: the app stays installed in the merchant's
-    // admin and Shopify billing is unchanged until they remove it there.
-    let chatDisabled = false;
-    if (String(cat.slug) === "shopify") {
-      for (const row of rows) {
-        const shop = normalizeShopifyShopDomain((row.config as any)?.shopDomain);
-        if (!shop) continue;
-        const installation = await markUninstalledByShop(shop);
-        if (installation) {
-          chatDisabled = true;
-          // Released like the shop identity below: the store is no longer
-          // this workspace's, so a reinstall binds afresh.
-          await withCrossTenantAccess(async () =>
-            (prisma as any).shopifyChatInstallation.update({
-              where: { id: installation.id },
-              data: { tenantId: null, channelAccountId: null },
-            }),
-          );
-        }
-      }
-    }
 
     for (const row of rows) {
       const config = { ...((row.config as any) ?? {}) };
@@ -345,10 +331,10 @@ router.post(
       `[connectors] ${req.params.slug} disconnected by tenant=${req.tenantId} ` +
         `(store identity released, ${rows.length} row(s)` +
         (calendarProvider ? `, ${calendarAccounts} employee calendar(s) stopped` : "") +
-        (chatDisabled ? ", storefront chat stopped" : "") + ")",
+        ")",
     );
     // billing: never touched by a disconnect (the owner's rule).
-    res.json({ ok: true, chatDisabled, billing: "unchanged" });
+    res.json({ ok: true, chatDisabled: false, billing: "unchanged" });
   },
 );
 

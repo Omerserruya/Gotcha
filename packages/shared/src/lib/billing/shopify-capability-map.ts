@@ -105,6 +105,15 @@ const ORDER_ACTION_TOOLS = new Set([
   "add_vip_tag",
   "add_retention_segment",
   "update_order_fulfillment",
+  // Order changes that were unmapped, so denied for everyone, paid or not
+  // (split billing 2026-10-28): they act on the order, so they are order actions.
+  "cancel_order",
+  "create_return",
+  "exchange_order_item",
+  "process_refund",
+  "resend_confirmation",
+  "send_invoice",
+  "update_order_shipping_address",
 ]);
 
 /**

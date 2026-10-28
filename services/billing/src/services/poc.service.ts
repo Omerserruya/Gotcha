@@ -124,6 +124,10 @@ export async function setupPoc(input: {
       trialEndsAt: null,
     },
   });
+  // Every Core change leaves a history row (split billing 2026-10-28).
+  await prisma.subscriptionEvent.create({
+    data: { subscriptionId: sub.id, type: "poc_started", toStatus: "ACTIVE", actor: input.actor ?? "system", metadata: { planKey: POC_PLAN_KEY, periodEnd: periodEnd.toISOString() } as any },
+  });
 
   // The budget: INCLUDED allowance = the operator-set credits, so consumption %
   // (and the 80/100 alerts) are computed against exactly that budget. Any
@@ -439,6 +443,10 @@ export async function expireDuePocs(now = new Date()): Promise<number> {
   for (const sub of due) {
     await prisma.subscription.update({ where: { id: sub.id }, data: { status: "CANCELED" } });
     const kind = kindBy.get(`${sub.planKey}@${sub.planVersion}`) === "POC" ? "POC" : "TRIAL";
+    // Every Core change leaves a history row (split billing 2026-10-28).
+    await prisma.subscriptionEvent.create({
+      data: { subscriptionId: sub.id, type: `${kind.toLowerCase()}_expired`, fromStatus: "ACTIVE", toStatus: "CANCELED", actor: "scheduler", metadata: { planKey: sub.planKey } as any },
+    });
     for (const tenantId of await tenantsForEntity(sub.billableEntityId)) {
       const expired = await prisma.tenantEntitlement.findMany({
         where: { tenantId, source: "TRIAL", valueType: "BOOLEAN", expiresAt: { lte: now } },

@@ -179,30 +179,22 @@ router.get("/billing/pricing/packages", authenticate, resolveTenant, async (req,
 });
 
 /**
- * Apply a plan / volume change. Owner-gated, provider-confirmed, and priced
- * from the catalog rather than from anything the client sent.
+ * RETIRED (split billing 2026-10-28). This applied a plan change without the
+ * confirmed-amount check that /billing/subscription/change-plan holds the
+ * charge to. Nothing in the v2 app calls it; a stale client gets a reason and
+ * where to go instead, never a charge.
  */
 router.post(
   "/billing/pricing/change",
   authenticate,
   resolveTenant,
   requirePermission("settings:billing:manage"),
-  async (req, res) => {
-    const { planKey, chatVolumeOptionKey, voiceVolumeOptionKey } = req.body ?? {};
-    if (!planKey) return res.status(400).json({ error: "planKey required" });
-    try {
-      const { changePlan } = await import("../services/subscription.service");
-      const result = await changePlan({
-        tenantId: req.tenantId!,
-        targetPlanKey: String(planKey),
-        chatVolumeOptionKey: chatVolumeOptionKey === undefined ? undefined : chatVolumeOptionKey,
-        voiceVolumeOptionKey: voiceVolumeOptionKey === undefined ? undefined : voiceVolumeOptionKey,
-        actor: req.user?.userId,
-      });
-      return res.json({ ok: true, ...result });
-    } catch (err: any) {
-      return res.status(400).json({ error: err?.message ?? "change_failed" });
-    }
+  (_req, res) => {
+    res.status(410).json({
+      error: "endpoint_retired",
+      reason: "Plan changes are confirmed against the exact amount shown; use the change-plan endpoint.",
+      use: "/api/billing/subscription/change-plan",
+    });
   },
 );
 

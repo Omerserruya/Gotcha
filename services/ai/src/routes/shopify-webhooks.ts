@@ -35,6 +35,7 @@ import {
   verifyShopifyWebhookHmac,
   getShopifyAppIdentity,
   normalizeShopifyShopDomain,
+  isShopifyAuthorized,
 } from "@chatcenter/shared";
 import {
   markUninstalledByShop,
@@ -163,6 +164,16 @@ async function alreadyProcessed(app: "chat" | "core", webhookId: string | null):
   } catch (err) {
     console.warn("[shopify-webhook] replay store unavailable:", (err as Error)?.message);
     return false;
+  }
+}
+
+/** Give the claim back after a failed attempt, so Shopify's redelivery is processed. */
+async function releaseProcessed(app: "chat" | "core", webhookId: string | null): Promise<void> {
+  if (!webhookId) return;
+  try {
+    await getRedis().del(`shopify:webhook:seen:${app}:${webhookId}`);
+  } catch (err) {
+    console.warn("[shopify-webhook] replay claim release failed:", (err as Error)?.message);
   }
 }
 
@@ -311,127 +322,97 @@ const core = Router();
 core.post("/app-uninstalled", async (req: Request, res: Response) => {
   const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "app/uninstalled");
   if (!hook) return;
-  res.status(200).json({ ok: true });
-
-  if (await alreadyProcessed("core", hook.webhookId)) return;
+  if (await alreadyProcessed("core", hook.webhookId)) {
+    res.status(200).json({ ok: true });
+    return;
+  }
+  // The work first, then the answer (split billing 2026-10-28). This used to
+  // answer 200 and then work, so a failure was never retried and a removed
+  // store could keep its Shopify-funded access. Every step is idempotent, so
+  // a redelivery after a partial run finishes the job: Shopify retries a
+  // non-2xx for up to 48 hours.
   try {
-    const shop = hook.shopDomain;
-    if (!shop) return;
-
-    const connections = await withCrossTenantAccess(async () =>
-      prisma.tenantIntegration.findMany({
-        where: { integration: { slug: "shopify" }, status: { in: ["CONNECTED", "ERROR"] } },
-        select: { id: true, tenantId: true, config: true },
-      }),
-    );
-    const match = connections.find(
-      (c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop,
-    );
-
-    // Billing FIRST, and deliberately before the `!match` early return below.
-    //
-    // This used to sit after it. The legacy `tenant_integrations` lookup only
-    // considers CONNECTED/ERROR rows, so a store whose legacy row was already
-    // DISCONNECTED - or that only ever had a `CommerceConnection` - produced
-    // `no_connection`, returned, and never told billing anything. The commerce
-    // connection stayed CONNECTED and the Shopify-funded entitlements survived
-    // an uninstall indefinitely, which is the exact opposite of the scoped
-    // revocation this handler exists to perform.
-    //
-    // The two records have different lifecycles, so one being absent must not
-    // suppress the other. Billing's handler is idempotent and answers
-    // `revoked: 0` for a shop it does not know, so calling it unconditionally
-    // is safe and is the only ordering that cannot silently skip revocation.
-    //
-    // The shop id comes from the verified payload; the domain is the fallback,
-    // because the token is already revoked and there is no way to look the id
-    // up afterwards.
-    await notifyShopifyUninstalled({
-      externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
-      shopDomain: shop,
-    });
-
-    if (!match) {
-      // No legacy row. Billing has already been told. The storefront chat
-      // still goes with the app (2026-10-10): a store disconnected here first
-      // has no CONNECTED row, and this return used to skip the chat shutdown,
-      // leaving the chat on after the merchant removed the app.
-      let chatDisabled = false;
-      try {
-        chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
-      } catch (err) {
-        console.error("[shopify-webhook] chat disable on unmatched uninstall failed:", (err as Error)?.message);
-      }
-      await recordDelivery({ app: "core", hook, outcome: chatDisabled ? "no_connection+chat_disabled" : "no_connection" });
-      return;
-    }
-
-    await withCrossTenantAccess(async () =>
-      prisma.tenantIntegration.update({
-        where: { id: match.id },
-        data: {
-          status: "DISCONNECTED",
-          // The token is revoked on Shopify's side the moment the app is
-          // removed. Keeping the ciphertext would only be a liability.
-          credentials: {},
-          // Two things at once, both about not leaving stale claims behind:
-          //
-          // `uninstallRequestedAt` is dropped because this webhook is the
-          // answer to that request, and it is cleared HERE rather than in the
-          // route that made it because only the webhook knows the uninstall
-          // actually happened.
-          //
-          // `useAsCrm` and `capabilityState` are dropped because they are
-          // claims about a live connection. Left in place they told the
-          // Business systems screen that Shopify was still the active source
-          // of truth with writeback on, beside a card already reading
-          // Disconnected. `shopDomain` is KEPT: which store this was is
-          // history worth having, and the screens label it disconnected.
-          config: stripLiveConnectionClaims(match.config),
-          lastError: withErrorCode("SHOPIFY_APP_UNINSTALLED"),
-        },
-      }),
-    );
-    // Tool assignments for a store that no longer exists, idempotent so a
-    // duplicate webhook is safe. The in-product Disconnect keeps them on
-    // purpose (they hold the admin's per-tool choices, and only a CONNECTED
-    // integration's tools are offered); a reinstall re-creates any missing.
-    // Best-effort like the chat step below: a failure here must not skip the
-    // storefront chat or the delivery record (they are only offered while
-    // CONNECTED, which the update above already ended).
-    try {
-      const toolsRemoved = await withCrossTenantAccess(async () =>
-        removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
-      );
-      if (toolsRemoved.removed > 0) {
-        console.log(
-          `[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) ` +
-            `for tenant=${match.tenantId} after uninstall`,
-        );
-      }
-    } catch (err) {
-      console.error("[shopify-webhook] tool assignment removal on uninstall failed:", (err as Error)?.message);
-    }
-
-    // The extension left with the app, so the storefront chat goes too.
-    // Best-effort and ordered second: a chat-side failure must not leave the
-    // commerce connection wrongly marked CONNECTED with a revoked token.
-    let chatDisabled = false;
-    try {
-      chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
-    } catch (err) {
-      console.error("[shopify-webhook] chat disable on core uninstall failed:", (err as Error)?.message);
-    }
-    await recordDelivery({
-      app: "core",
-      hook,
-      tenantId: match.tenantId,
-      outcome: chatDisabled ? "disconnected+chat_disabled" : "disconnected",
-    });
+    const outcome = await completeShopifyUninstall(hook);
+    await recordDelivery({ app: "core", hook, tenantId: outcome.tenantId, outcome: outcome.outcome });
+    res.status(200).json({ ok: true });
   } catch (err) {
-    console.error("[shopify-webhook] core uninstall failed:", (err as Error)?.message);
+    console.error("[shopify-webhook] core uninstall failed, Shopify will redeliver:", (err as Error)?.message);
+    await releaseProcessed("core", hook.webhookId);
+    res.status(500).json({ error: "uninstall_failed" });
   }
 });
+
+/**
+ * Everything an uninstall means, each step idempotent:
+ *   - billing: the commerce connection DISCONNECTED, the subscription
+ *     cancelled, the Shopify-funded entitlements revoked;
+ *   - the shopify integration DISCONNECTED, its credentials and live claims
+ *     (the uninstall request marker included) cleared;
+ *   - the tenant's Shopify tool assignments removed (the global catalog
+ *     tools stay);
+ *   - the storefront chat switched off.
+ * Core, conversations and every other integration are untouched.
+ */
+export async function completeShopifyUninstall(hook: { shopDomain: string | null; body: unknown }): Promise<{ tenantId: string | null; outcome: string }> {
+  const shop = hook.shopDomain;
+  if (!shop) return { tenantId: null, outcome: "no_shop" };
+
+  // Billing FIRST, and before the `!match` return: the integration row and
+  // the commerce connection have different lifecycles, so one being absent
+  // must not suppress the other. The shop id comes from the verified payload;
+  // the domain is the fallback, because the token is already revoked.
+  await notifyShopifyUninstalled({
+    externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
+    shopDomain: shop,
+  });
+
+  // Any status: a redelivery after a partial run finds the row this handler
+  // already marked DISCONNECTED and finishes the rest. A live row wins.
+  const connections = await withCrossTenantAccess(async () =>
+    prisma.tenantIntegration.findMany({
+      where: { integration: { slug: "shopify" } },
+      select: { id: true, tenantId: true, config: true, status: true },
+    }),
+  );
+  const forShop = connections.filter(
+    (c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop,
+  );
+  const match = forShop.find((c: any) => c.status !== "DISCONNECTED") ?? forShop[0];
+
+  if (!match) {
+    // No integration row. The storefront chat still goes with the app.
+    const chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
+    return { tenantId: null, outcome: chatDisabled ? "no_connection+chat_disabled" : "no_connection" };
+  }
+
+  await withCrossTenantAccess(async () =>
+    prisma.tenantIntegration.update({
+      where: { id: match.id },
+      data: {
+        status: "DISCONNECTED",
+        // The token is revoked on Shopify's side the moment the app is
+        // removed. Keeping the ciphertext would only be a liability.
+        credentials: {},
+        // `uninstallRequestedAt` (this webhook is its answer), `useAsCrm` and
+        // `capabilityState` are claims about a live connection. `shopDomain`
+        // is KEPT: which store this was is history worth having.
+        config: stripLiveConnectionClaims(match.config),
+        lastError: withErrorCode("SHOPIFY_APP_UNINSTALLED"),
+      },
+    }),
+  );
+  // Tool assignments for a store that no longer exists. A reinstall
+  // re-creates any missing.
+  const toolsRemoved = await withCrossTenantAccess(async () =>
+    removeTenantToolAssignments({ tenantId: match.tenantId, tenantIntegrationId: match.id }),
+  );
+  if (toolsRemoved.removed > 0) {
+    console.log(`[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) for tenant=${match.tenantId} after uninstall`);
+  }
+  // The extension left with the app, so the storefront chat goes too.
+  const chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
+  return { tenantId: match.tenantId, outcome: chatDisabled ? "disconnected+chat_disabled" : "disconnected" };
+}
 
 /**
  * Core's compliance topics. The Core integration DOES hold Shopify customer
@@ -494,6 +475,12 @@ function commerceRoute(topic: Topic, toJobs: (tenantId: string, body: any) => Ar
     try {
       const tenantId = await tenantForShop(hook.shopDomain);
       if (!tenantId) return;
+      // Order and checkout data is the Connector's order reading, billed by
+      // Shopify (split billing 2026-10-28): without it, acknowledged and dropped.
+      if (!(await isShopifyAuthorized(tenantId, "shopify_order_read"))) {
+        await recordDelivery({ app: "core", hook, tenantId, outcome: "not_entitled" });
+        return;
+      }
       for (const job of toJobs(tenantId, hook.body)) {
         if (!job?.data) continue;
         await incomingMessageQueue.add(job.name, job.data, { attempts: 3, backoff: { type: "exponential", delay: 2000 }, removeOnComplete: true, removeOnFail: 100 });

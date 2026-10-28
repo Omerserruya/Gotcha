@@ -8,8 +8,10 @@ import {
   getDefaultHighRiskTools,
   writeAudit,
   AuditAction,
+  shopifyCapabilityForTool,
 } from "@chatcenter/shared";
 import { getAvailableTools, getGovernableIntegrationTools, TOOL_REGISTRY } from "../services/tool-registry";
+import { getShopifyConnectorSummary } from "../services/shopify-billing-bridge.service";
 import {
   riskGroupFor,
   mayBeAlwaysAllowed,
@@ -103,6 +105,14 @@ export interface MergedToolRow {
   catalogToolId?: string;
   /** Catalogue risk level (LOW/MEDIUM/HIGH). */
   riskLevel?: string | null;
+  /** Shopify rows only: the Connector entitlement this tool needs (billed by Shopify). */
+  requiredCapability?: string | null;
+  /**
+   * Shopify rows only: the Connector's verdict does not fund this tool, so it
+   * cannot run whatever the OAuth row says. From the same verdict as
+   * GET /api/billing/shopify/state (split billing 2026-10-28).
+   */
+  connectorBlocked?: boolean;
 }
 
 /**
@@ -127,6 +137,9 @@ export async function listWorkspaceTools(tenantId: string): Promise<MergedToolRo
 
   const permByName = new Map<string, any>();
   for (const p of permissions) permByName.set(p.toolName, p);
+  const shopifyConnector = governable.some((g: any) => g.integrationSlug === "shopify")
+    ? await getShopifyConnectorSummary(tenantId)
+    : null;
 
   // Connection state and scope facts per integration slug, so the UI can say
   // "the integration is disconnected" or "this scope was never granted"
@@ -261,6 +274,12 @@ export async function listWorkspaceTools(tenantId: string): Promise<MergedToolRo
       integrationStatus: g.integrationStatus,
       catalogToolId: g.catalogToolId,
       riskLevel: g.riskLevel,
+      ...(g.integrationSlug === "shopify"
+        ? (() => {
+            const requiredCapability = shopifyCapabilityForTool(g.slug);
+            return { requiredCapability, connectorBlocked: !requiredCapability || !shopifyConnector?.capabilities[requiredCapability] };
+          })()
+        : {}),
     });
   }
 

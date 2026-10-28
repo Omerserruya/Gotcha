@@ -19,6 +19,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import crypto from "crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 vi.hoisted(() => {
   process.env.NODE_ENV = "test";
@@ -50,6 +52,8 @@ const H = vi.hoisted(() => {
     settings: new Map<string, string | null>(),
     /** Which workspace holds a shop, for the billing return. */
     owner: { current: null as { tenantId: string; connectionId: string; status: string } | null },
+    /** Is GOTCHA Core paid (the claim's own rule)? */
+    corePaid: { yes: true },
   };
 });
 
@@ -64,6 +68,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     },
     resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = H.tenantId.current; next(); },
     requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
+    requireCoreForShopifyConnect: () => (_req: any, res: any, next: any) =>
+      H.corePaid.yes ? next() : res.status(402).json({ error: "core_plan_required", scope: "gotcha_core", billedBy: "gotcha" }),
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: () => (_req: any, res: any, next: any) =>
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
@@ -162,6 +168,7 @@ function entryQuery(over: Record<string, string> = {}, atMs = Date.now()): strin
 
 beforeEach(() => {
   vi.clearAllMocks();
+  H.corePaid.yes = true;
   H.permission.granted = true;
   H.tenantId.current = "tenant-A";
   H.authed.yes = true;
@@ -847,5 +854,24 @@ describe("GET /connectors/shopify/billing/return", () => {
   it("an unknown shop, or no shop, gets today's page - never a guess", async () => {
     expect((await ret(`plan_handle=pro&shop=nobody.myshopify.com`)).headers.location).toContain("/integrations/shopify/billing/complete?");
     expect((await ret(`plan_handle=pro`)).headers.location).toContain("/integrations/shopify/billing/complete?plan_handle=pro");
+  });
+});
+
+describe("a store connects only after GOTCHA Core is paid (split billing 2026-10-28)", () => {
+  it("install/start and the claim refuse core_plan_required, scoped to Core, before anything is created", async () => {
+    H.corePaid.yes = false;
+    const start = await request(app()).get("/api/connectors/shopify/install/start");
+    expect(start.status).toBe(402);
+    expect(start.body).toMatchObject({ error: "core_plan_required", scope: "gotcha_core", billedBy: "gotcha" });
+    expect(H.intents.size).toBe(0);
+    const claim = await request(app()).post("/api/connectors/shopify/install/claim").send({ handle: "anything" });
+    expect(claim.status).toBe(402);
+    expect(claim.body.error).toBe("core_plan_required");
+    expect(H.linkCalls).toHaveLength(0);
+  });
+  it("wired on both routes", () => {
+    const src = readFileSync(join(__dirname, "../routes/shopify-install.ts"), "utf8");
+    expect(src.match(/requireCoreForShopifyConnect\(\),/g)?.length).toBe(2);
+    expect(src).not.toContain("requireActiveTenant()");
   });
 });

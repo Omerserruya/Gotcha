@@ -206,14 +206,14 @@ describe("the one failure that must NOT be swallowed", () => {
   });
 });
 
-describe("uninstall is fire-and-forget", () => {
-  it("never throws, whatever billing does", async () => {
+describe("uninstall reaches billing or fails loudly (split billing 2026-10-28)", () => {
+  it("throws when billing is down or refuses, so the webhook answers 500 and Shopify redelivers", async () => {
     mockFetch(() => {
       throw new Error("down");
     });
-    // The webhook has already been verified and acknowledged. Throwing here
-    // would risk Shopify timing out and redelivering a webhook we handled.
-    await expect(notifyShopifyUninstalled({ shopDomain: "acme.myshopify.com" })).resolves.toBeUndefined();
+    await expect(notifyShopifyUninstalled({ shopDomain: "acme.myshopify.com" })).rejects.toThrow("down");
+    mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }) as any);
+    await expect(notifyShopifyUninstalled({ shopDomain: "acme.myshopify.com" })).rejects.toThrow("500");
   });
 
   it("sends both the id and the domain so billing can resolve either way", async () => {

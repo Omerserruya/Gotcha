@@ -37,7 +37,7 @@ import { Router, type Request, type Response } from "express";
 import {
   authenticate,
   resolveTenant,
-  requireActiveTenant,
+  requireCoreForShopifyConnect,
   requireOnboardingOrActiveTenant,
   requirePermission,
   mintOAuthState,
@@ -164,6 +164,9 @@ router.get(
   authenticate,
   resolveTenant,
   requireOnboardingOrActiveTenant(),
+  // A store connects only after GOTCHA Core is paid (Omer, 2026-10-28): the
+  // claim's own rule, refused as core_plan_required before any intent exists.
+  requireCoreForShopifyConnect(),
   canConnectSystems,
   async (req: Request, res: Response) => {
     // ALWAYS resolves to a Shopify-owned page. There is no configuration this
@@ -439,9 +442,11 @@ router.post(
   "/connectors/shopify/install/claim",
   authenticate,
   resolveTenant,
-  // Onboarding-reachable like start and pending: the claim completes the same
-  // install, and onboarding's systems step is where it begins.
+  // Onboarding reaches the systems step, but a store connects only after
+  // GOTCHA Core is paid (Omer, 2026-10-28): the claim's rule, refused as a
+  // stable core_plan_required the screen can say in plain words.
   requireOnboardingOrActiveTenant(),
+  requireCoreForShopifyConnect(),
   canConnectSystems,
   async (req: Request, res: Response) => {
     // Body first, cookie as the fallback - the same recovery the pending

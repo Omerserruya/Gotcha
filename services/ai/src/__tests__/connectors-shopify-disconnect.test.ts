@@ -1,14 +1,11 @@
 /**
- * ★ Disconnecting Shopify stops the storefront chat, locally only (2026-10-10).
- * The chat was served from its own channel and installation, which a
- * disconnect never touched, so the storefront chat stayed live.
- *   - each disconnected store's chat installation is retired
- *     (markUninstalledByShop: channel disabled and DISCONNECTED, installation
- *     UNINSTALLED, token dropped) and its workspace binding released
- *   - the answer is { ok, chatDisabled, billing: "unchanged" }; nothing
- *     reaches billing or Shopify
- *   - idempotent: a second disconnect answers chatDisabled false
- *   - another system's disconnect touches no chat
+ * Disconnecting Shopify (split billing 2026-10-28) is uninstalling the app on
+ * Shopify: the route asks Shopify (appUninstall) and answers awaiting_webhook.
+ * Nothing local changes until Shopify's signed app/uninstalled arrives, which
+ * disconnects the connection, revokes the Shopify-funded access, removes the
+ * tool assignments and stops the storefront chat (shopify-webhooks). The old
+ * local-only disconnect left the app installed and Shopify billing running.
+ *   - another system's disconnect is unchanged and touches no chat
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
@@ -24,7 +21,10 @@ vi.mock("bullmq", () => ({ Queue: class { add = vi.fn(); }, Worker: class {}, Jo
 vi.mock("ioredis", () => ({ default: class { publish = vi.fn(); on = vi.fn(); subscribe = vi.fn(); quit = vi.fn(); async set() { return "OK"; } } }));
 vi.mock("@prisma/client", () => ({ PrismaClient: class { $extends() { return this; } } }));
 
-const DB = vi.hoisted(() => ({ integrations: [] as any[], installs: [] as any[], marked: [] as string[], billing: 0, fetches: 0 }));
+const DB = vi.hoisted(() => ({ integrations: [] as any[], installs: [] as any[], marked: [] as string[], billing: 0, fetches: 0, uninstallAsked: [] as string[], uninstall: { status: 200, body: { data: { state: "awaiting_webhook", shopDomain: "demo-store.myshopify.com" } } } as any }));
+vi.mock("../services/connectors/shopify-self-uninstall.service", () => ({
+  shopifyUninstallResponse: vi.fn(async (tenantId: string) => { DB.uninstallAsked.push(tenantId); return DB.uninstall; }),
+}));
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, any>;
   return {
@@ -80,34 +80,33 @@ beforeEach(() => {
     { id: "ti_h", tenantId: "tenant-A", integrationId: "cat_hubspot", status: "CONNECTED", config: {} },
   ];
   DB.installs = [{ id: "inst1", shopDomain: "demo-store.myshopify.com", status: "ACTIVE", tenantId: "tenant-A", channelAccountId: "ca_chat" }];
-  DB.marked = []; DB.billing = 0;
+  DB.marked = []; DB.billing = 0; DB.uninstallAsked = [];
+  DB.uninstall = { status: 200, body: { data: { state: "awaiting_webhook", shopDomain: "demo-store.myshopify.com" } } };
   vi.stubGlobal("fetch", vi.fn(async () => { DB.fetches++; return { ok: true, json: async () => ({}) }; }));
   DB.fetches = 0;
 });
 
-describe("★ a Shopify disconnect stops the storefront chat, locally", () => {
-  it("the chat installation is retired and released; the answer says billing is unchanged", async () => {
+describe("★ a Shopify disconnect is an uninstall on Shopify", () => {
+  it("asks Shopify and answers awaiting_webhook; nothing local changes yet", async () => {
     const r = await disconnect("shopify");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ok: true, chatDisabled: true, billing: "unchanged" });
-    expect(DB.marked).toEqual(["demo-store.myshopify.com"]);
-    expect(DB.installs[0]).toMatchObject({ status: "UNINSTALLED", tenantId: null, channelAccountId: null });
-    expect(DB.integrations[0]).toMatchObject({ status: "DISCONNECTED", credentials: {}, config: { useAsCrm: true } });
+    expect(r.body).toEqual({ data: { state: "awaiting_webhook", shopDomain: "demo-store.myshopify.com" } });
+    expect(DB.uninstallAsked).toEqual(["tenant-A"]);
+    expect(DB.integrations[0]).toMatchObject({ status: "CONNECTED", config: { shopDomain: "Demo-Store.myshopify.com" } });
+    expect(DB.installs[0].status).toBe("ACTIVE");
+    expect(DB.marked).toEqual([]);
   });
 
-  it("nothing reaches billing or Shopify", async () => {
-    await disconnect("shopify");
-    expect(DB.billing).toBe(0);
-    expect(DB.fetches).toBe(0);
+  it("Shopify's refusal and our preconditions keep their codes", async () => {
+    for (const [status, error] of [[404, "not_connected"], [409, "no_token"], [409, "no_shop_domain"], [502, "shopify_refused"]] as const) {
+      DB.uninstall = { status, body: { error } };
+      const r = await disconnect("shopify");
+      expect([r.status, r.body]).toEqual([status, { error }]);
+    }
   });
+});
 
-  it("idempotent: a second disconnect answers chatDisabled false", async () => {
-    await disconnect("shopify");
-    const again = await disconnect("shopify");
-    expect(again.status).toBe(200);
-    expect(again.body).toEqual({ ok: true, chatDisabled: false, billing: "unchanged" });
-  });
-
+describe("other systems", () => {
   it("another system's disconnect touches no chat", async () => {
     const r = await disconnect("hubspot");
     expect(r.body).toEqual({ ok: true, chatDisabled: false, billing: "unchanged" });

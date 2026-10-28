@@ -30,7 +30,7 @@
  * the other.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, shopifyConnectorVerdict, coreAllowsShopifyConnect, SHOPIFY_FUNDED_ENTITLEMENTS } from "@chatcenter/shared";
 import type { ProviderSubscriptionStatus } from "@prisma/client";
 import {
   shopifyBillingEnabled,
@@ -87,48 +87,10 @@ export function stateGrantsShopifyAccess(state: ShopifyBillingState): boolean {
   return ENTITLING_STATES.has(state);
 }
 
-/**
- * Does this workspace ACTUALLY have Shopify access right now.
- *
- * WHY THIS IS NOT `stateGrantsShopifyAccess` ON ITS OWN
- * The snapshot used to answer this from the subscription state alone. A store
- * that had been uninstalled reported `grantsAccess: true` while its
- * entitlements were empty, because Shopify had not finished cancelling the
- * subscription and the row still said TRIALING. Nothing was actually granted -
- * enforcement reads the entitlement rows - but the field contradicted itself,
- * and any consumer that trusted it without ALSO checking `uninstalledAt` would
- * have granted access to a store the merchant had removed.
- *
- * THREE INDEPENDENT FACTS, ALL REQUIRED
- *   1. the subscription state entitles,
- *   2. the app is still installed,
- *   3. the entitlement rows that enforcement reads actually exist.
- *
- * Each can be false while the others are true, so this is an AND and not a
- * preference order. In particular (3) is what makes the field agree with the
- * guard: if enforcement would deny, this says false.
- *
- * FAIL CLOSED ON ASYNCHRONY
- * Shopify cancels subscriptions asynchronously, so between uninstall and
- * cancellation the state is stale-but-entitling. During that window (2) is
- * false and access is denied, which is the safe direction: a reinstall issues
- * a new installation and a fresh subscription, and access returns only when
- * all three are true again. It can never be inherited from the old one.
- */
-export function snapshotGrantsShopifyAccess(input: {
-  state: ShopifyBillingState;
-  installationStatus: string | null | undefined;
-  uninstalledAt: Date | string | null | undefined;
-  entitlements: readonly string[];
-}): boolean {
-  if (!stateGrantsShopifyAccess(input.state)) return false;
-  // Uninstalled is terminal for access, whatever billing still says.
-  if (input.uninstalledAt) return false;
-  if (String(input.installationStatus ?? "").toUpperCase() === "DISCONNECTED") return false;
-  // No rows means enforcement denies, so the snapshot must not claim otherwise.
-  if (!input.entitlements || input.entitlements.length === 0) return false;
-  return true;
-}
+// Whether this workspace HAS Shopify access is not the state alone: see
+// `shopifyConnectorVerdict` in @chatcenter/shared, the one rule billing and
+// the integration screens both use (installed, connection live, a granting
+// state, and every entitlement the current plan funds).
 
 export interface ShopifyAccessSnapshot {
   tenantId: string;
@@ -138,7 +100,20 @@ export interface ShopifyAccessSnapshot {
     subscriptionStatus: string | null;
     planKey: string | null;
     billingSource: string | null;
+    /** The install claim's own rule (Core paid), never derived by a screen. */
+    allowsShopifyConnect: boolean;
+    connectBlockedReason: string | null;
   };
+
+  /**
+   * What the merchant's current catalog plan funds, the entitlements access
+   * requires. Null when no plan is known (nothing can be required, so nothing
+   * is granted); the four funded keys for the grandfather exemption.
+   */
+  requiredEntitlements: string[] | null;
+
+  /** The in-product uninstall waiting for Shopify's app/uninstalled. */
+  uninstallRequestedAt: Date | null;
 
   /** OAuth/installation, which is independent of whether anybody has paid. */
   installation: {
@@ -244,7 +219,7 @@ function mapProviderStatus(status: ProviderSubscriptionStatus): {
  * damaging thing this flow could do.
  */
 export async function getShopifyAccessSnapshot(tenantId: string): Promise<ShopifyAccessSnapshot> {
-  const [link, connection, grant] = await Promise.all([
+  const [link, connection, grant, coreConnect, integration] = await Promise.all([
     prisma.billableEntityTenant.findUnique({
       where: { tenantId },
       select: { billableEntityId: true },
@@ -254,7 +229,13 @@ export async function getShopifyAccessSnapshot(tenantId: string): Promise<Shopif
       orderBy: { installedAt: "desc" },
     }),
     prisma.shopifyGrandfatherGrant.findUnique({ where: { tenantId } }),
+    coreAllowsShopifyConnect(tenantId),
+    prisma.tenantIntegration.findFirst({
+      where: { tenantId, integration: { slug: "shopify" } },
+      select: { config: true },
+    }),
   ]);
+  const requestedAt = (integration?.config as any)?.uninstallRequestedAt;
 
   const core = link
     ? await prisma.subscription.findUnique({
@@ -349,7 +330,16 @@ export async function getShopifyAccessSnapshot(tenantId: string): Promise<Shopif
       subscriptionStatus: core?.status ?? null,
       planKey: core?.planKey ?? null,
       billingSource: core?.billingSource ?? null,
+      allowsShopifyConnect: coreConnect.allowed,
+      connectBlockedReason: coreConnect.reason,
     },
+    requiredEntitlements:
+      state === "NOT_REQUIRED_GRANDFATHERED"
+        ? [...SHOPIFY_FUNDED_ENTITLEMENTS]
+        : state === "UNKNOWN_PLAN" || !plan
+          ? null
+          : plan.entitlements,
+    uninstallRequestedAt: typeof requestedAt === "string" && !Number.isNaN(Date.parse(requestedAt)) ? new Date(requestedAt) : null,
     installation: {
       status: connection?.status ?? "NONE",
       shopDomain,
@@ -395,10 +385,29 @@ export async function getShopifyAccessSnapshot(tenantId: string): Promise<Shopif
  * is written down in one place instead of being whatever the route happened to
  * spread.
  */
+/** The Connector statuses for which Shopify's own plan page is where the plan is managed. */
+const MANAGEABLE = new Set(["active", "trialing", "past_due", "frozen", "approval_pending", "cancelled"]);
+
+/** The one verdict for a snapshot. */
+export function connectorVerdictFor(s: ShopifyAccessSnapshot) {
+  return shopifyConnectorVerdict({
+    state: s.shopify.state,
+    installationStatus: s.installation.status,
+    uninstalledAt: s.installation.uninstalledAt,
+    uninstallRequestedAt: s.uninstallRequestedAt,
+    entitlements: s.entitlements,
+    requiredEntitlements: s.requiredEntitlements,
+  });
+}
+
 export function serializeSnapshot(s: ShopifyAccessSnapshot) {
   const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+  const verdict = connectorVerdictFor(s);
   return {
-    core: s.core,
+    // Billed by Shopify, through Shopify App Pricing only (1.2.1).
+    scope: verdict.scope,
+    billedBy: verdict.billedBy,
+    core: { ...s.core, scope: "gotcha_core" as const, billedBy: "gotcha" as const },
     installation: {
       ...s.installation,
       installedAt: iso(s.installation.installedAt),
@@ -418,17 +427,22 @@ export function serializeSnapshot(s: ShopifyAccessSnapshot) {
         }
       : null,
     entitlements: s.entitlements,
+    requiredEntitlements: s.requiredEntitlements ?? [],
     planSelectionUrl: s.planSelectionUrl,
     availablePlanCount: s.availablePlanCount,
     requiresPlanSelection: s.shopify.state === "PLAN_SELECTION_REQUIRED",
-    // The subscription state alone is not the answer: see
-    // `snapshotGrantsShopifyAccess`. An uninstalled store whose subscription
-    // Shopify has not yet cancelled must not report access.
-    grantsAccess: snapshotGrantsShopifyAccess({
-      state: s.shopify.state,
-      installationStatus: s.installation.status,
-      uninstalledAt: s.installation.uninstalledAt,
-      entitlements: s.entitlements,
-    }),
+    // The verdict, never the subscription state alone: an uninstalled store,
+    // an OAuth-only store and a store missing what its plan funds all say false.
+    grantsAccess: verdict.grantsAccess,
+    capabilities: verdict.capabilities,
+    connector: {
+      status: verdict.status,
+      uninstallRequestedAt: iso(s.uninstallRequestedAt),
+      // Shopify's own managed-pricing page, where an existing plan is changed
+      // or cancelled. Built here; a screen never builds a Shopify URL.
+      manageUrl: MANAGEABLE.has(verdict.status) && s.installation.shopDomain
+        ? shopifyPlanSelectionUrl(s.installation.shopDomain)
+        : null,
+    },
   };
 }
