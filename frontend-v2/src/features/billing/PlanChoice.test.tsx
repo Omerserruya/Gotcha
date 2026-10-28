@@ -151,7 +151,9 @@ describe('★ 17b - the switch is drawn, and not live', () => {
     );
     expect(screen.getByTestId('switch-button')).toHaveTextContent('Switch to Foundation');
     expect(screen.getByTestId('switch-keep')).toHaveTextContent('Keep AI Voice');
-    expect(screen.getByTestId('switch-fine')).toHaveTextContent('Charged to Visa · 4417.');
+    expect(screen.getByTestId('switch-fine')).toHaveTextContent(
+      'Charged to Visa · 4417 for GOTCHA Core.',
+    );
     one.unmount();
     render(await SwitchActions({ target: null, current: voice!, methods: [] }));
     expect(screen.getByTestId('switch-button')).toHaveAttribute('aria-disabled', 'true');
@@ -193,7 +195,7 @@ describe('★★ 17b Switch - opens its confirm, says what changePlan would do, 
       subscription: SUB,
     });
     expect(box).toHaveTextContent(
-      'This moves you to AI Voice today and charges your Visa ending 4417 now: the difference between the two monthly prices, before VAT.',
+      'This moves you to AI Voice today and charges your Visa ending 4417 now for GOTCHA Core: the difference between the two monthly prices, before VAT.',
     );
     expect(box).toHaveTextContent('From then on, $1,499 a month, before VAT.');
     // Only the server can state the charged amount: no "$1,460" worked out here.

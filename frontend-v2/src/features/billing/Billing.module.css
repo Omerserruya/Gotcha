@@ -967,6 +967,10 @@
     color: var(--frame-text-body);
   }
 
+  .heroScopeLine {
+    display: block;
+  }
+
   .connectorCard {
     display: flex;
     flex-direction: column;

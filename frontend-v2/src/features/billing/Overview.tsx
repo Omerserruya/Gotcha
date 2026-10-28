@@ -135,8 +135,15 @@ export async function PlanHero({
           </p>
         )}
         {/* Said whatever the plan read: Core never includes Shopify (review 132211). */}
+        {/*
+          Two lines, not one: in Hebrew "Shopify. GOTCHA Core" is one Latin run
+          across the sentence break, and the full stop lands between them.
+        */}
         <p className={styles.heroScope} data-testid="core-scope">
-          {core('scope')} <span data-testid="core-no-shopify">{core('noShopify')}</span>
+          <span className={styles.heroScopeLine}>{core('scope')}</span>
+          <span className={styles.heroScopeLine} data-testid="core-no-shopify">
+            {core('noShopify')}
+          </span>
         </p>
       </div>
 

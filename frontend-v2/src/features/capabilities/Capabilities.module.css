@@ -109,7 +109,8 @@
     color: var(--signal-done-text);
   }
 
-  .systemState:not([data-state='CONNECTED']) {
+  /* Shopify's Connector: only active and trialing work - the rest are blocked. */
+  .systemState:not([data-state='CONNECTED'], [data-state='active'], [data-state='trialing']) {
     background-color: var(--intent-blocked-surface);
     color: var(--intent-blocked-text);
   }

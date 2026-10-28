@@ -204,7 +204,7 @@ describe('★★ 17e card - opens its confirm and holds (the session creates a c
     );
     fireEvent.click(screen.getByTestId('add-card'));
     expect(screen.getByTestId('add-card-confirm')).toHaveTextContent(
-      "This opens the payment provider's secure page to save a card. It's kept for future charges - nothing is charged now.",
+      "This opens the payment provider's secure page to save a card for GOTCHA Core. It's kept for future GOTCHA Core charges - nothing is charged now.",
     );
     const yes = screen.getByTestId('add-card-yes');
     expect(yes.tagName).toBe('SPAN');
@@ -224,7 +224,7 @@ describe('★★ 17e card - opens its confirm and holds (the session creates a c
     );
     fireEvent.click(screen.getByTestId('replace-card'));
     expect(screen.getByTestId('replace-card-confirm')).toHaveTextContent(
-      'save a new card in place of Visa ending 4417; the new one is charged from then on. Nothing is charged now.',
+      'save a new card in place of Visa ending 4417; the new one is charged for GOTCHA Core from then on. Nothing is charged now.',
     );
     expect(screen.getByTestId('replace-card-yes')).toHaveAttribute('aria-disabled', 'true');
   });

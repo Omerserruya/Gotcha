@@ -54,7 +54,7 @@ describe('★★ 17b live - the server’s exact figure, and only that figure is
     await open();
     expect(previewPlanChange).toHaveBeenCalledWith('ai_voice');
     const box = screen.getByTestId('switch-button-confirm');
-    expect(box).toHaveTextContent('charges ₪130.24 now, including VAT (₪19.87)');
+    expect(box).toHaveTextContent('charges ₪130.24 now for GOTCHA Core, including VAT (₪19.87)');
     expect(box).toHaveTextContent('Then $1,499.00 a month.');
     expect(screen.getByTestId('switch-button-yes')).toHaveTextContent('Yes, charge ₪130.24');
     expect(changePlanTo).not.toHaveBeenCalled();
