@@ -1265,9 +1265,14 @@
    * 17 in 02's frame: the two columns take the rest of its height.
    */
   @media (width > 900px) {
+    /*
+     * Grows to the frame's bottom, never shrinks below its own content: the
+     * Shopify Connector section follows it, and a shrinkable overview let a
+     * tall Billing card (long invoice lines) run under that card on dev. The
+     * settings section scrolls (`overflow-y: auto`) when both do not fit.
+     */
     .overview {
-      flex: 1;
-      min-block-size: 0;
+      flex: 1 0 auto;
       align-items: stretch;
     }
 

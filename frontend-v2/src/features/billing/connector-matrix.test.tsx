@@ -71,6 +71,7 @@ vi.mock('@/features/capabilities/shopify-actions', () => ({
   readShopifyConnectorStatus: vi.fn(),
 }));
 
+import { AvailableSystem } from '@/features/capabilities/AvailableSystem';
 import { SystemHead } from '@/features/capabilities/SystemHead';
 
 import {
@@ -85,6 +86,21 @@ const SHOPIFY = integrationSchema.parse({
   slug: 'shopify',
   name: 'Shopify',
   tenantConnection: { id: 'c1', status: 'CONNECTED' },
+});
+/*
+ * A workspace whose store was installed and later removed: the legacy row is
+ * DISCONNECTED and still carries its last error (urban on dev, 2026-10-28).
+ */
+const LEGACY = integrationSchema.parse({
+  id: 'i1',
+  slug: 'shopify',
+  name: 'Shopify',
+  tenantConnection: {
+    id: 'c1',
+    status: 'DISCONNECTED',
+    lastError: 'Shopify token revoked',
+    lastErrorCode: 'TOKEN_REVOKED',
+  },
 });
 const ACTIONS = [
   capabilitySchema.parse({ toolName: 'shopify.cancel_order', integration: 'shopify' }),
@@ -103,15 +119,22 @@ async function renderBoth(locale: Locale, name: ConnectorFixture) {
       <div data-testid="billing-screen">{await ConnectorSection({ verdict })}</div>
     </NextIntlClientProvider>,
   );
+  // The integration screen draws the head for an installed store, the Connect card otherwise.
   const head = render(
     <NextIntlClientProvider locale={locale} messages={MESSAGES[locale]}>
       <div data-testid="integration-screen">
-        {await SystemHead({
-          integration: SHOPIFY,
-          capabilities: ACTIONS,
-          usage: null,
-          connector: verdict,
-        })}
+        {isInstalledKind(verdict.kind)
+          ? await SystemHead({
+              integration: SHOPIFY,
+              capabilities: ACTIONS,
+              usage: null,
+              connector: verdict,
+            })
+          : await AvailableSystem({
+              integration: LEGACY,
+              shopify: { mode: 'listing', helpUrl: null, connectAllowed: verdict.connectAllowed },
+              connector: verdict,
+            })}
       </div>
     </NextIntlClientProvider>,
   );
@@ -142,10 +165,13 @@ describe.each(['en', 'he'] as const)('★★ the state matrix, %s', (locale) => 
       MESSAGES[locale].billing.connector.billedBy,
     );
 
-    // Status: the verdict's label, on both screens where both draw it.
+    // Status: the verdict's label, on both screens - installed or not.
     expect(billing.getByTestId('connector-status')).toHaveTextContent(label(locale, verdict.kind));
-    if (isInstalledKind(verdict.kind)) {
-      expect(head.getByTestId('system-state')).toHaveTextContent(label(locale, verdict.kind));
+    expect(head.getByTestId('system-state')).toHaveTextContent(label(locale, verdict.kind));
+    if (!isInstalledKind(verdict.kind)) {
+      // ★ The legacy row's last error is not the store's state: never said beside the verdict.
+      expect(head.queryByTestId('system-error')).toBeNull();
+      return;
     }
 
     // "Shopify access" is the server's grantsAccess, verbatim, and the same on both.

@@ -179,6 +179,7 @@ export default async function Page({
             {integration !== null && !isConnected(integration) ? (
               <AvailableSystem
                 integration={integration}
+                connector={onShopify ? shopifyVerdict : null}
                 shopify={
                   shopifyAvailability
                     ? {
