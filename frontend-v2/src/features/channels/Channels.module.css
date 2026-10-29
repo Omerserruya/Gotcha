@@ -815,6 +815,17 @@
     border-radius: var(--radius-step);
     font-size: var(--font-size-meta);
     color: var(--text-subtle);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* A live link reads as one on hover; only the unconfigured one is blocked. */
+  a.addNumber:hover {
+    border-color: var(--text-subtle);
+    color: var(--text-secondary);
+  }
+
+  .addNumber[aria-disabled='true'] {
     cursor: not-allowed;
   }
 }

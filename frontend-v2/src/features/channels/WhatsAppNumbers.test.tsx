@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { render, screen, within } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import type { ReactNode } from 'react';
@@ -445,6 +447,25 @@ describe('★★ 13c - "Add another number" opens the Connect WhatsApp sheet, no
     const add = screen.getByTestId('whatsapp-add-number');
     expect(add.tagName).toBe('A');
     expect(add).toHaveAttribute('href', '/settings/channels?panel=whatsapp&view=connect');
+  });
+
+  it('★ the live link never looks blocked - "not-allowed" only on the unconfigured one', () => {
+    // 0fb13a5d drew it "not live" with not-allowed on every state; the Link inherited it.
+    const css = readFileSync('src/features/channels/Channels.module.css', 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+      selector: (m[1] ?? '').trim(),
+      body: m[2] ?? '',
+    }));
+    const blocked = rules
+      .filter((rule) => /cursor:\s*not-allowed/.test(rule.body))
+      .map((rule) => rule.selector)
+      .filter((selector) => selector.includes('addNumber'));
+    expect(blocked).toEqual([".addNumber[aria-disabled='true']"]);
+    const base = rules.find((rule) => rule.selector === '.addNumber');
+    expect(base?.body).toMatch(/cursor:\s*pointer/);
   });
 });
 
