@@ -328,6 +328,29 @@ export async function peekPendingConnection(
 }
 
 /**
+ * The pending installation's access token, WITHOUT spending the handle.
+ *
+ * Server-side only: the claim needs the store's immutable id (and billing's
+ * answer) before it spends the one-shot handle, so a refusal leaves the
+ * merchant able to resolve it and claim again without reinstalling from
+ * Shopify. Same rule as `consumePendingConnection`: the token goes nowhere but
+ * the shop-identity call.
+ */
+export async function peekPendingAccessToken(handle: unknown): Promise<string | null> {
+  if (!isHandle(handle)) return null;
+  try {
+    const raw = await getRedis().get(pendingKey(handle));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingConnection;
+    if (!parsed?.credentialsBlob) return null;
+    const token = (decryptCredentials(parsed.credentialsBlob) as Record<string, any>)?.accessToken;
+    return typeof token === "string" && token ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Claim the pending installation. Exactly once.
  *
  * Returns the decrypted credentials for immediate persistence into the

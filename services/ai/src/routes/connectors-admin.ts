@@ -58,6 +58,8 @@ import {
   linkShopifyShopToTenant,
   pendingStoreReplacement,
   exchangeShopifyCode,
+  findShopOwner,
+  shopHeldElsewhere,
 } from "../services/shopify-connection-link.service";
 import {
   createPendingConnection,
@@ -65,7 +67,7 @@ import {
   setPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
-import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
+import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
 import { shopifyUninstallResponse } from "../services/connectors/shopify-self-uninstall.service";
 import { shopifyApiVersion } from "@chatcenter/shared";
 import { splitErrorCode } from "../lib/error-code";
@@ -846,6 +848,46 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       return;
     }
 
+    // ── Ownership, then billing, BEFORE anything is written in ai ──
+    //
+    // Billing used to run after the link with its failure swallowed, so a
+    // store billing refused came back "Connected" with no billing row
+    // (2026-10-29). Now either both hold the store or neither does.
+    const refuse = async (error: "shop_connected_elsewhere" | "billing_link_failed") => {
+      if (typeof payload.intentHandle === "string") await consumeInstallIntent(payload.intentHandle);
+      res.clearCookie(INSTALL_INTENT_COOKIE, { path: "/" });
+      let base = "";
+      try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      res.redirect(`${base}${redesignSystemsPath(isRedesignSystemsFlow(flow) ? flow : undefined)}?system=shopify&error=${error}`);
+    };
+    if (shopHeldElsewhere(await findShopOwner(shop), tenantId)) {
+      await refuse("shop_connected_elsewhere");
+      return;
+    }
+    let outcome: Awaited<ReturnType<typeof resolveShopifyBillingOutcome>> = null;
+    try {
+      // The three acquisition paths converge here: billing does not depend on
+      // where the merchant came from, so `acquisitionSource` is recorded for
+      // later analysis and reads on nothing.
+      outcome = await resolveShopifyBillingOutcome({
+        tenantId,
+        shopDomain: shop,
+        accessToken: creds.accessToken,
+        apiVersion: shopifyApiVersion(),
+        acquisitionSource: payload.hasIntent ? "in_app_connect" : "app_store",
+      });
+    } catch (err: any) {
+      if (err instanceof CrossTenantShopError) {
+        await refuse("shop_connected_elsewhere");
+        return;
+      }
+      console.warn(`[shopify oauth] billing link failed: ${err?.message}`);
+    }
+    if (!outcome) {
+      await refuse("billing_link_failed");
+      return;
+    }
+
     const linked = await linkShopifyShopToTenant({
       tenantId,
       shopDomain: shop,
@@ -876,26 +918,10 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       return;
     }
 
-    // ── Billing ──
-    //
-    // Runs only AFTER the store is linked, and cannot undo that. The three
-    // acquisition paths converge here: the confirmed model says billing does
-    // not depend on where the merchant came from, so `acquisitionSource` is
-    // recorded for later analysis and reads on nothing.
-    //
     // A merchant who owes Shopify a plan is sent to Shopify's own hosted plan
     // page. One who is grandfathered, already paying, or on a deployment with
-    // billing switched off goes straight to the connected screen exactly as
-    // before.
-    const outcome = await resolveShopifyBillingOutcome({
-      tenantId,
-      shopDomain: shop,
-      accessToken: creds.accessToken,
-      apiVersion: shopifyApiVersion(),
-      acquisitionSource: payload.hasIntent ? "in_app_connect" : "app_store",
-    }).catch(() => null);
-
-    if (outcome?.requiresPlanSelection && outcome.planSelectionUrl) {
+    // billing switched off goes straight to the connected screen.
+    if (outcome.requiresPlanSelection && outcome.planSelectionUrl) {
       res.redirect(outcome.planSelectionUrl);
       return;
     }

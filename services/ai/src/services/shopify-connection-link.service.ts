@@ -152,11 +152,13 @@ async function currentShopForTenant(
  * ownership question, not a data read, and the answer must never widen into
  * "here is the other workspace's connection".
  *
- * DISCONNECTED rows are included on purpose. An uninstall marks the row
- * DISCONNECTED and clears the token but keeps tenant ownership, which is what
- * makes a reinstall land back in the same workspace. Ignoring those rows here
- * would let a second workspace claim a store the moment the first one
- * uninstalled.
+ * DISCONNECTED rows are still returned (a reinstall lands back in the same
+ * workspace, and the billing-return page needs the owner), but a live row
+ * wins when both exist. Whether a DISCONNECTED row BLOCKS another workspace
+ * is `shopHeldElsewhere`'s question, and since 2026-10-29 it does not: a
+ * store left behind could otherwise never be connected anywhere again (the
+ * Shopify review store included). What claims it is a fresh Shopify install
+ * the store's owner just authorized, never something a user typed.
  */
 export async function findShopOwner(shopDomain: string): Promise<{
   tenantId: string;
@@ -174,11 +176,26 @@ export async function findShopOwner(shopDomain: string): Promise<{
       select: { id: true, tenantId: true, status: true, config: true },
     }),
   );
-  const match = rows.find(
+  // A store left DISCONNECTED in one workspace and connected in another has
+  // two rows; the live one is the owner (2026-10-29).
+  const matches = rows.filter(
     (r: any) => normalizeShopifyShopDomain((r.config as any)?.shopDomain) === shop,
   );
+  const match = matches.find((r: any) => r.status !== "DISCONNECTED") ?? matches[0];
   if (!match) return null;
   return { tenantId: match.tenantId, connectionId: match.id, status: match.status };
+}
+
+/**
+ * Another workspace still holds this store. A row it left DISCONNECTED does
+ * not count: billing moves such a store to the workspace that claims it, and
+ * the two must agree on what "taken" means (2026-10-29).
+ */
+export function shopHeldElsewhere(
+  owner: { tenantId: string; status: string } | null,
+  tenantId: string,
+): boolean {
+  return !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED";
 }
 
 /**
@@ -252,8 +269,8 @@ export async function linkShopifyShopToTenant(input: {
   // not a decision this code gets to make. The merchant disconnects from the
   // owning workspace, or an operator resolves it explicitly.
   const owner = await findShopOwner(shop);
-  if (owner && owner.tenantId !== input.tenantId) {
-    return { ok: false, reason: "shop_taken", conflictingTenantId: owner.tenantId };
+  if (shopHeldElsewhere(owner, input.tenantId)) {
+    return { ok: false, reason: "shop_taken", conflictingTenantId: owner!.tenantId };
   }
 
   // The other direction: this workspace already holds a DIFFERENT store.

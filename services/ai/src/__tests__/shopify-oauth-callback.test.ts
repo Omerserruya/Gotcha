@@ -44,6 +44,11 @@ const H = vi.hoisted(() => {
     replacing: { current: null as string | null },
     pendingCalls: [] as any[],
     exchange: v.fn(async () => ({ accessToken: "shpat_verysecret", scope: "read_orders" })),
+    /** Which workspace holds the shop in ai. */
+    owner: { current: null as any },
+    /** Billing's answer: an outcome, null (unreachable), or "taken" (409). */
+    billing: { current: null as any },
+    billingCalls: [] as any[],
   };
 });
 
@@ -97,8 +102,21 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   // (nothing to replace) so existing cases keep the plain connect path; the
   // multiple-store cases override H.replacing.
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
-  findShopOwner: vi.fn(async () => null),
+  findShopOwner: vi.fn(async () => H.owner.current),
+  shopHeldElsewhere: (owner: any, tenantId: string) => !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED",
 }));
+
+vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    resolveShopifyBillingOutcome: vi.fn(async (input: any) => {
+      H.billingCalls.push(input);
+      if (H.billing.current === "taken") throw new actual.CrossTenantShopError("held elsewhere");
+      return H.billing.current;
+    }),
+  };
+});
 
 vi.mock("../services/shopify-install-intent.service", () => ({
   INSTALL_INTENT_COOKIE: "gotcha_shopify_intent",
@@ -185,6 +203,9 @@ beforeEach(() => {
   H.linkCalls.length = 0;
   H.pendingCalls.length = 0;
   H.exchange.mockResolvedValue({ accessToken: "shpat_verysecret", scope: "read_orders" });
+  H.owner.current = null;
+  H.billingCalls.length = 0;
+  H.billing.current = { connectionId: "cc-1", state: "ACTIVE", grandfathered: false, requiresPlanSelection: false, planSelectionUrl: null };
 });
 
 // ─── Signature ───────────────────────────────────────────────
@@ -432,6 +453,35 @@ describe("redesign_studio flow", () => {
     expect(res.headers.location).not.toContain("p".repeat(64));
     expect(String(res.headers["set-cookie"] || "")).toContain("gotcha_shopify_pending=");
     expect(H.linkCalls).toHaveLength(0);
+  });
+
+  // ── 2026-10-29: billing refused after ai had already said Connected ──
+  it("billing refuses → error=shop_connected_elsewhere, ai never written", async () => {
+    H.stateResult.current = REDESIGN;
+    H.billing.current = "taken";
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=shop_connected_elsewhere`);
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("billing unreachable → error=billing_link_failed, ai never written", async () => {
+    H.stateResult.current = REDESIGN;
+    H.billing.current = null;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toBe(`${V2}?system=shopify&error=billing_link_failed`);
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("a live ai row elsewhere refuses before billing is asked; a DISCONNECTED one does not block", async () => {
+    H.stateResult.current = REDESIGN;
+    H.owner.current = { tenantId: "tenant-Z", connectionId: "ti-z", status: "CONNECTED" };
+    const live = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(live.headers.location).toBe(`${V2}?system=shopify&error=shop_connected_elsewhere`);
+    expect([H.billingCalls.length, H.linkCalls.length]).toEqual([0, 0]);
+
+    H.owner.current = { tenantId: "tenant-Z", connectionId: "ti-z", status: "DISCONNECTED" };
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect([H.billingCalls.length, H.linkCalls.length]).toEqual([1, 1]);
   });
 
   it("a store held by another workspace → error=shop_connected_elsewhere in v2", async () => {

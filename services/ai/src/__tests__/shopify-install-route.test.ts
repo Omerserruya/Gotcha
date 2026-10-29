@@ -54,6 +54,9 @@ const H = vi.hoisted(() => {
     owner: { current: null as { tenantId: string; connectionId: string; status: string } | null },
     /** Is GOTCHA Core paid (the claim's own rule)? */
     corePaid: { yes: true },
+    /** Billing's answer to the link: an outcome, null (unreachable), or "taken" (409). */
+    billing: { current: { connectionId: "cc-1", state: "PLAN_SELECTION_REQUIRED", grandfathered: false, requiresPlanSelection: false, planSelectionUrl: null } as any },
+    billingCalls: [] as any[],
   };
 });
 
@@ -116,7 +119,22 @@ vi.mock("../services/shopify-install-intent.service", () => ({
     H.pendings.delete(h);
     return v;
   }),
+  peekPendingAccessToken: vi.fn(async (h: any) => H.pendings.get(h)?.credentials?.accessToken ?? null),
 }));
+
+// Billing's link, as the bridge reports it. The real class, so the route's
+// instanceof check is the one under test.
+vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    resolveShopifyBillingOutcome: vi.fn(async (input: any) => {
+      H.billingCalls.push(input);
+      if (H.billing.current === "taken") throw new actual.CrossTenantShopError("held elsewhere");
+      return H.billing.current;
+    }),
+  };
+});
 
 vi.mock("../services/shopify-connection-link.service", () => ({
   SHOPIFY_OAUTH_SCOPES: "read_orders,read_products",
@@ -130,6 +148,7 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   // multiple-store cases override H.replacing.
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => H.owner.current),
+  shopHeldElsewhere: (owner: any, tenantId: string) => !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED",
 }));
 
 import router from "../routes/shopify-install";
@@ -177,6 +196,9 @@ beforeEach(() => {
   H.linkCalls.length = 0;
   H.linkResult.current = { ok: true, connectionId: "conn-1", reconnected: false };
   H.replacing.current = null;
+  H.owner.current = null;
+  H.billingCalls.length = 0;
+  H.billing.current = { connectionId: "cc-1", state: "PLAN_SELECTION_REQUIRED", grandfathered: false, requiresPlanSelection: false, planSelectionUrl: null };
   process.env.SHOPIFY_APP_HANDLE = "gotcha";
   // Both split variables start clear so a case that sets one is testing that
   // one. `SHOPIFY_APP_HANDLE` above remains the compatibility fallback.
@@ -786,6 +808,54 @@ describe("shopify install claim", () => {
     expect(res.body.error).toBe("shop_connected_to_another_workspace");
     // The conflicting workspace is never named to the caller.
     expect(JSON.stringify(res.body)).not.toContain("tenant-Z");
+  });
+
+  // ── 2026-10-29: billing refused, the claim said 200, ai said Connected ──
+  const claim = () => request(app()).post("/api/connectors/shopify/install/claim").send({ handle: PENDING });
+
+  it("billing refuses (held live elsewhere): 409 with the handle unspent, ai never written", async () => {
+    H.billing.current = "taken";
+    const res = await claim();
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: "shop_connected_to_another_workspace", data: { handle: PENDING } });
+    expect(H.linkCalls).toHaveLength(0);
+    expect(H.pendings.has(PENDING)).toBe(true);
+  });
+
+  it("billing unreachable: 503 billing_link_failed, handle unspent, ai never written; a retry then succeeds", async () => {
+    H.billing.current = null;
+    const res = await claim();
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ error: "billing_link_failed", data: { handle: PENDING } });
+    expect(H.linkCalls).toHaveLength(0);
+    expect(H.pendings.has(PENDING)).toBe(true);
+
+    H.billing.current = { connectionId: "cc-1", state: "ACTIVE", grandfathered: false, requiresPlanSelection: false, planSelectionUrl: null };
+    const again = await claim();
+    expect(again.status).toBe(200);
+    expect(again.body.data.billingState).toBe("ACTIVE");
+    expect(H.linkCalls).toHaveLength(1);
+  });
+
+  it("a LIVE ai row in another workspace refuses before billing is even asked", async () => {
+    H.owner.current = { tenantId: "tenant-Z", connectionId: "ti-z", status: "CONNECTED" };
+    const res = await claim();
+    expect([res.status, res.body.error]).toEqual([409, "shop_connected_to_another_workspace"]);
+    expect(H.billingCalls).toHaveLength(0);
+    expect(H.linkCalls).toHaveLength(0);
+  });
+
+  it("a DISCONNECTED ai row in another workspace does not block", async () => {
+    H.owner.current = { tenantId: "tenant-Z", connectionId: "ti-z", status: "DISCONNECTED" };
+    const res = await claim();
+    expect(res.status).toBe(200);
+    expect(H.billingCalls).toHaveLength(1);
+    expect(H.linkCalls).toHaveLength(1);
+  });
+
+  it("billing is linked with the pending token for the CALLER's workspace, before ai", async () => {
+    await claim();
+    expect(H.billingCalls[0]).toMatchObject({ tenantId: "tenant-A", accessToken: expect.any(String), acquisitionSource: "app_store" });
   });
 
   it("requires authentication and re-checks the connect permission on the CLAIMANT", async () => {

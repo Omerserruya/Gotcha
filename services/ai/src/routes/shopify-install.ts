@@ -59,6 +59,7 @@ import {
   readInstallIntent,
   discardInstallIntent,
   peekPendingConnection,
+  peekPendingAccessToken,
   consumePendingConnection,
   clearPendingInstallCookie,
   INSTALL_INTENT_COOKIE,
@@ -70,8 +71,9 @@ import {
   linkShopifyShopToTenant,
   pendingStoreReplacement,
   findShopOwner,
+  shopHeldElsewhere,
 } from "../services/shopify-connection-link.service";
-import { resolveShopifyBillingOutcome } from "../services/shopify-billing-bridge.service";
+import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
 
 const router = Router();
 
@@ -498,6 +500,58 @@ router.post(
       return;
     }
 
+    // ── Ownership, then billing, BEFORE the handle is spent ──
+    //
+    // Billing used to run after the link with its failure swallowed, so a
+    // store billing refused (2026-10-29: held by a workspace that had
+    // disconnected it) came back 200 with ai CONNECTED and no billing row -
+    // "No store connected" on the billing screen. Now either both hold the
+    // store or neither does, and a refusal leaves the handle unspent so the
+    // merchant can resolve it and claim again without reinstalling.
+    const taken = () =>
+      res.status(409).json({
+        error: "shop_connected_to_another_workspace",
+        detail:
+          `${summary.shopDomain} is already connected to a different GOTCHA workspace. ` +
+          "Disconnect it there first, then reconnect here.",
+        data: { shopDomain: summary.shopDomain, handle },
+      });
+    if (shopHeldElsewhere(await findShopOwner(summary.shopDomain), req.tenantId!)) {
+      taken();
+      return;
+    }
+
+    const accessToken = await peekPendingAccessToken(handle);
+    let outcome: Awaited<ReturnType<typeof resolveShopifyBillingOutcome>> = null;
+    try {
+      outcome = accessToken
+        ? await resolveShopifyBillingOutcome({
+            tenantId: req.tenantId!,
+            shopDomain: summary.shopDomain,
+            accessToken,
+            apiVersion: shopifyApiVersion(),
+            acquisitionSource: "app_store",
+          })
+        : null;
+    } catch (err: any) {
+      if (err instanceof CrossTenantShopError) {
+        taken();
+        return;
+      }
+      console.warn(`[shopify-install] claim billing link failed: ${err?.message}`);
+      outcome = null;
+    }
+    if (!outcome) {
+      // Billing unreachable, or Shopify did not give us the store's id. Nothing
+      // was written in ai; the same handle can be claimed again.
+      res.status(503).json({
+        error: "billing_link_failed",
+        detail: "We could not finish connecting the store. Nothing was changed; try again in a moment.",
+        data: { shopDomain: summary.shopDomain, handle },
+      });
+      return;
+    }
+
     const pending = await consumePendingConnection(handle);
     if (!pending) {
       // Lost the race, or already claimed. Single-use, by construction.
@@ -538,20 +592,6 @@ router.post(
       return;
     }
 
-    // ── Billing ──
-    //
-    // An App Store install claimed into a workspace reaches billing here
-    // instead of in the OAuth callback, because until this moment there was no
-    // workspace to decide anything about. Same call, same rules: it runs after
-    // the link and can only decide what to SHOW next.
-    const outcome = await resolveShopifyBillingOutcome({
-      tenantId: req.tenantId!,
-      shopDomain: pending.shopDomain,
-      accessToken: (pending.credentials as any)?.accessToken ?? "",
-      apiVersion: shopifyApiVersion(),
-      acquisitionSource: "app_store",
-    }).catch(() => null);
-
     // The installation is now a connection, so the cookie must not survive to
     // offer it again on the next page load.
     clearPendingInstallCookie(res);
@@ -563,8 +603,8 @@ router.post(
         flow: pending.flow ?? null,
         // The page navigates here when a plan is owed. Null for a grandfathered
         // merchant, for one already paying, and whenever billing is off.
-        billingState: outcome?.state ?? null,
-        planSelectionUrl: outcome?.requiresPlanSelection ? outcome.planSelectionUrl : null,
+        billingState: outcome.state ?? null,
+        planSelectionUrl: outcome.requiresPlanSelection ? outcome.planSelectionUrl : null,
       },
     });
   },

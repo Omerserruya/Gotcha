@@ -198,11 +198,24 @@ describe("linkShopifyShopToTenant", () => {
     expect(H.rows[0].tenantId).toBe("t1");
   });
 
-  it("refuses to move an UNINSTALLED store to a different workspace either", async () => {
+  // 2026-10-29: reversed on purpose. A store left DISCONNECTED in one
+  // workspace could never be connected anywhere else (the Shopify review
+  // store included). This function runs only after a fresh Shopify OAuth the
+  // store's owner just authorized; billing moves its row by the same rule.
+  it("an UNINSTALLED store CAN be connected by a different workspace after a fresh install", async () => {
     await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
     H.rows[0].status = "DISCONNECTED";
-    const stolen = await linkShopifyShopToTenant({ tenantId: "t2", shopDomain: SHOP, credentials: CREDS });
-    expect(stolen).toMatchObject({ ok: false, reason: "shop_taken" });
+    const claimed = await linkShopifyShopToTenant({ tenantId: "t2", shopDomain: SHOP, credentials: CREDS });
+    expect(claimed).toMatchObject({ ok: true });
+  });
+
+  it("a store LIVE in another workspace is still refused, in any non-DISCONNECTED status", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    for (const status of ["CONNECTED", "ERROR", "PENDING"]) {
+      H.rows[0].status = status;
+      const stolen = await linkShopifyShopToTenant({ tenantId: "t2", shopDomain: SHOP, credentials: CREDS });
+      expect(stolen).toMatchObject({ ok: false, reason: "shop_taken" });
+    }
   });
 
   it("lets two DIFFERENT stores connect to two different workspaces", async () => {
@@ -339,18 +352,18 @@ describe("a DISCONNECTED store is not a store this workspace holds", () => {
     expect((r as any).replacedShopDomain).toBeUndefined();
   });
 
-  it("but the shop still cannot be taken by ANOTHER workspace", async () => {
-    // Ownership is deliberately retained across an uninstall so a reinstall
-    // lands back in the same workspace. That must not be weakened by the above.
+  it("another workspace may claim it after a fresh install, and then owns it (2026-10-29)", async () => {
+    // A reinstall into the SAME workspace still lands back there (above). A
+    // different workspace's fresh, owner-authorized install now claims it, and
+    // the live row it gets is the owner from then on.
     await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
     H.rows.find((r: any) => r.tenantId === "t1").status = "DISCONNECTED";
 
-    const stolen = await linkShopifyShopToTenant({
-      tenantId: "t2",
-      shopDomain: SHOP,
-      credentials: CREDS,
-    });
-    expect(stolen).toMatchObject({ ok: false, reason: "shop_taken" });
+    const claimed = await linkShopifyShopToTenant({ tenantId: "t2", shopDomain: SHOP, credentials: CREDS });
+    expect(claimed).toMatchObject({ ok: true });
+    // And t1 cannot take it back while t2 holds it live.
+    const back = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(back).toMatchObject({ ok: false, reason: "shop_taken" });
   });
 });
 
