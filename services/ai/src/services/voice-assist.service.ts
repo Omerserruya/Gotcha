@@ -182,6 +182,8 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
         copilotConfig,
         customerMemory,
         locale,
+        // A call's locale is already the agent's (their own, else the workspace's).
+        agentLocale: locale,
         signal: turn.signal,
       };
       suggestions = await getSuggestions(context);

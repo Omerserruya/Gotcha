@@ -41,6 +41,7 @@ import {
   type CopilotDiagContext,
 } from "./copilot-diagnostics.service";
 import type { CrmStateFlags } from "./prospect-state";
+import { quickActionText } from "../lib/action-labels";
 
 // Terminator tool - copilot uses this to "finish" with structured output.
 //
@@ -569,7 +570,7 @@ export class OpenAIProvider implements AIProvider {
             if (adv.quickAction) {
               quickActions.push({
                 id: `quick-${quickActions.length}`,
-                text: humanizeQuickAction(adv.quickAction.tool, adv.quickAction.args),
+                text: quickActionText(adv.quickAction.tool, context.agentLocale),
                 confidence: 0.9,
                 type: "quick_action",
                 quickAction: adv.quickAction,
@@ -592,7 +593,7 @@ export class OpenAIProvider implements AIProvider {
             try { qaArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep {} */ }
             quickActions.push({
               id: `quick-${quickActions.length}`,
-              text: humanizeQuickAction(toolName, qaArgs),
+              text: quickActionText(toolName, context.agentLocale),
               confidence: 0.9,
               type: "quick_action",
               quickAction: { tool: toolName, args: qaArgs, reason: "Recommended by Co-Pilot" },
@@ -613,7 +614,7 @@ export class OpenAIProvider implements AIProvider {
               tool: toolName,
               executed: false,
               executionMode: "recommended",
-              result: `recommended to human: ${humanizeQuickAction(toolName, qaArgs)}`,
+              result: `recommended to human: ${toolName}`,
             }, diag);
             continue;
           }
@@ -626,7 +627,7 @@ export class OpenAIProvider implements AIProvider {
             const qa = res.sideEffect.proposeQuickAction;
             quickActions.push({
               id: `quick-${quickActions.length}`,
-              text: humanizeQuickAction(qa.tool, qa.args),
+              text: quickActionText(qa.tool, context.agentLocale),
               confidence: 0.9,
               type: "quick_action",
               quickAction: qa,
@@ -1144,18 +1145,6 @@ const LOCALE_NAME: Record<string, string> = {
   fr: "French", de: "German", pt: "Portuguese", ru: "Russian",
   zh: "Chinese", ja: "Japanese",
 };
-
-function humanizeQuickAction(toolName: string, args: Record<string, unknown>): string {
-  const slug = toolName.startsWith("integration_") ? toolName.slice("integration_".length) : toolName;
-  const verb = slug.replace(/_/g, " ");
-  const preview = Object.entries(args)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .slice(0, 3)
-    .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join(", ");
-  return preview ? `${verb} - ${preview}` : verb;
-}
-
 
 // ─── Copilot side chat: the propose_reply terminator ─────────────────────────
 

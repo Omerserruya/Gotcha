@@ -25,7 +25,7 @@
  * falls back to generating, because that fallback IS the defect being fixed.
  * ════════════════════════════════════════════════════════════════════════════
  */
-import { prisma, getRedis, isEntitled, resolveConversationLocale } from "@chatcenter/shared";
+import { prisma, getRedis, isEntitled, resolveConversationLocale, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getEffectiveCopilotConfig, getSuggestions, type ConversationContext } from "./ai-assist.service";
 import { publishConvEvent } from "./intelligence/events";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
@@ -188,6 +188,13 @@ async function buildContext(
     conversationId: conversation.id,
     fallbackUserId: opts.fallbackUserId ?? (conversation as any).assignedAgentId ?? undefined,
   }).catch(() => undefined);
+  // What is said to the agent (a proposed action's label) is in the agent's
+  // language: the person refreshing, else the assigned agent, else the
+  // workspace default.
+  const agentLocale = await resolveEffectiveLocale({
+    tenantId,
+    userId: opts.fallbackUserId ?? (conversation as any).assignedAgentId ?? undefined,
+  }).then((r) => r.effective).catch(() => undefined);
 
   return {
     copilotMode: copilotConfig.copilotMode || "READY_MESSAGE",
@@ -199,6 +206,7 @@ async function buildContext(
       })),
       copilotConfig,
       locale,
+      agentLocale,
       signal: opts.signal,
       conversationMeta: {
         channel: conversation.channel,

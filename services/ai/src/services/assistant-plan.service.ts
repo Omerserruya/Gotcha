@@ -16,6 +16,7 @@ import { channelName } from "./system-tools.service";
 import { visibleConversation, customersConversation } from "./assistant-conversation-read.service";
 import { visibleCustomer } from "./assistant-customers.service";
 import { customerDisplayName } from "./assistant-query.service";
+import { ACTION_LABELS } from "../lib/action-labels";
 
 type Locale = "he" | "en";
 
@@ -49,19 +50,8 @@ const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null
 const heb = (letter: string, word: string) => (/^[A-Za-z0-9]/.test(word) ? `${letter}-${word}` : `${letter}${word}`);
 const quote = (s: string) => `“${s.length > 60 ? `${s.slice(0, 57)}...` : s}”`;
 
-/** Generic wording for the actions that keep their own params. */
-const OTHER: Record<string, Record<Locale, string>> = {
-  send_message: { he: "לשלוח הודעה", en: "Send a message" },
-  tag_contact: { he: "לתייג", en: "Tag" },
-  schedule_followup: { he: "לתזמן הודעת המשך", en: "Schedule a follow-up" },
-  schedule_meeting: { he: "לקבוע פגישה", en: "Book a meeting" },
-  create_broadcast: { he: "ליצור קמפיין", en: "Create a campaign" },
-  schedule_broadcast: { he: "לתזמן קמפיין", en: "Schedule a campaign" },
-  create_workflow: { he: "ליצור אוטומציה", en: "Create an automation" },
-  resolve_identity: { he: "לזהות את הלקוח", en: "Identify the customer" },
-  merge_contacts: { he: "למזג את פרטי הלקוח", en: "Merge the customer's records" },
-  link_customer_identifier: { he: "לקשר פרט מזהה ללקוח", en: "Link an identifier to the customer" },
-};
+/** Generic wording for the actions that keep their own params (one table, shared with the Copilot). */
+const OTHER = ACTION_LABELS;
 
 async function userName(tenantId: string, userId: string): Promise<string | null> {
   const u = await prisma.user.findFirst({ where: { id: userId, tenantId, isActive: true }, select: { name: true, email: true } });

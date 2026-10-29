@@ -24,6 +24,11 @@ export interface ConversationContext {
   copilotConfig?: CopilotConfigData | null;
   locale?: string;
   /**
+   * The agent's own language, for what is said TO the agent (a proposed
+   * action's label). `locale` is the customer's, for the drafts.
+   */
+  agentLocale?: string;
+  /**
    * Customer + conversation metadata for the copilot's "Customer &
    * Conversation Info" block. Sourced from the Conversation row by the
    * route handler - keep optional so non-inbox callers still work.
