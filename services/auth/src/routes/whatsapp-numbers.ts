@@ -599,7 +599,9 @@ async function refreshUnprofiled(req: Request, res: Response) {
   // here, on the click, and only while unknown: a stored wabaId or name is
   // never overwritten, and an ambiguous or failed answer leaves both as they were.
   let meta: Record<string, unknown> = withWhatsAppNumberDetails(account.platformMeta, details);
-  if (!storedText(account.platformMeta, "wabaId")) {
+  if (storedText(account.platformMeta, "wabaId")) {
+    console.log("[wa-numbers] waba lookup: skipped reason=already_known");
+  } else {
     const waba = await wabaOfToken(accessToken, { id: META_APP_ID, secret: META_APP_SECRET });
     if (waba) meta = { ...meta, wabaId: waba.wabaId, ...(storedText(account.platformMeta, "wabaName") ? {} : { wabaName: waba.wabaName }) };
   }
