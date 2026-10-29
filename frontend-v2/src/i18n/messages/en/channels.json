@@ -180,6 +180,24 @@
     },
     "close": "Close",
     "panelLine": "WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
+    "panelLineAccount": "<account>{name}</account> WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
+    "panelLineAccounts": "{accounts} WhatsApp Business accounts · {count, plural, one {one number} other {# numbers}}",
+    "account": "<account>{name}</account> account",
+    "primary": {
+      "chip": "Primary",
+      "rowLabel": "Sends what isn't tied to a number",
+      "thisNumber": "This number",
+      "set": "Set as primary",
+      "setting": "Setting…",
+      "done": "<ltr>{number}</ltr> is now the primary number.",
+      "note": "Anything that isn't sent from a particular number goes from the primary one.",
+      "failed": {
+        "failed": "{hasOld, select, yes {Not changed - <ltr>{old}</ltr> is still the primary number. Try again.} other {Not changed. Try again.}}",
+        "not_active": "{hasOld, select, yes {Not changed - this number isn't active, so it can't send. <ltr>{old}</ltr> is still the primary number.} other {Not changed - this number isn't active, so it can't send.}}",
+        "not_found": "Not changed - that number isn't connected here any more. Reload the page.",
+        "forbidden": "Not changed - your role can't change the primary number."
+      }
+    },
     "tab": {
       "numbers": "Numbers",
       "templates": "Templates",

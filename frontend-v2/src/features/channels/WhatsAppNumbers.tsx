@@ -1,20 +1,27 @@
 import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import { Link } from '@/i18n/navigation';
 
 import {
+  accountIds,
+  accountLabel,
   advisoryChecks,
   blockingChecks,
+  byAccount,
+  numberCount,
   deliveryState,
   repliesStillFlow,
   templatesPaused,
   fixableHere,
   type HealthCheck,
+  type AccountName,
   type NumbersResponse,
   type UnprofiledNumber,
   type WhatsAppNumber,
 } from '@/api/contracts/whatsapp-numbers';
 
+import { PrimaryNumber } from './PrimaryNumber';
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import rowLink from '@/design-system/styles/row-link.module.css';
@@ -120,6 +127,39 @@ export async function WhatsAppNumbers({
         x.block !== null,
     );
 
+  /*
+    ★ Two business accounts are two separate WhatsApp accounts (Omer,
+    2026-10-29): each row says which one it is on, and the rows are grouped
+    by account. With one, the panel's line names it and the rows say nothing.
+  */
+  const severalAccounts = accountIds(numbers).length > 1;
+  const choosing = numbers.primary !== null && numberCount(numbers) > 1;
+  const labelOf = (n: { phoneNumber: string | null; name: string | null }) =>
+    n.phoneNumber ?? n.name ?? t('aNumber');
+  const primaryRow = [...numbers.data, ...numbers.unprofiled].find((n) => n.isPrimary);
+  const placeOf = (n: WhatsAppNumber | UnprofiledNumber): Place => ({
+    account: severalAccounts ? accountLabel(n) : null,
+    choosing,
+    isPrimary: n.isPrimary,
+    channelAccountId: n.channelAccountId,
+    label: labelOf(n),
+    current: primaryRow ? labelOf(primaryRow) : null,
+  });
+  const rows = byAccount([
+    ...numbers.data.map((n) => ({
+      kind: 'profiled' as const,
+      key: n.id,
+      wabaId: n.wabaId,
+      number: n,
+    })),
+    ...numbers.unprofiled.map((u) => ({
+      kind: 'unprofiled' as const,
+      key: u.channelAccountId,
+      wabaId: u.wabaId,
+      number: u,
+    })),
+  ]);
+
   return (
     <>
       {paused.length > 0 ? (
@@ -160,20 +200,71 @@ export async function WhatsAppNumbers({
       ) : null}
 
       <ul className={styles.numbers} data-testid="whatsapp-numbers">
-        {numbers.data.map((n) => (
-          <li key={n.id}>
-            <NumberCard number={n} t={t} locale={locale} />
-          </li>
-        ))}
-        {numbers.unprofiled.map((u) => (
-          <li key={u.channelAccountId}>
-            <UnprofiledCard number={u} t={t} locale={locale} timeZone={timeZone} />
-          </li>
-        ))}
+        {rows.map((row) =>
+          row.kind === 'profiled' ? (
+            <li key={row.key}>
+              <NumberCard number={row.number} t={t} locale={locale} place={placeOf(row.number)} />
+            </li>
+          ) : (
+            <li key={row.key}>
+              <UnprofiledCard
+                number={row.number}
+                t={t}
+                locale={locale}
+                timeZone={timeZone}
+                place={placeOf(row.number)}
+              />
+            </li>
+          ),
+        )}
         <li>
           <AddNumber t={t} connectable={connectable} />
         </li>
       </ul>
+      {/* What "primary" means, once, and only while there is a choice to make. */}
+      {choosing ? (
+        <p className={styles.primaryNote} data-testid="whatsapp-primary-note">
+          {t('primary.note')}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Where a number stands among the others: which business account it is on
+ * (said only when there is more than one), and whether it is the primary
+ * (drawn only when the server knows one and there are two numbers or more).
+ */
+interface Place {
+  readonly account: AccountName | null;
+  readonly choosing: boolean;
+  readonly isPrimary: boolean;
+  readonly channelAccountId: string | null;
+  /** This number and the primary now, as their rows name them. */
+  readonly label: string;
+  readonly current: string | null;
+}
+
+/**
+ * The panel's line under "WhatsApp": the business account by name and how
+ * many numbers (02: "Aviv & Co. WhatsApp Business account · 2 numbers"); with
+ * two accounts or more, how many of each. No name known: as before.
+ */
+export function WhatsAppLine({ numbers, t }: { readonly numbers: NumbersResponse; readonly t: T }) {
+  const count = numberCount(numbers);
+  const ids = accountIds(numbers);
+  if (ids.length > 1) return <>{t('panelLineAccounts', { accounts: ids.length, count })}</>;
+  const first = [...numbers.data, ...numbers.unprofiled].find((n) => n.wabaId === ids[0]);
+  const name = first ? accountLabel(first) : null;
+  if (name === null) return <>{t('panelLine', { count })}</>;
+  return (
+    <>
+      {t.rich('panelLineAccount', {
+        count,
+        name: name.text,
+        account: (chunks) => <AccountBdi name={name}>{chunks}</AccountBdi>,
+      })}
     </>
   );
 }
@@ -182,10 +273,12 @@ function NumberCard({
   number,
   t,
   locale,
+  place,
 }: {
   readonly number: WhatsAppNumber;
   readonly t: T;
   readonly locale: string;
+  readonly place: Place;
 }) {
   const delivery = deliveryState(number.health);
   const blocking = blockingChecks(number.health);
@@ -195,7 +288,9 @@ function NumberCard({
     <article className={styles.number} data-testid="whatsapp-number" data-delivery={delivery}>
       <p className={styles.numberLine}>
         <NumberIdentity phone={number.phoneNumber} name={number.name} t={t} />
+        <PrimaryChip place={place} t={t} />
       </p>
+      <AccountLine place={place} t={t} />
 
       {/*
         The verdict, in four values rather than two. `inbound_only` gets a
@@ -285,9 +380,42 @@ function NumberCard({
             })
           : t('neverChecked')}
       </p>
-      <NumberRows t={t} />
+      <NumberRows t={t} place={place} />
     </article>
   );
+}
+
+/** "Primary", first among the row's chips, while there is a choice. */
+function PrimaryChip({ place, t }: { readonly place: Place; readonly t: T }) {
+  return place.choosing && place.isPrimary ? (
+    <span className={styles.chipQuiet} data-testid="whatsapp-primary-chip">
+      {t('primary.chip')}
+    </span>
+  ) : null;
+}
+
+/** A name in its own direction; the `…last4` stand-in always left to right. */
+function AccountBdi({
+  name,
+  children,
+}: {
+  readonly name: AccountName;
+  readonly children: ReactNode;
+}) {
+  return <bdi dir={name.unnamed ? 'ltr' : 'auto'}>{children}</bdi>;
+}
+
+/** Which business account the number is on - only when there is more than one. */
+function AccountLine({ place, t }: { readonly place: Place; readonly t: T }) {
+  const account = place.account;
+  return account ? (
+    <p className={styles.numberAccount} data-testid="whatsapp-account">
+      {t.rich('account', {
+        name: account.text,
+        account: (chunks) => <AccountBdi name={account}>{chunks}</AccountBdi>,
+      })}
+    </p>
+  ) : null;
 }
 
 function CheckList({ checks, t }: { readonly checks: readonly HealthCheck[]; readonly t: T }) {
@@ -373,11 +501,13 @@ function UnprofiledCard({
   t,
   locale,
   timeZone,
+  place,
 }: {
   readonly number: UnprofiledNumber;
   readonly t: T;
   readonly locale: string;
   readonly timeZone: string | undefined;
+  readonly place: Place;
 }) {
   /*
     02's number card, in its shape: the number over its state; then what is
@@ -399,6 +529,7 @@ function UnprofiledCard({
           <NumberIdentity phone={number.phoneNumber} name={number.name} t={t} />
         </span>
         <span className={styles.numberChips}>
+          <PrimaryChip place={place} t={t} />
           {number.qualityRating ? (
             <span
               className={styles.chipQuiet}
@@ -415,6 +546,7 @@ function UnprofiledCard({
           )}
         </span>
       </div>
+      <AccountLine place={place} t={t} />
       {number.verifiedName ? (
         <p className={styles.lastChecked} data-testid="whatsapp-verified-name">
           {t('unprofiled.verifiedName')} <UserText>{number.verifiedName}</UserText>
@@ -433,7 +565,7 @@ function UnprofiledCard({
           })}
         </p>
       ) : null}
-      <NumberRows t={t} />
+      <NumberRows t={t} place={place} />
     </article>
   );
 }
@@ -444,7 +576,7 @@ function UnprofiledCard({
  * decide it - said once, with the way there. "AI mode", "Answered by" and
  * "First greeting" were a field nothing read and two that did not exist.
  */
-function NumberRows({ t }: { readonly t: T }) {
+function NumberRows({ t, place }: { readonly t: T; readonly place: Place }) {
   return (
     <>
       <dl className={styles.numberRows}>
@@ -458,6 +590,19 @@ function NumberRows({ t }: { readonly t: T }) {
             </Link>
           </dd>
         </div>
+        {place.choosing ? (
+          <div>
+            <dt>{t('primary.rowLabel')}</dt>
+            <dd>
+              <PrimaryNumber
+                channelAccountId={place.channelAccountId}
+                isPrimary={place.isPrimary}
+                phone={place.label}
+                current={place.current}
+              />
+            </dd>
+          </div>
+        ) : null}
       </dl>
       <p className={styles.whoAnswersNote} data-testid="number-who-answers">
         {t.rich('rows.whoAnswers', {

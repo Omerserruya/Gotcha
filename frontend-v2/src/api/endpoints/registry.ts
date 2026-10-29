@@ -722,6 +722,12 @@ export const channelEndpoints = {
    * when it was the last number on it. Never pressed by a test or a capture.
    */
   whatsappNumber: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}', { id }),
+  /**
+   * PATCH the workspace's primary WhatsApp number - what sends anything no
+   * number was chosen for. `{ channelAccountId }`; null goes back to the
+   * default, the first connected.
+   */
+  whatsappPrimary: () => endpoint('/api/channels/whatsapp/primary'),
 } as const;
 
 /**

@@ -397,6 +397,33 @@
     color: var(--text-subtle);
   }
 
+  /* Which business account a number is on, under the number - with two or more. */
+  .numberAccount {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* "This number", or Set as primary, and what the press did. */
+  .primaryValue {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .primaryDone {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* What "primary" means: said once, under the list. */
+  .primaryNote {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
   /*
    * The verdict. Four values, not two - a number receiving while Meta blocks
    * its replies is doing half its job, and the half it is doing is the one the

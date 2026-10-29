@@ -179,7 +179,25 @@
       "noLanguageShortcut": "בעיצוב יש קיצור דרך להוספת שפת מענה חסרה מכאן. אין לאן להוסיף - GOTCHA שומרת שפה אחת ועונה לכל לקוח בשפה שלו בכל מקרה."
     },
     "close": "סגירה",
-    "panelLine": "חשבון WhatsApp Business · {count, plural, =0 {עדיין אין מספרים} one {מספר אחד} other {# מספרים}}",
+    "panelLine": "חשבון WhatsApp Business‏ · {count, plural, =0 {עדיין אין מספרים} one {מספר אחד} other {# מספרים}}",
+    "panelLineAccount": "חשבון WhatsApp Business ‏<account>{name}</account> · {count, plural, =0 {עדיין אין מספרים} one {מספר אחד} other {# מספרים}}",
+    "panelLineAccounts": "{accounts} חשבונות WhatsApp Business‏ · {count, plural, one {מספר אחד} other {# מספרים}}",
+    "account": "חשבון ‏<account>{name}</account>",
+    "primary": {
+      "chip": "ראשי",
+      "rowLabel": "שולח את מה שלא משויך למספר",
+      "thisNumber": "המספר הזה",
+      "set": "הגדרה כראשי",
+      "setting": "מגדירים…",
+      "done": "<ltr>{number}</ltr> הוא עכשיו המספר הראשי.",
+      "note": "כל מה שלא נשלח ממספר מסוים יוצא מהמספר הראשי.",
+      "failed": {
+        "failed": "{hasOld, select, yes {לא שונה - <ltr>{old}</ltr> עדיין המספר הראשי. אפשר לנסות שוב.} other {לא שונה. אפשר לנסות שוב.}}",
+        "not_active": "{hasOld, select, yes {לא שונה - המספר הזה לא פעיל, ולכן לא יכול לשלוח. <ltr>{old}</ltr> עדיין המספר הראשי.} other {לא שונה - המספר הזה לא פעיל, ולכן לא יכול לשלוח.}}",
+        "not_found": "לא שונה - המספר הזה כבר לא מחובר כאן. כדאי לטעון את הדף מחדש.",
+        "forbidden": "לא שונה - התפקיד שלכם לא מאפשר לשנות את המספר הראשי."
+      }
+    },
     "tab": {
       "numbers": "מספרים",
       "templates": "תבניות",
