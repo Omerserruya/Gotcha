@@ -21,13 +21,15 @@ vi.hoisted(() => {
 });
 vi.mock("ioredis", () => ({ default: class { on = vi.fn(); quit = vi.fn(); publish = vi.fn(); subscribe = vi.fn(); async get() { return null; } async set() { return "OK"; } async del() { return 0; } } }));
 
-const H = vi.hoisted(() => ({ subscribeFails: false, existing: null as any, writes: [] as any[], numbers: [] as any[], legacy: [] as any[], details: {} as any, accounts: [] as any[], slots: new Set<string>(), detailsFail: false, graphReads: 0 }));
+const H = vi.hoisted(() => ({ subscribeFails: false, existing: null as any, writes: [] as any[], numbers: [] as any[], legacy: [] as any[], details: {} as any, accounts: [] as any[], slots: new Set<string>(), detailsFail: false, graphReads: 0, scopes: [] as any[], debugFail: false, wabaFail: false, debugReads: 0 }));
 
 vi.mock("axios", () => ({
   default: {
     get: async (url: string) => {
       if (url.endsWith("/oauth/access_token")) return { data: { access_token: "business-token-0123456789" } };
       if (url.endsWith("/pn_1")) { H.graphReads++; if (H.detailsFail) throw new Error("graph down"); return { data: H.details }; }
+      if (url.endsWith("/debug_token")) { H.debugReads++; if (H.debugFail) throw new Error("debug down"); return { data: { data: { granular_scopes: H.scopes } } }; }
+      if (/\/waba_\d+$/.test(url)) { if (H.wabaFail) throw new Error("waba down"); return { data: { id: url.split("/").pop(), name: "Shop North" } }; }
       throw new Error(`unexpected GET ${url}`);
     },
     post: async (url: string) => {
@@ -84,6 +86,7 @@ const connect = () => request(app).post("/api/channels/connect/whatsapp").send({
 beforeEach(() => {
   H.subscribeFails = false;
   H.existing = null; H.writes = []; H.numbers = []; H.legacy = []; H.accounts = []; H.slots = new Set(); H.detailsFail = false; H.graphReads = 0;
+  H.scopes = []; H.debugFail = false; H.wabaFail = false; H.debugReads = 0;
   H.details = { id: "pn_1", display_phone_number: "+972 52-540-1686", verified_name: "GOTCHA Demo", quality_rating: "GREEN" };
 });
 
@@ -148,6 +151,43 @@ describe("★ refresh from Meta, for an unprofiled account (POST /numbers/:chann
     expect(r.body.data).toMatchObject({ channelAccountId: "ca_1", phoneNumber: "+972 52-540-1686", verifiedName: "GOTCHA Demo", qualityRating: "GREEN" });
     expect(Date.now() - Date.parse(r.body.data.lastHealthCheck)).toBeLessThan(5000);
     expect(H.accounts[0].platformMeta).toEqual({ wabaId: "waba_1", displayPhoneNumber: "+972 52-540-1686", verifiedName: "GOTCHA Demo", qualityRating: "GREEN" });
+  });
+
+  // 2026-10-29: a number added by hand never recorded its WABA.
+  describe("a number with no stored WABA learns it on the click", () => {
+    const manual = () => account({ platformMeta: { displayPhoneNumber: "+972 55-777-3421" } });
+    const scope = (ids: string[]) => [{ scope: "whatsapp_business_messaging", target_ids: ["x"] }, { scope: "whatsapp_business_management", target_ids: ids }];
+
+    it("exactly one WABA in the token's scopes: wabaId and wabaName stored, the rest kept", async () => {
+      H.accounts = [manual()];
+      H.scopes = scope(["waba_9"]);
+      const r = await refresh();
+      expect(r.status).toBe(200);
+      expect(r.body.data).toMatchObject({ wabaId: "waba_9", wabaName: "Shop North" });
+      expect(H.accounts[0].platformMeta).toMatchObject({ displayPhoneNumber: "+972 52-540-1686", wabaId: "waba_9", wabaName: "Shop North" });
+    });
+
+    it.each([
+      ["several WABAs (no guess)", () => { H.scopes = scope(["waba_1", "waba_2"]); }],
+      ["no WABA in the scopes", () => { H.scopes = []; }],
+      ["debug_token failing", () => { H.scopes = scope(["waba_9"]); H.debugFail = true; }],
+      ["the WABA name read failing", () => { H.scopes = scope(["waba_9"]); H.wabaFail = true; }],
+    ])("%s: nothing stored about the WABA, the refresh still succeeds", async (_n, set) => {
+      H.accounts = [manual()];
+      (set as () => void)();
+      const r = await refresh();
+      expect(r.status).toBe(200);
+      expect(H.accounts[0].platformMeta).not.toHaveProperty("wabaId");
+      expect(H.accounts[0].platformMeta).not.toHaveProperty("wabaName");
+    });
+
+    it("a stored wabaId is never asked about or overwritten", async () => {
+      H.accounts = [account({ platformMeta: { wabaId: "waba_1", wabaName: "Kept" } })];
+      H.scopes = scope(["waba_9"]);
+      await refresh();
+      expect(H.debugReads).toBe(0);
+      expect(H.accounts[0].platformMeta).toMatchObject({ wabaId: "waba_1", wabaName: "Kept" });
+    });
   });
 
   it("once a minute per account: the second call is 429 and reads nothing", async () => {

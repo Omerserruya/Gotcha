@@ -47,6 +47,7 @@ import {
   PrimaryNumberError,
 } from "@chatcenter/shared";
 import { inspectDecideOnboard } from "../services/whatsapp/onboarding.service";
+import { wabaOfToken } from "../services/whatsapp/waba-of-token";
 import {
   startSignupSession,
   readSignupSession,
@@ -594,9 +595,17 @@ async function refreshUnprofiled(req: Request, res: Response) {
   if (!details) {
     return res.status(502).json({ error: "Meta did not answer for this number. Nothing was changed.", code: "META_UNREADABLE" });
   }
+  // A number added by hand never recorded its business account. Asked of Meta
+  // here, on the click, and only while unknown: a stored wabaId or name is
+  // never overwritten, and an ambiguous or failed answer leaves both as they were.
+  let meta: Record<string, unknown> = withWhatsAppNumberDetails(account.platformMeta, details);
+  if (!storedText(account.platformMeta, "wabaId")) {
+    const waba = await wabaOfToken(accessToken, { id: META_APP_ID, secret: META_APP_SECRET });
+    if (waba) meta = { ...meta, wabaId: waba.wabaId, ...(storedText(account.platformMeta, "wabaName") ? {} : { wabaName: waba.wabaName }) };
+  }
   const updated = await prisma.channelAccount.update({
     where: { id: account.id },
-    data: { platformMeta: withWhatsAppNumberDetails(account.platformMeta, details) as any, lastHealthCheck: new Date() },
+    data: { platformMeta: meta as any, lastHealthCheck: new Date() },
     select: UNPROFILED_SELECT,
   });
   const primary = await primaryWhatsAppState(req.tenantId!, prisma);
