@@ -1,9 +1,10 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
-import { Link, useRouter } from '@/i18n/navigation';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
 
 import {
   claimShopifyInstall,
@@ -93,42 +94,74 @@ export function ShopifyConnect({
 }
 
 /**
- * Back from Shopify with a store waiting to be claimed - to replace the one
- * connected now, or one that did not finish. No design yet (Omer): a
- * sentence and a button, in 10's existing shape. Nothing is replaced before
- * the press.
+ * Back from Shopify with `pending=1`: a store waiting to be claimed - to
+ * replace the one connected now, or one that did not finish - or, when the
+ * page found no approval, why there is nothing to claim. No design yet
+ * (Omer): a sentence and a button, in 10's existing shape. Nothing is
+ * replaced before the press.
+ *
+ * ★ ONE component for all three, holding what the claim did (prod,
+ *   2026-10-29). A successful claim spends the cookie and revalidates the
+ *   page, which then reads "no approval" - and when this was two components,
+ *   the page swapped the claimed banner for "That approval has expired or was
+ *   already used" right after a claim that worked. Here an ok claim is said,
+ *   whatever the page reads after it; "gone" is only what the page found on
+ *   arrival. Then the browser leaves the pending URL: to Shopify's plan page
+ *   when the server owes one, else this page without `pending` - where the
+ *   store's state is the server's to say.
  */
 export function ShopifyPending({
-  shopDomain,
+  pending,
   replace,
+  helpUrl,
 }: {
-  readonly shopDomain: string;
+  /** The server's read on arrival: the store's domain, `'gone'`, or `null` (unread). */
+  readonly pending: string | 'gone' | null;
   readonly replace: boolean;
+  readonly helpUrl: string | null;
 }) {
   const t = useTranslations('capabilities.shopify.pending');
   const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
   const [result, setResult] = useState<ShopifyClaim | null>(null);
+  const [claimed, setClaimed] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const shopDomain = typeof pending === 'string' && pending !== 'gone' ? pending : null;
   /* `reason=claim` that met another store: the question becomes "replace it?". */
   const conflict = result && !result.ok && result.reason === 'another_store_connected';
   const replacing = replace || Boolean(conflict);
 
-  const claim = () =>
+  const claim = () => {
+    if (shopDomain === null) return;
     startTransition(async () => {
       const done = await claimShopifyInstall(replacing);
       setResult(done);
       if (!done.ok) return;
+      setClaimed(shopDomain);
       // A plan is owed: Shopify's page is the next step, so go there.
-      if (done.planSelectionUrl) window.location.assign(done.planSelectionUrl);
-      else router.refresh();
+      if (done.planSelectionUrl) {
+        window.location.assign(done.planSelectionUrl);
+        return;
+      }
+      // Off the pending URL: the approval is spent, and the page says the store's state.
+      const rest = new URLSearchParams(search.toString());
+      rest.delete('pending');
+      rest.delete('reason');
+      const query = rest.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname);
     });
+  };
 
-  if (result?.ok) {
+  if (claimed !== null) {
     return (
       <p className={styles.landing} data-outcome="ok" role="status" data-testid="shopify-claimed">
-        {t('done', { shop: shopDomain })}
+        {t('done', { shop: claimed })}
       </p>
     );
+  }
+  if (shopDomain === null) {
+    return <ShopifyPendingGone read={pending === 'gone'} helpUrl={helpUrl} />;
   }
   return (
     <div className={styles.landing} data-outcome="problem" data-testid="shopify-pending">

@@ -127,7 +127,12 @@ export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClai
       ) {
         return { ok: false, reason: 'shop_connected_to_another_workspace' };
       }
-      if (cause.status === 409) return { ok: false, reason: 'gone' };
+      // Used already: there is nothing left to claim.
+      if (cause.status === 409 && cause.developerMessage === 'pending_install_already_used') {
+        return { ok: false, reason: 'gone' };
+      }
+      // An unknown 409 is not proof the approval is gone: said as a failure, not as "expired".
+      // 503 billing_link_failed lands here too - nothing was spent, so the button tries again.
     }
     return { ok: false, reason: 'failed' };
   }

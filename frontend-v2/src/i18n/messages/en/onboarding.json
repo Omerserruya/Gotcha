@@ -425,6 +425,7 @@
         "callback_error": "Something went wrong on the way back from {name}. Nothing was connected. Try connecting again.",
         "validation_failed": "{name} connected, but our first check against it failed. Try connecting again; if it keeps failing, continue and fix it later in Settings.",
         "shop_connected_elsewhere": "That store is already connected to another GOTCHA workspace. Disconnect it there first, or connect a different store.",
+        "billing_link_failed": "We couldn't finish connecting the store. Nothing was changed - connect it again in a moment.",
         "link_failed": "{name} answered, but the store couldn't be linked to this workspace. Try connecting again.",
         "not_configured": "This connection isn't set up on our side yet, so nothing was connected. Continue without it, and connect it later in Settings.",
         "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Connect again and approve read and write access.",

@@ -7,11 +7,7 @@ import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavai
 import { isLaunchable } from '@/features/capabilities/ConnectFor';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
-import {
-  ShopifyBillingVerify,
-  ShopifyPending,
-  ShopifyPendingGone,
-} from '@/features/capabilities/ShopifyConnect';
+import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
 
 import { connectKind, STORE_SYSTEMS } from './connect-kind';
 import shell from './Onboarding.module.css';
@@ -286,14 +282,11 @@ export function SystemsStep({
           />
         ) : null}
         {returned?.kind === 'pending' ? (
-          typeof shopifyPending === 'string' && shopifyPending !== 'gone' ? (
-            <ShopifyPending shopDomain={shopifyPending} replace={returned.replace} />
-          ) : (
-            <ShopifyPendingGone
-              read={shopifyPending === 'gone'}
-              helpUrl={shopify?.helpUrl ?? null}
-            />
-          )
+          <ShopifyPending
+            pending={shopifyPending}
+            replace={returned.replace}
+            helpUrl={shopify?.helpUrl ?? null}
+          />
         ) : null}
         {returned && !landingShownBelow ? landingFor(returned.slug) : null}
       </div>

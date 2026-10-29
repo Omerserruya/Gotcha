@@ -34,6 +34,8 @@ export const OAUTH_FAILURES = [
   'callback_error',
   'validation_failed',
   'shop_connected_elsewhere',
+  // Billing refused or was unreachable (Backend 0d35aed8): nothing connected, start again.
+  'billing_link_failed',
   'link_failed',
   // e7523379 and B (WooCommerce):
   'not_configured',
@@ -61,6 +63,7 @@ export const SHOPIFY_INSTALL_ERRORS = [
   'invalid_request',
   'not_configured',
   'shop_connected_elsewhere',
+  'billing_link_failed',
 ] as const;
 export type ShopifyInstallError = (typeof SHOPIFY_INSTALL_ERRORS)[number];
 

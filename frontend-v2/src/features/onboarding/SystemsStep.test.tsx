@@ -49,11 +49,13 @@ vi.mock('@/features/capabilities/ShopifyConnect', () => ({
       data-reconnect={String(needsReconnect)}
     />
   ),
-  ShopifyPending: ({ shopDomain, replace }: { shopDomain: string; replace: boolean }) => (
-    <span data-testid="shopify-pending" data-shop={shopDomain} data-replace={String(replace)} />
-  ),
-  ShopifyPendingGone: ({ read }: { read: boolean }) => (
-    <span data-testid="shopify-pending-gone" data-read={String(read)} />
+  // One banner for all three reads (a store, gone, unread): it keeps a claim that worked.
+  ShopifyPending: ({ pending, replace }: { pending: string | null; replace: boolean }) => (
+    <span
+      data-testid="shopify-pending"
+      data-pending={pending ?? 'unread'}
+      data-replace={String(replace)}
+    />
   ),
 }));
 vi.mock('@/features/capabilities/IntegrationLogo', () => ({ IntegrationLogo: () => null }));
@@ -380,7 +382,7 @@ describe('★★ the way back to step 2 (flow=onboarding_systems): each return q
       shopifyPending: 'avivco.myshopify.com',
     });
     const pending = screen.getByTestId('shopify-pending');
-    expect(pending).toHaveAttribute('data-shop', 'avivco.myshopify.com');
+    expect(pending).toHaveAttribute('data-pending', 'avivco.myshopify.com');
     expect(pending).toHaveAttribute('data-replace', 'true');
     expect(screen.queryByTestId('systems-landing-shopify')).toBeNull();
     expect(window.location.search).toBe('');
@@ -388,7 +390,8 @@ describe('★★ the way back to step 2 (flow=onboarding_systems): each return q
 
   it('★ pending with nothing to claim: said, never silence', () => {
     back('system=shopify&pending=1', { shopifyPending: 'gone' });
-    expect(screen.getByTestId('shopify-pending-gone')).toHaveAttribute('data-read', 'true');
+    // The banner draws "gone" itself (ShopifyConnect's own tests); here, the read reaches it.
+    expect(screen.getByTestId('shopify-pending')).toHaveAttribute('data-pending', 'gone');
   });
 
   it('★★ system=shopify&billing=verify&shop=: the server is asked (POST /api/billing/shopify/complete), the shop passed on', () => {

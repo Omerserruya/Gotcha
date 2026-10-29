@@ -6,11 +6,7 @@ import { oauthFailure } from '@/features/capabilities/oauth';
 import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
-import {
-  ShopifyBillingVerify,
-  ShopifyPending,
-  ShopifyPendingGone,
-} from '@/features/capabilities/ShopifyConnect';
+import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -154,19 +150,13 @@ export default async function Page({
                 needsReconnect={isConnected(integration)}
               />
             ) : null}
-            {/* Back with `pending=1`, a banner whatever came of it. */}
+            {/* Back with `pending=1`, a banner whatever came of it - one banner, which keeps a claim that worked. */}
             {onShopify && params.pending === '1' ? (
-              typeof shopifyPending === 'string' && shopifyPending !== 'gone' ? (
-                <ShopifyPending
-                  shopDomain={shopifyPending}
-                  replace={params.reason === 'replace_store'}
-                />
-              ) : (
-                <ShopifyPendingGone
-                  read={shopifyPending === 'gone'}
-                  helpUrl={shopifyAvailability?.helpUrl ?? null}
-                />
-              )
+              <ShopifyPending
+                pending={shopifyPending}
+                replace={params.reason === 'replace_store'}
+                helpUrl={shopifyAvailability?.helpUrl ?? null}
+              />
             ) : null}
             {/* Connected and broken (ERROR): what that means, and the way back. */}
             {integration !== null && needsReconnect(integration) ? (

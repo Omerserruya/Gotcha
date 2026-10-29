@@ -173,6 +173,7 @@
       "callback_error": "Something went wrong on the way back from {name}. Nothing was connected - try again.",
       "validation_failed": "{name} connected, but the first check against it failed.",
       "shop_connected_elsewhere": "That store is already connected to another workspace.",
+      "billing_link_failed": "We couldn't finish connecting the store. Nothing was changed - connect it again in a moment.",
       "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
       "other": "{name} didn't connect. Try again.",
       "not_configured": "This connection isn't set up in this environment yet. Nothing was connected.",

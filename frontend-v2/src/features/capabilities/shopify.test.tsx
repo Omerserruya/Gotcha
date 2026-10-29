@@ -11,12 +11,16 @@ const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
 const jar = vi.hoisted(() => ({ set: vi.fn(), get: vi.fn(), delete: vi.fn() }));
 const refresh = vi.hoisted(() => vi.fn());
+const replace = vi.hoisted(() => vi.fn());
+const search = vi.hoisted(() => ({ value: 'system=shopify&pending=1&reason=claim' }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: async () => jar }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get, post }) }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(search.value) }));
 vi.mock('@/i18n/navigation', () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, replace }),
+  usePathname: () => '/studio/capabilities',
   Link: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
       {children}
@@ -41,6 +45,8 @@ beforeEach(() => {
   jar.get.mockReset();
   jar.delete.mockReset();
   refresh.mockReset();
+  replace.mockReset();
+  search.value = 'system=shopify&pending=1&reason=claim';
 });
 
 describe('★★ the intent cookie, read off Set-Cookie', () => {
@@ -169,7 +175,7 @@ describe('★★ 10 - Shopify before and after', () => {
   it('a pending replace: nothing replaced before the press; then claimed with replace', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     post.mockResolvedValue({ data: { planSelectionUrl: null } });
-    intl(<ShopifyPending shopDomain="new.myshopify.com" replace />);
+    intl(<ShopifyPending pending="new.myshopify.com" replace helpUrl={null} />);
     expect(post).not.toHaveBeenCalled();
     expect(screen.getByTestId('shopify-pending')).toHaveTextContent(
       'replacing it disconnects that one',
@@ -238,7 +244,7 @@ describe('★★ split billing - a store is connected only after GOTCHA Core (Om
 describe('★★ reason=claim - an App Store install, to this workspace', () => {
   it('asks first; another store here → "Replace it?" naming it, and only then replace: true', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
-    intl(<ShopifyPending shopDomain="new.myshopify.com" replace={false} />);
+    intl(<ShopifyPending pending="new.myshopify.com" replace={false} helpUrl={null} />);
     expect(screen.getByTestId('shopify-pending-lead')).toHaveTextContent(
       'You approved new.myshopify.com in Shopify. Connect it to this workspace?',
     );
@@ -261,7 +267,7 @@ describe('★★ reason=claim - an App Store install, to this workspace', () => 
     try {
       jar.get.mockReturnValue({ value: 'p1' });
       post.mockResolvedValue({ data: { planSelectionUrl: 'https://admin.shopify.com/charges/x' } });
-      intl(<ShopifyPending shopDomain="new.myshopify.com" replace={false} />);
+      intl(<ShopifyPending pending="new.myshopify.com" replace={false} helpUrl={null} />);
       await userEvent.click(screen.getByTestId('shopify-claim'));
       expect(assign).toHaveBeenCalledWith('https://admin.shopify.com/charges/x');
       expect(refresh).not.toHaveBeenCalled();
@@ -402,5 +408,109 @@ describe('★★ the pending approval: a shop, gone, or unread - three different
     expect(await loadShopifyPending()).toBeNull();
     get.mockResolvedValueOnce({ shopDomain: 'new.myshopify.com' });
     expect(await loadShopifyPending()).toBe('new.myshopify.com');
+  });
+});
+
+/*
+ * ★★ PROD 2026-10-29 09:23:31Z: a claim that WORKED read "That approval has
+ * expired or was already used". The claim spends the cookie and revalidates;
+ * the page, still on `pending=1`, read "gone" and swapped the banner. These
+ * re-render the banner the way the refresh does - same place, new read.
+ */
+describe('★★ a claim that worked is never "gone"', () => {
+  const at = (pending: string | 'gone' | null) => (
+    <NextIntlClientProvider
+      locale="en"
+      messages={{ capabilities: messages, billing: billingMessages }}
+    >
+      <ShopifyPending pending={pending} replace={false} helpUrl={null} />
+    </NextIntlClientProvider>
+  );
+
+  it('ok, no plan page: said, the page leaves pending (other params kept), and the re-read "gone" is never drawn', async () => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockResolvedValue({ data: { planSelectionUrl: null } });
+    const { rerender } = render(at('new.myshopify.com'));
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect(replace).toHaveBeenCalledWith('/studio/capabilities?system=shopify');
+    expect(refresh).not.toHaveBeenCalled();
+    // The revalidated page, without the cookie now.
+    rerender(at('gone'));
+    expect(screen.getByTestId('shopify-claimed')).toHaveTextContent(
+      'new.myshopify.com is connected.',
+    );
+    expect(screen.queryByTestId('shopify-pending-gone')).toBeNull();
+  });
+
+  it('ok, only pending in the URL: back to the bare page', async () => {
+    search.value = 'pending=1';
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockResolvedValue({ data: { planSelectionUrl: null } });
+    render(at('new.myshopify.com'));
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect(replace).toHaveBeenCalledWith('/studio/capabilities');
+  });
+
+  it('ok, a plan owed: straight to Shopify, and the re-read "gone" is not drawn meanwhile', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    try {
+      jar.get.mockReturnValue({ value: 'p1' });
+      post.mockResolvedValue({ data: { planSelectionUrl: 'https://admin.shopify.com/charges/x' } });
+      const { rerender } = render(at('new.myshopify.com'));
+      await userEvent.click(screen.getByTestId('shopify-claim'));
+      expect(assign).toHaveBeenCalledWith('https://admin.shopify.com/charges/x');
+      expect(replace).not.toHaveBeenCalled();
+      rerender(at('gone'));
+      expect(screen.queryByTestId('shopify-pending-gone')).toBeNull();
+      expect(screen.getByTestId('shopify-claimed')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('arriving with no approval still says "gone" - and unread says so too', () => {
+    const { rerender } = render(at('gone'));
+    expect(screen.getByTestId('shopify-pending-gone')).toHaveTextContent(
+      'That approval has expired or was already used',
+    );
+    expect(screen.queryByTestId('shopify-claim')).toBeNull();
+    rerender(at(null));
+    expect(screen.getByTestId('shopify-pending-gone')).not.toHaveTextContent('expired');
+  });
+
+  it('a claim that failed keeps the button: 503 billing_link_failed is tried again with the same approval', async () => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockRejectedValueOnce(
+      new ApiError({ kind: 'server', status: 503, developerMessage: 'billing_link_failed' }),
+    );
+    render(at('new.myshopify.com'));
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect(screen.getByTestId('shopify-claim-problem')).toHaveTextContent(
+      "new.myshopify.com wasn't connected - try again.",
+    );
+    expect(jar.delete).not.toHaveBeenCalled();
+    post.mockResolvedValueOnce({ data: { planSelectionUrl: null } });
+    await userEvent.click(screen.getByTestId('shopify-claim'));
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('shopify-claimed')).toBeInTheDocument();
+  });
+});
+
+describe("★★ the claim's answers, by what they mean (Backend 0d35aed8)", () => {
+  const refusal = (status: number, code: string) =>
+    new ApiError({ kind: status === 409 ? 'conflict' : 'server', status, developerMessage: code });
+
+  it.each([
+    [409, 'shop_connected_to_another_workspace', 'shop_connected_to_another_workspace'],
+    [409, 'pending_install_already_used', 'gone'],
+    [404, 'pending_install_not_found', 'gone'],
+    [503, 'billing_link_failed', 'failed'],
+    // Not proof the approval is gone: a failure, with the button to try again.
+    [409, 'something_new', 'failed'],
+  ])('%i %s -> %s', async (status, code, reason) => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockRejectedValueOnce(refusal(status, code));
+    expect(await claimShopifyInstall(false)).toMatchObject({ ok: false, reason });
   });
 });
