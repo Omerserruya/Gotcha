@@ -18,6 +18,7 @@
  *   POST   /numbers/:id/repair        run one repair action
  *   DELETE /numbers/:id               disconnect ONE number
  *   GET    /numbers/:id/events        the audit trail for one number
+ *   PATCH  /primary                   choose (or clear) the primary number
  */
 
 import { Router, Request, Response } from "express";
@@ -40,6 +41,10 @@ import {
   selectFlow,
   businessAppOptions,
   evaluatePathOutcome,
+  primaryWhatsAppState,
+  setPrimaryWhatsAppAccount,
+  releasePrimaryIfRemoved,
+  PrimaryNumberError,
 } from "@chatcenter/shared";
 import { inspectDecideOnboard } from "../services/whatsapp/onboarding.service";
 import {
@@ -69,14 +74,33 @@ function storedText(meta: unknown, key: string): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-const UNPROFILED_SELECT = { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true, lastHealthCheck: true } as const;
+const UNPROFILED_SELECT = { id: true, externalId: true, displayName: true, connectionStatus: true, platformMeta: true, lastHealthCheck: true, credentials: true } as const;
+
+/**
+ * Which business account a number belongs to, as signup stored it on the
+ * channel account. Names are what the inspection read at connect; no Meta
+ * call is made to render them, so a number connected before they were stored
+ * shows null. wabaId falls back to the stored credentials.
+ */
+export function wabaOf(platformMeta: unknown, credentials?: unknown, wabaId?: string | null) {
+  let fromCreds: string | null = null;
+  if (!wabaId && !storedText(platformMeta, "wabaId") && credentials) {
+    try { fromCreds = (decryptCredentials(credentials as any) as any)?.wabaId || null; } catch { fromCreds = null; }
+  }
+  return {
+    wabaId: wabaId || storedText(platformMeta, "wabaId") || fromCreds,
+    wabaName: storedText(platformMeta, "wabaName"),
+    businessPortfolioId: storedText(platformMeta, "businessPortfolioId"),
+    businessName: storedText(platformMeta, "businessName"),
+  };
+}
 
 /**
  * One unprofiled (legacy) WhatsApp account as the numbers page shows it: the
  * number, its verified name and quality as Meta last told us, and when we last
  * checked. Each is null until the 6-hourly check or a refresh has read it.
  */
-function unprofiledRow(c: { id: string; externalId: string; displayName: string | null; connectionStatus: string; platformMeta: unknown; lastHealthCheck: Date | null }) {
+function unprofiledRow(c: { id: string; externalId: string; displayName: string | null; connectionStatus: string; platformMeta: unknown; lastHealthCheck: Date | null; credentials?: unknown }, primaryId: string | null) {
   return {
     channelAccountId: c.id,
     phoneNumberId: c.externalId,
@@ -88,6 +112,8 @@ function unprofiledRow(c: { id: string; externalId: string; displayName: string 
     qualityRating: storedText(c.platformMeta, "qualityRating"),
     lastHealthCheck: c.lastHealthCheck ? c.lastHealthCheck.toISOString() : null,
     connectionStatus: c.connectionStatus,
+    ...wabaOf(c.platformMeta, c.credentials),
+    isPrimary: c.id === primaryId,
     note: "Connected before per-number health was available. Its number, name and quality are read from Meta; reconnect it for full health checks and repair.",
   };
 }
@@ -135,6 +161,14 @@ router.get(
       where: { tenantId: req.tenantId! },
       orderBy: [{ state: "asc" }, { createdAt: "asc" }],
     });
+    // Every WhatsApp account of the tenant: the WABA names live on these, and
+    // the ones without a lifecycle row are listed as unprofiled below.
+    const accounts = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
+      select: UNPROFILED_SELECT,
+    });
+    const metaOf = new Map(accounts.map((a) => [a.id, a.platformMeta]));
+    const primary = await primaryWhatsAppState(req.tenantId!, prisma);
 
     const data = numbers.map((n) => ({
       id: n.id,
@@ -157,22 +191,22 @@ router.get(
       throughputLevel: n.throughputLevel,
       connectedAt: n.connectedAt,
       health: buildHealthReport(n),
+      ...wabaOf(metaOf.get(n.channelAccountId), undefined, n.wabaId),
+      businessPortfolioId: n.businessPortfolioId ?? storedText(metaOf.get(n.channelAccountId), "businessPortfolioId"),
+      isPrimary: n.channelAccountId === primary.channelAccountId,
     }));
 
     // Legacy WhatsApp channels connected before this feature existed have no
     // lifecycle row. They are surfaced rather than hidden, because a number the
     // customer can see in their inbox but not on this page reads as a bug.
     const profiledIds = new Set(numbers.map((n) => n.phoneNumberId));
-    const legacy = await prisma.channelAccount.findMany({
-      where: { tenantId: req.tenantId!, channel: "WHATSAPP" },
-      select: UNPROFILED_SELECT,
-    });
 
     return res.json({
       data,
-      unprofiled: legacy
+      unprofiled: accounts
         .filter((c) => !profiledIds.has(c.externalId))
-        .map(unprofiledRow),
+        .map((c) => unprofiledRow(c, primary.channelAccountId)),
+      primary,
     });
   },
 );
@@ -565,7 +599,8 @@ async function refreshUnprofiled(req: Request, res: Response) {
     data: { platformMeta: withWhatsAppNumberDetails(account.platformMeta, details) as any, lastHealthCheck: new Date() },
     select: UNPROFILED_SELECT,
   });
-  return res.json({ data: unprofiledRow(updated) });
+  const primary = await primaryWhatsAppState(req.tenantId!, prisma);
+  return res.json({ data: unprofiledRow(updated, primary.channelAccountId) });
 }
 
 const repairSchema = z.object({
@@ -606,9 +641,53 @@ router.delete(
   resolveTenant,
   requirePermission("channels:manage:update"),
   async (req: Request, res: Response) => {
+    const removing = await prisma.whatsAppNumber.findFirst({
+      where: { id: paramId(req), tenantId: req.tenantId! },
+      select: { channelAccountId: true },
+    });
     const result = await disconnectNumber(paramId(req), req.tenantId!);
     if (!result.succeeded) return res.status(404).json({ error: result.message, code: "NUMBER_NOT_FOUND" });
-    return res.json({ data: result });
+    // The primary moves on by itself (the next by connectedAt); the stored
+    // choice is dropped if it was this number, and the caller is told who
+    // sends now.
+    const primary = removing
+      ? await releasePrimaryIfRemoved(req.tenantId!, removing.channelAccountId, prisma)
+      : await primaryWhatsAppState(req.tenantId!, prisma);
+    return res.json({ data: result, primary });
+  },
+);
+
+// ─── Primary number ──────────────────────────────────────────
+
+/**
+ * The number that sends when nothing more specific chose one: an unbound
+ * template's Meta calls, approval requests to managers and the reply to their
+ * tap, a new abandoned-cart conversation, an unbound voice-flow or missed-call
+ * template. A conversation's own replies always use the conversation's number.
+ * null clears the choice, back to the first active number by connectedAt.
+ */
+const primarySchema = z.object({ channelAccountId: z.string().min(1).nullable() });
+
+router.patch(
+  "/primary",
+  authenticate,
+  resolveTenant,
+  requirePermission("channels:manage:update"),
+  validate(primarySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await setPrimaryWhatsAppAccount(req.tenantId!, req.body.channelAccountId, req.user?.userId, prisma);
+      return res.json({ data });
+    } catch (err: any) {
+      if (err instanceof PrimaryNumberError) {
+        const error = err.code === "WHATSAPP_NUMBER_NOT_FOUND"
+          ? "That WhatsApp number is not connected here."
+          : "That WhatsApp number is disconnected, so it cannot be the primary.";
+        return res.status(err.status).json({ error, code: err.code });
+      }
+      console.error("[wa-numbers] set primary failed:", err?.message);
+      return res.status(500).json({ error: "We could not save the primary number.", code: "PRIMARY_SAVE_FAILED" });
+    }
   },
 );
 

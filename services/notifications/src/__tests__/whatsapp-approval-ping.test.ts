@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const H = vi.hoisted(() => ({ sent: [] as any[], notify: [] as any[], recipient: { userId: "boss", phoneE164: "+972500000000" }, locale: "he" }));
+const H = vi.hoisted(() => ({ sent: [] as any[], notify: [] as any[], recipient: { userId: "boss", phoneE164: "+972500000000" }, locale: "he", primaryAsked: [] as any[], from: [] as string[] }));
 
 vi.mock("@chatcenter/shared", async () => ({
   resolveEffectiveLocale: async () => ({ effective: H.locale }),
@@ -19,14 +19,19 @@ vi.mock("@chatcenter/shared", async () => ({
     approvalRequest: { updateMany: async (a: any) => { H.notify.push(a.data); return { count: 1 }; } },
     channelAccount: { findFirst: async () => ({ id: "wa", externalId: "+97230000000", credentials: { x: 1 } }) },
   },
+  // The tenant's primary number (2026-10-29), not whichever account came first.
+  resolvePrimaryWhatsAppAccount: async (tenantId: string, o: any) => {
+    H.primaryAsked.push({ tenantId, select: o?.select, hasDb: !!o?.db });
+    return { account: { id: "wa_primary", externalId: "pn_primary", credentials: { x: 1 } }, source: "chosen" };
+  },
   decryptCredentials: () => ({ token: "t" }),
   resolveApprovalRecipient: async () => ({ ok: true, recipient: H.recipient }),
   recipientRejectionMessage: () => "no",
   mintApprovalRefs: async () => ({ approve: "ref_a", reject: "ref_r" }),
   // A double that records what WOULD be sent; nothing leaves the test.
   getOutboundAdapter: () => ({
-    sendTextMessage: async (_c: any, _f: any, to: string, text: string) => { H.sent.push({ to, text, buttons: null }); },
-    sendInteractiveMessage: async (_c: any, _f: any, to: string, text: string, buttons: any[]) => { H.sent.push({ to, text, buttons }); },
+    sendTextMessage: async (_c: any, f: string, to: string, text: string) => { H.from.push(f); H.sent.push({ to, text, buttons: null }); },
+    sendInteractiveMessage: async (_c: any, f: string, to: string, text: string, buttons: any[]) => { H.from.push(f); H.sent.push({ to, text, buttons }); },
   }),
 }));
 
@@ -37,7 +42,7 @@ const TO_YOU = "לשייך אליך את השיחה של Omer Serruya (וואט�
 const plan = (o: any = {}) => ({ steps: [{ riskLevel: "low", target: { assigneeId: "noa" }, summary: NEUTRAL, summaryForAssignee: TO_YOU }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant", ...o });
 const DATA = { id: "apr1", tool: "propose_plan", summary: NEUTRAL, riskLevel: "medium", reason: "בקשה של Matan מ-GOTCHA ב-Home", expiresAt: "2026-10-08T15:30:00Z" };
 
-beforeEach(() => { H.sent = []; H.notify = []; H.recipient = { userId: "boss", phoneE164: "+972500000000" }; H.locale = "he"; });
+beforeEach(() => { H.sent = []; H.notify = []; H.primaryAsked = []; H.from = []; H.recipient = { userId: "boss", phoneE164: "+972500000000" }; H.locale = "he"; });
 
 describe("★ the ping's words", () => {
   it("a plan: who asked, where, the steps for this reader; its own risk; no tool name, no requester line as a reason", () => {
@@ -68,6 +73,12 @@ describe("★ the ping's words", () => {
 });
 
 describe("★ who is sent it", () => {
+  it("sent from the tenant's primary WhatsApp number", async () => {
+    await notifyManagerOfApproval("T", DATA, plan());
+    expect(H.primaryAsked).toEqual([{ tenantId: "T", select: { id: true, externalId: true, credentials: true }, hasDb: true }]);
+    expect(H.from).toEqual(["pn_primary"]);
+  });
+
   it("the approver, in their language, with buttons in that language", async () => {
     await notifyManagerOfApproval("T", DATA, plan());
     expect(H.sent).toHaveLength(1);

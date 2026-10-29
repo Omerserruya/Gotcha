@@ -19,3 +19,4 @@ export * from "./inspector";
 export * from "./flow-selector";
 export * from "./path-fallback";
 export * from "./embedded-signup";
+export * from "./primary-number";

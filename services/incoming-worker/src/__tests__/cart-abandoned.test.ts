@@ -73,6 +73,11 @@ function table(name: string) {
 }
 
 vi.mock("@chatcenter/shared", () => ({
+  // The tenant's primary WhatsApp number (2026-10-29), read through the caller's own prisma.
+  resolvePrimaryWhatsAppAccount: async (tenantId: string, o: any) => {
+    const account = await o.db.channelAccount.findFirst({ where: { tenantId, channel: "WHATSAPP", isActive: true, ...(o?.where ?? {}) }, ...(o?.select ? { select: o.select } : {}) });
+    return { account, source: account ? "default" : "none" };
+  },
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,
   settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,

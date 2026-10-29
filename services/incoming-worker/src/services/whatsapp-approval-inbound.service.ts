@@ -28,6 +28,7 @@ import {
   getOutboundAdapter,
   decryptCredentials,
   type ChannelCredentials,
+  resolvePrimaryWhatsAppAccount,
 } from "@chatcenter/shared";
 
 export interface InboundApprovalResult {
@@ -43,9 +44,10 @@ async function replyToManager(
   text: string,
 ): Promise<void> {
   try {
-    const account = await prisma.channelAccount.findFirst({
-      where: { tenantId, channel: "WHATSAPP", isActive: true },
+    // Same number the request went out on: the tenant's primary.
+    const { account } = await resolvePrimaryWhatsAppAccount(tenantId, {
       select: { externalId: true, credentials: true },
+      db: prisma,
     });
     if (!account?.credentials || !account.externalId) return;
     const adapter = getOutboundAdapter("WHATSAPP");

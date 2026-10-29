@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError, resolvePrimaryWhatsAppAccount } from "@chatcenter/shared";
 import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
 import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, requiredRolesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
 
@@ -113,9 +113,9 @@ async function resolveWabaCreds(tenantId: string, template: { channelAccountId: 
           connectionStatus: "CONNECTED",
         },
       })
-    : await prisma.channelAccount.findFirst({
-        where: { tenantId, channel: "WHATSAPP", isActive: true, connectionStatus: "CONNECTED" },
-      });
+    : // Unbound: the tenant's primary number, not whichever row came first;
+      // with two WABAs that was the wrong business account.
+      (await resolvePrimaryWhatsAppAccount(tenantId, { where: { connectionStatus: "CONNECTED" }, db: prisma })).account;
   if (!channelAccount) return { error: "No connected WhatsApp channel found for this template" as const };
   const creds = decryptCredentials(channelAccount.credentials as any);
   const accessToken = creds?.accessToken;

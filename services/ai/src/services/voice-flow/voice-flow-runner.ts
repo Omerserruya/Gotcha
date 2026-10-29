@@ -32,6 +32,7 @@ import {
   decryptCredentials,
   type ChannelCredentials,
   type ServiceEvent,
+  resolvePrimaryWhatsAppAccount,
 } from "@chatcenter/shared";
 
 type FlowTriggerKind =
@@ -634,17 +635,14 @@ async function sendTemplateFromVoice(data: Record<string, unknown>, ctx: VoiceCo
   }
 
   // Resolve WhatsApp ChannelAccount: prefer the template's binding, else
-  // fall back to the tenant's first active WhatsApp account.
+  // the tenant's primary WhatsApp number.
   let channelAccount = tmpl.channelAccountId
     ? await prisma.channelAccount.findFirst({
         where: { id: tmpl.channelAccountId, tenantId: ctx.tenantId, channel: "WHATSAPP", isActive: true },
       })
     : null;
   if (!channelAccount) {
-    channelAccount = await prisma.channelAccount.findFirst({
-      where: { tenantId: ctx.tenantId, channel: "WHATSAPP", isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
+    channelAccount = (await resolvePrimaryWhatsAppAccount(ctx.tenantId, { db: prisma })).account;
   }
   if (!channelAccount) {
     console.warn(`${tag} skip no_whatsapp_account tenant=${ctx.tenantId}`);

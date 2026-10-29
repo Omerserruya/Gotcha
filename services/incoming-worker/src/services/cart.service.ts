@@ -13,7 +13,7 @@
  * Customer-protection rules live here and in the validator (WhatsApp outside
  * the 24 h window: template only), never in the author's goodwill.
  */
-import { prisma, getRedis, incomingMessageQueue, type CartEventJob } from "@chatcenter/shared";
+import { prisma, getRedis, incomingMessageQueue, type CartEventJob, resolvePrimaryWhatsAppAccount } from "@chatcenter/shared";
 import { runAutomationsForEvent } from "./automation-runner.service";
 import { ensureContactForInbound } from "./ensure-contact.service";
 import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
@@ -119,10 +119,7 @@ export async function resolveCartTarget(tenantId: string, customer: CartEventJob
     }
   }
   if (phone.length < 7 || opts.create === false) return null;
-  const account = await prisma.channelAccount.findFirst({
-    where: { tenantId, channel: "WHATSAPP" as any, isActive: true },
-    select: { id: true },
-  });
+  const { account } = await resolvePrimaryWhatsAppAccount(tenantId, { select: { id: true }, db: prisma });
   if (!account) return null;
   const contact = await ensureContactForInbound({ tenantId, channel: "WHATSAPP" as any, externalId: phone, displayName: customer?.firstName ?? null });
   const conv = await prisma.conversation.create({

@@ -26,6 +26,7 @@ import {
   resolveApprovalRecipient,
   recipientRejectionMessage,
   type ChannelCredentials,
+  resolvePrimaryWhatsAppAccount,
 } from "@chatcenter/shared";
 import { localeForRecipient, type TemplateLocale } from "./platform-whatsapp";
 import { workspaceTimeZone } from "./personal-preferences.service";
@@ -144,9 +145,10 @@ async function markNotifyState(
  * to reach anybody - a distinct, actionable reason from "no recipient".
  */
 async function resolveWhatsAppSender(tenantId: string) {
-  const account = await prisma.channelAccount.findFirst({
-    where: { tenantId, channel: "WHATSAPP", isActive: true },
+  // The tenant's primary number (chosen, else the first connected).
+  const { account } = await resolvePrimaryWhatsAppAccount(tenantId, {
     select: { id: true, externalId: true, credentials: true },
+    db: prisma,
   });
   if (!account?.credentials || !account.externalId) return null;
   try {

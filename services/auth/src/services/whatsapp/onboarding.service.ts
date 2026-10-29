@@ -161,6 +161,10 @@ export async function onboardNumber(input: OnboardNumberInput): Promise<OnboardR
     businessPortfolioId: input.businessPortfolioId,
     flow: SCENARIO_TO_FLOW[decision.scenario] ?? "RECONNECT",
     inspected,
+    // Which business account this number is on, by name, so the numbers
+    // screen can say so without asking Meta on every render.
+    wabaName: inspection.wabas?.find((w) => w.wabaId === wabaId)?.name,
+    businessName: inspection.portfolios?.find((p) => p.portfolioId === input.businessPortfolioId)?.name,
   });
 
   const completed: AutomatedStep[] = [];
@@ -543,6 +547,25 @@ async function healthCheckStep(ctx: StepContext): Promise<StepResult> {
  * deliberate: revoking one number must never reach another number's ability to
  * send. Sharing a row would make isolation impossible.
  */
+/**
+ * The account facts signup knows, merged over what is already stored so a
+ * reconnect keeps the number details the health check wrote. A name Meta did
+ * not give us this time leaves the stored one in place.
+ */
+export function signupMeta(
+  prev: unknown,
+  args: { wabaId: string; businessPortfolioId?: string; wabaName?: string; businessName?: string },
+): Record<string, unknown> {
+  const base = prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
+  return {
+    ...base,
+    wabaId: args.wabaId,
+    businessPortfolioId: args.businessPortfolioId,
+    ...(args.wabaName ? { wabaName: args.wabaName } : {}),
+    ...(args.businessName ? { businessName: args.businessName } : {}),
+  };
+}
+
 async function upsertNumberRecord(args: {
   tenantId: string;
   userId?: string;
@@ -552,6 +575,8 @@ async function upsertNumberRecord(args: {
   businessPortfolioId?: string;
   flow: WhatsAppOnboardingFlow;
   inspected?: InspectedNumber;
+  wabaName?: string;
+  businessName?: string;
 }) {
   const { tenantId, phoneNumberId, wabaId, inspected } = args;
 
@@ -587,7 +612,7 @@ async function upsertNumberRecord(args: {
           // and correcting later is what produced channels that claimed to
           // work and did not.
           connectionStatus: "PENDING",
-          platformMeta: { wabaId, businessPortfolioId: args.businessPortfolioId },
+          platformMeta: signupMeta(existing.platformMeta, args),
         },
       })
     : await prisma.channelAccount.create({
@@ -601,7 +626,7 @@ async function upsertNumberRecord(args: {
           connectedAt: new Date(),
           connectedBy: args.userId,
           isActive: true,
-          platformMeta: { wabaId, businessPortfolioId: args.businessPortfolioId },
+          platformMeta: signupMeta(null, args),
         },
       });
 

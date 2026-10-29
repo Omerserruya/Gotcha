@@ -36,6 +36,7 @@ import {
   EntitlementDeniedError,
   webchatSeedConfig,
   WEBCHAT_COPY,
+  releasePrimaryIfRemoved,
 } from "@chatcenter/shared";
 import { startPageSession, readPageSession, endPageSession, type PageCandidate } from "../services/messenger/page-session";
 
@@ -2427,6 +2428,10 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("c
     // Invalidate Redis cache
     const redis = getRedis();
     await redis.del(`channel_account:${account.channel}:${account.externalId}`);
+    // A disconnected primary stops being the choice; the next number takes over.
+    if (account.channel === "WHATSAPP") {
+      await releasePrimaryIfRemoved(req.tenantId!, account.id, prisma).catch(() => {});
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -2459,6 +2464,9 @@ router.delete("/:id", authenticate, resolveTenant, requirePermission("channels:m
       await tx.channelAccount.delete({ where: { id: channelAccountId } });
       return { deletedMessages, deletedConversations };
     });
+    if (account.channel === "WHATSAPP") {
+      await releasePrimaryIfRemoved(req.tenantId!, channelAccountId, prisma).catch(() => {});
+    }
 
     // Invalidate Redis cache
     const redis = getRedis();

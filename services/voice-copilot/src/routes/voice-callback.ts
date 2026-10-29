@@ -18,7 +18,7 @@
 import crypto from "crypto";
 import express, { Router, Request, Response } from "express";
 import twilio from "twilio";
-import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, verifyInternalServiceKey, getInternalServiceKey } from "@chatcenter/shared";
+import { prisma, getRedis, normalizePhone, publishEvent, outgoingMessageQueue, verifyInternalServiceKey, getInternalServiceKey, resolvePrimaryWhatsAppAccount } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
@@ -589,11 +589,13 @@ export function createVoiceCallbackRouter(opts: {
       return;
     }
     // Sent from the number the template is approved on, else (an unbound
-    // one) the tenant's active WhatsApp number, as Broadcast does.
-    const waChannel = await prisma.channelAccount.findFirst({
-      where: { tenantId: session.tenantId, channel: "WHATSAPP", isActive: true, ...(tmpl.channelAccountId ? { id: tmpl.channelAccountId } : {}) },
-      select: { id: true },
-    });
+    // one) the tenant's primary WhatsApp number.
+    const waChannel = tmpl.channelAccountId
+      ? await prisma.channelAccount.findFirst({
+          where: { tenantId: session.tenantId, channel: "WHATSAPP", isActive: true, id: tmpl.channelAccountId },
+          select: { id: true },
+        })
+      : (await resolvePrimaryWhatsAppAccount(session.tenantId, { select: { id: true }, db: prisma })).account;
     if (!waChannel) {
       res.status(409).json({ error: "no_whatsapp_channel" });
       return;
