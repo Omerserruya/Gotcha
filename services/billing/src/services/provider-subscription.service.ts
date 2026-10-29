@@ -73,8 +73,10 @@ export interface LinkConnectionInput {
  * This is the cross-tenant guard. The database's unique index on
  * (platform, externalShopId) is the real enforcement; this function turns the
  * violation into a named error instead of a constraint failure, and - crucially
- * - never "fixes" a conflict by moving the store. A shop already claimed by
- * another workspace is an incident, not a merge.
+ * - never "fixes" a conflict by moving a LIVE store. A shop another workspace
+ * still holds is an incident, not a merge. One it left behind (disconnected or
+ * uninstalled, nothing billing on it) moves to the workspace the merchant
+ * verified it into, audited in both.
  *
  * Reinstall is the reason this is an upsert rather than a create: the same shop
  * coming back must find its existing row rather than mint a duplicate.
@@ -90,6 +92,14 @@ export async function linkCommerceConnection(input: LinkConnectionInput) {
   });
 
   if (existing && existing.tenantId !== input.tenantId) {
+    // A store another workspace left behind - disconnected or uninstalled,
+    // with nothing still billing on it - moves to the workspace the merchant
+    // just verified it into (2026-10-29: after a local disconnect, no other
+    // workspace could ever connect that store again, the review store
+    // included). A live one is still an incident, never a merge.
+    if (await isStaleConnection(existing)) {
+      return moveStaleConnection(existing, input);
+    }
     console.error(
       `[commerce][cross-tenant] platform=${input.platform} shop=${input.externalShopId} ` +
         `is held by tenant=${existing.tenantId} and was claimed for tenant=${input.tenantId}`,
@@ -128,6 +138,90 @@ export async function linkCommerceConnection(input: LinkConnectionInput) {
       lastVerifiedAt: new Date(),
     },
   });
+}
+
+/**
+ * Nothing left that another workspace still holds: the connection is
+ * disconnected or uninstalled, and no subscription on it is still alive
+ * (anything but CANCELLED / DECLINED / EXPIRED counts as alive, PENDING and
+ * FROZEN included - those can still become a charge).
+ */
+async function isStaleConnection(conn: { id: string; status: string; uninstalledAt: Date | null }): Promise<boolean> {
+  if (conn.status !== "DISCONNECTED" && !conn.uninstalledAt) return false;
+  const alive = await prisma.providerSubscription.count({
+    where: { commerceConnectionId: conn.id, status: { notIn: ["CANCELLED", "DECLINED", "EXPIRED"] } },
+  });
+  return alive === 0;
+}
+
+/**
+ * Move a stale connection to the claiming workspace, in one transaction.
+ *
+ * The old workspace's subscription rows stay with it - they are its payment
+ * history - but are detached from the connection, so a reconciliation pass of
+ * the old workspace can never write the new owner's connection status. The
+ * connection starts over as BILLING_PENDING, exactly like a first install, and
+ * the move is written to both workspaces' audit logs.
+ */
+async function moveStaleConnection(
+  existing: { id: string; tenantId: string; status: string; shopDomain: string | null; uninstalledAt: Date | null },
+  input: LinkConnectionInput,
+) {
+  const now = new Date();
+  // What the row WAS, read once before anything changes it.
+  const from = {
+    tenantId: existing.tenantId,
+    status: existing.status,
+    uninstalledAt: existing.uninstalledAt ? existing.uninstalledAt.toISOString() : null,
+  };
+  const moved = await prisma.$transaction(async (tx: any) => {
+    const detached = await tx.providerSubscription.updateMany({
+      where: { commerceConnectionId: existing.id },
+      data: { commerceConnectionId: null },
+    });
+    const row = await tx.commerceConnection.update({
+      where: { id: existing.id },
+      data: {
+        tenantId: input.tenantId,
+        status: "BILLING_PENDING",
+        shopDomain: input.shopDomain ?? existing.shopDomain,
+        acquisitionSource: input.acquisitionSource ?? null,
+        shopifyChatInstallationId: input.shopifyChatInstallationId ?? null,
+        installedAt: now,
+        uninstalledAt: null,
+        lastVerifiedAt: now,
+      },
+    });
+    const metadata = {
+      platform: input.platform,
+      externalShopId: input.externalShopId,
+      connectionId: existing.id,
+      fromTenantId: from.tenantId,
+      toTenantId: input.tenantId,
+      previousStatus: from.status,
+      previousUninstalledAt: from.uninstalledAt,
+      detachedSubscriptions: detached.count,
+    };
+    for (const tenantId of [from.tenantId, input.tenantId]) {
+      await tx.auditLog.create({
+        data: {
+          tenantId,
+          actorType: "system",
+          actorId: "billing:commerce-link",
+          action: "billing.commerce_connection.moved",
+          targetType: "commerce_connection",
+          targetId: existing.id,
+          metadata: metadata as any,
+        },
+      });
+    }
+    return row;
+  });
+  console.log(
+    `[commerce][moved] platform=${input.platform} shop=${input.externalShopId} connection=${existing.id} ` +
+      `from=${from.tenantId} (${from.status}) to=${input.tenantId}`,
+  );
+  return moved;
 }
 
 export interface SyncResult {
