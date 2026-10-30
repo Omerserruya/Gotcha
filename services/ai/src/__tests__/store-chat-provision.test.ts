@@ -309,3 +309,33 @@ describe("replacing the store stops the chat on the old one", () => {
     expect(H.channels.find((c) => c.id === "c-old")).toMatchObject({ isActive: true });
   });
 });
+
+describe("a channel made by a connect looks like the widget the merchant set up", () => {
+  it("prod's case: Urban's old store channel carries Snowy, the avatar and the logo; the new store's channel gets them", async () => {
+    const old = channel("c-demo", NEW, "urban-supply-gotcha-demo.myshopify.com", true);
+    Object.assign(old.platformMeta.shopifyLiveChat, {
+      welcome: { assistantName: "Snowy", headline: "Hi", subline: "", suggestedQuestions: ["What fits me?"] },
+      appearance: { primaryColor: "#0E7C66", logoUrl: "https://cdn.example.com/snowboard_sky.png", avatarUrl: "https://cdn.example.com/snowy.png" },
+      // What the v2 widget screen saves, and what its preview reads.
+      ux: { welcome: { title: "Hi", assistantName: "Snowy", avatarUrl: "https://cdn.example.com/snowy.png" } },
+    });
+    const out = await provisionStoreChat({ tenantId: NEW, shopDomain: SHOP });
+    expect(out.ok).toBe(true);
+    const ch = H.channels.find((c) => c.id === H.installs[0].channelAccountId);
+    expect(ch.id).not.toBe("c-demo");
+    const cfg = ch.platformMeta.shopifyLiveChat;
+    expect(cfg.welcome.assistantName).toBe("Snowy");
+    expect(cfg.appearance.logoUrl).toBe("https://cdn.example.com/snowboard_sky.png");
+    expect(cfg.appearance.avatarUrl).toBe("https://cdn.example.com/snowy.png");
+    expect(cfg.shopDomain).toBe(SHOP);
+    expect(cfg.enabled).toBe(true);
+  });
+
+  it("nothing to copy (the workspace's first store): defaults, switched on", async () => {
+    const out = await provisionStoreChat({ tenantId: NEW, shopDomain: SHOP });
+    expect(out.ok).toBe(true);
+    const cfg = H.channels[0].platformMeta.shopifyLiveChat;
+    expect(cfg.welcome.assistantName).toBe("Store Assistant");
+    expect(cfg.enabled).toBe(true);
+  });
+});

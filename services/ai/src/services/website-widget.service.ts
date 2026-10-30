@@ -248,16 +248,38 @@ export class WidgetInputError extends Error {
   constructor(public code: string, public field: string) { super(code); }
 }
 
+/** The settings the screen shows: the web chat's, else the oldest store channel's. */
+function settingsOf(webchat: { credentials: unknown } | null, shops: Array<{ config: any }>) {
+  return webchat
+    ? fromWebchat(normalizeWebchatConfig(webchat.credentials))
+    : shops[0]
+      ? fromShopify({ shopifyLiveChat: shops[0].config })
+      : fromWebchat(normalizeWebchatConfig(null));
+}
+
+/**
+ * The widget's shared settings as a patch for a store channel the workspace
+ * did not have when they were last saved, or null when there is nothing to
+ * copy (no web chat and no other store channel). A channel made by a connect
+ * was created with the defaults - "Store Assistant", no avatar, no logo - while
+ * the preview showed the workspace's own (prod 2026-10-30, Urban Supply).
+ */
+export async function widgetPatchFor(tenantId: string, exceptChannelId: string): Promise<Record<string, unknown> | null> {
+  const [webchat, shops] = await Promise.all([
+    prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
+    listChannels(tenantId),
+  ]);
+  const others = shops.filter((s) => s.id !== exceptChannelId);
+  if (!webchat && !others.length) return null;
+  return shopifyPatchOf(settingsOf(webchat, others));
+}
+
 export async function getWidget(tenantId: string) {
   const [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
     listChannels(tenantId),
   ]);
-  const settings = webchat
-    ? fromWebchat(normalizeWebchatConfig(webchat.credentials))
-    : shops[0]
-      ? fromShopify({ shopifyLiveChat: shops[0].config })
-      : fromWebchat(normalizeWebchatConfig(null));
+  const settings = settingsOf(webchat, shops);
   return {
     settings,
     assignedEmployee: await assignedEmployeeOf(tenantId).catch(() => null),

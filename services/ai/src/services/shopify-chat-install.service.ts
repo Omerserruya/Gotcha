@@ -837,9 +837,16 @@ export async function provisionStoreChat(input: {
     // the App Embed in the merchant's theme is the decision to show the
     // bubble, and v2 has no other switch. A channel this workspace already
     // had live for this shop keeps whatever its owner chose.
+    // Such a channel also takes the widget's settings as the merchant last
+    // saved them (name, avatar, logo, texts), so the store shows what the
+    // preview shows. Loaded lazily: website-widget imports this module.
     let channel = bound.channel;
-    if ((bound.created || movedFromTenantId || returning) && !channel.config.enabled) {
-      channel = await saveChannelConfig(channel, { enabled: true });
+    if (bound.created || movedFromTenantId || returning) {
+      const { widgetPatchFor } = await import("./website-widget.service");
+      const patch = await widgetPatchFor(input.tenantId, channel.id).catch((e) => { console.warn("[shopify-chat] widget settings not copied:", e?.message); return null; });
+      if (patch || !channel.config.enabled) {
+        channel = await saveChannelConfig(channel, { ...(patch ?? {}), enabled: true });
+      }
     }
 
     if (movedFromTenantId) {
