@@ -45,6 +45,8 @@ const H = vi.hoisted(() => {
     enableChatForTenant: v.fn(),
     disableChatForTenant: v.fn(async () => ({ ok: true, disabled: 1 })),
     refreshVerifiedDomains: v.fn(async () => ["my-store.myshopify.com"]),
+    provisionStoreChat: v.fn(async () => ({ ok: false, reason: "shop_taken" })),
+    provisionFailure: { current: null as any },
   };
 });
 
@@ -76,6 +78,8 @@ vi.mock("../services/shopify-chat-install.service", () => ({
   refreshVerifiedDomains: H.refreshVerifiedDomains,
   enableChatForTenant: H.enableChatForTenant,
   disableChatForTenant: H.disableChatForTenant,
+  provisionStoreChat: H.provisionStoreChat,
+  readProvisionFailure: vi.fn(async () => H.provisionFailure.current),
 }));
 
 import router from "../routes/shopify-chat-install";
@@ -109,6 +113,8 @@ beforeEach(() => {
   H.install.current = { ...INSTALLATION };
   H.connection.current = { config: { shopDomain: SHOP } };
   H.disableChatForTenant.mockResolvedValue({ ok: true, disabled: 1 });
+  H.provisionStoreChat.mockResolvedValue({ ok: false, reason: "shop_taken" });
+  H.provisionFailure.current = null;
   H.enableChatForTenant.mockResolvedValue({
     ok: true,
     installation: { ...INSTALLATION },
@@ -175,6 +181,26 @@ describe("status", () => {
     const res = await request(app()).get("/api/shopify-chat-install/status");
     expect(res.body.data.state).toBe("ready_to_activate");
     expect(res.body.data.activation).toBeNull();
+  });
+
+  // 2026-10-30: a store connected from v2 had no chat, and nothing said so.
+  it("store connected, chat not bound: says so, and why", async () => {
+    H.install.current = null;
+    H.provisionStoreChat.mockResolvedValueOnce({ ok: false, reason: "not_entitled" });
+    H.provisionFailure.current = { reason: "not_entitled", shopDomain: SHOP, at: "2026-10-30T10:00:00.000Z" };
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.status).toBe(200);
+    expect(res.body.data.shopifyConnected).toBe(true);
+    expect(res.body.data.chat).toEqual({ bound: false, reason: "not_entitled", at: "2026-10-30T10:00:00.000Z" });
+    expect(H.provisionStoreChat).toHaveBeenCalledWith({ tenantId: "t1", shopDomain: SHOP, userId: "u1" });
+  });
+
+  it("a store the connect could not bind is bound on the next read", async () => {
+    H.install.current = null;
+    H.provisionStoreChat.mockResolvedValueOnce({ ok: true, installation: { ...INSTALLATION, tenantId: "t1" }, channel: { id: "c1" }, movedFromTenantId: null });
+    const res = await request(app()).get("/api/shopify-chat-install/status");
+    expect(res.body.data.state).toBe("enabled");
+    expect(res.body.data.chat).toEqual({ bound: true, reason: null, at: null });
   });
 });
 

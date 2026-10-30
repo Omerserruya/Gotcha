@@ -36,9 +36,12 @@ import {
   buildThemeEditorDeepLink,
   isFeatureEnabledForTenant,
   FEATURES,
+  auditSystem,
+  readDurableSetting,
+  writeDurableSetting,
   type ChatActivationState,
 } from "@chatcenter/shared";
-import { SHOPIFY_LIVE_CHAT, loadChannel, type ShopifyLiveChatChannel } from "./shopify-live-chat.service";
+import { SHOPIFY_LIVE_CHAT, loadChannel, saveChannelConfig, type ShopifyLiveChatChannel } from "./shopify-live-chat.service";
 import { resolveShopifyStore } from "./shopify-catalog.service";
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
 import { withErrorCode, ERROR_CODES_KNOWN } from "../lib/error-code";
@@ -123,6 +126,14 @@ export async function recordAuthorizedInstall(input: {
   shopDomain: string;
   accessToken?: string | null;
   scopes?: string | null;
+  /**
+   * The workspace that just proved it holds this store. A revived row bound
+   * to a DIFFERENT workspace comes back unbound: the store moved, and
+   * restoring the old binding would bring the old workspace's channel back to
+   * life (2026-10-30: a store claimed into Urban Supply revived GOTCHA's
+   * channel, and binding it to Urban Supply was then refused).
+   */
+  forTenantId?: string;
 }): Promise<ChatInstallation> {
   const shop = normalizeShopifyShopDomain(input.shopDomain);
   if (!shop) throw new Error("invalid_shop_domain");
@@ -157,10 +168,12 @@ export async function recordAuthorizedInstall(input: {
       orderBy: { uninstalledAt: "desc" },
     });
     if (retired) {
+      const foreign = !!input.forTenantId && !!retired.tenantId && retired.tenantId !== input.forTenantId;
       const row = await (prisma as any).shopifyChatInstallation.update({
         where: { id: retired.id },
         data: {
-          status: retired.tenantId && retired.channelAccountId ? "ACTIVE" : "PENDING",
+          ...(foreign ? { tenantId: null, channelAccountId: null, boundAt: null } : {}),
+          status: !foreign && retired.tenantId && retired.channelAccountId ? "ACTIVE" : "PENDING",
           uninstalledAt: null,
           installedAt: new Date(),
           lastVerifiedAt: new Date(),
@@ -300,6 +313,18 @@ export function __resetKnownOriginCache(): void {
   knownOriginCache.clear();
 }
 
+/**
+ * Forget what we answered for these hosts. Called when a binding changes, so
+ * a storefront refused a moment ago is not kept refused for the rest of the
+ * cache window after it was just bound.
+ */
+export function forgetKnownOrigins(hosts: string[]): void {
+  for (const h of hosts) {
+    const host = normalizeStorefrontHost(h);
+    if (host) knownOriginCache.delete(host);
+  }
+}
+
 export async function isKnownStorefrontOrigin(origin: unknown): Promise<boolean> {
   if (typeof origin !== "string" || !origin) return false;
   let host: string;
@@ -426,6 +451,7 @@ export async function bindInstallationToTenant(input: {
   // possibly a Core connection) exists. Best-effort: never block binding.
   const domains = await refreshVerifiedDomains(bound).catch(() => bound.verifiedDomains);
   const withDomains = await syncChannelDomains(channel, domains).catch(() => channel);
+  forgetKnownOrigins([bound.shopDomain, ...domains]);
 
   return { ok: true, installation: bound, channel: withDomains, created };
 }
@@ -716,7 +742,7 @@ export async function enableChatForTenant(input: {
   const shopDomain = normalizeShopifyShopDomain((conn?.config as any)?.shopDomain ?? "");
   if (!conn || !shopDomain) return { ok: false, reason: "shopify_not_connected" };
 
-  const installation = await recordAuthorizedInstall({ shopDomain, accessToken: null, scopes: null });
+  const installation = await recordAuthorizedInstall({ shopDomain, accessToken: null, scopes: null, forTenantId: input.tenantId });
   const bound = await bindInstallationToTenant({
     installationId: installation.id,
     tenantId: input.tenantId,
@@ -725,6 +751,175 @@ export async function enableChatForTenant(input: {
   if (!bound.ok) return { ok: false, reason: bound.reason };
 
   return { ok: true, installation: bound.installation, channel: bound.channel, created: bound.created };
+}
+
+// ─── Provisioning on connect ─────────────────────────────────
+
+/** Why the last provisioning left the store without a bound chat, if it did. */
+export const CHAT_PROVISION_FAILURE_KEY = "shopify_chat.provision_failure";
+
+export type ProvisionFailure = BindFailure | "shop_invalid" | "error";
+
+export type ProvisionResult =
+  | { ok: true; installation: ChatInstallation; channel: ShopifyLiveChatChannel; movedFromTenantId: string | null }
+  | { ok: false; reason: ProvisionFailure };
+
+export async function readProvisionFailure(
+  tenantId: string,
+): Promise<{ reason: string; shopDomain: string; at: string } | null> {
+  const raw = await readDurableSetting(tenantId, CHAT_PROVISION_FAILURE_KEY).catch(() => null);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Give a store that was just connected its storefront chat.
+ *
+ * Under the unified app nothing else does. The v2 screens assume installing
+ * the Shopify app provisions the chat, and only the legacy "enable" button
+ * ever recorded and bound an installation - so a store connected from v2
+ * had no installation, no channel, and its storefront's preflight was
+ * refused (2026-10-30, shining-face claimed into Urban Supply).
+ *
+ * Callers run this only AFTER the store is this workspace's: the link has
+ * already refused a store another workspace holds live. So an installation
+ * row still bound to another workspace is stale by construction, and it
+ * moves - the old workspace's channel is switched off (its conversations
+ * stay) and the move is audited in both workspaces.
+ *
+ * Never throws and never fails the connect. A refusal (most often
+ * `not_entitled` before the Connector is paid) is logged and kept for the
+ * status route, and the next status read tries again.
+ */
+export async function provisionStoreChat(input: {
+  tenantId: string;
+  shopDomain: string;
+  userId?: string;
+}): Promise<ProvisionResult> {
+  const shop = normalizeShopifyShopDomain(input.shopDomain);
+  const fail = async (reason: ProvisionFailure): Promise<ProvisionResult> => {
+    console.warn(`[shopify-chat] provision tenant=${input.tenantId} shop=${shop || input.shopDomain} not bound: ${reason}`);
+    await writeDurableSetting(
+      input.tenantId,
+      CHAT_PROVISION_FAILURE_KEY,
+      JSON.stringify({ reason, shopDomain: shop || input.shopDomain, at: new Date().toISOString() }),
+    ).catch(() => undefined);
+    return { ok: false, reason };
+  };
+  if (!shop) return fail("shop_invalid");
+
+  try {
+    const released = await releaseForeignBinding(shop, input.tenantId);
+    if (released === "held") return fail("shop_taken");
+    const movedFromTenantId = released;
+    const installation = await recordAuthorizedInstall({
+      shopDomain: shop,
+      accessToken: null,
+      scopes: null,
+      forTenantId: input.tenantId,
+    });
+    const bound = await bindInstallationToTenant({
+      installationId: installation.id,
+      tenantId: input.tenantId,
+      userId: input.userId,
+    });
+    if (!bound.ok) return fail(bound.reason);
+
+    // A channel made (or moved) by this connect is switched on: the App
+    // Embed in the merchant's theme is the decision to show the bubble, and
+    // v2 has no other switch. A channel this workspace already had for this
+    // shop keeps whatever its owner chose.
+    let channel = bound.channel;
+    if ((bound.created || movedFromTenantId) && !channel.config.enabled) {
+      channel = await saveChannelConfig(channel, { enabled: true });
+    }
+
+    if (movedFromTenantId) {
+      const metadata = {
+        shopDomain: shop,
+        installationId: bound.installation.id,
+        fromTenantId: movedFromTenantId,
+        toTenantId: input.tenantId,
+        channelAccountId: channel.id,
+      };
+      for (const t of [movedFromTenantId, input.tenantId]) {
+        await auditSystem(t, "shopify_chat.installation.moved", { type: "shopify_chat_installation", id: bound.installation.id }, metadata);
+      }
+    }
+
+    await writeDurableSetting(input.tenantId, CHAT_PROVISION_FAILURE_KEY, null).catch(() => undefined);
+    console.log(
+      `[shopify-chat] provision tenant=${input.tenantId} shop=${shop} bound channel=${channel.id}` +
+        (movedFromTenantId ? ` moved_from=${movedFromTenantId}` : ""),
+    );
+    return { ok: true, installation: bound.installation, channel, movedFromTenantId };
+  } catch (err) {
+    console.error(`[shopify-chat] provision tenant=${input.tenantId} shop=${shop} failed: ${(err as Error)?.message}`);
+    return fail("error");
+  }
+}
+
+/**
+ * The shop's newest installation row, live or retired, when it is bound to a
+ * workspace other than `tenantId`: switch that workspace's channel off and
+ * unbind the row. Returns the workspace it was taken from.
+ */
+async function releaseForeignBinding(shop: string, tenantId: string): Promise<string | null | "held"> {
+  const row = await findLatestInstallation(shop);
+  if (!row?.tenantId || row.tenantId === tenantId) return null;
+  const from = row.tenantId;
+
+  // Belt and braces: the link already refused a store held live elsewhere,
+  // but this also runs from a status read. A workspace whose Core connection
+  // to this shop is still live keeps its chat.
+  const held = await withCrossTenantAccess(async () =>
+    (prisma as any).tenantIntegration.findFirst({
+      where: {
+        tenantId: from,
+        integration: { slug: "shopify" },
+        status: { not: "DISCONNECTED" },
+        config: { path: ["shopDomain"], equals: shop },
+      },
+      select: { id: true },
+    }),
+  );
+  if (held) return "held";
+
+  if (row.channelAccountId) {
+    await switchChannelOff(from, row.channelAccountId);
+  }
+  await withCrossTenantAccess(async () =>
+    (prisma as any).shopifyChatInstallation.update({
+      where: { id: row.id },
+      data: {
+        tenantId: null,
+        channelAccountId: null,
+        boundAt: null,
+        ...(row.status === "ACTIVE" ? { status: "PENDING" } : {}),
+      },
+    }),
+  );
+  forgetKnownOrigins([shop, ...row.verifiedDomains]);
+  return from;
+}
+
+/** Switch one store channel off. Its conversations are untouched. */
+async function switchChannelOff(tenantId: string, channelAccountId: string): Promise<void> {
+  const ch = await withCrossTenantAccess(async () =>
+    prisma.channelAccount.findFirst({ where: { id: channelAccountId, tenantId, channel: SHOPIFY_LIVE_CHAT as any } }),
+  );
+  if (!ch) return;
+  const next = normalizeShopifyLiveChatConfig({ enabled: false }, readShopifyLiveChatConfig(ch.platformMeta));
+  await withCrossTenantAccess(async () =>
+    prisma.channelAccount.update({
+      where: { id: ch.id },
+      data: { platformMeta: { shopifyLiveChat: next } as any, connectionStatus: "DISCONNECTED", isActive: false },
+    }),
+  );
 }
 
 /**

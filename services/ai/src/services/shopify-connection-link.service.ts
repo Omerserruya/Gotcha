@@ -34,6 +34,7 @@ import {
 import { findCatalog, upsertConnection } from "./connector-connection.service";
 import { refreshCapabilityState } from "./connectors/integration-framework";
 import { reconcileAgentToolPermissions } from "./tool-permission-reconcile.service";
+import { provisionStoreChat } from "./shopify-chat-install.service";
 
 /**
  * The scopes GOTCHA requests, in the ONE place that decides them.
@@ -319,6 +320,12 @@ export async function linkShopifyShopToTenant(input: {
       }
     })
     .catch((e: any) => console.warn("[shopify install] tool-permission reconcile failed:", e?.message));
+
+  // The storefront chat comes with the store (2026-10-30). Awaited so the
+  // screen the merchant lands on already shows it, and never allowed to fail
+  // the connect: a refusal is logged and kept for the status route.
+  await provisionStoreChat({ tenantId: input.tenantId, shopDomain: shop, userId: input.connectedBy })
+    .catch((e: any) => console.warn("[shopify install] store chat provisioning failed:", e?.message));
 
   if (replacing) {
     // Worth a line in the log on its own: from here on, every Shopify answer

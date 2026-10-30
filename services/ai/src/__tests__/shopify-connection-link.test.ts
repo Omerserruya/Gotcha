@@ -91,6 +91,12 @@ vi.mock("../services/tool-permission-reconcile.service", () => ({
   reconcileAgentToolPermissions: vi.fn(async () => ({ added: [] })),
 }));
 
+const PROVISION = vi.hoisted(() => ({ fn: null as any }));
+vi.mock("../services/shopify-chat-install.service", () => {
+  PROVISION.fn = vi.fn(async () => ({ ok: true }));
+  return { provisionStoreChat: PROVISION.fn };
+});
+
 import {
   linkShopifyShopToTenant,
   pendingStoreReplacement,
@@ -143,6 +149,28 @@ describe("findShopOwner", () => {
   it("is null for an unconnected shop and for a malformed one", async () => {
     await expect(findShopOwner(SHOP)).resolves.toBeNull();
     await expect(findShopOwner("evil.com")).resolves.toBeNull();
+  });
+});
+
+describe("the store's chat comes with the connect (2026-10-30)", () => {
+  it("a successful link provisions the storefront chat for that workspace and shop", async () => {
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS, connectedBy: "u1" });
+    expect(r.ok).toBe(true);
+    expect(PROVISION.fn).toHaveBeenCalledWith({ tenantId: "t1", shopDomain: SHOP, userId: "u1" });
+  });
+
+  it("provisioning that throws never fails the connect", async () => {
+    PROVISION.fn.mockRejectedValueOnce(new Error("chat down"));
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(r.ok).toBe(true);
+    expect(H.upsertCalls).toHaveLength(1);
+  });
+
+  it("a refused link provisions nothing", async () => {
+    H.rows.push({ id: "c1", tenantId: "t9", status: "CONNECTED", config: { shopDomain: SHOP } });
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(r.ok).toBe(false);
+    expect(PROVISION.fn).not.toHaveBeenCalled();
   });
 });
 

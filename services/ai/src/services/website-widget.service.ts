@@ -23,9 +23,12 @@ import {
   type HandoffRecord,
   type WebchatConfig,
   type ShopifyChatUx,
+  normalizeShopifyShopDomain,
+  SHOPIFY_OPERATION,
 } from "@chatcenter/shared";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
-import { activationSnapshot } from "./shopify-chat-install.service";
+import { activationSnapshot, provisionStoreChat } from "./shopify-chat-install.service";
+import { loadConnection } from "./connectors/integration-framework";
 import { answeringEmployee } from "./widget-assignment.service";
 import { splitErrorCode } from "../lib/error-code";
 
@@ -323,12 +326,32 @@ export function snippetFor(widgetId: string, origin = publicOrigin()): string {
   return `<script>window.__chatcenter = { widgetId: ${JSON.stringify(widgetId)}, apiUrl: ${api} };</script>\n<script src=${JSON.stringify(`${origin}/widget/chatcenter-widget.js`)} async></script>`;
 }
 
+/** The shop this workspace's Core Shopify connection holds, when the storefront is funded. */
+async function coreShopOf(tenantId: string): Promise<string | null> {
+  const conn = await loadConnection({ tenantId, slug: "shopify", capability: SHOPIFY_OPERATION.STOREFRONT }).catch(() => null);
+  return normalizeShopifyShopDomain((conn?.config as any)?.shopDomain ?? "") || null;
+}
+
 export async function installOf(tenantId: string, now = new Date()) {
-  const [webchat, shops, installations] = await Promise.all([
+  // The connected store gets its chat if the connect could not bind it then
+  // (the Connector unpaid at the time), so this tab never offers an install
+  // for a store that has no channel (2026-10-30).
+  const coreShop = await coreShopOf(tenantId);
+  if (coreShop) {
+    const bound = await (prisma as any).shopifyChatInstallation.findFirst({
+      where: { tenantId, shopDomain: coreShop, status: "ACTIVE" },
+      select: { id: true },
+    });
+    if (!bound) await provisionStoreChat({ tenantId, shopDomain: coreShop }).catch(() => null);
+  }
+  const [webchat, allShops, installations] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
     listChannels(tenantId),
     (prisma as any).shopifyChatInstallation.findMany({ where: { tenantId } }),
   ]);
+  // Only the store that is connected now. A channel left from a store this
+  // workspace replaced would put the wrong shop on the Install tab.
+  const shops = coreShop ? allShops.filter((ch) => ch.config.shopDomain === coreShop) : allShops;
   const seen = (webchat?.platformMeta as any)?.webchatInstall ?? {};
   const shopify = [];
   for (const ch of shops) {

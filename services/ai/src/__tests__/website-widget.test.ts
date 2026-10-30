@@ -28,6 +28,8 @@ const H = vi.hoisted(() => ({
   updates: 0,
   integrations: [] as any[],
   integrationWhere: [] as any[],
+  coreShop: null as string | null,
+  provision: [] as any[],
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -55,7 +57,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       flowCanvas: { findUnique: async () => H.canvas },
       chatbotFlow: { findMany: async (a: any) => H.flows.filter((f) => f.tenantId === a.where.tenantId && f.isActive && f.triggerType === a.where.triggerType) },
       aIAgent: { findFirst: async (a: any) => H.agents.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId) ?? null },
-      shopifyChatInstallation: { findMany: async () => H.installs },
+      shopifyChatInstallation: {
+        findMany: async () => H.installs,
+        findFirst: async (a: any) => H.installs.find((r) => Object.entries(a.where).every(([k, v]) => r[k] === v)) ?? null,
+      },
       tenantIntegration: {
         findMany: async (a: any) => {
           H.integrationWhere.push(a.where);
@@ -67,7 +72,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
+vi.mock("../services/connectors/integration-framework", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  loadConnection: async () => (H.coreShop ? { config: { shopDomain: H.coreShop } } : null),
+}));
+
 vi.mock("../services/shopify-chat-install.service", () => ({
+  provisionStoreChat: async (a: any) => { H.provision.push(a); return { ok: false, reason: "not_entitled" }; },
   activationSnapshot: async (inst: any) => ({ lastHeartbeatAt: inst.lastHeartbeatAt ?? null, themeEditorDeepLink: `https://admin.shopify.com/store/${inst.shopDomain}/themes/current/editor` }),
 }));
 
@@ -106,6 +117,7 @@ const cfgOf = (id: string) => readShopifyLiveChatConfig(H.accounts.find((a) => a
 
 beforeEach(() => {
   H.accounts = []; H.canvas = null; H.agents = []; H.installs = []; H.raw = []; H.updates = 0; H.integrations = []; H.integrationWhere = [];
+  H.coreShop = null; H.provision = [];
   process.env.APP_PUBLIC_URL = "https://dev.gotcha.co.il/";
 });
 
@@ -311,6 +323,24 @@ describe("/install", () => {
     // The plugin's sites (none here) and its download (docs/api/woocommerce-plugin-v1.md §5).
     expect(d.woocommerce).toEqual({ status: "use_code", sites: [], downloadUrl: "/api/woocommerce-plugin/download" });
     expect(d).not.toHaveProperty("shopifyInstallUrl");
+  });
+
+  // 2026-10-30: Urban Supply's tab showed the store it had replaced.
+  it("only the store connected now is listed, and a store with no bound chat is provisioned", async () => {
+    H.coreShop = "new.myshopify.com";
+    H.accounts = [shop("ca_old", "old.myshopify.com"), shop("ca_new", "new.myshopify.com")];
+    H.installs = [{ tenantId: "T", channelAccountId: "ca_old", shopDomain: "old.myshopify.com", status: "ACTIVE" }];
+    const d = (await get("/api/website-widget/install")).body.data;
+    expect(d.shopify.map((s: any) => s.channelId)).toEqual(["ca_new"]);
+    expect(H.provision).toEqual([{ tenantId: "T", shopDomain: "new.myshopify.com" }]);
+  });
+
+  it("a store whose chat is bound is not provisioned again", async () => {
+    H.coreShop = "new.myshopify.com";
+    H.accounts = [shop("ca_new", "new.myshopify.com")];
+    H.installs = [{ tenantId: "T", channelAccountId: "ca_new", shopDomain: "new.myshopify.com", status: "ACTIVE" }];
+    await get("/api/website-widget/install");
+    expect(H.provision).toEqual([]);
   });
 });
 

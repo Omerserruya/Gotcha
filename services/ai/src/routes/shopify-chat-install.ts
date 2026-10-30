@@ -42,6 +42,8 @@ import {
   refreshVerifiedDomains,
   enableChatForTenant,
   disableChatForTenant,
+  provisionStoreChat,
+  readProvisionFailure,
 } from "../services/shopify-chat-install.service";
 import { loadConnection } from "../services/connectors/integration-framework";
 
@@ -86,9 +88,20 @@ authed.get("/status", async (req: Request, res: Response) => {
     return;
   }
 
-  const installation = await findLiveInstallation(shopDomain);
+  let installation = await findLiveInstallation(shopDomain);
+  let bound = !!installation && installation.tenantId === tenantId;
+  // A store connected while the Connector was unpaid could not be bound then;
+  // the Core connection read above passing means it can be now (2026-10-30).
+  if (!bound) {
+    const out = await provisionStoreChat({ tenantId, shopDomain, userId: req.user?.userId });
+    if (out.ok) {
+      installation = out.installation;
+      bound = true;
+    }
+  }
   const mine = installation && (!installation.tenantId || installation.tenantId === tenantId);
   const identity = getShopifyAppIdentity();
+  const failure = bound ? null : await readProvisionFailure(tenantId);
 
   res.json({
     data: {
@@ -96,6 +109,8 @@ authed.get("/status", async (req: Request, res: Response) => {
       shopDomain,
       state: mine ? "enabled" : "ready_to_activate",
       activation: mine ? await activationSnapshot(installation!) : null,
+      // "Store connected, chat not bound", and why, as separate facts.
+      chat: { bound, reason: failure?.reason ?? null, at: failure?.at ?? null },
       // Empty until SHOPIFY_APP_HANDLE is read from the Partner Dashboard.
       // A guessed handle produces a link that 404s in the merchant's admin,
       // so the UI is given null and can say the link is unavailable.
