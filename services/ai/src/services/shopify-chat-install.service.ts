@@ -816,6 +816,10 @@ export async function provisionStoreChat(input: {
     const released = await releaseForeignBinding(shop, input.tenantId);
     if (released === "held") return fail("shop_taken");
     const movedFromTenantId = released;
+    // A store coming back after an uninstall: the uninstall switched its
+    // channel off, not the merchant, so the reconnect switches it back on.
+    const before = await findLatestInstallation(shop);
+    const returning = !before || before.status === "UNINSTALLED";
     const installation = await recordAuthorizedInstall({
       shopDomain: shop,
       accessToken: null,
@@ -829,12 +833,12 @@ export async function provisionStoreChat(input: {
     });
     if (!bound.ok) return fail(bound.reason);
 
-    // A channel made (or moved) by this connect is switched on: the App
-    // Embed in the merchant's theme is the decision to show the bubble, and
-    // v2 has no other switch. A channel this workspace already had for this
-    // shop keeps whatever its owner chose.
+    // A channel made, moved or brought back by this connect is switched on:
+    // the App Embed in the merchant's theme is the decision to show the
+    // bubble, and v2 has no other switch. A channel this workspace already
+    // had live for this shop keeps whatever its owner chose.
     let channel = bound.channel;
-    if ((bound.created || movedFromTenantId) && !channel.config.enabled) {
+    if ((bound.created || movedFromTenantId || returning) && !channel.config.enabled) {
       channel = await saveChannelConfig(channel, { enabled: true });
     }
 

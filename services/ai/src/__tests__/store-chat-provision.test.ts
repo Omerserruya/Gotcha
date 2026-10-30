@@ -175,6 +175,16 @@ describe("a connected store gets its chat", () => {
     expect(H.audits).toHaveLength(0);
   });
 
+  it("a store reconnected after an uninstall gets its old channel back, switched on", async () => {
+    // Dev's shape on 10-30: the uninstall switched the channel off; v2 has no switch to turn it back on.
+    channel("c-mine", NEW, SHOP, false);
+    H.installs.push({ id: "i-mine", shopDomain: SHOP, status: "UNINSTALLED", tenantId: null, channelAccountId: null, verifiedDomains: [SHOP], installedAt: new Date(), uninstalledAt: new Date() });
+    const out = await provisionStoreChat({ tenantId: NEW, shopDomain: SHOP });
+    expect(out.ok).toBe(true);
+    expect(H.installs.find((r) => r.id === "i-mine")).toMatchObject({ status: "ACTIVE", tenantId: NEW, channelAccountId: "c-mine" });
+    expect(H.channels.find((c) => c.id === "c-mine")).toMatchObject({ isActive: true, connectionStatus: "CONNECTED" });
+  });
+
   it("a channel this workspace already had for the shop keeps its owner's choice", async () => {
     channel("c-mine", NEW, SHOP, false);
     H.installs.push({ id: "i-mine", shopDomain: SHOP, status: "ACTIVE", tenantId: NEW, channelAccountId: "c-mine", verifiedDomains: [SHOP], installedAt: new Date() });
