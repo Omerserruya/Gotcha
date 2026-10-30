@@ -133,12 +133,37 @@ function absoluteUrl(website: string | null | undefined): string | undefined {
   }
 }
 
-export async function createAirtableLead(lead: AirtableLead): Promise<void> {
+/** What a write or a lookup came back with. `billingLimit` is the workspace's monthly API quota, a hard stop until it resets. */
+export type AirtableFailure = { ok: false; status: number | null; billingLimit: boolean };
+export type AirtableWrite = { ok: true } | AirtableFailure;
+
+async function airtable(path: string, init: RequestInit): Promise<{ ok: boolean; status: number | null; body: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+    return { ok: res.ok, status: res.status, body: res.ok && init.method === "POST" ? "" : await res.text().catch(() => "") };
+  } catch (err: any) {
+    return { ok: false, status: null, body: err?.name === "AbortError" ? "timeout" : String(err?.message ?? err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function failure(r: { status: number | null; body: string }): AirtableFailure {
+  return { ok: false, status: r.status, billingLimit: r.status === 429 && r.body.includes("PUBLIC_API_BILLING_LIMIT_EXCEEDED") };
+}
+
+export async function createAirtableLead(lead: AirtableLead): Promise<AirtableWrite> {
   if (!isConfigured()) {
     console.log(
       "[AIRTABLE-LEAD] Not configured (AIRTABLE_LEADS_TOKEN, AIRTABLE_LEADS_BASE_ID, AIRTABLE_LEADS_TABLE_ID required). Skipping.",
     );
-    return;
+    return { ok: false, status: null, billingLimit: false };
   }
 
   const phone = (lead.phone || "").trim();
@@ -165,34 +190,65 @@ export async function createAirtableLead(lead: AirtableLead): Promise<void> {
   const url = absoluteUrl(lead.website);
   if (url) fields[F.website] = url;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      // `typecast` lets Airtable create a select option it has not seen before,
-      // which is what puts `ליד חדש` and a new campaign name on the board
-      // without anyone editing the schema first.
-      body: JSON.stringify({ records: [{ fields }], typecast: true }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(
-        `[AIRTABLE-LEAD] create failed ${res.status}: ${body.slice(0, 300)}`,
-      );
-      return;
-    }
-    console.log(`[AIRTABLE-LEAD] created for source=${lead.source}`);
-  } catch (err: any) {
+  // `typecast` lets Airtable create a select option it has not seen before,
+  // which is what puts `ליד חדש` and a new campaign name on the board
+  // without anyone editing the schema first.
+  const r = await airtable("", { method: "POST", body: JSON.stringify({ records: [{ fields }], typecast: true }) });
+  if (!r.ok) {
     console.error(
-      `[AIRTABLE-LEAD] create failed: ${err?.name === "AbortError" ? "timeout" : err?.message}`,
+      r.status === null ? `[AIRTABLE-LEAD] create failed: ${r.body}` : `[AIRTABLE-LEAD] create failed ${r.status}: ${r.body.slice(0, 300)}`,
     );
-  } finally {
-    clearTimeout(timer);
+    return failure(r);
   }
+  console.log(`[AIRTABLE-LEAD] created for source=${lead.source}`);
+  return { ok: true };
+}
+
+/**
+ * Field NAMES, unlike everywhere else here: a formula cannot address a field by
+ * id. A renamed column turns the lookup into an error, and an error is never
+ * read as "missing" - so the worst a rename does is stop the retry, never
+ * write a duplicate.
+ */
+const FORMULA_EMAIL = "אימייל";
+const FORMULA_PHONE = "טלפון";
+
+/** A value inside a formula's single-quoted string. */
+function quoted(v: string): string {
+  return `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+/**
+ * Is this lead already in the table? By email, or by phone for a phone-first
+ * lead (it has no email there). Asked before every retried create, so a lead
+ * whose first write landed but was never marked is not written twice, and a
+ * record the team already works on is never touched.
+ */
+export async function findAirtableLead(lead: AirtableLead): Promise<"found" | "missing" | AirtableFailure> {
+  const email = (lead.email || "").trim().toLowerCase();
+  const phone = (lead.phone || "").trim();
+  if (!email && !phone) return "missing";
+  const formula = email
+    ? `LOWER({${FORMULA_EMAIL}})=${quoted(email)}`
+    : `{${FORMULA_PHONE}}=${quoted(phone)}`;
+  const qs = new URLSearchParams({ filterByFormula: formula, maxRecords: "1", pageSize: "1" });
+  const r = await airtable(`?${qs.toString()}`, { method: "GET" });
+  if (!r.ok) {
+    console.error(`[AIRTABLE-LEAD] lookup failed ${r.status ?? ""}: ${r.body.slice(0, 300)}`);
+    return failure(r);
+  }
+  try {
+    return (JSON.parse(r.body)?.records ?? []).length > 0 ? "found" : "missing";
+  } catch {
+    return { ok: false, status: r.status, billingLimit: false };
+  }
+}
+
+/** Look first, write only what is missing. Never an upsert: that would reset a worked lead's status. */
+export async function syncLeadToAirtable(lead: AirtableLead): Promise<AirtableWrite> {
+  if (!isConfigured()) return { ok: false, status: null, billingLimit: false };
+  const found = await findAirtableLead(lead);
+  if (found === "found") return { ok: true };
+  if (found !== "missing") return found;
+  return createAirtableLead(lead);
 }

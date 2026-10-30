@@ -44,7 +44,7 @@ describe("with nothing configured", () => {
   it("does not reach the network and does not throw", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch" as never);
     const { createAirtableLead } = await load();
-    await expect(createAirtableLead(lead() as never)).resolves.toBeUndefined();
+    await expect(createAirtableLead(lead() as never)).resolves.toMatchObject({ ok: false });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -144,7 +144,7 @@ describe("configured: what actually gets sent", () => {
     } as never);
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const { createAirtableLead } = await load();
-    await expect(createAirtableLead(lead() as never)).resolves.toBeUndefined();
+    await expect(createAirtableLead(lead() as never)).resolves.toMatchObject({ ok: false });
     expect(err).toHaveBeenCalled();
     expect(String(err.mock.calls[0][0])).toContain("422");
   });

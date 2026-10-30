@@ -2136,6 +2136,8 @@ model WaitlistEntry {
   leadScore   Int        @default(0) @map("lead_score")
   notes       String?
   convertedAt DateTime?  @map("converted_at")
+  /// When the team's Airtable got this lead. Null = not yet; the hourly pass retries it.
+  airtableSyncedAt DateTime? @map("airtable_synced_at")
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 

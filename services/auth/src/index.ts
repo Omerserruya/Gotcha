@@ -21,6 +21,7 @@ import setupLinkRoutes from "./routes/setup-link";
 import realtimeRoutes from "./routes/realtime";
 import agentPresenceRoutes from "./routes/agent-presence";
 import { startNudgeWorker } from "./services/nudge-engine.service";
+import { startAirtableLeadSync } from "./services/airtable-lead-sync.service";
 import { startOnboardingDiscoverWorker } from "./services/onboarding-discover/queue";
 import { learnStages } from "./services/onboarding-discover/learn";
 import rateLimit from "express-rate-limit";
@@ -95,6 +96,7 @@ startService(app, config);
 // Lifecycle Nudge Engine - repeatable sweep that sends due onboarding nudges.
 // Best-effort: a failure here must never stop the auth service from serving.
 startNudgeWorker().catch((err) => console.error("[auth] nudge worker start failed:", err?.message));
+startAirtableLeadSync();
 startOnboardingDiscoverWorker(() => ({ learn: learnStages() }));
 
 // RBAC seed sweep: ensure every tenant has the built-in TenantRole rows +

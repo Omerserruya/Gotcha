@@ -107,6 +107,7 @@ router.post("/", validate(waitlistSchema), async (req: Request, res: Response): 
     frustration: entry.frustration,
     source: entry.source,
     createdAt: entry.createdAt,
+    waitlistEntryId: entry.id,
   }).catch(() => {});
 
   res.status(201).json({ data: { id: entry.id } });

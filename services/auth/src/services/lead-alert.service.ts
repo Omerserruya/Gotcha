@@ -13,6 +13,7 @@
 
 import { sendTelegramNotification } from "./telegram.service";
 import { sendWhatsAppAlert } from "./whatsapp-alert.service";
+import { prisma } from "@chatcenter/shared";
 import { createAirtableLead } from "./airtable-lead.service";
 
 export interface LeadAlert {
@@ -36,6 +37,8 @@ export interface LeadAlert {
   frustration?: string | null;
   source: string;
   createdAt: Date;
+  /** The stored row, so a lead Airtable took is marked and the hourly pass skips it. */
+  waitlistEntryId?: string;
 }
 
 /** Label/value pairs, in the order a human wants to read them. */
@@ -94,6 +97,8 @@ export async function notifyNewLead(lead: LeadAlert): Promise<void> {
     // one place that knows a lead arrived and what is in it. A third
     // destination added here inherits the field list, the "never reject"
     // contract and the single call site, rather than growing a second one.
+    // A miss is left unmarked for the hourly pass (airtable-lead-sync), which
+    // looks before it writes, so the first try here stays a single call.
     createAirtableLead({
       firstName: lead.firstName,
       email: lead.email,
@@ -101,6 +106,10 @@ export async function notifyNewLead(lead: LeadAlert): Promise<void> {
       website: lead.website,
       source: lead.source,
       createdAt: lead.createdAt,
+    }).then(async (r) => {
+      if (r.ok && lead.waitlistEntryId) {
+        await prisma.waitlistEntry.update({ where: { id: lead.waitlistEntryId }, data: { airtableSyncedAt: new Date() } });
+      }
     }),
   ]);
 }
