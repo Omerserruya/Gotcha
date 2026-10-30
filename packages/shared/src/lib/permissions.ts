@@ -262,6 +262,43 @@ export function isShopifyFeature(feature: Feature): boolean {
 }
 
 /**
+ * The storefront pair, decided by the Connector alone (split billing,
+ * 2026-10-30).
+ *
+ * Their GOTCHA-side rows (`shopify_live_chat`, materialized from
+ * `commerce.shopify_live_chat`) can only ever come from a Core plan, a trial
+ * or a default - and under split billing none of those may grant Shopify. No
+ * Shopify-funded writer exists for them, so the row read below was false for
+ * every workspace and the veto direction made the store chat impossible to
+ * have, Connector paid or not (prod: Urban Supply, a TRIAL `false` beside a
+ * SHOPIFY_SUBSCRIPTION `shopify_storefront_widget`).
+ *
+ * So for these two the funded capability is the grant. The merchant's own
+ * switch is the channel's on/off and the theme's App Embed; a deliberate
+ * staff decision still wins as an OVERRIDE or COMPLIANCE_DENY entitlement on
+ * the canonical key.
+ */
+const SHOPIFY_FUNDING_DECIDES: Partial<Record<Feature, string>> = {
+  [FEATURES.SHOPIFY_LIVE_CHAT]: "commerce.shopify_live_chat",
+  [FEATURES.SHOPIFY_PRODUCT_MESSAGING]: "commerce.shopify_product_messaging",
+};
+
+async function staffDenied(tenantId: string, entitlementKey: string): Promise<boolean> {
+  const rows = await prisma.tenantEntitlement.findMany({
+    where: { tenantId, entitlementKey, source: { in: ["OVERRIDE", "COMPLIANCE_DENY"] as any } },
+    select: { value: true, source: true, expiresAt: true },
+  });
+  const now = new Date();
+  return rows.some((r: any) => {
+    if (r.expiresAt && r.expiresAt <= now) return false;
+    if (r.source === "COMPLIANCE_DENY") return true;
+    const v = r.value as any;
+    const on = typeof v === "boolean" ? v : v && typeof v === "object" ? Boolean(v.bool ?? v.value) : Boolean(v);
+    return !on;
+  });
+}
+
+/**
  * Does this tenant have feature F enabled at the org level?
  *
  * SHOPIFY IS DECIDED BEFORE ANYTHING ELSE, AND IT IS A VETO.
@@ -276,7 +313,9 @@ export function isShopifyFeature(feature: Feature): boolean {
  *
  * The veto direction matters. A workspace that has paid Shopify still has to
  * have the feature switched on; paying does not force a capability on anybody.
- * So Shopify can only ever REMOVE access here, never add it.
+ * So Shopify can only ever REMOVE access here, never add it - except for the
+ * storefront pair (`SHOPIFY_FUNDING_DECIDES`), whose GOTCHA-side switch no
+ * Shopify payment could ever turn on.
  */
 export async function isFeatureEnabledForTenant(
   tenantId: string,
@@ -288,6 +327,8 @@ export async function isFeatureEnabledForTenant(
     // an unmapped entry means nobody decided who funds it.
     if (!capability) return false;
     if (!(await isShopifyAuthorized(tenantId, capability))) return false;
+    const canonical = SHOPIFY_FUNDING_DECIDES[feature];
+    if (canonical) return !(await staffDenied(tenantId, canonical));
   }
   const map = await loadTenantFeatures(tenantId);
   if (map.has(feature)) return map.get(feature)!;
