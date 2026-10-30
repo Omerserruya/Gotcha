@@ -907,6 +907,40 @@ async function releaseForeignBinding(shop: string, tenantId: string): Promise<st
   return from;
 }
 
+/**
+ * This workspace replaced its Shopify store, so the chat on the store it
+ * left stops: its channel is switched off (conversations kept) and the
+ * installation is unbound, so the old shop can be connected elsewhere and
+ * the Install tab stops naming it. The App Embed stays in that theme; the
+ * bootstrap simply stops answering.
+ */
+export async function releaseReplacedStoreChat(input: { tenantId: string; shopDomain: string }): Promise<{ released: boolean }> {
+  const shop = normalizeShopifyShopDomain(input.shopDomain);
+  if (!shop) return { released: false };
+  const channels = await prisma.channelAccount.findMany({
+    where: { tenantId: input.tenantId, channel: SHOPIFY_LIVE_CHAT as any },
+  });
+  for (const ch of channels) {
+    if (readShopifyLiveChatConfig(ch.platformMeta).shopDomain === shop) await switchChannelOff(input.tenantId, ch.id);
+  }
+  const row = await findLiveInstallation(shop);
+  if (!row || row.tenantId !== input.tenantId) return { released: false };
+  await withCrossTenantAccess(async () =>
+    (prisma as any).shopifyChatInstallation.update({
+      where: { id: row.id },
+      data: { tenantId: null, channelAccountId: null, boundAt: null, status: "PENDING" },
+    }),
+  );
+  forgetKnownOrigins([shop, ...row.verifiedDomains]);
+  await auditSystem(input.tenantId, "shopify_chat.installation.released", { type: "shopify_chat_installation", id: row.id }, {
+    shopDomain: shop,
+    channelAccountId: row.channelAccountId,
+    reason: "store_replaced",
+  });
+  console.log(`[shopify-chat] tenant=${input.tenantId} released the chat on replaced store ${shop}`);
+  return { released: true };
+}
+
 /** Switch one store channel off. Its conversations are untouched. */
 async function switchChannelOff(tenantId: string, channelAccountId: string): Promise<void> {
   const ch = await withCrossTenantAccess(async () =>

@@ -34,7 +34,7 @@ import {
 import { findCatalog, upsertConnection } from "./connector-connection.service";
 import { refreshCapabilityState } from "./connectors/integration-framework";
 import { reconcileAgentToolPermissions } from "./tool-permission-reconcile.service";
-import { provisionStoreChat } from "./shopify-chat-install.service";
+import { provisionStoreChat, releaseReplacedStoreChat } from "./shopify-chat-install.service";
 
 /**
  * The scopes GOTCHA requests, in the ONE place that decides them.
@@ -324,6 +324,10 @@ export async function linkShopifyShopToTenant(input: {
   // The storefront chat comes with the store (2026-10-30). Awaited so the
   // screen the merchant lands on already shows it, and never allowed to fail
   // the connect: a refusal is logged and kept for the status route.
+  if (replacing) {
+    await releaseReplacedStoreChat({ tenantId: input.tenantId, shopDomain: replacing })
+      .catch((e: any) => console.warn("[shopify install] releasing the replaced store's chat failed:", e?.message));
+  }
   await provisionStoreChat({ tenantId: input.tenantId, shopDomain: shop, userId: input.connectedBy })
     .catch((e: any) => console.warn("[shopify install] store chat provisioning failed:", e?.message));
 

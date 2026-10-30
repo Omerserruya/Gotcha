@@ -91,10 +91,11 @@ vi.mock("../services/tool-permission-reconcile.service", () => ({
   reconcileAgentToolPermissions: vi.fn(async () => ({ added: [] })),
 }));
 
-const PROVISION = vi.hoisted(() => ({ fn: null as any }));
+const PROVISION = vi.hoisted(() => ({ fn: null as any, release: null as any }));
 vi.mock("../services/shopify-chat-install.service", () => {
   PROVISION.fn = vi.fn(async () => ({ ok: true }));
-  return { provisionStoreChat: PROVISION.fn };
+  PROVISION.release = vi.fn(async () => ({ released: true }));
+  return { provisionStoreChat: PROVISION.fn, releaseReplacedStoreChat: PROVISION.release };
 });
 
 import {
@@ -164,6 +165,21 @@ describe("the store's chat comes with the connect (2026-10-30)", () => {
     const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
     expect(r.ok).toBe(true);
     expect(H.upsertCalls).toHaveLength(1);
+  });
+
+  it("replacing the store releases the old store's chat, then provisions the new one", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: "old-store.myshopify.com", credentials: CREDS });
+    vi.clearAllMocks();
+    const r = await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS, allowReplace: true });
+    expect(r).toMatchObject({ ok: true, replacedShopDomain: "old-store.myshopify.com" });
+    expect(PROVISION.release).toHaveBeenCalledWith({ tenantId: "t1", shopDomain: "old-store.myshopify.com" });
+    expect(PROVISION.fn).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "t1", shopDomain: SHOP }));
+  });
+
+  it("reconnecting the same store releases nothing", async () => {
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    await linkShopifyShopToTenant({ tenantId: "t1", shopDomain: SHOP, credentials: CREDS });
+    expect(PROVISION.release).not.toHaveBeenCalled();
   });
 
   it("a refused link provisions nothing", async () => {

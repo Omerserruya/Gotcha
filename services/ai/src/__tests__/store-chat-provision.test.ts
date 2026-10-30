@@ -120,6 +120,7 @@ import {
   recordAuthorizedInstall,
   isKnownStorefrontOrigin,
   readProvisionFailure,
+  releaseReplacedStoreChat,
   __resetKnownOriginCache,
 } from "../services/shopify-chat-install.service";
 import { resolveForBootstrap } from "../services/shopify-live-chat.service";
@@ -272,5 +273,29 @@ describe("the origin cache", () => {
     expect(await isKnownStorefrontOrigin(`https://${SHOP}`)).toBe(false);
     await provisionStoreChat({ tenantId: NEW, shopDomain: SHOP });
     expect(await isKnownStorefrontOrigin(`https://${SHOP}`)).toBe(true);
+  });
+});
+
+describe("replacing the store stops the chat on the old one", () => {
+  it("the old store's channel off, its installation unbound, its origin no longer known, audited", async () => {
+    await provisionStoreChat({ tenantId: NEW, shopDomain: "old-store.myshopify.com" });
+    expect(await isKnownStorefrontOrigin("https://old-store.myshopify.com")).toBe(true);
+    const inst = H.installs[0];
+    const chId = inst.channelAccountId;
+
+    expect(await releaseReplacedStoreChat({ tenantId: NEW, shopDomain: "old-store.myshopify.com" })).toEqual({ released: true });
+    expect(inst).toMatchObject({ status: "PENDING", tenantId: null, channelAccountId: null });
+    expect(H.channels.find((c) => c.id === chId)).toMatchObject({ isActive: false, connectionStatus: "DISCONNECTED" });
+    expect(await isKnownStorefrontOrigin("https://old-store.myshopify.com")).toBe(false);
+    const pk = H.channels.find((c) => c.id === chId).externalId;
+    expect(await resolveForBootstrap({ publicKey: pk, origin: "https://old-store.myshopify.com" })).toEqual({ ok: false, denial: "disabled" });
+    expect(H.audits.at(-1)).toMatchObject({ tenantId: NEW, action: "shopify_chat.installation.released" });
+  });
+
+  it("another workspace's installation for that shop is not touched", async () => {
+    goTchaLeftovers("ACTIVE");
+    expect(await releaseReplacedStoreChat({ tenantId: NEW, shopDomain: SHOP })).toEqual({ released: false });
+    expect(H.installs.find((r) => r.id === "i-old")).toMatchObject({ tenantId: OLD, status: "ACTIVE" });
+    expect(H.channels.find((c) => c.id === "c-old")).toMatchObject({ isActive: true });
   });
 });
