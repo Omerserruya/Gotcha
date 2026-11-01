@@ -110,38 +110,26 @@ describe("POC provisioning", () => {
     // not enough - the slowness is the environment's, not the code's.
   }, 30_000);
 
-  it("enables only the selected feature areas", async () => {
+  // A pilot gets EVERYTHING (Omer, 2026-11-01): the area picker no longer narrows it.
+  it("enables every area, whatever was picked", async () => {
     const t = await makeTenant();
-    const picked = ["conversation", "analytics"].filter((d) => POC_FEATURE_DOMAINS.includes(d));
-    const result = await provisionPoc({ tenantId: t.id, credits: 1_000, expiresAt: ahead(72), features: picked });
+    const result = await provisionPoc({ tenantId: t.id, credits: 1_000, expiresAt: ahead(72), features: ["conversation"] });
 
-    expect(result.featuresEnabled.sort()).toEqual([...picked].sort());
+    expect(result.featuresEnabled.sort()).toEqual([...POC_FEATURE_DOMAINS].sort());
+    expect(result.featuresDenied).toEqual([]);
     const effective = await getEffectiveEntitlements(t.id);
-    for (const d of picked) {
-      expect(effective.get(d)?.value, d).toBeTruthy();
-    }
+    for (const d of POC_FEATURE_DOMAINS) expect(effective.get(d)?.value, d).toBeTruthy();
   });
 
-  it("writes an explicit DENIAL for every unselected area", async () => {
+  it("writes every area as an explicit TRIAL row, so the grant ends with the pilot", async () => {
     const t = await makeTenant();
-    const picked = ["conversation"];
-    const result = await provisionPoc({ tenantId: t.id, credits: 1_000, expiresAt: ahead(72), features: picked });
-
-    // License semantics are default-ALLOW, so an absent row means allowed. A
-    // POC scoped to conversations that merely failed to mention voice would
-    // have granted voice.
-    const denied = POC_FEATURE_DOMAINS.filter((d) => !picked.includes(d));
-    expect(result.featuresDenied.sort()).toEqual(denied.sort());
-
+    await provisionPoc({ tenantId: t.id, credits: 1_000, expiresAt: ahead(72), features: ["conversation"] });
     const rows = await prisma.tenantEntitlement.findMany({
-      where: { tenantId: t.id, entitlementKey: { in: denied } },
+      where: { tenantId: t.id, entitlementKey: { in: POC_FEATURE_DOMAINS } },
       select: { entitlementKey: true, source: true },
     });
-    expect(rows).toHaveLength(denied.length);
+    expect(rows).toHaveLength(POC_FEATURE_DOMAINS.length);
     for (const r of rows) expect(r.source).toBe("TRIAL");
-
-    const effective = await getEffectiveEntitlements(t.id);
-    for (const d of denied) expect(effective.get(d)?.value, d).toBeFalsy();
   });
 
   it("stores the exact expiry and schedules no renewal charge", async () => {

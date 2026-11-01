@@ -58,6 +58,16 @@ const PILOT_LIMITS: Record<string, number> = {
  * Derived from the shipped catalog so a capability added later cannot be
  * silently missing from every pilot.
  */
+/** A stored BOOLEAN entitlement value: `true`, `{ bool }` or `{ value }`. */
+function isOn(v: unknown): boolean {
+  if (typeof v === "boolean") return v;
+  if (v && typeof v === "object") return Boolean((v as any).bool ?? (v as any).value);
+  return Boolean(v);
+}
+
+/** Capabilities only the Shopify Connector may fund. */
+const SHOPIFY_FUNDED_KEY = /^(commerce\.)?shopify_/;
+
 export const PILOT_CAPABILITY_KEYS: string[] = BOOLEAN_FEATURE_KEYS.filter(
   (k) => !isUnsellable(k) && !k.startsWith("voice."),
 );
@@ -233,14 +243,22 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
     actor: input.actor,
   });
 
-  // License semantics are default-ALLOW: an absent row means allowed. So an
-  // EXACT feature set needs an explicit row for every domain - true for the
-  // chosen ones and false for the rest - or "we only enabled conversations"
-  // would quietly mean "we enabled everything except the ones we listed".
+  // A pilot gets EVERYTHING (Omer, 2026-11-01). The console's area picker
+  // used to narrow it, and it could not even do that right: the capability
+  // keys were matched to areas by their first segment, and `communication.*`,
+  // `commerce.*` and `manager.*` match no area - so "everything on" in the
+  // console switched automations, broadcasts, the dashboard and nine more OFF
+  // (prod, One Of A Kind, POST /api/automations 402). Every area and every
+  // capability is now written true. `features` is still validated and is
+  // echoed back as what was asked, but it no longer restricts.
+  //
+  // The Shopify pair is the one exception, and it is not ours to grant: a
+  // TRIAL row can never fund Shopify (entitledIn), the Connector does
+  // (permissions.ts SHOPIFY_FUNDING_DECIDES). Written false so the rows say so.
   const enabled: string[] = [];
   const denied: string[] = [];
   for (const domain of POC_FEATURE_DOMAINS) {
-    const on = picked ? picked.has(domain) : true;
+    const on = true;
     await setTenantEntitlement({
       tenantId: input.tenantId,
       key: domain,
@@ -306,8 +324,7 @@ export async function provisionPoc(input: PocProvisioningInput): Promise<PocProv
   // door. Voice is excluded for the same reason `limit:voice_channels` is -
   // it belongs to the voice license, which is the more specific answer.
   for (const key of PILOT_CAPABILITY_KEYS) {
-    const domain = key.split(".")[0] as string;
-    const on = picked ? picked.has(domain) : true;
+    const on = !SHOPIFY_FUNDED_KEY.test(key);
     await setTenantEntitlement({
       tenantId: input.tenantId,
       key,
@@ -397,6 +414,61 @@ export async function reconcileEvaluationCapabilities(input: {
   invalidatePermissionsCache({ tenantId: input.tenantId });
 
   return { granted: missing, alreadyPresent: have.size };
+}
+
+/**
+ * Every area and capability ON for a live evaluation, without touching its
+ * credits or expiry (Omer, 2026-11-01: a pilot gets everything).
+ *
+ * The repair for pilots provisioned while the console's area picker could
+ * switch capabilities off: their rows EXIST with false, so the reconcile above
+ * (missing keys only) never reached them. Writes TRIAL rows on the
+ * evaluation's own expiry; the Shopify pair stays false, the Connector's to
+ * grant. `apply: false` reports what would change and writes nothing.
+ */
+export async function grantAllEvaluationFeatures(input: {
+  tenantId: string;
+  apply: boolean;
+  actor?: string;
+}): Promise<{ evaluation: boolean; changes: Array<{ key: string; from: boolean | null; to: boolean }> }> {
+  const link = await prisma.billableEntityTenant.findUnique({
+    where: { tenantId: input.tenantId },
+    include: { entity: { include: { subscription: true } } },
+  });
+  const sub = link?.entity.subscription;
+  if (!sub || sub.status !== "ACTIVE") return { evaluation: false, changes: [] };
+  const plan = await prisma.plan.findUnique({
+    where: { key_version: { key: sub.planKey, version: sub.planVersion } },
+    select: { kind: true },
+  });
+  if (!plan || (plan.kind !== "POC" && plan.kind !== "TRIAL")) return { evaluation: false, changes: [] };
+
+  const keys = [...POC_FEATURE_DOMAINS, ...PILOT_CAPABILITY_KEYS];
+  const rows = await prisma.tenantEntitlement.findMany({
+    where: { tenantId: input.tenantId, source: "TRIAL", entitlementKey: { in: keys } },
+    select: { entitlementKey: true, value: true },
+  });
+  const now = new Map(rows.map((r) => [r.entitlementKey, isOn(r.value)]));
+  const changes = keys
+    .map((key) => ({ key, from: now.has(key) ? now.get(key)! : null, to: !SHOPIFY_FUNDED_KEY.test(key) }))
+    .filter((c) => c.from !== c.to);
+  if (!input.apply || changes.length === 0) return { evaluation: true, changes };
+
+  for (const c of changes) {
+    await setTenantEntitlement({
+      tenantId: input.tenantId,
+      key: c.key,
+      valueType: "BOOLEAN",
+      value: c.to,
+      source: "TRIAL",
+      expiresAt: sub.currentPeriodEnd ?? undefined,
+      reason: "Evaluation: every feature on (2026-11-01)",
+      createdBy: input.actor,
+    });
+  }
+  await materializeEntitlements(input.tenantId, input.actor);
+  invalidatePermissionsCache({ tenantId: input.tenantId });
+  return { evaluation: true, changes };
 }
 
 /**
