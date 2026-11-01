@@ -114,6 +114,12 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       }),
       support ? Promise.resolve([]) : listMemberships(user.identityId),
     ]);
+    // The banner names the admin; their user row is in the System tenant.
+    const adminName = support
+      ? await withCrossTenantAccess(() => prisma.user.findUnique({ where: { id: support.adminUserId }, select: { name: true } }))
+          .then((u) => u?.name ?? null)
+          .catch(() => null)
+      : null;
 
     // Only while the workspace is still being set up (see setupAdminFor).
     const setupAdmin = await setupAdminFor(user.tenantId, tenant?.status).catch(() => null);
@@ -127,7 +133,7 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       // tenant switcher / picker.
       memberships,
       ...(support
-        ? { support: { sessionId: support.sessionId, tenantName: tenant?.name ?? null, startedAt: support.startedAt, expiresAt: support.expiresAt, reason: support.reason, actor: { adminUserId: support.adminUserId, adminEmail: support.adminEmail } } }
+        ? { support: { sessionId: support.sessionId, tenantName: tenant?.name ?? null, startedAt: support.startedAt, expiresAt: support.expiresAt, reason: support.reason, actor: { adminUserId: support.adminUserId, adminEmail: support.adminEmail, adminName } } }
         : {}),
     });
   } catch (err) {

@@ -10,7 +10,9 @@
  *   support_denied:delete     deleting conversations, messages or AI employees;
  *                             disconnecting a channel, number, system or Woo
  *                             site; uninstalling a store; erasing a user
- *   support_denied:ownership  removing a user, changing a role, inviting an admin
+ *   support_denied:ownership  removing a user, changing a role, inviting an admin;
+ *                             signing a member out (one session or all others),
+ *                             removing an MFA device, changing the MFA policy
  *   support_denied:secrets    rotating credentials
  * Reconnecting a store, and editing or deleting automations and knowledge
  * documents, stay allowed.
@@ -50,7 +52,10 @@ const RULES: Rule[] = [
 
   { methods: ["DELETE"], path: new RegExp(`^/api/agents/(?!presence|settings)${ID}$`), code: "support_denied:ownership" },
   { methods: ["PATCH", "PUT"], path: new RegExp(`^/api/agents/(?!presence|settings)${ID}$`), code: "support_denied:ownership", when: (b) => b && typeof b === "object" && ("role" in b || "isActive" in b) },
-  { methods: ["POST"], path: /^\/api\/agents\/?$/, code: "support_denied:ownership", when: (b) => String(b?.role ?? "").toUpperCase() === "ADMIN" },
+  { methods: ["POST"], path: /^\/api\/agents\/?$/, code: "support_denied:ownership", when: (b) => ["ADMIN", "OWNER", "SYSTEM_ADMIN"].includes(String(b?.role ?? "").toUpperCase()) },
+  { methods: ["DELETE"], path: new RegExp(`^/api/account/sessions(/${ID})?$`), code: "support_denied:ownership" },
+  { methods: ["DELETE"], path: new RegExp(`^/api/account/security/device/${ID}/${ID}$`), code: "support_denied:ownership" },
+  { methods: "WRITE", path: /^\/api\/tenant\/security$/, code: "support_denied:ownership" },
 
   { methods: ["POST"], path: new RegExp(`^/api/voice-channels/${ID}/rotate-secrets$`), code: "support_denied:secrets" },
 ];

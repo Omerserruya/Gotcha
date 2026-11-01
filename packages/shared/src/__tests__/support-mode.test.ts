@@ -68,6 +68,10 @@ describe("what support mode may not do", () => {
     ["DELETE", "/api/woocommerce-plugin/sites/s1", "support_denied:delete"],
     ["DELETE", "/api/gdpr/users/u1", "support_denied:delete"],
     ["DELETE", "/api/agents/u2", "support_denied:ownership"],
+    ["DELETE", "/api/account/sessions/us_9", "support_denied:ownership"],
+    ["DELETE", "/api/account/sessions", "support_denied:ownership"],
+    ["DELETE", "/api/account/security/device/totp/d1", "support_denied:ownership"],
+    ["PATCH", "/api/tenant/security", "support_denied:ownership"],
     ["POST", "/api/voice-channels/v1/rotate-secrets", "support_denied:secrets"],
   ])("%s %s -> %s", (m, path, code) => {
     expect(supportDenial(m, path, {})).toBe(code);
@@ -81,6 +85,7 @@ describe("what support mode may not do", () => {
 
   it("inviting an admin is ownership; inviting an agent is not", () => {
     expect(supportDenial("POST", "/api/agents", { role: "ADMIN" })).toBe("support_denied:ownership");
+    expect(supportDenial("POST", "/api/agents", { role: "owner" })).toBe("support_denied:ownership");
     expect(supportDenial("POST", "/api/agents", { role: "AGENT" })).toBeNull();
   });
 
@@ -96,6 +101,8 @@ describe("what support mode may not do", () => {
     ["POST", "/api/integrations/shopify/install/start"],
     ["PUT", "/api/website-widget"],
     ["DELETE", "/api/channels/whatsapp/exclusions/e1"],
+    ["GET", "/api/account/sessions"],
+    ["GET", "/api/tenant/security"],
   ])("%s %s stays allowed (automations, knowledge, reconnect, everyday work)", (m, path) => {
     expect(supportDenial(m, path, {})).toBeNull();
   });
