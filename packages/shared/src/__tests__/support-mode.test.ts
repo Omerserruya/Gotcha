@@ -72,6 +72,11 @@ describe("what support mode may not do", () => {
     ["DELETE", "/api/account/sessions", "support_denied:ownership"],
     ["DELETE", "/api/account/security/device/totp/d1", "support_denied:ownership"],
     ["PATCH", "/api/tenant/security", "support_denied:ownership"],
+    ["PUT", "/api/permissions/users/u2/role", "support_denied:ownership"],
+    ["POST", "/api/permissions/users/u2/roles/r1", "support_denied:ownership"],
+    ["PUT", "/api/permissions/users/u2/grants/billing", "support_denied:ownership"],
+    ["POST", "/api/permissions/roles", "support_denied:ownership"],
+    ["PUT", "/api/permissions/roles/r1/features", "support_denied:ownership"],
     ["POST", "/api/voice-channels/v1/rotate-secrets", "support_denied:secrets"],
   ])("%s %s -> %s", (m, path, code) => {
     expect(supportDenial(m, path, {})).toBe(code);
@@ -103,6 +108,7 @@ describe("what support mode may not do", () => {
     ["DELETE", "/api/channels/whatsapp/exclusions/e1"],
     ["GET", "/api/account/sessions"],
     ["GET", "/api/tenant/security"],
+    ["GET", "/api/permissions/roles"],
   ])("%s %s stays allowed (automations, knowledge, reconnect, everyday work)", (m, path) => {
     expect(supportDenial(m, path, {})).toBeNull();
   });

@@ -6,6 +6,7 @@ import {
   isPermissionKey,
   expandPermissionPattern,
   getEffectiveBuiltinRole,
+  currentRequestContext,
   type PermissionPrincipal,
 } from "@chatcenter/shared";
 
@@ -25,7 +26,7 @@ import {
 
 export interface GrantRefusal {
   status: 403;
-  code: "ABOVE_OWN_ROLE" | "OWNER_ONLY";
+  code: "ABOVE_OWN_ROLE" | "OWNER_ONLY" | "support_denied:ownership";
   error: string;
   /** The keys the actor would be handing out without holding. */
   missing?: string[];
@@ -96,7 +97,12 @@ export function actorOf(req: { user?: any; tenantId?: string }): PermissionPrinc
 export async function inviteRoleRefusal(
   actor: PermissionPrincipal,
   tenantId: string,
-  resolved: { tenantRoleId: string | null },
+  resolved: { tenantRoleId: string | null; coarse?: string },
 ): Promise<GrantRefusal | null> {
+  // Support mode invites members only. The role is checked RESOLVED: v2 sends a
+  // role row's id, which the keyword rule in support-deny.ts cannot see.
+  if (currentRequestContext()?.supportSessionId && resolved.coarse !== "AGENT") {
+    return { status: 403, code: "support_denied:ownership", error: "Not available in support mode" };
+  }
   return resolved.tenantRoleId ? roleRefusal(actor, tenantId, resolved.tenantRoleId) : null;
 }

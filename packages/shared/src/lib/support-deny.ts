@@ -12,7 +12,10 @@
  *                             site; uninstalling a store; erasing a user
  *   support_denied:ownership  removing a user, changing a role, inviting an admin;
  *                             signing a member out (one session or all others),
- *                             removing an MFA device, changing the MFA policy
+ *                             removing an MFA device, changing the MFA policy;
+ *                             any change to roles, role assignments or grants
+ *                             (an invite into a role id is refused at the
+ *                             resolved role, auth lib/grant-ceiling)
  *   support_denied:secrets    rotating credentials
  * Reconnecting a store, and editing or deleting automations and knowledge
  * documents, stay allowed.
@@ -56,6 +59,7 @@ const RULES: Rule[] = [
   { methods: ["DELETE"], path: new RegExp(`^/api/account/sessions(/${ID})?$`), code: "support_denied:ownership" },
   { methods: ["DELETE"], path: new RegExp(`^/api/account/security/device/${ID}/${ID}$`), code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/tenant\/security$/, code: "support_denied:ownership" },
+  { methods: "WRITE", path: /^\/api\/permissions\/(users|roles)(\/|$)/, code: "support_denied:ownership" },
 
   { methods: ["POST"], path: new RegExp(`^/api/voice-channels/${ID}/rotate-secrets$`), code: "support_denied:secrets" },
 ];
