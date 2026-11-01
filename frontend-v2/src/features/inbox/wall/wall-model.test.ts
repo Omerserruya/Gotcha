@@ -33,6 +33,7 @@ const ok = (over: Partial<SuggestionsResponse> = {}): CopilotRead =>
       copilotMode: 'READY_MESSAGE',
       stale: false,
       generating: false,
+      skipped: null,
       basedOnMessageId: null,
       generatedAt: null,
       ...over,
@@ -63,10 +64,21 @@ describe('★★ suggestionView - every kind of nothing, said apart', () => {
     [{}, 'none'],
     [{ generating: true }, 'writing'],
     [{ stale: true }, 'waiting'],
+    [{ skipped: 'ai_or_closed' }, 'aiOrClosed'],
   ] as const)('only actions read as no answers: %o -> %s', (over, note) => {
     expect(
       suggestionView(ok({ data: [s({ id: 'q', type: 'quick_action' })], ...over })),
     ).toMatchObject({ kind: 'note', note });
+  });
+
+  it('★ a refresh that skipped (the AI, a flow or closed) says why and offers no "Try again"', () => {
+    expect(suggestionView(ok({ data: [], stale: true, skipped: 'ai_or_closed' }))).toEqual({
+      kind: 'note',
+      note: 'aiOrClosed',
+      retry: false,
+    });
+    // What is stored still shows: the skip only says nothing new was made.
+    expect(suggestionView(ok({ skipped: 'ai_or_closed' }))).toMatchObject({ kind: 'cards' });
   });
 
   it('★★ Backend 9c5e96cc: empty and generating is "writing", empty and stale is "waiting"', () => {

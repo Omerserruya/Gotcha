@@ -17,8 +17,12 @@ import { WallBody } from './WallBody';
 
 const messages = vi.hoisted(() => vi.fn());
 vi.mock('./wall-actions', () => ({ conversationMessages: messages }));
-const ask = vi.hoisted(() => vi.fn());
-vi.mock('../compose-actions', () => ({ askCopilot: ask }));
+const chat = vi.hoisted(() => ({
+  readCopilotChat: vi.fn(),
+  askCopilotChat: vi.fn(),
+  clearCopilotChat: vi.fn(),
+}));
+vi.mock('./copilot-chat-actions', () => chat);
 const runOrder = vi.hoisted(() => vi.fn());
 vi.mock('@/features/customers/order-actions', () => ({ runOrderAction: runOrder }));
 vi.mock('@/i18n/navigation', () => ({
@@ -42,7 +46,8 @@ const wrap = (node: ReactNode) =>
 
 beforeEach(() => {
   messages.mockReset();
-  ask.mockReset();
+  for (const fn of Object.values(chat)) fn.mockReset();
+  chat.readCopilotChat.mockResolvedValue({ ok: true, turns: [] });
   runOrder.mockReset();
 });
 
@@ -365,38 +370,135 @@ describe('★★ WooCommerce, by contact (e30900fd) - read-only, and says how it
   });
 });
 
-describe('★★ Ask Copilot anything - into the reply box, never to the customer', () => {
-  it('the answer lands in the composer, selected; the field empties', async () => {
-    ask.mockResolvedValue({ ok: true, text: 'Here is a reply.' });
+const turn = (
+  id: string,
+  role: 'agent' | 'copilot',
+  text: string,
+  draft: string | null = null,
+) => ({
+  id,
+  role,
+  text,
+  draft,
+  at: '2026-10-24T22:00:00Z',
+});
+
+describe('★★ the Copilot side chat - a private thread, never to the customer', () => {
+  it("★★ the thread the server keeps is drawn on open, the agent's and the Copilot's", async () => {
+    chat.readCopilotChat.mockResolvedValue({
+      ok: true,
+      turns: [
+        turn('1', 'agent', 'Where is the order?'),
+        turn('2', 'copilot', 'It shipped Monday.'),
+      ],
+    });
+    wrap(<AskCopilot conversationId="c1" />);
+    expect(await screen.findByTestId('wall-chat-copilot')).toHaveTextContent('It shipped Monday.');
+    expect(screen.getByTestId('wall-chat-agent')).toHaveTextContent('Where is the order?');
+    expect(chat.readCopilotChat).toHaveBeenCalledWith('c1');
+    expect(screen.getByTestId('wall-chat')).toHaveTextContent(
+      'Nothing in it reaches the customer.',
+    );
+  });
+
+  it('★★ asking: the question shows at once, then the thread the server answers with; the composer is untouched', async () => {
+    let answer: (value: unknown) => void = () => {};
+    chat.askCopilotChat.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     const fills: ComposerFill[] = [];
     const onFill = (e: Event) => fills.push((e as CustomEvent<ComposerFill>).detail);
     window.addEventListener(FILL_COMPOSER_EVENT, onFill);
     wrap(<AskCopilot conversationId="c1" />);
     const input = screen.getByTestId('wall-ask-input');
-    fireEvent.change(input, { target: { value: 'Offer a discount' } });
+    fireEvent.change(input, { target: { value: 'Can we refund?' } });
     fireEvent.click(screen.getByTestId('wall-ask-send'));
-    await waitFor(() => expect(fills).toEqual([{ text: 'Here is a reply.', select: true }]));
-    window.removeEventListener(FILL_COMPOSER_EVENT, onFill);
-    expect(ask).toHaveBeenCalledWith('c1', 'Offer a discount');
+    expect(await screen.findByTestId('wall-chat-asking')).toHaveTextContent('Can we refund?');
+    expect(screen.getByTestId('wall-chat-thinking')).toBeInTheDocument();
     expect(input).toHaveValue('');
-    expect(input).toHaveAttribute('title', expect.stringContaining('Nothing is sent'));
+    expect(chat.askCopilotChat).toHaveBeenCalledWith('c1', 'Can we refund?', 'en');
+    answer({
+      ok: true,
+      turns: [turn('1', 'agent', 'Can we refund?'), turn('2', 'copilot', 'Yes, within 14 days.')],
+    });
+    expect(await screen.findByTestId('wall-chat-copilot')).toHaveTextContent(
+      'Yes, within 14 days.',
+    );
+    expect(screen.queryByTestId('wall-chat-thinking')).toBeNull();
+    // No draft: nothing to put in the reply box, and nothing put there.
+    expect(screen.queryByTestId('wall-chat-use')).toBeNull();
+    window.removeEventListener(FILL_COMPOSER_EVENT, onFill);
+    expect(fills).toEqual([]);
   });
 
-  it('a failure says which, and keeps the question', async () => {
-    ask.mockResolvedValue({ ok: false, reason: 'units_exhausted' });
+  it('★★ a draft reaches the composer only through "Use as reply", selected; never by itself', async () => {
+    chat.readCopilotChat.mockResolvedValue({
+      ok: true,
+      turns: [turn('2', 'copilot', 'Offer a refund.', 'Hi Dana, we have refunded your order.')],
+    });
+    const fills: ComposerFill[] = [];
+    const onFill = (e: Event) => fills.push((e as CustomEvent<ComposerFill>).detail);
+    window.addEventListener(FILL_COMPOSER_EVENT, onFill);
+    wrap(<AskCopilot conversationId="c1" />);
+    expect(await screen.findByTestId('wall-chat-draft')).toHaveTextContent(
+      'Hi Dana, we have refunded your order.',
+    );
+    expect(fills).toEqual([]);
+    fireEvent.click(screen.getByTestId('wall-chat-use'));
+    window.removeEventListener(FILL_COMPOSER_EVENT, onFill);
+    expect(fills).toEqual([{ text: 'Hi Dana, we have refunded your order.', select: true }]);
+  });
+
+  it.each([
+    ['busy', 'still on its way'],
+    ['no_ai_employee', 'no AI employee yet'],
+    ['too_long', 'Up to 4,000 characters'],
+  ] as const)('%s: says so, and keeps the message in the field', async (reason, words) => {
+    chat.askCopilotChat.mockResolvedValue({ ok: false, reason });
     wrap(<AskCopilot conversationId="c1" />);
     fireEvent.change(screen.getByTestId('wall-ask-input'), { target: { value: 'Hi' } });
     fireEvent.click(screen.getByTestId('wall-ask-send'));
+    const note = await screen.findByTestId('wall-ask-note');
+    expect(note).toHaveAttribute('data-reason', reason);
+    expect(note).toHaveTextContent(words);
+    expect(screen.getByTestId('wall-ask-input')).toHaveValue('Hi');
+    expect(screen.queryByTestId('wall-ask-retry')).toBeNull();
+  });
+
+  it('★ a failed round stored nothing: it says so, and "Try again" sends the same words', async () => {
+    chat.askCopilotChat.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    chat.askCopilotChat.mockResolvedValueOnce({
+      ok: true,
+      turns: [turn('1', 'agent', 'Hi'), turn('2', 'copilot', 'Hello.')],
+    });
+    wrap(<AskCopilot conversationId="c1" />);
+    fireEvent.change(screen.getByTestId('wall-ask-input'), { target: { value: 'Hi' } });
+    fireEvent.click(screen.getByTestId('wall-ask-send'));
+    fireEvent.click(await screen.findByTestId('wall-ask-retry'));
+    expect(await screen.findByTestId('wall-chat-copilot')).toHaveTextContent('Hello.');
+    expect(chat.askCopilotChat).toHaveBeenNthCalledWith(2, 'c1', 'Hi', 'en');
+  });
+
+  it('★ start over empties the thread on the server, then here', async () => {
+    chat.readCopilotChat.mockResolvedValue({ ok: true, turns: [turn('2', 'copilot', 'Old.')] });
+    chat.clearCopilotChat.mockResolvedValue({ ok: true, turns: [] });
+    wrap(<AskCopilot conversationId="c1" />);
+    fireEvent.click(await screen.findByTestId('wall-chat-start-over'));
+    await waitFor(() => expect(screen.queryByTestId('wall-chat')).toBeNull());
+    expect(chat.clearCopilotChat).toHaveBeenCalledWith('c1');
+  });
+
+  it('★ not on the plan: said once, and the field is off', async () => {
+    chat.readCopilotChat.mockResolvedValue({ ok: false, reason: 'not_on_plan' });
+    wrap(<AskCopilot conversationId="c1" />);
     expect(await screen.findByTestId('wall-ask-note')).toHaveAttribute(
       'data-reason',
-      'units_exhausted',
+      'not_on_plan',
     );
-    expect(screen.getByTestId('wall-ask-input')).toHaveValue('Hi');
+    expect(screen.getByTestId('wall-ask-input')).toBeDisabled();
   });
 
   it('★ Send always draws its arrow - empty, typing, sending and off', async () => {
     const arrow = () => screen.getByTestId('wall-ask-send').querySelector('svg');
-    ask.mockReturnValue(new Promise(() => {}));
+    chat.askCopilotChat.mockReturnValue(new Promise(() => {}));
     const { unmount } = wrap(<AskCopilot conversationId="c1" />);
     expect(screen.getByTestId('wall-ask-send')).toBeDisabled();
     expect(arrow()).not.toBeNull();
@@ -404,7 +506,8 @@ describe('★★ Ask Copilot anything - into the reply box, never to the custome
     expect(screen.getByTestId('wall-ask-send')).toBeEnabled();
     expect(arrow()).not.toBeNull();
     fireEvent.click(screen.getByTestId('wall-ask-send'));
-    await waitFor(() => expect(screen.getByTestId('wall-ask-send')).toBeDisabled());
+    expect(await screen.findByTestId('wall-chat-asking')).toBeInTheDocument();
+    expect(screen.getByTestId('wall-ask-send')).toBeDisabled();
     expect(arrow()).not.toBeNull();
     expect(arrow()).toHaveAttribute('aria-hidden', 'true');
     unmount();
@@ -412,9 +515,10 @@ describe('★★ Ask Copilot anything - into the reply box, never to the custome
     expect(arrow()).not.toBeNull();
   });
 
-  it('nothing open: off, and says why', () => {
+  it('nothing open: off, says why, and reads nothing', () => {
     wrap(<AskCopilot conversationId={null} />);
     expect(screen.getByTestId('wall-ask-input')).toBeDisabled();
     expect(screen.getByTestId('wall-ask-send')).toBeDisabled();
+    expect(chat.readCopilotChat).not.toHaveBeenCalled();
   });
 });

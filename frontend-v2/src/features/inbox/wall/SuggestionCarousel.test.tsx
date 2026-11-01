@@ -52,6 +52,7 @@ const ok = (data: Suggestion[], over: Record<string, unknown> = {}): CopilotRead
     copilotMode: 'READY_MESSAGE',
     stale: false,
     generating: false,
+    skipped: null,
     basedOnMessageId: null,
     generatedAt: null,
     ...over,
