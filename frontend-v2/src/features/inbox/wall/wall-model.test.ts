@@ -45,6 +45,30 @@ describe('★★ suggestionView - every kind of nothing, said apart', () => {
     expect(suggestionView(ok({ stale: true }))).toMatchObject({ kind: 'cards', stale: true });
   });
 
+  it('★★ the cards are drafts only, in their order; actions and info are dropped', () => {
+    const view = suggestionView(
+      ok({
+        data: [
+          s({ id: 'a' }),
+          s({ id: 'q', type: 'quick_action' }),
+          s({ id: 'b', type: ' Reply ' }),
+          s({ id: 'x', type: 'action' }),
+        ],
+      }),
+    );
+    expect(view.kind === 'cards' && view.suggestions.map((x) => x.id)).toEqual(['a', 'b']);
+  });
+
+  it.each([
+    [{}, 'none'],
+    [{ generating: true }, 'writing'],
+    [{ stale: true }, 'waiting'],
+  ] as const)('only actions read as no answers: %o -> %s', (over, note) => {
+    expect(
+      suggestionView(ok({ data: [s({ id: 'q', type: 'quick_action' })], ...over })),
+    ).toMatchObject({ kind: 'note', note });
+  });
+
   it('★★ Backend 9c5e96cc: empty and generating is "writing", empty and stale is "waiting"', () => {
     expect(suggestionView(ok({ data: [], stale: true, generating: true }))).toEqual({
       kind: 'note',

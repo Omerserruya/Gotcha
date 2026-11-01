@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -221,12 +221,35 @@ describe('★★ Use this and Edit put text in the box - and send nothing', () =
     ]);
   });
 
-  it('⚠ a proposed action has no button', async () => {
-    read.mockResolvedValue(ok([s('a', { type: 'quick_action' })]));
+  it('★★ a mixed array: only drafts are answers - drawn, counted and paged; actions are not there at all', async () => {
+    // What dev showed as "option 4": the suggestions loop puts quick_action items in the same array.
+    read.mockResolvedValue(
+      ok([
+        s('a'),
+        s('q', { type: 'quick_action', text: 'link customer identifier - type: phone' }),
+        s('b'),
+        s('x', { type: 'action', text: 'Refund the order' }),
+        s('i', { type: 'info', text: 'Customer is a VIP' }),
+      ]),
+    );
     show();
     await screen.findByTestId('wall-suggestion-a');
-    expect(screen.queryByTestId('wall-suggestion-use')).toBeNull();
-    expect(screen.queryByTestId('wall-suggestion-edit')).toBeNull();
+    const answers = screen.getByTestId('wall-suggestions');
+    expect(within(answers).getByRole('heading')).toHaveTextContent('Two ways to answer');
+    expect(screen.getByTestId('wall-suggestions-position')).toHaveTextContent('1 of 2');
+    expect(screen.getByTestId('wall-suggestion-b')).toBeInTheDocument();
+    for (const id of ['q', 'x', 'i'])
+      expect(screen.queryByTestId(`wall-suggestion-${id}`)).toBeNull();
+    expect(answers).not.toHaveTextContent(/link customer identifier|Refund the order|VIP/);
+  });
+
+  it('only actions: no answers - said as "nothing to suggest", never an action card', async () => {
+    read.mockResolvedValue(
+      ok([s('q', { type: 'quick_action', text: 'link customer identifier' })]),
+    );
+    show();
+    expect(await screen.findByTestId('wall-suggestions-note')).toHaveAttribute('data-note', 'none');
+    expect(screen.queryByTestId('wall-suggestion-q')).toBeNull();
   });
 
   it('the model’s approach is isolated as its text, and "Recommended" is ours', async () => {
