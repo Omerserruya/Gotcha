@@ -25,7 +25,6 @@ import {
   type ShopifyChatUx,
   normalizeShopifyShopDomain,
   SHOPIFY_OPERATION,
-  assertWithinLimit,
   webchatSeedConfig,
   WEBCHAT_COPY,
 } from "@chatcenter/shared";
@@ -303,8 +302,10 @@ export async function getWidget(tenantId: string) {
 /**
  * The workspace's web chat, created on the spot when it has no place at all -
  * the same row POST /api/channels/webchat/create makes: one per tenant, a
- * PENDING draft until a page loads it, seeded in the workspace's language,
- * and under the plan's channel limit.
+ * PENDING draft until a page loads it, seeded in the workspace's language.
+ * Never refused for the plan's channel limit: the workspace's one website
+ * chat is part of every plan (Omer, 2026-11-01: a widget save is never
+ * refused for lack of a channel), so only a permission can refuse a save.
  *
  * A save made before the chat existed used to answer 409 WIDGET_NOT_CREATED
  * and keep nothing (prod 2026-11-01: 21 saves lost, then a WooCommerce connect
@@ -314,8 +315,6 @@ export async function getWidget(tenantId: string) {
 async function ensureWebchat(tenantId: string) {
   const existing = await prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } });
   if (existing) return existing;
-  const used = await prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } });
-  await assertWithinLimit(tenantId, "limit:channels", used, 1);
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });
   const locale = tenant?.defaultLocale;
   return prisma.channelAccount.create({

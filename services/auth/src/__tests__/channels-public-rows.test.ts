@@ -57,7 +57,7 @@ vi.mock("axios", () => {
   return { default: axiosMock, ...axiosMock };
 });
 
-const DB = vi.hoisted(() => ({ rows: [] as any[], seq: 0, locale: "en" }));
+const DB = vi.hoisted(() => ({ rows: [] as any[], seq: 0, locale: "en", full: false }));
 
 const isPlain = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
 const cond = (actual: unknown, v: any): boolean => {
@@ -123,7 +123,8 @@ vi.mock("@chatcenter/shared", async () => {
     resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = G.user.tenantId; next(); },
     requirePermission: () => (_q: any, _s: any, n: any) => n(),
     requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
-    requireCapacity: () => (_q: any, _s: any, n: any) => n(),
+    // Refuses when DB.full, so a route that must stay open at the limit can be proven to.
+    requireCapacity: () => (_q: any, res: any, n: any) => (DB.full ? res.status(402).json({ code: "PLAN_LIMIT_REACHED" }) : n()),
     assertWithinLimit: async () => {},
     hasPermission: async () => true,
   };
@@ -250,6 +251,17 @@ describe("★ E2: no route answers with a secret", () => {
     expect(r.body.data[0]).toMatchObject({ displayName: "Support", connectionStatus: "CONNECTED", externalId: "support@acme.test" });
     // Stored, just not served.
     expect(decryptCredentials(DB.rows[0].credentials).smtpPass).toBe("PLANTED_smtp_pass");
+  });
+
+  // The workspace's one website chat is part of every plan (Omer, 2026-11-01).
+  it("POST /webchat/create is never refused for the channel limit", async () => {
+    DB.full = true;
+    try {
+      const created = await request(app).post("/api/channels/webchat/create").send({});
+      expect(created.status).toBe(201);
+    } finally {
+      DB.full = false;
+    }
   });
 
   it("POST /webchat/create (new and existing) and PUT /webchat/:id/settings", async () => {

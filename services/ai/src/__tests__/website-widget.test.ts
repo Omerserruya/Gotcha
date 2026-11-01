@@ -3,7 +3,7 @@
  *   - PUT writes the shared settings to the web chat AND every Shopify chat;
  *     Shopify-only fields (shop, enabled, commerce, privacy, install) untouched;
  *     the Shopify legacy welcome + launcher fields kept in step; bad values normalised
- *   - a first save with no place creates the web chat (seeded, under the channel limit) and keeps the save
+ *   - a first save with no place creates the web chat (seeded, never refused for the channel limit) and keeps the save
  *   - a Shopify-only workspace reads from and writes to its shop(s)
  *   - permissions: read for GET and /install, update for PUT
  *   - assignedEmployee follows the playbook's single path; a branch or a
@@ -200,13 +200,14 @@ describe("★ PUT writes every place, and only the shared settings", () => {
     expect(normalizeWebchatConfig(H.accounts[0].credentials).appearance.primaryColor).toBe("#112233");
   });
 
-  it("over the plan's channel limit: the plan's 402, and nothing is created", async () => {
+  it("at the plan's channel limit, the first save still creates the website chat and saves", async () => {
     const { EntitlementDeniedError } = await import("@chatcenter/shared");
+    // Were the limit consulted, this would refuse.
     H.limitError = new (EntitlementDeniedError as any)({ code: "PLAN_LIMIT_REACHED", feature: "limit:channels", currentPlan: "foundation", upgradePath: "/settings/billing" });
     const r = await put({ offline: { message: "x" } });
-    expect(r.status).toBe(402);
-    expect(r.body.code).toBe("PLAN_LIMIT_REACHED");
-    expect(H.accounts).toEqual([]);
+    expect(r.status).toBe(200);
+    expect(H.accounts.filter((a) => a.channel === "WEBCHAT")).toHaveLength(1);
+    expect(normalizeWebchatConfig(H.accounts[0].credentials).offline.message).toBe("x");
   });
 
   it("a Shopify-only workspace reads from its shop and writes to it", async () => {

@@ -2671,7 +2671,9 @@ router.post("/connect/email", authenticate, resolveTenant, requirePermission("ch
 
 // ─── Create Embedded Chat Widget ─────────────────────────────
 
-router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), requireChannelCapacity, async (req: Request, res: Response) => {
+// No channel-capacity gate: the workspace's one website chat is part of every
+// plan, the same rule as its first widget save (Omer, 2026-11-01).
+router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
 
