@@ -524,5 +524,44 @@
       "doneRenewalOff": "Renewal is off: not charged or renewed automatically.",
       "doneEnds": "Access ends on {date}."
     }
+  },
+  "support": {
+    "banner": {
+      "label": "Support mode",
+      "in": "You are working in <b>{tenant}</b> as its admin. Everything you do here is recorded as GOTCHA Support.",
+      "inUnnamed": "You are working in a customer's workspace as its admin. Everything you do here is recorded as GOTCHA Support.",
+      "reason": "Reason: <r>{reason}</r>",
+      "endsAt": "Ends at {time}",
+      "exit": "Exit support mode",
+      "exiting": "Exiting…",
+      "exitFailed": "Support mode could not be ended. Try again."
+    },
+    "enter": {
+      "title": "Support mode",
+      "what": "Work inside this workspace as its admin. Billing, ownership, secrets, deleting and disconnecting are refused, and the session ends on its own.",
+      "reason": "Why are you entering?",
+      "reasonHint": "Recorded in the workspace's history and in System's.",
+      "enter": "Enter as admin",
+      "entering": "Entering…",
+      "ended": "Support mode ended. You are back in the console.",
+      "active": "You are already in support mode in <b>{name}</b>.",
+      "activeUnnamed": "You are already in support mode in another workspace.",
+      "resume": "Return to it",
+      "endOther": "End that session",
+      "endedOther": "That session has ended. You can enter this workspace now.",
+      "refusal": {
+        "reason_invalid": "Write a short reason for entering.",
+        "forbidden": "Only a GOTCHA admin can enter support mode.",
+        "mfa_required": "Turn on two-step verification for your login first.",
+        "not_found": "This workspace no longer exists.",
+        "system_tenant": "Support mode is for a customer's workspace, not System or your own.",
+        "active": "You are already in support mode in another workspace.",
+        "no_session": "Sign in again to enter support mode.",
+        "not_kept": "Support mode started, but this browser could not keep it. Try again.",
+        "none": "There is no support session to return to.",
+        "failed": "Support mode could not be started. Try again."
+      }
+    },
+    "refused": "Not allowed in support mode."
   }
 }

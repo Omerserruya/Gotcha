@@ -7,6 +7,7 @@ import { DirectionProvider } from '@/i18n/direction-context';
 import { PermissionsProvider, type PermissionsStatus } from '@/permissions/permissions-context';
 import { RealtimeProvider } from '@/realtime/realtime-provider';
 import { QueryProvider } from '@/server-state/query-provider';
+import { SupportProvider, type SupportView } from '@/support/support-context';
 import { TenantProvider } from '@/tenant/tenant-context';
 
 import { InboundAlerts } from './InboundAlerts';
@@ -31,6 +32,7 @@ export function AppProviders({
   permissions,
   roleKey,
   permissionsStatus,
+  support = null,
   children,
 }: {
   locale: string;
@@ -38,6 +40,8 @@ export function AppProviders({
   permissions: readonly string[];
   roleKey?: string;
   permissionsStatus?: PermissionsStatus;
+  /** The support session this page is drawn in (`load-support.ts`), or none. */
+  support?: SupportView | null;
   children: ReactNode;
 }) {
   return (
@@ -52,11 +56,13 @@ export function AppProviders({
           >
             <RealtimeProvider tenantId={tenantId}>
               <TooltipProvider delayDuration={400} skipDelayDuration={200}>
-                <SessionExpiryWatcher />
-                {/* A chime and a desktop notification for a customer's message, on every screen. */}
-                <InboundAlerts tenantId={tenantId} />
-                <ScrollFades />
-                {children}
+                <SupportProvider session={support}>
+                  <SessionExpiryWatcher />
+                  {/* A chime and a desktop notification for a customer's message, on every screen. */}
+                  <InboundAlerts tenantId={tenantId} />
+                  <ScrollFades />
+                  {children}
+                </SupportProvider>
               </TooltipProvider>
             </RealtimeProvider>
           </PermissionsProvider>

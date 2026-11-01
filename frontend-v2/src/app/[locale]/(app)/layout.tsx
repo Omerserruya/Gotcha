@@ -13,6 +13,9 @@ import { AppProviders } from '@/shell/AppProviders';
 import { AppShell } from '@/shell/AppShell';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
+import { WithSupportBanner } from '@/features/support/SupportBanner';
+import { loadSupport } from '@/support/load-support';
+import { SupportProvider } from '@/support/support-context';
 import { isConsolePath } from '@/shell/workspace-gate';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
@@ -62,14 +65,23 @@ export default async function AuthenticatedLayout({
   */
   const at = consoleOnly ? (await headers()).get(RETURN_TO_HEADER) : null;
   if (at !== null && !isConsolePath(at)) localeRedirect({ href: '/system', locale: resolved });
+  /*
+    ★★ SUPPORT MODE, said on every page this layout draws - the gate's
+    screens and the console's included (Omer, 2026-11-01).
+  */
+  const support = await loadSupport();
   if (route === 'waiting' || route === 'unavailable' || route === 'payment') {
     return (
       <NextIntlClientProvider messages={await loadMessages(resolved)}>
-        <WorkspaceGate
-          route={route}
-          paymentPath={route === 'payment' ? await paymentPath(resolved) : null}
-          setupAdmin={setupAdmin}
-        />
+        <SupportProvider session={support}>
+          <WithSupportBanner>
+            <WorkspaceGate
+              route={route}
+              paymentPath={route === 'payment' ? await paymentPath(resolved) : null}
+              setupAdmin={setupAdmin}
+            />
+          </WithSupportBanner>
+        </SupportProvider>
       </NextIntlClientProvider>
     );
   }
@@ -98,8 +110,11 @@ export default async function AuthenticatedLayout({
         permissions={permissions}
         roleKey={roleKey}
         permissionsStatus={status}
+        support={support}
       >
-        <AppShell consoleOnly={consoleOnly}>{children}</AppShell>
+        <WithSupportBanner>
+          <AppShell consoleOnly={consoleOnly}>{children}</AppShell>
+        </WithSupportBanner>
       </AppProviders>
     </NextIntlClientProvider>
   );

@@ -36,12 +36,18 @@ const localeRedirect = vi.hoisted(() =>
   }),
 );
 vi.mock('@/i18n/navigation', () => ({ redirect: localeRedirect }));
+/* Support mode: none unless a test opens one. */
+const support = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('@/support/load-support', () => ({ loadSupport: async () => support.value }));
+const WithSupportBanner = vi.hoisted(() => vi.fn(() => null));
+vi.mock('@/features/support/SupportBanner', () => ({ WithSupportBanner }));
 
 const { default: Layout } = await import('./layout');
 const render = () => Layout({ children: null, params: Promise.resolve({ locale: 'en' }) });
 const SIGN_IN = `REDIRECT /api/auth/login?returnTo=${encodeURIComponent('/en/approvals?tab=done')}`;
 
 beforeEach(() => {
+  support.value = null;
   at.path = '/en/approvals?tab=done';
   activeSession.mockReset();
   get.mockReset();
@@ -230,5 +236,21 @@ describe('★★ the realtime socket is for the workspace /auth/me names (2026-1
   it('/auth/me naming none: null, never an empty string', async () => {
     me({ tenantId: '' });
     expect(propsOf(AppProviders, await render())).toMatchObject({ tenantId: null });
+  });
+
+  it('★★ support mode: the providers carry the session, and the shell sits under the banner', async () => {
+    me({ tenantId: 't9' });
+    support.value = { tenantName: 'Aviv & Co.', reason: 'r', endsAt: '16:40' };
+    const tree = await render();
+    expect(propsOf(AppProviders, tree)).toMatchObject({ support: support.value });
+    // The shell is inside the banner's wrapper (its props are a node to search).
+    const banner = propsOf(WithSupportBanner, tree);
+    expect(banner).not.toBeNull();
+    expect(propsOf(AppShellMock, { props: banner })).not.toBeNull();
+  });
+
+  it('outside support mode: no session in the providers', async () => {
+    me({ tenantId: 't9' });
+    expect(propsOf(AppProviders, await render())).toMatchObject({ support: null });
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,6 +67,11 @@ vi.mock('@/features/console/TenantControls', () => ({
 vi.mock('@/features/console/TenantDelete', () => ({
   TenantDelete: ({ slug }: { slug: string }) => <div data-testid="delete">{slug}</div>,
 }));
+vi.mock('@/features/support/SupportEnter', () => ({
+  SupportEnter: ({ tenantId, ended }: { tenantId: string; ended: boolean }) => (
+    <div data-testid="support-enter" data-tenant={tenantId} data-ended={String(ended)} />
+  ),
+}));
 vi.mock('@/features/console/TenantMembers', () => ({
   TenantMembers: ({ members }: { members?: readonly { email: string }[] }) => (
     <div data-testid="members">
@@ -87,10 +92,10 @@ const tenant = tenantDetailSchema.parse({
   planAccess: { state: 'ACTIVE_PAID', label: 'Paid plan', active: true },
   users: [{ id: 'u1', name: 'Dana', email: 'dana@acme.co', role: 'ADMIN', isActive: true }],
 });
-const open = async () =>
+const open = async (query: { support?: string } = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ console: consoleEn }}>
-      {await Page({ params: Promise.resolve({ id: 't1' }) })}
+      {await Page({ params: Promise.resolve({ id: 't1' }), searchParams: Promise.resolve(query) })}
     </NextIntlClientProvider>,
   );
 
@@ -110,7 +115,9 @@ beforeEach(() => {
 describe('★★ /system/tenants/[id]', () => {
   it('★★ not a system admin: not found, and nothing is read', async () => {
     door.open = false;
-    await expect(Page({ params: Promise.resolve({ id: 't1' }) })).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(
+      Page({ params: Promise.resolve({ id: 't1' }), searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
     expect(loadTenant).not.toHaveBeenCalled();
   });
 
@@ -155,6 +162,15 @@ describe('★★ /system/tenants/[id]', () => {
     writes.on = true;
     await open();
     expect(screen.queryByTestId('billing-held')).toBeNull();
+  });
+
+  it('★★ support mode can be entered from here; back from an ended session, it says so', async () => {
+    await open();
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-tenant', 't1');
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-ended', 'false');
+    cleanup();
+    await open({ support: 'ended' });
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-ended', 'true');
   });
 
   it('★ a tenant that does not exist and one that could not be read: two sentences', async () => {

@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { loadMessages } from '@/i18n/load-messages';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
 import { CHECKOUT_NAMESPACES } from '@/i18n/namespaces';
+import { WithSupportBanner } from '@/features/support/SupportBanner';
+import { loadSupport } from '@/support/load-support';
+import { SupportProvider } from '@/support/support-context';
 
 /**
  * The customer checkout: where billing's emails and the provider's return
@@ -25,9 +28,19 @@ export default async function CheckoutLayout({
 }) {
   const { locale } = await params;
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+  /*
+   * ★ SUPPORT MODE IS SAID HERE TOO, and pays nothing: the banner, and every
+   *   payment control refused (the platform refuses `/api/checkout` writes,
+   *   `support_denied:billing`). Signed out there is no support session, and
+   *   the checkout's copy alone, as before.
+   */
+  const support = await loadSupport();
+  const namespaces = support ? [...CHECKOUT_NAMESPACES, 'console' as const] : CHECKOUT_NAMESPACES;
   return (
-    <NextIntlClientProvider messages={await loadMessages(resolved, CHECKOUT_NAMESPACES)}>
-      {children}
+    <NextIntlClientProvider messages={await loadMessages(resolved, namespaces)}>
+      <SupportProvider session={support}>
+        <WithSupportBanner>{children}</WithSupportBanner>
+      </SupportProvider>
     </NextIntlClientProvider>
   );
 }

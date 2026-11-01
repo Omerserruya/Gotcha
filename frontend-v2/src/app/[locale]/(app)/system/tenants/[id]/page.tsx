@@ -11,6 +11,7 @@ import { TenantFacts } from '@/features/console/TenantFacts';
 import { TenantDelete } from '@/features/console/TenantDelete';
 import { TenantMembers } from '@/features/console/TenantMembers';
 import { TenantPlanEdit } from '@/features/console/TenantPlanEdit';
+import { SupportEnter } from '@/features/support/SupportEnter';
 import { pageMetadata } from '@/shell/page-metadata';
 import { requireConsole } from '@/shell/require-console';
 import { SettingsSection } from '@/shell/SettingsSection';
@@ -27,11 +28,14 @@ import styles from '@/features/console/Console.module.css';
  */
 export default async function Page({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ readonly id: string }>;
+  readonly searchParams: Promise<{ readonly support?: string | string[] }>;
 }) {
   await requireConsole();
   const { id } = await params;
+  const { support } = await searchParams;
   const [t, nav, data, options] = await Promise.all([
     getTranslations('console.detail'),
     getTranslations('console.sections'),
@@ -59,6 +63,8 @@ export default async function Page({
         </p>
       )}
       <TenantFacts tenant={tenant} provisioning={data.provisioning} />
+      {/* Support mode (Omer, 2026-11-01): work inside this workspace as its admin. */}
+      <SupportEnter tenantId={tenant.id} ended={support === 'ended'} />
       <TenantBilling
         tenantId={tenant.id}
         status={tenant.status}

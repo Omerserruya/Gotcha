@@ -36,6 +36,20 @@ vi.mock('@/shell/load-workspace-gate', () => ({
   readWorkspaceGate: gate,
   paymentPath: async () => '/checkout',
 }));
+/* Support mode: none unless a test opens one; the banner is a marker here. */
+const support = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('@/support/load-support', () => ({ loadSupport: async () => support.value }));
+vi.mock('@/features/support/SupportBanner', async () => {
+  const { useSupport } = await import('@/support/support-context');
+  return {
+    WithSupportBanner: ({ children }: { children: React.ReactNode }) => (
+      <>
+        {useSupport().session ? <p data-testid="support-banner" /> : null}
+        {children}
+      </>
+    ),
+  };
+});
 vi.mock('@/shell/WorkspaceGate', () => ({
   WorkspaceGate: ({ route }: { route: string }) => <p data-testid="gate">{route}</p>,
 }));
@@ -49,6 +63,7 @@ const open = () =>
   });
 
 beforeEach(() => {
+  support.value = null;
   gate.mockReset();
   sent.home.mockReset();
   sent.signIn.mockReset();
@@ -82,6 +97,14 @@ describe('★★ a live workspace and onboarding', () => {
     gate.mockResolvedValue({ route: 'onboarding', setupAdmin: null, mayPreview: false });
     render(await open());
     expect(screen.getByTestId('onboarding')).toBeInTheDocument();
+  });
+
+  it('★★ support mode opens a workspace being set up here: onboarding, under the banner', async () => {
+    gate.mockResolvedValue({ route: 'onboarding', setupAdmin: null, mayPreview: false });
+    support.value = { tenantName: 'Aviv & Co.', reason: null, endsAt: null };
+    render(await open());
+    expect(screen.getByTestId('onboarding')).toBeInTheDocument();
+    expect(screen.getByTestId('support-banner')).toBeInTheDocument();
   });
 
   it('waiting is still the gate screen, preview asked or not', async () => {

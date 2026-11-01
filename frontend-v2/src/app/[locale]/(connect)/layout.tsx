@@ -6,6 +6,9 @@ import { signInHere } from '@/api/client/signed-out';
 import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
+import { WithSupportBanner } from '@/features/support/SupportBanner';
+import { loadSupport } from '@/support/load-support';
+import { SupportProvider } from '@/support/support-context';
 
 /**
  * Pages another product opens in GOTCHA and gets back from - today the
@@ -24,9 +27,13 @@ export default async function ConnectLayout({
   // Signed out: sign in, and back here with the whole query (the proxy keeps it).
   if (!(await activeSession())) redirect(await signInHere());
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+  // Support mode: said here too (Omer, 2026-11-01).
+  const support = await loadSupport();
   return (
     <NextIntlClientProvider messages={await loadMessages(resolved)}>
-      {children}
+      <SupportProvider session={support}>
+        <WithSupportBanner>{children}</WithSupportBanner>
+      </SupportProvider>
     </NextIntlClientProvider>
   );
 }
