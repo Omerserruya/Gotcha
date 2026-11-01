@@ -212,7 +212,7 @@ describe('★★ who answers the widget - chosen here, written to the playbook',
 });
 
 describe('★★ the onboarding route answers here - said, never a trip to Automations', () => {
-  const AUTO = { id: 'f1', name: 'New conversation', everyChannel: true };
+  const AUTO = { id: 'f1', name: 'New conversation', dedicated: false, everyChannel: true };
   const card = (
     read: WidgetAssignment | null,
     automation: typeof AUTO | null,
