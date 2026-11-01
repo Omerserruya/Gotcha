@@ -18,6 +18,7 @@ const { actions, refresh } = vi.hoisted(() => ({
 }));
 vi.mock('./actions', () => actions);
 vi.mock('./coupon-actions', () => ({}));
+vi.mock('./edit-actions', () => ({ setTenantStatus: vi.fn() }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh }) }));
 
 import { TenantControls } from './TenantControls';
@@ -25,7 +26,7 @@ import { TenantControls } from './TenantControls';
 const show = (props: Partial<Parameters<typeof TenantControls>[0]> = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ console: consoleEn }}>
-      <TenantControls tenantId="t1" name="Acme" status="ACTIVE" isActive {...props} />
+      <TenantControls tenantId="t1" name="Acme" status="ACTIVE" isActive planActive {...props} />
     </NextIntlClientProvider>,
   );
 

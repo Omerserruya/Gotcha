@@ -4,19 +4,11 @@ import { useTranslations } from 'next-intl';
 
 import { useRouter } from '@/i18n/navigation';
 
-import { ConfirmedAction, REASON_MAX } from './ConfirmedAction';
+import { ConfirmedAction } from './ConfirmedAction';
 import styles from './Console.module.css';
 import { keepDeleted } from './DeletedNotice';
-import { deleteTenant, type DeleteResult, type EditRefusal } from './edit-actions';
-
-/** A refusal in words; a reason the validator refused names its limit. */
-function useEditRefusal() {
-  const t = useTranslations('console.edit.refusal');
-  return (result: { readonly reason: EditRefusal }) =>
-    result.reason === 'reason_invalid'
-      ? t('reason_invalid', { max: REASON_MAX })
-      : t(result.reason);
-}
+import { deleteTenant, type DeleteResult } from './edit-actions';
+import { useEditRefusal } from './TenantStatusEdit';
 
 /** The System tenant's slug: the route refuses it, so the screen never offers it. */
 const SYSTEM_SLUG = 'system';

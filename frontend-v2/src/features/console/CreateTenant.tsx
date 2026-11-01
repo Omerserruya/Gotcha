@@ -411,7 +411,8 @@ export function CreateTenant({
   );
 }
 
-function VolumeSelect({
+/** A plan's volume picker, by KEY (the route prices it). */
+export function VolumeSelect({
   label,
   options,
   value,

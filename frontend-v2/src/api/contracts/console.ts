@@ -111,6 +111,17 @@ export const provisioningStatusSchema = z
   .nullable();
 export type ProvisioningStatus = z.infer<typeof provisioningStatusSchema>;
 
+/** One member of a tenant, as the detail route selects it (system.ts:196). */
+export const tenantMemberSchema = z.object({
+  id: z.string(),
+  name: z.string().catch('').default(''),
+  email: z.string(),
+  /** ADMIN · AGENT · SYSTEM_ADMIN (a role this build does not know is kept as sent). */
+  role: z.string(),
+  isActive: z.boolean().catch(true).default(true),
+});
+export type TenantMember = z.infer<typeof tenantMemberSchema>;
+
 /**
  * One tenant - `GET /api/system/tenants/:id` (system.ts:172) → `{ data }`.
  * The route sends the whole Tenant row and more; the console reads what it
@@ -158,8 +169,97 @@ export const tenantDetailSchema = z.object({
     .default([]),
   /** Always sent on the detail (system.ts:211), with `planName`. */
   planAccess: planAccessSchema,
+  /**
+   * The tenant's members (system.ts:196), oldest first. `undefined` when the
+   * list could not be read: never drawn as "no members".
+   */
+  users: z.array(tenantMemberSchema).optional().catch(undefined),
 });
 export type TenantDetail = z.infer<typeof tenantDetailSchema>;
+
+/**
+ * A manual edit's answer (Backend's contract, 2026-10-23): `{ data: { before,
+ * after, planAccess, warnings } }`. The screen re-reads the page after, so it
+ * keeps only the warnings - codes the write succeeded WITH, said beside it.
+ * Read leniently: a done write is never turned into "failed" by a field.
+ */
+export const manualEditSchema = z
+  .object({ warnings: z.array(z.string()).catch([]).default([]) })
+  .catch({ warnings: [] });
+
+/** A count the route read before deleting; unreadable is `null`, said as nothing. */
+const removedCount = z.number().int().nonnegative().nullable().catch(null).default(null);
+
+/** What a delete removed, counted before the rows went (eraseTenant's `counts`). */
+const DELETED_EMPTY = {
+  users: null,
+  conversations: null,
+  messages: null,
+  channelAccounts: null,
+  contacts: null,
+} as const;
+
+/**
+ * A deleted tenant (DELETE /api/system/tenants/:id, Backend 2026-10-23) →
+ * `{ data: { ..., counts, identitiesDeleted, uploadFiles, uploadsRemoved,
+ * uploadsLeftBehind, providerLeftovers } }`. The screen says what went, and
+ * keeps what the operator must act on: what is still connected on a
+ * provider's side, and the files left in storage (the tenant is deleted
+ * either way). Lenient: a delete that happened is never reported as
+ * "failed" by a field.
+ */
+export const deletedTenantSchema = z
+  .object({
+    counts: z
+      .object({
+        users: removedCount,
+        conversations: removedCount,
+        messages: removedCount,
+        channelAccounts: removedCount,
+        contacts: removedCount,
+      })
+      .catch(DELETED_EMPTY)
+      .default(DELETED_EMPTY),
+    identitiesDeleted: removedCount,
+    uploadFiles: removedCount,
+    providerLeftovers: z.array(z.string()).catch([]).default([]),
+    uploadsRemoved: z.boolean().catch(true).default(true),
+    uploadsLeftBehind: z.array(z.string()).catch([]).default([]),
+  })
+  .catch({
+    counts: DELETED_EMPTY,
+    identitiesDeleted: null,
+    uploadFiles: null,
+    providerLeftovers: [],
+    uploadsRemoved: true,
+    uploadsLeftBehind: [],
+  });
+export type DeletedTenant = z.infer<typeof deletedTenantSchema>;
+
+/**
+ * A manual plan, date, POC or credit edit's answer (billing
+ * `ManualEditResult`, through auth). The screen says the renewal plainly and
+ * when access ends, from what the route answered: `renewal` "off" after every
+ * plan or date edit, "unchanged" after credits. An unreadable renewal is
+ * `null`: said as nothing, never guessed.
+ */
+export const manualBillingSchema = z
+  .object({
+    renewal: z.enum(['off', 'unchanged']).nullable().catch(null).default(null),
+    after: z.object({ currentPeriodEnd: nullableString }).nullable().catch(null).default(null),
+    warnings: z.array(z.string()).catch([]).default([]),
+  })
+  .catch({ renewal: null, after: null, warnings: [] });
+export type ManualBilling = z.infer<typeof manualBillingSchema>;
+
+/** The statuses a SYSTEM_ADMIN may set by hand (the route's enum). */
+export const SETTABLE_STATUSES = [
+  'ACTIVE',
+  'PENDING_ONBOARDING',
+  'PENDING_PAYMENT',
+  'SUSPENDED',
+] as const;
+export type SettableStatus = (typeof SETTABLE_STATUSES)[number];
 
 /** A plan's volume option: KEY and daily volume - the route prices it (`safeOption`). */
 const volumeOptionSchema = z.object({ key: z.string(), dailyVolume: z.number() });
@@ -272,52 +372,3 @@ export const pocDomainsSchema = z.array(z.string());
 export const createdTenantSchema = z.object({
   tenant: z.object({ id: z.string(), name: z.string() }),
 });
-
-/** A count the route read before deleting; unreadable is `null`, said as nothing. */
-const removedCount = z.number().int().nonnegative().nullable().catch(null).default(null);
-
-/** What a delete removed, counted before the rows went (eraseTenant's `counts`). */
-const DELETED_EMPTY = {
-  users: null,
-  conversations: null,
-  messages: null,
-  channelAccounts: null,
-  contacts: null,
-} as const;
-
-/**
- * A deleted tenant (DELETE /api/system/tenants/:id, Backend 2026-10-23) →
- * `{ data: { ..., counts, identitiesDeleted, uploadFiles, uploadsRemoved,
- * uploadsLeftBehind, providerLeftovers } }`. The screen says what went, and
- * keeps what the operator must act on: what is still connected on a
- * provider's side, and the files left in storage (the tenant is deleted
- * either way). Lenient: a delete that happened is never reported as
- * "failed" by a field.
- */
-export const deletedTenantSchema = z
-  .object({
-    counts: z
-      .object({
-        users: removedCount,
-        conversations: removedCount,
-        messages: removedCount,
-        channelAccounts: removedCount,
-        contacts: removedCount,
-      })
-      .catch(DELETED_EMPTY)
-      .default(DELETED_EMPTY),
-    identitiesDeleted: removedCount,
-    uploadFiles: removedCount,
-    providerLeftovers: z.array(z.string()).catch([]).default([]),
-    uploadsRemoved: z.boolean().catch(true).default(true),
-    uploadsLeftBehind: z.array(z.string()).catch([]).default([]),
-  })
-  .catch({
-    counts: DELETED_EMPTY,
-    identitiesDeleted: null,
-    uploadFiles: null,
-    providerLeftovers: [],
-    uploadsRemoved: true,
-    uploadsLeftBehind: [],
-  });
-export type DeletedTenant = z.infer<typeof deletedTenantSchema>;

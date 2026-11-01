@@ -2105,6 +2105,31 @@ export const consoleEndpoints = {
   resendOnboarding: (tenantId: string) =>
     endpoint('/api/system/tenants/{tenantId}/resend-onboarding', { tenantId }),
   /**
+   * PATCH `{ status, reason }` → `{ data: { before, after, planAccess, warnings } }`
+   * (Backend's manual-edit contract, 2026-10-23). Sets the status by hand,
+   * without payment or onboarding; the same status is a 200 with no write.
+   */
+  tenantStatus: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/status', { tenantId }),
+  /**
+   * PATCH `{ userId, newEmail, reason }` - a member's login email, Authentik
+   * first (system-manual-edits.ts:148). Any member but a SYSTEM_ADMIN.
+   */
+  memberEmail: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/admin-email', { tenantId }),
+  /**
+   * POST `{ action, reason, ... }` - plan, end date, POC or credits, by hand
+   * (system-manual-edits.ts:294 → billing manual-edit.service.ts). Never a
+   * charge: `charges: "none"`, and every plan or date edit turns renewal off.
+   */
+  manualBilling: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/billing/manual', { tenantId }),
+  /** POST `{ email, name, role, reason? }` → 201 `{ data: user, setupLink }` (system.ts:1449). */
+  members: (tenantId: string) => endpoint('/api/system/tenants/{tenantId}/users', { tenantId }),
+  /** DELETE `{ reason? }` - revokes the login, then removes the member (system.ts:1560). */
+  member: (tenantId: string, userId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/users/{userId}', { tenantId, userId }),
+  /**
    * GET `{ data }` - ACTIVE, PUBLIC plans (billing admin-pricing.ts:1085),
    * served by billing through the gateway's `/api/admin/pricing`.
    */

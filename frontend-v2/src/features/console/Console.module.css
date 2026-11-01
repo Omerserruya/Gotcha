@@ -139,6 +139,37 @@
     color: var(--warning-banner-text);
   }
 
+  /* ── A tenant's members ───────────────────────────────────────────── */
+  .members {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .member {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    border-block-end: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .member:last-child {
+    border-block-end: none;
+  }
+
+  .memberWho {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
   /* What a done write left to know: said under the outcome, never instead of it. */
   .notes {
     display: flex;

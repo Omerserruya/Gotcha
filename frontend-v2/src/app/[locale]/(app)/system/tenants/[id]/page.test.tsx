@@ -19,6 +19,14 @@ vi.mock('@/shell/require-console', () => ({
 }));
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
 vi.mock('@/features/console/load-tenant', () => ({ loadTenant }));
+vi.mock('@/features/console/load-tenants', () => ({
+  loadCreateOptions: async () => ({ plans: [], domains: ['ai'] }),
+}));
+vi.mock('@/features/console/TenantPlanEdit', () => ({
+  TenantPlanEdit: ({ plans, domains }: { plans?: unknown[]; domains?: string[] }) => (
+    <div data-testid="plan-edit">{`${plans === undefined ? 'unread' : plans.length}|${domains?.join(',')}`}</div>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'console.detail') =>
     createTranslator({ locale: 'en', messages: { console: consoleEn }, namespace }),
@@ -52,10 +60,19 @@ vi.mock('@/features/console/TenantCoupons', () => ({
   TenantCoupons: () => <div data-testid="coupons" />,
 }));
 vi.mock('@/features/console/TenantControls', () => ({
-  TenantControls: () => <div data-testid="controls" />,
+  TenantControls: ({ planActive }: { planActive: boolean }) => (
+    <div data-testid="controls" data-plan-active={String(planActive)} />
+  ),
 }));
 vi.mock('@/features/console/TenantDelete', () => ({
   TenantDelete: ({ slug }: { slug: string }) => <div data-testid="delete">{slug}</div>,
+}));
+vi.mock('@/features/console/TenantMembers', () => ({
+  TenantMembers: ({ members }: { members?: readonly { email: string }[] }) => (
+    <div data-testid="members">
+      {members === undefined ? 'unread' : members.map((m) => m.email).join(',')}
+    </div>
+  ),
 }));
 
 const { default: Page } = await import('./page');
@@ -68,6 +85,7 @@ const tenant = tenantDetailSchema.parse({
   isActive: true,
   createdAt: '2026-10-01T09:00:00.000Z',
   planAccess: { state: 'ACTIVE_PAID', label: 'Paid plan', active: true },
+  users: [{ id: 'u1', name: 'Dana', email: 'dana@acme.co', role: 'ADMIN', isActive: true }],
 });
 const open = async () =>
   render(
@@ -105,7 +123,7 @@ describe('★★ /system/tenants/[id]', () => {
       'href',
       '/system/tenants',
     );
-    const ids = ['facts', 'billing-t1', 'coupons', 'controls', 'delete'];
+    const ids = ['facts', 'billing-t1', 'coupons', 'controls', 'plan-edit', 'members', 'delete'];
     for (const id of ids) expect(screen.getByTestId(id)).toBeInTheDocument();
     // The delete is the LAST card on the page.
     const cards = [...document.querySelectorAll('[data-testid]')].map((el) =>
@@ -113,6 +131,19 @@ describe('★★ /system/tenants/[id]', () => {
     );
     expect(cards.at(-1)).toBe('delete');
     expect(screen.getByTestId('delete')).toHaveTextContent('acme');
+    // The plan card gets the provisionable plans and POC areas as read.
+    expect(screen.getByTestId('plan-edit')).toHaveTextContent('0|ai');
+  });
+
+  it('★ the members are the detail’s own list; the plan says whether a status is enough', async () => {
+    await open();
+    expect(screen.getByTestId('members')).toHaveTextContent('dana@acme.co');
+    expect(screen.getByTestId('controls')).toHaveAttribute('data-plan-active', 'true');
+  });
+
+  it('★ a members list the detail could not read stays unread, never "none"', () => {
+    expect(tenantDetailSchema.parse({ ...tenant, users: 'garbage' }).users).toBeUndefined();
+    expect(tenantDetailSchema.parse({ ...tenant, users: undefined }).users).toBeUndefined();
   });
 
   it('★★ billing writes off here: said before anyone presses anything', async () => {
