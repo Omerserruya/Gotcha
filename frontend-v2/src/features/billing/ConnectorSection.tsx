@@ -5,6 +5,7 @@ import { Link } from '@/i18n/navigation';
 
 import { ChooseShopifyPlan } from './ConnectorCta';
 import styles from './Billing.module.css';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * The Billing page's second section: the Shopify Connector. A separate
@@ -107,7 +108,11 @@ export async function ConnectorActions({
   const t = await getTranslations('billing.connector');
   switch (verdict.cta) {
     case 'choose':
-      return <ChooseShopifyPlan testid={testid} />;
+      return (
+        <SupportRefused kind="billing">
+          <ChooseShopifyPlan testid={testid} />
+        </SupportRefused>
+      );
     case 'manage':
       return verdict.url ? (
         <a

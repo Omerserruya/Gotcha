@@ -19,6 +19,7 @@ import { automationsLink, WhoAnswers, type ReachItem } from './WhoAnswers';
 import styles from './EmployeeDetail.module.css';
 import { PauseEmployee } from './PauseEmployee';
 import type { ToolLevelRow } from './page/EmployeeToolLevels';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /** How many permission rows the card shows, as 02's does. */
 const MAY_DO_ROWS = 6;
@@ -115,7 +116,9 @@ export async function EmployeeDetail({
           >
             {t('detail.edit')}
           </Link>
-          <DeleteEmployee employee={employee} />
+          <SupportRefused kind="delete">
+            <DeleteEmployee employee={employee} />
+          </SupportRefused>
         </div>
       </header>
 

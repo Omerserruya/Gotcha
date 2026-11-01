@@ -17,6 +17,7 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { Drawer } from '@/shell/Drawer';
 import { InterfaceLanguageSelect } from '@/shell/InterfaceLanguageSelect';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · People & teams - screen 12.
@@ -158,15 +159,17 @@ export default async function Page({
             }
           />
           {params.grant === '1' ? (
-            <GrantPicker
-              person={person}
-              permissions={catalog?.permissions ?? []}
-              roleName={
-                role
-                  ? roleNameOf(role, (key, part) => tr(`builtinRole.${key}.${part}`))
-                  : (member?.roleName ?? null)
-              }
-            />
+            <SupportRefused kind="ownership">
+              <GrantPicker
+                person={person}
+                permissions={catalog?.permissions ?? []}
+                roleName={
+                  role
+                    ? roleNameOf(role, (key, part) => tr(`builtinRole.${key}.${part}`))
+                    : (member?.roleName ?? null)
+                }
+              />
+            </SupportRefused>
           ) : null}
         </Drawer>
       ) : null}

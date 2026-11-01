@@ -10,6 +10,8 @@ import { Dialog, DialogContent } from '@/design-system/primitives/overlay/Dialog
 import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavailable';
 import { useRouter } from '@/i18n/navigation';
 
+import { SupportRefused } from '@/features/support/SupportRefused';
+
 import styles from './Webchat.module.css';
 import { removeWooSite, type WooRemove } from './woo-plugin-actions';
 
@@ -141,14 +143,16 @@ function WooSiteRow({ site }: { readonly site: WooSite }) {
         </span>
         <span className={styles.storeName}>{t('site')}</span>
         {site.status === 'removed' ? null : (
-          <button
-            type="button"
-            className={styles.secondary}
-            onClick={() => setAsking(true)}
-            data-testid={`webchat-woo-remove-${site.id}`}
-          >
-            {t('remove.button')}
-          </button>
+          <SupportRefused kind="delete">
+            <button
+              type="button"
+              className={styles.secondary}
+              onClick={() => setAsking(true)}
+              data-testid={`webchat-woo-remove-${site.id}`}
+            >
+              {t('remove.button')}
+            </button>
+          </SupportRefused>
         )}
         <span
           className={styles.status}

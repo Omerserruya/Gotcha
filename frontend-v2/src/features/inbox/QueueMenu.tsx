@@ -43,6 +43,7 @@ import { inboxQuery, viewAfter, type InboxView } from './inbox-views';
 import { menuPlan, type MenuRow } from './queue-menu-rules';
 import { clearSelected, currentSelection, useSelection } from './queue-selection';
 import styles from './Inbox.module.css';
+import { useSupport } from '@/support/support-context';
 
 /**
  * 02's right-click menu on the queue - and shift-click to pick several.
@@ -83,6 +84,9 @@ export function QueueMenu({
   const t = useTranslations('inbox.queue.menu');
   const problems = useTranslations('inbox.verbs.problem');
   const viewName = useTranslations('navigation.inbox');
+  // Support mode: deleting a conversation is refused (Omer, 2026-11-01).
+  const deleteRefused = useSupport().refuses('delete');
+  const supportWords = useTranslations('console.support');
   const router = useRouter();
   const selection = useSelection();
   const [targets, setTargets] = useState<readonly MenuRow[]>([]);
@@ -361,11 +365,14 @@ export function QueueMenu({
               <ContextMenuItem
                 tone="danger"
                 data-testid="menu-delete"
-                disabled={busy}
+                disabled={busy || deleteRefused}
                 onSelect={() => setConfirming(true)}
               >
                 <Trash2 size={13} aria-hidden="true" />
                 {t('remove')}
+                {deleteRefused ? (
+                  <span data-testid="menu-delete-support"> · {supportWords('refused')}</span>
+                ) : null}
               </ContextMenuItem>
             </>
           ) : null}

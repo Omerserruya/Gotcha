@@ -9,6 +9,7 @@ import { PayButton } from '@/features/checkout/PayButton';
 import { SummaryCard } from '@/features/checkout/SummaryCard';
 import styles from '@/features/checkout/Checkout.module.css';
 import { pageMetadata } from '@/shell/page-metadata';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * The provider's failure return (`/checkout/failed?ref=`, billing
@@ -32,11 +33,13 @@ export default async function Page({
     <CheckoutFrame title={t('failed.title')} lead={t('failed.lead')} testid="checkout-failed">
       <SummaryCard summary={summary} />
       {summary.retryEligible && summary.paymentSetupAvailable ? (
-        <PayButton
-          reference={reference}
-          label={t('failed.tryAgain')}
-          live={billingWritesEnabled()}
-        />
+        <SupportRefused kind="billing">
+          <PayButton
+            reference={reference}
+            label={t('failed.tryAgain')}
+            live={billingWritesEnabled()}
+          />
+        </SupportRefused>
       ) : null}
       <p className={styles.actions}>
         <a className={styles.secondary} href={SUPPORT_MAILTO} data-testid="checkout-support">

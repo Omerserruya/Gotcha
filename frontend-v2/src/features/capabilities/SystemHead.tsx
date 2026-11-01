@@ -8,6 +8,7 @@ import { usableShopifyActions, type ConnectorVerdict } from '@/api/contracts/sho
 import { DisconnectSystem } from './DisconnectSystem';
 import { IntegrationLogo } from './IntegrationLogo';
 import styles from './Capabilities.module.css';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * 10's detail header: the selected system - a 38px tile, its name (16/600),
@@ -135,11 +136,13 @@ export async function SystemHead({
         </span>
       </span>
       {disconnect && integration ? (
-        <DisconnectSystem
-          slug={integration.slug}
-          name={integration.name}
-          pending={shopify?.kind === 'uninstall_pending'}
-        />
+        <SupportRefused kind="delete">
+          <DisconnectSystem
+            slug={integration.slug}
+            name={integration.name}
+            pending={shopify?.kind === 'uninstall_pending'}
+          />
+        </SupportRefused>
       ) : null}
     </header>
   );

@@ -9,11 +9,15 @@ import { Button } from '@/design-system/primitives/button/Button';
 import { isCeilingReason, useCeilingSentence } from '@/features/roles/ceiling-words';
 import { grantableRoles } from '@/features/roles/grantable';
 import { roleNameOf } from '@/features/roles/role-words';
+import { useSupport } from '@/support/support-context';
 import { Link } from '@/i18n/navigation';
 import { usePermissions } from '@/permissions/permissions-context';
 
 import { inviteMember, type PeopleWriteResult } from './actions';
 import styles from './People.module.css';
+
+/** The built-in roles that own a workspace: never invited in support mode. */
+const ADMIN_ROLES: ReadonlySet<string> = new Set(['owner', 'admin', 'system_admin']);
 
 /**
  * *"Invite happens inline on the page, with role and team set before sending."*
@@ -55,9 +59,18 @@ export function InviteForm({
   const t = useTranslations('people');
   const tr = useTranslations('roles');
   const { canSee, roleKey } = usePermissions();
+  /*
+   * ★ SUPPORT MODE INVITES MEMBERS, NEVER ADMINS (Omer, 2026-11-01: "adding
+   *   admins" is refused): the Owner and Admin roles are not offered. The
+   *   platform refuses them too (403 `support_denied:ownership`).
+   */
+  const ownershipRefused = useSupport().refuses('ownership');
   const choices = useMemo(
-    () => (roles ? grantableRoles(roles, { has: canSee, roleKey }, catalog) : []),
-    [roles, canSee, roleKey, catalog],
+    () =>
+      (roles ? grantableRoles(roles, { has: canSee, roleKey }, catalog) : []).filter(
+        (role) => !ownershipRefused || !ADMIN_ROLES.has(role.builtinKey?.toLowerCase() ?? ''),
+      ),
+    [roles, canSee, roleKey, catalog, ownershipRefused],
   );
   // The platform's key is lowercase (`invite-role.service`: builtinKey "agent").
   const agentId = choices.find((r) => r.builtinKey?.toLowerCase() === 'agent')?.id ?? '';

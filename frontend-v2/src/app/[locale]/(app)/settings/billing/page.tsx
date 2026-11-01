@@ -26,6 +26,7 @@ import {
 import { Link } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · Usage & billing - screen 17.
@@ -91,25 +92,27 @@ export default async function Page({
 
       {panel === 'buy' ? (
         <BillingOverlay kind="dialog" title={t('overview.overlay.buy')} line={t('buy.subline')}>
-          <BuyCredits
-            packages={packages}
-            /*
-              `buyCredits()` checks `no_billable_entity` FIRST, so these are
-              the server's own two gates read back in the same order - two
-              booleans, because "nobody to invoice" and "nothing to charge"
-              have different repairs.
-            */
-            billable={profileReading(profile) !== 'no_account'}
-            hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
-            card={paymentMethods?.[0] ?? null}
-            receiptTo={profile?.billingEmail ?? null}
-            /*
-              The purchase is handed to the dialog only where billing may move
-              money (BILLING_WRITES=on, fail closed). Dev's billing is the live
-              payment account: there the pay button is the held status.
-            */
-            charge={billingWritesEnabled() ? buyCreditPack : null}
-          />
+          <SupportRefused kind="billing">
+            <BuyCredits
+              packages={packages}
+              /*
+                `buyCredits()` checks `no_billable_entity` FIRST, so these are
+                the server's own two gates read back in the same order - two
+                booleans, because "nobody to invoice" and "nothing to charge"
+                have different repairs.
+              */
+              billable={profileReading(profile) !== 'no_account'}
+              hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
+              card={paymentMethods?.[0] ?? null}
+              receiptTo={profile?.billingEmail ?? null}
+              /*
+                The purchase is handed to the dialog only where billing may move
+                money (BILLING_WRITES=on, fail closed). Dev's billing is the live
+                payment account: there the pay button is the held status.
+              */
+              charge={billingWritesEnabled() ? buyCreditPack : null}
+            />
+          </SupportRefused>
           {/*
             Nothing to buy says why - the plan cannot, the shelf is empty, or
             we could not find out - rather than leaving the dialog blank.

@@ -10,6 +10,7 @@ import styles from './Billing.module.css';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { HeldConfirm } from './HeldConfirm';
 import { PlanSwitch } from './PlanSwitch';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 const FEATURES_SHOWN = 3;
 
@@ -314,12 +315,14 @@ export async function SwitchActions({
     <div className={styles.switchActions} data-testid="switch-actions">
       {target && live ? (
         // Live (BILLING_WRITES=on): the server's preview, then the exact charge.
-        <PlanSwitch
-          planKey={target.key}
-          planName={nameOf(target)}
-          label={t('switchTo', { plan: nameOf(target) })}
-          className={styles.switchButton}
-        />
+        <SupportRefused kind="billing">
+          <PlanSwitch
+            planKey={target.key}
+            planName={nameOf(target)}
+            label={t('switchTo', { plan: nameOf(target) })}
+            className={styles.switchButton}
+          />
+        </SupportRefused>
       ) : target ? (
         <HeldConfirm
           label={t('switchTo', { plan: nameOf(target) })}

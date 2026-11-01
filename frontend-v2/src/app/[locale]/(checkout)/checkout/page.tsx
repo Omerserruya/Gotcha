@@ -5,6 +5,7 @@ import { checkoutPagePath, pageForStatus, referenceFrom } from '@/features/check
 import { loadCheckout, loadMine } from '@/features/checkout/load-checkout';
 import { redirect } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Where the payment email lands (`/checkout?ref=&token=`, auth
@@ -29,7 +30,12 @@ export default async function Page({
   const reference = referenceFrom(q.ref);
   const token = typeof q.token === 'string' && q.token !== '' ? q.token : null;
 
-  if (reference && token) return <CheckoutOpen reference={reference} token={token} />;
+  if (reference && token)
+    return (
+      <SupportRefused kind="billing">
+        <CheckoutOpen reference={reference} token={token} />
+      </SupportRefused>
+    );
 
   if (reference) {
     const read = await loadCheckout(reference);

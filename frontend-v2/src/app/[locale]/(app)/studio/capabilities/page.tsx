@@ -23,6 +23,7 @@ import {
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Studio · Capabilities - screen 10.
@@ -211,11 +212,13 @@ export default async function Page({
             isConnected(integration) &&
             !needsReconnect(integration) &&
             (capabilities === null || capabilities.length === 0) ? (
-              <DisconnectSystem
-                slug={integration.slug}
-                name={integration.name}
-                pending={onShopify && shopifyVerdict?.kind === 'uninstall_pending'}
-              />
+              <SupportRefused kind="delete">
+                <DisconnectSystem
+                  slug={integration.slug}
+                  name={integration.name}
+                  pending={onShopify && shopifyVerdict?.kind === 'uninstall_pending'}
+                />
+              </SupportRefused>
             ) : null}
           </>
         }

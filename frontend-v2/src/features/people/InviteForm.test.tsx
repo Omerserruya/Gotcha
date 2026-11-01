@@ -8,6 +8,7 @@ import { roleSchema } from '@/api/contracts/roles';
 import people from '@/i18n/messages/en/people.json';
 import roles from '@/i18n/messages/en/roles.json';
 import { PermissionsProvider } from '@/permissions/permissions-context';
+import { SupportProvider } from '@/support/support-context';
 
 // ⚠ Nothing here invites anyone: the action throws if it is ever reached.
 vi.mock('./actions', () => ({
@@ -188,5 +189,20 @@ describe('★★ G5 - each refusal is a sentence, and says nobody was invited', 
     expect(note).toHaveTextContent(sentence);
     expect(note).not.toHaveTextContent(/:[a-z]+:/);
     expect(screen.queryByTestId('invite-link')).toBeNull();
+  });
+});
+
+describe('★★ support mode invites members, never admins (Omer, 2026-11-01)', () => {
+  it('★★ Owner and Admin are not offered; every other role is', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ people, roles }}>
+        <PermissionsProvider permissions={[]} roleKey="owner" tenantId="t">
+          <SupportProvider session={{ tenantName: 'A', reason: null, endsAt: null }}>
+            <InviteForm teams={teams} open roles={ROLES} catalog={CATALOG} />
+          </SupportProvider>
+        </PermissionsProvider>
+      </NextIntlClientProvider>,
+    );
+    expect(options()).toEqual(['Agent', 'Refunds desk']);
   });
 });

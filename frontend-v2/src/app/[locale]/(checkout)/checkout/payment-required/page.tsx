@@ -11,6 +11,7 @@ import { SummaryCard } from '@/features/checkout/SummaryCard';
 import styles from '@/features/checkout/Checkout.module.css';
 import { redirect } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * "One step left": the plan, its price, and the way to the provider's card
@@ -62,11 +63,13 @@ export default async function Page({
       ) : null}
       <SummaryCard summary={summary} />
       {summary.paymentSetupAvailable ? (
-        <PayButton
-          reference={reference}
-          label={declined ? t('retry') : t('start')}
-          live={billingWritesEnabled()}
-        />
+        <SupportRefused kind="billing">
+          <PayButton
+            reference={reference}
+            label={declined ? t('retry') : t('start')}
+            live={billingWritesEnabled()}
+          />
+        </SupportRefused>
       ) : (
         <p className={styles.quiet} data-testid="checkout-not-yet">
           {t('notYet')}
