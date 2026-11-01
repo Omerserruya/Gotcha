@@ -675,7 +675,9 @@
       "saving": "Saving…",
       "saved": "Saved",
       "failed": "Not saved. Change it again to retry",
-      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
+      "nowhere": "Not saved: the widget couldn't be created yet. Get the code under Install, then change it again",
+      "nowhereLimit": "Not saved: the widget needs a channel, and your plan has no room for another one",
+      "nowhereForbidden": "Not saved: the widget isn't created yet, and you don't have permission to add a channel. Ask a workspace admin",
       "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
       "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one.",
       "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it."

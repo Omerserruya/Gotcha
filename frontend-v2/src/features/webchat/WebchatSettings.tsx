@@ -78,7 +78,10 @@ import { WooPlugin } from './WooPlugin';
 export const SAVE_AFTER_MS = 700;
 
 type Saving =
-  'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number' | 'kindNumber' | 'couponPersonal';
+  | 'idle'
+  | 'saving'
+  | 'saved'
+  | Extract<Awaited<ReturnType<typeof saveWebsiteWidget>>, { ok: false }>['reason'];
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -301,6 +304,10 @@ export function WebchatSettings({
             className={styles.saving}
             role="status"
             data-saving={saving}
+            // Every refusal in the urgent tone - never grey like "Saved".
+            data-failed={
+              saving === 'idle' || saving === 'saving' || saving === 'saved' ? undefined : ''
+            }
             data-testid="webchat-saving"
           >
             {saving === 'idle' ? '' : t(`saving.${saving}`)}

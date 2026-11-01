@@ -10,6 +10,8 @@ vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ put, get }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
+const create = vi.hoisted(() => vi.fn());
+vi.mock('@/features/channels/actions', () => ({ connectWebChat: create }));
 
 import {
   loadWidgetPromotions,
@@ -34,7 +36,12 @@ const { displayName: _name, ...SETTINGS } = webchatSettingsSchema.parse({
 beforeEach(() => {
   put.mockReset();
   put.mockResolvedValue({ data: { settings: SETTINGS } });
+  create.mockReset();
+  create.mockResolvedValue({ ok: false, reason: 'failed' });
 });
+
+const NOT_CREATED = () =>
+  new ApiError({ kind: 'conflict', status: 409, code: 'WIDGET_NOT_CREATED' });
 
 const sent = () => (put.mock.calls.at(-1)![0] as { body: { ux: Record<string, unknown> } }).body;
 
@@ -54,9 +61,7 @@ describe('★★ the widget save, stage A and stage B', () => {
   });
 
   it('★ each refusal is its own: no place yet (409), another workspace’s number (422)', async () => {
-    put.mockRejectedValueOnce(
-      new ApiError({ kind: 'conflict', status: 409, code: 'WIDGET_NOT_CREATED' }),
-    );
+    put.mockRejectedValueOnce(NOT_CREATED());
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'nowhere' });
     put.mockRejectedValueOnce(
       new ApiError({ kind: 'validation', status: 422, code: 'WHATSAPP_NUMBER_NOT_FOUND' }),
@@ -69,6 +74,57 @@ describe('★★ the widget save, stage A and stage B', () => {
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'kindNumber' });
     put.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'failed' });
+    // Only "no place yet" creates one.
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('★★ no place yet (409 WIDGET_NOT_CREATED): the first save creates the web chat', () => {
+  it('creates it, then sends the same save once more - and that answer is what is kept', async () => {
+    const kept = { ...SETTINGS, appearance: { ...SETTINGS.appearance, primaryColor: '#abcdef' } };
+    put.mockRejectedValueOnce(NOT_CREATED()).mockResolvedValueOnce({ data: { settings: kept } });
+    create.mockResolvedValue({ ok: true, data: { id: 'w1' } });
+    expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: true, settings: kept });
+    expect(create).toHaveBeenCalledExactlyOnceWith('');
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(put.mock.calls[1]![0]).toEqual(put.mock.calls[0]![0]);
+  });
+
+  it('a widget that already exists by then (duplicate) is saved to all the same', async () => {
+    put.mockRejectedValueOnce(NOT_CREATED());
+    create.mockResolvedValue({ ok: false, reason: 'duplicate' });
+    expect(await saveWebsiteWidget(SETTINGS)).toEqual({ ok: true, settings: SETTINGS });
+    expect(put).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['limit', 'nowhereLimit'],
+    ['forbidden', 'nowhereForbidden'],
+    ['failed', 'nowhere'],
+    ['invalid', 'nowhere'],
+  ] as const)('a create refused as %s says so (%s), and saves nothing', async (made, reason) => {
+    put.mockRejectedValueOnce(NOT_CREATED());
+    create.mockResolvedValue({ ok: false, reason: made, fields: {} });
+    expect(await saveWebsiteWidget(SETTINGS)).toEqual({ ok: false, reason });
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
+  it('created, and the save still finds no place: "nowhere", and no third try', async () => {
+    put.mockRejectedValueOnce(NOT_CREATED()).mockRejectedValueOnce(NOT_CREATED());
+    create.mockResolvedValue({ ok: true, data: { id: 'w1' } });
+    expect(await saveWebsiteWidget(SETTINGS)).toEqual({ ok: false, reason: 'nowhere' });
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('created, and the save then refused for its own reason: that reason', async () => {
+    put
+      .mockRejectedValueOnce(NOT_CREATED())
+      .mockRejectedValueOnce(
+        new ApiError({ kind: 'validation', status: 400, code: 'COUPON_PERSONAL' }),
+      );
+    create.mockResolvedValue({ ok: true, data: { id: 'w1' } });
+    expect(await saveWebsiteWidget(SETTINGS)).toEqual({ ok: false, reason: 'couponPersonal' });
   });
 });
 

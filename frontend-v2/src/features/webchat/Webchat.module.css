@@ -149,7 +149,7 @@
     color: var(--text-subtle);
   }
 
-  .saving[data-saving='failed'] {
+  .saving[data-failed] {
     color: var(--intent-urgent-text);
   }
 

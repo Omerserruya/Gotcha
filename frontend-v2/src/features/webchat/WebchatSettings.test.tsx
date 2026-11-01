@@ -215,6 +215,36 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent('Change it again');
   });
 
+  it.each([
+    ['nowhere', 'Get the code under Install'],
+    ['nowhereLimit', 'your plan has no room for another one'],
+    ['nowhereForbidden', 'Ask a workspace admin'],
+    ['failed', 'Not saved'],
+    ['number', 'Not saved'],
+    ['kindNumber', 'Not saved'],
+    ['couponPersonal', 'Not saved'],
+  ] as const)(
+    '★★ a refused save (%s) says so in words, in the urgent tone',
+    async (reason, words) => {
+      actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason });
+      show('behaviour', { read: install({ code: null }) });
+      fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+      await pause();
+      const line = screen.getByTestId('webchat-saving');
+      expect(line).toHaveTextContent(words);
+      expect(line).toHaveTextContent(/^Not saved: |^Not saved\. /);
+      expect(line).toHaveAttribute('data-failed');
+    },
+  );
+
+  it('saved: not in the urgent tone', async () => {
+    show('behaviour');
+    fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Saved');
+    expect(screen.getByTestId('webchat-saving')).not.toHaveAttribute('data-failed');
+  });
+
   it('a half-typed colour is never saved; a whole one is', async () => {
     show('appearance');
     fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
