@@ -109,6 +109,8 @@ describe("what support mode may not do", () => {
     ["GET", "/api/account/sessions"],
     ["GET", "/api/tenant/security"],
     ["GET", "/api/permissions/roles"],
+    ["PUT", "/api/ai-agents/a1/tool-levels/shopify.create_discount"],
+    ["PUT", "/api/tool-permissions/schedule_meeting"],
   ])("%s %s stays allowed (automations, knowledge, reconnect, everyday work)", (m, path) => {
     expect(supportDenial(m, path, {})).toBeNull();
   });
