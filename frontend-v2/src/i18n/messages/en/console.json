@@ -357,5 +357,45 @@
       "forbidden": "The platform refused: this needs a platform administrator.",
       "failed": "The console couldn't confirm whether the tenant was created. Search the list before trying again."
     }
+  },
+  "edit": {
+    "reason": "Reason (saved with the change)",
+    "refusal": {
+      "not_found": "This tenant no longer exists.",
+      "reason_invalid": "Give a reason of up to {max} characters.",
+      "invalid": "The platform refused the change. Reload the page and try again.",
+      "forbidden": "The platform refused: this needs a platform administrator.",
+      "failed": "The console couldn't confirm what happened. The page now shows the tenant as the platform has it.",
+      "slug_mismatch": "The slug typed doesn't match this organization.",
+      "system_tenant": "The System organization can't be deleted.",
+      "own_tenant": "You can't delete the organization you are signed in to.",
+      "paid_subscription": "This organization has a paid plan that can still charge. Cancel or end the plan first.",
+      "open_checkout": "This organization has a payment the customer could still complete. Wait for it to expire, or cancel it first.",
+      "shopify_billed": "Shopify bills this organization. The merchant must uninstall the app in Shopify first."
+    },
+    "delete": {
+      "title": "Delete the organization",
+      "intro": "The organization is deleted for good, right away. This can't be undone.",
+      "systemTenant": "The System organization can't be deleted.",
+      "label": "Delete the organization",
+      "what": "{name} and everything in it is deleted for good: its users, conversations, customers, channels, knowledge, files and settings. This can't be undone.",
+      "provider": "Nothing is charged or refunded, and nothing is disconnected on WhatsApp, Meta or Shopify. What is still connected there is listed after.",
+      "match": "Type {slug} to confirm",
+      "yes": "Delete for good",
+      "done": "{name} was deleted.",
+      "leftovers": "Still connected on the provider side:",
+      "uploadsLeft": "Some of its files couldn't be removed from storage. The organization itself is deleted.",
+      "dismiss": "Got it",
+      "removed": "What was removed:",
+      "counts": {
+        "users": "Users",
+        "conversations": "Conversations",
+        "messages": "Messages",
+        "channelAccounts": "Channels",
+        "contacts": "Customers",
+        "identitiesDeleted": "Sign-in accounts",
+        "uploadFiles": "Files"
+      }
+    }
   }
 }

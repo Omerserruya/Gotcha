@@ -165,6 +165,12 @@
     border-radius: var(--radius-card);
   }
 
+  /* The permanent delete: the one card drawn in the danger tone. After .card,
+     whose border shorthand would otherwise win in the same layer. */
+  .danger {
+    border-color: var(--danger-action);
+  }
+
   .cardTitle {
     margin: 0;
     font-size: var(--font-size-body);

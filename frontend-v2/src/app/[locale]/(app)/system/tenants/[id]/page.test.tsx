@@ -54,6 +54,9 @@ vi.mock('@/features/console/TenantCoupons', () => ({
 vi.mock('@/features/console/TenantControls', () => ({
   TenantControls: () => <div data-testid="controls" />,
 }));
+vi.mock('@/features/console/TenantDelete', () => ({
+  TenantDelete: ({ slug }: { slug: string }) => <div data-testid="delete">{slug}</div>,
+}));
 
 const { default: Page } = await import('./page');
 
@@ -102,9 +105,14 @@ describe('★★ /system/tenants/[id]', () => {
       'href',
       '/system/tenants',
     );
-    for (const id of ['facts', 'billing-t1', 'coupons', 'controls']) {
-      expect(screen.getByTestId(id)).toBeInTheDocument();
-    }
+    const ids = ['facts', 'billing-t1', 'coupons', 'controls', 'delete'];
+    for (const id of ids) expect(screen.getByTestId(id)).toBeInTheDocument();
+    // The delete is the LAST card on the page.
+    const cards = [...document.querySelectorAll('[data-testid]')].map((el) =>
+      el.getAttribute('data-testid'),
+    );
+    expect(cards.at(-1)).toBe('delete');
+    expect(screen.getByTestId('delete')).toHaveTextContent('acme');
   });
 
   it('★★ billing writes off here: said before anyone presses anything', async () => {

@@ -272,3 +272,52 @@ export const pocDomainsSchema = z.array(z.string());
 export const createdTenantSchema = z.object({
   tenant: z.object({ id: z.string(), name: z.string() }),
 });
+
+/** A count the route read before deleting; unreadable is `null`, said as nothing. */
+const removedCount = z.number().int().nonnegative().nullable().catch(null).default(null);
+
+/** What a delete removed, counted before the rows went (eraseTenant's `counts`). */
+const DELETED_EMPTY = {
+  users: null,
+  conversations: null,
+  messages: null,
+  channelAccounts: null,
+  contacts: null,
+} as const;
+
+/**
+ * A deleted tenant (DELETE /api/system/tenants/:id, Backend 2026-10-23) →
+ * `{ data: { ..., counts, identitiesDeleted, uploadFiles, uploadsRemoved,
+ * uploadsLeftBehind, providerLeftovers } }`. The screen says what went, and
+ * keeps what the operator must act on: what is still connected on a
+ * provider's side, and the files left in storage (the tenant is deleted
+ * either way). Lenient: a delete that happened is never reported as
+ * "failed" by a field.
+ */
+export const deletedTenantSchema = z
+  .object({
+    counts: z
+      .object({
+        users: removedCount,
+        conversations: removedCount,
+        messages: removedCount,
+        channelAccounts: removedCount,
+        contacts: removedCount,
+      })
+      .catch(DELETED_EMPTY)
+      .default(DELETED_EMPTY),
+    identitiesDeleted: removedCount,
+    uploadFiles: removedCount,
+    providerLeftovers: z.array(z.string()).catch([]).default([]),
+    uploadsRemoved: z.boolean().catch(true).default(true),
+    uploadsLeftBehind: z.array(z.string()).catch([]).default([]),
+  })
+  .catch({
+    counts: DELETED_EMPTY,
+    identitiesDeleted: null,
+    uploadFiles: null,
+    providerLeftovers: [],
+    uploadsRemoved: true,
+    uploadsLeftBehind: [],
+  });
+export type DeletedTenant = z.infer<typeof deletedTenantSchema>;

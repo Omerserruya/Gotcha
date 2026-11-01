@@ -20,6 +20,9 @@ vi.mock('@/features/console/load-tenants', () => ({
 vi.mock('@/features/console/CreateTenant', () => ({
   CreateTenant: () => <div data-testid="create-tenant" />,
 }));
+vi.mock('@/features/console/DeletedNotice', () => ({
+  DeletedNotice: () => <div data-testid="deleted-notice" />,
+}));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
@@ -69,6 +72,13 @@ describe('★★ /system/tenants', () => {
   it('★ the create form is on the page', async () => {
     await open();
     expect(screen.getByTestId('create-tenant')).toBeInTheDocument();
+    // A delete's outcome is said first, above the create form.
+    expect(
+      screen
+        .getByTestId('deleted-notice')
+        .compareDocumentPosition(screen.getByTestId('create-tenant')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('no search: all of them', async () => {

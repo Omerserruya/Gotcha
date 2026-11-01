@@ -6,6 +6,7 @@ import { loadTenant } from '@/features/console/load-tenant';
 import { TenantBilling } from '@/features/console/TenantBilling';
 import { TenantControls } from '@/features/console/TenantControls';
 import { TenantCoupons } from '@/features/console/TenantCoupons';
+import { TenantDelete } from '@/features/console/TenantDelete';
 import { TenantFacts } from '@/features/console/TenantFacts';
 import { pageMetadata } from '@/shell/page-metadata';
 import { requireConsole } from '@/shell/require-console';
@@ -16,8 +17,8 @@ import styles from '@/features/console/Console.module.css';
 /**
  * Console · one tenant - legacy `/system/tenants/[id]`, the parts in scope:
  * its facts, its billing (provisioning, repair, resend, a plan for a tenant
- * with none) and its coupons. Users, features, entitlements, bot settings,
- * the AI prompt viewer and deleting the tenant are not ported.
+ * with none) and its coupons. Users, features, entitlements, bot settings
+ * and the AI prompt viewer are not ported. The last card deletes it for good.
  */
 export default async function Page({
   params,
@@ -66,6 +67,7 @@ export default async function Page({
         status={tenant.status}
         isActive={tenant.isActive}
       />
+      <TenantDelete tenantId={tenant.id} name={tenant.name} slug={tenant.slug} />
     </SettingsSection>
   );
 }
