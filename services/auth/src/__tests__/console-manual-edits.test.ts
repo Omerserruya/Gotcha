@@ -15,6 +15,7 @@ const H = vi.hoisted(() => ({
   identities: [] as any[],
   audits: [] as any[],
   checkouts: [] as any[],
+  checkoutUnknown: false,
   subs: [] as any[],
   shopify: [] as any[],
   idp: { users: [] as any[], updates: [] as any[], failUpdate: false, applyThenThrow: false, readThrows: false },
@@ -23,6 +24,11 @@ const H = vi.hoisted(() => ({
   planAccess: { state: "MISSING", label: "Missing", active: false, planKey: null, planName: null, expiresAt: null } as any,
   erase: [] as any[],
   caller: { userId: "sa1", role: "SYSTEM_ADMIN", tenantId: "SYS" } as any,
+}));
+
+// Checkouts are billing's table: auth asks billing, never reads it (2026-11-01).
+vi.mock("../services/billing-checkout", () => ({
+  hasOpenCheckout: async (tenantId: string) => (H.checkoutUnknown ? null : H.checkouts.some((c) => c.tenantId === tenantId)),
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -45,7 +51,6 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       findFirst: async ({ where }: any) => H.identities.find((i) => i.email === where.email && i.id !== where.id?.not) ?? null,
       update: async ({ where, data }: any) => Object.assign(H.identities.find((i) => i.id === where.id), data),
     },
-    pendingCheckout: { findFirst: async ({ where }: any) => H.checkouts.find((c) => c.tenantId === where.tenantId) ?? null },
     billableEntityTenant: {
       findFirst: async ({ where }: any) => {
         const sub = H.subs.find((s) => s.tenantId === where.tenantId);
@@ -143,7 +148,7 @@ beforeEach(() => {
     { id: "u2", tenantId: "T", email: "agent@acme.test", name: "Agent", role: "AGENT", isActive: true, identityId: "i2" },
   ];
   H.idp = { users: [{ subject: "sub1", pk: 7, email: "owner@acme.test", username: "owner@acme.test" }], updates: [], failUpdate: false, applyThenThrow: false, readThrows: false };
-  H.audits = []; H.checkouts = []; H.subs = []; H.shopify = []; H.revoked = []; H.erase = [];
+  H.audits = []; H.checkouts = []; H.checkoutUnknown = false; H.subs = []; H.shopify = []; H.revoked = []; H.erase = [];
   H.owners = true;
   H.planAccess = { state: "MISSING", label: "Missing", active: false, planKey: null, planName: null, expiresAt: null };
   H.caller = { userId: "sa1", role: "SYSTEM_ADMIN", tenantId: "SYS" };
@@ -169,6 +174,14 @@ describe("PATCH /tenants/:id/status", () => {
       metadata: { before: { status: "PENDING_PAYMENT" }, after: { status: "ACTIVE" }, reason: "paid by transfer" },
     })]);
     expect(fetchCalls).toEqual([]);
+  });
+
+  it("billing unable to say whether a checkout is open: the status is set, with a warning that says so", async () => {
+    H.checkoutUnknown = true;
+    const r = await request(app).patch("/api/system/tenants/T/status").send({ status: "ACTIVE", reason: "paid by transfer" });
+    expect(r.status).toBe(200);
+    expect(r.body.data.warnings).toEqual(expect.arrayContaining(["open_checkout_unknown"]));
+    expect(r.body.data.warnings).not.toContain("open_checkout");
   });
 
   it("warns that a renewal will undo a manual suspend", async () => {
@@ -359,6 +372,7 @@ describe("DELETE /tenants/:id", () => {
     ["a renewing paid plan", () => { H.subs.push({ tenantId: "T", status: "ACTIVE", cancelAtPeriodEnd: false, planKey: "starter", planVersion: 1, snapshotPrice: "190.00" }); }, { confirmSlug: "acme", reason: "r" }, 409, "ACTIVE_PAID_SUBSCRIPTION"],
     ["dunning", () => { H.subs.push({ tenantId: "T", status: "PAST_DUE", cancelAtPeriodEnd: false, planKey: "starter", planVersion: 1 }); }, { confirmSlug: "acme", reason: "r" }, 409, "ACTIVE_PAID_SUBSCRIPTION"],
     ["an open checkout", () => { H.checkouts.push({ tenantId: "T" }); }, { confirmSlug: "acme", reason: "r" }, 409, "OPEN_CHECKOUT"],
+    ["billing unable to say whether a checkout is open", () => { H.checkoutUnknown = true; }, { confirmSlug: "acme", reason: "r" }, 409, "OPEN_CHECKOUT"],
     ["Shopify-billed", () => { H.shopify.push({ tenantId: "T" }); }, { confirmSlug: "acme", reason: "r" }, 409, "SHOPIFY_BILLED"],
   ];
   for (const [name, setup, body, status, code] of refusals) {

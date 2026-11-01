@@ -36,12 +36,12 @@ const router = Router();
 // tenant. Every handler is gated by authenticate + requireSystemAdmin().
 router.use(crossTenantMiddleware);
 
+import { hasOpenCheckout } from "../services/billing-checkout";
 const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
 
 const reason = z.string().trim().min(1).max(500);
 
 /** Checkout states that mean the customer could still pay. */
-const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
 
 async function planAccessView(tenantId: string) {
   const p = await resolveTenantPlanAccess(tenantId);
@@ -99,10 +99,7 @@ router.patch("/tenants/:id/status", authenticate, requireSystemAdmin(), validate
     if (status === "ACTIVE" && !planAccess.active) warnings.push("no_access_source");
 
     const [checkout, link] = await Promise.all([
-      prisma.pendingCheckout.findFirst({
-        where: { tenantId, status: { in: OPEN_CHECKOUT_STATES as any } },
-        select: { id: true },
-      }),
+      hasOpenCheckout(tenantId),
       prisma.billableEntityTenant.findFirst({
         where: { tenantId },
         select: { entity: { select: { subscription: { select: { status: true, cancelAtPeriodEnd: true } } } } },
@@ -110,6 +107,7 @@ router.patch("/tenants/:id/status", authenticate, requireSystemAdmin(), validate
     ]);
     // Completing a checkout writes ACTIVE or PENDING_ONBOARDING over this.
     if (checkout) warnings.push("open_checkout");
+    if (checkout === null) warnings.push("open_checkout_unknown");
     const sub = link?.entity?.subscription;
     // Dunning suspends an ACTIVE tenant when it gives up.
     if (sub?.status === "PAST_DUE") warnings.push("billing_may_resuspend");

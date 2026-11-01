@@ -21,6 +21,7 @@ import {
 } from "@chatcenter/shared";
 import { eraseUserIdentity } from "./invitation.service";
 import { ERASED_EXPLICITLY } from "./tenant-erasure-tables";
+import { hasOpenCheckout } from "./billing-checkout";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 
@@ -193,7 +194,6 @@ export async function exportTenant(tenantId: string, requestedBy?: string) {
  * scoped and would otherwise be cascade-deleted).
  */
 /** Checkout states that mean the customer could still pay. */
-const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
 
 /**
  * Why this tenant must not be deleted right now, or null when it may be.
@@ -248,11 +248,10 @@ export async function tenantDeletionRefusal(
     if (chargeable) return { code: "ACTIVE_PAID_SUBSCRIPTION", detail: sub.status };
   }
 
-  const checkout = await prisma.pendingCheckout.findFirst({
-    where: { tenantId, status: { in: OPEN_CHECKOUT_STATES as any } },
-    select: { id: true },
-  });
-  if (checkout) return { code: "OPEN_CHECKOUT" };
+  // Billing's table, so billing answers. Unknown is refused: a delete that
+  // cannot rule out a live checkout must not happen.
+  const checkout = await hasOpenCheckout(tenantId);
+  if (checkout !== false) return { code: "OPEN_CHECKOUT", ...(checkout === null ? { detail: "billing_unreachable" } : {}) };
   return null;
 }
 

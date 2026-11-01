@@ -22,6 +22,7 @@ import {
   manualSwitchToPoc,
   manualAddCredits,
   ManualEditRefused,
+  OPEN_CHECKOUT_STATES,
 } from "../services/manual-edit.service";
 import {
   provisionPaidTenant,
@@ -40,6 +41,25 @@ import {
 
 const router = Router();
 router.use("/internal/billing", requireInternalKey);
+
+/**
+ * Does this tenant have a checkout its customer could still complete?
+ * Asked by auth before a tenant delete and after a manual status change:
+ * checkouts are billing's table, so other services ask here instead of
+ * reading it (architecture-rules.test).
+ */
+router.get("/internal/billing/open-checkout/:tenantId", async (req, res) => {
+  try {
+    const open = await prisma.pendingCheckout.findFirst({
+      where: { tenantId: String(req.params.tenantId), status: { in: OPEN_CHECKOUT_STATES as any } },
+      select: { id: true },
+    });
+    res.json({ open: !!open });
+  } catch (err: any) {
+    console.error("[billing] open-checkout check failed:", err?.message);
+    res.status(500).json({ error: "open_checkout_check_failed" });
+  }
+});
 
 router.post("/internal/billing/ensure-entity", async (req, res) => {
   const { tenantId } = req.body ?? {};

@@ -44,7 +44,7 @@ export class ManualEditRefused extends Error {
 }
 
 /** Checkout states that mean a customer could still pay and replace the plan. */
-const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
+export const OPEN_CHECKOUT_STATES = ["PENDING", "AWAITING_PROVIDER", "TOKENIZED"];
 
 /** Subscription states a manual edit may start from. */
 const EDITABLE_STATES = ["ACTIVE", "TRIALING", "CANCELED"];
