@@ -1377,3 +1377,5 @@ export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";
 export { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "./lib/support-principal";
 export { supportDenial, type SupportDenyCode } from "./lib/support-deny";
 export { runWithRequestContext, currentRequestContext, type RequestContext } from "./lib/request-context";
+export { installSupportAuditPropagation, supportAuditContextOf, SUPPORT_AUDIT_HEADER } from "./lib/support-audit";
+export { continueWithSupportAudit } from "./lib/internal-key";

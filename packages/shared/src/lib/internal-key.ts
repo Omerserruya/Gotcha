@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { SUPPORT_AUDIT_HEADER, supportAuditContextOf } from "./support-audit";
+import { runWithRequestContext } from "./request-context";
 import type { Request, Response, NextFunction } from "express";
 
 /**
@@ -71,5 +73,20 @@ export function requireInternalKey(req: Request, res: Response, next: NextFuncti
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  next();
+  continueWithSupportAudit(req, next);
+}
+
+/**
+ * After the internal key is verified: run the rest of the request with the
+ * support audit context the caller forwarded, if it names a real session.
+ * Attribution only - nothing about the caller's access changes.
+ */
+export function continueWithSupportAudit(req: Request, next: NextFunction): void {
+  const header = req.headers[SUPPORT_AUDIT_HEADER];
+  if (!header) { next(); return; }
+  const tenant = req.headers["x-tenant-id"];
+  void supportAuditContextOf(header, typeof tenant === "string" ? tenant : null).then(
+    (ctx) => (ctx ? runWithRequestContext(ctx, next) : next()),
+    () => next(),
+  );
 }

@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { installSupportAuditPropagation } from "./support-audit";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -34,6 +35,8 @@ export interface ServiceConfig {
 }
 
 export function createServiceApp(config: ServiceConfig): express.Express {
+  // Support mode: internal calls made during a support request carry it, for the audit.
+  installSupportAuditPropagation();
   // Before any middleware. Sentry is wired HERE, in the shared factory, for the
   // same reason assertEnforcementConfigured lives in startService below: a step
   // every service has to remember is a step one service will not have, and the

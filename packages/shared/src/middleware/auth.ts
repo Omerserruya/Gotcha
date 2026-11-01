@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma";
 import { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "../lib/support-principal";
 import { supportDenial } from "../lib/support-deny";
 import { runWithRequestContext } from "../lib/request-context";
+import { SUPPORT_AUDIT_HEADER, supportAuditContextOf } from "../lib/support-audit";
 
 /**
  * The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is: both
@@ -155,7 +156,10 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   if (bearer) {
     try {
       if (await tryInternalAuth(req, bearer)) {
-        next();
+        // Support mode reaches here through another service: attribution only.
+        const ctx = await supportAuditContextOf(req.headers[SUPPORT_AUDIT_HEADER], req.tenantId ?? null);
+        if (ctx) runWithRequestContext(ctx, next);
+        else next();
         return;
       }
     } catch {

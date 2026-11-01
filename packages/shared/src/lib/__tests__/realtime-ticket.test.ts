@@ -10,6 +10,8 @@ const { redisMock } = vi.hoisted(() => ({
   redisMock: { set: vi.fn(), getdel: vi.fn(), eval: vi.fn() },
 }));
 vi.mock("../redis", () => ({ getRedis: () => redisMock }));
+const SUPPORT = vi.hoisted(() => ({ session: null as any }));
+vi.mock("../prisma", () => ({ prisma: { supportSession: { findUnique: async () => SUPPORT.session } } }));
 
 import {
   issueRealtimeTicket,
@@ -143,5 +145,39 @@ describe("redeemRealtimeTicket", () => {
     const { ticket } = await issueRealtimeTicket(PRINCIPAL as any);
     await expect(redeemRealtimeTicket(ticket)).resolves.toEqual(PRINCIPAL);
     await expect(redeemRealtimeTicket(ticket)).resolves.toBeNull();
+  });
+});
+
+// Support mode (2026-11-01): a support ticket is for the supported tenant, and
+// it stops working the moment its support session does.
+describe("a support-mode ticket", () => {
+  const support = { ...PRINCIPAL, userId: "usr_support", tenantId: "ten_shop", role: "ADMIN", support: { sessionId: "ss_1", adminUserId: "u_sys", adminEmail: "a@g", expiresAt: "", startedAt: "", reason: "r" } };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    redisMock.set.mockResolvedValue("OK");
+    SUPPORT.session = { endedAt: null, expiresAt: new Date(Date.now() + 3_600_000), tenantId: "ten_shop" };
+  });
+
+  it("carries the support session, and nothing of the admin's own tenant", async () => {
+    await issueRealtimeTicket(support as any);
+    const stored = JSON.parse(redisMock.set.mock.calls[0][1]);
+    expect(stored).toMatchObject({ tenantId: "ten_shop", role: "ADMIN", supportSessionId: "ss_1" });
+    expect(stored).not.toHaveProperty("support");
+  });
+
+  it("redeems while the session is live", async () => {
+    redisMock.getdel.mockResolvedValue(JSON.stringify({ ...PRINCIPAL, tenantId: "ten_shop", supportSessionId: "ss_1" }));
+    await expect(redeemRealtimeTicket("t".repeat(43))).resolves.toMatchObject({ tenantId: "ten_shop" });
+  });
+
+  it.each([
+    ["ended", () => { SUPPORT.session.endedAt = new Date(); }],
+    ["expired", () => { SUPPORT.session.expiresAt = new Date(Date.now() - 1); }],
+    ["gone", () => { SUPPORT.session = null; }],
+    ["for another tenant", () => { SUPPORT.session.tenantId = "ten_other"; }],
+  ])("is refused once the session is %s", async (_n, setup) => {
+    setup();
+    redisMock.getdel.mockResolvedValue(JSON.stringify({ ...PRINCIPAL, tenantId: "ten_shop", supportSessionId: "ss_1" }));
+    await expect(redeemRealtimeTicket("t".repeat(43))).resolves.toBeNull();
   });
 });

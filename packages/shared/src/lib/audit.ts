@@ -183,7 +183,9 @@ export async function writeAudit(event: AuditEventInput): Promise<void> {
     await prisma.auditLog.create({
       data: {
         tenantId: event.tenantId,
-        actorType: support && event.actorType === "user" ? "support" : event.actorType,
+        // A person's or the platform's write made for a support session is the
+        // admin's; an AI employee's own action stays "ai" (with the support stamp).
+        actorType: support && (event.actorType === "user" || event.actorType === "system") ? "support" : event.actorType,
         actorId: event.actorId ?? null,
         action: event.action,
         targetType: event.targetType ?? null,

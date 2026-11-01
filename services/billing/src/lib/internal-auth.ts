@@ -4,7 +4,7 @@
  * convention as services/ai (accepts INTERNAL_SERVICE_KEY or _TOKEN).
  */
 import type { Request, Response, NextFunction } from "express";
-import { verifyInternalServiceKey } from "@chatcenter/shared";
+import { verifyInternalServiceKey, continueWithSupportAudit } from "@chatcenter/shared";
 
 export function requireInternalKey(req: Request, res: Response, next: NextFunction): void {
   // Hardened, constant-time, fail-closed. No hardcoded default: an unset or
@@ -14,5 +14,6 @@ export function requireInternalKey(req: Request, res: Response, next: NextFuncti
     res.status(401).json({ error: "unauthorized", scope: "internal" });
     return;
   }
-  next();
+  // Support mode: the caller's audit attribution, nothing more.
+  continueWithSupportAudit(req, next);
 }
