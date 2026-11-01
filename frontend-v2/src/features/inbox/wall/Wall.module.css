@@ -736,18 +736,24 @@
   }
 
   .askSend {
+    display: inline-flex;
     flex: none;
+    align-items: center;
+    justify-content: center;
     inline-size: 22px;
     block-size: 22px;
     padding: 0;
     border: 0;
     border-radius: 50%;
     background-color: var(--copilot-ask-mark);
+    /* The arrow never takes the fill's colour: muted on the dark mark, dark on lavender. */
+    color: var(--menu-dark-icon);
     cursor: pointer;
   }
 
   .askSend:enabled {
     background-color: var(--signal-ai);
+    color: var(--copilot-input-surface);
   }
 
   .askSend:disabled {

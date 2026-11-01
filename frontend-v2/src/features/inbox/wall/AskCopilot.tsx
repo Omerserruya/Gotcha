@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowUp } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, useTransition, type FormEvent } from 'react';
 
@@ -68,7 +69,10 @@ export function AskCopilot({ conversationId }: { readonly conversationId: string
           title={t('title')}
           disabled={off || isPending || question.trim() === ''}
           data-testid="wall-ask-send"
-        />
+        >
+          {/* 02 draws a bare circle; the arrow says what it does, in every state. */}
+          <ArrowUp size={13} strokeWidth={2.4} aria-hidden="true" />
+        </button>
       </div>
     </form>
   );

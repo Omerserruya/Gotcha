@@ -394,6 +394,24 @@ describe('★★ Ask Copilot anything - into the reply box, never to the custome
     expect(screen.getByTestId('wall-ask-input')).toHaveValue('Hi');
   });
 
+  it('★ Send always draws its arrow - empty, typing, sending and off', async () => {
+    const arrow = () => screen.getByTestId('wall-ask-send').querySelector('svg');
+    ask.mockReturnValue(new Promise(() => {}));
+    const { unmount } = wrap(<AskCopilot conversationId="c1" />);
+    expect(screen.getByTestId('wall-ask-send')).toBeDisabled();
+    expect(arrow()).not.toBeNull();
+    fireEvent.change(screen.getByTestId('wall-ask-input'), { target: { value: 'Refund?' } });
+    expect(screen.getByTestId('wall-ask-send')).toBeEnabled();
+    expect(arrow()).not.toBeNull();
+    fireEvent.click(screen.getByTestId('wall-ask-send'));
+    await waitFor(() => expect(screen.getByTestId('wall-ask-send')).toBeDisabled());
+    expect(arrow()).not.toBeNull();
+    expect(arrow()).toHaveAttribute('aria-hidden', 'true');
+    unmount();
+    wrap(<AskCopilot conversationId={null} />);
+    expect(arrow()).not.toBeNull();
+  });
+
   it('nothing open: off, and says why', () => {
     wrap(<AskCopilot conversationId={null} />);
     expect(screen.getByTestId('wall-ask-input')).toBeDisabled();
