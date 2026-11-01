@@ -1,6 +1,7 @@
 'use client';
 
 import { logger } from '@/observability/logger';
+import { isSupportEnded } from '@/support/support-codes';
 
 import { HttpClient } from './http-client';
 import { appPath } from '@/lib/base-path';
@@ -38,7 +39,12 @@ export const browserApi = new HttpClient({
   onError(error) {
     logger.warn('api.request_failed', error.toDiagnostics());
   },
-  onUnauthenticated() {
+  onUnauthenticated(error) {
+    // Support mode ended, not the sign-in: back to the console (the BFF already cleared it).
+    if (isSupportEnded(error.code)) {
+      window.dispatchEvent(new CustomEvent(SUPPORT_ENDED_EVENT));
+      return;
+    }
     // The session is over. Broadcasting rather than redirecting here keeps the
     // transport free of routing concerns: the shell listens and decides how to
     // recover, which is the only place that knows whether a modal is open or
@@ -48,3 +54,6 @@ export const browserApi = new HttpClient({
 });
 
 export const SESSION_EXPIRED_EVENT = 'gotcha:session-expired';
+
+/** The platform ended the support session (`support_expired` / `support_session_invalid`). */
+export const SUPPORT_ENDED_EVENT = 'gotcha:support-ended';

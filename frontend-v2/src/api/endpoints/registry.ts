@@ -2153,6 +2153,17 @@ export const consoleEndpoints = {
   quote: () => endpoint('/api/admin/pricing/provisioning/quote'),
   /** GET `{ data: string[] }` - the license domains a POC is scoped to (system.ts:1028). */
   pocDomains: () => endpoint('/api/system/poc-feature-domains'),
+  /**
+   * Support mode (auth `routes/support-sessions.ts`). POST `{ tenantId, reason }`
+   * → 201 `{ data: session }`; 403 `not_system_admin` / `mfa_required`, 404
+   * `tenant_not_found`, 409 `support_system_tenant` / `support_session_active`.
+   */
+  supportSessions: () => endpoint('/api/system/support-sessions'),
+  /** GET `{ data: session | null }` - this login's live session. */
+  currentSupportSession: () => endpoint('/api/system/support-sessions/current'),
+  /** POST - idempotent; 404 `support_session_not_found` for another admin's. */
+  endSupportSession: (sessionId: string) =>
+    endpoint('/api/system/support-sessions/{sessionId}/end', { sessionId }),
 } as const;
 
 /**

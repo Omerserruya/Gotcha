@@ -8,6 +8,8 @@ import { z } from 'zod';
 const marked = vi.hoisted(() => vi.fn());
 vi.mock('server-only', () => ({}));
 vi.mock('./session-rejected', () => ({ markSessionRejected: marked }));
+const supportEnded = vi.hoisted(() => vi.fn());
+vi.mock('@/support/support-ended', () => ({ markSupportEnded: supportEnded }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
 vi.mock('@/auth/session-store', () => ({ activeSession: async () => ({ at: 'at', tid: 't' }) }));
 vi.mock('@/config/env.server', () => ({
@@ -26,6 +28,7 @@ const read = () =>
 
 beforeEach(() => {
   marked.mockReset();
+  supportEnded.mockReset();
 });
 
 describe('serverApi and a refused session', () => {
@@ -46,4 +49,17 @@ describe('serverApi and a refused session', () => {
     await expect(read()).rejects.toMatchObject({ status: 403 });
     expect(marked).not.toHaveBeenCalled();
   });
+
+  it.each(['support_expired', 'support_session_invalid'])(
+    '★★ 401 %s ends support mode, not the sign-in',
+    async (code) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(JSON.stringify({ error: 'x', code }), { status: 401 })),
+      );
+      await expect(read()).rejects.toMatchObject({ status: 401 });
+      expect(supportEnded).toHaveBeenCalledTimes(1);
+      expect(marked).not.toHaveBeenCalled();
+    },
+  );
 });

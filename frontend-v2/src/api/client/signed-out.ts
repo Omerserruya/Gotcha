@@ -5,11 +5,19 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { RETURN_TO_HEADER, SESSION_ENDED_HEADER } from '@/auth/return-to';
+import { SUPPORT_ENDED_PATH } from '@/support/support-codes';
+import { supportEnded } from '@/support/support-ended';
 
 import { isApiError } from './api-error';
 
 /** `/api/auth/login`, with where they were - read from the proxy's header. */
 export async function signInHere(): Promise<Route> {
+  /*
+   * ★★ A SUPPORT SESSION THAT ENDED IS NOT A SIGN-OUT. The platform refused
+   *   the session inside the workspace, not the admin's sign-in: back to the
+   *   console, "Support mode ended" - never the sign-in screen.
+   */
+  if (supportEnded()) return SUPPORT_ENDED_PATH as Route;
   const all = await headers();
   const query = new URLSearchParams();
   const here = all.get(RETURN_TO_HEADER);

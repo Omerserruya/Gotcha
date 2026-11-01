@@ -7,6 +7,8 @@ import { sessionCookieOptions } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
 import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
+import { isConsoleRoute, isSupportEnded, SUPPORT_SESSION_HEADER } from '@/support/support-codes';
+import { readSupport, SUPPORT_COOKIE } from '@/support/support-cookie';
 
 /**
  * The browser's only route to the platform API.
@@ -41,6 +43,8 @@ const HOP_BY_HOP = new Set([
   'cookie',
   'authorization',
   TENANT_HEADER,
+  // Support mode is the server's to attach, from the sealed cookie - never the browser's.
+  SUPPORT_SESSION_HEADER,
 ]);
 
 /**
@@ -141,6 +145,16 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
     headers.set('authorization', `Bearer ${session.at}`);
     if (session.tid) headers.set(TENANT_HEADER, session.tid);
   }
+  /*
+   * ★★ SUPPORT MODE, as `platformHeaders` attaches it: the session and its
+   *   workspace on every call but the console's (`/api/system/*` goes out as
+   *   the admin - `requireSystemAdmin` refuses a support principal).
+   */
+  const support = isConsoleRoute(path) ? null : await readSupport();
+  if (support) {
+    headers.set(SUPPORT_SESSION_HEADER, support.id);
+    headers.set(TENANT_HEADER, support.tenantId);
+  }
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
 
@@ -221,18 +235,41 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
       : 'no-store, private',
   );
 
-  const response = new NextResponse(upstream.body, {
-    status: upstream.status,
-    headers: responseHeaders,
-  });
-
   if (upstream.status === 401) {
+    /*
+     * ★★ WHICH SESSION THE PLATFORM REFUSED. `support_expired` and
+     *   `support_session_invalid` end the support session only: its cookie
+     *   goes, and the admin's own sign-in stays (the browser hears the code
+     *   and goes back to the console). Any other 401 is the sign-in, as before.
+     *   A 401's body is a short JSON error, read here to know which.
+     */
+    const body = await upstream.text();
+    const response = new NextResponse(body, { status: 401, headers: responseHeaders });
+    if (support && isSupportEnded(codeOf(body))) {
+      logger.info('bff.support_ended_upstream', { path });
+      response.cookies.delete({ name: SUPPORT_COOKIE, path: '/' });
+      return response;
+    }
     // The platform rejected a token we believed was live. The session is over.
     logger.info('bff.session_rejected_upstream', { path });
     response.cookies.delete({ name: sessionCookieOptions().name, path: '/' });
+    return response;
   }
 
-  return response;
+  return new NextResponse(upstream.body, {
+    status: upstream.status,
+    headers: responseHeaders,
+  });
+}
+
+/** A JSON error body's `code`, or `null`. */
+function codeOf(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown };
+    return typeof parsed.code === 'string' ? parsed.code : null;
+  } catch {
+    return null;
+  }
 }
 
 type RouteContext = { params: Promise<{ path: string[] }> };

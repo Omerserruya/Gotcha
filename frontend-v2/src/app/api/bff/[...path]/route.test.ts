@@ -10,6 +10,11 @@ vi.mock('@/auth/session-store', () => ({
   activeSession: async () => ({ at: 'token', tid: 't1' }),
 }));
 vi.mock('@/auth/session', () => ({ sessionCookieOptions: () => ({ name: 'gotcha_session' }) }));
+const support = vi.hoisted(() => ({ value: null as { id: string; tenantId: string } | null }));
+vi.mock('@/support/support-cookie', () => ({
+  SUPPORT_COOKIE: 'sup',
+  readSupport: async () => support.value,
+}));
 vi.mock('@/observability/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
@@ -41,7 +46,10 @@ const never = (signal: AbortSignal) =>
     signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
   );
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  support.value = null;
+});
 
 describe('★★ a stream’s timeout ends when it answers (the BFF cut every answer at 20s)', () => {
   it('★★ an event stream that has begun outlives the timeout', async () => {
@@ -253,5 +261,81 @@ describe('★★ a message’s file streams through the BFF (the platform serves
     );
     const response = await GET(new NextRequest(url), media);
     expect(response.headers.get('cache-control')).toBe('no-store, private');
+  });
+});
+
+describe('★★ support mode through the BFF', () => {
+  /** The upstream fetch, recording the headers it was sent. */
+  const sent = (answer: () => Response) => {
+    const seen: { headers?: Headers; url?: string } = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: URL, init: RequestInit) => {
+        seen.url = String(url);
+        seen.headers = new Headers(init.headers);
+        return answer();
+      }),
+    );
+    return seen;
+  };
+  const call = (segments: string[], headers: Record<string, string> = {}) =>
+    GET(new NextRequest(`http://app.test/api/bff/${segments.join('/')}`, { headers }), {
+      params: Promise.resolve({ path: segments }),
+    });
+  const ok = () => Response.json({ data: [] });
+  const refusal = (code: string) => Response.json({ error: 'no', code }, { status: 401 });
+  /** The BFF only ever deletes cookies: a Set-Cookie for a name is that cookie cleared. */
+  const cleared = (response: Response, name: string) =>
+    response.headers.getSetCookie().some((c) => c.startsWith(`${name}=`));
+
+  it('a live session: the session and ITS workspace go upstream, over the session tid', async () => {
+    support.value = { id: 'ss1', tenantId: 't9' };
+    const seen = sent(ok);
+    await call(['api', 'conversations']);
+    expect(seen.headers!.get('x-support-session')).toBe('ss1');
+    expect(seen.headers!.get('x-tenant-id')).toBe('t9');
+    expect(seen.headers!.get('authorization')).toBe('Bearer token');
+  });
+
+  it('★★ a console route goes out as the admin', async () => {
+    support.value = { id: 'ss1', tenantId: 't9' };
+    const seen = sent(ok);
+    await call(['api', 'system', 'support-sessions', 'current']);
+    expect(seen.headers!.get('x-support-session')).toBeNull();
+    expect(seen.headers!.get('x-tenant-id')).toBe('t1');
+  });
+
+  it('★ the browser can never send a session of its own', async () => {
+    const seen = sent(ok);
+    await call(['api', 'conversations'], { 'x-support-session': 'forged', 'x-tenant-id': 'other' });
+    expect(seen.headers!.get('x-support-session')).toBeNull();
+    expect(seen.headers!.get('x-tenant-id')).toBe('t1');
+  });
+
+  it.each(['support_expired', 'support_session_invalid'])(
+    '★★ 401 %s ends support mode only: the support cookie goes, the sign-in stays',
+    async (code) => {
+      support.value = { id: 'ss1', tenantId: 't9' };
+      sent(() => refusal(code));
+      const response = await call(['api', 'conversations']);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({ code });
+      expect(cleared(response, 'sup')).toBe(true);
+      expect(cleared(response, 'gotcha_session')).toBe(false);
+    },
+  );
+
+  it('any other 401 in support mode is the sign-in, as before', async () => {
+    support.value = { id: 'ss1', tenantId: 't9' };
+    sent(() => refusal('token_expired'));
+    const response = await call(['api', 'conversations']);
+    expect(cleared(response, 'gotcha_session')).toBe(true);
+    expect(cleared(response, 'sup')).toBe(false);
+  });
+
+  it('a support code with no support session held is the sign-in too', async () => {
+    sent(() => refusal('support_expired'));
+    const response = await call(['api', 'conversations']);
+    expect(cleared(response, 'gotcha_session')).toBe(true);
   });
 });

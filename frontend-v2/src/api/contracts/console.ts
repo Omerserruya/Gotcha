@@ -372,3 +372,27 @@ export const pocDomainsSchema = z.array(z.string());
 export const createdTenantSchema = z.object({
   tenant: z.object({ id: z.string(), name: z.string() }),
 });
+
+/**
+ * A support session (auth `routes/support-sessions.ts` `view()`): a GOTCHA
+ * admin working inside `tenantId` as its admin until `expiresAt`. Loose, and
+ * only the fields the console and the banner draw are required.
+ */
+export const supportSessionSchema = z.looseObject({
+  id: z.string().min(1),
+  tenantId: z.string().min(1),
+  tenantName: z
+    .string()
+    .nullish()
+    .transform((name) => name ?? null),
+  reason: z
+    .string()
+    .nullish()
+    .transform((reason) => reason ?? null),
+  startedAt: z.string().min(1),
+  expiresAt: z.string().min(1),
+});
+export type SupportSession = z.infer<typeof supportSessionSchema>;
+
+/** The `current` read: `{ data: null }` is no live session, never an unread one. */
+export const currentSupportSessionSchema = supportSessionSchema.nullable();
