@@ -7,6 +7,55 @@ import { canViewConversation } from "./conversation-visibility";
 let io: Server;
 
 /**
+ * Support mode (2026-11-01): a support socket lives only while its support
+ * session does. The ticket is checked at the handshake (redeemRealtimeTicket);
+ * after that, every join re-checks it, and a sweep disconnects the sockets of
+ * sessions that were ended (console, logout) or ran out.
+ *
+ * Wire shape, a contract with the console UI:
+ *   emit("support:ended", { code: "support_expired" }), then disconnect(true)
+ *   (the client sees reason "io server disconnect" and does not reconnect).
+ *   A refused join acks { ok: false, reason: "support_expired" }.
+ */
+export const SUPPORT_ENDED_EVENT = "support:ended";
+export const SUPPORT_SWEEP_MS = 15_000;
+
+function endSupportSocket(socket: Socket): void {
+  socket.emit(SUPPORT_ENDED_EVENT, { code: "support_expired" });
+  socket.disconnect(true);
+}
+
+/** The ids among these support sessions that are still live. A failed lookup is none (fails closed). */
+async function liveSupportSessions(ids: string[], now: Date): Promise<Set<string>> {
+  try {
+    const rows: Array<{ id: string; endedAt: Date | null; expiresAt: Date }> = await (prisma as any).supportSession.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, endedAt: true, expiresAt: true },
+    });
+    return new Set(rows.filter((r) => !r.endedAt && r.expiresAt.getTime() > now.getTime()).map((r) => r.id));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Disconnect every support socket whose session is over. Returns how many. */
+export async function sweepSupportSockets(sockets: Iterable<Socket>, now: Date = new Date()): Promise<number> {
+  const bySession = new Map<string, Socket[]>();
+  for (const socket of sockets) {
+    const id = (socket as any).user?.supportSessionId as string | undefined;
+    if (id) bySession.set(id, [...(bySession.get(id) ?? []), socket]);
+  }
+  if (!bySession.size) return 0;
+  const live = await liveSupportSessions([...bySession.keys()], now);
+  let ended = 0;
+  for (const [id, group] of bySession) {
+    if (live.has(id)) continue;
+    for (const socket of group) { endSupportSocket(socket); ended++; }
+  }
+  return ended;
+}
+
+/**
  * Storefront visitors connect from the merchant's own domain, so the
  * socket CORS allowlist can no longer be just the dashboard. We accept
  * any origin at the handshake and rely on the token check below for
@@ -125,6 +174,12 @@ export function initSocket(httpServer: HttpServer): Server {
     return next(new Error("Authentication required"));
   });
 
+  setInterval(() => {
+    void Promise.resolve()
+      .then(() => sweepSupportSockets(io.of("/").sockets.values()))
+      .catch(() => {});
+  }, SUPPORT_SWEEP_MS).unref();
+
   io.on("connection", (socket: Socket) => {
     if ((socket as any).kind === "visitor") {
       const visitor = (socket as any).visitor;
@@ -167,6 +222,11 @@ export function initSocket(httpServer: HttpServer): Server {
       const conversationId = typeof raw === "string" ? raw : String((raw as any)?.conversationId ?? "");
       if (!conversationId) {
         ack?.({ ok: false, reason: "conversation_required" });
+        return;
+      }
+      if (user.supportSessionId && !(await liveSupportSessions([user.supportSessionId], new Date())).has(user.supportSessionId)) {
+        ack?.({ ok: false, reason: "support_expired" });
+        endSupportSocket(socket);
         return;
       }
       try {
