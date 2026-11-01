@@ -6,6 +6,9 @@ import { logger } from '@/observability/logger';
 import { isSupportEnded } from '@/support/support-codes';
 
 import { translate, type RealtimeEvent, type RealtimeEventType } from './events';
+
+/** What the platform sends a support-mode socket when the session ends. */
+const SUPPORT_ENDED_WIRE_EVENT = 'support:ended';
 import type {
   ConnectionState,
   RealtimeCredentialProvider,
@@ -28,13 +31,14 @@ export class SocketTransport implements RealtimeTransport {
   private readonly stateListeners = new Set<(state: ConnectionState) => void>();
   /** Conversation rooms asked for, counted: two screens on one conversation leave once. */
   private readonly rooms = new Map<string, number>();
+  private supportEnded = false;
 
   constructor(
     private readonly options: {
       readonly url: string;
       readonly tenantId: string;
       readonly credentials: RealtimeCredentialProvider;
-      /** The platform refused the handshake because support mode ended. */
+      /** Support mode ended: the handshake was refused, or the platform said so. */
       readonly onSupportEnded?: () => void;
     },
   ) {}
@@ -75,7 +79,9 @@ export class SocketTransport implements RealtimeTransport {
          */
         for (const conversationId of this.rooms.keys()) this.subscribe(conversationId);
       });
-      socket.on('disconnect', () => this.setState('reconnecting'));
+      socket.on('disconnect', () => {
+        if (!this.supportEnded) this.setState('reconnecting');
+      });
       socket.on('connect_error', (error) => {
         logger.warn('realtime.connect_error', { message: error.message });
         /*
@@ -83,13 +89,18 @@ export class SocketTransport implements RealtimeTransport {
          *   this session will ever be accepted again. Stopped, and handed up.
          */
         if (isSupportEnded(error.message)) {
-          socket.disconnect();
-          this.setState('failed');
-          this.options.onSupportEnded?.();
+          this.endSupport();
           return;
         }
         this.setState('reconnecting');
       });
+      /*
+       * ★★ ENDED WHILE CONNECTED (Backend ae81a9de): the console's end, a
+       *   logout or the expiry sweep (up to 15s late) sends this, then closes
+       *   the socket from the server - which never reconnects by itself. The
+       *   event's name is the news; its code is not needed to act on it.
+       */
+      socket.on(SUPPORT_ENDED_WIRE_EVENT, () => this.endSupport());
 
       socket.onAny((wireEvent: string, payload: unknown) => {
         const event = translate(wireEvent, payload);
@@ -103,6 +114,15 @@ export class SocketTransport implements RealtimeTransport {
 
       this.socket = socket;
     });
+  }
+
+  /** Once: the event, the refused join and the refused handshake can all say it. */
+  private endSupport(): void {
+    if (this.supportEnded) return;
+    this.supportEnded = true;
+    this.socket?.disconnect();
+    this.setState('failed');
+    this.options.onSupportEnded?.();
   }
 
   disconnect(): void {
@@ -148,6 +168,10 @@ export class SocketTransport implements RealtimeTransport {
       { conversationId },
       (answer: { ok?: boolean; reason?: string } | undefined) => {
         if (answer?.ok) return;
+        if (isSupportEnded(answer?.reason)) {
+          this.endSupport();
+          return;
+        }
         logger.warn('realtime.conversation_join_refused', {
           reason: answer?.reason ?? 'no_answer',
         });
