@@ -14,6 +14,7 @@ import {
   asksToHidePoweredBy,
   POWERED_BY_LOCKED_CODE,
   WEBCHAT_NAME_SOURCES,
+  handleEntitlementError,
 } from "@chatcenter/shared";
 import { getWidget, putWidget, installOf, WidgetInputError, connectedWooStore, type WidgetSettings } from "../services/website-widget.service";
 import { storeCoupons, personalCouponIds } from "../services/widget-promotions.service";
@@ -98,6 +99,8 @@ router.put("/", requirePermission("channels:manage:update"), async (req: Request
       res.status(422).json({ error, code: err.code, field: err.field });
       return;
     }
+    // The plan's channel limit, from creating the web chat on a first save.
+    if (handleEntitlementError(err, res)) return;
     console.error("[website-widget] put failed:", (err as Error)?.message);
     res.status(500).json({ error: "Could not save the widget" });
   }

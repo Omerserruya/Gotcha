@@ -25,7 +25,11 @@ import {
   type ShopifyChatUx,
   normalizeShopifyShopDomain,
   SHOPIFY_OPERATION,
+  assertWithinLimit,
+  webchatSeedConfig,
+  WEBCHAT_COPY,
 } from "@chatcenter/shared";
+import crypto from "crypto";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot, provisionStoreChat } from "./shopify-chat-install.service";
 import { loadConnection } from "./connectors/integration-framework";
@@ -297,16 +301,45 @@ export async function getWidget(tenantId: string) {
 }
 
 /**
- * Apply a partial settings object to every place. Returns null when the
- * workspace has no place yet (the web chat is created by
- * POST /api/channels/webchat/create, which owns the plan's channel limit).
+ * The workspace's web chat, created on the spot when it has no place at all -
+ * the same row POST /api/channels/webchat/create makes: one per tenant, a
+ * PENDING draft until a page loads it, seeded in the workspace's language,
+ * and under the plan's channel limit.
+ *
+ * A save made before the chat existed used to answer 409 WIDGET_NOT_CREATED
+ * and keep nothing (prod 2026-11-01: 21 saves lost, then a WooCommerce connect
+ * created the chat with the defaults, so the store showed defaults while the
+ * preview showed the merchant's design).
+ */
+async function ensureWebchat(tenantId: string) {
+  const existing = await prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } });
+  if (existing) return existing;
+  const used = await prisma.channelAccount.count({ where: { tenantId, connectionStatus: { not: "DISCONNECTED" } } });
+  await assertWithinLimit(tenantId, "limit:channels", used, 1);
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });
+  const locale = tenant?.defaultLocale;
+  return prisma.channelAccount.create({
+    data: {
+      tenantId,
+      channel: "WEBCHAT" as any,
+      externalId: `widget_${crypto.randomBytes(12).toString("hex")}`,
+      displayName: locale === "he" ? WEBCHAT_COPY.he.channelName : "Website Chat Widget",
+      connectionStatus: "PENDING",
+      credentials: webchatSeedConfig(locale) as any,
+    },
+  });
+}
+
+/**
+ * Apply a partial settings object to every place. A workspace with no place
+ * yet gets its web chat first (ensureWebchat), so the first save is kept.
  */
 export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>) {
-  const [webchat, shops] = await Promise.all([
+  let [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
     listChannels(tenantId),
   ]);
-  if (!webchat && !shops.length) return null;
+  if (!webchat && !shops.length) webchat = await ensureWebchat(tenantId);
   // A WhatsApp number for the handoff must be one of this workspace's.
   const chosen = (patch.ux as any)?.whatsapp?.channelAccountId;
   if (typeof chosen === "string" && chosen) {

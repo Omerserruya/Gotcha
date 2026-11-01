@@ -3,7 +3,7 @@
  *   - PUT writes the shared settings to the web chat AND every Shopify chat;
  *     Shopify-only fields (shop, enabled, commerce, privacy, install) untouched;
  *     the Shopify legacy welcome + launcher fields kept in step; bad values normalised
- *   - PUT never creates a place: none → 409 WIDGET_NOT_CREATED, nothing written
+ *   - a first save with no place creates the web chat (seeded, under the channel limit) and keeps the save
  *   - a Shopify-only workspace reads from and writes to its shop(s)
  *   - permissions: read for GET and /install, update for PUT
  *   - assignedEmployee follows the playbook's single path; a branch or a
@@ -29,6 +29,8 @@ const H = vi.hoisted(() => ({
   integrations: [] as any[],
   integrationWhere: [] as any[],
   coreShop: null as string | null,
+  locale: "he" as string | null,
+  limitError: null as any,
   provision: [] as any[],
 }));
 
@@ -43,8 +45,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     requireOnboardingOrActiveTenant: () => (_req: any, _res: any, next: any) => next(),
     requirePermission: (...need: string[]) => (req: any, res: any, next: any) =>
       need.some((p) => req.perms.includes(p)) ? next() : res.status(403).json({ error: "forbidden" }),
+    assertWithinLimit: async () => { if (H.limitError) throw H.limitError; },
     prisma: {
+      tenant: { findUnique: async () => ({ defaultLocale: H.locale }) },
       channelAccount: {
+        count: async () => H.accounts.length,
+        create: async (a: any) => { const r = { id: "ca_new", createdAt: new Date(), ...a.data }; H.accounts.push(r); return r; },
         findFirst: async (a: any) => H.accounts.find((r) => match(r, a.where)) ?? null,
         findMany: async (a: any) => H.accounts.filter((r) => match(r, a.where)),
         update: async (a: any) => {
@@ -117,7 +123,7 @@ const cfgOf = (id: string) => readShopifyLiveChatConfig(H.accounts.find((a) => a
 
 beforeEach(() => {
   H.accounts = []; H.canvas = null; H.agents = []; H.installs = []; H.raw = []; H.updates = 0; H.integrations = []; H.integrationWhere = [];
-  H.coreShop = null; H.provision = [];
+  H.coreShop = null; H.provision = []; H.locale = "he"; H.limitError = null;
   process.env.APP_PUBLIC_URL = "https://dev.gotcha.co.il/";
 });
 
@@ -173,11 +179,33 @@ describe("★ PUT writes every place, and only the shared settings", () => {
     expect(r.body.data.settings.offline.message).toBe("Later");
   });
 
-  it("no place yet → 409 WIDGET_NOT_CREATED and nothing is created", async () => {
+  // prod 2026-11-01: 21 saves answered 409 WIDGET_NOT_CREATED and kept nothing.
+  it("a first save with no place creates the web chat and keeps the save", async () => {
+    const r = await put({ offline: { message: "נחזור אליכם" }, appearance: { primaryColor: "#0E7C66" } });
+    expect(r.status).toBe(200);
+    expect(H.accounts).toHaveLength(1);
+    const w = H.accounts[0];
+    expect(w).toMatchObject({ tenantId: "T", channel: "WEBCHAT", connectionStatus: "PENDING" });
+    expect(String(w.externalId)).toMatch(/^widget_[0-9a-f]{24}$/);
+    const saved = normalizeWebchatConfig(w.credentials);
+    expect(saved.appearance.primaryColor).toBe("#0e7c66");
+    expect(saved.offline.message).toBe("נחזור אליכם");
+    expect(r.body.data.settings.appearance.primaryColor).toBe("#0e7c66");
+  });
+
+  it("a second save writes the same web chat, never a second one", async () => {
+    await put({ appearance: { primaryColor: "#0E7C66" } });
+    await put({ appearance: { primaryColor: "#112233" } });
+    expect(H.accounts.filter((a) => a.channel === "WEBCHAT")).toHaveLength(1);
+    expect(normalizeWebchatConfig(H.accounts[0].credentials).appearance.primaryColor).toBe("#112233");
+  });
+
+  it("over the plan's channel limit: the plan's 402, and nothing is created", async () => {
+    const { EntitlementDeniedError } = await import("@chatcenter/shared");
+    H.limitError = new (EntitlementDeniedError as any)({ code: "PLAN_LIMIT_REACHED", feature: "limit:channels", currentPlan: "foundation", upgradePath: "/settings/billing" });
     const r = await put({ offline: { message: "x" } });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe("WIDGET_NOT_CREATED");
-    expect(H.updates).toBe(0);
+    expect(r.status).toBe(402);
+    expect(r.body.code).toBe("PLAN_LIMIT_REACHED");
     expect(H.accounts).toEqual([]);
   });
 
