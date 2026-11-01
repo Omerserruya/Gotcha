@@ -62,6 +62,7 @@ export async function saveWebsiteWidget(
     try {
       answer = await write();
     } catch (cause) {
+      await signInIfSignedOut(cause);
       if (!(isApiError(cause) && cause.status === 409 && cause.code === 'WIDGET_NOT_CREATED')) {
         throw cause;
       }
