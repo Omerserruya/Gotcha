@@ -50,6 +50,7 @@ function matches(row: any, where: any): boolean {
 }
 
 vi.mock("@chatcenter/shared", () => ({
+  currentRequestContext: () => undefined,
   authenticate: (req: any, res: any, n: any) => {
     if (!H.viewer) { res.status(401).json({ error: "Unauthorized" }); return; }
     req.user = { ...H.viewer }; n();

@@ -184,6 +184,7 @@ export async function resolvePrincipalFromSessionToken(
   return {
     userId: membership.id,
     identityId: session.identity.id,
+    sessionId: session.id,
     tenantId: membership.tenantId,
     role: membership.role,
     email: membership.email,

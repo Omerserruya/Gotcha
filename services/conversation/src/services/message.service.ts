@@ -1,4 +1,4 @@
-import { prisma, publishEvent, type ChannelType, withHistoricalRecords } from "@chatcenter/shared";
+import { prisma, publishEvent, type ChannelType, withHistoricalRecords, currentRequestContext } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import { presentMessageMedia } from "../lib/message-media";
 
@@ -82,6 +82,18 @@ export async function listByConversation(tenantId: string, conversationId: strin
 }
 
 export async function create(data: CreateMessageData) {
+  // Support mode (2026-11-01): a message a GOTCHA admin sends from inside the
+  // workspace is staff-marked for the agent UI and keeps no sender name, so an
+  // email's {{agent_name}} never says "support@gotcha.internal" - to the
+  // customer it comes from the business.
+  const support = currentRequestContext();
+  if (support?.supportSessionId && data.direction === "OUTBOUND") {
+    data = {
+      ...data,
+      senderName: undefined,
+      metadata: { ...(data.metadata ?? {}), senderType: "staff", support: { sessionId: support.supportSessionId, adminUserId: support.supportAdminUserId ?? null } },
+    };
+  }
   const message = await prisma.$transaction(async (tx) => {
     const msg = await tx.message.create({
       data: {

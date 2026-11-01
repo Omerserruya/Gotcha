@@ -32,6 +32,7 @@ vi.mock("@chatcenter/shared", () => {
   };
   prisma.$transaction = async (fn: any) => fn(prisma);
   return {
+    currentRequestContext: () => undefined,
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", email: "agent@x.test", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),

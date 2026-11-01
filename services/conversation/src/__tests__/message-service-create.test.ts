@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const state = vi.hoisted(() => ({
   created: null as any,
   convUpdates: [] as any[],
+  ctx: undefined as any,
 }));
 
 vi.mock("@chatcenter/shared", () => ({
@@ -38,6 +39,7 @@ vi.mock("@chatcenter/shared", () => ({
   },
   publishEvent: async () => undefined,
   withHistoricalRecords: (fn: any) => fn(),
+  currentRequestContext: () => state.ctx,
 }));
 vi.mock("../lib/socket", () => ({ getIO: () => { throw new Error("no io in tests"); } }));
 
@@ -45,7 +47,7 @@ import { create } from "../services/message.service";
 
 const base = { tenantId: "t1", conversationId: "cv1", direction: "OUTBOUND" as const, body: "hi" };
 
-beforeEach(() => { state.created = null; state.convUpdates = []; });
+beforeEach(() => { state.created = null; state.convUpdates = []; state.ctx = undefined; });
 
 describe("★ the caller's send outcome is respected", () => {
   it("★ accepts an explicit status", async () => {
@@ -106,5 +108,29 @@ describe("★ a FAILED send does not move the conversation's sort key", () => {
     // FAILED row is the point.
     expect(state.created.body).toBe("hi");
     expect(state.created.status).toBe("FAILED");
+  });
+});
+
+// Support mode (2026-11-01): a GOTCHA admin's message is staff in the agent UI,
+// and never names support@gotcha.internal to the customer.
+describe("a message sent in support mode", () => {
+  it("is staff-marked, carries the session and admin, and keeps no sender name", async () => {
+    state.ctx = { supportSessionId: "ss_1", supportAdminUserId: "u_sys" };
+    await create({ ...base, senderName: "support@gotcha.internal", metadata: { email: { subject: "Re: order" } } });
+    expect(state.created.senderName).toBeUndefined();
+    expect(state.created.metadata).toEqual({ email: { subject: "Re: order" }, senderType: "staff", support: { sessionId: "ss_1", adminUserId: "u_sys" } });
+  });
+
+  it("an inbound message in the same request is not touched", async () => {
+    state.ctx = { supportSessionId: "ss_1", supportAdminUserId: "u_sys" };
+    await create({ ...base, direction: "INBOUND", senderName: "Dana" });
+    expect(state.created.senderName).toBe("Dana");
+    expect(state.created.metadata).toBeUndefined();
+  });
+
+  it("outside support mode nothing changes", async () => {
+    await create({ ...base, senderName: "dana@shop.co.il" });
+    expect(state.created.senderName).toBe("dana@shop.co.il");
+    expect(state.created.metadata).toBeUndefined();
   });
 });

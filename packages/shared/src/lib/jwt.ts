@@ -72,6 +72,17 @@ export interface JwtPayload {
   email: string;
   departmentId?: string;
   departmentRole?: string;
+  /** The user_sessions row behind a cookie principal (support mode binds to it). */
+  sessionId?: string;
+  /** Set when a SYSTEM_ADMIN is working inside this tenant (support mode). */
+  support?: {
+    sessionId: string;
+    adminUserId: string;
+    adminEmail: string;
+    expiresAt: string;
+    startedAt: string;
+    reason: string;
+  };
 }
 
 export interface SystemAdminJwtPayload {

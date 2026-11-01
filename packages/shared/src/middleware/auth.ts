@@ -4,6 +4,9 @@ import { resolvePrincipal, AuthError } from "../lib/principal";
 import { readSessionCookie, resolvePrincipalFromSessionToken } from "../lib/session-principal";
 import { readSessionFlags } from "../lib/session-flags";
 import { prisma } from "../lib/prisma";
+import { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "../lib/support-principal";
+import { supportDenial } from "../lib/support-deny";
+import { runWithRequestContext } from "../lib/request-context";
 
 /**
  * The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is: both
@@ -21,6 +24,12 @@ function tenantHintOf(req: Request): string | null {
  * cookie and Bearer paths so the two cannot drift into answering differently
  * about the same rejection.
  */
+/** The support session id the BFF forwards, if any. */
+function supportSessionOf(req: Request): string | null {
+  const raw = req.headers[SUPPORT_SESSION_HEADER];
+  return typeof raw === "string" && raw.length > 0 && raw.length <= 64 ? raw : null;
+}
+
 function respondToAuthFailure(res: Response, err: unknown): void {
   if (err instanceof AuthError) {
     // A valid credential whose subject has no GOTCHA user means the identity is
@@ -160,6 +169,27 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const rawSession = readSessionCookie(req.headers.cookie, process.env);
     if (rawSession) {
       try {
+        const supportId = supportSessionOf(req);
+        if (supportId) {
+          // Support mode (2026-11-01): the admin's OWN login first, without the
+          // tenant hint (they have no membership there), then the session that
+          // lets this login act in that tenant. Refused otherwise, never a
+          // fallback to the admin's own tenant.
+          const admin = await resolvePrincipalFromSessionToken(rawSession, null);
+          const principal = await resolveSupportPrincipal(admin, supportId, tenantHintOf(req));
+          const denied = supportDenial(req.method, req.originalUrl || req.url, req.body);
+          if (denied) {
+            res.status(403).json({ error: "Not available in support mode", code: denied });
+            return;
+          }
+          req.user = principal as any;
+          req.tenantId = principal.tenantId;
+          runWithRequestContext(
+            { supportSessionId: principal.support!.sessionId, supportAdminUserId: principal.support!.adminUserId },
+            next,
+          );
+          return;
+        }
         const principal = await resolvePrincipalFromSessionToken(rawSession, tenantHintOf(req));
         req.user = principal as any;
         req.tenantId = principal.tenantId;

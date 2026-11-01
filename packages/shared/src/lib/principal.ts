@@ -28,7 +28,7 @@ import type { JwtPayload } from "./jwt";
 export class AuthError extends Error {
   constructor(
     message: string,
-    readonly code: "invalid_token" | "no_account" | "inactive" | "tenant_denied",
+    readonly code: "invalid_token" | "no_account" | "inactive" | "tenant_denied" | "support_expired" | "support_session_invalid",
   ) {
     super(message);
   }

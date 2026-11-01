@@ -1,3 +1,4 @@
+import { applyMembersByDefault } from "./members-by-default";
 import { PrismaClient } from "@prisma/client";
 import { AsyncLocalStorage } from "async_hooks";
 
@@ -285,6 +286,7 @@ function buildClient() {
             args,
             historicalContext.getStore() === true,
           ) as typeof args;
+          args = applyMembersByDefault(model, operation, args) as typeof args;
 
           // Not a tenant-scoped model → pass through.
           if (!model || !TENANT_SCOPED_MODELS.has(model)) {

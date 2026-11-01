@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { endSupportSessionsForLogin } from "./support-sessions";
 import {
   prisma,
   readSessionFlags,
@@ -156,10 +157,13 @@ router.post("/logout", async (req: Request, res: Response): Promise<void> => {
     const raw = parseSessionCookie(req.headers.cookie, contract.name);
     if (raw) {
       const sessionTokenHash = hashSessionToken(raw);
+      const session = await prisma.userSession.findUnique({ where: { sessionTokenHash }, select: { id: true } });
       await prisma.userSession.updateMany({
         where: { sessionTokenHash, revokedAt: null },
         data: { revokedAt: new Date(), revocationReason: REVOCATION_REASON.LOGOUT },
       });
+      // A support session lives only as long as the login it was started from.
+      if (session) await endSupportSessionsForLogin(session.id, "logout").catch(() => 0);
     }
   } catch {
     // Even if revocation fails, still clear the browser cookie below.

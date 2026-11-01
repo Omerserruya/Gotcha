@@ -9,6 +9,7 @@ import whatsappNumberRoutes from "./routes/whatsapp-numbers";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
 import systemManualEditRoutes from "./routes/system-manual-edits";
+import supportSessionRoutes from "./routes/support-sessions";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
 import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
@@ -76,6 +77,8 @@ app.use("/api/system", systemFeatureRoutes);
 app.use("/api/system", knowledgeBackfillRoutes);
 // Console manual edits: status, login email, no-charge plan/credit changes.
 app.use("/api/system", systemManualEditRoutes);
+// Support mode: start / current / end (2026-11-01).
+app.use("/api/system", supportSessionRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/account", accountRoutes);

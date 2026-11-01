@@ -201,6 +201,7 @@ model Tenant {
 
   @@map("tenants")
   customerNotes CustomerNote[]
+  supportSessions SupportSession[]
 }
 
 /// Admin-configured runtime settings that must SURVIVE a restart.
@@ -893,6 +894,11 @@ model User {
   name                     String
   role                     Role      @default(AGENT)
   isActive                 Boolean   @default(true) @map("is_active")
+  /// "member" for a person in the team; "support" for the hidden GOTCHA
+  /// Support actor that support-mode writes are attributed to. A support
+  /// row never signs in (its identity has no Authentik subject) and is kept
+  /// out of team lists and seat counts.
+  kind                     String    @default("member") @map("kind")
   notificationSoundEnabled Boolean   @default(true) @map("notification_sound_enabled")
   // E.164 personal/mobile number. Used for FORWARD_TO_AGENT inbound mode
   // and smart-callback recognition (when the agent calls the business
@@ -8158,4 +8164,32 @@ model ProductDemandTerm {
   @@unique([tenantId, term, weekKey])
   @@index([tenantId, weekKey])
   @@map("product_demand_terms")
+}
+
+/// A SYSTEM_ADMIN working inside one tenant as its admin (support mode).
+/// Bound to the admin's own login (userSessionId): it ends with that login,
+/// on expiry, or when ended explicitly. Every write made through it is
+/// attributed to the tenant's support actor (supportUserId), with the admin
+/// in the audit metadata.
+model SupportSession {
+  id               String    @id @default(cuid())
+  /// The tenant being supported.
+  tenantId         String    @map("tenant_id")
+  adminIdentityId  String    @map("admin_identity_id")
+  /// The admin's membership in the System tenant.
+  adminUserId      String    @map("admin_user_id")
+  userSessionId    String    @map("user_session_id")
+  /// The tenant's hidden GOTCHA Support user (User.kind = "support").
+  supportUserId    String    @map("support_user_id")
+  reason           String
+  startedAt        DateTime  @default(now()) @map("started_at")
+  expiresAt        DateTime  @map("expires_at")
+  endedAt          DateTime? @map("ended_at")
+  endedReason      String?   @map("ended_reason")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userSessionId])
+  @@index([tenantId, startedAt])
+  @@map("support_sessions")
 }

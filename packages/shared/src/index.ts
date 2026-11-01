@@ -1372,3 +1372,8 @@ export { agentToolLevelsKey, stricterLevel, allowedEmployeeLevels, readAgentTool
 // An AI employee's own free-text rules (customGuardrails): one shape, one set of limits (B4).
 export { MAX_RULE_LEN, MAX_RULES, GuardrailsError, normalizeGuardrails, readGuardrails, clampGuardrails } from "./lib/guardrails";
 export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";
+
+// Support mode (2026-11-01)
+export { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "./lib/support-principal";
+export { supportDenial, type SupportDenyCode } from "./lib/support-deny";
+export { runWithRequestContext, currentRequestContext, type RequestContext } from "./lib/request-context";

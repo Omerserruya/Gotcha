@@ -103,12 +103,16 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
         }
       : {};
 
+    // Support mode: the support actor's identity is shared by every supported
+    // workspace, so its memberships would list them all. The console needs
+    // only the one being supported, and who is supporting it until when.
+    const support = (req.user as any)?.support ?? null;
     const [tenant, memberships] = await Promise.all([
       prisma.tenant.findUnique({
         where: { id: user.tenantId },
         select: { status: true, name: true },
       }),
-      listMemberships(user.identityId),
+      support ? Promise.resolve([]) : listMemberships(user.identityId),
     ]);
 
     // Only while the workspace is still being set up (see setupAdminFor).
@@ -122,6 +126,9 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       // Every tenant this person can enter. length > 1 → the client shows the
       // tenant switcher / picker.
       memberships,
+      ...(support
+        ? { support: { sessionId: support.sessionId, tenantName: tenant?.name ?? null, startedAt: support.startedAt, expiresAt: support.expiresAt, reason: support.reason, actor: { adminUserId: support.adminUserId, adminEmail: support.adminEmail } } }
+        : {}),
     });
   } catch (err) {
     // Never swallow silently - this 500 was invisible in the logs. Surface the

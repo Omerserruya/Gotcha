@@ -18,6 +18,7 @@
  * principal a socket ends up with is the one the HTTP request proved, not one a
  * client asserted. See docs/security/bff-session-migration-map.md §A9.
  */
+import { prisma } from "./prisma";
 import crypto from "crypto";
 import { getRedis } from "./redis";
 import type { JwtPayload } from "./jwt";
@@ -42,6 +43,8 @@ export interface RealtimeTicketPrincipal {
   email: string;
   departmentId?: string;
   departmentRole?: string;
+  /** Support mode: the socket lives only while this session does. */
+  supportSessionId?: string;
 }
 
 export function isWellFormedRealtimeTicket(value: unknown): value is string {
@@ -79,6 +82,7 @@ export async function issueRealtimeTicket(
     email: principal.email,
     departmentId: principal.departmentId,
     departmentRole: principal.departmentRole,
+    ...(principal.support ? { supportSessionId: principal.support.sessionId } : {}),
   };
   await getRedis().set(ticketKey(ticket), JSON.stringify(payload), "EX", ttlSeconds);
   return { ticket, expiresInSeconds: ttlSeconds };
@@ -122,6 +126,11 @@ export async function redeemRealtimeTicket(
   try {
     const parsed = JSON.parse(raw) as RealtimeTicketPrincipal;
     if (!parsed?.userId || !parsed?.tenantId) return null;
+    // A support ticket redeems only while its support session is live.
+    if (parsed.supportSessionId) {
+      const s = await (prisma as any).supportSession.findUnique({ where: { id: parsed.supportSessionId }, select: { endedAt: true, expiresAt: true, tenantId: true } });
+      if (!s || s.endedAt || s.expiresAt.getTime() <= Date.now() || s.tenantId !== parsed.tenantId) return null;
+    }
     return parsed;
   } catch {
     return null;

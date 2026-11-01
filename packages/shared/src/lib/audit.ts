@@ -18,8 +18,9 @@
  */
 
 import { prisma } from "./prisma";
+import { currentRequestContext } from "./request-context";
 
-export type AuditActorType = "user" | "ai" | "system";
+export type AuditActorType = "user" | "ai" | "system" | "support";
 
 export interface AuditEventInput {
   tenantId: string;
@@ -174,15 +175,20 @@ export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
  */
 export async function writeAudit(event: AuditEventInput): Promise<void> {
   try {
+    // Support mode: every row says it was GOTCHA support, and which admin.
+    const ctx = currentRequestContext();
+    const support = ctx?.supportSessionId
+      ? { supportSessionId: ctx.supportSessionId, adminUserId: ctx.supportAdminUserId ?? null }
+      : null;
     await prisma.auditLog.create({
       data: {
         tenantId: event.tenantId,
-        actorType: event.actorType,
+        actorType: support && event.actorType === "user" ? "support" : event.actorType,
         actorId: event.actorId ?? null,
         action: event.action,
         targetType: event.targetType ?? null,
         targetId: event.targetId ?? null,
-        metadata: (event.metadata ?? undefined) as any,
+        metadata: (support ? { ...(event.metadata ?? {}), support } : event.metadata ?? undefined) as any,
         createdAt: event.at ?? new Date(),
       },
     });
