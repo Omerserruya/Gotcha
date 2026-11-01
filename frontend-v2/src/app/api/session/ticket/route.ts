@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { isApiError } from '@/api/client/api-error';
 import { assertSameOrigin } from '@/api/client/csrf';
 import { realtimeTicketSchema } from '@/api/contracts/presence';
 import { realtimeEndpoints } from '@/api/endpoints/registry';
 import { serverApi } from '@/api/client/server-api';
 import { logger } from '@/observability/logger';
 import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
+import { isSupportEnded } from '@/support/support-codes';
+import { SUPPORT_COOKIE } from '@/support/support-cookie';
 
 /**
  * Mints a socket handshake ticket for the browser.
@@ -55,6 +58,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers: { 'cache-control': 'no-store, private' },
     });
   } catch (cause) {
+    /*
+     * ★★ SUPPORT MODE ENDED, found by the socket's next ticket: a socket
+     *   outlives the session it was opened in, and its reconnect is where the
+     *   platform says so. Its code, passed on (the provider sends the admin
+     *   to the console), and the support cookie cleared - as the BFF does.
+     */
+    if (isApiError(cause) && cause.status === 401 && isSupportEnded(cause.code)) {
+      const response = NextResponse.json(
+        { error: 'support_ended', code: cause.code },
+        { status: 401, headers: { 'cache-control': 'no-store, private' } },
+      );
+      response.cookies.delete({ name: SUPPORT_COOKIE, path: '/' });
+      return response;
+    }
     logger.warn('realtime.ticket_failed', { cause });
     return NextResponse.json({ error: 'ticket_unavailable' }, { status: 502 });
   }

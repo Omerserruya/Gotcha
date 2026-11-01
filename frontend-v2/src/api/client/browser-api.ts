@@ -1,7 +1,7 @@
 'use client';
 
 import { logger } from '@/observability/logger';
-import { isSupportEnded } from '@/support/support-codes';
+import { isSupportEnded, SUPPORT_ENDED_EVENT } from '@/support/support-codes';
 
 import { HttpClient } from './http-client';
 import { appPath } from '@/lib/base-path';
@@ -56,4 +56,4 @@ export const browserApi = new HttpClient({
 export const SESSION_EXPIRED_EVENT = 'gotcha:session-expired';
 
 /** The platform ended the support session (`support_expired` / `support_session_invalid`). */
-export const SUPPORT_ENDED_EVENT = 'gotcha:support-ended';
+export { SUPPORT_ENDED_EVENT };

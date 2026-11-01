@@ -35,6 +35,13 @@ export function isSupportEnded(code: string | null | undefined): boolean {
   return typeof code === 'string' && ENDED_CODES.has(code);
 }
 
+/**
+ * The browser's announcement that the platform ended the support session -
+ * a refused call (`browser-api.ts`) or the socket's refused ticket or
+ * handshake (`realtime-provider.tsx`). The banner listens.
+ */
+export const SUPPORT_ENDED_EVENT = 'gotcha:support-ended';
+
 /** The header that names the session upstream. The BFF and the server set it, never the browser. */
 export const SUPPORT_SESSION_HEADER = 'x-support-session';
 

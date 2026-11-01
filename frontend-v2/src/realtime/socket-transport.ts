@@ -3,6 +3,7 @@
 import { io, type Socket } from 'socket.io-client';
 
 import { logger } from '@/observability/logger';
+import { isSupportEnded } from '@/support/support-codes';
 
 import { translate, type RealtimeEvent, type RealtimeEventType } from './events';
 import type {
@@ -33,6 +34,8 @@ export class SocketTransport implements RealtimeTransport {
       readonly url: string;
       readonly tenantId: string;
       readonly credentials: RealtimeCredentialProvider;
+      /** The platform refused the handshake because support mode ended. */
+      readonly onSupportEnded?: () => void;
     },
   ) {}
 
@@ -75,6 +78,16 @@ export class SocketTransport implements RealtimeTransport {
       socket.on('disconnect', () => this.setState('reconnecting'));
       socket.on('connect_error', (error) => {
         logger.warn('realtime.connect_error', { message: error.message });
+        /*
+         * ★ SUPPORT MODE ENDED: not a network fault to retry - no ticket of
+         *   this session will ever be accepted again. Stopped, and handed up.
+         */
+        if (isSupportEnded(error.message)) {
+          socket.disconnect();
+          this.setState('failed');
+          this.options.onSupportEnded?.();
+          return;
+        }
         this.setState('reconnecting');
       });
 

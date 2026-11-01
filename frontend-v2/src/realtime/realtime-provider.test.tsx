@@ -48,3 +48,44 @@ describe('★★ the socket ticket comes from this app at the root', () => {
     expect(init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
   });
 });
+
+describe('★★ the socket finds support mode ended', () => {
+  it.each(['support_expired', 'support_session_invalid'])(
+    'its ticket refused %s: no ticket, and support-ended is announced',
+    async (code) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(JSON.stringify({ code }), { status: 401 })),
+      );
+      const heard = vi.fn();
+      window.addEventListener('gotcha:support-ended', heard);
+      render(
+        <RealtimeProvider tenantId="t1">
+          <span />
+        </RealtimeProvider>,
+      );
+      await expect(made[0]!.credentials()).resolves.toBeNull();
+      expect(heard).toHaveBeenCalledTimes(1);
+      window.removeEventListener('gotcha:support-ended', heard);
+    },
+  );
+
+  it('any other refused ticket: no ticket, nothing announced', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(JSON.stringify({ error: 'ticket_unavailable' }), { status: 502 }),
+      ),
+    );
+    const heard = vi.fn();
+    window.addEventListener('gotcha:support-ended', heard);
+    render(
+      <RealtimeProvider tenantId="t1">
+        <span />
+      </RealtimeProvider>,
+    );
+    await expect(made[0]!.credentials()).resolves.toBeNull();
+    expect(heard).not.toHaveBeenCalled();
+    window.removeEventListener('gotcha:support-ended', heard);
+  });
+});
