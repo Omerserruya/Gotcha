@@ -80,7 +80,7 @@ describe("start", () => {
     await start({ tenantId: "t_shop", reason: "a" });
     H.sessions[0].endedAt = new Date();
     await start({ tenantId: "t_shop", reason: "b" });
-    expect(H.identities).toEqual([expect.objectContaining({ email: SUPPORT_IDENTITY_EMAIL, authentikSubject: null })]);
+    expect(H.identities).toEqual([expect.objectContaining({ email: SUPPORT_IDENTITY_EMAIL, name: "GOTCHA Support", authentikSubject: null })]);
     expect(H.users).toEqual([expect.objectContaining({ tenantId: "t_shop", kind: "support", role: "ADMIN", name: "GOTCHA Support" })]);
     expect(H.sessions.map((s) => s.supportUserId)).toEqual([H.users[0].id, H.users[0].id]);
   });

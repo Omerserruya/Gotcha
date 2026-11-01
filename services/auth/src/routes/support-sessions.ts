@@ -36,11 +36,11 @@ export async function ensureSupportActor(tenantId: string): Promise<{ id: string
     const identity =
       (await prisma.identity.findUnique({ where: { email: SUPPORT_IDENTITY_EMAIL }, select: { id: true } })) ??
       // No Authentik subject: this identity can never sign in.
-      (await prisma.identity.create({ data: { email: SUPPORT_IDENTITY_EMAIL, authentikSubject: null } as any, select: { id: true } }));
-    const existing = await prisma.user.findFirst({ where: { tenantId, kind: "support" } as any, select: { id: true } });
+      (await prisma.identity.create({ data: { email: SUPPORT_IDENTITY_EMAIL, name: SUPPORT_ACTOR_NAME, authentikSubject: null }, select: { id: true } }));
+    const existing = await prisma.user.findFirst({ where: { tenantId, kind: "support" }, select: { id: true } });
     if (existing) return existing;
     return prisma.user.create({
-      data: { tenantId, identityId: identity.id, email: SUPPORT_IDENTITY_EMAIL, name: SUPPORT_ACTOR_NAME, role: "ADMIN" as any, isActive: true, kind: "support" } as any,
+      data: { tenantId, identityId: identity.id, email: SUPPORT_IDENTITY_EMAIL, name: SUPPORT_ACTOR_NAME, role: "ADMIN", isActive: true, kind: "support" },
       select: { id: true },
     });
   });
@@ -71,7 +71,7 @@ router.post("/support-sessions", authenticate, requireSystemAdmin(), validate(st
       return;
     }
     const now = new Date();
-    const live = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.findFirst({
+    const live = await withCrossTenantAccess<any>(() => prisma.supportSession.findFirst({
       where: { userSessionId: admin.sessionId, endedAt: null, expiresAt: { gt: now } },
     }));
     if (live) {
@@ -79,7 +79,7 @@ router.post("/support-sessions", authenticate, requireSystemAdmin(), validate(st
       return;
     }
     const actor = await ensureSupportActor(tenantId);
-    const s = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.create({
+    const s = await withCrossTenantAccess<any>(() => prisma.supportSession.create({
       data: {
         tenantId, adminIdentityId: admin.identityId, adminUserId: admin.userId, userSessionId: admin.sessionId,
         supportUserId: actor.id, reason, expiresAt: new Date(now.getTime() + SUPPORT_SESSION_TTL_MS),
@@ -99,7 +99,7 @@ router.post("/support-sessions", authenticate, requireSystemAdmin(), validate(st
 router.get("/support-sessions/current", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
   const admin = (req as any).user;
   const s = admin?.sessionId
-    ? await withCrossTenantAccess<any>(() => (prisma as any).supportSession.findFirst({ where: { userSessionId: admin.sessionId, endedAt: null, expiresAt: { gt: new Date() } } }))
+    ? await withCrossTenantAccess<any>(() => prisma.supportSession.findFirst({ where: { userSessionId: admin.sessionId, endedAt: null, expiresAt: { gt: new Date() } } }))
     : null;
   if (!s) { res.json({ data: null }); return; }
   const tenant = await withCrossTenantAccess(() => prisma.tenant.findUnique({ where: { id: s.tenantId }, select: { name: true } }));
@@ -108,23 +108,23 @@ router.get("/support-sessions/current", authenticate, requireSystemAdmin(), asyn
 
 /** End one session. Idempotent; also called on logout (endSupportSessionsForLogin). */
 export async function endSupportSession(id: string, reason: string): Promise<any | null> {
-  const s = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.findUnique({ where: { id } }));
+  const s = await withCrossTenantAccess<any>(() => prisma.supportSession.findUnique({ where: { id } }));
   if (!s) return null;
   if (s.endedAt) return s;
-  const ended = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.update({ where: { id }, data: { endedAt: new Date(), endedReason: reason } }));
+  const ended = await withCrossTenantAccess<any>(() => prisma.supportSession.update({ where: { id }, data: { endedAt: new Date(), endedReason: reason } }));
   await writeAudit({ tenantId: s.tenantId, actorType: "support", actorId: s.supportUserId, action: "support.session.ended", targetType: "support_session", targetId: s.id, metadata: { supportSessionId: s.id, adminUserId: s.adminUserId, endedReason: reason } });
   return ended;
 }
 
 export async function endSupportSessionsForLogin(userSessionId: string, reason: string): Promise<number> {
-  const live = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.findMany({ where: { userSessionId, endedAt: null }, select: { id: true } }));
+  const live = await withCrossTenantAccess<any>(() => prisma.supportSession.findMany({ where: { userSessionId, endedAt: null }, select: { id: true } }));
   for (const s of live as Array<{ id: string }>) await endSupportSession(s.id, reason);
   return live.length;
 }
 
 router.post("/support-sessions/:id/end", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
   const admin = (req as any).user;
-  const s = await withCrossTenantAccess<any>(() => (prisma as any).supportSession.findUnique({ where: { id: String(req.params.id) } }));
+  const s = await withCrossTenantAccess<any>(() => prisma.supportSession.findUnique({ where: { id: String(req.params.id) } }));
   if (!s || s.adminUserId !== admin.userId) { res.status(404).json({ error: "Support session not found", code: "support_session_not_found" }); return; }
   const ended = await endSupportSession(s.id, "ended");
   res.json({ data: { id: s.id, endedAt: ended.endedAt } });
