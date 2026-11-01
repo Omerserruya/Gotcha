@@ -472,24 +472,39 @@ describe("★★ the header name: the answering employee's, or one you choose (B
 });
 
 describe("★★ who answers is the playbook's - read here, never chosen", () => {
-  it('names the employee the playbook routes the website to, and where that is decided', () => {
-    show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
+  it('★★ the onboarding route (no automation): names the employee as answering here - never sends to Automations', () => {
+    const maya = { id: 'a1', name: 'Maya' };
+    show('conversation', { assigned: maya, answering: { employee: maya, automation: null } });
     expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent('Maya');
     // The avatar is the name's first letter, never two letters of one word ("נו" read as one glyph).
     expect(screen.getByTestId('webchat-employee-who').querySelector('span')).toHaveTextContent(
       /^M$/,
     );
-    const where = screen.getByTestId('webchat-employee-where');
-    expect(where).toHaveTextContent('Studio · Automations');
-    expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
+    expect(screen.getByTestId('webchat-employee-via-route')).toHaveTextContent(
+      'Maya answers website conversations: the route set up at onboarding sends every channel to this employee. There is nothing more to set up.',
+    );
+    expect(screen.queryByTestId('webchat-employee-where')).toBeNull();
+    expect(
+      screen.getByTestId('webchat-employee').querySelector('a[href="/studio/automations"]'),
+    ).toBeNull();
     expect(screen.getByTestId('webchat-employee').querySelector('button, input')).toBeNull();
   });
 
-  it('routes to no one employee: says so, never a name', () => {
+  it('an older service (no answering read): never claims the onboarding route', () => {
+    show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    expect(screen.getByTestId('webchat-employee-where')).toBeInTheDocument();
+  });
+
+  it('routes to no one employee: says so, never a name, and where it is decided', () => {
     show('conversation');
     expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent(
       "The playbook doesn't send website conversations to one employee",
     );
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    const where = screen.getByTestId('webchat-employee-where');
+    expect(where).toHaveTextContent('Studio · Automations');
+    expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
   });
 });
 

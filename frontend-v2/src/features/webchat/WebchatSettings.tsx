@@ -936,7 +936,7 @@ function Conversation({
             <WidgetAssignmentCard
               read={assignment}
               assigned={assigned}
-              automation={answering?.automation ?? null}
+              automation={answering ? answering.automation : undefined}
             />
           </section>
           <section

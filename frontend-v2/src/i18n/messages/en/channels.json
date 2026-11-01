@@ -755,6 +755,7 @@
       },
       "employeeNone": "The playbook doesn't send website conversations to one employee",
       "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here",
+      "answersViaRoute": "<user>{name}</user> answers website conversations: the route set up at onboarding sends every channel to this employee. There is nothing more to set up.",
       "assign": {
         "adminsOnly": "Only an admin can change who answers the widget.",
         "noPlace": "Who answers can be chosen once the widget has a place - create its code on the Install tab.",

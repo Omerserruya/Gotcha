@@ -38,17 +38,20 @@ import styles from './Webchat.module.css';
 export function WidgetAssignmentCard({
   read,
   assigned,
-  automation = null,
+  automation,
 }: {
   /** `null`: could not be read; `'forbidden'`: not an admin. */
   readonly read: WidgetAssignment | 'forbidden' | null;
   readonly assigned: WebsiteWidget['assignedEmployee'];
-  /** The routing automation that decides who answers (Backend 330b0461); `null`: none, or unread. */
-  readonly automation?: NonNullable<WebsiteWidget['answering']>['automation'];
+  /**
+   * The routing automation that decides who answers (Backend 330b0461);
+   * `null`: none decides it; `undefined`: not read (an older service).
+   */
+  readonly automation?: NonNullable<WebsiteWidget['answering']>['automation'] | undefined;
 }) {
   return (
     <>
-      <AssignmentBody read={read} assigned={assigned} />
+      <AssignmentBody read={read} assigned={assigned} viaRoute={automation === null} />
       {automation ? <SetBy automation={automation} /> : null}
     </>
   );
@@ -82,12 +85,31 @@ function SetBy({
   );
 }
 
+/**
+ * ★ An employee answering with no automation behind it is the playbook's
+ *   route - the one onboarding sets up, start → employee for every channel
+ *   (prod 2026-11-01: it answered the first web chat, while this card sent
+ *   the owner to Automations to "connect" the same employee, and that hit
+ *   402). Said as it is: this employee answers here, nothing to set up.
+ */
+function ViaRoute({ name }: { readonly name: string }) {
+  const t = useTranslations('channels.webchat.conversation');
+  return (
+    <p className={styles.rowHint} data-testid="webchat-employee-via-route">
+      {t.rich('answersViaRoute', { name, user: (chunks) => <bdi dir="auto">{chunks}</bdi> })}
+    </p>
+  );
+}
+
 function AssignmentBody({
   read,
   assigned,
+  viaRoute,
 }: {
   readonly read: WidgetAssignment | 'forbidden' | null;
   readonly assigned: WebsiteWidget['assignedEmployee'];
+  /** No routing automation decides it: an employee here is the playbook's route. */
+  readonly viaRoute: boolean;
 }) {
   const t = useTranslations('channels.webchat.conversation');
   if (read === null || read === 'forbidden' || read.channels.length === 0) {
@@ -114,13 +136,17 @@ function AssignmentBody({
             {t('assign.noPlace')}
           </p>
         ) : null}
-        <p className={styles.rowHint} data-testid="webchat-employee-where">
-          {t.rich('employeeWhere', { automations: automationsLink })}
-        </p>
+        {assigned && viaRoute ? (
+          <ViaRoute name={assigned.name} />
+        ) : (
+          <p className={styles.rowHint} data-testid="webchat-employee-where">
+            {t.rich('employeeWhere', { automations: automationsLink })}
+          </p>
+        )}
       </>
     );
   }
-  return <Chooser initial={read} />;
+  return <Chooser initial={read} viaRoute={viaRoute} />;
 }
 
 /** The employee every editable channel goes to today, or `null` when they differ or none does. */
@@ -130,7 +156,13 @@ function currentEmployee(channels: readonly AssignmentChannel[]): string | null 
   return first !== null && ids.every((id) => id === first) ? first : null;
 }
 
-function Chooser({ initial }: { readonly initial: WidgetAssignment }) {
+function Chooser({
+  initial,
+  viaRoute,
+}: {
+  readonly initial: WidgetAssignment;
+  readonly viaRoute: boolean;
+}) {
   const t = useTranslations('channels.webchat.conversation.assign');
   const names = useTranslations('channels');
   const router = useRouter();
@@ -176,6 +208,11 @@ function Chooser({ initial }: { readonly initial: WidgetAssignment }) {
       }
     });
 
+  // Every place answered by one employee through the shared route, no automation.
+  const routed =
+    viaRoute && now !== null && fixed.length === 0 && editable.every((c) => !c.dedicated)
+      ? (editable[0]?.employee?.name ?? null)
+      : null;
   const who = (c: AssignmentChannel) =>
     c.how === 'always' && c.employee ? c.employee.name : t(`how.${c.how}`);
 
@@ -190,6 +227,7 @@ function Chooser({ initial }: { readonly initial: WidgetAssignment }) {
           </li>
         ))}
       </ul>
+      {routed ? <ViaRoute name={routed} /> : null}
 
       {fixed.length > 0 ? (
         <p className={styles.rowHint} data-testid="webchat-employee-conditional">

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -208,5 +208,50 @@ describe('★★ who answers the widget - chosen here, written to the playbook',
       }
       unmount();
     }
+  });
+});
+
+describe('★★ the onboarding route answers here - said, never a trip to Automations', () => {
+  const AUTO = { id: 'f1', name: 'New conversation', everyChannel: true };
+  const card = (
+    read: WidgetAssignment | null,
+    automation: typeof AUTO | null,
+    assigned: typeof MAYA | null = MAYA,
+  ) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ channels, common }}>
+        <WidgetAssignmentCard read={read} assigned={assigned} automation={automation} />
+      </NextIntlClientProvider>,
+    );
+  const VIA =
+    'Maya answers website conversations: the route set up at onboarding sends every channel to this employee. There is nothing more to set up.';
+
+  it('no place yet, the route answers: the employee, that it answers here, no Automations link', () => {
+    card({ ...DEV, channels: [] }, null);
+    expect(screen.getByTestId('webchat-employee-via-route')).toHaveTextContent(VIA);
+    expect(screen.queryByTestId('webchat-employee-where')).toBeNull();
+  });
+
+  it('placed, every place on the shared route: the same line under who answers today', () => {
+    card(DEV, null);
+    expect(screen.getByTestId('webchat-employee-via-route')).toHaveTextContent(VIA);
+  });
+
+  it('an automation decides: its own line, never "the route set up at onboarding"', () => {
+    card(DEV, AUTO);
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    cleanup();
+    card({ ...DEV, channels: [] }, AUTO);
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    expect(screen.getByTestId('webchat-employee-where')).toBeInTheDocument();
+  });
+
+  it('a place with its own entry, or no one answering: not the shared route', () => {
+    card({ ...DEV, channels: [channel({ channel: 'WEBCHAT', dedicated: true })] }, null);
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    cleanup();
+    card({ ...DEV, channels: [] }, null, null);
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    expect(screen.getByTestId('webchat-employee-where')).toBeInTheDocument();
   });
 });
