@@ -20,6 +20,7 @@ const H = vi.hoisted(() => ({
   adapterCalls: [] as any[],
   adapterReply: { ok: true, result: { orders: [{ name: "#1043" }] } } as any,
   shops: [] as any[],
+  flows: [] as any[],
 }));
 vi.mock("../services/website-widget.service", () => ({
   installOf: async () => ({ shopify: H.shops }),
@@ -64,8 +65,14 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       },
       flowCanvas: {
         findUnique: async () => H.canvas,
-        upsert: async ({ create, update }: any) => { H.canvas = H.canvas ? { ...H.canvas, ...update } : create; },
+        update: async ({ data }: any) => { H.canvas = { ...H.canvas, ...data }; },
       },
+      chatbotFlow: {
+        findMany: async ({ where }: any) => H.flows.filter((f) => f.triggerType === where.triggerType),
+        create: async ({ data }: any) => { const f = { id: `f${H.flows.length + 1}`, ...data }; H.flows.push(f); return f; },
+        updateMany: async ({ where, data }: any) => { const f = H.flows.find((x) => x.id === where.id); Object.assign(f, data); return { count: 1 }; },
+      },
+      $transaction: async (ops: any[]) => Promise.all(ops),
       channelAccount: { findMany: async () => H.accounts },
       auditLog: { create: async ({ data }: any) => { H.audits.push(data); } },
     },
@@ -73,8 +80,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 vi.mock("../services/employee-reach.service", () => ({
   whereEmployeeAnswers: async (_t: string, agentId: string) => {
-    const nodes = H.canvas?.nodes ?? [];
-    const routes = nodes.some((n: any) => n.type === "route_target" && n.data?.targetId === agentId);
+    const routes = H.flows.some((f) => f.isActive && f.nodes.some((n: any) => n.type === "hand_to_ai" && n.data?.aiAgentId === agentId));
     return H.accounts.map((a) => ({ channel: a.channel, reach: routes ? "always" : "never", accounts: [] }));
   },
 }));
@@ -85,7 +91,7 @@ const POLICIES = [{ kind: "returns", summary: "Return within 30 days.", terms: {
 const tool = (id: string, slug: string, category: string, ti = "ti-shop") => ({ id, tenantIntegrationId: ti, isEnabled: true, catalogTool: { slug, category } });
 
 beforeEach(() => {
-  H.setting = new Map(); H.agents = []; H.kbLinks = []; H.perms = []; H.canvas = null; H.depts = []; H.audits = [];
+  H.setting = new Map(); H.agents = []; H.kbLinks = []; H.perms = []; H.canvas = null; H.flows = []; H.depts = []; H.audits = [];
   H.adapterCalls = []; H.shops = []; H.adapterReply = { ok: true, result: { orders: [{ name: "#1043" }] } };
   H.discovery = {
     status: "COMPLETE", business: { name: "Acme", industry: "Fashion", summary: "Clothes" }, brand: { voice: "warm" },
@@ -176,11 +182,57 @@ describe("go-live", () => {
     expect(r.tools.granted).toEqual(["shopify.track_shipment"]);
   });
 
-  it("an empty playbook routes every channel to the employee", async () => {
+  it("the setup route is an automation: every channel, trigger -> hand to the employee, marked setup, active", async () => {
     const r = await goLiveEmployee({ tenantId: "T" });
-    expect(H.canvas.nodes.map((n: any) => n.type)).toEqual(["start", "route_target"]);
-    expect(H.canvas.nodes[1].data).toEqual({ routeType: "agent", targetId: r.employee.id });
+    expect(H.flows).toHaveLength(1);
+    expect(H.flows[0]).toMatchObject({
+      name: "Who answers new conversations", channel: null, triggerType: "conversation_started",
+      triggerConfig: { channels: [], origin: "setup" }, isActive: true,
+    });
+    expect(H.flows[0].nodes.map((n: any) => n.type)).toEqual(["automation_trigger", "hand_to_ai"]);
+    expect(H.flows[0].nodes[1].data).toEqual({ aiAgentId: r.employee.id });
+    expect(H.canvas).toBeNull();
     expect(r.channels.every((c) => c.routed)).toBe(true);
+  });
+
+  it("a second go-live re-points the SAME setup route, no second automation", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    H.flows[0].nodes[1].data.aiAgentId = "someone-else";
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(H.flows).toHaveLength(1);
+    expect(H.flows[0].nodes[1].data.aiAgentId).toBe(r.employee.id);
+  });
+
+  it("a paused setup route is switched back on by a go-live", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    Object.assign(H.flows[0], { isActive: false, pausedAt: new Date() });
+    await goLiveEmployee({ tenantId: "T" });
+    expect(H.flows[0]).toMatchObject({ isActive: true, pausedAt: null });
+  });
+
+  it("a setup route the owner extended (a message first) is LEFT AS IS, and reported", async () => {
+    await goLiveEmployee({ tenantId: "T" });
+    const f = H.flows[0];
+    f.nodes = [f.nodes[0], { id: "msg", type: "send_message_text", data: { text: "hi" } }, f.nodes[1]];
+    f.edges = [{ id: "a", source: "trigger", target: "msg" }, { id: "b", source: "msg", target: "hand_to_ai" }];
+    const before = JSON.parse(JSON.stringify(f));
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(JSON.parse(JSON.stringify(H.flows[0]))).toEqual(before);
+    expect(r.warnings).toContain("playbook_customized");
+  });
+
+  it("another every-channel routing automation already live: no competing setup route", async () => {
+    H.flows.push({ id: "own", triggerType: "conversation_started", triggerConfig: {}, isActive: true, nodes: [], edges: [] });
+    const r = await goLiveEmployee({ tenantId: "T" });
+    expect(H.flows).toHaveLength(1);
+    expect(r.warnings).toContain("playbook_customized");
+  });
+
+  it("an old onboarding canvas is emptied in the same step, so nothing routes twice", async () => {
+    H.canvas = { nodes: [{ id: "onboarding-start", type: "start" }, { id: "onboarding-route", type: "route_target", data: { routeType: "agent", targetId: "old" } }], edges: [] };
+    await goLiveEmployee({ tenantId: "T" });
+    expect(H.canvas.nodes).toEqual([]);
+    expect(H.flows[0].triggerConfig.origin).toBe("setup");
   });
 
   it("an owner's customized playbook is LEFT AS IS, and the response says so", async () => {

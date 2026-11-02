@@ -10,6 +10,8 @@
  * `isActive` is never taken from a request body.
  */
 import { Router, type Request, type Response } from "express";
+import { isSetupRoute, SETUP_ORIGIN, ROUTING_TRIGGER } from "@chatcenter/shared";
+import { workflowsTowardLimit } from "../lib/workflow-limit";
 import {
   prisma, authenticate, resolveTenant, requirePermissionOrRole, requireEntitlement, requireCapacity,
   visibilityClause, viewerOf,
@@ -85,6 +87,8 @@ async function present(tenantId: string, flows: FlowRow[], full: boolean) {
     return {
       id: f.id, name: f.name, description: f.description,
       trigger: { type: f.triggerType, config: f.triggerConfig ?? {} },
+      // The setup route (onboarding's "who answers"): the UI words it; it cannot be deleted.
+      origin: isSetupRoute(f.triggerConfig) ? SETUP_ORIGIN : null,
       status: statusOf(f), isActive: f.isActive,
       activatedAt: f.activatedAt, activatedBy: who(f.activatedBy),
       pausedAt: f.pausedAt, pausedBy: who(f.pausedBy),
@@ -218,7 +222,7 @@ router.post(
   "/",
   CAN_WRITE,
   requireEntitlement("communication.automations"),
-  requireCapacity("limit:workflows", (tenantId) => prisma.chatbotFlow.count({ where: { tenantId } })),
+  requireCapacity("limit:workflows", workflowsTowardLimit),
   async (req: Request, res: Response) => {
     try {
       const data = editable(req.body, false);
@@ -245,6 +249,15 @@ router.put("/:id", CAN_WRITE, async (req: Request, res: Response) => {
       return;
     }
     const data = editable(req.body, true);
+    if (isSetupRoute(existing.triggerConfig)) {
+      // The setup route stays the "New conversation" route, and keeps its marker
+      // (normalizeTrigger rebuilds the config without it).
+      if (data.triggerType !== undefined && data.triggerType !== ROUTING_TRIGGER) {
+        res.status(422).json({ error: "The setup route always starts on a new conversation.", code: "setup_route_trigger_fixed" });
+        return;
+      }
+      if (data.triggerConfig !== undefined) data.triggerConfig = { ...((data.triggerConfig as any) ?? {}), origin: SETUP_ORIGIN };
+    }
     // A live automation stays live only if the new version can go live.
     if (existing.isActive) {
       const next = { ...existing, ...data } as FlowRow;
@@ -303,6 +316,12 @@ router.delete("/:id", CAN_WRITE, async (req: Request, res: Response) => {
   try {
     const existing = await findAutomation(req.tenantId!, String(req.params.id));
     if (!existing) { res.status(404).json({ error: "Automation not found" }); return; }
+    // Omer, 2026-11-02: the setup route can be paused, not deleted. Without it
+    // no one answers a new conversation.
+    if (isSetupRoute(existing.triggerConfig)) {
+      res.status(422).json({ error: "The setup route can be paused but not deleted.", code: "setup_route_required" });
+      return;
+    }
     // A conversation parked on one of its runs is released, not left on a dead cursor.
     const runIds = (await prisma.automationRun.findMany({ where: { tenantId: req.tenantId!, flowId: existing.id, status: "waiting" }, select: { id: true } })).map((r: any) => r.id);
     if (runIds.length) {

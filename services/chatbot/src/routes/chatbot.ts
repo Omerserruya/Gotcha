@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate, requireEntitlement, requireCapacity } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requirePermissionOrRole, validate, requireEntitlement, requireCapacity, isSetupRoute } from "@chatcenter/shared";
 import { validateGraph } from "../lib/graph-validator";
+import { workflowsTowardLimit } from "../lib/workflow-limit";
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.post(
   "/",
   requirePermissionOrRole("ai:workflows:update", "ADMIN"),
   requireEntitlement("communication.automations"),
-  requireCapacity("limit:workflows", (tenantId) => prisma.chatbotFlow.count({ where: { tenantId } })),
+  requireCapacity("limit:workflows", workflowsTowardLimit),
   validate(flowSchema),
   async (req: Request, res: Response) => {
   try {
@@ -96,6 +97,10 @@ router.delete("/:id", requirePermissionOrRole("ai:workflows:update", "ADMIN"), a
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
+    if (isSetupRoute((existing as any)?.triggerConfig)) {
+      res.status(422).json({ error: "The setup route can be paused but not deleted.", code: "setup_route_required" });
+      return;
+    }
     await prisma.chatbotFlow.delete({ where: { id: req.params.id as string } });
     res.json({ success: true });
   } catch (err) { console.error("Delete flow error:", err); res.status(500).json({ error: "Failed to delete flow" }); }

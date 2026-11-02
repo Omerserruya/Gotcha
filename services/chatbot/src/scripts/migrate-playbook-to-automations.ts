@@ -49,7 +49,7 @@ async function migrate() {
     console.log(`\ntenant ${c.tenantId}: ${nodes.length} nodes, ${(c.edges ?? []).length} edges`);
     if (!plan.migratable) { console.log(`  REFUSED: ${plan.refused}. Canvas left as it is.`); continue; }
     for (const a of plan.automations) {
-      console.log(`  + ${a.channels.length ? a.channels.join(",") : "(every other channel)"}: ${a.nodes.map((n) => n.type).join(" -> ")}${a.warnings.length ? `  [warnings: ${a.warnings.join(" | ")}]` : ""}`);
+      console.log(`  + ${a.channels.length ? a.channels.join(",") : "(every other channel)"}${a.origin ? ` [${a.origin}]` : ""}: ${a.nodes.map((n) => n.type).join(" -> ")}${a.warnings.length ? `  [warnings: ${a.warnings.join(" | ")}]` : ""}`);
     }
     for (const r of plan.notMigrated) console.log(`  ! not migrated: ${r}`);
     if (!plan.automations.length) { console.log("  nothing to create; canvas left as it is"); continue; }
@@ -62,7 +62,7 @@ async function migrate() {
         const row = await tx.chatbotFlow.create({
           data: {
             tenantId: c.tenantId, name: a.name, channel: a.channels.length === 1 ? a.channels[0] : null,
-            triggerType: "conversation_started", triggerConfig: a.channels.length ? { channels: a.channels } : {},
+            triggerType: "conversation_started", triggerConfig: { ...(a.channels.length ? { channels: a.channels } : {}), ...(a.origin ? { origin: a.origin } : {}) },
             nodes: a.nodes, edges: a.edges, isActive: true, activatedAt: now, activatedBy: ACTOR,
           },
           select: { id: true },

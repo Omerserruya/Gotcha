@@ -25,6 +25,7 @@
  * the canvas would switch those off.
  */
 import { CHANNELS, validateAutomation, type Channel } from "./automation-catalog";
+import { SETUP_ORIGIN, SETUP_ROUTE_NAME } from "@chatcenter/shared";
 
 type Node = { id: string; type: string; data?: any; position?: { x: number; y: number } };
 type Edge = { id?: string; source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null };
@@ -34,6 +35,8 @@ export interface PlannedAutomation {
   channels: Channel[];
   /** The canvas entry it came from. */
   fromEntryId: string;
+  /** "setup": onboarding's own route, carried as the setup route (2026-11-02). */
+  origin?: string;
   nodes: Node[];
   edges: Edge[];
   warnings: string[];
@@ -146,6 +149,14 @@ export function planPlaybookMigration(canvas: { nodes?: unknown; edges?: unknown
     const others = ROUTING_CHANNELS.filter((c) => !withEntry.has(c));
     if (!entries.length) add(fallback, [], "Who answers on every channel (from the playbook)");
     else if (others.length) add(fallback, others, "Who answers on every other channel (from the playbook)");
+  }
+
+  // A canvas that is exactly what onboarding wrote (onboarding-employee
+  // routeToEmployee: start -> route to the employee) becomes the setup route,
+  // the same automation a go-live writes today.
+  const onboardingShaped = nodes.length === 2 && nodes.some((n) => n.id === "onboarding-start") && nodes.some((n) => n.id === "onboarding-route");
+  if (onboardingShaped && plan.automations.length === 1 && plan.automations[0]!.channels.length === 0) {
+    plan.automations[0] = { ...plan.automations[0]!, name: SETUP_ROUTE_NAME, origin: SETUP_ORIGIN };
   }
 
   const unused = nodes.filter((n) => !ROUTING_ENTRIES.has(n.type) && !edges.some((e) => e.target === n.id));

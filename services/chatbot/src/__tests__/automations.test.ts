@@ -89,8 +89,10 @@ function table(name: string) {
 
 vi.mock("@chatcenter/shared", async () => {
   const rule = await import("@chatcenter/shared/src/lib/conversation-visibility-rule");
+  const routing = await import("@chatcenter/shared/src/lib/routing-automation");
   const pass = (_q: any, _s: any, n: any) => n();
   return {
+    ...routing,
     ORDER_STATUSES: ["created", "paid", "fulfilled", "cancelled"],
     visibilityClause: rule.visibilityClause,
     viewerOf: (req: any) => ({ userId: req.user.userId, role: req.user.role, departmentId: req.user.departmentId }),
@@ -687,5 +689,57 @@ describe("★ 2026-10-14: page on a comment trigger, message waits, catalogue fa
     expect(by.wait).toMatchObject({ sends: false, commentSafe: false });
     expect(by.add_tag).toMatchObject({ sends: false });
     expect(all.every((i: any) => typeof i.sends === "boolean" && typeof i.commentSafe === "boolean")).toBe(true);
+  });
+});
+
+describe("★ the setup route (onboarding's who-answers, 2026-11-02)", () => {
+  const setupRow = () => ({
+    id: "setup", tenantId: "T", name: "Who answers new conversations", triggerType: "conversation_started",
+    triggerConfig: { channels: [], origin: "setup" }, isActive: true, updatedAt: new Date(0), createdAt: new Date(0),
+    nodes: [{ id: "trigger", type: "automation_trigger", data: {} }, { id: "hand_to_ai", type: "hand_to_ai", data: { aiAgentId: "maya" } }],
+    edges: [{ id: "e", source: "trigger", target: "hand_to_ai" }],
+  });
+  beforeEach(() => { H.db.chatbotFlow.push(setupRow()); });
+
+  it("is listed as an automation with origin setup; others have origin null", async () => {
+    await create();
+    const list = (await request(app).get("/api/automations")).body.data;
+    expect(list.find((a: any) => a.id === "setup")).toMatchObject({ origin: "setup", trigger: { type: "conversation_started" } });
+    expect(list.filter((a: any) => a.id !== "setup").every((a: any) => a.origin === null)).toBe(true);
+  });
+
+  it("an edit (a message before the hand-over, fewer channels) keeps the setup marker", async () => {
+    const r = await request(app).put("/api/automations/setup").send({
+      trigger: { type: "conversation_started", config: { channels: ["WHATSAPP"] } },
+      nodes: [
+        { id: "trigger", type: "automation_trigger", data: {} },
+        { id: "m", type: "send_message_text", data: { text: "Hi, one moment" } },
+        { id: "hand_to_ai", type: "hand_to_ai", data: { aiAgentId: "maya" } },
+      ],
+      edges: [{ id: "a", source: "trigger", target: "m" }, { id: "b", source: "m", target: "hand_to_ai" }],
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.data.origin).toBe("setup");
+    expect(H.db.chatbotFlow.find((f: any) => f.id === "setup").triggerConfig).toEqual({ channels: ["WHATSAPP"], origin: "setup" });
+  });
+
+  it("its trigger cannot become another trigger: 422 setup_route_trigger_fixed", async () => {
+    const r = await request(app).put("/api/automations/setup").send({ trigger: { type: "message_received", config: {} } });
+    expect([r.status, r.body.code]).toEqual([422, "setup_route_trigger_fixed"]);
+  });
+
+  it("cannot be deleted, on either API (422 setup_route_required); pausing works", async () => {
+    const a = await request(app).delete("/api/automations/setup");
+    const b = await request(app).delete("/api/chatbot-flows/setup");
+    expect([a.status, a.body.code, b.status, b.body.code]).toEqual([422, "setup_route_required", 422, "setup_route_required"]);
+    expect(H.db.chatbotFlow.some((f: any) => f.id === "setup")).toBe(true);
+    const p = await request(app).post("/api/automations/setup/pause");
+    expect(p.status).toBe(200);
+    expect(H.db.chatbotFlow.find((f: any) => f.id === "setup").isActive).toBe(false);
+  });
+
+  it("an ordinary automation is still deletable", async () => {
+    const a = await create();
+    expect((await request(app).delete(`/api/automations/${a.id}`)).status).toBe(200);
   });
 });
