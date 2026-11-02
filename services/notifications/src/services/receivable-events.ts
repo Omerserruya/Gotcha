@@ -13,6 +13,7 @@ import { prisma } from "@chatcenter/shared";
 import { EVENT_CATALOGUE } from "./event-catalogue";
 import { defaultRoute, DELIVERABLE_CHANNELS, wantsPush, ASSIGNEE_PUSH_ONLY } from "./notification-engine.service";
 import { fcmConfig } from "./push-sender";
+import { apnsConfig } from "./apns-sender";
 import { wantsWhatsApp } from "./whatsapp-notice.service";
 import { getPlatformWhatsAppSender } from "./platform-whatsapp";
 import { resolveRecipients, type RecipientSpec } from "./recipient-resolver.service";
@@ -36,7 +37,7 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
   const deliverable = new Set<string>(DELIVERABLE_CHANNELS as readonly string[]);
   const whatsappReady = !!getPlatformWhatsAppSender();
   // Push per event: only where the event pushes and a provider is set up.
-  const pushReady = !!fcmConfig();
+  const pushReady = !!fcmConfig() || !!apnsConfig();
   const out: ReceivableEvent[] = [];
   for (const entry of EVENT_CATALOGUE) {
     if (!entry.emitted) continue;

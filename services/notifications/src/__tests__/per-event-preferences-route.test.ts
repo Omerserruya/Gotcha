@@ -197,6 +197,18 @@ describe("push (mobile app, 2026-11-03)", () => {
     expect(types["tool.approval_required"]).toBeUndefined();
   });
 
+  it("APNs alone (an iOS-only setup) is enough to offer push", async () => {
+    delete process.env.FCM_PROJECT_ID;
+    process.env.APNS_KEY_ID = "k"; process.env.APNS_TEAM_ID = "t"; process.env.APNS_PRIVATE_KEY = "p";
+    try {
+      const r = await request(app).get("/api/notification-preferences/me");
+      const types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+      expect(types["message.inbound"]).toEqual(["push"]);
+    } finally {
+      delete process.env.APNS_KEY_ID; delete process.env.APNS_TEAM_ID; delete process.env.APNS_PRIVATE_KEY;
+    }
+  });
+
   it("a workspace rule's channels do not decide push: it is personal", async () => {
     H.rules = [rule("conversation.escalated", ["in_app"])];
     const r = await request(app).get("/api/notification-preferences/me");
