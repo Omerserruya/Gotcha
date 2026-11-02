@@ -97,6 +97,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
+// message.inbound (mobile push): the real rule decides, the queue publish is spied.
+const INBOUND = vi.hoisted(() => ({ calls: [] as any[] }));
+vi.mock("@chatcenter/shared/src/lib/notifications/inbound-push", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, emitInboundMessage: (input: any) => { const queued = actual.shouldEmitInbound(input.conversation); INBOUND.calls.push({ input, queued }); return queued; } };
+});
+
 const EMITTED = vi.hoisted(() => [] as any[]);
 vi.mock("../services/notifications-emit", () => ({ tryEmit: (e: any) => EMITTED.push(e) }));
 vi.mock("../services/shopify-catalog.service", () => ({
@@ -701,5 +708,45 @@ describe("★ a working storefront clears a stale \"uninstalled\" (2026-10-09)",
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 10));
     expect(INSTALL.clear).toHaveBeenCalled();
+  });
+});
+
+// ─── The offline form announces itself (message.inbound) ─────
+
+describe("★ POST /lead: the assignee's phone hears the form (mobile push)", () => {
+  const lead = () => request(app())
+    .post("/api/shopify-chat/lead")
+    .set("Origin", ORIGIN)
+    .send({ sessionToken: session(), name: "Dana", email: "dana@x.test", message: "Do you ship to Eilat?", consent: true });
+  beforeEach(() => {
+    INBOUND.calls = [];
+    const cfg = H.channelRow.current.platformMeta.shopifyLiveChat;
+    cfg.hours.offlineBehavior = "form";
+    H.createMessage.mockResolvedValue({ id: "msg_lead", createdAt: new Date() });
+  });
+
+  it("a person owns the chat: announced, with the shopper's words", async () => {
+    H.conversationRow.current = { id: "conv7", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "human", isHandedOver: true, origin: "LIVE", isTest: false, customerExternalId: "sfyv_visitor" };
+    const r = await lead();
+    expect(r.status).toBe(200);
+    expect(INBOUND.calls).toHaveLength(1);
+    expect(INBOUND.calls[0]).toMatchObject({
+      queued: true,
+      input: { tenantId: "t1", messageId: "msg_lead", body: "Do you ship to Eilat?", channel: "SHOPIFY_LIVE_CHAT", customerName: "Dana", conversation: { id: "conv7", assignedAgentId: "matan" } },
+    });
+  });
+
+  it("the AI handling it, or nobody assigned: the rule queues nothing", async () => {
+    H.conversationRow.current = { id: "conv8", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "ai_agent", origin: "LIVE" };
+    await lead();
+    H.conversationRow.current = { id: "conv9", tenantId: "t1", customerName: "Shopper", assignedAgentId: null, handledBy: null, origin: "LIVE" };
+    await lead();
+    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false]);
+  });
+
+  it("a failing publish never breaks the form", async () => {
+    H.conversationRow.current = { id: "conv7", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "human" };
+    const r = await lead();
+    expect(r.body).toEqual({ data: { submitted: true } });
   });
 });

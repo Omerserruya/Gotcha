@@ -24,6 +24,7 @@ import { executeAdapterTool } from "../services/connectors/integration-framework
 import { listActivePromotions } from "../services/widget-promotions.service";
 import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { tryEmit } from "../services/notifications-emit";
+import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
 import { offerCrossSellAfterCart } from "../services/woo-chat-turn.service";
 
 const router = Router();
@@ -297,7 +298,12 @@ async function visitorConversation(conversationId: string, token: unknown) {
   if (typeof token !== "string" || !token || !conversationId) return null;
   const c = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: { id: true, tenantId: true, channel: true, channelAccountId: true, customerExternalId: true, customerName: true },
+    select: {
+      id: true, tenantId: true, channel: true, channelAccountId: true, customerExternalId: true, customerName: true,
+      // Who owns it, for message.inbound (a customer message written here
+      // rather than by the incoming worker).
+      assignedAgentId: true, handledBy: true, departmentId: true, isTest: true, origin: true,
+    },
   });
   if (!c || c.channel !== "WEBCHAT" || !c.customerExternalId) return null;
   const a = Buffer.from(String(c.customerExternalId));
@@ -414,13 +420,17 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
     const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
     if (text) {
       // Recorded, not queued: no website answer to a question asked on WhatsApp.
-      await withCrossTenantAccess(() => prisma.message.create({
+      const written = await withCrossTenantAccess(() => prisma.message.create({
         data: {
           tenantId: conv.tenantId, conversationId: conv.id, channel: "WEBCHAT", direction: "INBOUND",
           body: text, messageType: "text", status: "DELIVERED", senderName: conv.customerName || "Visitor",
           metadata: { source: "whatsapp_handoff" },
         },
       }));
+      // Never through the incoming worker, so it announces itself: the
+      // assignee's phone, when a person owns this chat (a queue publish,
+      // fire-and-forget; the rule lives in shared).
+      emitInboundMessage({ tenantId: conv.tenantId, conversation: conv, messageId: written.id, body: text, messageType: "text", channel: "WEBCHAT" });
     }
     const prefilled = ref ? (text ? `${text} (${ref})` : handoffMessage(ref, locale)) : (text || plainHandoffMessage(locale));
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });

@@ -63,6 +63,13 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   };
 });
 
+// message.inbound (mobile push): the real rule decides, the queue publish is spied.
+const INBOUND = vi.hoisted(() => ({ calls: [] as any[] }));
+vi.mock("@chatcenter/shared/src/lib/notifications/inbound-push", async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return { ...actual, emitInboundMessage: (input: any) => { const queued = actual.shouldEmitInbound(input.conversation); INBOUND.calls.push({ input, queued }); return queued; } };
+});
+
 import { normalizeWebchatConfig, findHandoffRef, newHandoffRef, HANDOFF_REF_ALPHABET, waMeDigits, handoffMessage } from "@chatcenter/shared";
 import chat from "../routes/embedded-chat";
 import widget from "../routes/website-widget";
@@ -322,5 +329,40 @@ describe("★ the business's wordmark (design 7)", () => {
     expect(brandFromName("<b>Shop</b>")!.name).toBe("bShop/b");
     expect(brandFromName("   ")).toBeNull();
     expect(brandFromName(null)).toBeNull();
+  });
+});
+
+describe("★ the visitor's words kept on a WhatsApp handoff announce themselves (mobile push)", () => {
+  beforeEach(() => { INBOUND.calls = []; });
+  const own = (o: any) => Object.assign(H.conversations[0], o);
+
+  it("a person owns the chat: the assignee is told, with the words", async () => {
+    own({ assignedAgentId: "matan", handledBy: "human", customerName: "Dana", origin: "LIVE", isTest: false });
+    const r = await handoff({ sessionId: "conv_web", sessionToken: "sess_abc", text: "Is the oak lamp in stock?" });
+    expect(r.status).toBe(200);
+    expect(INBOUND.calls).toHaveLength(1);
+    expect(INBOUND.calls[0]).toMatchObject({
+      queued: true,
+      input: { tenantId: "T", messageId: "m1", body: "Is the oak lamp in stock?", channel: "WEBCHAT", conversation: { id: "conv_web", assignedAgentId: "matan", customerName: "Dana" } },
+    });
+  });
+
+  it("the bot handling it, a sandbox rehearsal, or nobody assigned: nothing is queued", async () => {
+    for (const o of [
+      { assignedAgentId: "matan", handledBy: "ai_agent" },
+      { assignedAgentId: "matan", handledBy: "sandbox" },
+      { assignedAgentId: "matan", handledBy: "human", isTest: true },
+      { assignedAgentId: null, handledBy: "human" },
+    ]) {
+      own({ isTest: false, ...o });
+      await handoff({ sessionId: "conv_web", sessionToken: "sess_abc", text: "hello" });
+    }
+    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false, false, false]);
+  });
+
+  it("no words, no message and no announcement", async () => {
+    own({ assignedAgentId: "matan", handledBy: "human" });
+    await handoff();
+    expect(INBOUND.calls).toHaveLength(0);
   });
 });

@@ -60,6 +60,7 @@ import { validateCartLine } from "../services/shopify-catalog.service";
 import { handoffTarget, mintHandoffRef, brandOf } from "../services/website-widget.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { tryEmit } from "../services/notifications-emit";
+import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
@@ -968,6 +969,18 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
       event: "conversation:updated",
       tenantId: session.tenantId,
       data: { id: conversation.id, status: "WAITING", channel: "SHOPIFY_LIVE_CHAT" },
+    });
+    // The form is the shopper writing, and it never passes the incoming
+    // worker: the assignee's phone hears it when a person owns the chat
+    // (usually nobody does yet, and then nothing is sent).
+    emitInboundMessage({
+      tenantId: session.tenantId,
+      conversation,
+      messageId: offlineMessage.id,
+      body: note || "(no message)",
+      messageType: "text",
+      channel: "SHOPIFY_LIVE_CHAT",
+      customerName: name || conversation.customerName,
     });
     trackEvent(session.tenantId, "shopify_chat_offline_lead", { conversationId: conversation.id });
     res.json({ data: { submitted: true } });
