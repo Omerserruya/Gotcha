@@ -752,6 +752,12 @@ services:
       FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
       FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:-}
       FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:-}
+      # iOS push straight to Apple (APNs token auth, a .p8 key). Empty = iOS push off.
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-il.co.gotcha.app}
+      APNS_ENV: ${APNS_ENV:-sandbox}
     depends_on:
       db:
         condition: service_healthy

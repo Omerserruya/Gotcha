@@ -1,5 +1,6 @@
 /**
- * Mobile push through Firebase Cloud Messaging (HTTP v1).
+ * Mobile push: Android through Firebase Cloud Messaging (HTTP v1), iOS
+ * straight to Apple (apns-sender.ts). Each PushDevice says which (provider).
  *
  *   POST https://fcm.googleapis.com/v1/projects/{project}/messages:send
  *
@@ -25,6 +26,7 @@
 import { createSign } from "crypto";
 import { prisma } from "@chatcenter/shared";
 import type { SystemEvent } from "./event-emitter.service";
+import { apnsConfig, sendApns, resetApnsState } from "./apns-sender";
 
 export interface FcmConfig { projectId: string; clientEmail: string; privateKey: string }
 
@@ -42,12 +44,12 @@ const SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const EXPIRY_MARGIN_MS = 60_000;
 
 let cached: { token: string; expiresAt: number; clientEmail: string } | null = null;
-let saidNotConfigured = false;
 
-/** Test seam: forget the cached access token and the "not configured" line. */
+/** Test seam: forget the cached access tokens and the "not configured" lines. */
 export function resetPushSenderState(): void {
   cached = null;
-  saidNotConfigured = false;
+  said.clear();
+  resetApnsState();
 }
 
 const b64url = (v: string | Buffer) => Buffer.from(v).toString("base64url");
@@ -133,12 +135,47 @@ export function isDeadToken(status: number, json: any): boolean {
 export type PushOutcome =
   | { status: "not_configured" }
   | { status: "no_devices" }
-  | { status: "sent"; sent: number; failed: number; removed: number };
+  | { status: "sent"; sent: number; failed: number; removed: number; skipped: number };
+
+type Device = { id: string; token: string; platform: string; provider: string };
+type Attempt = { ok: true } | { ok: false; error: string; dead: boolean };
+
+/** Said once per process per provider: not configured is a normal state, not an incident. */
+const said = new Set<string>();
+function sayNotConfigured(provider: "fcm" | "apns") {
+  if (said.has(provider)) return;
+  said.add(provider);
+  console.info(provider === "fcm"
+    ? "[notifications.push] FCM is not configured (FCM_PROJECT_ID / FCM_CLIENT_EMAIL / FCM_PRIVATE_KEY); Android push is skipped"
+    : "[notifications.push] APNs is not configured (APNS_KEY_ID / APNS_TEAM_ID / APNS_PRIVATE_KEY); iOS push is skipped");
+}
+
+async function sendFcm(cfg: FcmConfig, d: Device, msg: { title: string; body: string; link?: string; eventType: string; conversationId: string | null }): Promise<Attempt> {
+  const url = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/messages:send`;
+  const send = async () => fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await accessToken(cfg)}`, "Content-Type": "application/json" },
+    body: JSON.stringify(buildFcmMessage({ token: d.token, ...msg })),
+  });
+  let res = await send();
+  // A token Google revoked early: fetch a fresh one once.
+  if (res.status === 401) { cached = null; res = await send(); }
+  if (res.ok) return { ok: true };
+  const json: any = await res.json().catch(() => ({}));
+  return {
+    ok: false,
+    error: `FCM ${res.status}${json?.error?.status ? ` ${json.error.status}` : ""}${json?.error?.message ? `: ${json.error.message}` : ""}`,
+    dead: isDeadToken(res.status, json),
+  };
+}
 
 /**
- * Send one notice to every phone this person registered in this tenant.
- * Never throws for a single device; one NotificationLog row per device, like
- * the email sender's one row per send.
+ * Send one notice to every phone this person registered in this tenant, each
+ * through its own provider (Android: FCM; iOS: APNs directly, see
+ * apns-sender.ts). A device whose provider is not configured is skipped
+ * without a row, as is a person with no device. Never throws for a single
+ * device; one NotificationLog row per device actually tried, like the email
+ * sender's one row per send.
  */
 export async function sendPushToUser(opts: {
   user: { id: string; tenantId: string; email?: string | null };
@@ -147,52 +184,48 @@ export async function sendPushToUser(opts: {
   priority?: string;
 }): Promise<PushOutcome> {
   const { user, event, tpl } = opts;
-  const cfg = fcmConfig();
-  if (!cfg) {
-    if (!saidNotConfigured) {
-      saidNotConfigured = true;
-      console.info("[notifications.push] FCM is not configured (FCM_PROJECT_ID / FCM_CLIENT_EMAIL / FCM_PRIVATE_KEY); push is skipped");
-    }
-    return { status: "not_configured" };
-  }
-  const devices: Array<{ id: string; token: string; platform: string }> = await (prisma as any).pushDevice.findMany({
+  const fcm = fcmConfig();
+  const apns = apnsConfig();
+  if (!fcm) sayNotConfigured("fcm");
+  if (!apns) sayNotConfigured("apns");
+  if (!fcm && !apns) return { status: "not_configured" };
+
+  const devices: Device[] = await (prisma as any).pushDevice.findMany({
     where: { tenantId: user.tenantId, userId: user.id },
-    select: { id: true, token: true, platform: true },
+    select: { id: true, token: true, platform: true, provider: true },
   });
   if (!devices.length) return { status: "no_devices" };
 
   const conversationId = conversationOf(event);
   const link = mobileLink(event, tpl.link);
-  const url = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/messages:send`;
-  let sent = 0, failed = 0, removed = 0;
+  let sent = 0, failed = 0, removed = 0, skipped = 0;
   for (const d of devices) {
-    let status: "sent" | "failed" = "failed";
-    let error: string | undefined;
+    const provider = d.provider === "apns" ? "apns" : "fcm";
+    if ((provider === "fcm" && !fcm) || (provider === "apns" && !apns)) { skipped++; continue; }
+    let attempt: Attempt;
     try {
-      const send = async () => fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${await accessToken(cfg)}`, "Content-Type": "application/json" },
-        body: JSON.stringify(buildFcmMessage({ token: d.token, title: tpl.title, body: tpl.body, link, eventType: event.type, conversationId })),
-      });
-      let res = await send();
-      // A token Google revoked early: fetch a fresh one once.
-      if (res.status === 401) { cached = null; res = await send(); }
-      if (res.ok) {
-        status = "sent";
-        sent++;
-      } else {
-        const json: any = await res.json().catch(() => ({}));
-        error = `FCM ${res.status}${json?.error?.status ? ` ${json.error.status}` : ""}${json?.error?.message ? `: ${json.error.message}` : ""}`;
-        failed++;
-        if (isDeadToken(res.status, json)) {
+      attempt = provider === "apns"
+        ? await sendApns(apns!, { token: d.token, title: tpl.title, body: tpl.body, link, conversationId })
+            .then((r): Attempt => (r.ok ? r : { ok: false, error: `APNs ${r.status}${r.reason ? ` ${r.reason}` : ""}`, dead: r.dead }))
+        : await sendFcm(fcm!, d, { title: tpl.title, body: tpl.body, link, eventType: event.type, conversationId });
+    } catch (err: any) {
+      attempt = { ok: false, error: err?.message ?? String(err), dead: false };
+    }
+    let error: string | undefined;
+    if (attempt.ok) {
+      sent++;
+    } else {
+      failed++;
+      error = attempt.error;
+      if (attempt.dead) {
+        try {
           await (prisma as any).pushDevice.deleteMany({ where: { id: d.id, token: d.token } });
           removed++;
           error += " (device removed)";
+        } catch (err: any) {
+          console.warn("[notifications.push] removing a dead device failed:", err?.message);
         }
       }
-    } catch (err: any) {
-      failed++;
-      error = err?.message ?? String(err);
     }
     try {
       await (prisma as any).notificationLog.create({
@@ -203,16 +236,16 @@ export async function sendPushToUser(opts: {
           recipient: user.email ?? user.id,
           subject: tpl.title,
           body: tpl.body,
-          status,
+          status: attempt.ok ? "sent" : "failed",
           error,
           // Never the token itself: it is a credential to reach that phone.
-          metadata: { eventId: event.id, userId: user.id, deviceId: d.id, platform: d.platform, priority: opts.priority },
-          sentAt: status === "sent" ? new Date() : undefined,
+          metadata: { eventId: event.id, userId: user.id, deviceId: d.id, platform: d.platform, provider, priority: opts.priority },
+          sentAt: attempt.ok ? new Date() : undefined,
         },
       });
     } catch (err: any) {
       console.warn("[notifications.push] log failed:", err?.message);
     }
   }
-  return { status: "sent", sent, failed, removed };
+  return { status: "sent", sent, failed, removed, skipped };
 }

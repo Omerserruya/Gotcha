@@ -1,7 +1,7 @@
 /**
  * The mobile app's phones, for push.
  *
- *   POST   /notifications/devices          { token, platform: "ios" | "android" }
+ *   POST   /notifications/devices          { token, platform: "ios" | "android", provider?: "fcm" | "apns" }
  *   DELETE /notifications/devices/:token   (or DELETE /notifications/devices { token })
  *
  * A registration token names an app INSTALL, not a person. One phone can be
@@ -10,6 +10,11 @@
  * upserts by token and re-points the row to whoever is calling, in whichever
  * tenant they are calling from: the previous owner silently stops receiving
  * there, which is exactly what signing out of the phone means.
+ *
+ * `provider` says who delivers to the token. Absent, it follows the platform:
+ * iOS is "apns" (the Capacitor plugin hands iOS a raw APNs token, not an FCM
+ * one), Android is "fcm". An iOS build that does carry the Firebase SDK can
+ * still say "fcm" explicitly.
  *
  * DELETE removes only the caller's own row. A token is not a secret worth
  * guessing, but "unregister someone else's phone" is still not a thing a
@@ -28,6 +33,7 @@ const router = Router();
 router.use("/notifications/devices", authenticate, resolveTenant, requireActiveTenant());
 
 const PLATFORMS = new Set(["ios", "android"]);
+const PROVIDERS = new Set(["fcm", "apns"]);
 /** FCM tokens are ~150-250 chars; anything far outside that is not one. */
 const MAX_TOKEN = 4096;
 
@@ -60,13 +66,19 @@ router.post("/notifications/devices", async (req: Request, res: Response) => {
     res.status(400).json({ error: "platform must be \"ios\" or \"android\"" });
     return;
   }
+  const asked = req.body?.provider;
+  if (asked !== undefined && asked !== null && (typeof asked !== "string" || !PROVIDERS.has(asked.toLowerCase()))) {
+    res.status(400).json({ error: "provider must be \"fcm\" or \"apns\"" });
+    return;
+  }
+  const provider = typeof asked === "string" ? asked.toLowerCase() : platform === "ios" ? "apns" : "fcm";
   try {
     const now = new Date();
     const row = await (prisma as any).pushDevice.upsert({
       where: { token },
-      create: { token, platform, userId: me.userId, tenantId: me.tenantId, lastSeenAt: now },
-      update: { platform, userId: me.userId, tenantId: me.tenantId, lastSeenAt: now },
-      select: { id: true, platform: true, createdAt: true, lastSeenAt: true },
+      create: { token, platform, provider, userId: me.userId, tenantId: me.tenantId, lastSeenAt: now },
+      update: { platform, provider, userId: me.userId, tenantId: me.tenantId, lastSeenAt: now },
+      select: { id: true, platform: true, provider: true, createdAt: true, lastSeenAt: true },
     });
     res.json({ data: row });
   } catch (err) {

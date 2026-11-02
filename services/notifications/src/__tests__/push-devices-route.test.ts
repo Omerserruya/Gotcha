@@ -4,6 +4,7 @@
  *   - support mode is refused (support_denied:ownership), in the route and in
  *     the shared deny table authenticate() applies
  *   - a token is upserted, and re-pointed to whoever signs in on that phone
+ *   - provider: given, else iOS -> apns and Android -> fcm
  *   - DELETE removes the caller's own row only, by path or by body
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -32,7 +33,7 @@ vi.mock("@chatcenter/shared", async () => ({
         let row = H.devices.find((d) => d.token === a.where.token);
         if (row) Object.assign(row, a.update);
         else { row = { id: `d${H.devices.length + 1}`, createdAt: new Date(), ...a.create }; H.devices.push(row); }
-        return { id: row.id, platform: row.platform, createdAt: row.createdAt, lastSeenAt: row.lastSeenAt };
+        return { id: row.id, platform: row.platform, provider: row.provider, createdAt: row.createdAt, lastSeenAt: row.lastSeenAt };
       },
       deleteMany: async (a: any) => {
         const before = H.devices.length;
@@ -117,6 +118,20 @@ describe("★ POST registers", () => {
     H.tenant = "T2";
     await request(app).post("/api/notifications/devices").send({ token: "shared-phone", platform: "android" });
     expect(H.devices).toEqual([expect.objectContaining({ token: "shared-phone", userId: "noa", tenantId: "T2" })]);
+  });
+
+  it("provider follows the platform when absent: iOS is apns, Android is fcm", async () => {
+    await request(app).post("/api/notifications/devices").send({ token: "a1b2c3", platform: "ios" });
+    await request(app).post("/api/notifications/devices").send({ token: "fcm-tok", platform: "android" });
+    expect(H.devices.map((d) => [d.token, d.provider])).toEqual([["a1b2c3", "apns"], ["fcm-tok", "fcm"]]);
+  });
+
+  it("an explicit provider wins, and an unknown one is refused", async () => {
+    const r = await request(app).post("/api/notifications/devices").send({ token: "ios-fcm", platform: "ios", provider: "FCM" });
+    expect(r.status).toBe(200);
+    expect(r.body.data.provider).toBe("fcm");
+    expect((await request(app).post("/api/notifications/devices").send({ token: "x", platform: "ios", provider: "pushy" })).status).toBe(400);
+    expect(H.devices.map((d) => d.token)).toEqual(["ios-fcm"]);
   });
 
   it("refuses a missing token or an unknown platform", async () => {

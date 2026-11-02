@@ -9,9 +9,11 @@
  *   - the OAuth token is a signed RS256 assertion, cached across sends
  *   - message.inbound: push only, to the assignee only, whatever a rule says
  *   - the conversation.waiting guard (an event not on this branch yet)
+ *   - iOS straight to Apple (APNs over http2, ES256 provider token cached
+ *     ~50 minutes), routed per device by its provider
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateKeyPairSync, createVerify } from "crypto";
+import { generateKeyPairSync, createVerify, verify as cryptoVerify } from "crypto";
 
 const H = vi.hoisted(() => ({
   rules: [] as any[],
@@ -25,6 +27,42 @@ const H = vi.hoisted(() => ({
   deviceQueries: 0,
   dedup: new Set<string>(),
 }));
+
+/** The http2 double: every APNs request, and Apple's answer per device token. */
+const A = vi.hoisted(() => ({
+  connects: [] as string[],
+  requests: [] as Array<{ host: string; headers: Record<string, string>; body: any }>,
+  reply: (_token: string, _n: number): { status: number; body?: any } => ({ status: 200 }),
+}));
+vi.mock("http2", async () => {
+  const { EventEmitter: EE } = await import("events");
+  const connect = (host: string) => {
+    A.connects.push(host);
+    const s: any = new EE();
+    s.closed = false; s.destroyed = false;
+    s.close = () => { s.closed = true; };
+    s.unref = () => s;
+    s.request = (headers: Record<string, string>) => {
+      const req: any = new EE();
+      req.setEncoding = () => req;
+      req.setTimeout = () => req;
+      req.close = () => undefined;
+      req.end = (body: string) => {
+        const token = String(headers[":path"]).split("/").pop()!;
+        A.requests.push({ host, headers, body: JSON.parse(body) });
+        const r = A.reply(token, A.requests.length);
+        setImmediate(() => {
+          req.emit("response", { ":status": r.status });
+          if (r.body) req.emit("data", JSON.stringify(r.body));
+          req.emit("end");
+        });
+      };
+      return req;
+    };
+    return s;
+  };
+  return { connect, constants: { NGHTTP2_CANCEL: 8 }, default: { connect } };
+});
 
 vi.mock("@chatcenter/shared", async () => ({
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
@@ -78,10 +116,14 @@ import { personalAllows, PERSONAL_DEFAULTS, type Personal } from "../services/pe
 import {
   fcmConfig, buildFcmMessage, isDeadToken, mobileLink, signAssertion, sendPushToUser, resetPushSenderState,
 } from "../services/push-sender";
+import { apnsConfig, signApnsJwt, buildApnsRequest, collapseId, isDeadApnsToken, APNS_HOSTS } from "../services/apns-sender";
 import type { SystemEvent } from "../services/event-emitter.service";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const PEM = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+// An Apple .p8 is a PKCS#8 P-256 key.
+const ec = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const P8 = ec.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
 let seq = 0;
 const ev = (type: string, data: Record<string, unknown> = {}, metadata: Record<string, unknown> = {}) =>
@@ -116,6 +158,13 @@ const configure = () => {
   process.env.FCM_PRIVATE_KEY = PEM.replace(/\n/g, "\\n");
 };
 const unconfigure = () => { delete process.env.FCM_PROJECT_ID; delete process.env.FCM_CLIENT_EMAIL; delete process.env.FCM_PRIVATE_KEY; };
+const configureApns = () => {
+  process.env.APNS_KEY_ID = "KEY123ABCD";
+  process.env.APNS_TEAM_ID = "TEAM456EFG";
+  process.env.APNS_PRIVATE_KEY = P8.replace(/\n/g, "\\n");
+};
+const unconfigureApns = () => { for (const k of ["APNS_KEY_ID", "APNS_TEAM_ID", "APNS_PRIVATE_KEY", "APNS_BUNDLE_ID", "APNS_ENV"]) delete process.env[k]; };
+const iphone = (id: string, userId: string, tenantId = "T") => ({ id, userId, tenantId, token: `a1b2${id}`, platform: "ios", provider: "apns" });
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -126,9 +175,11 @@ beforeEach(() => {
   fcmReply = () => ({ status: 200, json: { name: "projects/p/messages/1" } });
   resetPushSenderState();
   configure();
+  unconfigureApns();
   installFetch();
+  A.connects = []; A.requests = []; A.reply = () => ({ status: 200 });
 });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); unconfigure(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); unconfigure(); unconfigureApns(); });
 
 describe("★ personalAllows: push", () => {
   const p = (over: Partial<Personal> = {}): Personal => ({ ...PERSONAL_DEFAULTS, ...over });
@@ -323,7 +374,7 @@ describe("★ dead tokens", () => {
       return { status: 200, json: {} };
     };
     const out = await sendPushToUser({ user: { id: "dana", tenantId: "T", email: "dana@x.test" }, event: ev("conversation.escalated", {}, { conversationId: "c1" }), tpl: { title: "T", body: "B" } });
-    expect(out).toEqual({ status: "sent", sent: 1, failed: 3, removed: 2 });
+    expect(out).toEqual({ status: "sent", sent: 1, failed: 3, removed: 2, skipped: 0 });
     expect(H.devices.map((d) => d.id).sort()).toEqual(["fine", "flaky"]);
     expect(H.logs.filter((l) => l.status === "failed").map((l) => l.metadata.deviceId).sort()).toEqual(["dead", "flaky", "gone"]);
   });
@@ -394,5 +445,123 @@ describe("★ conversation.waiting: push only while nobody is assigned", () => {
     expect(fcmCalls).toHaveLength(0);
     expect(H.inApp.map((r) => r.userId)).toEqual(["matan"]);
     expect(H.emails.map((e) => e.to)).toEqual(["matan@x.test"]);
+  });
+});
+
+describe("★ iOS straight to Apple (APNs)", () => {
+  beforeEach(() => configureApns());
+  const send = (event = ev("conversation.escalated", {}, { conversationId: "c1" })) =>
+    sendPushToUser({ user: { id: "dana", tenantId: "T" }, event, tpl: { title: "T", body: "B" } });
+
+  it("config: escaped newlines restored, bundle id defaulted, production unless APNS_ENV=sandbox", () => {
+    const cfg = apnsConfig()!;
+    expect(cfg.privateKey).toBe(P8.trim());
+    expect(cfg.bundleId).toBe("il.co.gotcha.app");
+    expect(cfg.host).toBe(APNS_HOSTS.production);
+    expect(apnsConfig({ ...process.env, APNS_ENV: "sandbox", APNS_BUNDLE_ID: "x.y" })).toMatchObject({ host: "https://api.sandbox.push.apple.com", bundleId: "x.y" });
+    expect(apnsConfig({ APNS_KEY_ID: "k", APNS_TEAM_ID: "t" } as any)).toBeNull();
+  });
+
+  it("the provider token is ES256 with kid = key id and iss = team id", () => {
+    const jwt = signApnsJwt(apnsConfig()!, 1_000_000);
+    const [h, c, sig] = jwt.split(".");
+    expect(JSON.parse(Buffer.from(h!, "base64url").toString())).toEqual({ alg: "ES256", kid: "KEY123ABCD" });
+    expect(JSON.parse(Buffer.from(c!, "base64url").toString())).toEqual({ iss: "TEAM456EFG", iat: 1_000_000 });
+    // JWS wants raw r||s (64 bytes), not DER.
+    expect(Buffer.from(sig!, "base64url")).toHaveLength(64);
+    expect(cryptoVerify("sha256", Buffer.from(`${h}.${c}`), { key: ec.publicKey, dsaEncoding: "ieee-p1363" }, Buffer.from(sig!, "base64url"))).toBe(true);
+  });
+
+  it("headers and payload: topic, alert, priority 10, collapse and thread per conversation, the mobile link", async () => {
+    H.devices = [iphone("p1", "dana")];
+    await send();
+    expect(A.connects).toEqual(["https://api.push.apple.com"]);
+    const { headers, body } = A.requests[0]!;
+    expect(headers).toMatchObject({
+      ":method": "POST", ":path": "/3/device/a1b2p1",
+      "apns-topic": "il.co.gotcha.app", "apns-push-type": "alert", "apns-priority": "10", "apns-collapse-id": "c1",
+    });
+    expect(headers.authorization).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+    expect(body).toEqual({ aps: { alert: { title: "T", body: "B" }, sound: "default", "thread-id": "c1" }, link: "/m/inbox/c1" });
+    expect(fcmCalls).toHaveLength(0); // an iPhone never goes through FCM
+    expect(H.logs[0]).toMatchObject({ channel: "push", status: "sent", metadata: { deviceId: "p1", provider: "apns" } });
+  });
+
+  it("apns-collapse-id is cut to 64 bytes, never mid-character", () => {
+    expect(collapseId("c".repeat(80))).toHaveLength(64);
+    const cut = collapseId("א".repeat(40)); // 2 bytes each
+    expect(Buffer.byteLength(cut)).toBe(64);
+    expect(collapseId("c1")).toBe("c1");
+    const { headers, payload } = buildApnsRequest(apnsConfig()!, { token: "t", title: "T", body: "B", jwt: "j" });
+    expect(headers).not.toHaveProperty("apns-collapse-id");
+    expect(payload).toEqual({ aps: { alert: { title: "T", body: "B" }, sound: "default" } });
+  });
+
+  it("the provider token is reused for ~50 minutes, then signed again", async () => {
+    H.devices = [iphone("p1", "dana")];
+    await send();
+    vi.setSystemTime(new Date("2026-11-03T12:49:00Z"));
+    await send();
+    vi.setSystemTime(new Date("2026-11-03T12:51:00Z"));
+    await send();
+    const auth = A.requests.map((r) => r.headers.authorization);
+    expect(auth[0]).toBe(auth[1]);
+    expect(auth[2]).not.toBe(auth[1]);
+  });
+
+  it("Apple refusing our provider token: signed afresh once, and sent", async () => {
+    H.devices = [iphone("p1", "dana")];
+    A.reply = (_t, n) => (n === 1 ? { status: 403, body: { reason: "ExpiredProviderToken" } } : { status: 200 });
+    const out = await send();
+    expect(out).toMatchObject({ sent: 1, failed: 0 });
+    expect(A.requests).toHaveLength(2);
+  });
+
+  it("410 Unregistered and 400 BadDeviceToken delete the row; other failures keep it", async () => {
+    H.devices = [iphone("gone", "dana"), iphone("bad", "dana"), iphone("big", "dana"), iphone("down", "dana"), iphone("ok", "dana")];
+    A.reply = (token) => {
+      if (token === "a1b2gone") return { status: 410, body: { reason: "Unregistered", timestamp: 1 } };
+      if (token === "a1b2bad") return { status: 400, body: { reason: "BadDeviceToken" } };
+      if (token === "a1b2big") return { status: 413, body: { reason: "PayloadTooLarge" } };
+      if (token === "a1b2down") return { status: 503, body: { reason: "ServiceUnavailable" } };
+      return { status: 200 };
+    };
+    const out = await send();
+    expect(out).toEqual({ status: "sent", sent: 1, failed: 4, removed: 2, skipped: 0 });
+    expect(H.devices.map((d) => d.id).sort()).toEqual(["big", "down", "ok"]);
+    expect(H.logs.find((l) => l.metadata.deviceId === "gone").error).toBe("APNs 410 Unregistered (device removed)");
+    expect(isDeadApnsToken(400, "BadTopic")).toBe(false);
+  });
+
+  it("one person, two phones: the Android through FCM, the iPhone through APNs", async () => {
+    H.devices = [device("d1", "dana"), iphone("p1", "dana")];
+    const out = await send();
+    expect(out).toMatchObject({ sent: 2, skipped: 0 });
+    expect(fcmCalls.map((c) => c.body.message.token)).toEqual(["tok-d1"]);
+    expect(A.requests.map((r) => r.headers[":path"])).toEqual(["/3/device/a1b2p1"]);
+  });
+
+  it("APNs not configured: the iPhone is skipped without a row, the Android still gets it", async () => {
+    unconfigureApns();
+    H.devices = [device("d1", "dana"), iphone("p1", "dana")];
+    const out = await send();
+    expect(out).toEqual({ status: "sent", sent: 1, failed: 0, removed: 0, skipped: 1 });
+    expect(A.requests).toHaveLength(0);
+    expect(H.logs.map((l) => l.metadata.deviceId)).toEqual(["d1"]);
+  });
+
+  it("FCM not configured: the Android is skipped, the iPhone still gets it", async () => {
+    unconfigure();
+    H.devices = [device("d1", "dana"), iphone("p1", "dana")];
+    const out = await send();
+    expect(out).toEqual({ status: "sent", sent: 1, failed: 0, removed: 0, skipped: 1 });
+    expect(fcmCalls).toHaveLength(0);
+    expect(A.requests).toHaveLength(1);
+  });
+
+  it("through the fan-out: an escalation reaches the admin's iPhone", async () => {
+    H.devices = [iphone("p1", "dana")];
+    await processEvent(ev("conversation.escalated", {}, { conversationId: "c5" }));
+    expect(A.requests.map((r) => r.body.link)).toEqual(["/m/inbox/c5"]);
   });
 });

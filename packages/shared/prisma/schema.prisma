@@ -8083,7 +8083,7 @@ model UserNotificationPreference {
 
 // ─── Push devices (mobile app) ─────────────────────────────
 //
-// One row per FCM registration token. The token is the identity of an app
+// One row per push token (FCM or APNs). The token is the identity of an app
 // install, not of a person: a shared phone that signs in as someone else
 // re-points its row (POST /api/notifications/devices), so a token is unique
 // across the whole table rather than per user. The provider reporting the
