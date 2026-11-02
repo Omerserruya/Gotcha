@@ -1,0 +1,75 @@
+# Runs on the mobile-android branch, which carries only mobile/ on top of main.
+# Builds the GOTCHA Android app (mobile/) into an installable debug APK.
+#
+# A debug build pointed at dev (GOTCHA_ENV=dev): for installing on a test
+# phone by hand, not for the Play Store. The APK is the run's artifact
+# ("gotcha-android-dev"), kept 14 days.
+#
+# google-services.json is not in git; it comes from the repository secret
+# GOOGLE_SERVICES_JSON (the file's contents, as they are). Without it the
+# build still succeeds, but push notifications will not work.
+name: Android APK
+
+on:
+  push:
+    branches: [mobile-android]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install Capacitor
+        run: npm ci --no-audit --no-fund
+
+      - name: Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON is not set: the APK will build without push."
+          fi
+
+      - name: Sync (dev)
+        run: GOTCHA_ENV=dev npx cap sync android
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gotcha-android-dev
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error

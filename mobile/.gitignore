@@ -1,0 +1,21 @@
+# Dependencies (never commit; and never symlink from another checkout)
+node_modules/
+
+# Generated at every cap command by capacitor.config.js
+www/env.js
+
+# Firebase / Google config: provided by the owner, never committed
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
+
+# Signing material
+*.keystore
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+keystore.properties
+
+# OS / editor
+.DS_Store
+*.log

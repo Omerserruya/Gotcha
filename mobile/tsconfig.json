@@ -1,0 +1,16 @@
+{
+  "//": "Editor type-checking for capacitor.config.js only. TypeScript is NOT a dependency of mobile/.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "files": ["capacitor.config.js"]
+}
