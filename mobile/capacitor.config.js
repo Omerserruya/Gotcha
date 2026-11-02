@@ -133,7 +133,7 @@ const config = {
       launchShowDuration: 1500,
       launchAutoHide: true,
       launchFadeOutDuration: 250,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#121212',
       showSpinner: false,
       androidScaleType: 'CENTER_INSIDE',
       splashFullScreen: false,
@@ -144,14 +144,15 @@ const config = {
     // WebView honest about insets and exposes --safe-area-inset-* to the page.
     SystemBars: {
       insetsHandling: 'css',
-      style: 'LIGHT',
+      // The frame behind the status bar is the product's dark ground: light icons.
+      style: 'DARK',
     },
 
     // iOS, and Android below 15 (where backgroundColor / overlaysWebView still apply).
     StatusBar: {
       // Capacitor naming: 'LIGHT' = dark text for a light background.
-      style: 'LIGHT',
-      backgroundColor: '#FFFFFF',
+      style: 'DARK',
+      backgroundColor: '#121212',
       overlaysWebView: false,
     },
   },
