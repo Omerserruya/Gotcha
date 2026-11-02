@@ -216,6 +216,7 @@
     font-weight: var(--font-weight-semibold);
     line-height: 64px;
     text-align: center;
+    letter-spacing: var(--letter-spacing-heading);
   }
 
   .name {
@@ -224,6 +225,7 @@
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
     overflow-wrap: anywhere;
+    letter-spacing: var(--letter-spacing-heading);
   }
 
   .facts {

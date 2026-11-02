@@ -146,6 +146,7 @@
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
     overflow-wrap: anywhere;
+    letter-spacing: var(--letter-spacing-hero);
   }
 
   .error {
@@ -185,6 +186,7 @@
     font-size: var(--font-size-heading);
     font-weight: var(--font-weight-semibold);
     font-variant-numeric: tabular-nums;
+    letter-spacing: var(--letter-spacing-heading);
   }
 
   .fields {

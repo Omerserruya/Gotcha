@@ -3,6 +3,7 @@
 import { z } from 'zod';
 
 import { serverApi } from '@/api/client/server-api';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 import { notificationEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -31,6 +32,7 @@ export async function registerPushDevice(token: string, platform: PushPlatform):
     });
     return true;
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('mobile.push_register_failed', { cause, platform });
     return false;
   }
@@ -50,6 +52,7 @@ export async function forgetPushDevice(token: string): Promise<void> {
       raw: true,
     });
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('mobile.push_forget_failed', { cause });
   }
 }
