@@ -934,6 +934,12 @@ export async function fetchWooStoreCurrency(credentials: Record<string, any>, co
   }
 }
 
+/** WOO_REQUEST_TIMEOUT_MS, default 20s. */
+export function wooRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.WOO_REQUEST_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 20_000;
+}
+
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
   // SSRF guard: storeUrl is free-form tenant config. Block private/metadata
   // targets at DNS resolution before dispatching.
@@ -946,7 +952,12 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
     },
     body: body ? JSON.stringify(body) : undefined,
   };
-  const res = await fetch(url, init);
+  // A store that does not answer must not hold a customer's turn (Tehila,
+  // 2026-11-02: 12-24s per call, no cap). Sized above a slow-but-working store.
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(wooRequestTimeoutMs()) }).catch((err: any) => {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new Error("woocommerce_timeout: the store did not answer in time");
+    throw err;
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`woocommerce_${res.status}: ${text.slice(0, 240)}`);

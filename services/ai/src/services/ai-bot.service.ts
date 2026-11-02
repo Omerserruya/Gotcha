@@ -13,6 +13,7 @@
  * Spec rule #3: KB retrieval is gated ONLY by `shouldRetrieveKB(state, ...)`.
  */
 
+import { cachedTitlesLanguage, type TitlesLanguage } from "./catalogue-language.service";
 import {
   prisma,
   buildAgentToolsForAIAgent,
@@ -931,10 +932,34 @@ function renderCustomerInfoBlock(
   return lines.join("\n");
 }
 
+/**
+ * How the search query is written, by the store's title language (2026-11-02:
+ * a Hebrew catalogue was searched in English). Unknown: the customer's word first.
+ */
+export function searchQueryInstruction(lang: TitlesLanguage | null): string {
+  if (lang === "en") {
+    return `The query argument matches product TITLE and is in ENGLISH, so set it to the singular English noun for what the customer asked ("shirt", "tank top", "coat"; never a store category name or another shop's example) and put nothing else in it (${HEBREW_PRODUCT_GLOSSARY}) - no price, no colour, no Hebrew. `;
+  }
+  if (lang === "he") {
+    return `The query argument matches product TITLE, and this store writes its titles in HEBREW, so set it to the singular Hebrew noun for what the customer asked ("מטפחת", "חולצה", "מעיל"; never a store category name or another shop's example) and put nothing else in it - no price, no colour, no English. `;
+  }
+  return `The query argument matches product TITLE. Set it to the customer's own word for what they asked, as a single noun in the singular (never a store category name or another shop's example), and put nothing else in it - no price, no colour. `;
+}
+
+/** How long a turn may spend calling tools before it must answer (AI_TOOL_BUDGET_MS, default 40s). */
+export function toolBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.AI_TOOL_BUDGET_MS);
+  return Number.isFinite(n) && n > 0 ? n : 40_000;
+}
+export const TOOL_BUDGET_NOTE =
+  "Time is up for looking things up in this turn. Answer the customer now from what you already found, " +
+  "showing what you have. Do not call any tool, and do not say you will check something.";
+
 const PRODUCT_SEARCH_TOOL = /^(woocommerce\.list_products|shopify\.search_products)$/;
 const EMPTY_SEARCH_NOTE =
   "No product TITLE matched this search. That does NOT mean the store lacks it, and it says nothing about stock. " +
-  "If you have not yet, search once more with a single English word in the singular (\"coat\", \"hoodie\"). " +
+  "If you have not yet, search once more with a single word in the singular in the OTHER language than the one you used " +
+  "(Hebrew if you searched in English, English if you searched in Hebrew: \"מטפחת\" / \"scarf\"). " +
   "If that is empty too, tell the customer you could not find it by that name (\"לא מצאתי\") and offer another way to look. " +
   "Never say it is out of stock, and never say the store does not carry it.";
 
@@ -3010,7 +3035,8 @@ async function generateAIBotReplyInner(
           role: "system",
           content:
             `Enough information exists to search. Call ${disc.decision.tool} NOW. ` +
-            `The query argument matches product TITLE and is in ENGLISH, so set it to the singular English noun for what the customer asked ("shirt", "tank top", "coat"; never a store category name or another shop's example) and put nothing else in it (${HEBREW_PRODUCT_GLOSSARY}) - no price, no colour, no Hebrew. ` +
+            // Not yet known: English, as before (an English catalogue must not regress); the empty-search note then tries the other language.
+            searchQueryInstruction((await cachedTitlesLanguage(opts.tenantId, disc.decision.tool).catch(() => null)) ?? "en") +
             // This used to end "apply budget/length/flex yourself when choosing
             // which products to present", which was the only option back when
             // the tool took a query and nothing else. It is now the bug: a
@@ -3448,7 +3474,8 @@ async function generateAIBotReplyInner(
     chatMessages.push({
       role: "system",
       content:
-        "The customer named a kind of product. Search for it now with woocommerce.list_products (the English noun) so it shows as a live card; " +
+        "The customer named a kind of product. Search for it now with woocommerce.list_products, in the customer's own word first " +
+        "(a store's titles are usually in its customers' language), so it shows as a live card; " +
         "never describe a product or its price from the knowledge text.",
     });
   }
@@ -3461,6 +3488,14 @@ async function generateAIBotReplyInner(
   let afterTools = false;
   for (let round = 0; round < (choiceShortCircuit ? 0 : 3); round++) {
     const preSearch = round === 0 && discoveryPreSearch ? discoveryPreSearch : null;
+    // The turn's tool budget (Tehila 2026-11-02: four store calls at 12-24s
+    // each made an 81s turn; the worker gave up at 60s and handed a product
+    // question to a person). Past it, this round answers from what was found.
+    const overToolBudget = round > 0 && !preSearch && Date.now() - turnStartedAt > toolBudgetMs();
+    if (overToolBudget) {
+      console.warn(`[ai-bot] tool budget spent (${Date.now() - turnStartedAt}ms) - answering without more tools conv=${opts.conversationId}`);
+      chatMessages.push({ role: "system", content: TOOL_BUDGET_NOTE });
+    }
     if (preSearch) console.log(`[ai-bot][presearch] ${preSearch.tool} ${JSON.stringify(preSearch.args)} conv=${opts.conversationId}`);
     const response: Awaited<ReturnType<typeof generateResponse>> = preSearch ? {
       content: "",
@@ -3481,9 +3516,11 @@ async function generateAIBotReplyInner(
       // Discovery says we are ready and the real product tool is offered:
       // force it on the first round so the model executes a real search
       // instead of narrating one. Cleared after round 0.
-      ...(round === 0 && discoveryForceTool
-        ? { toolChoice: { type: "function", function: { name: discoveryForceTool } } }
-        : {}),
+      ...(overToolBudget
+        ? { toolChoice: "none" }
+        : round === 0 && discoveryForceTool
+          ? { toolChoice: { type: "function", function: { name: discoveryForceTool } } }
+          : {}),
       metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
       ...(afterTools && answerEffort ? { reasoningEffort: answerEffort } : replyEffort ? { reasoningEffort: replyEffort } : {}),
       signal,
@@ -3771,15 +3808,21 @@ async function generateAIBotReplyInner(
                 // 2026-10-26: Striped Cotton Shirt, blue only, on "יש חולצה לבנה?").
                 const colourHits = new Set<string>();
                 const checkedUpTo = Math.min(colours.length ? 4 : 3, envlp.candidates.length);
+                // Read together, used in order: one at a time against a slow
+                // store was most of an 81s turn (Tehila, 2026-11-02).
+                const fetched = await Promise.all(envlp.candidates.slice(0, checkedUpTo).map((c) =>
+                  /^\d{1,12}$/.test(String(c.productId))
+                    ? executeAdapterTool({
+                      tenantId: opts.tenantId,
+                      toolFunctionName: "woocommerce.list_product_variations",
+                      args: { product_id: String(c.productId), per_page: 50 },
+                      accessScope: opts.onboardingTest ? "internal" : "customer",
+                    }).catch(() => null)
+                    : Promise.resolve(null)));
                 for (let i = 0; i < checkedUpTo; i++) {
                   const id = envlp.candidates[i].productId;
                   if (!/^\d{1,12}$/.test(String(id))) continue;
-                  const got = await executeAdapterTool({
-                    tenantId: opts.tenantId,
-                    toolFunctionName: "woocommerce.list_product_variations",
-                    args: { product_id: String(id), per_page: 50 },
-                    accessScope: opts.onboardingTest ? "internal" : "customer",
-                  }).catch(() => null);
+                  const got = fetched[i];
                   if (got?.ok && Array.isArray(got.result) && got.result.length) {
                     let mark = "";
                     if (colours.length) {
@@ -5686,10 +5729,14 @@ async function generateAIBotReplyInner(
         ),
       });
       if (guarded.changed) {
-        console.warn(
-          `[ai-bot] reply guard rewrote the outgoing message conv=${opts.conversationId}: ` +
-            guarded.findings.map((f) => `${f.kind}(${f.match})`).join(", "),
-        );
+        // A whitespace tidy alone is a change with no findings: not worth a
+        // warning (it read as "the guard rewrote the reply" in an incident).
+        if (guarded.findings.length) {
+          console.warn(
+            `[ai-bot] reply guard rewrote the outgoing message conv=${opts.conversationId}: ` +
+              guarded.findings.map((f) => `${f.kind}(${f.match})`).join(", "),
+          );
+        }
         replyText = guarded.text;
       }
     } catch (err: any) {

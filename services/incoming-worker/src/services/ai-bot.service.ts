@@ -175,8 +175,12 @@ export async function processAIBot(
   //   - runs the tool-calling loop (3 rounds)
   //   - returns reply / escalation / awaiting-approval signal
   let result: AIBotReplyResult;
+  // A slow turn (a slow store, 81s on 2026-11-02) is not a failure: past
+  // holdingAfterMs the customer is told we are checking, and the real reply
+  // follows when it lands. Only an error, or no reply within aiReplyTimeoutMs,
+  // hands the conversation to a person.
   try {
-    const res = await axios.post(
+    const res = await withHolding(() => axios.post(
       `${AI_SERVICE_URL}/api/ai-bot/reply`,
       {
         tenantId,
@@ -203,9 +207,10 @@ export async function processAIBot(
       },
       {
         headers: { "X-Internal-Key": INTERNAL_SERVICE_KEY, "Content-Type": "application/json" },
-        timeout: 60_000,
+        timeout: aiReplyTimeoutMs(),
       },
-    );
+    ), () => sendHoldingMessage(tenantId, conversationId, sendContext, incomingMessage)
+      .catch((err: any) => console.warn(`[AI-Bot] holding message failed conv=${conversationId}:`, err?.message)), holdingAfterMs());
     result = res.data as AIBotReplyResult;
   } catch (err: any) {
     // 499 - AI service aborted the in-flight LLM call because a newer
@@ -874,6 +879,77 @@ export async function getBusinessHoursState(
  * AI reply - at most once per closed window per conversation, so a customer
  * sending three messages overnight gets one notice, not three.
  */
+/**
+ * Await `call`; if it has not settled after `afterMs`, run `onHolding` once
+ * (the customer's "one moment"). The call's own result or error is returned
+ * unchanged, and the holding step never runs after it settled.
+ */
+export async function withHolding<T>(call: () => Promise<T>, onHolding: () => Promise<unknown> | void, afterMs: number): Promise<T> {
+  const timer = setTimeout(() => { void onHolding(); }, afterMs);
+  try {
+    return await call();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The worker waits this long for the AI's reply (AI_REPLY_TIMEOUT_MS, default 150s); past it is a failure. */
+export function aiReplyTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.AI_REPLY_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 150_000;
+}
+
+/** After this long with no reply the customer is told we are checking (AI_HOLDING_AFTER_MS, default 30s). */
+export function holdingAfterMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.AI_HOLDING_AFTER_MS);
+  return Number.isFinite(n) && n > 0 ? n : 30_000;
+}
+
+const HEBREW = /[\u0590-\u05FF]/;
+
+/** One short, neutral holding line in the conversation's language. Fixed text: no model call on a slow turn. */
+export function holdingLine(hebrew: boolean): string {
+  return hebrew ? "רגע אחד, בודקים את זה בשבילך." : "One moment, checking that for you.";
+}
+
+/** Send the holding line once, the way the approval bridge ack is sent. */
+export async function sendHoldingMessage(
+  tenantId: string,
+  conversationId: string,
+  sendContext: any,
+  incomingMessage: string,
+): Promise<void> {
+  let hebrew = HEBREW.test(incomingMessage ?? "");
+  if (!hebrew) {
+    const recent = await prisma.message.findMany({
+      where: { tenantId, conversationId, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" }, take: 5, select: { body: true },
+    }).catch(() => [] as Array<{ body: string | null }>);
+    hebrew = recent.some((m) => HEBREW.test(m.body ?? ""));
+  }
+  const text = holdingLine(hebrew);
+  const adapter = getOutboundAdapter(sendContext.channel);
+  if (!adapter) return;
+  const extId = await adapter.sendTextMessage(
+    sendContext.credentials,
+    sendContext.channelAccountExternalId,
+    sendContext.recipientId,
+    text,
+    undefined,
+    await emailThreadFor(tenantId, conversationId, sendContext.channel),
+  );
+  const msg = await prisma.message.create({
+    data: {
+      tenantId, conversationId, channel: sendContext.channel, direction: "OUTBOUND",
+      body: text, senderName: "AI Bot", externalMessageId: extId, status: extId ? "SENT" : "FAILED",
+      metadata: { source: "ai_bot", kind: "holding" },
+    },
+  });
+  if (extId) await prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: msg.createdAt } });
+  await publishEvent({ event: "message:new", tenantId, data: { message: msg, conversationId, channel: sendContext.channel } });
+  console.log(`[AI-Bot] slow turn: holding message sent conv=${conversationId}`);
+}
+
 async function sendClosedHoursAutoReply(
   tenantId: string,
   conversationId: string,

@@ -18,6 +18,7 @@ import {
   readShopifyLiveChatConfig,
   projectVisitorMessage,
   type ServiceEvent,
+  visitorSenderName,
 } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 // Deep import: the pure rule, because this service's tests mock the barrel.
@@ -88,7 +89,8 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
         id: message.id,
         direction: message.direction,
         body: message.body ?? "",
-        senderName: message.senderName ?? null,
+        // A person's first name only, never their email (visitorSenderName).
+        senderName: visitorSenderName(message.senderName),
         createdAt: message.createdAt ?? new Date().toISOString(),
         commerce,
       },
