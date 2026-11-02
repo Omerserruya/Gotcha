@@ -73,7 +73,8 @@ export async function MobileCustomerChips({
         data-testid="mobile-customer-chip-quiet"
       >
         <span>{t('customers.chips.quiet')}</span>
-        {quiet === null ? null : (
+        {/* Unknown or none: the chip bare, as the design leaves an empty one. */}
+        {quiet === null || quiet.count === 0 ? null : (
           <span className={ui.chipCount}>
             {format.number(quiet.count)}
             {quiet.capped ? '+' : ''}

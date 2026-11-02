@@ -2463,7 +2463,7 @@
   .composer[data-variant='phone'] {
     flex-flow: row wrap;
     align-items: flex-end;
-    gap: var(--space-8);
+    gap: var(--space-8) 0;
     padding-block: 0 var(--space-10);
     padding-inline: var(--space-8);
     border: 0;
@@ -2490,7 +2490,6 @@
     border-start-start-radius: 24px;
     border-end-start-radius: 24px;
     background-color: var(--mobile-surface);
-    box-shadow: var(--mobile-shadow-bubble);
     font-size: var(--font-size-lead);
     color: var(--mobile-ink);
   }
@@ -2516,7 +2515,6 @@
     block-size: 48px;
     border-radius: 0;
     background-color: var(--mobile-surface);
-    box-shadow: var(--mobile-shadow-bubble);
     color: var(--text-muted);
   }
 
@@ -2530,7 +2528,7 @@
 
   .composer[data-variant='phone'] .composerSend {
     order: 3;
-    margin-inline-start: 0;
+    margin-inline-start: var(--space-8);
     inline-size: 48px;
     block-size: 48px;
     border-radius: var(--radius-round);
