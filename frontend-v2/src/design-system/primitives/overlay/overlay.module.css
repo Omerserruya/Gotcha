@@ -140,6 +140,48 @@
     z-index: var(--z-panel);
   }
 
+  /* ── Sheet: the phone's dialog, from the bottom edge ───────────────── */
+  .sheetOverlay {
+    position: fixed;
+    inset: 0;
+    background-color: var(--mobile-scrim);
+    z-index: var(--z-overlay);
+  }
+
+  .sheetContent {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    max-block-size: 88dvh;
+    overflow-y: auto;
+    padding-block: var(--space-10) calc(var(--space-18) + env(safe-area-inset-bottom));
+    padding-inline: var(--space-18);
+    border-start-start-radius: 26px;
+    border-start-end-radius: 26px;
+    background-color: var(--mobile-surface);
+    color: var(--mobile-ink);
+    scrollbar-width: none;
+    z-index: var(--z-dialog);
+  }
+
+  .sheetHandle {
+    align-self: center;
+    inline-size: 38px;
+    block-size: var(--space-4);
+    border-radius: var(--radius-mark);
+    background-color: var(--mobile-handle);
+  }
+
+  .sheetTitle {
+    margin: 0;
+    font-size: var(--font-size-heading);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
   /* The submenu's `›`, pushed to the item's end. */
   .subArrow {
     margin-inline-start: auto;

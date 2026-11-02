@@ -1,8 +1,13 @@
 import { getTranslations } from 'next-intl/server';
 
+import type { Campaign } from '@/api/contracts/outreach';
 import { loadOutreach } from '@/features/outreach/load-outreach';
-import { MobileCampaignList } from '@/features/mobile/outreach/MobileCampaigns';
-import styles from '@/features/mobile/outreach/mobile-outreach.module.css';
+import {
+  MobileCampaignChips,
+  MobileCampaignList,
+} from '@/features/mobile/outreach/MobileCampaigns';
+import { groupOf, parseGroup } from '@/features/mobile/outreach/mobile-outreach';
+import ui from '@/features/mobile/mobile-ui.module.css';
 import { OnWebsite } from '@/features/mobile/OnWebsite';
 import { MobileBar } from '@/shell/mobile/MobileBar';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -12,40 +17,86 @@ import { pageMetadata } from '@/shell/page-metadata';
  *
  * ★ The desktop's loader (`loadOutreach`), so a campaign's status and
  *   numbers are the website's. Creating, sending and stopping stay there,
- *   behind the one link at the foot.
+ *   behind the one link at the foot - so no "new outreach" button here.
+ *
+ * ★ The chips filter by `?show=`, counted from the whole list (the route
+ *   returns every campaign in one read). The design's figures card is not
+ *   drawn: delivered and replied are never counted and revenue has no
+ *   inputs, so its three numbers would be invented.
  *
  * ★ A failed read and no campaigns are opposite facts: one means nothing
  *   has gone out, the other that you do not know whether anything is going
  *   out right now. Each is its own sentence, as on the desktop.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ readonly show?: string }>;
+}) {
   const t = await getTranslations('mobile');
   const to = await getTranslations('outreach');
+  const show = parseGroup((await searchParams).show);
   const { inFlight, finished, unavailable } = await loadOutreach();
-  const website = <OnWebsite path="/outreach" label={t('outreach.website')} />;
+  const website = (
+    <p className={ui.foot}>
+      <OnWebsite path="/outreach" label={t('outreach.website')} className={ui.footLink} />
+    </p>
+  );
 
-  return (
-    <div className={styles.screen} data-testid="mobile-outreach">
-      <MobileBar title={t('outreach.title')} />
-      <div className={styles.scroll}>
-        {unavailable || inFlight === null || finished === null ? (
-          <p className={styles.note} role="status" data-testid="mobile-outreach-unavailable">
+  if (unavailable || inFlight === null || finished === null) {
+    return (
+      <div className={ui.screen} data-testid="mobile-outreach">
+        <MobileBar title={t('outreach.title')} />
+        <div className={ui.scroll}>
+          <p className={ui.empty} role="status" data-testid="mobile-outreach-unavailable">
             {to('unavailable')}
           </p>
-        ) : inFlight.length === 0 && finished.length === 0 ? (
-          <div data-testid="mobile-outreach-empty">
-            <p className={styles.note}>{to('none')}</p>
-            <p className={styles.noteBody}>{to('noneBody')}</p>
+          {website}
+        </div>
+      </div>
+    );
+  }
+
+  const all = [...inFlight, ...finished];
+  const shown = (list: readonly Campaign[]) =>
+    show === null ? list : list.filter((c) => groupOf(c.status) === show);
+  const now = new Date();
+  const going = shown(inFlight);
+  const earlier = shown(finished);
+
+  return (
+    <div className={ui.screen} data-testid="mobile-outreach">
+      <MobileBar title={t('outreach.title')} />
+      <div className={ui.scroll}>
+        {all.length === 0 ? (
+          <div className={ui.empty} data-testid="mobile-outreach-empty">
+            <span className={ui.emptyTitle}>{to('none')}</span>
+            <span>{to('noneBody')}</span>
           </div>
         ) : (
           <>
-            <p className={styles.lead}>
-              {to('statusLine', {
-                running: inFlight.filter((c) => c.status === 'SENDING').length,
-                scheduled: inFlight.filter((c) => c.status === 'SCHEDULED').length,
-              })}
-            </p>
-            <MobileCampaignList campaigns={[...inFlight, ...finished]} now={new Date()} />
+            <MobileCampaignChips campaigns={all} show={show} />
+            {going.length > 0 ? (
+              <section aria-labelledby="mobile-outreach-going">
+                <h2 className={ui.section} id="mobile-outreach-going">
+                  {t('outreach.going')}
+                </h2>
+                <MobileCampaignList campaigns={going} now={now} />
+              </section>
+            ) : null}
+            {earlier.length > 0 ? (
+              <section aria-labelledby="mobile-outreach-earlier">
+                <h2 className={ui.section} id="mobile-outreach-earlier">
+                  {t('outreach.earlier')}
+                </h2>
+                <MobileCampaignList campaigns={earlier} now={now} />
+              </section>
+            ) : null}
+            {going.length === 0 && earlier.length === 0 ? (
+              <p className={ui.empty} data-testid="mobile-outreach-none-here">
+                {t('outreach.noneHere')}
+              </p>
+            ) : null}
           </>
         )}
         {website}

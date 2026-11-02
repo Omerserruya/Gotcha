@@ -89,3 +89,43 @@ export function amountOf(approval: Pick<Approval, 'facts'>, locale: string): str
     currency ? { style: 'currency', currency, maximumFractionDigits: 0 } : {},
   ).format(amount);
 }
+
+/** A card's one tag, in the design's five tones: danger, money, the AI's own, the rest. */
+export type TagTone = 'bad' | 'warn' | 'ai' | 'mute';
+
+export function tagTone(tag: string): TagTone {
+  if (tag === 'IRREVERSIBLE' || tag === 'HIGH') return 'bad';
+  if (tag === 'FINANCIAL') return 'warn';
+  if (tag === 'PLAN' || tag === 'SYSTEM_COPILOT') return 'ai';
+  return 'mute';
+}
+
+/** A deadline inside the hour, or past it: the time said in the accent. */
+export function isUrgent(clock: RowClock): boolean {
+  return clock.kind !== 'waited';
+}
+
+/** The decisions taken on `now`'s calendar day, in the order given (newest first). */
+export function decidedOn(decided: readonly Approval[], now: Date): readonly Approval[] {
+  const day = now.toDateString();
+  return decided.filter(
+    (approval) =>
+      approval.decidedAt !== null && new Date(approval.decidedAt).toDateString() === day,
+  );
+}
+
+/**
+ * What a decided row says at its end: rejected, or approved - and of an
+ * approval, whether it RAN, as the desktop keeps the two apart. `approved`
+ * alone is a decision whose run is not known to have finished.
+ */
+export type DecidedOutcome = 'ran' | 'didntRun' | 'approved' | 'rejected';
+
+export function decidedOutcome(
+  approval: Pick<Approval, 'status' | 'executionState'>,
+): DecidedOutcome {
+  if (approval.status === 'REJECTED') return 'rejected';
+  if (approval.executionState === 'SUCCEEDED') return 'ran';
+  if (approval.executionState === 'FAILED') return 'didntRun';
+  return 'approved';
+}

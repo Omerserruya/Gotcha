@@ -1,4 +1,25 @@
 {
+  "tabs": {
+    "home": "בית",
+    "inbox": "אינבוקס",
+    "approvals": "אישורים",
+    "outreach": "יוצא",
+    "customers": "לקוחות"
+  },
+  "home": {
+    "today": "היום",
+    "handled": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת היום} other {GOTCHA טיפלה ב־# שיחות היום}}",
+    "handledWaiting": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת} other {GOTCHA טיפלה ב־# שיחות}}{waiting, plural, =0 {, ואף שיחה לא מחכה לך} one {, ושיחה אחת מחכה לך} other {, ו־# מחכות לך}}",
+    "tiles": {
+      "conversations": "שיחות היום",
+      "byYourTeam": "על ידי הצוות",
+      "approvals": "אישורים מחכים"
+    },
+    "needsYou": "צריך אותך",
+    "open": "לשיחה",
+    "more": "{count, plural, one {עוד שיחה אחת ממתינה} other {עוד # שיחות ממתינות}}",
+    "updates": "עדכונים"
+  },
   "inbox": {
     "title": "שיחות",
     "views": "תצוגות",
@@ -8,7 +29,23 @@
     "back": "חזרה לשיחות",
     "openFailed": "לא הצלחנו לפתוח את השיחה",
     "notAvailable": "השיחה הזו לא זמינה לך",
-    "onWebsite": "פתיחה באתר"
+    "onWebsite": "פתיחה באתר",
+    "all": "הכל",
+    "search": "חיפוש לפי שם או טלפון",
+    "noMatch": "אין שיחות שמתאימות לחיפוש או לסינון",
+    "grounded": "GOTCHA עונה רק מתוך המידע של העסק שלכם",
+    "owner": {
+      "mine": "אצלכם",
+      "waiting": "ממתין בתור",
+      "gotcha": "GOTCHA",
+      "flow": "תהליך",
+      "resolved": "טופל"
+    },
+    "filter": {
+      "open": "סינון לפי ערוץ",
+      "title": "סינון לפי ערוץ",
+      "all": "כל הערוצים"
+    }
   },
   "account": {
     "menu": "חשבון",
@@ -19,18 +56,78 @@
     "title": "אישורים",
     "conversation": "לשיחה",
     "cancel": "ביטול",
-    "website": "החלטות קודמות ועריכה באתר"
+    "website": "החלטות קודמות ועריכה באתר",
+    "lead": "{count, plural, one {דבר אחד מחכה להחלטה שלך} other {# דברים מחכים להחלטה שלך}}. GOTCHA כבר עשתה את העבודה",
+    "leadNone": "שום דבר לא מחכה לך. GOTCHA ממשיכה לבד",
+    "views": "תצוגה",
+    "pending": "ממתינים",
+    "decided": "הוחלטו היום",
+    "details": "פרטים",
+    "emptyTitle": "אין מה לאשר כרגע",
+    "emptyBody": "GOTCHA תעדכן כשמשהו יצטרך אותך",
+    "decidedNone": "היום עוד לא הוחלט כלום",
+    "decidedUnavailable": "את ההחלטות של היום לא הצלחנו לקרוא כרגע",
+    "outcome": {
+      "ran": "בוצע",
+      "didntRun": "לא רץ",
+      "approved": "אושר",
+      "rejected": "נדחה"
+    },
+    "back": "חזרה לאישורים",
+    "gone": "הבקשה הזו כבר לא מחכה להחלטה. ייתכן שמישהו החליט עליה, או שהמועד שלה חלף.",
+    "editOnWebsite": "עריכה באתר",
+    "rejectTitle": "למה לדחות?",
+    "rejectSub": "הסיבה נשמרת עם ההחלטה"
   },
   "outreach": {
-    "title": "פנייה יזומה",
+    "title": "יוצא",
     "back": "חזרה לקמפיינים",
     "website": "יצירה ועריכה באתר",
-    "websiteOne": "הקמפיין הזה באתר"
+    "websiteOne": "הקמפיין הזה באתר",
+    "chipsLabel": "סינון קמפיינים",
+    "chips": {
+      "all": "הכל",
+      "live": "פעילים",
+      "sched": "מתוזמנים",
+      "done": "הסתיימו"
+    },
+    "going": "בתהליך",
+    "earlier": "קודם",
+    "noneHere": "אין כאן קמפיינים כרגע",
+    "replies": "תשובות"
   },
   "customers": {
     "title": "לקוחות",
     "back": "חזרה ללקוחות",
     "website": "עריכה באתר",
-    "conversations": "שיחות אחרונות"
+    "searchPlaceholder": "חיפוש לפי שם, טלפון או הזמנה",
+    "chipsLabel": "סינון לקוחות",
+    "chips": {
+      "everyone": "הכל",
+      "quiet": "בסיכון"
+    },
+    "count": "{count, plural, one {לקוח אחד} other {# לקוחות}} · פעילות אחרונה",
+    "noneQuiet": "אף אחד לא השתתק",
+    "channelsLabel": "{count, plural, one {כותב בערוץ אחד} other {כותב ב־# ערוצים}}",
+    "actionsLabel": "פעולות",
+    "call": "שיחה",
+    "spent": "סך קניות",
+    "history": "היסטוריה בכל הערוצים"
+  },
+  "thread": {
+    "menu": "פעולות בשיחה",
+    "website": "פתיחה באתר המלא",
+    "cancel": "ביטול",
+    "ai": {
+      "active": "AI פעיל",
+      "paused": "AI מושהה",
+      "pause": "השהיית ה‑AI בשיחה הזו",
+      "resume": "החזרת השיחה ל‑AI"
+    }
+  },
+  "copilot": {
+    "label": "Copilot",
+    "ready": "Copilot · תשובה מוכנה",
+    "more": "{count, plural, =1 {עוד אפשרות אחת} other {עוד # אפשרויות}}"
   }
 }

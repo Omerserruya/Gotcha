@@ -33,17 +33,19 @@ export async function ConversationStream({
   detail,
   conversationId,
   channel,
+  variant,
 }: {
   readonly detail: Promise<ConversationDetail>;
   readonly conversationId: string;
   readonly channel: string | null;
+  readonly variant?: 'phone';
 }) {
   const { messages } = await detail;
   // The platform refused the session during this render: sign-in, not "couldn't read".
   if (sessionRejected()) return <SessionEnded />;
   return (
     <>
-      <MessageStream messages={messages} channel={channel} />
+      <MessageStream messages={messages} channel={channel} variant={variant} />
       {/* After the stream, because it scrolls the stream: it must exist. */}
       <StreamPin conversationId={conversationId} />
     </>

@@ -2393,4 +2393,152 @@
     font-size: 12px;
     color: var(--text-subtle);
   }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE PHONE - `data-variant='phone'` (`GOTCHA Mobile App.dc.html`)
+   * ════════════════════════════════════════════════════════════════════════
+   * The same stream and the same composer, so the phone sends through the
+   * same actions and refuses what the website refuses; only the look is the
+   * phone's. The bubbles are larger and the customer's sits on the thread's
+   * warm ground with no border; a colleague's action is an amber note, not a
+   * rule across the screen. The composer is a white pill with the send
+   * button beside it, round and ink, and the rewrite chips and the channel's
+   * name stay on the website: the bar above already says where this goes.
+   */
+  .stream[data-variant='phone'] {
+    gap: var(--space-6);
+    padding-block: var(--space-12) var(--space-8);
+  }
+
+  .stream[data-variant='phone'] .message {
+    max-inline-size: 82%;
+    gap: var(--space-3);
+  }
+
+  .stream[data-variant='phone'] .bubble {
+    padding: var(--space-6) var(--space-9) 5px;
+    border: 0;
+    border-radius: 14px;
+    border-start-start-radius: var(--space-4);
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-bubble);
+    font-size: 15.5px;
+    line-height: 1.42;
+    color: var(--mobile-ink);
+  }
+
+  .stream[data-variant='phone'] .message[data-direction='OUTBOUND'] .bubble {
+    min-inline-size: 120px;
+    padding: 7px var(--space-10) var(--space-6);
+    border-radius: 14px;
+    border-start-end-radius: var(--space-4);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  .stream[data-variant='phone'] .meta {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .stream[data-variant='phone'] .divider {
+    align-self: center;
+    max-inline-size: 86%;
+    margin-block: var(--space-4);
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-10);
+    background-color: var(--mobile-tag-warn);
+    color: var(--mobile-tag-warn-text);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  .stream[data-variant='phone'] .divider::before,
+  .stream[data-variant='phone'] .divider::after {
+    content: none;
+  }
+
+  /* The composer: one row - the pill, then the send button - under whatever it has to say. */
+  .composer[data-variant='phone'] {
+    flex-flow: row wrap;
+    align-items: flex-end;
+    gap: var(--space-8);
+    padding-block: 0 var(--space-10);
+    padding-inline: var(--space-8);
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    overflow: visible;
+  }
+
+  .composer[data-variant='phone']:focus-within {
+    border-color: transparent;
+  }
+
+  .composer[data-variant='phone'] > * {
+    flex-basis: 100%;
+  }
+
+  .composer[data-variant='phone'] .composerInput {
+    order: 1;
+    flex: 1 1 0;
+    min-block-size: 48px;
+    box-sizing: border-box;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16) var(--space-4);
+    border-start-start-radius: 24px;
+    border-end-start-radius: 24px;
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-bubble);
+    font-size: var(--font-size-lead);
+    color: var(--mobile-ink);
+  }
+
+  .composer[data-variant='phone'] .composerInput::placeholder {
+    color: var(--text-subtle);
+  }
+
+  /* The bar's own children join the row: the pill's icons, then Send. */
+  .composer[data-variant='phone'] .composerBar {
+    display: contents;
+  }
+
+  .composer[data-variant='phone'] .composerDivider,
+  .composer[data-variant='phone'] .composerChips,
+  .composer[data-variant='phone'] .composerChannel {
+    display: none;
+  }
+
+  .composer[data-variant='phone'] .composerIcon {
+    order: 2;
+    inline-size: 34px;
+    block-size: 48px;
+    border-radius: 0;
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-bubble);
+    color: var(--text-muted);
+  }
+
+  /* The paperclip is the bar's last icon: it closes the pill. */
+  .composer[data-variant='phone'] .composerIcon[data-testid='composer-attach-file'] {
+    padding-inline-end: var(--space-8);
+    inline-size: 42px;
+    border-start-end-radius: 24px;
+    border-end-end-radius: 24px;
+  }
+
+  .composer[data-variant='phone'] .composerSend {
+    order: 3;
+    margin-inline-start: 0;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  .composer[data-variant='phone'] .composerActions {
+    order: 4;
+  }
 }

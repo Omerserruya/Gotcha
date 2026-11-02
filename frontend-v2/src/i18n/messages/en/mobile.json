@@ -1,4 +1,25 @@
 {
+  "tabs": {
+    "home": "Home",
+    "inbox": "Inbox",
+    "approvals": "Approvals",
+    "outreach": "Outbound",
+    "customers": "Customers"
+  },
+  "home": {
+    "today": "Today",
+    "handled": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation today} other {GOTCHA handled # conversations today}}",
+    "handledWaiting": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation} other {GOTCHA handled # conversations}}{waiting, plural, =0 {, and none are waiting for you} one {, and one is waiting for you} other {, and # are waiting for you}}",
+    "tiles": {
+      "conversations": "Conversations today",
+      "byYourTeam": "By your team",
+      "approvals": "Approvals waiting"
+    },
+    "needsYou": "Needs you",
+    "open": "Open chat",
+    "more": "{count, plural, one {# more waiting} other {# more waiting}}",
+    "updates": "Updates"
+  },
   "inbox": {
     "title": "Chats",
     "views": "Views",
@@ -8,7 +29,23 @@
     "back": "Back to chats",
     "openFailed": "We couldn't open this conversation",
     "notAvailable": "This conversation isn't available to you",
-    "onWebsite": "Open on the website"
+    "onWebsite": "Open on the website",
+    "all": "All",
+    "search": "Search by name or phone",
+    "noMatch": "No conversations match this search or filter",
+    "grounded": "GOTCHA answers only from your business's own information",
+    "owner": {
+      "mine": "With you",
+      "waiting": "Waiting in queue",
+      "gotcha": "GOTCHA",
+      "flow": "Flow",
+      "resolved": "Resolved"
+    },
+    "filter": {
+      "open": "Filter by channel",
+      "title": "Filter by channel",
+      "all": "All channels"
+    }
   },
   "account": {
     "menu": "Account",
@@ -19,18 +56,78 @@
     "title": "Approvals",
     "conversation": "Open the chat",
     "cancel": "Cancel",
-    "website": "Earlier decisions and editing on the website"
+    "website": "Earlier decisions and editing on the website",
+    "lead": "{count, plural, one {One thing is waiting for your decision} other {# things are waiting for your decision}}. GOTCHA has already done the work",
+    "leadNone": "Nothing is waiting for you. GOTCHA carries on by itself",
+    "views": "View",
+    "pending": "Waiting",
+    "decided": "Decided today",
+    "details": "Details",
+    "emptyTitle": "Nothing to approve right now",
+    "emptyBody": "GOTCHA will tell you when something needs you",
+    "decidedNone": "Nothing has been decided yet today",
+    "decidedUnavailable": "Today's decisions could not be read right now",
+    "outcome": {
+      "ran": "Done",
+      "didntRun": "Didn't run",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "back": "Back to approvals",
+    "gone": "This request is no longer waiting for a decision. Someone may have decided it, or its time ran out.",
+    "editOnWebsite": "Edit on the website",
+    "rejectTitle": "Why reject it?",
+    "rejectSub": "The reason is kept with the decision"
   },
   "outreach": {
-    "title": "Outreach",
+    "title": "Outbound",
     "back": "Back to campaigns",
     "website": "Create and edit on the website",
-    "websiteOne": "This campaign on the website"
+    "websiteOne": "This campaign on the website",
+    "chipsLabel": "Filter campaigns",
+    "chips": {
+      "all": "All",
+      "live": "Active",
+      "sched": "Scheduled",
+      "done": "Finished"
+    },
+    "going": "In progress",
+    "earlier": "Earlier",
+    "noneHere": "No campaigns here right now",
+    "replies": "Replies"
   },
   "customers": {
     "title": "Customers",
     "back": "Back to customers",
     "website": "Edit on the website",
-    "conversations": "Recent conversations"
+    "searchPlaceholder": "Search by name, phone or order",
+    "chipsLabel": "Filter customers",
+    "chips": {
+      "everyone": "All",
+      "quiet": "At risk"
+    },
+    "count": "{count, plural, one {1 customer} other {# customers}} · Recent activity",
+    "noneQuiet": "Nobody has gone quiet",
+    "channelsLabel": "{count, plural, one {Writes on 1 channel} other {Writes on # channels}}",
+    "actionsLabel": "Actions",
+    "call": "Call",
+    "spent": "Total spent",
+    "history": "History across every channel"
+  },
+  "thread": {
+    "menu": "Conversation actions",
+    "website": "Open on the full website",
+    "cancel": "Cancel",
+    "ai": {
+      "active": "AI on",
+      "paused": "AI paused",
+      "pause": "Pause the AI in this conversation",
+      "resume": "Hand this conversation back to the AI"
+    }
+  },
+  "copilot": {
+    "label": "Copilot",
+    "ready": "Copilot · Reply ready",
+    "more": "{count, plural, =1 {1 more option} other {# more options}}"
   }
 }

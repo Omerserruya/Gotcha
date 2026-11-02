@@ -17,17 +17,20 @@ export async function OnWebsite({
   path,
   label,
   testId,
+  className,
 }: {
   /** A locale-less website path: `/outreach`, `/customers/<id>`. */
   readonly path: `/${string}`;
   readonly label: string;
   readonly testId?: string;
+  /** A screen that draws it as its own button: a sheet's call to action. */
+  readonly className?: string;
 }) {
   const locale = await getLocale();
   return (
     <a
       href={appPath(`/${locale}${path}`)}
-      className={styles.link}
+      className={className ?? styles.link}
       data-testid={testId ?? 'mobile-on-website'}
     >
       {label}

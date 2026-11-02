@@ -71,6 +71,7 @@ export function Composer({
   replyWindow = null,
   customerName = null,
   resolved = false,
+  variant,
 }: {
   readonly conversationId: string;
   /** Already-named channel, for the sentence about where this goes. */
@@ -81,6 +82,8 @@ export function Composer({
   readonly customerName?: string | null;
   /** Already closed: no "close the conversation" action. */
   readonly resolved?: boolean;
+  /** The phone app's look (`/m`): a pill and a round send, no rewrite chips. */
+  readonly variant?: 'phone';
 }) {
   const t = useTranslations('inbox.composer');
   const router = useRouter();
@@ -259,6 +262,7 @@ export function Composer({
   return (
     <form
       className={styles.composer}
+      data-variant={variant}
       data-dragging={dragging ? 'yes' : undefined}
       onDragOver={(event) => {
         if (!event.dataTransfer.types.includes('Files') || busy) return;
