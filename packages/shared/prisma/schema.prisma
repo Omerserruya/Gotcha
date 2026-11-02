@@ -166,6 +166,7 @@ model Tenant {
   communicationChannels   CommunicationChannel[]
   agentPresences          AgentPresence[]
   userNotificationPrefs   UserNotificationPreference[]
+  pushDevices             PushDevice[]
   insightDismissals       InsightDismissal[]
   unansweredQuestions     UnansweredQuestion[]
   productDemandTerms      ProductDemandTerm[]
@@ -917,6 +918,7 @@ model User {
   // the default-tenant resolution for hint-less API calls.
   lastActiveAt             DateTime? @map("last_active_at")
   notificationPreference UserNotificationPreference?
+  pushDevices            PushDevice[]
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
@@ -8058,6 +8060,10 @@ model UserNotificationPreference {
   /// Approvals are opt-OUT: an action waiting on you is the one notification
   /// whose default cannot be silence.
   approvals Boolean @default(true)
+  /// Mobile push to the person's registered phones (PushDevice). On by
+  /// default like in-app: a phone only receives it after the person signed in
+  /// on it and allowed notifications, which is the opt-in.
+  push      Boolean @default(true)
 
   /// "HH:MM" in the tenant's timezone, both null when quiet hours are off.
   /// Stored as text rather than minutes so what the user typed is what is
@@ -8073,6 +8079,30 @@ model UserNotificationPreference {
 
   @@index([tenantId])
   @@map("user_notification_preferences")
+}
+
+// ─── Push devices (mobile app) ─────────────────────────────
+//
+// One row per FCM registration token. The token is the identity of an app
+// install, not of a person: a shared phone that signs in as someone else
+// re-points its row (POST /api/notifications/devices), so a token is unique
+// across the whole table rather than per user. FCM reporting the token dead
+// (UNREGISTERED / 404 / INVALID_ARGUMENT) deletes the row.
+model PushDevice {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  userId     String   @map("user_id")
+  /// "ios" | "android"
+  platform   String
+  token      String   @unique
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@map("push_devices")
 }
 
 // ─── Dismissed insights ────────────────────────────────────
