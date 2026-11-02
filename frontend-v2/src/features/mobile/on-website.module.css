@@ -1,0 +1,13 @@
+@layer features {
+  /* A quiet way out, at the foot of a screen: the website does the rest. */
+  .link {
+    display: block;
+    padding: var(--space-16);
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: underline;
+    text-underline-offset: var(--space-3);
+  }
+}

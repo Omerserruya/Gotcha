@@ -1,0 +1,66 @@
+@layer shell {
+  /*
+   * The phone's frame: the product's dark ground, the screen on the light
+   * panel inside it, and the tabs on the dark again - the desktop's frame and
+   * panels, folded to one column.
+   *
+   * `100dvh`, not `100vh`: on a phone `vh` is the height with the browser's
+   * bars hidden, so a `100vh` frame puts the tabs under the toolbar.
+   */
+  .frame {
+    display: flex;
+    flex-direction: column;
+    block-size: 100dvh;
+    background-color: var(--frame-base);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    padding-block-start: env(safe-area-inset-top);
+  }
+
+  .main {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--panel-base);
+    overflow: hidden;
+  }
+
+  /* ── Tabs ─────────────────────────────────────────────────────────── */
+  .tabs {
+    flex: none;
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    background-color: var(--frame-base);
+    border-block-start: var(--border-width-thin) solid var(--frame-line);
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    min-block-size: 56px;
+    color: var(--frame-text-muted);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tab[aria-current='page'] {
+    color: var(--frame-text);
+  }
+
+  .tab:focus-visible {
+    outline: var(--border-width-thick) solid var(--frame-text);
+    outline-offset: calc(-1 * var(--space-4));
+  }
+
+  .tabLabel {
+    font-size: var(--font-size-micro);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+  }
+}
