@@ -16,12 +16,21 @@
     "signOut": "התנתקות"
   },
   "approvals": {
-    "title": "אישורים"
+    "title": "אישורים",
+    "conversation": "לשיחה",
+    "cancel": "ביטול",
+    "website": "החלטות קודמות ועריכה באתר"
   },
   "outreach": {
-    "title": "פנייה יזומה"
+    "title": "פנייה יזומה",
+    "back": "חזרה לקמפיינים",
+    "website": "יצירה ועריכה באתר",
+    "websiteOne": "הקמפיין הזה באתר"
   },
   "customers": {
-    "title": "לקוחות"
+    "title": "לקוחות",
+    "back": "חזרה ללקוחות",
+    "website": "עריכה באתר",
+    "conversations": "שיחות אחרונות"
   }
 }

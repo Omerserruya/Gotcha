@@ -16,12 +16,21 @@
     "signOut": "Sign out"
   },
   "approvals": {
-    "title": "Approvals"
+    "title": "Approvals",
+    "conversation": "Open the chat",
+    "cancel": "Cancel",
+    "website": "Earlier decisions and editing on the website"
   },
   "outreach": {
-    "title": "Outreach"
+    "title": "Outreach",
+    "back": "Back to campaigns",
+    "website": "Create and edit on the website",
+    "websiteOne": "This campaign on the website"
   },
   "customers": {
-    "title": "Customers"
+    "title": "Customers",
+    "back": "Back to customers",
+    "website": "Edit on the website",
+    "conversations": "Recent conversations"
   }
 }

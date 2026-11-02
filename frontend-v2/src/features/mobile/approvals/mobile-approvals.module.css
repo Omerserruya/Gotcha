@@ -1,0 +1,301 @@
+@layer features {
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* The count, under the bar: the size of the queue as a sentence. */
+  .lead {
+    margin: 0;
+    padding-block: var(--space-12) 0;
+    padding-inline: var(--space-16);
+    color: var(--text-muted);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin: 0;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-12);
+    list-style: none;
+  }
+
+  /* ── One request ─────────────────────────────────────────────────── */
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-14) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-base);
+  }
+
+  .card[data-lapsed] {
+    background-color: var(--panel-quiet);
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-8);
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .asked {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .when {
+    flex: none;
+    color: var(--text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Near its deadline, or past it: said in the urgent colour, as 02's "38m left". */
+  .when[data-soon] {
+    color: var(--intent-urgent-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .title {
+    margin: 0;
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.35;
+    color: var(--text-primary);
+  }
+
+  .facts {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--text-secondary);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6) var(--space-8);
+    margin: 0;
+  }
+
+  .tag {
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+    border-radius: var(--radius-chip);
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+    font-size: var(--font-size-tag);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .conversation {
+    margin-inline-start: auto;
+    color: var(--text-primary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* What approving does, and why: folded, one tap away, above the buttons. */
+  .more {
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+    padding-block-start: var(--space-8);
+  }
+
+  .moreSummary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .moreHeading {
+    margin-block: var(--space-10) 0;
+    margin-inline: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .moreText {
+    margin-block: var(--space-6) 0;
+    margin-inline: 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .steps {
+    margin-block: var(--space-6) 0;
+    margin-inline: 0;
+    padding-inline-start: var(--space-18);
+    color: var(--text-body);
+    font-size: var(--font-size-body-sm);
+    line-height: 1.5;
+  }
+
+  .lapsed {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-body-sm);
+  }
+
+  /* ── The decision ────────────────────────────────────────────────── */
+  .buttons {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .approve,
+  .secondary,
+  .rejectButton {
+    flex: 1;
+    min-block-size: var(--size-control);
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-control);
+    font: inherit;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .approve {
+    border: 0;
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .secondary {
+    border: var(--border-width-thin) solid var(--border-default);
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .rejectButton {
+    border: 0;
+    background-color: var(--danger-action);
+    color: var(--danger-action-text);
+  }
+
+  .approve:disabled,
+  .secondary:disabled,
+  .rejectButton:disabled {
+    opacity: 0.5;
+  }
+
+  .approve:focus-visible,
+  .secondary:focus-visible,
+  .rejectButton:focus-visible,
+  .reason:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  .reject {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .rejectPrompt {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .reasons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+  }
+
+  .reason {
+    min-block-size: 36px;
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+  }
+
+  .reason[aria-pressed='true'] {
+    border-color: var(--action-base);
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .reasonInput {
+    min-block-size: var(--size-control);
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    background-color: var(--panel-field);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-body);
+  }
+
+  .problem {
+    margin: 0;
+    color: var(--intent-urgent-text);
+    font-size: var(--font-size-body-sm);
+  }
+
+  /* ── Decided here, a moment ago ──────────────────────────────────── */
+  .done {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-16);
+    border-radius: var(--radius-card);
+    background-color: var(--intent-calm-surface);
+    color: var(--intent-calm-text);
+  }
+
+  .done[data-outcome='didntRun'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .done[data-outcome='rejected'] {
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+  }
+
+  .doneText {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .note {
+    margin: 0;
+    padding-block: var(--space-40);
+    padding-inline: var(--space-24);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--font-size-body);
+  }
+}
