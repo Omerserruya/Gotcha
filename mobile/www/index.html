@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>GOTCHA</title>
+  <style>
+    :root { --fg: #111827; --muted: #6B7280; --accent: #111827; --bg: #FFFFFF; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Heebo", "Arial Hebrew", Arial, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+      text-align: center;
+    }
+    main { max-width: 320px; }
+    .mark { font-weight: 800; letter-spacing: 0.08em; font-size: 22px; margin-bottom: 32px; direction: ltr; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0 0 28px; }
+    button {
+      appearance: none; border: 0; border-radius: 12px;
+      background: var(--accent); color: #FFFFFF;
+      font: inherit; font-size: 16px; font-weight: 600;
+      min-height: 48px; width: 100%; padding: 12px 20px;
+    }
+    button:active { opacity: 0.85; }
+    button[disabled] { opacity: 0.6; }
+  </style>
+  <!-- Written by capacitor.config.js at sync time: which environment to retry. -->
+  <script src="env.js"></script>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">GOTCHA</div>
+    <h1>לא הצלחנו להתחבר</h1>
+    <p>ייתכן שאין חיבור לאינטרנט, או שהשירות לא זמין כרגע. כדאי לבדוק את החיבור ולנסות שוב.</p>
+    <button id="retry" type="button">נסו שוב</button>
+  </main>
+  <script>
+    (function () {
+      var shell = window.GOTCHA_SHELL || {};
+      var startUrl = shell.startUrl || 'https://app.gotcha.co.il/he/m/inbox';
+      var button = document.getElementById('retry');
+      function retry() {
+        button.disabled = true;
+        button.textContent = 'מתחברים...';
+        window.location.replace(startUrl);
+      }
+      button.addEventListener('click', retry);
+      // Come back by itself when the network does.
+      window.addEventListener('online', retry);
+    })();
+  </script>
+</body>
+</html>
