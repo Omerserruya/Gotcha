@@ -89,6 +89,10 @@
     "product": {
       "view": "View product",
       "soldOut": "Out of stock"
+    },
+    "day": {
+      "today": "Today",
+      "yesterday": "Yesterday"
     }
   },
   "queue": {

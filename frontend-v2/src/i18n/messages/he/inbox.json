@@ -89,6 +89,10 @@
     "product": {
       "view": "לדף המוצר",
       "soldOut": "אזל מהמלאי"
+    },
+    "day": {
+      "today": "היום",
+      "yesterday": "אתמול"
     }
   },
   "queue": {
