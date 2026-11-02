@@ -1,0 +1,55 @@
+@layer shell {
+  /*
+   * A screen's bar: on the panel, not the frame, so the phone reads as the
+   * desktop does - dark ground, light work - with the status bar above it.
+   */
+  .bar {
+    flex: none;
+    background-color: var(--panel-base);
+    border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-block-size: 56px;
+    padding-inline: var(--space-8);
+  }
+
+  .title {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-heading);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--text-primary);
+    padding-inline: var(--space-8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Back, the account, a screen's own action: 44px, the touch minimum. */
+  .iconButton {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--size-control);
+    block-size: var(--size-control);
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .iconButton:active {
+    background-color: var(--border-subtle);
+  }
+
+  .iconButton:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+  }
+}

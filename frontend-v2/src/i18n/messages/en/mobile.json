@@ -1,0 +1,27 @@
+{
+  "inbox": {
+    "title": "Chats",
+    "views": "Views",
+    "empty": "No conversations here right now",
+    "unavailable": "We couldn't load the conversations",
+    "more": "Earlier conversations",
+    "back": "Back to chats",
+    "openFailed": "We couldn't open this conversation",
+    "notAvailable": "This conversation isn't available to you",
+    "onWebsite": "Open on the website"
+  },
+  "account": {
+    "menu": "Account",
+    "website": "Go to the full website",
+    "signOut": "Sign out"
+  },
+  "approvals": {
+    "title": "Approvals"
+  },
+  "outreach": {
+    "title": "Outreach"
+  },
+  "customers": {
+    "title": "Customers"
+  }
+}

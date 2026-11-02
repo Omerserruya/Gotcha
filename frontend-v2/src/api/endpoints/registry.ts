@@ -410,6 +410,12 @@ export const notificationEndpoints = {
   markRead: (id: string) => endpoint('/api/notifications/{id}/mark-read', { id }),
   markAllRead: () => endpoint('/api/notifications/mark-all-read'),
   /**
+   * The phones that receive this person's push notifications (the mobile app).
+   * POST `{ token, platform }` registers one; DELETE by token forgets it.
+   */
+  devices: () => endpoint('/api/notifications/devices'),
+  device: (token: string) => endpoint('/api/notifications/devices/{token}', { token }),
+  /**
    * The signed-in person's own notification preferences - screen 15.
    *
    * Four booleans and a quiet-hours window. NOT the design's 8×3 matrix: the
