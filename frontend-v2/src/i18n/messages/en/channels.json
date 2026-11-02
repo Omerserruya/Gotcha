@@ -679,8 +679,9 @@
       "nowhereLimit": "Not saved: the widget needs a channel, and your plan has no room for another one",
       "nowhereForbidden": "Not saved: the widget isn't created yet, and you don't have permission to add a channel. Ask a workspace admin",
       "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
-      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one.",
-      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it."
+      "kindNumber": "Not saved: a WhatsApp widget needs a number. Choose a connected one or type one.",
+      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it.",
+      "phone": "Not saved: that isn't a phone number WhatsApp can open. Check it and type it again"
     },
     "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
@@ -986,7 +987,7 @@
       "number": "On WhatsApp with {name} {phone}.",
       "changeNumber": "Change number",
       "pickNumber": "Which WhatsApp number it continues on",
-      "noNumber": "A WhatsApp widget needs a connected WhatsApp number. Connect one in <channels>Settings · Channels</channels>.",
+      "noNumber": "No WhatsApp number is connected. Type the number customers should write to, or connect one in <channels>Settings · Channels</channels>.",
       "numberWhy": {
         "not_connected": "Not connected",
         "number_unknown": "Its phone number isn't known yet"
@@ -996,7 +997,12 @@
         "chat": "Switch the widget on your site to a chat widget with an AI employee? Visitors will see it right away.",
         "yes": "Switch",
         "no": "Cancel"
-      }
+      },
+      "typedOption": "Another number",
+      "typedLabel": "The WhatsApp number customers write to",
+      "typedUse": "Use this number",
+      "typedBad": "That isn't a phone number. Type it with its area code, like 054-123 4567.",
+      "typedNumber": "On WhatsApp with"
     }
   },
   "widgetRow": {

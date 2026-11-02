@@ -72,6 +72,11 @@ describe('★★ the widget save, stage A and stage B', () => {
       new ApiError({ kind: 'validation', status: 422, code: 'WHATSAPP_KIND_NEEDS_NUMBER' }),
     );
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'kindNumber' });
+    // The typed number is not one (Omer, 2026-11-02): its own words.
+    put.mockRejectedValueOnce(
+      new ApiError({ kind: 'validation', status: 422, code: 'WHATSAPP_PHONE_INVALID' }),
+    );
+    expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'phone' });
     put.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
     expect(await saveWebsiteWidget(SETTINGS, true)).toEqual({ ok: false, reason: 'failed' });
     // Only "no place yet" creates one.

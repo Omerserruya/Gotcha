@@ -83,14 +83,21 @@ export const webchatConfigSchema = z.object({
     look: z.enum(WIDGET_LOOKS).catch('gotcha').default('gotcha'),
     /** W1: chat (the default, and anything unknown) or WhatsApp. */
     kind: z.enum(WIDGET_KINDS).catch('chat').default('chat'),
-    /** Stage B: "Continue on WhatsApp" - on, and the workspace's number it continues on. */
+    /**
+     * Stage B: "Continue on WhatsApp" - on, and the number it continues on: a
+     * connected one (`channelAccountId`), else one typed in (`phone`, Omer
+     * 2026-11-02 - a workspace with no WhatsApp channel can still use the
+     * WhatsApp widget). Both may be stored: a connected one wins, the typed
+     * one is the fallback (Backend). `phone` as the route keeps it, "+<digits>".
+     */
     whatsapp: z
       .object({
         enabled: z.boolean().catch(false),
         channelAccountId: z.string().nullable().catch(null),
+        phone: z.string().nullable().catch(null).default(null),
       })
-      .catch({ enabled: false, channelAccountId: null })
-      .default({ enabled: false, channelAccountId: null }),
+      .catch({ enabled: false, channelAccountId: null, phone: null })
+      .default({ enabled: false, channelAccountId: null, phone: null }),
   }),
   /**
    * ★ W9 (Backend 7eb3810a, 2db313bb): products from the connected WooCommerce

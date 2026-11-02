@@ -31,6 +31,8 @@ export type WidgetSave =
   | { readonly ok: false; readonly reason: 'number' }
   /** 422 WHATSAPP_KIND_NEEDS_NUMBER: a WhatsApp widget needs a number that can take it (W1). */
   | { readonly ok: false; readonly reason: 'kindNumber' }
+  /** 422 WHATSAPP_PHONE_INVALID (`ux.whatsapp.phone`): the typed number is not a phone number. */
+  | { readonly ok: false; readonly reason: 'phone' }
   /** 400 COUPON_PERSONAL: a customer's own coupon cannot be a widget deal (Backend bd1fe183). */
   | { readonly ok: false; readonly reason: 'couponPersonal' };
 
@@ -95,6 +97,9 @@ export async function saveWebsiteWidget(
     }
     if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
       return { ok: false, reason: 'number' };
+    }
+    if (isApiError(cause) && cause.code === 'WHATSAPP_PHONE_INVALID') {
+      return { ok: false, reason: 'phone' };
     }
     logger.warn('website_widget.save_failed', {
       status: isApiError(cause) ? cause.status : undefined,

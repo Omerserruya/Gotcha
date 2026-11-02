@@ -1919,7 +1919,14 @@ function PoweredBy() {
  * A WhatsApp widget needs a number that can take it (else 422
  * WHATSAPP_KIND_NEEDS_NUMBER): it is chosen here, in place - one that can be
  * used is offered, one that cannot says why - and the kind is saved only with
- * one. No usable number at all: said, with where to connect one.
+ * one.
+ *
+ * ★ OR TYPED (Omer, 2026-11-02): a workspace with no WhatsApp channel can
+ *   still have the widget - it opens wa.me/<number>. A connected number is
+ *   offered first, as before, with "Another number" beside them; with none
+ *   that can be used, the field itself. The route normalises what is typed
+ *   (an Israeli 05… becomes +9725…) and refuses what is not a number
+ *   (WHATSAPP_PHONE_INVALID), said in words; here only "has digits enough".
  */
 function KindChoice({
   config,
@@ -1948,25 +1955,84 @@ function KindChoice({
     WhatsApp widget): the hand-off is off - never a number nobody chose.
   */
   const [before, setBefore] = useState<WebchatConfig['ux']['whatsapp'] | null>(null);
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [typedBad, setTypedBad] = useState(false);
   const usable = numbers.filter((n) => n.available);
   const current = numbers.find((n) => n.channelId === config.ux.whatsapp.channelAccountId) ?? null;
-  const ready = config.ux.whatsapp.enabled && current?.available === true;
+  // A connected number wins; the typed one is what is used without one (Backend).
+  const typedNumber = current?.available ? null : config.ux.whatsapp.phone;
+  const ready = config.ux.whatsapp.enabled && (current?.available === true || typedNumber !== null);
   const toWhatsApp = (channelAccountId: string) => {
     setPicking(false);
-    setAsking({ kind: 'whatsapp', whatsapp: { enabled: true, channelAccountId } });
+    setTyping(false);
+    setAsking({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId, phone: config.ux.whatsapp.phone },
+    });
+  };
+  const toTyped = () => {
+    if (!looksLikePhone(typed)) {
+      setTypedBad(true);
+      return;
+    }
+    setPicking(false);
+    setTyping(false);
+    setAsking({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId: null, phone: typed.trim() },
+    });
   };
   const choose = (kind: WidgetKind) => {
     if (kind === 'chat') {
       setPicking(false);
       if (config.ux.kind === 'chat') return;
-      setAsking({ kind: 'chat', whatsapp: before ?? { enabled: false, channelAccountId: null } });
+      setAsking({
+        kind: 'chat',
+        whatsapp: before ?? { enabled: false, channelAccountId: null, phone: null },
+      });
       return;
     }
     if (config.ux.kind === 'whatsapp' && ready) return;
-    if (ready) toWhatsApp(config.ux.whatsapp.channelAccountId!);
+    if (ready) setAsking({ kind: 'whatsapp', whatsapp: config.ux.whatsapp });
     else if (usable.length === 1) toWhatsApp(usable[0]!.channelId);
     else setPicking(true);
   };
+  const typedField = (
+    <span className={styles.kindNumbers} data-testid="webchat-kind-typed">
+      <label className={styles.rowHint} htmlFor="webchat-kind-phone">
+        {t('typedLabel')}
+      </label>
+      <span className={styles.textField}>
+        <input
+          id="webchat-kind-phone"
+          value={typed}
+          inputMode="tel"
+          dir="ltr"
+          placeholder="054-123 4567"
+          aria-invalid={typedBad}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            setTypedBad(false);
+          }}
+          data-testid="webchat-kind-phone"
+        />
+      </span>
+      {typedBad ? (
+        <span className={styles.rowHint} role="alert" data-testid="webchat-kind-phone-bad">
+          {t('typedBad')}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className={styles.linkButton}
+        onClick={toTyped}
+        data-testid="webchat-kind-phone-use"
+      >
+        {t('typedUse')}
+      </button>
+    </span>
+  );
   const confirm = () => {
     if (!asking) return;
     if (asking.kind === 'whatsapp' && config.ux.kind === 'chat') setBefore(config.ux.whatsapp);
@@ -2017,9 +2083,15 @@ function KindChoice({
           </span>
         </div>
       ) : null}
-      {config.ux.kind === 'whatsapp' && current && !picking && !asking ? (
+      {config.ux.kind === 'whatsapp' && (current || typedNumber) && !picking && !asking ? (
         <p className={styles.rowHint} data-testid="webchat-kind-number">
-          {t('number', { name: current.name, phone: current.phone ?? '' })}{' '}
+          {current?.available || !typedNumber ? (
+            t('number', { name: current!.name, phone: current!.phone ?? '' })
+          ) : (
+            <>
+              {t('typedNumber')} <span dir="ltr">{typedNumber}</span>
+            </>
+          )}{' '}
           <button
             type="button"
             className={styles.linkButton}
@@ -2032,11 +2104,14 @@ function KindChoice({
       ) : null}
       {picking ? (
         usable.length === 0 ? (
-          <p className={styles.rowHint} role="status" data-testid="webchat-kind-no-number">
-            {t.rich('noNumber', {
-              channels: (chunks) => <Link href="/settings/channels">{chunks}</Link>,
-            })}
-          </p>
+          <>
+            <p className={styles.rowHint} role="status" data-testid="webchat-kind-no-number">
+              {t.rich('noNumber', {
+                channels: (chunks) => <Link href="/settings/channels">{chunks}</Link>,
+              })}
+            </p>
+            {typedField}
+          </>
         ) : (
           <span
             className={styles.kindNumbers}
@@ -2064,11 +2139,34 @@ function KindChoice({
                 )}
               </label>
             ))}
+            <label className={styles.radio}>
+              <input
+                type="radio"
+                name="webchat-kind-number"
+                checked={typing}
+                onChange={() => setTyping(true)}
+                data-testid="webchat-kind-number-typed"
+              />
+              {t('typedOption')}
+            </label>
+            {typing ? typedField : null}
           </span>
         )
       ) : null}
     </section>
   );
+}
+
+/**
+ * Enough of a phone number to send: digits, with the separators people type
+ * (`+`, spaces, dashes, brackets, dots), 8 to 15 digits as the route keeps.
+ * The route normalises and is the judge (WHATSAPP_PHONE_INVALID).
+ */
+function looksLikePhone(raw: string): boolean {
+  const text = raw.trim();
+  if (!/^\+?[\d\s\-().]+$/.test(text)) return false;
+  const digits = text.replace(/\D/g, '').length;
+  return digits >= 8 && digits <= 15;
 }
 
 /** For a value that never changes while the page is open (a browser's abilities). */

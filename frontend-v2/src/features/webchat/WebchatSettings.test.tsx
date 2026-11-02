@@ -853,7 +853,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       kind: 'whatsapp',
       look: 'whatsapp',
       // The only number that can take it: chosen with the kind.
-      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
     });
     expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
   });
@@ -877,18 +877,140 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'whatsapp',
-      whatsapp: { enabled: true, channelAccountId: 'wa4' },
+      whatsapp: { enabled: true, channelAccountId: 'wa4', phone: null },
     });
   });
 
-  it('W1: no number that can take it - said, with where to connect one, nothing saved', async () => {
+  it('W1: no number that can take it - said, with where to connect one, and the field to type one; nothing saved', async () => {
     show('appearance', { numbers: NUMBERS.filter((n) => !n.available) });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
     expect(screen.getByTestId('webchat-kind-no-number')).toHaveTextContent(
-      'A WhatsApp widget needs a connected WhatsApp number',
+      'No WhatsApp number is connected. Type the number customers should write to',
     );
+    expect(screen.getByTestId('webchat-kind-phone')).toBeInTheDocument();
     await pause();
     expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('★★ typed: asked first, then saved as typed - no channel, the number as the route will normalise it', async () => {
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: ' 054-123 4567 ' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    expect(screen.getByTestId('webchat-kind-ask')).toBeInTheDocument();
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(sentAt().ux.kind).toBe('whatsapp');
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: '054-123 4567',
+    });
+  });
+
+  it('★ typed, not a number: said here, nothing asked, nothing saved', async () => {
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    for (const value of ['', 'call me', '12345', '+1 234 567 890 123 456']) {
+      fireEvent.change(screen.getByTestId('webchat-kind-phone'), { target: { value } });
+      fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+      expect(screen.getByTestId('webchat-kind-phone-bad')).toHaveTextContent(
+        "That isn't a phone number",
+      );
+      expect(screen.queryByTestId('webchat-kind-ask')).toBeNull();
+    }
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('★ with connected numbers, "Another number" is one more choice - and opens the field', () => {
+    show('appearance', {
+      numbers: [...NUMBERS, { ...NUMBERS[0]!, channelId: 'wa9', name: 'Second' }],
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.queryByTestId('webchat-kind-phone')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-kind-number-typed'));
+    expect(screen.getByTestId('webchat-kind-phone')).toBeInTheDocument();
+  });
+
+  it('★ a typed number kept: said as the number; a connected one, when there is one, wins', () => {
+    const typed = (channelAccountId: string | null) => ({
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId, phone: '+972541234567' },
+      },
+    });
+    const { unmount } = show('appearance', { numbers: NUMBERS, initial: typed(null) });
+    expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent(
+      'On WhatsApp with +972541234567',
+    );
+    unmount();
+    show('appearance', { numbers: NUMBERS, initial: typed('wa1') });
+    expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
+    expect(screen.getByTestId('webchat-kind-number')).not.toHaveTextContent('+972541234567');
+  });
+
+  it('★★ "Another number" over a connected one: sent without the channel - else the connected one would win', async () => {
+    const wa = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+      },
+    };
+    show('appearance', { numbers: NUMBERS, initial: wa });
+    fireEvent.click(screen.getByTestId('webchat-kind-change-number'));
+    fireEvent.click(screen.getByTestId('webchat-kind-number-typed'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: '052-123 4567' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: '052-123 4567',
+    });
+  });
+
+  it('★ back to WhatsApp with a typed number kept: asked straight away, nothing to pick', () => {
+    const chat = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'chat' as const,
+        whatsapp: { enabled: true, channelAccountId: null, phone: '+972541234567' },
+      },
+    };
+    show('appearance', { numbers: [], initial: chat });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.getByTestId('webchat-kind-ask')).toBeInTheDocument();
+    expect(screen.queryByTestId('webchat-kind-phone')).toBeNull();
+  });
+
+  it('★ the route refusing the typed number says so in words', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'phone' });
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: '+999 1234 5678' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
+      "Not saved: that isn't a phone number WhatsApp can open",
+    );
   });
 
   it('★★ W1: a WhatsApp widget shows only its own settings, in every tab', () => {
@@ -898,7 +1020,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
       },
     };
     const appearance = show('appearance', { numbers: NUMBERS, initial: wa });
@@ -944,7 +1066,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
-      'a WhatsApp widget needs a connected WhatsApp number',
+      'a WhatsApp widget needs a number. Choose a connected one or type one.',
     );
   });
 
@@ -971,9 +1093,9 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     show('behaviour', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1' });
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1', phone: null });
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
-      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
     });
     const one = within(screen.getByTestId('webchat-wa-wa1')).getByRole('radio');
     expect(one).toBeChecked();
@@ -1005,7 +1127,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       "The button won't show on your site until a number that can take it is chosen.",
     );
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null });
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null, phone: null });
   });
 
   it('the preview shows the WhatsApp action only when the button will show', () => {
@@ -1023,7 +1145,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       numbers: NUMBERS,
       initial: {
         ...config,
-        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2' } },
+        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2', phone: null } },
       },
     });
     expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
@@ -1057,7 +1179,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     const { look: _l, whatsapp: _w, ...stageA } = config.ux;
     expect(webchatSettingsSchema.parse({ data: { ...config, ux: stageA } }).data.ux).toMatchObject({
       look: 'gotcha',
-      whatsapp: { enabled: false, channelAccountId: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null },
     });
   });
 });
@@ -1179,7 +1301,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
   it('★★ back to chat is asked too, and puts back the hand-off as it was before - never the widget’s number', async () => {
     const off = {
       ...config,
-      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null } },
+      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null, phone: null } },
     };
     show('appearance', { numbers: NUMS, initial: off });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
@@ -1195,7 +1317,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     expect(bodyOfWidget(last, { stageB: true }).ux).toMatchObject({
       kind: 'chat',
       look: 'gotcha',
-      whatsapp: { enabled: true, channelAccountId: null },
+      whatsapp: { enabled: true, channelAccountId: null, phone: null },
     });
   });
 
@@ -1206,7 +1328,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
       },
     };
     show('appearance', { numbers: NUMS, initial: wa });
@@ -1215,7 +1337,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'chat',
-      whatsapp: { enabled: false, channelAccountId: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null },
     });
   });
 

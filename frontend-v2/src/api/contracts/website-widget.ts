@@ -60,6 +60,7 @@ export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) 
       whatsapp: {
         enabled: settings.ux.whatsapp.enabled,
         channelAccountId: settings.ux.whatsapp.channelAccountId,
+        phone: settings.ux.whatsapp.phone,
       },
     },
   };

@@ -94,3 +94,30 @@ describe("★ the preview's address: a connected store, else the website, else w
     expect(previewSite(read, 'urban.example')).toBe('urban.example');
   });
 });
+
+describe('★★ the WhatsApp number: connected, or typed (Omer, 2026-11-02)', () => {
+  it('a typed number is read as kept; a service without it reads none', () => {
+    const typed = read({
+      whatsapp: { enabled: true, channelAccountId: null, phone: '+972541234567' },
+    });
+    expect(typed.ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: '+972541234567',
+    });
+    expect(
+      read({ whatsapp: { enabled: true, channelAccountId: 'wa1' } }).ux.whatsapp.phone,
+    ).toBeNull();
+    expect(read().ux.whatsapp.phone).toBeNull();
+  });
+
+  it('★ sent with the channel to a stage B service, the typed number beside it', () => {
+    const settings = read({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: '+972541234567' },
+    });
+    expect(bodyOfWidget(settings, { stageB: true }).ux).toMatchObject({
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: '+972541234567' },
+    });
+  });
+});
