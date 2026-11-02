@@ -221,7 +221,6 @@
   .name {
     margin: 0;
     font-size: var(--font-size-heading);
-    overflow-wrap: anywhere;
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
     overflow-wrap: anywhere;
