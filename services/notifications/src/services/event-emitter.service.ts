@@ -26,6 +26,8 @@ export type SystemEventType =
   | "discount.applied"
   | "refund.issued"
   | "conversation.escalated"
+  // A customer waited past the SLA with no reply (waiting-alert.service).
+  | "conversation.waiting"
   | "high_value_lead.detected"
   | "payment.failed"
   | "system.error.critical"

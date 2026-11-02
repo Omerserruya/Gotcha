@@ -223,6 +223,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
  * decide (personalAllows). A workspace rule for the event replaces all of it.
  */
 export const EMAIL_BY_DEFAULT: ReadonlySet<string> = new Set([
+  "conversation.waiting",
   "tool.approval_required",
   "tool.action_failed",
   "integration.check_failed",
@@ -239,6 +240,12 @@ const ADMINS_FOR = new Set([
 export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; channels: string[]; priority: string; conditions: null; departmentId: null } | null {
   const base = { priority: "MEDIUM", conditions: null, departmentId: null } as const;
   const channels = EMAIL_BY_DEFAULT.has(event.type) ? ["in_app", "email"] : ["in_app"];
+  if (event.type === "conversation.waiting") {
+    // The assignee, else the department's members (resolved by the sweeper);
+    // with neither, the admins.
+    const ids = Array.isArray((event.data as any)?.recipientUserIds) ? ((event.data as any).recipientUserIds as unknown[]).filter((x): x is string => typeof x === "string" && !!x) : [];
+    return { ...base, channels, recipients: ids.length ? ({ type: "users", userIds: ids } as RecipientSpec) : ({ type: "tenant_owner" } as RecipientSpec) };
+  }
   if (event.type === "conversation.assigned") {
     // The assignee only, never the admins.
     const userId = event.metadata?.userId;

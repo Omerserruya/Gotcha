@@ -220,6 +220,17 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
     };
   },
 
+  "conversation.waiting": (e) => {
+    const minutes = Number(e.data.minutes);
+    const m = Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+    return {
+      // No minutes: the title says it all (a body never repeats its title).
+      en: { title: "A customer is waiting for a reply", body: m ? `A customer has been waiting ${m} minutes for a reply.` : "" },
+      he: { title: "לקוח ממתין למענה", body: m ? `לקוח ממתין כבר ${m} דקות למענה.` : "" },
+      link: convLink(e),
+    };
+  },
+
   "conversation.escalated": (e) => {
     const reason = safe(e.data.reason, "");
     return {

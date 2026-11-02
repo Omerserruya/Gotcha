@@ -102,6 +102,15 @@ export const EVENT_CATALOGUE: CatalogueEntry[] = [
 
   // ── Operations ──
   {
+    key: "conversation.waiting",
+    label: "A customer is waiting for a reply",
+    group: "operations",
+    emitted: true,
+    emitters: [E("services/notifications/src/services/waiting-alert.service.ts", "tryEmit")],
+    caveat:
+      "Only when the response-time (SLA) setting is on: sent once per waiting period, after the SLA minutes, to the assignee, else the department, else the admins.",
+  },
+  {
     key: "conversation.escalated",
     label: "A conversation was escalated to a person",
     group: "operations",

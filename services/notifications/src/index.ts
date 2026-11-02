@@ -6,6 +6,7 @@ import notificationPreferencesMeRoutes from "./routes/notification-preferences-m
 import { startNotificationsDispatcherWorker } from "./services/dispatcher.worker";
 import { startNotificationsEmailWorker } from "./services/email-sender.worker";
 import { startNotificationEventBridge } from "./services/event-bridge";
+import { startWaitingSweeper } from "./services/waiting-alert.service";
 import { startNotificationWsServer } from "./ws-server";
 
 const config = { name: "notifications-service", port: parseInt(process.env.PORT || "4008", 10) };
@@ -22,6 +23,7 @@ if (notificationsEnabled) {
     startNotificationsDispatcherWorker();
     startNotificationsEmailWorker();
     startNotificationEventBridge();
+    startWaitingSweeper();
   } catch (err: any) {
     console.warn("[notifications] worker startup failed:", err?.message);
   }
