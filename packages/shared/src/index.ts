@@ -792,6 +792,7 @@ export {
   normalizeStorefrontContext,
   isRenderableCommercePayload,
   projectVisitorMessage,
+  visitorSenderName,
 } from "./lib/shopify-live-chat";
 export type {
   ShopifyMessageType,

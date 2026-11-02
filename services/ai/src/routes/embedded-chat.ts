@@ -14,7 +14,7 @@ import {
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
   visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce, wooCartLine,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, handoffButtonLabel, waMeUrl,
-  type HandoffRecord, type WebchatConfig } from "@chatcenter/shared";
+  type HandoffRecord, type WebchatConfig, visitorSenderName } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
@@ -794,8 +794,10 @@ router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Respon
       ? await withCrossTenantAccess(() => connectedWooStore(conversation.tenantId)).catch(() => null)
       : null;
     res.json({
-      data: messages.map(({ metadata, ...m }) => ({
+      data: messages.map(({ metadata, senderName, ...m }) => ({
         ...m,
+        // A person's first name only, never their email.
+        senderName: visitorSenderName(senderName),
         commerce: projectWooCommerce(metadata, { storeUrl: store?.storeUrl ?? null, channelAccountId: conversation.channelAccountId ?? "" }),
       })),
     });

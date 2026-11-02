@@ -1095,6 +1095,21 @@ export function projectVisitorMessage(
 }
 
 /**
+ * The sender a web-chat visitor may see (2026-11-02): a person's first name,
+ * never their email; an employee's own name as is; nothing for internal
+ * markers ("AI Bot", "System"), where the widget shows its own name. The website chat used to pass senderName through as stored,
+ * so a reply typed in the inbox carried the agent's email to the shopper.
+ */
+const INTERNAL_SENDERS = new Set(["ai bot", "system", "broadcast", "voice flow", "bot"]);
+export function visitorSenderName(senderName: string | null | undefined): string | null {
+  const s = String(senderName ?? "").trim();
+  if (!s || INTERNAL_SENDERS.has(s.toLowerCase())) return null;
+  if (s.includes("@")) return displayAgentName(s);
+  // An employee's own name ("Maya") is what the visitor should see.
+  return sanitizeToken(s, 40) || null;
+}
+
+/**
  * Staff identities arrive from the inbox composer as email addresses.
  * A shopper gets a first name, never a way to contact an agent directly.
  */
