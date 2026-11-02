@@ -25,6 +25,16 @@
     scrollbar-width: none;
   }
 
+  /*
+   * A scroller's end padding is dropped by the browser, so the last chip sat
+   * flush against the glass when scrolled to the end. The gutter is a box.
+   */
+  .chips::after {
+    content: '';
+    flex: none;
+    inline-size: var(--space-8);
+  }
+
   .chip {
     flex: none;
     padding-block: var(--space-6);
@@ -134,6 +144,9 @@
     font-size: var(--font-size-lead);
     font-weight: var(--font-weight-medium);
     color: var(--text-primary);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
   }
 
   .row[data-unread] .who {
@@ -234,6 +247,9 @@
     white-space: nowrap;
     font-size: var(--font-size-lead);
     font-weight: var(--font-weight-semibold);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
   }
 
   .barMeta {

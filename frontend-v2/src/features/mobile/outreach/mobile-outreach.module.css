@@ -67,6 +67,9 @@
     font-size: var(--font-size-lead);
     font-weight: var(--font-weight-medium);
     color: var(--text-primary);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
   }
 
   .line,
