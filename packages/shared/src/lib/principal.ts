@@ -120,5 +120,8 @@ export async function resolvePrincipal(token: string, tenantHint?: string | null
     email: membership.email,
     departmentId: membership.departmentMembers?.[0]?.departmentId,
     departmentRole: membership.departmentMembers?.[0]?.departmentRole,
+    // The login this token belongs to. A Bearer caller (the v2 BFF) has no
+    // UserSession row; support mode binds its sessions to this instead.
+    ...(verified.sid ? { sessionId: `oidc:${verified.sid}` } : {}),
   };
 }

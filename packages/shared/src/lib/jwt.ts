@@ -56,6 +56,8 @@ export interface VerifiedIdentity {
   subject: string;
   email?: string;
   name?: string;
+  /** Authentik's login session (hashed session key), stable across refreshes of one login. */
+  sid?: string;
 }
 
 /**
@@ -108,10 +110,15 @@ export async function verifyAccessToken(token: string): Promise<VerifiedIdentity
     ...(process.env.OIDC_AUDIENCE ? { audience: process.env.OIDC_AUDIENCE } : {}),
   });
 
-  const claims = payload as JWTPayload & { email?: string; name?: string };
+  const claims = payload as JWTPayload & { email?: string; name?: string; sid?: unknown };
   if (!claims.sub) throw new Error("[jwt] token has no subject claim");
 
-  return { subject: claims.sub, email: claims.email, name: claims.name };
+  return {
+    subject: claims.sub,
+    email: claims.email,
+    name: claims.name,
+    ...(typeof claims.sid === "string" && claims.sid ? { sid: claims.sid } : {}),
+  };
 }
 
 /**

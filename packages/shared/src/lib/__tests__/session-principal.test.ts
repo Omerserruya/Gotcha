@@ -77,6 +77,8 @@ describe("resolvePrincipalFromSessionToken", () => {
     prismaMock.userSession.findUnique.mockResolvedValue(session());
     const p = await resolvePrincipalFromSessionToken(token, null, NOW);
     expect(p).toEqual({
+      // The login itself, which support mode binds to (2026-11-01).
+      sessionId: "ses_1",
       userId: "usr_1",
       identityId: "idn_1",
       tenantId: "ten_1",

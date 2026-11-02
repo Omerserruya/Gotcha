@@ -8,6 +8,7 @@ import { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "../lib/support-
 import { supportDenial } from "../lib/support-deny";
 import { runWithRequestContext } from "../lib/request-context";
 import { SUPPORT_AUDIT_HEADER, supportAuditContextOf } from "../lib/support-audit";
+import type { JwtPayload } from "../lib/jwt";
 
 /**
  * The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is: both
@@ -29,6 +30,28 @@ function tenantHintOf(req: Request): string | null {
 function supportSessionOf(req: Request): string | null {
   const raw = req.headers[SUPPORT_SESSION_HEADER];
   return typeof raw === "string" && raw.length > 0 && raw.length <= 64 ? raw : null;
+}
+
+/**
+ * Support mode (2026-11-01), for the cookie and the Bearer front doors alike:
+ * the admin's OWN login is resolved first, without the tenant hint (they have
+ * no membership there), then the support session that lets THIS login act in
+ * that tenant. Refused otherwise, never a fallback to the admin's own tenant.
+ * Throws AuthError for the caller to answer.
+ */
+async function enterSupportMode(req: Request, res: Response, next: NextFunction, admin: JwtPayload, supportId: string): Promise<void> {
+  const principal = await resolveSupportPrincipal(admin, supportId, tenantHintOf(req));
+  const denied = supportDenial(req.method, req.originalUrl || req.url, req.body);
+  if (denied) {
+    res.status(403).json({ error: "Not available in support mode", code: denied });
+    return;
+  }
+  req.user = principal as any;
+  req.tenantId = principal.tenantId;
+  runWithRequestContext(
+    { supportSessionId: principal.support!.sessionId, supportAdminUserId: principal.support!.adminUserId },
+    next,
+  );
 }
 
 function respondToAuthFailure(res: Response, err: unknown): void {
@@ -175,23 +198,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       try {
         const supportId = supportSessionOf(req);
         if (supportId) {
-          // Support mode (2026-11-01): the admin's OWN login first, without the
-          // tenant hint (they have no membership there), then the session that
-          // lets this login act in that tenant. Refused otherwise, never a
-          // fallback to the admin's own tenant.
-          const admin = await resolvePrincipalFromSessionToken(rawSession, null);
-          const principal = await resolveSupportPrincipal(admin, supportId, tenantHintOf(req));
-          const denied = supportDenial(req.method, req.originalUrl || req.url, req.body);
-          if (denied) {
-            res.status(403).json({ error: "Not available in support mode", code: denied });
-            return;
-          }
-          req.user = principal as any;
-          req.tenantId = principal.tenantId;
-          runWithRequestContext(
-            { supportSessionId: principal.support!.sessionId, supportAdminUserId: principal.support!.adminUserId },
-            next,
-          );
+          await enterSupportMode(req, res, next, await resolvePrincipalFromSessionToken(rawSession, null), supportId);
           return;
         }
         const principal = await resolvePrincipalFromSessionToken(rawSession, tenantHintOf(req));
@@ -226,6 +233,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   }
 
   try {
+    const supportId = supportSessionOf(req);
+    if (supportId) {
+      await enterSupportMode(req, res, next, await resolvePrincipal(bearer, null), supportId);
+      return;
+    }
     const principal = await resolvePrincipal(bearer, tenantHintOf(req));
     req.user = principal as any;
     req.tenantId = principal.tenantId;
