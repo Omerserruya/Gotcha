@@ -11,14 +11,15 @@
  */
 import { prisma } from "@chatcenter/shared";
 import { EVENT_CATALOGUE } from "./event-catalogue";
-import { defaultRoute, DELIVERABLE_CHANNELS } from "./notification-engine.service";
+import { defaultRoute, DELIVERABLE_CHANNELS, wantsPush, ASSIGNEE_PUSH_ONLY } from "./notification-engine.service";
+import { fcmConfig } from "./push-sender";
 import { wantsWhatsApp } from "./whatsapp-notice.service";
 import { getPlatformWhatsAppSender } from "./platform-whatsapp";
 import { resolveRecipients, type RecipientSpec } from "./recipient-resolver.service";
 
 export interface ReceivableEvent { type: string; label: string; group: string; channels: string[] }
 
-/** The two channels a person switches per event; WhatsApp is added where it can be sent (a template, the platform number). */
+/** The two channels a person switches per event; WhatsApp and push are added where they can be sent. */
 const PER_EVENT_CHANNELS = ["email", "in_app"];
 
 export async function receivableEvents(tenantId: string, userId: string): Promise<ReceivableEvent[]> {
@@ -34,11 +35,14 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
   };
   const deliverable = new Set<string>(DELIVERABLE_CHANNELS as readonly string[]);
   const whatsappReady = !!getPlatformWhatsAppSender();
+  // Push per event: only where the event pushes and a provider is set up.
+  const pushReady = !!fcmConfig();
   const out: ReceivableEvent[] = [];
   for (const entry of EVENT_CATALOGUE) {
     if (!entry.emitted) continue;
+    // An inbound customer message ignores workspace rules (the assignee only).
     let routes: Array<{ recipients: RecipientSpec; channels: string[]; departmentId: string | null }> = rules
-      .filter((r) => r.eventType === entry.key)
+      .filter((r) => r.eventType === entry.key && !ASSIGNEE_PUSH_ONLY.has(entry.key))
       .map((r) => ({ recipients: r.recipients as RecipientSpec, channels: Array.isArray(r.channels) ? r.channels : ["email", "in_app"], departmentId: r.departmentId ?? null }));
     if (routes.length === 0) {
       // The built-in route, from the one definition the fan-out uses (an
@@ -47,16 +51,22 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
       if (fb) routes = [{ recipients: fb.recipients, channels: fb.channels, departmentId: null }];
     }
     const channels = new Set<string>();
+    // Push needs only that the event reaches this person: it has no rule
+    // channel of its own (message.inbound has none at all).
+    let reached = false;
     for (const r of routes) {
       if (!r.recipients?.type) continue;
-      if (await reaches(r.recipients, r.departmentId)) for (const c of r.channels) if (PER_EVENT_CHANNELS.includes(c) && deliverable.has(c)) channels.add(c);
+      if (!(await reaches(r.recipients, r.departmentId))) continue;
+      reached = true;
+      for (const c of r.channels) if (PER_EVENT_CHANNELS.includes(c) && deliverable.has(c)) channels.add(c);
     }
-    if (channels.size) {
-      const list = PER_EVENT_CHANNELS.filter((c) => channels.has(c));
+    const list = PER_EVENT_CHANNELS.filter((c) => channels.has(c));
+    if (list.length) {
       // WhatsApp per event: only where a template exists and GOTCHA's number is set up.
       if (whatsappReady && wantsWhatsApp(entry.key)) list.push("whatsapp");
-      out.push({ type: entry.key, label: entry.label, group: entry.group, channels: list });
     }
+    if (reached && pushReady && wantsPush(entry.key)) list.push("push");
+    if (list.length) out.push({ type: entry.key, label: entry.label, group: entry.group, channels: list });
   }
   return out;
 }

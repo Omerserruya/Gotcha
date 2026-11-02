@@ -128,6 +128,16 @@ export const EVENT_CATALOGUE: CatalogueEntry[] = [
       "conversation yourself does not notify you.",
   },
   {
+    key: "message.inbound",
+    label: "A customer wrote in a conversation assigned to me",
+    group: "operations",
+    emitted: true,
+    emitters: [E("services/incoming-worker/src/services/notifications-emit.ts", "emitInboundMessage")],
+    caveat:
+      "Mobile push only, to the person the conversation is assigned to. Never " +
+      "while the AI is handling the conversation.",
+  },
+  {
     key: "tool.action_failed",
     label: "An action the AI tried to take failed",
     group: "operations",

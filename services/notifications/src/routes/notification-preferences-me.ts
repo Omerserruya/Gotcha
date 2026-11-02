@@ -38,6 +38,9 @@ const DEFAULTS = {
   inApp: true,
   email: true,
   whatsapp: false,
+  // On like in-app: a phone only gets push once its owner signed in on it and
+  // allowed notifications there, which is the opt-in.
+  push: true,
   approvals: true,
   quietHoursFrom: null as string | null,
   quietHoursTo: null as string | null,
@@ -52,6 +55,7 @@ function shape(row: Record<string, unknown> | null) {
     inApp: r.inApp,
     email: r.email,
     whatsapp: r.whatsapp,
+    push: r.push,
     approvals: r.approvals,
     // A window needs both ends to mean anything, so it is one nullable object
     // rather than two independent fields the client has to correlate.
@@ -82,12 +86,13 @@ async function eventsFor(me: { userId: string; tenantId: string }) {
     prisma.tenantSetting.findFirst({ where: { tenantId: me.tenantId, key: EVENT_PREFS_KEY(me.userId) }, select: { value: true } }),
   ]);
   const own = (((stored?.value as any)?.events ?? {}) as Record<string, EventChannels>);
-  const events: Record<string, { email?: boolean; inApp?: boolean; whatsapp?: boolean }> = {};
+  const events: Record<string, EventChannels> = {};
   for (const t of types) {
     events[t.type] = {
       ...(t.channels.includes("email") ? { email: own[t.type]?.email ?? true } : {}),
       ...(t.channels.includes("in_app") ? { inApp: own[t.type]?.inApp ?? true } : {}),
       ...(t.channels.includes("whatsapp") ? { whatsapp: own[t.type]?.whatsapp ?? true } : {}),
+      ...(t.channels.includes("push") ? { push: own[t.type]?.push ?? true } : {}),
     };
   }
   return { events, eventTypes: types };
@@ -124,7 +129,7 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
   const body = (req.body ?? {}) as Record<string, unknown>;
   const data: Record<string, unknown> = {};
 
-  for (const key of ["inApp", "email", "whatsapp", "approvals"] as const) {
+  for (const key of ["inApp", "email", "whatsapp", "push", "approvals"] as const) {
     if (key in body) {
       if (typeof body[key] !== "boolean") {
         res.status(400).json({ error: `${key} must be a boolean` });
@@ -183,12 +188,12 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
     }
   }
 
-  // { events: { "<eventType>": { email?: boolean, inApp?: boolean } } }
+  // { events: { "<eventType>": { email?: boolean, inApp?: boolean, whatsapp?: boolean, push?: boolean } } }
   let eventPatch: Record<string, EventChannels> | null = null;
   if ("events" in body) {
     const ev = body.events;
     if (!ev || typeof ev !== "object" || Array.isArray(ev)) {
-      res.status(400).json({ error: "events must be an object of { email?, inApp? } by event type" });
+      res.status(400).json({ error: "events must be an object of { email?, inApp?, whatsapp?, push? } by event type" });
       return;
     }
     eventPatch = {};
@@ -198,11 +203,11 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
         return;
       }
       if (!v || typeof v !== "object") {
-        res.status(400).json({ error: `events.${type} must be { email?, inApp? }` });
+        res.status(400).json({ error: `events.${type} must be { email?, inApp?, whatsapp?, push? }` });
         return;
       }
       const entry: EventChannels = {};
-      for (const ch of ["email", "inApp", "whatsapp"] as const) {
+      for (const ch of ["email", "inApp", "whatsapp", "push"] as const) {
         if (ch in (v as object)) {
           const b = (v as Record<string, unknown>)[ch];
           if (typeof b !== "boolean") {

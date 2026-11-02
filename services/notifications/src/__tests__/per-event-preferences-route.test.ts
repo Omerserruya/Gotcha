@@ -5,7 +5,7 @@
  *   - events: a switch per event and channel - an override, else on
  *   - PATCH { events } merges, refuses an unknown event or a non-boolean
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -97,6 +97,8 @@ describe("GET with no workspace rules: the built-in routes (D2, 2026-10-12)", ()
       expect(types[t], t).toEqual(["email", "in_app"]);
     }
     expect(types["broadcast.completed"]).toEqual(["in_app"]);
+    // No push provider set up: push is not offered, and an inbound message has nothing else.
+    expect(types["message.inbound"]).toBeUndefined();
   });
 
   it("an agent is offered the assignment by email, and not the admins' events", async () => {
@@ -161,5 +163,57 @@ describe("★ WhatsApp on the personal preferences (2026-11-02)", () => {
   it("verify without GOTCHA's number: 409 whatsapp_unavailable", async () => {
     const r = await request(app).post("/api/notification-preferences/me/whatsapp/verify").send({ phone: "+972521234567" });
     expect([r.status, r.body.code]).toEqual([409, "whatsapp_unavailable"]);
+  });
+});
+
+describe("push (mobile app, 2026-11-03)", () => {
+  // Push is offered per event only where a provider is set up, like WhatsApp.
+  beforeEach(() => { process.env.FCM_PROJECT_ID = "p"; process.env.FCM_CLIENT_EMAIL = "e"; process.env.FCM_PRIVATE_KEY = "k"; });
+  afterEach(() => { delete process.env.FCM_PROJECT_ID; delete process.env.FCM_CLIENT_EMAIL; delete process.env.FCM_PRIVATE_KEY; });
+  it("the master switch: on by default, PATCH turns it off on the row", async () => {
+    expect((await request(app).get("/api/notification-preferences/me")).body.data.push).toBe(true);
+    const r = await request(app).patch("/api/notification-preferences/me").send({ push: false });
+    expect(r.status).toBe(200);
+    expect(r.body.data.push).toBe(false);
+    expect(H.personal).toEqual(expect.objectContaining({ push: false, userId: "dana" }));
+    expect((await request(app).patch("/api/notification-preferences/me").send({ push: "no" })).status).toBe(400);
+  });
+
+  it("offered on the events that push, to whoever they reach; an inbound message is push only", async () => {
+    H.rules = [];
+    let r = await request(app).get("/api/notification-preferences/me");
+    let types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+    for (const t of ["tool.approval_required", "conversation.escalated", "conversation.assigned", "conversation.waiting"]) {
+      expect(types[t], t).toEqual(["email", "in_app", "push"]);
+    }
+    expect(types["tool.action_failed"]).toEqual(["email", "in_app"]);
+    expect(types["message.inbound"]).toEqual(["push"]);
+    // An agent: their assignments and messages, not the admins' events.
+    H.me = { userId: "matan", role: "AGENT" };
+    r = await request(app).get("/api/notification-preferences/me");
+    types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+    expect(types["conversation.assigned"]).toEqual(["email", "in_app", "push"]);
+    expect(types["message.inbound"]).toEqual(["push"]);
+    expect(types["tool.approval_required"]).toBeUndefined();
+  });
+
+  it("a workspace rule's channels do not decide push: it is personal", async () => {
+    H.rules = [rule("conversation.escalated", ["in_app"])];
+    const r = await request(app).get("/api/notification-preferences/me");
+    const types = Object.fromEntries(r.body.data.eventTypes.map((t: any) => [t.type, t.channels]));
+    expect(types["conversation.escalated"]).toEqual(["in_app", "push"]);
+  });
+
+  it("per event: a push switch where push can arrive, stored beside email and inApp", async () => {
+    H.rules = [];
+    H.me = { userId: "dana", role: "ADMIN" };
+    let r = await request(app).get("/api/notification-preferences/me");
+    expect(r.body.data.events["conversation.escalated"]).toEqual({ email: true, inApp: true, push: true });
+    expect(r.body.data.events["tool.action_failed"]).toEqual({ email: true, inApp: true });
+    expect(r.body.data.events["message.inbound"]).toEqual({ push: true });
+    r = await request(app).patch("/api/notification-preferences/me").send({ events: { "message.inbound": { push: false } } });
+    expect(r.body.data.events["message.inbound"]).toEqual({ push: false });
+    expect(H.settings[0].value).toEqual({ events: { "message.inbound": { push: false } } });
+    expect((await request(app).patch("/api/notification-preferences/me").send({ events: { "message.inbound": { push: 1 } } })).status).toBe(400);
   });
 });

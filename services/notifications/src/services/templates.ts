@@ -66,7 +66,34 @@ function whichConversation(e: SystemEvent, locale: TemplateLocale): string {
 /** GOTCHA is feminine in Hebrew; a person's gender is unknown, so "העביר/ה". */
 const isGotcha = (name: string) => /^gotcha$/i.test(name.trim());
 
+/** What a media message is called when it has no words of its own. */
+const MEDIA_LABEL: Record<string, { en: string; he: string }> = {
+  image: { en: "Photo", he: "תמונה" },
+  video: { en: "Video", he: "סרטון" },
+  audio: { en: "Voice message", he: "הודעה קולית" },
+  document: { en: "Document", he: "מסמך" },
+  sticker: { en: "Sticker", he: "מדבקה" },
+  location: { en: "Location", he: "מיקום" },
+};
+
 const TEMPLATES: Record<SystemEventType, TemplateFn> = {
+  // One customer message, for its assignee's phone: who wrote as the title,
+  // their words as the body (in whatever language they wrote them). A photo
+  // with no caption is named in the reader's language, not as the "[Image]"
+  // placeholder the channel stored.
+  "message.inbound": (e) => {
+    const raw = safe(e.data.customerName, "");
+    const kind = safe(e.data.previewKind, "text");
+    const media = MEDIA_LABEL[safe(e.data.messageType, "")];
+    const preview = safe(e.data.preview, "");
+    const said = (locale: TemplateLocale) => (kind === "media" ? media?.[locale] ?? preview : preview);
+    return {
+      en: { title: raw ? `New message from ${customerName(raw, "en")}` : "New message", body: said("en") },
+      he: { title: raw ? `הודעה חדשה: ${customerName(raw, "he")}` : "הודעה חדשה", body: said("he") },
+      link: convLink(e),
+    };
+  },
+
   // Never a tool's raw name: the request is said by its own summary. A plan
   // proposed in Home is said as who asked, in the reader's words ("you" when
   // it assigns to them); "GOTCHA asks to run propose_plan" was wrong twice.

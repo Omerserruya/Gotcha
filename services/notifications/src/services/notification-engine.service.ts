@@ -27,6 +27,7 @@ import { renderTemplate } from "./templates";
 import { localeForRecipient } from "./platform-whatsapp";
 import { deliverWhatsAppNotice, wantsWhatsApp } from "./whatsapp-notice.service";
 import { createInAppNotification } from "./in-app.service";
+import { sendPushToUser } from "./push-sender";
 import { loadPersonal, personalAllows, workspaceTimeZone, localTime, PERSONAL_DEFAULTS } from "./personal-preferences.service";
 import {
   getNotificationsEmailQueue,
@@ -148,6 +149,10 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   // is more specific and the operator clearly meant to override.
   const hasDeptScoped = prefs.some((p) => p.departmentId);
   let effective = hasDeptScoped ? prefs.filter((p) => p.departmentId) : prefs;
+  // An inbound customer message goes to its assignee's phone and nowhere
+  // else, whatever a workspace rule says: a rule could otherwise broadcast
+  // every customer message to the admins, by email.
+  if (ASSIGNEE_PUSH_ONLY.has(event.type)) effective = [];
   // No rule for this event in the workspace: the built-in route, so it
   // reaches someone (design 15, Step 1). It was silently dropped.
   if (effective.length === 0) {
@@ -199,7 +204,13 @@ export async function processEvent(event: SystemEvent): Promise<void> {
 
     // WhatsApp is personal, not a workspace rule's channel: added for everyone
     // the event reaches when it has a template; personalAllows decides.
-    const withPersonal = wantsWhatsApp(event.type) && !channels.includes("whatsapp") ? [...channels, "whatsapp"] : channels;
+    const withWhatsApp = wantsWhatsApp(event.type) && !channels.includes("whatsapp") ? [...channels, "whatsapp"] : channels;
+    // Push is personal the same way (a phone the person registered): added
+    // for the events that push, never offered on a workspace rule. An inbound
+    // customer message is push only, whatever a rule would say.
+    const withPersonal = ASSIGNEE_PUSH_ONLY.has(event.type)
+      ? ["push"]
+      : wantsPush(event.type) && !withWhatsApp.includes("push") ? [...withWhatsApp, "push"] : withWhatsApp;
     for (const user of recipients) {
       if (user.id === skip) continue;
       for (const channel of withPersonal) {
@@ -235,6 +246,30 @@ export const EMAIL_BY_DEFAULT: ReadonlySet<string> = new Set([
   "conversation.escalated",
   "conversation.assigned",
 ]);
+/**
+ * Push (mobile app, 2026-11-03), a PERSONAL channel like WhatsApp: not a
+ * workspace rule's channel and not in DELIVERABLE_CHANNELS, but added for
+ * everyone these events reach, by whichever route (processEvent,
+ * withPersonal). The person's own push switch, per-event switch and quiet
+ * hours decide. conversation.waiting pushes only while nobody is assigned
+ * (skipPushForAssignedWaiting).
+ */
+export const PUSH_BY_DEFAULT: ReadonlySet<string> = new Set([
+  "tool.approval_required",
+  "conversation.escalated",
+  "conversation.assigned",
+  "conversation.waiting",
+]);
+/**
+ * Push only, to the conversation's assignee only (Omer, 2026-11-03): every
+ * inbound customer message in a conversation a PERSON owns. The emitter
+ * (incoming-worker) already refuses one the bot is handling.
+ */
+export const ASSIGNEE_PUSH_ONLY: ReadonlySet<string> = new Set(["message.inbound"]);
+/** Whether this event is pushed to the phones of the people it reaches. */
+export function wantsPush(type: string): boolean {
+  return PUSH_BY_DEFAULT.has(type) || ASSIGNEE_PUSH_ONLY.has(type);
+}
 const ADMINS_FOR = new Set([
   "tool.approval_required", "tool.action_failed", "conversation.escalated", "integration.check_failed", "broadcast.completed",
   "refund.issued", "discount.applied", "meeting.scheduled",
@@ -245,6 +280,14 @@ const ADMINS_FOR = new Set([
 export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; channels: string[]; priority: string; conditions: null; departmentId: null } | null {
   const base = { priority: "MEDIUM", conditions: null, departmentId: null } as const;
   const channels = EMAIL_BY_DEFAULT.has(event.type) ? ["in_app", "email"] : ["in_app"];
+  if (ASSIGNEE_PUSH_ONLY.has(event.type)) {
+    // No rule channels at all: push is personal and added per recipient
+    // (processEvent, withPersonal), so the assignee's phone is all it reaches.
+    const userId = (event.data as any)?.assignedAgentId ?? event.metadata?.userId;
+    return typeof userId === "string" && userId
+      ? { ...base, channels: [], recipients: { type: "users", userIds: [userId] } as RecipientSpec }
+      : null;
+  }
   if (event.type === "conversation.waiting") {
     // The assignee, else the department's members (resolved by the sweeper);
     // with neither, the admins.
@@ -414,6 +457,20 @@ async function deliverChannel(opts: {
         },
         opts,
       );
+    } else if (channel === "push") {
+      // ── conversation.waiting guard ──────────────────────────────────────
+      // "A conversation is waiting" is pushed only while NOBODY owns it: once
+      // someone is assigned, the assignee hears each customer message through
+      // message.inbound instead, and a waiting push on top would be the same
+      // news twice. Keyed on the waiting alert's own payload
+      // (waiting-alert.service, data.assignedAgentId). Its in-app row and
+      // email are untouched.
+      if (skipPushForAssignedWaiting(event)) return;
+      // Not configured (said once, by the sender) and no registered phone are
+      // the normal state for most people, not failures, so unlike the
+      // undeliverable arm below neither writes a row: every web-only user
+      // would write one per event. Each actual send is logged per device.
+      await sendPushToUser({ user, event, tpl, priority });
     } else {
       // ── A channel nobody can deliver ────────────────────────────────────
       //
@@ -439,4 +496,9 @@ async function deliverChannel(opts: {
   } catch (err: any) {
     console.warn(`[notifications.deliver] channel=${channel} userId=${user.id} failed:`, err?.message);
   }
+}
+
+/** conversation.waiting is pushed only to a conversation nobody is assigned to. */
+export function skipPushForAssignedWaiting(event: { type: string; data?: Record<string, unknown> }): boolean {
+  return (event.type as string) === "conversation.waiting" && !!(event.data as any)?.assignedAgentId;
 }

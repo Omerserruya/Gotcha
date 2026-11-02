@@ -70,7 +70,11 @@ export type SystemEventType =
   // failure === "errored"; a refusal is the product working correctly and is
   // not worth interrupting anyone. The kind (refund/discount/meeting) rides in
   // the payload so one type covers the family, mirroring the success side.
-  | "tool.action_failed";
+  | "tool.action_failed"
+  // Emitted by services/incoming-worker for EVERY inbound customer message in
+  // a conversation a person is assigned to and the bot is not handling. Push
+  // only, to the assignee only (notification-engine ASSIGNEE_PUSH_ONLY).
+  | "message.inbound";
 
 export interface SystemEventMetadata {
   conversationId?: string;

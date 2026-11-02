@@ -6,9 +6,9 @@
  * by NOTHING: the fan-out routed only by the workspace's routing rules, so
  * every switch on the settings screen changed nothing (2026-10-08). The
  * fan-out now asks this, per recipient and channel:
- *   - the channel's own switch (in-app, email; WhatsApp is not deliverable);
+ *   - the channel's own switch (in-app, email, WhatsApp, push);
  *   - "approvals": off silences approval notices on every channel;
- *   - quiet hours (the workspace's timezone): no email; the in-app row is
+ *   - quiet hours (the workspace's timezone): no email and no push; the in-app row is
  *     still written, silently, so nothing is lost. One
  *     exception: an action that failed with money involved (a refund, a
  *     discount) still reaches email.
@@ -21,9 +21,9 @@
  */
 import { prisma, readDurableSetting, parseBusinessHours } from "@chatcenter/shared";
 
-export type EventChannels = { email?: boolean; inApp?: boolean; whatsapp?: boolean };
+export type EventChannels = { email?: boolean; inApp?: boolean; whatsapp?: boolean; push?: boolean };
 export interface Personal {
-  inApp: boolean; email: boolean; whatsapp: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null;
+  inApp: boolean; email: boolean; whatsapp: boolean; push: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null;
   events?: Record<string, EventChannels>;
   /** The confirmed number for GOTCHA alerts on WhatsApp, and when it was confirmed (2026-11-02). */
   whatsappPhone?: string | null;
@@ -33,7 +33,7 @@ export interface Personal {
 export const EVENT_PREFS_KEY = (userId: string) => `notify:events:${userId}`;
 
 /** The same defaults as routes/notification-preferences-me.ts. */
-export const PERSONAL_DEFAULTS: Personal = { inApp: true, email: true, whatsapp: false, approvals: true, quietHoursFrom: null, quietHoursTo: null };
+export const PERSONAL_DEFAULTS: Personal = { inApp: true, email: true, whatsapp: false, push: true, approvals: true, quietHoursFrom: null, quietHoursTo: null };
 
 const MONEY_KINDS = new Set(["refund.issued", "discount.applied"]);
 
@@ -43,7 +43,7 @@ export async function loadPersonal(userIds: string[], tenantId?: string): Promis
   const [rows, eventRows] = await Promise.all([
     (prisma as any).userNotificationPreference.findMany({
       where: { userId: { in: userIds } },
-      select: { userId: true, inApp: true, email: true, whatsapp: true, approvals: true, quietHoursFrom: true, quietHoursTo: true, whatsappPhone: true, whatsappOptedInAt: true },
+      select: { userId: true, inApp: true, email: true, whatsapp: true, push: true, approvals: true, quietHoursFrom: true, quietHoursTo: true, whatsappPhone: true, whatsappOptedInAt: true },
     }),
     // The per-event overrides are optional: if they cannot be read, every
     // event is delivered as it was before them - a lost notice is worse than
@@ -104,6 +104,9 @@ export function personalAllows(p: Personal, channel: string, event: { type: stri
   // WhatsApp: on, with a number the person confirmed by code, this event not
   // switched off, and not in quiet hours.
   if (channel === "whatsapp") return p.whatsapp && !!p.whatsappPhone && !!p.whatsappOptedInAt && own?.whatsapp !== false && !inQuietHours(p, hhmm);
+  // Push: on, this event not switched off, and not in quiet hours - a phone
+  // buzzing at 2am is what quiet hours are for; the in-app row still records it.
+  if (channel === "push") return p.push && own?.push !== false && !inQuietHours(p, hhmm);
   // Any other channel: not the person's to switch (the dispatcher records it as undeliverable).
   return true;
 }
