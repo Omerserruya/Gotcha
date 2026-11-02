@@ -369,6 +369,28 @@ describe('★★ per event, per channel - the platform keeps it now (notificatio
     );
   });
 
+  it('★ a customer waiting (Backend 2ac65631): its own row, its own switch where it reaches you', async () => {
+    saveEvent.mockResolvedValue({ ok: true });
+    await show(
+      matrix({
+        eventTypes: [
+          {
+            type: 'conversation.waiting',
+            label: 'A customer is waiting for a reply',
+            group: 'operations',
+            channels: ['in_app', 'email'],
+          },
+        ],
+        events: {},
+      }),
+    );
+    expect(screen.getByTestId('pref-row-waiting')).toHaveTextContent(
+      'A customer is waiting for a reply',
+    );
+    await act(async () => fireEvent.click(screen.getByTestId('pref-waiting-inApp-switch')));
+    expect(saveEvent).toHaveBeenCalledWith('conversation.waiting', 'inApp', false);
+  });
+
   it('★ pressing it writes that event on that channel, and the page reads again', async () => {
     saveEvent.mockResolvedValue({ ok: true });
     await show(matrix());

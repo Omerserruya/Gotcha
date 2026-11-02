@@ -36,7 +36,8 @@
     },
     "conversation": {
       "escalated": "A conversation is escalated",
-      "assigned": "A conversation is handed to someone"
+      "assigned": "A conversation is handed to someone",
+      "waiting": "A customer is waiting for a reply"
     },
     "integration": {
       "check_failed": "A business system's credentials were rejected"
@@ -81,7 +82,8 @@
       "check_failed": "Fires when someone runs a connection test and the credentials are rejected - not continuous monitoring, and not \"the provider is down\"."
     },
     "conversation": {
-      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves."
+      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves.",
+      "waiting": "Only while the response target is on, once a customer has waited past it."
     },
     "broadcast": {
       "completed": "When every recipient has reached a final state - including the ones that failed."
@@ -129,7 +131,8 @@
       "employeeDown": "An AI employee stops working",
       "complaints": "Complaints spike unusually",
       "campaign": "A campaign finishes",
-      "assigned": "A conversation is assigned to me"
+      "assigned": "A conversation is assigned to me",
+      "waiting": "A customer is waiting for a reply"
     },
     "nothingSends": "Nothing sends this yet",
     "on": "on",

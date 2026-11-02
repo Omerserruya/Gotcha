@@ -26,6 +26,7 @@ const ROWS = [
   { key: 'complaints', event: null, about: true },
   { key: 'campaign', event: 'broadcast.completed' },
   { key: 'assigned', event: 'conversation.assigned' },
+  { key: 'waiting', event: 'conversation.waiting' },
 ] as const;
 
 const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
