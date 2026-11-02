@@ -16,6 +16,10 @@ import styles from './StepSheet.module.css';
  * One or several (09c's selection): several are named by count, "Delete 3
  * automations?". Each is deleted on its own route call; the ones that went
  * are reported back even when another did not, and that one is said.
+ *
+ * ★ THE SETUP ROUTE IS REFUSED, NOT FAILED: the route will not delete the
+ *   automation that answers every new conversation. Said as that, with the
+ *   way it can be turned off - and no "try again" that can only fail again.
  */
 export function DeleteAutomation({
   targets,
@@ -29,11 +33,13 @@ export function DeleteAutomation({
 }) {
   const t = useTranslations('automations.delete');
   const [failed, setFailed] = useState(false);
+  const [refused, setRefused] = useState<ReadonlySet<string>>(new Set());
   // AU2: awaited with its own pending state; `onDeleted` (a navigation in the builder) runs outside any transition.
   const [isDeleting, setDeleting] = useState(false);
   // A retry asks only for the ones still here.
   const [left, setLeft] = useState(targets);
   const one = left.length === 1 ? left[0]! : null;
+  const retryable = left.some((target) => !refused.has(target.id));
   return (
     <Dialog open onOpenChange={(open) => (open ? null : onClose())}>
       <DialogContent
@@ -41,6 +47,11 @@ export function DeleteAutomation({
         description={one ? t('what') : t('whatMany')}
         data-testid="delete-automation"
       >
+        {refused.size > 0 ? (
+          <p className={styles.problem} role="alert" data-testid="delete-automation-setup">
+            {t('setupRoute')}
+          </p>
+        ) : null}
         {failed ? (
           <p className={styles.problem} role="alert" data-testid="delete-automation-failed">
             {t('failed')}
@@ -53,18 +64,25 @@ export function DeleteAutomation({
           <button
             type="button"
             className={styles.dangerButton}
-            disabled={isDeleting}
+            disabled={isDeleting || !retryable}
             onClick={async () => {
               setDeleting(true);
               setFailed(false);
               const done: string[] = [];
+              const kept = new Set(refused);
+              let anyFailed = false;
               for (const target of left) {
-                if (await deleteAutomation(target.id)) done.push(target.id);
+                if (kept.has(target.id)) continue;
+                const result = await deleteAutomation(target.id);
+                if (result === 'deleted') done.push(target.id);
+                else if (result === 'setup_route') kept.add(target.id);
+                else anyFailed = true;
               }
               if (done.length > 0) onDeleted(done);
               if (done.length === left.length) return;
               setLeft(left.filter((target) => !done.includes(target.id)));
-              setFailed(true);
+              setRefused(kept);
+              setFailed(anyFailed);
               setDeleting(false);
             }}
             data-testid="delete-automation-yes"

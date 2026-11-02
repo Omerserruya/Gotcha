@@ -44,6 +44,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 
 import { setLive } from './automation-actions';
 import { DeleteAutomation } from './DeleteAutomation';
+import { PauseSetupRoute } from './PauseSetupRoute';
 import { modLabel, shortcutsAllowed, withMod } from './shortcuts';
 import styles from './Automations.module.css';
 
@@ -83,6 +84,8 @@ export function AutomationsList({ automations }: { readonly automations: readonl
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<readonly Automation[] | null>(null);
+  /** Pausing the setup route waits here for its confirmation. */
+  const [pausing, setPausing] = useState<readonly Automation[] | null>(null);
   const router = useRouter();
 
   const ids = items.map((a) => a.id);
@@ -111,6 +114,13 @@ export function AutomationsList({ automations }: { readonly automations: readonl
 
   /** Turn on or pause each - one route call apiece, each refusal said on its own row. */
   const setEach = async (targets: readonly Automation[], on: boolean) => {
+    if (!on && targets.some((a) => a.status === 'live' && a.origin === 'setup')) {
+      setPausing(targets);
+      return;
+    }
+    await setEachNow(targets, on);
+  };
+  const setEachNow = async (targets: readonly Automation[], on: boolean) => {
     const todo = targets.filter((a) => (a.status === 'live') !== on);
     setBusy(new Set(todo.map((a) => a.id)));
     for (const target of todo) {
@@ -244,6 +254,17 @@ export function AutomationsList({ automations }: { readonly automations: readonl
         {selected.size > 0 ? `${t('listSelect.selected', { count: selected.size })} · ` : ''}
         {t('listSelect.hint', { mod: modLabel() })}
       </p>
+      {pausing ? (
+        <PauseSetupRoute
+          name={pausing.find((a) => a.origin === 'setup')!.name}
+          onClose={() => setPausing(null)}
+          onPause={() => {
+            const targets = pausing;
+            setPausing(null);
+            void setEachNow(targets, false);
+          }}
+        />
+      ) : null}
       {deleting ? (
         <DeleteAutomation
           targets={deleting.map((a) => ({ id: a.id, name: a.name }))}

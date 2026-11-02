@@ -592,7 +592,7 @@ describe('★ measured on dev (e6785c4)', () => {
   });
 
   it('09d: Delete, confirmed, saying the run history goes too; then back to 09c', async () => {
-    actions.deleteAutomation.mockResolvedValue(true);
+    actions.deleteAutomation.mockResolvedValue('deleted');
     showBuilder(live());
     fireEvent.keyDown(screen.getByTestId('builder-more'), { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('builder-delete'));
@@ -608,7 +608,7 @@ describe('★ measured on dev (e6785c4)', () => {
   });
 
   it('09c: Delete from the row; the row goes; refused, it stays and says so', async () => {
-    actions.deleteAutomation.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    actions.deleteAutomation.mockResolvedValueOnce('failed').mockResolvedValueOnce('deleted');
     wrap(<AutomationsList automations={[automation()]} />);
     fireEvent.keyDown(screen.getByTestId('automation-more-a1'), { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('automation-delete-a1'));
@@ -1361,6 +1361,81 @@ describe('★★ the route onboarding wrote: a normal automation, said as made a
       expect(screen.getByTestId(`inspector-channel-${ch}`)).not.toBeChecked();
     }
     expect(screen.getByText('None chosen: any channel')).toBeInTheDocument();
+  });
+
+  it('★ Delete is refused for it: said why, the way to turn it off, and no retry', async () => {
+    actions.deleteAutomation.mockResolvedValue('setup_route');
+    wrap(<AutomationsList automations={[setup()]} />);
+    fireEvent.keyDown(screen.getByTestId('automation-more-s1'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('automation-delete-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.getByTestId('delete-automation-setup')).toHaveTextContent(
+      'answers every new conversation',
+    );
+    expect(screen.getByTestId('delete-automation-setup')).toHaveTextContent('pause it instead');
+    expect(screen.queryByTestId('delete-automation-failed')).toBeNull();
+    expect(screen.getByTestId('delete-automation-yes')).toBeDisabled();
+    expect(screen.getByTestId('automation-s1')).toBeInTheDocument();
+    expect(actions.deleteAutomation).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ deleting it with others: the others go; it stays, said as refused', async () => {
+    actions.deleteAutomation.mockImplementation(async (id: string) =>
+      id === 's1' ? 'setup_route' : 'deleted',
+    );
+    wrap(<AutomationsList automations={[setup(), automation({ id: 'a2' })]} />);
+    fireEvent.keyDown(screen.getByTestId('automation-more-s1'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('automation-delete-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.getByTestId('automation-s1')).toBeInTheDocument();
+    expect(screen.getByTestId('delete-automation-setup')).toBeInTheDocument();
+  });
+
+  it('★ pausing it asks first, saying new conversations go unanswered; Cancel pauses nothing', async () => {
+    actions.setLive.mockResolvedValue({
+      ok: true,
+      warnings: [],
+      automation: setup({ status: 'paused', pausedAt: '2026-10-06T10:00:00Z' }),
+    });
+    wrap(<AutomationsList automations={[setup()]} />);
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    expect(screen.getByTestId('pause-setup')).toHaveTextContent(
+      "New conversations will get no automatic answer until it's on again.",
+    );
+    expect(actions.setLive).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('pause-setup')).toBeNull();
+    expect(actions.setLive).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pause-setup-yes'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('s1', false);
+  });
+
+  it('turning it on, or pausing any other, asks nothing', async () => {
+    actions.setLive.mockResolvedValue({ ok: true, warnings: [], automation: setup() });
+    wrap(<AutomationsList automations={[setup({ status: 'paused' }), automation({ id: 'a2' })]} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('s1', true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-a2'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('a2', false);
+    expect(screen.queryByTestId('pause-setup')).toBeNull();
+  });
+
+  it('in Hebrew, the pause and the refusal in Hebrew', async () => {
+    actions.deleteAutomation.mockResolvedValue('setup_route');
+    wrapHe(<AutomationsList automations={[setup()]} />);
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    expect(screen.getByTestId('pause-setup')).toHaveTextContent('לא יקבלו מענה אוטומטי');
   });
 
   it('New automation: "New conversation" picked goes on, named', () => {

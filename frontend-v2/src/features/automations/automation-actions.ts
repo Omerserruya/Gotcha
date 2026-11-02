@@ -291,7 +291,14 @@ export async function provisionWebhook(automationId: string): Promise<WebhookTri
  * by cascade, its runs; a conversation parked on one of its runs is released.
  * `false`: it was not deleted.
  */
-export async function deleteAutomation(id: string): Promise<boolean> {
+/**
+ * `setup_route`: the route refuses to delete the automation onboarding wrote
+ * (422 `setup_route_required`, Omer 2026-11-02) - it answers every new
+ * conversation. Pausing it stays allowed.
+ */
+export type DeleteResult = 'deleted' | 'setup_route' | 'failed';
+
+export async function deleteAutomation(id: string): Promise<DeleteResult> {
   try {
     await serverApi().delete({
       endpoint: automationEndpoints.one(id),
@@ -303,13 +310,14 @@ export async function deleteAutomation(id: string): Promise<boolean> {
       router's state under the builder's push back to the list. The list
       drops deleted rows itself, and reads fresh when it is opened.
     */
-    return true;
+    return 'deleted';
   } catch (cause) {
     await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.code === 'setup_route_required') return 'setup_route';
     logger.warn('automations.delete_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
-    return false;
+    return 'failed';
   }
 }
 

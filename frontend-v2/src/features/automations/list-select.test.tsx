@@ -42,7 +42,7 @@ const automation = (id: string, status: string, over: Record<string, unknown> = 
 
 const LIST = [automation('a1', 'live'), automation('a2', 'paused'), automation('a3', 'draft')];
 
-const show = () =>
+const show = (list: readonly Automation[] = LIST) =>
   render(
     <NextIntlClientProvider
       locale="en"
@@ -50,7 +50,7 @@ const show = () =>
       now={new Date('2026-10-06T10:00:00Z')}
       messages={{ automations: automationsMessages, common: commonMessages }}
     >
-      <AutomationsList automations={LIST} />
+      <AutomationsList automations={list} />
     </NextIntlClientProvider>,
   );
 
@@ -154,7 +154,7 @@ describe('★★ selecting rows', () => {
 
 describe('★★ Delete asks, naming the count', () => {
   it('Delete on three: "Delete 3 automations?", and each one goes', async () => {
-    actions.deleteAutomation.mockResolvedValue(true);
+    actions.deleteAutomation.mockResolvedValue('deleted');
     show();
     key('a', true);
     key('Delete');
@@ -168,7 +168,9 @@ describe('★★ Delete asks, naming the count', () => {
   });
 
   it('one that is not deleted stays, is said, and a retry asks only for it', async () => {
-    actions.deleteAutomation.mockImplementation(async (id: string) => id !== 'a2');
+    actions.deleteAutomation.mockImplementation(async (id: string) =>
+      id !== 'a2' ? 'deleted' : 'failed',
+    );
     show();
     key('a', true);
     key('Backspace');
@@ -219,5 +221,41 @@ describe('★★ right-click', () => {
       ['a2', true],
       ['a3', true],
     ]);
+  });
+
+  it('★ Pause on a selection with the setup route live: asked first, then all of them', async () => {
+    actions.setLive.mockImplementation(async (id: string) => ({
+      ok: true,
+      automation: automation(id, 'paused'),
+      warnings: [],
+    }));
+    show([automation('a1', 'live'), automation('s1', 'live', { origin: 'setup' })]);
+    key('a', true);
+    rightClick('a1');
+    fireEvent.click(within(screen.getByTestId('automations-menu')).getByTestId('menu-pause'));
+    expect(actions.setLive).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pause-setup-yes'));
+    });
+    expect(actions.setLive.mock.calls).toEqual([
+      ['a1', false],
+      ['s1', false],
+    ]);
+  });
+
+  it('★ the setup route already paused in the selection: nothing to warn about, nothing asked', async () => {
+    actions.setLive.mockResolvedValue({
+      ok: true,
+      automation: automation('a1', 'paused'),
+      warnings: [],
+    });
+    show([automation('a1', 'live'), automation('s1', 'paused', { origin: 'setup' })]);
+    key('a', true);
+    rightClick('a1');
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId('automations-menu')).getByTestId('menu-pause'));
+    });
+    expect(screen.queryByTestId('pause-setup')).toBeNull();
+    expect(actions.setLive.mock.calls).toEqual([['a1', false]]);
   });
 });

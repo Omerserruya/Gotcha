@@ -571,6 +571,7 @@
     "deleting": "Deleting…",
     "cancel": "Cancel",
     "failed": "It wasn't deleted. Try again in a moment.",
+    "setupRoute": "It wasn't deleted: this automation answers every new conversation, on every channel. You can pause it instead.",
     "done": "Automation deleted.",
     "titleMany": "Delete {count, plural, one {# automation} other {# automations}}?",
     "whatMany": "They stop running and are deleted, together with their run history. A conversation waiting on one carries on as usual."
@@ -628,5 +629,11 @@
   },
   "origin": {
     "setup": "Created at setup"
+  },
+  "pauseSetup": {
+    "title": "Pause “{name}”?",
+    "what": "New conversations will get no automatic answer until it's on again.",
+    "yes": "Pause",
+    "cancel": "Cancel"
   }
 }
