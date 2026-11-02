@@ -17,7 +17,7 @@
  * All queries are tenantId-scoped.
  */
 
-import { prisma, hasPermission } from "@chatcenter/shared";
+import { prisma, hasPermission, visibilityClause, canViewConversation, type Viewer } from "@chatcenter/shared";
 
 export type RecipientType = "tenant_owner" | "department_manager" | "users" | "conversation_readers";
 
@@ -27,6 +27,8 @@ export const CONVERSATION_READ = "conversation:messages:read";
 export interface RecipientSpec {
   type: RecipientType;
   userIds?: string[];
+  /** conversation_readers: the conversation each person must be able to open. */
+  conversationId?: string;
 }
 
 export interface ResolvedUser {
@@ -83,23 +85,41 @@ export async function resolveRecipients(opts: {
       }
     }
   } else if (spec.type === "conversation_readers") {
-    // Everyone in the workspace who may read its conversations (2026-11-03,
+    // Everyone in the workspace who may read THIS conversation (2026-11-03,
     // an unclaimed chat's messages "alert everyone"). Members only: a support
     // principal (kind "support") is not a teammate, and inactive users are
-    // gone. The permission is checked per person, and a check that fails
-    // leaves that person out: a push carries the customer's words, so it
-    // must never reach someone who could not open the conversation.
+    // gone. Two checks per person, both the platform's own:
+    //   - the permission to read conversations at all;
+    //   - the ONE visibility rule for a conversation by id (shared
+    //     canViewConversation, what the inbox and every by-id route apply):
+    //     a member scoped to another department holds the permission and
+    //     still cannot open this chat.
+    // The viewer is built as the auth principal builds it (role, and the
+    // earliest department membership), so the answer is the one the inbox
+    // would give this person. A check that fails leaves the person out: the
+    // push carries the customer's words. No conversation id: nobody.
+    const conversationId = spec.conversationId;
+    if (!conversationId) return [];
     const members = await (prisma as any).user.findMany({
       where: { tenantId, isActive: true, kind: "member" },
-      select: { id: true, tenantId: true, email: true, name: true, notificationSoundEnabled: true, role: true },
+      select: {
+        id: true, tenantId: true, email: true, name: true, notificationSoundEnabled: true, role: true,
+        departmentMembers: { select: { departmentId: true }, orderBy: { createdAt: "asc" }, take: 1 },
+      },
     });
     for (const u of members) {
-      const allowed = await hasPermission({ userId: u.id, tenantId, role: u.role }, CONVERSATION_READ).catch((err: any) => {
-        console.warn(`[notifications] permission check failed for user=${u.id}; left out:`, err?.message);
+      const viewer: Viewer = { userId: u.id, role: u.role, departmentId: u.departmentMembers?.[0]?.departmentId ?? undefined };
+      const allowed = await (async () => {
+        if (!(await hasPermission({ userId: u.id, tenantId, role: u.role }, CONVERSATION_READ))) return false;
+        // Unrestricted (an admin, or no department): nothing to look up.
+        if (!visibilityClause(viewer)) return true;
+        return canViewConversation(tenantId, conversationId, viewer);
+      })().catch((err: any) => {
+        console.warn(`[notifications] access check failed for user=${u.id}; left out:`, err?.message);
         return false;
       });
       if (allowed) {
-        const { role: _role, ...user } = u;
+        const { role: _role, departmentMembers: _d, ...user } = u;
         out.set(u.id, user);
       }
     }

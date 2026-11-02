@@ -27,6 +27,8 @@ const H = vi.hoisted(() => ({
   deviceQueries: 0,
   members: [] as Array<{ tenantId: string; departmentId: string; userId: string }>,
   cannotRead: new Set<string>(),
+  conversations: [] as Array<Record<string, any>>,
+  viewChecks: [] as any[],
   permissionDown: false,
   dedup: new Set<string>(),
 }));
@@ -75,7 +77,9 @@ vi.mock("@chatcenter/shared", async () => ({
       findMany: async (a: any) => H.users.filter((u) => u.tenantId === a.where.tenantId && u.isActive
         && (a.where.role ? u.role === a.where.role : true)
         && (a.where.kind ? (u.kind ?? "member") === a.where.kind : true)
-        && (a.where.id?.in ? a.where.id.in.includes(u.id) : true)),
+        && (a.where.id?.in ? a.where.id.in.includes(u.id) : true))
+        // Department memberships, in the order they were added (the earliest is the principal's).
+        .map((u) => ({ ...u, departmentMembers: H.members.filter((m) => m.userId === u.id && m.tenantId === u.tenantId).map((m) => ({ departmentId: m.departmentId })) })),
     },
     departmentMember: { findMany: async (a: any) => H.members.filter((m) => m.tenantId === a.where?.tenantId && m.departmentId === a.where?.departmentId) },
     userNotificationPreference: { findMany: async (a: any) => H.personal.filter((p) => a.where.userId.in.includes(p.userId)) },
@@ -92,6 +96,16 @@ vi.mock("@chatcenter/shared", async () => ({
     tenantSetting: { findMany: async () => [] },
   },
   publishEvent: async () => undefined,
+  // The real rule, and canViewConversation as the conversation lookup it is:
+  // tenant first, then any one of the rule's clauses matching the row.
+  visibilityClause: (await import("@chatcenter/shared/src/lib/conversation-visibility-rule")).visibilityClause,
+  canViewConversation: async (tenantId: string, id: string, viewer: any) => {
+    const { visibilityClause } = await import("@chatcenter/shared/src/lib/conversation-visibility-rule");
+    H.viewChecks.push(viewer.userId);
+    const clause = visibilityClause(viewer);
+    const row = H.conversations.find((c) => c.id === id && c.tenantId === tenantId);
+    return !!row && (!clause || clause.some((w) => Object.entries(w).every(([k, v]) => (row[k] ?? null) === v)));
+  },
   hasPermission: async (p: any, key: string) => {
     if (H.permissionDown) throw new Error("rbac unavailable");
     return key === "conversation:messages:read" && !H.cannotRead.has(p.userId);
@@ -177,7 +191,8 @@ const iphone = (id: string, userId: string, tenantId = "T") => ({ id, userId, te
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
-  H.rules = []; H.personal = []; H.timezone = null; H.inApp = []; H.emails = []; H.devices = []; H.logs = []; H.deviceQueries = 0; H.members = []; H.cannotRead = new Set(); H.permissionDown = false; H.dedup = new Set();
+  H.rules = []; H.personal = []; H.timezone = null; H.inApp = []; H.emails = []; H.devices = []; H.logs = []; H.deviceQueries = 0; H.members = []; H.cannotRead = new Set(); H.permissionDown = false; H.viewChecks = [];
+  H.conversations = [{ id: "c7", tenantId: "T", departmentId: null, assignedAgentId: null }]; H.dedup = new Set();
   const u = (id: string, role: string, tenantId = "T") => ({ id, tenantId, role, isActive: true, email: `${id}@x.test`, name: id, notificationSoundEnabled: true });
   H.users = [u("dana", "ADMIN"), u("noa", "ADMIN"), u("matan", "AGENT")];
   fcmReply = () => ({ status: 200, json: { name: "projects/p/messages/1" } });
@@ -350,11 +365,58 @@ describe("★ message.inbound in the team's queue (handed over, nobody assigned;
     expect(H.emails).toHaveLength(0);
   });
 
-  it("a department set: still everyone, not only its members", async () => {
+  it("a department set: still everyone who can open it, not only its members", async () => {
+    H.conversations = [{ id: "c7", tenantId: "T", departmentId: "sales", assignedAgentId: null }];
     H.members = [{ tenantId: "T", departmentId: "sales", userId: "matan" }];
-    H.devices = [device("d1", "dana"), device("d3", "matan")];
+    H.devices = [device("d1", "dana"), device("d2", "noa"), device("d3", "matan")];
+    await processEvent(queued("sales"));
+    expect(fcmCalls.map((c) => c.body.message.token).sort()).toEqual(["tok-d1", "tok-d2", "tok-d3"]);
+  });
+
+  it("★ the visibility rule: an agent of another department holds the read permission and gets nothing", async () => {
+    H.conversations = [{ id: "c7", tenantId: "T", departmentId: "sales", assignedAgentId: null }];
+    H.users.push({ id: "yael", tenantId: "T", role: "AGENT", isActive: true, email: "y@x.test", name: "yael", notificationSoundEnabled: true });
+    H.members = [
+      { tenantId: "T", departmentId: "sales", userId: "matan" },   // eligible: the chat's department
+      { tenantId: "T", departmentId: "support", userId: "yael" },  // another department
+    ];
+    H.devices = [device("d3", "matan"), device("y1", "yael"), device("d1", "dana")];
     await processEvent(queued("sales"));
     expect(fcmCalls.map((c) => c.body.message.token).sort()).toEqual(["tok-d1", "tok-d3"]);
+    // Only the restricted viewers were looked up; the admins are unrestricted by the rule.
+    expect(H.viewChecks.sort()).toEqual(["matan", "yael"]);
+  });
+
+  it("★ a department-scoped agent's view of a chat with no department: visible (the rule's own answer)", async () => {
+    H.members = [{ tenantId: "T", departmentId: "support", userId: "matan" }];
+    H.devices = [device("d3", "matan")];
+    await processEvent(queued());
+    expect(fcmCalls.map((c) => c.body.message.token)).toEqual(["tok-d3"]);
+  });
+
+  it("the earliest department is the one that counts, as in the auth principal", async () => {
+    H.conversations = [{ id: "c7", tenantId: "T", departmentId: "sales", assignedAgentId: null }];
+    H.members = [
+      { tenantId: "T", departmentId: "support", userId: "matan" },
+      { tenantId: "T", departmentId: "sales", userId: "matan" },
+    ];
+    H.devices = [device("d3", "matan")];
+    await processEvent(queued("sales"));
+    expect(fcmCalls).toHaveLength(0);
+  });
+
+  it("no conversation id on the event: nobody, not even the admins", async () => {
+    H.devices = [device("d1", "dana")];
+    await processEvent(ev("message.inbound", { assignedAgentId: null, messageId: "mx", preview: "hi" }, {}));
+    expect(fcmCalls).toHaveLength(0);
+  });
+
+  it("a conversation the rule cannot find (another tenant's id): restricted viewers get nothing", async () => {
+    H.conversations = [{ id: "c7", tenantId: "OTHER", departmentId: "sales", assignedAgentId: null }];
+    H.members = [{ tenantId: "T", departmentId: "sales", userId: "matan" }];
+    H.devices = [device("d3", "matan")];
+    await processEvent(queued("sales"));
+    expect(fcmCalls).toHaveLength(0);
   });
 
   it("not a support principal, not an inactive user, not someone who cannot read conversations, not another workspace", async () => {

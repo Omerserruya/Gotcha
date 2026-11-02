@@ -232,14 +232,16 @@ async function rulesFor(tenantId: string, eventType: string, departmentId?: stri
 /**
  * A customer message in a conversation the TEAM has and nobody claimed
  * (handed over, or a person replied from the queue): EVERYONE in the
- * workspace who can read conversations - "if the chat isn't assigned, alert
- * everyone" (Omer, 2026-11-03). Not the department and not an escalation
+ * workspace who can open THIS conversation - "if the chat isn't assigned,
+ * alert everyone" (Omer, 2026-11-03), within the platform's visibility rule
+ * (recipient-resolver, conversation_readers). Not the department and not an escalation
  * rule's recipients: everyone, the department set or not. Push only (no rule
  * channels; push is added per person), and each person's push switch,
  * per-event switch and quiet hours still decide.
  */
-function teamQueueRoutes(_event: SystemEvent): any[] {
-  return [{ priority: "MEDIUM", conditions: null, channels: [] as string[], departmentId: null, recipients: { type: "conversation_readers" } as RecipientSpec }];
+function teamQueueRoutes(event: SystemEvent): any[] {
+  const conversationId = (event.metadata?.conversationId ?? (event.data as any)?.conversationId) as string | undefined;
+  return [{ priority: "MEDIUM", conditions: null, channels: [] as string[], departmentId: null, recipients: { type: "conversation_readers", conversationId } as RecipientSpec }];
 }
 
 /**
