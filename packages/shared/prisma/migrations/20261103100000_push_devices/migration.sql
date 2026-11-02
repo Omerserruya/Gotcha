@@ -7,6 +7,7 @@ CREATE TABLE "push_devices" (
     "tenant_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "platform" TEXT NOT NULL,
+    "provider" TEXT NOT NULL DEFAULT 'fcm',
     "token" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "last_seen_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

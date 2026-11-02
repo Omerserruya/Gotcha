@@ -8086,14 +8086,19 @@ model UserNotificationPreference {
 // One row per FCM registration token. The token is the identity of an app
 // install, not of a person: a shared phone that signs in as someone else
 // re-points its row (POST /api/notifications/devices), so a token is unique
-// across the whole table rather than per user. FCM reporting the token dead
-// (UNREGISTERED / 404 / INVALID_ARGUMENT) deletes the row.
+// across the whole table rather than per user. The provider reporting the
+// token dead (FCM: UNREGISTERED / 404 / INVALID_ARGUMENT; APNs: 410 /
+// BadDeviceToken) deletes the row.
 model PushDevice {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
   userId     String   @map("user_id")
   /// "ios" | "android"
   platform   String
+  /// Who delivers to this token: "fcm" | "apns". The app's Capacitor plugin
+  /// hands iOS a raw APNs device token (hex), not an FCM one, so iOS goes to
+  /// Apple directly rather than through the Firebase iOS SDK.
+  provider   String   @default("fcm")
   token      String   @unique
   createdAt  DateTime @default(now()) @map("created_at")
   lastSeenAt DateTime @default(now()) @map("last_seen_at")
