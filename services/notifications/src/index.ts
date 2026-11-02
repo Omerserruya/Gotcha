@@ -1,6 +1,7 @@
 import http from "http";
 import { createServiceApp } from "@chatcenter/shared";
 import notificationsRoutes from "./routes/notifications";
+import pushDevicesRoutes from "./routes/push-devices";
 import notificationPreferencesAdminRoutes from "./routes/notification-preferences-admin";
 import notificationPreferencesMeRoutes from "./routes/notification-preferences-me";
 import { startNotificationsDispatcherWorker } from "./services/dispatcher.worker";
@@ -12,6 +13,9 @@ import { startNotificationWsServer } from "./ws-server";
 const config = { name: "notifications-service", port: parseInt(process.env.PORT || "4008", 10) };
 const app = createServiceApp(config);
 
+// Before notificationsRoutes: its "/notifications" guard would otherwise run
+// authenticate a second time for every device call.
+app.use("/api", pushDevicesRoutes);
 app.use("/api", notificationsRoutes);
 app.use("/api", notificationPreferencesMeRoutes);
 app.use("/api", notificationPreferencesAdminRoutes);
