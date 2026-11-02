@@ -245,6 +245,25 @@ describe("★ the WhatsApp kind (no on-site chat)", () => {
     expect(colour.status).toBe(200);
   });
 
+  it("★ a typed number, no WhatsApp channel connected (Omer, 2026-11-02): saved normalised, start opens wa.me with no code", async () => {
+    const saved = await request(app()).put("/api/website-widget").send({ ux: { kind: "whatsapp", whatsapp: { enabled: true, phone: "052-123 4567" } } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.settings.ux.whatsapp).toMatchObject({ enabled: true, phone: "+972521234567" });
+    H.accounts[0] = web({ kind: "whatsapp", whatsapp: { enabled: true, phone: "+972521234567" } });
+    const r = await start({ widgetId: "widget-1", text: "Is the oak lamp in stock?" });
+    expect(r.status).toBe(200);
+    expect(r.body.data).toEqual({ url: `https://wa.me/972521234567?text=${encodeURIComponent("Is the oak lamp in stock?")}`, ref: null });
+    expect([...H.kv.keys()].some((k) => k.startsWith("wahandoff:ref:"))).toBe(false);
+    const d = (await start({ widgetId: "widget-1", locale: "he" })).body.data;
+    expect(d.url).toBe(`https://wa.me/972521234567?text=${encodeURIComponent("היי, הגעתי מהאתר")}`);
+  });
+
+  it("a typed number that is not a number: 422 with its field; nothing saved", async () => {
+    const r = await request(app()).put("/api/website-widget").send({ ux: { kind: "whatsapp", whatsapp: { enabled: true, phone: "call us" } } });
+    expect(r.status).toBe(422);
+    expect(r.body).toMatchObject({ code: "WHATSAPP_PHONE_INVALID", field: "ux.whatsapp.phone" });
+  });
+
   it("an unknown kind falls back to chat", async () => {
     const r = await request(app()).put("/api/website-widget").send({ ux: { kind: "sms" } });
     expect(r.body.data.settings.ux.kind).toBe("chat");

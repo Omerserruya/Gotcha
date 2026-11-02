@@ -60,6 +60,14 @@ export function handoffMessage(ref: string, locale: "he" | "en"): string {
     : `Hi, continuing our chat from the website (${ref})`;
 }
 
+/**
+ * The opening line for a number that is not connected to GOTCHA (a typed
+ * number): no code, because the reply never reaches us to be matched.
+ */
+export function plainHandoffMessage(locale: "he" | "en"): string {
+  return locale === "he" ? "היי, הגעתי מהאתר" : "Hi, I came from your website";
+}
+
 /** The widget's button label. */
 export function handoffButtonLabel(locale: "he" | "en"): string {
   return locale === "he" ? "המשך בוואטסאפ" : "Continue on WhatsApp";

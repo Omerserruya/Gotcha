@@ -46,7 +46,7 @@ import {
   visitorLocaleOf,
   widgetTextsOf,
   isWidgetLocale,
-  handoffMessage,
+  handoffMessage, plainHandoffMessage,
   waMeUrl,
   recordHandover } from "@chatcenter/shared";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
@@ -869,17 +869,19 @@ router.post("/whatsapp-start", conversationLimiter, async (req: Request, res: Re
     const record: HandoffRecord = {
       tenantId: session.tenantId,
       conversationId: null,
-      whatsappChannelAccountId: target.channelAccountId,
+      // Only minted for a connected number (below); a typed one has no channel.
+      whatsappChannelAccountId: target.channelAccountId ?? "",
       createdAt: new Date().toISOString(),
       context: { pageType: page.pageType, productHandle: page.productHandle, productId: page.productId, path: page.path },
     };
-    const ref = await mintHandoffRef(record, (n) => crypto.randomBytes(n));
-    if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+    // A typed number: the link only, no code (nothing would read it).
+    const ref = target.channelAccountId ? await mintHandoffRef(record, (n) => crypto.randomBytes(n)) : null;
+    if (target.channelAccountId && !ref) { res.status(503).json({ error: "try_again" }); return; }
     const asked = (req.body as any)?.locale;
     const locale = asked === "he" || asked === "en" ? asked : channel.config.appearance.language === "he" ? "he" : "en";
     const raw = (req.body as any)?.text;
     const text = typeof raw === "string" ? sanitizeUntrusted(raw, { wrap: false, maxLength: 500 }).trim() : "";
-    const prefilled = text ? `${text} (${ref})` : handoffMessage(ref, locale);
+    const prefilled = ref ? (text ? `${text} (${ref})` : handoffMessage(ref, locale)) : (text || plainHandoffMessage(locale));
     trackEvent(session.tenantId, "shopify_chat_whatsapp_start", {});
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
   } catch (err) {

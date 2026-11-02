@@ -27,6 +27,7 @@ import {
   SHOPIFY_OPERATION,
   webchatSeedConfig,
   WEBCHAT_COPY,
+  normalizeWhatsappPhone,
 } from "@chatcenter/shared";
 import crypto from "crypto";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
@@ -183,11 +184,18 @@ function storedPhone(meta: unknown): string | null {
 }
 
 /** The wa.me digits the handoff opens, or null when the button must not show. */
-export async function handoffTarget(tenantId: string, ux: ShopifyChatUx): Promise<{ channelAccountId: string; digits: string } | null> {
-  if (!ux.whatsapp.enabled || !ux.whatsapp.channelAccountId) return null;
-  const n = (await whatsappNumbers(tenantId)).find((x) => x.channelId === ux.whatsapp.channelAccountId);
-  const digits = n?.available ? waMeDigits(n.phone) : null;
-  return digits ? { channelAccountId: n!.channelId, digits } : null;
+export async function handoffTarget(tenantId: string, ux: ShopifyChatUx): Promise<{ channelAccountId: string | null; digits: string } | null> {
+  if (!ux.whatsapp.enabled) return null;
+  // A connected number wins: its replies reach the inbox and the handoff code
+  // ties them to the website conversation.
+  if (ux.whatsapp.channelAccountId) {
+    const n = (await whatsappNumbers(tenantId)).find((x) => x.channelId === ux.whatsapp.channelAccountId);
+    const digits = n?.available ? waMeDigits(n.phone) : null;
+    if (digits) return { channelAccountId: n!.channelId, digits };
+  }
+  // Else a number typed by hand (2026-11-02): wa.me only, no channel behind it.
+  const typed = waMeDigits(ux.whatsapp.phone ?? null);
+  return typed ? { channelAccountId: null, digits: typed } : null;
 }
 
 /**
@@ -340,6 +348,11 @@ export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>
   ]);
   if (!webchat && !shops.length) webchat = await ensureWebchat(tenantId);
   // A WhatsApp number for the handoff must be one of this workspace's.
+  // A number typed by hand must be a phone number (normalised when stored).
+  const typedPhone = (patch.ux as any)?.whatsapp?.phone;
+  if (typeof typedPhone === "string" && typedPhone.trim() && !normalizeWhatsappPhone(typedPhone)) {
+    throw new WidgetInputError("WHATSAPP_PHONE_INVALID", "ux.whatsapp.phone");
+  }
   const chosen = (patch.ux as any)?.whatsapp?.channelAccountId;
   if (typeof chosen === "string" && chosen) {
     const owned = await prisma.channelAccount.findFirst({ where: { id: chosen, tenantId, channel: "WHATSAPP" as any }, select: { id: true } });
