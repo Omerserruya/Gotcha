@@ -443,7 +443,7 @@ export function Composer({
         value={text}
         rows={1}
         disabled={busy || locked}
-        placeholder={t('placeholder')}
+        placeholder={variant === 'phone' ? t('placeholderPhone') : t('placeholder')}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key !== 'Enter' || event.shiftKey) return;
