@@ -126,6 +126,9 @@ if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,frontend-v2,* ]]; then
     --build-arg "NEXT_PUBLIC_APP_ENV=production"
     --build-arg "NEXT_PUBLIC_REALTIME_URL=${V2_REALTIME_URL:-https://app.gotcha.co.il}"
     --build-arg "NEXT_PUBLIC_RELEASE=${TAG}"
+    # The build's Node heap: it shares the box (2026-11-02, the type check
+    # alone took about 2.7G). V2_BUILD_HEAP=2048 if 1536 runs out.
+    --build-arg "NODE_BUILD_OPTIONS=--max-old-space-size=${V2_BUILD_HEAP:-1536}"
   )
   # Optional: an ARG passed empty is SET, and the app's schema rejects ''.
   if [ -n "${V2_SENTRY_DSN:-}" ]; then v2_args+=(--build-arg "NEXT_PUBLIC_SENTRY_DSN=${V2_SENTRY_DSN}"); fi
