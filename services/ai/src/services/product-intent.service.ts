@@ -226,7 +226,7 @@ export function detectProductInquiry(text: string | null | undefined): { kind: P
  * no variant_information, so the lookup is a search by name, then the
  * product's variations when a size or colour is asked about.
  */
-import { HEBREW_PRODUCT_GLOSSARY } from "./woo-chat-turn.service";
+import { HEBREW_PRODUCT_GLOSSARY, namesProduct } from "./woo-chat-turn.service";
 
 export function buildWooLookupDirective(kind: ProductInquiryKind, locale: "he" | "en"): string {
   return (
@@ -257,4 +257,23 @@ export function buildBudgetRule(outbound: Array<{ body: string | null }>, lookup
       " If price matters, the products and their prices speak for themselves.";
   }
   return "BUDGET: optional, never a condition for showing products. Ask about it at most once in this conversation, and only when the customer wants a recommendation and the matching products span a wide price range. Never after they named a product, a size or a colour, never as a menu of brackets, never with a slash.";
+}
+
+/**
+ * Is this conversation, right now, a shopper choosing a product (2026-11-02,
+ * Tehila)? The onboarding made the store's employee a SUPPORT persona, whose
+ * objective asks for [issue, environment]; "איזה מוצר מתאים לי?" is not an
+ * issue to diagnose. Read over the last few customer messages, because the
+ * turn that matters may be a bare "כן". A clear issue in the newest message
+ * (an order, a delivery, a refund, something broken) wins.
+ */
+const RECOMMEND_RE = /(איזה\s+(מוצר|דגם|פריט)|מה\s+(מתאים|כדאי|תמליצ|אתם\s+ממליצים|מומלץ)|ממליצ|המלצה|מחפש|מתאים\s+לי|\bwhich (one|product)\b|\brecommend|\bsuggest|\blooking for\b)/i;
+const ISSUE_RE = /(ההזמנה|הזמנתי|הזמנה\s*(מס|#)|משלוח|לא\s+הגיע|איפה\s+ה|החזר\s+כספי|זיכוי|שבור|פגום|תקלה|לא\s+עובד|\border\b|\bdelivery\b|\brefund\b|\bbroken\b|\btracking\b|\bnot working\b)/i;
+
+export function detectShoppingTurn(recentInbound: Array<string | null | undefined>, storeConnected: boolean): boolean {
+  if (!storeConnected) return false;
+  const msgs = recentInbound.map((m) => String(m ?? "").trim()).filter(Boolean);
+  if (!msgs.length) return false;
+  if (ISSUE_RE.test(msgs[msgs.length - 1]!)) return false;
+  return msgs.slice(-3).some((t) => RECOMMEND_RE.test(t) || namesProduct(t) || detectProductInquiry(t) !== null);
 }

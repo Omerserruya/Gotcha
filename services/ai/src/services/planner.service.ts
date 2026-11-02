@@ -17,6 +17,7 @@
  * state, no new LLM call, pure and never throws.
  */
 
+import { shoppingTurnObjective } from "./objectives";
 import { computeProspectState, type CrmStateFlags, type ProspectState } from "./prospect-state";
 import {
   selectActiveObjective,
@@ -51,6 +52,8 @@ import {
  * decoupled from the builder (no circular import).
  */
 export interface PlanInput {
+  /** This turn is a shopper choosing a product (product-intent detectShoppingTurn). */
+  shoppingTurn?: boolean;
   /** Agent role → objective chain. */
   role: string;
   /** CRM presence flags for this customer → prospect state + chain selection. */
@@ -160,7 +163,11 @@ export function computeCurrentPlan(input: PlanInput): CurrentPlan {
     input.calendarBookable !== false, // non-bookable agent → don't stall on BOOK_MEETING
     wf.goalObjective, // WIZARD→RUNTIME: configured goal sets the chain endpoint
   );
-  const { status, snapshot } = commitObjective(input.priorGoal ?? null, fresh, input.factText);
+  const committed = commitObjective(input.priorGoal ?? null, fresh, input.factText);
+  // A shopping turn under a support persona acts on PRODUCT_RECOMMENDATION for
+  // this turn only; the snapshot carried forward is the committed one.
+  const status = shoppingTurnObjective(committed.status, !!input.shoppingTurn);
+  const snapshot = committed.snapshot;
   const stalled = (snapshot?.stalledTurns ?? 0) >= 2;
 
   const candidates = resolveNextActions({

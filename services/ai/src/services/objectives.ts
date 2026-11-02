@@ -1117,3 +1117,15 @@ export function buildCloserCorrective(status: ObjectiveStatus): string {
     `Lead the conversation. Reply in the customer's language. One move only.`
   );
 }
+
+/**
+ * A shopping turn under a support persona (2026-11-02): for THIS turn the
+ * objective is PRODUCT_RECOMMENDATION, so the model searches and shows rather
+ * than asking for [issue, environment]. Turn-level only: the committed goal
+ * (and the snapshot persisted for the next turn) stays the persona's, so an
+ * issue raised later is handled as support. Other personas are untouched.
+ */
+export function shoppingTurnObjective<S extends ObjectiveStatus | null>(status: S, shopping: boolean): S | ObjectiveStatus {
+  if (!shopping || !status || status.objective.id !== "RESOLVE_ISSUE") return status;
+  return { objective: PRODUCT_RECOMMENDATION, stepIndex: 0, chain: ["PRODUCT_RECOMMENDATION"], missingRequired: [] };
+}

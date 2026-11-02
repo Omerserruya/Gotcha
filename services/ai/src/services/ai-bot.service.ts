@@ -74,6 +74,7 @@ import {
   buildCouponPromotionsDirective,
   detectOrderNoteIntent,
   buildOrderNoteDirective,
+  detectShoppingTurn,
 } from "./product-intent.service";
 import {
   detectMissingItemIntent,
@@ -171,6 +172,7 @@ import { missingContractInputs } from "./tool-contracts";
 import { computeProspectState, type ProspectState } from "./prospect-state";
 import {
   selectActiveObjective,
+  shoppingTurnObjective,
   commitObjective,
   resolveGoalObjective,
   type ActiveGoalSnapshot,
@@ -2890,7 +2892,14 @@ async function generateAIBotReplyInner(
       .join("\n"),
   });
 
+  // A shopper choosing a product, whatever the persona (Tehila 2026-11-02:
+  // a support employee asked for "issue, environment" on "איזה מוצר מתאים לי?").
+  const shoppingTurn = detectShoppingTurn(
+    [...(messages as any[]).filter((m) => m.direction === "INBOUND").slice(-2).map((m) => String(m.body ?? "")), opts.incomingMessage ?? ""],
+    toolFunctionNames.some((n) => PRODUCT_SEARCH_TOOL.test(n)),
+  );
   const promptOpts: BuildPromptOpts = {
+    shoppingTurn,
     behaviorState,
     agent: toAgentRecord(config),
     context: ctxSlot,
@@ -4537,11 +4546,14 @@ async function generateAIBotReplyInner(
   // GOAL OWNERSHIP (Unit A): reconcile against the committed goal (incl. this
   // turn's landed actions) → the objective to act on AND the snapshot to persist
   // for next turn. This is what stops the agent regressing/restarting.
-  const { status: decisionObjStatus, snapshot: nextGoalSnapshot } = commitObjective(
+  const committedDecision = commitObjective(
     priorGoal,
     freshDecisionObjStatus,
     decisionFactText,
   );
+  // Turn-level only (shoppingTurnObjective): the snapshot persisted is the committed goal.
+  const decisionObjStatus = shoppingTurnObjective(committedDecision.status, shoppingTurn);
+  const nextGoalSnapshot = committedDecision.snapshot;
 
   // GOAL EVALUATOR (separate from navigation): did the configured business
   // OUTCOME happen? Pure projection over runtime homes (CRM flags + active

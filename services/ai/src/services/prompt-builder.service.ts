@@ -182,6 +182,8 @@ export interface KnowledgeSlot {
 }
 
 export interface BuildPromptOpts {
+  /** This turn is a shopper choosing a product: the plan acts on PRODUCT_RECOMMENDATION. */
+  shoppingTurn?: boolean;
   /** REQUIRED. Builder fails closed if missing. */
   behaviorState: BehaviorState;
   agent: AgentRecord;
@@ -1021,6 +1023,7 @@ function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
 export function planInputFromOpts(opts: BuildPromptOpts): PlanInput {
   return {
     role: opts.agent.role,
+    shoppingTurn: opts.shoppingTurn,
     prospectFlags: opts.crm ?? { hasLead: false, hasContact: false },
     factText: factTextOf(opts),
     completedActionTools: opts.completedActionTools ?? [],
