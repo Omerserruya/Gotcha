@@ -7,12 +7,14 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+const R = vi.hoisted(() => ({ delay: null as string | null }));
 vi.mock("@chatcenter/shared", async (importOriginal) => ({
   ...(await importOriginal<any>()),
   assertPublicUrl: vi.fn(async () => undefined),
+  getRedis: () => ({ get: async () => R.delay }),
 }));
 
-import Woo, { wooRequestTimeoutMs } from "../services/connectors/woocommerce.adapter";
+import Woo, { wooRequestTimeoutMs, debugStoreDelay } from "../services/connectors/woocommerce.adapter";
 import { toolBudgetMs, TOOL_BUDGET_NOTE } from "../services/ai-bot.service";
 
 const realFetch = globalThis.fetch;
@@ -42,5 +44,18 @@ describe("a store that does not answer", () => {
   it("past the budget the model is told to answer from what it found, without promising a check", () => {
     expect(TOOL_BUDGET_NOTE).toMatch(/Answer the customer now from what you already found/);
     expect(TOOL_BUDGET_NOTE).toMatch(/Do not call any tool/);
+  });
+});
+
+describe("the dev-only slow-store switch", () => {
+  it("never applies in production, whatever Redis says", async () => {
+    R.delay = "5000";
+    expect(await debugStoreDelay({ NODE_ENV: "production" } as any)).toBe(0);
+  });
+  it("on dev it waits the set time; unset is no wait", async () => {
+    R.delay = "30";
+    expect(await debugStoreDelay({ NODE_ENV: "development" } as any)).toBe(30);
+    R.delay = null;
+    expect(await debugStoreDelay({ NODE_ENV: "development" } as any)).toBe(0);
   });
 });
