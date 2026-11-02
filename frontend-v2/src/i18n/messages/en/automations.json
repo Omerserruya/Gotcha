@@ -103,6 +103,7 @@
   "nodes": {
     "trigger": {
       "message_received": "Message received",
+      "conversation_started": "New conversation",
       "call_missed": "Call missed",
       "call_answered": "Call answered",
       "new_customer": "New customer",
@@ -167,6 +168,7 @@
   "lines": {
     "trigger": {
       "message_received": "Any channel, or a keyword",
+      "conversation_started": "Before anyone answers it, on any channel",
       "call_missed": "On any of your lines",
       "call_answered": "When it ends, with the recording",
       "new_customer": "First message ever",
@@ -575,6 +577,7 @@
   },
   "when": {
     "message_received": "a message comes in",
+    "conversation_started": "a new conversation starts",
     "new_customer": "a new customer writes for the first time",
     "tag_added": "one of its tags is added",
     "schedule": "its time comes round",
@@ -622,5 +625,8 @@
   "via": {
     "whatsapp": "WhatsApp",
     "email": "Email"
+  },
+  "origin": {
+    "setup": "Created at setup"
   }
 }

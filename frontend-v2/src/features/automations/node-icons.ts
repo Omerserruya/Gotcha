@@ -13,6 +13,7 @@ import {
   MapPin,
   Megaphone,
   MessageSquare,
+  MessageSquarePlus,
   MessagesSquare,
   Reply,
   MessageSquareReply,
@@ -41,6 +42,7 @@ import {
 /** One mark per step, as 09d's library draws them. */
 export const NODE_ICON: Readonly<Record<string, LucideIcon>> = {
   'trigger:message_received': MessageSquare,
+  'trigger:conversation_started': MessageSquarePlus,
   'trigger:message_from_ad': Megaphone,
   'trigger:button_tapped': MousePointerClick,
   'trigger:comment_received': MessagesSquare,

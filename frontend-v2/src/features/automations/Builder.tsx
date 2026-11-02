@@ -511,6 +511,11 @@ export function Builder({
             ) : null}
             {t(`builder.status.${automation.status}`)}
           </span>
+          {automation.origin === 'setup' ? (
+            <span className={styles.quiet} data-testid="builder-origin">
+              {t('origin.setup')}
+            </span>
+          ) : null}
           <span className={styles.quiet}>
             {automation.stats.lastRunAt === null ? t('noRuns') : t('builder.week', { count: runs })}
           </span>

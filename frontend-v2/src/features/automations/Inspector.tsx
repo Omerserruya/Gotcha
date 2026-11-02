@@ -36,6 +36,18 @@ const TRIGGER_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL', 'WEBCHA
 /** Each trigger's channels, as the route accepts them (`normalizeTrigger`). */
 const CHANNELS_OF: Readonly<Record<string, readonly string[]>> = {
   message_received: TRIGGER_CHANNELS,
+  // Every conversation channel the route's catalogue names for it.
+  conversation_started: [
+    'WHATSAPP',
+    'INSTAGRAM',
+    'MESSENGER',
+    'EMAIL',
+    'GMAIL',
+    'OUTLOOK',
+    'WEBCHAT',
+    'SHOPIFY_LIVE_CHAT',
+    'SLACK',
+  ],
   new_customer: TRIGGER_CHANNELS,
   message_from_ad: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
   button_tapped: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
@@ -1003,6 +1015,7 @@ function TriggerFields({
           {matchField}
         </>
       );
+    case 'conversation_started':
     case 'new_customer':
       return channelPicker;
     case 'message_from_ad':

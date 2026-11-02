@@ -21,6 +21,8 @@ import { plainDashes } from '@/lib/plain-dashes';
 /** Every trigger the route knows (`TRIGGER_TYPES`). */
 export const TRIGGER_TYPES = [
   'message_received',
+  /** Once, before anyone answers (Backend d574d1de): who answers a new conversation. */
+  'conversation_started',
   'new_customer',
   'message_from_ad',
   'button_tapped',
@@ -136,6 +138,11 @@ export const automationSchema = z.looseObject({
       lastRunStatus: z.enum(RUN_STATUSES).nullable().catch(null).default(null),
     })
     .catch({ runsThisWeek: 0, lastRunAt: null, lastRunStatus: null }),
+  /**
+   * `setup`: onboarding wrote it - the route that answers every channel.
+   * Kept by the route across saves; any other value is not ours to name.
+   */
+  origin: z.enum(['setup']).nullable().catch(null).default(null),
   /** Sent back as `expectedUpdatedAt`: a stale save is a 409. */
   updatedAt: z.string(),
   createdAt: text,
@@ -313,6 +320,7 @@ export type Catalog = z.infer<typeof catalogSchema>['data'];
  */
 export const CATALOG_NAMES: Readonly<Record<string, string>> = {
   'trigger:message_received': 'Message received',
+  'trigger:conversation_started': 'New conversation',
   'trigger:message_from_ad': 'Message from an ad',
   'trigger:button_tapped': 'Button tapped',
   'trigger:comment_received': 'Comment on a post',

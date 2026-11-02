@@ -103,6 +103,7 @@
   "nodes": {
     "trigger": {
       "message_received": "הודעה התקבלה",
+      "conversation_started": "שיחה חדשה",
       "call_missed": "שיחה שלא נענתה",
       "call_answered": "שיחה שנענתה",
       "new_customer": "לקוח חדש",
@@ -167,6 +168,7 @@
   "lines": {
     "trigger": {
       "message_received": "כל ערוץ, או מילת מפתח",
+      "conversation_started": "לפני שמישהו עונה לה, בכל ערוץ",
       "call_missed": "בכל אחד מהקווים שלך",
       "call_answered": "כשהיא מסתיימת, עם ההקלטה",
       "new_customer": "הודעה ראשונה אי פעם",
@@ -575,6 +577,7 @@
   },
   "when": {
     "message_received": "שמגיעה הודעה",
+    "conversation_started": "שמתחילה שיחה חדשה",
     "new_customer": "שלקוח חדש כותב בפעם הראשונה",
     "tag_added": "שנוספת אחת התגיות שלה",
     "schedule": "שמגיעה השעה שלה",
@@ -622,5 +625,8 @@
   "via": {
     "whatsapp": "וואטסאפ",
     "email": "אימייל"
+  },
+  "origin": {
+    "setup": "נוצרה בהגדרה הראשונית"
   }
 }

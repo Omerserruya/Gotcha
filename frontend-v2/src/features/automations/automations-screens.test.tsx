@@ -1274,3 +1274,105 @@ describe('★★ a duration in the largest unit it fills whole (dev: "1,440 minu
     expect(screen.getByTestId('node-n')).not.toHaveTextContent(/1,440|minutes.*minutes/);
   });
 });
+
+describe('★★ the route onboarding wrote: a normal automation, said as made at setup', () => {
+  const setup = (over: Record<string, unknown> = {}) =>
+    automation({
+      id: 's1',
+      name: 'New conversation',
+      origin: 'setup',
+      trigger: { type: 'conversation_started', config: {} },
+      path: [
+        { nodeId: 'trigger', type: 'automation_trigger', label: 'New conversation' },
+        { nodeId: 'hand_to_ai', type: 'hand_to_ai', label: 'Hand to AI employee' },
+      ],
+      ...over,
+    });
+  const wrapHe = (node: ReactNode) =>
+    render(
+      <NextIntlClientProvider
+        locale="he"
+        timeZone="Asia/Jerusalem"
+        now={NOW}
+        messages={{ automations: heAutomationsMessages, common: heCommonMessages }}
+      >
+        {node}
+      </NextIntlClientProvider>,
+    );
+
+  it('the trigger is read, not dropped: its own mark, the step in our words', () => {
+    const parsed = setup();
+    expect(parsed.trigger.type).toBe('conversation_started');
+    wrapHe(<AutomationsList automations={[parsed]} />);
+    const row = screen.getByTestId('automation-s1');
+    expect(row.querySelector('[data-trigger="conversation_started"]')).not.toBeNull();
+    expect(screen.getByTestId('automation-path-s1')).toHaveTextContent('שיחה חדשה');
+    expect(screen.getByTestId('automation-path-s1')).not.toHaveTextContent('New conversation');
+  });
+
+  it('one channel: the row wears it, like a message trigger', () => {
+    wrap(
+      <AutomationsList
+        automations={[
+          setup({ trigger: { type: 'conversation_started', config: { channels: ['WEBCHAT'] } } }),
+        ]}
+      />,
+    );
+    expect(
+      screen.getByTestId('automation-s1').querySelector('[data-channel-plate]'),
+    ).not.toBeNull();
+  });
+
+  it('made at setup: a line under the name, in both languages; anything else, none', () => {
+    const { unmount } = wrap(
+      <AutomationsList automations={[setup(), automation({ id: 'a2', origin: null })]} />,
+    );
+    expect(screen.getByTestId('automation-origin-s1')).toHaveTextContent('Created at setup');
+    expect(screen.queryByTestId('automation-origin-a2')).toBeNull();
+    unmount();
+    wrapHe(<AutomationsList automations={[setup()]} />);
+    expect(screen.getByTestId('automation-origin-s1')).toHaveTextContent('נוצרה בהגדרה הראשונית');
+  });
+
+  it('an origin this screen does not know is no origin', () => {
+    expect(setup({ origin: 'import' }).origin).toBeNull();
+    expect(automation({}).origin).toBeNull();
+  });
+
+  it('the builder opens it: the note in the bar, every channel the route lets it pick', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    expect(screen.getByTestId('builder-origin')).toHaveTextContent('Created at setup');
+    for (const ch of ['WHATSAPP', 'GMAIL', 'SHOPIFY_LIVE_CHAT', 'SLACK']) {
+      expect(screen.getByTestId(`inspector-channel-${ch}`)).not.toBeChecked();
+    }
+    expect(screen.getByText('None chosen: any channel')).toBeInTheDocument();
+  });
+
+  it('New automation: "New conversation" picked goes on, named', () => {
+    const withIt = catalogSchema.parse({
+      data: {
+        context: { channel: null, firstStep: true, hasCustomer: true, afterNodeType: null },
+        groups: [{ key: 'trigger', items: [item('trigger:conversation_started')] }],
+        variables: [],
+      },
+    }).data;
+    wrap(<NewAutomation catalog={withIt} />);
+    fireEvent.click(screen.getByTestId('step-trigger:conversation_started'));
+    expect(screen.getByTestId('new-automation-name')).toHaveValue('New conversation');
+  });
+});

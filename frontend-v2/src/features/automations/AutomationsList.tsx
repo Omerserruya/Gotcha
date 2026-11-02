@@ -6,6 +6,7 @@ import {
   FileText,
   Megaphone,
   MessageSquare,
+  MessageSquarePlus,
   MessagesSquare,
   MousePointerClick,
   MoreHorizontal,
@@ -48,6 +49,7 @@ import styles from './Automations.module.css';
 
 const TRIGGER_ICON: Readonly<Record<TriggerType, LucideIcon>> = {
   message_received: MessageSquare,
+  conversation_started: MessageSquarePlus,
   new_customer: UserPlus,
   message_from_ad: Megaphone,
   button_tapped: MousePointerClick,
@@ -360,9 +362,20 @@ function Row({
     >
       <span className={styles.when} role="cell">
         <Mark trigger={trigger} channel={channels.length === 1 ? channels[0]! : null} />
-        <Link href={href} className={styles.name} data-testid={`automation-open-${automation.id}`}>
-          <bdi dir="auto">{automation.name}</bdi>
-        </Link>
+        <span className={styles.named}>
+          <Link
+            href={href}
+            className={styles.name}
+            data-testid={`automation-open-${automation.id}`}
+          >
+            <bdi dir="auto">{automation.name}</bdi>
+          </Link>
+          {automation.origin === 'setup' ? (
+            <span className={styles.origin} data-testid={`automation-origin-${automation.id}`}>
+              {t('origin.setup')}
+            </span>
+          ) : null}
+        </span>
       </span>
       <span className={styles.flow} role="cell" data-testid={`automation-path-${automation.id}`}>
         {automation.path.map((step, i) => {
@@ -473,7 +486,12 @@ function Mark({
   readonly trigger: TriggerType | null;
   readonly channel: string | null;
 }) {
-  if (channel && (trigger === 'message_received' || trigger === 'new_customer')) {
+  if (
+    channel &&
+    (trigger === 'message_received' ||
+      trigger === 'conversation_started' ||
+      trigger === 'new_customer')
+  ) {
     /*
      * The shared plate (28) in the trigger tile's 30px slot, so a channel
      * row's name lines up with a trigger row's. Decorative, as the tile was:
