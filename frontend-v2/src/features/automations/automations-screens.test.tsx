@@ -1438,6 +1438,43 @@ describe('★★ the route onboarding wrote: a normal automation, said as made a
     expect(screen.getByTestId('pause-setup')).toHaveTextContent('לא יקבלו מענה אוטומטי');
   });
 
+  it("★ its name as onboarding stored it is said in the screen's words; renamed, as written", () => {
+    const { unmount } = wrapHe(
+      <AutomationsList
+        automations={[
+          setup({ name: 'Who answers new conversations' }),
+          automation({ id: 'a2', name: 'Who answers new conversations', origin: null }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('automation-open-s1')).toHaveTextContent('מי עונה לשיחות חדשות');
+    // Only the setup route's: another automation with those words is its author's.
+    expect(screen.getByTestId('automation-open-a2')).toHaveTextContent(
+      'Who answers new conversations',
+    );
+    unmount();
+    wrapHe(<AutomationsList automations={[setup({ name: 'Yaara answers' })]} />);
+    expect(screen.getByTestId('automation-open-s1')).toHaveTextContent('Yaara answers');
+  });
+
+  it('★ the builder opens it in Hebrew with the Hebrew name - and that is not an unsaved change', () => {
+    wrapHe(
+      <Builder
+        automation={setup({
+          name: 'Who answers new conversations',
+          nodes: [{ id: 'trigger', type: 'automation_trigger', data: {} }],
+          edges: [],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [], teams: [], members: [], skills: [] }}
+      />,
+    );
+    expect(screen.getByTestId('builder-name')).toHaveValue('מי עונה לשיחות חדשות');
+    expect(screen.getByTestId('builder-publish')).toBeDisabled();
+  });
+
   it('New automation: "New conversation" picked goes on, named', () => {
     const withIt = catalogSchema.parse({
       data: {

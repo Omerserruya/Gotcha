@@ -56,6 +56,7 @@ import {
   type Graph,
 } from './graph';
 import { DeleteAutomation } from './DeleteAutomation';
+import { shownName } from './shown-name';
 import { Inspector, type Choices } from './Inspector';
 import { nodeIcon } from './node-icons';
 import { NodeCard } from './NodeCard';
@@ -110,7 +111,7 @@ export function Builder({
     nodes: initial.nodes ?? [],
     edges: initial.edges ?? [],
   });
-  const [name, setName] = useState(initial.name);
+  const [name, setName] = useState(() => shownName(initial, t('origin.setupName')));
   const [trigger, setTrigger] = useState<Trigger>(initial.trigger);
   /* AU4: a cart reminder's first send step has its "unreachable" exit - read from the trigger, never stored. */
   const cart = trigger.type === 'cart_abandoned';
@@ -153,7 +154,7 @@ export function Builder({
   const [, startRead] = useTransition();
 
   const dirty =
-    name.trim() !== automation.name ||
+    name.trim() !== shownName(automation, t('origin.setupName')) ||
     JSON.stringify(trigger) !== JSON.stringify(automation.trigger) ||
     // The steps and lines only: `cart` is read from the trigger, never saved.
     JSON.stringify({ nodes: graph.nodes, edges: graph.edges }) !==
@@ -394,7 +395,7 @@ export function Builder({
       setGraph({ nodes: result.automation.nodes ?? [], edges: result.automation.edges ?? [] });
       // Published: there is nothing before it to undo to.
       setHistory([]);
-      setName(result.automation.name);
+      setName(shownName(result.automation, t('origin.setupName')));
       setTrigger(result.automation.trigger);
       setOutcome(
         result.live
@@ -1011,7 +1012,7 @@ export function Builder({
 
       {deleting ? (
         <DeleteAutomation
-          targets={[{ id: automation.id, name: automation.name }]}
+          targets={[{ id: automation.id, name: shownName(automation, t('origin.setupName')) }]}
           onClose={() => setDeleting(false)}
           onDeleted={() => router.push('/studio/automations?deleted=1')}
         />

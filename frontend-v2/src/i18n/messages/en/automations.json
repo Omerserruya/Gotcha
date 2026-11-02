@@ -628,7 +628,8 @@
     "email": "Email"
   },
   "origin": {
-    "setup": "Created at setup"
+    "setup": "Created at setup",
+    "setupName": "Who answers new conversations"
   },
   "pauseSetup": {
     "title": "Pause “{name}”?",

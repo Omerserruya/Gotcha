@@ -45,6 +45,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { setLive } from './automation-actions';
 import { DeleteAutomation } from './DeleteAutomation';
 import { PauseSetupRoute } from './PauseSetupRoute';
+import { shownName } from './shown-name';
 import { modLabel, shortcutsAllowed, withMod } from './shortcuts';
 import styles from './Automations.module.css';
 
@@ -256,7 +257,10 @@ export function AutomationsList({ automations }: { readonly automations: readonl
       </p>
       {pausing ? (
         <PauseSetupRoute
-          name={pausing.find((a) => a.origin === 'setup')!.name}
+          name={shownName(
+            pausing.find((a) => a.origin === 'setup')!,
+            t('origin.setupName'),
+          )}
           onClose={() => setPausing(null)}
           onPause={() => {
             const targets = pausing;
@@ -267,7 +271,7 @@ export function AutomationsList({ automations }: { readonly automations: readonl
       ) : null}
       {deleting ? (
         <DeleteAutomation
-          targets={deleting.map((a) => ({ id: a.id, name: a.name }))}
+          targets={deleting.map((a) => ({ id: a.id, name: shownName(a, t('origin.setupName')) }))}
           onClose={() => setDeleting(null)}
           onDeleted={(gone) => {
             setItems((now) => now.filter((a) => !gone.includes(a.id)));
@@ -368,6 +372,7 @@ function Row({
         ? t(`issues.${issue.code}` as 'issues.no_steps')
         : issue.message || t('cantGoLiveUnknown');
 
+  const name = shownName(automation, t('origin.setupName'));
   const lastRun = automation.stats.lastRunAt;
 
   return (
@@ -389,7 +394,7 @@ function Row({
             className={styles.name}
             data-testid={`automation-open-${automation.id}`}
           >
-            <bdi dir="auto">{automation.name}</bdi>
+            <bdi dir="auto">{name}</bdi>
           </Link>
           {automation.origin === 'setup' ? (
             <span className={styles.origin} data-testid={`automation-origin-${automation.id}`}>
@@ -451,9 +456,7 @@ function Row({
           className={styles.switch}
           checked={live}
           disabled={pending}
-          aria-label={
-            live ? t('pause', { name: automation.name }) : t('activate', { name: automation.name })
-          }
+          aria-label={live ? t('pause', { name }) : t('activate', { name })}
           onChange={(e) => onToggle(e.target.checked)}
           data-testid={`automation-switch-${automation.id}`}
         />
@@ -462,7 +465,7 @@ function Row({
             <button
               type="button"
               className={styles.more}
-              aria-label={t('rowMore', { name: automation.name })}
+              aria-label={t('rowMore', { name })}
               data-testid={`automation-more-${automation.id}`}
             >
               <MoreHorizontal size={14} aria-hidden="true" />
