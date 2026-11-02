@@ -93,7 +93,12 @@ ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
 # all 68 static pages, because nothing prerendered calls `serverEnv()`. So the
 # platform credentials stay out of the image and arrive from compose.
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# The build's heap, when the box is short (2026-11-02: Next's type check took
+# about 2.7G of host memory and tripped every memory floor on dev). The dev
+# scripts pass `--max-old-space-size=1536`. Unset is today's build exactly.
+# A heap too small fails this step inside the builder, never the host.
+ARG NODE_BUILD_OPTIONS=
+RUN NODE_OPTIONS="${NODE_BUILD_OPTIONS}" npm run build
 
 # ── run ──────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS run
