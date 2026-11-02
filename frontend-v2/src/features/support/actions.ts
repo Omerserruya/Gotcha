@@ -1,5 +1,6 @@
 'use server';
 
+import { getLocale } from 'next-intl/server';
 import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
@@ -10,9 +11,15 @@ import {
   supportSessionSchema,
   type SupportSession,
 } from '@/api/contracts/console';
-import { consoleEndpoints } from '@/api/endpoints/registry';
+import { consoleEndpoints, workspaceEndpoints } from '@/api/endpoints/registry';
+import { isLocale, type Locale } from '@/i18n/locales';
 import { logger } from '@/observability/logger';
-import { clearSupport, readSupport, writeSupport } from '@/support/support-cookie';
+import {
+  clearSupport,
+  readSupport,
+  supportReturnLocale,
+  writeSupport,
+} from '@/support/support-cookie';
 
 /**
  * Entering and leaving support mode (Omer, 2026-11-01): a GOTCHA admin works
@@ -119,11 +126,49 @@ export async function startSupport(
     if (refusal !== 'active') return { ok: false, reason: refusal };
     return { ok: false, reason: 'active', activeName: await activeName() };
   }
-  if (!(await writeSupport(session))) {
+  if (!(await writeSupport(session, await adminLocale()))) {
     logger.warn('support.cookie_not_kept', { sessionId: session.id });
     return { ok: false, reason: 'not_kept' };
   }
   return { ok: true, session };
+}
+
+/** The language the console is in now: the way back from the workspace is in it. */
+async function adminLocale(): Promise<Locale | null> {
+  const locale = await getLocale();
+  return isLocale(locale) ? locale : null;
+}
+
+const myLocaleSchema = z.object({
+  data: z.looseObject({ tenantDefault: z.string().nullable().catch(null) }),
+});
+
+/**
+ * The workspace's own language, to open support mode in (Omer, 2026-11-02):
+ * the admin sees it as its people do. Read in the session itself - its
+ * `tenantDefault` is the workspace's (Backend: `req.tenantId` is the
+ * target). Not `effective`: that is the hidden support actor's override
+ * first. `null` - not in a session, unread, or a language this app has not
+ * - opens in the admin's own, and never stops the entry.
+ *
+ * ★ NEVER WRITTEN HERE. A PUT of `/me/locale` in support mode would keep a
+ *   language on the support actor, not change the workspace's.
+ */
+export async function supportLocale(): Promise<Locale | null> {
+  try {
+    if (!(await readSupport())) return null;
+    const answer = await serverApi().get({
+      endpoint: workspaceEndpoints.myLocale(),
+      payload: myLocaleSchema,
+      raw: true,
+    });
+    const locale = answer.data.tenantDefault;
+    return isLocale(locale) ? locale : null;
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('support.locale_unread', { cause });
+    return null;
+  }
 }
 
 /** The workspace this login's live session is in - for "already in a session". */
@@ -149,7 +194,8 @@ export async function resumeSupport(): Promise<
   try {
     const session = await current();
     if (!session) return { ok: false, reason: 'none' };
-    if (!(await writeSupport(session))) return { ok: false, reason: 'not_kept' };
+    if (!(await writeSupport(session, await adminLocale())))
+      return { ok: false, reason: 'not_kept' };
     return { ok: true, session };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -165,9 +211,12 @@ export async function resumeSupport(): Promise<
  *   to end). A failed end keeps it, so the banner and its Exit stay: dropping
  *   it would leave a live session the admin can no longer see.
  */
-export async function endSupport(): Promise<SupportResult<{ readonly tenantId: string | null }>> {
+export async function endSupport(): Promise<
+  SupportResult<{ readonly tenantId: string | null; readonly locale: Locale | null }>
+> {
   try {
     const held = await readSupport();
+    const locale = await supportReturnLocale();
     const id = held?.id ?? (await current())?.id ?? null;
     const tenantId = held?.tenantId ?? null;
     if (id) {
@@ -183,7 +232,7 @@ export async function endSupport(): Promise<SupportResult<{ readonly tenantId: s
       }
     }
     await clearSupport();
-    return { ok: true, tenantId };
+    return { ok: true, tenantId, locale };
   } catch (cause) {
     await signInIfSignedOut(cause);
     return { ok: false, reason: refusalOf(cause, 'support.end_failed') };

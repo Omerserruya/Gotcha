@@ -3,17 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client/api-error';
 
 /* Support mode at the wire. ⚠ Mocked: nothing is sent. */
-const { api, signIn, warn, cookie } = vi.hoisted(() => ({
-  api: { get: vi.fn(), post: vi.fn() },
+const { api, signIn, warn, cookie, intl } = vi.hoisted(() => ({
+  intl: { locale: 'en' },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
   signIn: vi.fn(async () => {}),
   warn: vi.fn(),
   cookie: {
     held: null as { id: string; tenantId: string } | null,
+    returnLocale: null as 'en' | 'he' | null,
     write: vi.fn(async () => true),
     clear: vi.fn(async () => {}),
   },
 }));
 vi.mock('server-only', () => ({}));
+vi.mock('next-intl/server', () => ({ getLocale: async () => intl.locale }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => api }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: signIn }));
 vi.mock('@/observability/logger', () => ({ logger: { warn } }));
@@ -21,9 +24,10 @@ vi.mock('@/support/support-cookie', () => ({
   readSupport: async () => cookie.held,
   writeSupport: cookie.write,
   clearSupport: cookie.clear,
+  supportReturnLocale: async () => cookie.returnLocale,
 }));
 
-import { endSupport, resumeSupport, startSupport } from './actions';
+import { endSupport, resumeSupport, startSupport, supportLocale } from './actions';
 
 const SESSION = {
   id: 'ss1',
@@ -42,6 +46,9 @@ beforeEach(() => {
   signIn.mockClear();
   warn.mockClear();
   cookie.held = null;
+  cookie.returnLocale = null;
+  intl.locale = 'en';
+  api.put.mockReset();
   cookie.write.mockReset();
   cookie.write.mockResolvedValue(true);
   cookie.clear.mockClear();
@@ -54,7 +61,7 @@ describe('★★ entering support mode', () => {
     const call = api.post.mock.calls[0]![0];
     expect(call.endpoint.path).toBe('/api/system/support-sessions');
     expect(call.body).toEqual({ tenantId: 't9', reason: 'ticket 42' });
-    expect(cookie.write).toHaveBeenCalledWith(SESSION);
+    expect(cookie.write).toHaveBeenCalledWith(SESSION, 'en');
   });
 
   it('started but not kept: said, never "entered"', async () => {
@@ -103,7 +110,7 @@ describe('returning to a live session', () => {
   it('the platform names it: kept again', async () => {
     api.get.mockResolvedValue(SESSION);
     expect(await resumeSupport()).toEqual({ ok: true, session: SESSION });
-    expect(cookie.write).toHaveBeenCalledWith(SESSION);
+    expect(cookie.write).toHaveBeenCalledWith(SESSION, 'en');
   });
 
   it('none live: said', async () => {
@@ -116,7 +123,7 @@ describe('★★ leaving support mode', () => {
   it('★★ ends the session this browser holds, then clears it', async () => {
     cookie.held = { id: 'ss1', tenantId: 't9' };
     api.post.mockResolvedValue({});
-    expect(await endSupport()).toEqual({ ok: true, tenantId: 't9' });
+    expect(await endSupport()).toEqual({ ok: true, tenantId: 't9', locale: null });
     expect(api.post.mock.calls[0]![0].endpoint.path).toBe('/api/system/support-sessions/ss1/end');
     expect(cookie.clear).toHaveBeenCalledTimes(1);
   });
@@ -124,13 +131,13 @@ describe('★★ leaving support mode', () => {
   it('no cookie: the live one the platform names', async () => {
     api.get.mockResolvedValue(SESSION);
     api.post.mockResolvedValue({});
-    expect(await endSupport()).toEqual({ ok: true, tenantId: null });
+    expect(await endSupport()).toEqual({ ok: true, tenantId: null, locale: null });
     expect(api.post.mock.calls[0]![0].endpoint.path).toBe('/api/system/support-sessions/ss1/end');
   });
 
   it('nothing live anywhere: done, nothing sent', async () => {
     api.get.mockResolvedValue(null);
-    expect(await endSupport()).toEqual({ ok: true, tenantId: null });
+    expect(await endSupport()).toEqual({ ok: true, tenantId: null, locale: null });
     expect(api.post).not.toHaveBeenCalled();
     expect(cookie.clear).toHaveBeenCalledTimes(1);
   });
@@ -138,7 +145,7 @@ describe('★★ leaving support mode', () => {
   it('not this admin’s, or gone: nothing of theirs is live, so cleared', async () => {
     cookie.held = { id: 'ss1', tenantId: 't9' };
     api.post.mockRejectedValue(refused(404, 'support_session_not_found', 'not_found'));
-    expect(await endSupport()).toEqual({ ok: true, tenantId: 't9' });
+    expect(await endSupport()).toEqual({ ok: true, tenantId: 't9', locale: null });
     expect(cookie.clear).toHaveBeenCalledTimes(1);
   });
 
@@ -147,5 +154,55 @@ describe('★★ leaving support mode', () => {
     api.post.mockRejectedValue(new ApiError({ kind: 'network' }));
     expect(await endSupport()).toEqual({ ok: false, reason: 'failed' });
     expect(cookie.clear).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ the language support mode opens in, and the one it leaves in', () => {
+  const answer = (tenantDefault: unknown, userOverride: unknown = null) => ({
+    data: {
+      effective: userOverride ?? tenantDefault,
+      tenantDefault,
+      userOverride,
+      supported: ['en', 'he'],
+    },
+  });
+
+  it("★★ the workspace's default, read in the session - not the support actor's override", async () => {
+    cookie.held = { id: 'ss1', tenantId: 't9' };
+    api.get.mockResolvedValue(answer('he', 'en'));
+    expect(await supportLocale()).toBe('he');
+    const call = api.get.mock.calls[0]![0];
+    expect(call.endpoint.path).toBe('/api/agents/me/locale');
+    expect(call.raw).toBe(true);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('not in a session: nothing read, the admin keeps their own', async () => {
+    expect(await supportLocale()).toBeNull();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('a language this app has not, or none, or unread: the admin keeps their own', async () => {
+    cookie.held = { id: 'ss1', tenantId: 't9' };
+    api.get.mockResolvedValueOnce(answer('fr'));
+    expect(await supportLocale()).toBeNull();
+    api.get.mockResolvedValueOnce(answer(null));
+    expect(await supportLocale()).toBeNull();
+    api.get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    expect(await supportLocale()).toBeNull();
+  });
+
+  it('entered from the Hebrew console: Hebrew is what the way back is in', async () => {
+    intl.locale = 'he';
+    api.post.mockResolvedValue(SESSION);
+    await startSupport('t9', 'ticket 42');
+    expect(cookie.write).toHaveBeenCalledWith(SESSION, 'he');
+  });
+
+  it('ended: the language it was entered in comes back with the workspace', async () => {
+    cookie.held = { id: 'ss1', tenantId: 't9' };
+    cookie.returnLocale = 'en';
+    api.post.mockResolvedValue({});
+    expect(await endSupport()).toEqual({ ok: true, tenantId: 't9', locale: 'en' });
   });
 });

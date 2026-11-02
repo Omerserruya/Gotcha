@@ -4,7 +4,7 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
 import { serverEnv } from '@/config/env.server';
 import { appUrl } from '@/lib/base-path';
 import { logger } from '@/observability/logger';
-import { SUPPORT_COOKIE, supportTenant } from '@/support/support-cookie';
+import { SUPPORT_COOKIE, supportReturnLocale, supportTenant } from '@/support/support-cookie';
 
 /**
  * Support mode is over: the platform said `support_expired` or
@@ -12,8 +12,9 @@ import { SUPPORT_COOKIE, supportTenant } from '@/support/support-cookie';
  * 401, `SessionExpiryWatcher`). The admin's own sign-in is untouched.
  *
  * Clears the support cookie - a render cannot - and opens the console's page
- * for that workspace with "Support mode ended". Unprefixed, so the language
- * is the visitor's own (the locale middleware's cookie).
+ * for that workspace with "Support mode ended" - in the language the admin
+ * entered in (the cookie's), since the page it leaves is in the workspace's.
+ * A cookie without one: unprefixed, the locale middleware's choice.
  *
  * ★ A GET that changes nothing but this browser's own cookie, and redirects
  *   only into this app: the workspace comes out of the sealed cookie, never
@@ -24,9 +25,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const notHere = refuseOnCredentialSurface(request);
   if (notHere) return notHere;
   const tenantId = await supportTenant();
+  const locale = await supportReturnLocale();
+  const prefix = locale ? (`/${locale}` as const) : ('' as const);
   const path = tenantId
-    ? (`/system/tenants/${encodeURIComponent(tenantId)}?support=ended` as const)
-    : ('/system/tenants?support=ended' as const);
+    ? (`${prefix}/system/tenants/${encodeURIComponent(tenantId)}?support=ended` as const)
+    : (`${prefix}/system/tenants?support=ended` as const);
   logger.info('support.ended_redirect', { tenantId });
   const response = NextResponse.redirect(appUrl(path, serverEnv().APP_ORIGIN), 303);
   response.cookies.delete({ name: SUPPORT_COOKIE, path: '/' });

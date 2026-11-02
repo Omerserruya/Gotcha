@@ -77,13 +77,11 @@ export function SupportBanner() {
             setPending(false);
             return;
           }
-          window.location.assign(
-            appPath(
-              result.tenantId
-                ? `/system/tenants/${encodeURIComponent(result.tenantId)}`
-                : '/system/tenants',
-            ),
-          );
+          // Back in the admin's own language, not the workspace's this page is in.
+          const path: `/${string}` = result.tenantId
+            ? `/system/tenants/${encodeURIComponent(result.tenantId)}`
+            : '/system/tenants';
+          window.location.assign(appPath(result.locale ? `/${result.locale}${path}` : path));
         }}
       >
         {pending ? t('exiting') : t('exit')}

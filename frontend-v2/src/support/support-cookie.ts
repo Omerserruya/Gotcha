@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { readSession } from '@/auth/session-store';
 import { nowInSeconds } from '@/auth/session';
 import { serverEnv } from '@/config/env.server';
+import { LOCALE_CODES, type Locale } from '@/i18n/locales';
 
 const hkdfAsync = promisify(hkdf);
 
@@ -38,6 +39,12 @@ const supportSchema = z.object({
   sid: z.string().min(1),
   /** The session's expiry, epoch seconds. */
   exp: z.number().int().positive(),
+  /**
+   * The admin's own language when they entered: support mode opens in the
+   * workspace's, and the way back to the console is in this one. Absent on
+   * a cookie sealed before it existed.
+   */
+  rl: z.enum(LOCALE_CODES as [Locale, ...Locale[]]).optional(),
 });
 
 type SealedSupport = z.infer<typeof supportSchema>;
@@ -119,12 +126,21 @@ export async function supportTenant(): Promise<string | null> {
   return value?.tid ?? null;
 }
 
+/** The language the admin entered in - for the way back to the console. */
+export async function supportReturnLocale(): Promise<Locale | null> {
+  const value = await unsealSupport((await cookies()).get(SUPPORT_COOKIE)?.value);
+  return value?.rl ?? null;
+}
+
 /** Route handlers and server actions only: a render cannot write a cookie. */
-export async function writeSupport(started: {
-  readonly id: string;
-  readonly tenantId: string;
-  readonly expiresAt: string;
-}): Promise<boolean> {
+export async function writeSupport(
+  started: {
+    readonly id: string;
+    readonly tenantId: string;
+    readonly expiresAt: string;
+  },
+  returnLocale: Locale | null = null,
+): Promise<boolean> {
   const session = await readSession();
   const exp = Math.floor(Date.parse(started.expiresAt) / 1000);
   if (!session || !Number.isFinite(exp)) return false;
@@ -135,6 +151,7 @@ export async function writeSupport(started: {
     tid: started.tenantId,
     sid: session.sid,
     exp,
+    ...(returnLocale ? { rl: returnLocale } : {}),
   });
   (await cookies()).set(SUPPORT_COOKIE, sealed, cookieOptions(maxAge));
   return true;

@@ -22,8 +22,15 @@ vi.mock('@/config/env.server', () => ({
   serverEnv: () => ({ SESSION_SECRET: 'x'.repeat(48), APP_ORIGIN: 'https://app.test' }),
 }));
 
-const { SUPPORT_COOKIE, clearSupport, readSupport, sealSupport, supportTenant, writeSupport } =
-  await import('./support-cookie');
+const {
+  SUPPORT_COOKIE,
+  clearSupport,
+  readSupport,
+  sealSupport,
+  supportReturnLocale,
+  supportTenant,
+  writeSupport,
+} = await import('./support-cookie');
 
 const inAnHour = () => new Date(Date.now() + 3600_000).toISOString();
 
@@ -94,6 +101,19 @@ describe('support cookie', () => {
     session.value = null;
     expect(await writeSupport({ id: 'ss1', tenantId: 't9', expiresAt: inAnHour() })).toBe(false);
     expect(jar.has(SUPPORT_COOKIE)).toBe(false);
+  });
+
+  it('★ the language the admin entered in, sealed with it and read back for the way out', async () => {
+    await writeSupport({ id: 'ss1', tenantId: 't9', expiresAt: inAnHour() }, 'he');
+    expect(await supportReturnLocale()).toBe('he');
+  });
+
+  it('a cookie sealed before the language existed still reads; it names none', async () => {
+    jar.set(SUPPORT_COOKIE, {
+      value: await sealSupport({ id: 'ss1', tid: 't9', sid: 'sid-1', exp: 2_000_000_000 }),
+    });
+    expect(await readSupport()).toEqual({ id: 'ss1', tenantId: 't9' });
+    expect(await supportReturnLocale()).toBeNull();
   });
 
   it('cleared', async () => {

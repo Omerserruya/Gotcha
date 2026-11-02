@@ -7,7 +7,12 @@ import consoleHe from '@/i18n/messages/he/console.json';
 
 /** Console · enter a workspace as its admin. Mocked: nothing is sent. */
 const { actions, assign } = vi.hoisted(() => ({
-  actions: { startSupport: vi.fn(), resumeSupport: vi.fn(), endSupport: vi.fn() },
+  actions: {
+    startSupport: vi.fn(),
+    resumeSupport: vi.fn(),
+    endSupport: vi.fn(),
+    supportLocale: vi.fn(),
+  },
   assign: vi.fn(),
 }));
 vi.mock('./actions', () => actions);
@@ -26,6 +31,7 @@ const enter = () => act(async () => fireEvent.click(screen.getByTestId('support-
 
 beforeEach(() => {
   for (const action of Object.values(actions)) action.mockReset();
+  actions.supportLocale.mockResolvedValue(null);
   assign.mockReset();
   vi.stubGlobal('location', { ...window.location, assign });
 });
@@ -51,6 +57,16 @@ describe('★★ entering support mode from the console', () => {
     await enter();
     expect(actions.startSupport).toHaveBeenCalledWith('t9', 'ticket 42');
     expect(assign).toHaveBeenCalledWith('/home');
+  });
+
+  it("★★ entered: in the workspace's language when it has one - the URL's wins", async () => {
+    actions.startSupport.mockResolvedValue({ ok: true, session: {} });
+    actions.supportLocale.mockResolvedValue('he');
+    show();
+    typeReason('ticket 42');
+    await enter();
+    expect(actions.supportLocale).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/he/home');
   });
 
   it.each(

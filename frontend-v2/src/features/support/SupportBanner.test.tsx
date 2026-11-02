@@ -91,6 +91,13 @@ describe('★★ the support banner', () => {
     expect(assign).toHaveBeenCalledWith('/system/tenants/t%209');
   });
 
+  it("★ Exit opens the console in the language the admin entered in, not the workspace's", async () => {
+    endSupport.mockResolvedValue({ ok: true, tenantId: 't9', locale: 'en' });
+    show(SESSION);
+    await act(async () => fireEvent.click(screen.getByTestId('support-exit')));
+    expect(assign).toHaveBeenCalledWith('/en/system/tenants/t9');
+  });
+
   it('★★ an Exit that failed stays here and says so', async () => {
     endSupport.mockResolvedValue({ ok: false, reason: 'failed' });
     show(SESSION);

@@ -9,7 +9,13 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import styles from '@/features/console/Console.module.css';
 import { appPath } from '@/lib/base-path';
 
-import { endSupport, resumeSupport, startSupport, type SupportRefusal } from './actions';
+import {
+  endSupport,
+  resumeSupport,
+  startSupport,
+  supportLocale,
+  type SupportRefusal,
+} from './actions';
 
 /** The reason's ceiling, as the platform's validator has it (support-sessions.ts). */
 const REASON_MAX = 500;
@@ -43,7 +49,15 @@ export function SupportEnter({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const ready = reason.trim() !== '' && !pending;
 
-  const open = () => window.location.assign(appPath('/home'));
+  /*
+   * ★ IN THE WORKSPACE'S LANGUAGE (Omer, 2026-11-02): as its people see it.
+   *   Read once the cookie is set - a request of its own - and the URL's
+   *   language wins over the admin's cookie. Unread: the admin's, as before.
+   */
+  const open = async () => {
+    const locale = await supportLocale();
+    window.location.assign(appPath(locale ? `/${locale}/home` : '/home'));
+  };
 
   return (
     <section className={styles.card} aria-labelledby="support-enter" data-testid="support-enter">
