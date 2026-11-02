@@ -132,7 +132,8 @@ export const EVENT_CATALOGUE: CatalogueEntry[] = [
     label: "A customer wrote in a conversation assigned to me",
     group: "operations",
     emitted: true,
-    emitters: [E("services/incoming-worker/src/services/notifications-emit.ts", "emitInboundMessage")],
+    // One emitter shared by the incoming worker and services/ai's chat routes.
+    emitters: [E("packages/shared/src/lib/notifications/inbound-push.ts", "emitInboundMessage")],
     caveat:
       "Mobile push only, to the person the conversation is assigned to. Never " +
       "while the AI is handling the conversation.",

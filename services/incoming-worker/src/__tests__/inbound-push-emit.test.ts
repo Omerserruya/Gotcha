@@ -2,11 +2,10 @@
  * ★ message.inbound (mobile push, 2026-11-03): every inbound customer message
  * in a conversation a PERSON is assigned to is announced to the notifications
  * service, for the assignee's phone; never while the bot handles it.
- *   - the rule itself (assignee set, handledBy not the bot's)
- *   - the payload: conversationId, assignedAgentId, preview, channel,
- *     customerName (and messageId, which keeps the dedup from eating repeats)
- *   - wired through dispatch(): human-assigned emits, bot-handled and
- *     unassigned do not
+ * Wired through dispatch(): human-assigned emits, bot-handled and unassigned
+ * do not, on every channel this path carries (the website widget and the
+ * Shopify chat included). The rule and the payload are tested where they
+ * live, packages/shared/src/__tests__/inbound-push.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -89,7 +88,6 @@ vi.mock("bullmq", () => ({
 }));
 
 import { dispatch } from "../workers/incoming.worker";
-import { emitInboundMessage, inboundPreview, shouldEmitInbound } from "../services/notifications-emit";
 
 const JOB = {
   name: "process",
@@ -114,62 +112,6 @@ beforeEach(() => {
   Q.adds = [];
 });
 
-describe("★ who is told", () => {
-  it("a person assigned and the bot not driving: yes", () => {
-    expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy: "human" })).toBe(true);
-    expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy: null })).toBe(true);
-  });
-  it("no assignee: no (the recipient IS the assignee)", () => {
-    expect(shouldEmitInbound({ assignedAgentId: null, handledBy: "human" })).toBe(false);
-  });
-  it("the bot, a flow, a pending approval or the sandbox driving: no, even with an assignee left on the row", () => {
-    for (const handledBy of ["ai_agent", "awaiting_approval", "flow", "sandbox"]) {
-      expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy }), handledBy).toBe(false);
-    }
-  });
-});
-
-describe("★ the preview", () => {
-  it("the first ~100 characters, whitespace folded", () => {
-    expect(inboundPreview("  Is it\n in stock? ", "text")).toEqual({ preview: "Is it in stock?", previewKind: "text" });
-    const long = inboundPreview("x".repeat(300), "text").preview;
-    expect(long.length).toBe(100);
-    expect(long.endsWith("\u2026")).toBe(true);
-  });
-  it("a media placeholder is a media preview; a caption is text", () => {
-    expect(inboundPreview("[Image]", "image")).toEqual({ preview: "[Image]", previewKind: "media" });
-    expect(inboundPreview("", "audio")).toEqual({ preview: "[audio]", previewKind: "media" });
-    expect(inboundPreview("look at this", "image")).toEqual({ preview: "look at this", previewKind: "text" });
-  });
-});
-
-describe("★ the event", () => {
-  it("goes on the notifications queue with the agreed payload", async () => {
-    const queued = emitInboundMessage({
-      tenantId: "t1",
-      conversation: { id: "c1", assignedAgentId: "matan", handledBy: "human", customerName: "Omer", departmentId: "d1" },
-      messageId: "m9", body: "hello", messageType: "text", channel: "WHATSAPP",
-    });
-    expect(queued).toBe(true);
-    await flush();
-    expect(Q.adds).toHaveLength(1);
-    const { queue, name, data, opts } = Q.adds[0];
-    expect([queue, name]).toEqual(["notifications", "message.inbound"]);
-    expect(data).toMatchObject({
-      type: "message.inbound", tenantId: "t1", departmentId: "d1",
-      data: { conversationId: "c1", assignedAgentId: "matan", messageId: "m9", preview: "hello", previewKind: "text", messageType: "text", channel: "WHATSAPP", customerName: "Omer" },
-      metadata: { conversationId: "c1", userId: "matan" },
-    });
-    expect(opts.jobId).toBe(`evt-${data.id}`);
-  });
-
-  it("refused: nothing queued", async () => {
-    expect(emitInboundMessage({ tenantId: "t1", conversation: { id: "c1", assignedAgentId: "matan", handledBy: "ai_agent" }, messageId: "m1", body: "hi", messageType: "text", channel: "WHATSAPP" })).toBe(false);
-    await flush();
-    expect(Q.adds).toHaveLength(0);
-  });
-});
-
 describe("★ through dispatch()", () => {
   const inbound = () => Q.adds.filter((a) => a.name === "message.inbound");
 
@@ -188,6 +130,17 @@ describe("★ through dispatch()", () => {
     await flush();
     expect(inbound()).toHaveLength(0);
     expect(mocks.processAIBot).toHaveBeenCalled();
+  });
+
+  it("the website widget and the Shopify chat go through this same path, and emit too", async () => {
+    for (const channel of ["WEBCHAT", "SHOPIFY_LIVE_CHAT"]) {
+      Q.adds = [];
+      (prisma.conversation as any).__reset();
+      S.conv = baseConv({ channel, assignedAgentId: "matan", isHandedOver: true, handledBy: "human", customerName: "Shopper" });
+      await dispatch({ ...JOB, data: { ...JOB.data, channel } });
+      await flush();
+      expect(inbound().map((a) => a.data.data.channel), channel).toEqual([channel]);
+    }
   });
 
   it("unassigned and waiting for a person: no message.inbound (nobody to send it to)", async () => {

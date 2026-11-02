@@ -1379,6 +1379,7 @@ export type { ToolLevel, EmployeeToolLevel } from "./lib/agent-tool-levels";
 // Support mode (2026-11-01)
 export { resolveSupportPrincipal, SUPPORT_SESSION_HEADER } from "./lib/support-principal";
 export { supportDenial, type SupportDenyCode } from "./lib/support-deny";
+export { emitInboundMessage, shouldEmitInbound, inboundPreview, type InboundConversation } from "./lib/notifications/inbound-push";
 export { runWithRequestContext, currentRequestContext, type RequestContext } from "./lib/request-context";
 export { installSupportAuditPropagation, supportAuditContextOf, SUPPORT_AUDIT_HEADER } from "./lib/support-audit";
 export { continueWithSupportAudit } from "./lib/internal-key";

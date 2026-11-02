@@ -8,7 +8,8 @@ import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, Inco
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
-import { emitInboundMessage } from "../services/notifications-emit";
+// A subpath, not the package root: this worker's tests mock "@chatcenter/shared" whole.
+import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
