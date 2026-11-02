@@ -25,12 +25,21 @@ function files(dir: string): string[] {
   });
 }
 
+/*
+ * ★ THE PHONE IS ANOTHER DESIGN. `/m` is drawn from `GOTCHA Mobile App.dc.html`
+ *   (Omer, 2026-11-02), which sets its screen titles, the greeting, card
+ *   titles, initials and the current tab's label at 700 on purpose. Its own
+ *   stylesheets follow it; everything else still stops at 600.
+ */
+const PHONE = ['features/mobile/', 'shell/mobile/'];
+
 const HEAVY = /font-weight:\s*(?:([7-9]00)|bold|bolder|var\(--font-weight-bold\))\s*;/;
 
 describe('★★ nothing above 600 but the wordmark', () => {
   it('no stylesheet sets a weight above 600, except on the wordmark', () => {
     const found: string[] = [];
     for (const file of files(ROOT)) {
+      if (PHONE.some((dir) => file.startsWith(join(ROOT, dir)))) continue;
       const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
       for (const block of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
         const body = block[2]!;

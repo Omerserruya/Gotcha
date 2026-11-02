@@ -650,6 +650,76 @@
     --skeleton-on-dark: rgb(255 255 255 / 9%);
 
     /*
+     * ════════════════════════════════════════════════════════════════════
+     * THE PHONE - `GOTCHA Mobile App.dc.html`
+     * ════════════════════════════════════════════════════════════════════
+     * The app under `/m` is its own design (Omer, 2026-11-02): no dark frame,
+     * the warm paper edge to edge, one terracotta accent for "this needs
+     * you", the desktop's lavender for the AI. Its values are here, by role,
+     * and only the `/m` screens read them.
+     *
+     * ★ THE ONE PLACE A SHADOW IS ALLOWED. The desktop draws depth with
+     *   colour; the phone's design lifts what floats over a scrolling list
+     *   (the action button, the ask bar, a toast, Copilot's card) and nothing
+     *   else.
+     */
+    --mobile-ink: #16150f;
+    --mobile-ink-raised: #24231c;
+    --mobile-ink-text: #faf8f4;
+    --mobile-ink-muted: #b8b3aa;
+    --mobile-ground: #faf8f4;
+    --mobile-surface: #fff;
+    --mobile-accent: #c4552f;
+    --mobile-accent-text: #8e3418;
+    --mobile-accent-lite: #e8946e;
+    --mobile-accent-tint: #fbeee8;
+    --mobile-accent-edge: #f1cdbe;
+    --mobile-chip: #efebe3;
+    --mobile-press: #f1ede6;
+    --mobile-card-edge: #ece7de;
+    --mobile-row-rule: #f2eee7;
+    --mobile-control-edge: #e0dacf;
+    --mobile-float-edge: #e4dfd4;
+    --mobile-avatar: #ede6da;
+    --mobile-thread-ground: #efe9df;
+    --mobile-quiet-card: #f3efe8;
+    /* The small tile a channel's mark sits in, inside a white sheet or card. */
+    --mobile-tile: #f5f2ec;
+    --mobile-handle: #ddd7cc;
+    --mobile-scrim: rgb(22 21 15 / 42%);
+    --mobile-shadow-float: 0 14px 28px -12px rgb(22 21 15 / 55%);
+    --mobile-shadow-soft: 0 14px 30px -18px rgb(22 21 15 / 35%);
+    --mobile-shadow-card: 0 18px 36px -22px rgb(0 0 0 / 60%);
+    --mobile-shadow-bubble: 0 1px 0 rgb(22 21 15 / 6%);
+    --mobile-read-tick: #4fa3d1;
+    /* Tags, by what they mean: a problem, fine, waiting, the AI, nothing. */
+    --mobile-tag-bad: #fbe4dc;
+    --mobile-tag-bad-text: #a3381a;
+    --mobile-tag-ok: #e7f0d4;
+    --mobile-tag-ok-text: #3f6323;
+    --mobile-tag-warn: #f6efd8;
+    --mobile-tag-warn-text: #7e5410;
+    --mobile-tag-ai: #ece7fb;
+    --mobile-tag-ai-text: #5b49b5;
+    --mobile-tag-mute: #efebe3;
+    --mobile-tag-mute-text: #6b6660;
+    /* A timeline's dots. */
+    --mobile-dot-ai: #7c6ad6;
+    --mobile-dot-ok: #7fa650;
+    --mobile-dot-warn: #e0b341;
+    --mobile-dot-mute: #c9c3b8;
+    /* "GOTCHA remembers", on a customer. */
+    --mobile-memory: #f1edfb;
+    --mobile-memory-title: #4a3a9e;
+    --mobile-memory-text: #2b2550;
+    /* Copilot's ready reply: the desktop's dark wall, as one card. */
+    --mobile-copilot: #171717;
+    --mobile-copilot-text: #f7f5f1;
+    --mobile-copilot-muted: #8e8a83;
+    --mobile-copilot-edge: #3a3a3a;
+    --mobile-copilot-accent: #c9bcf7;
+
+    /*
      * The design is a single committed light-on-warm direction with a dark
      * frame - not a light theme awaiting a dark twin. Declaring the scheme
      * stops the browser inverting form controls and scrollbars for a viewer

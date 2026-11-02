@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { campaignSchema } from '@/api/contracts/outreach';
 
-import { audienceWords, sentShare, whenWords } from './mobile-outreach';
+import {
+  audienceWords,
+  groupOf,
+  parseGroup,
+  sentShare,
+  statusTone,
+  whenWords,
+} from './mobile-outreach';
 
 const campaign = (over: Record<string, unknown> = {}) =>
   campaignSchema.parse({
@@ -85,5 +92,27 @@ describe('progress is sent of recipients', () => {
     expect(sentShare({ sentCount: 50, totalRecipients: 200 })).toBe(0.25);
     expect(sentShare({ sentCount: 9, totalRecipients: 5 })).toBe(1);
     expect(sentShare({ sentCount: 0, totalRecipients: 0 })).toBeNull();
+  });
+});
+
+describe('the chips: running, scheduled, finished', () => {
+  it('each status in one group; a draft in none, so only "all" shows it', () => {
+    expect(groupOf('SENDING')).toBe('live');
+    expect(groupOf('SCHEDULED')).toBe('sched');
+    expect(['COMPLETED', 'FAILED', 'CANCELLED'].map((s) => groupOf(s as 'FAILED'))).toEqual([
+      'done',
+      'done',
+      'done',
+    ]);
+    expect(groupOf('DRAFT')).toBeNull();
+  });
+
+  it('an unknown ?show= is everything; a halt is the one bad tone', () => {
+    expect(parseGroup('live')).toBe('live');
+    expect(parseGroup('wait')).toBeNull();
+    expect(parseGroup(undefined)).toBeNull();
+    expect(statusTone('FAILED')).toBe('bad');
+    expect(statusTone('SENDING')).toBe('ok');
+    expect(statusTone('CANCELLED')).toBe('mute');
   });
 });

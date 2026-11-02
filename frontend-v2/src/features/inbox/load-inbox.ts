@@ -197,6 +197,12 @@ export async function loadInbox(
    * viewer is read as "Active" (`shownView`); a named one is read as named.
    */
   explicit = true,
+  /**
+   * The phone's search field: the route's own `search`, which matches the
+   * customer's name or handle. `null` (and the website, which has no field)
+   * sends none.
+   */
+  search: string | null = null,
 ): Promise<InboxData> {
   const api = serverApi();
 
@@ -273,6 +279,7 @@ export async function loadInbox(
             query: {
               ...query,
               ...(channel === null ? {} : { channel }),
+              ...(search === null || search === '' ? {} : { search }),
               ...(period?.from ? { from: period.from } : {}),
               ...(period?.to ? { to: period.to } : {}),
               limit: QUEUE_CAP,

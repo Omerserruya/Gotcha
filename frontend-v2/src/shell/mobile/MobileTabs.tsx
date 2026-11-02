@@ -1,6 +1,6 @@
 'use client';
 
-import { ListChecks, Megaphone, MessageCircle, Users } from 'lucide-react';
+import { BadgeCheck, House, MessageCircle, Send, Users } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { Link, usePathname } from '@/i18n/navigation';
@@ -9,20 +9,26 @@ import type { PermissionString } from '@/permissions/permission-set';
 import { usePermissions } from '@/permissions/permissions-context';
 
 import styles from './MobileShell.module.css';
-import { inMobileThread } from './mobile-paths';
+import { inMobileOverlay } from './mobile-paths';
+
+export type MobileTabHref = '/m/home' | '/m/inbox' | '/m/approvals' | '/m/outreach' | '/m/customers';
 
 interface MobileTab {
-  readonly id: 'inbox' | 'approvals' | 'outreach' | 'customers';
-  readonly href: '/m/inbox' | '/m/approvals' | '/m/outreach' | '/m/customers';
+  readonly id: 'home' | 'inbox' | 'approvals' | 'outreach' | 'customers';
+  readonly href: MobileTabHref;
   readonly icon: typeof MessageCircle;
-  readonly permission: PermissionString;
+  /** `null`: every signed-in member has it, as the desktop rail's Home. */
+  readonly permission: PermissionString | null;
 }
 
 /*
- * The desktop rail's permissions, entry for entry (`shell/navigation.ts`), so
- * the phone never offers a tab the website would hide.
+ * The design's five tabs, in its order and with its icons (`GOTCHA Mobile
+ * App.dc.html`: house, message-circle, badge-check, send, users). The
+ * permissions are the desktop rail's, entry for entry (`shell/navigation.ts`),
+ * so the phone never offers a tab the website would hide.
  */
 export const MOBILE_TABS: readonly MobileTab[] = [
+  { id: 'home', href: '/m/home', icon: House, permission: null },
   {
     id: 'inbox',
     href: '/m/inbox',
@@ -32,13 +38,13 @@ export const MOBILE_TABS: readonly MobileTab[] = [
   {
     id: 'approvals',
     href: '/m/approvals',
-    icon: ListChecks,
+    icon: BadgeCheck,
     permission: PERMISSIONS.approvals.requests.view,
   },
   {
     id: 'outreach',
     href: '/m/outreach',
-    icon: Megaphone,
+    icon: Send,
     permission: PERMISSIONS.outbound.calls.view,
   },
   {
@@ -50,23 +56,24 @@ export const MOBILE_TABS: readonly MobileTab[] = [
 ];
 
 /**
- * The four tabs at the bottom of the phone.
+ * The tabs at the bottom of the phone.
  *
- * ★ HIDDEN INSIDE A CONVERSATION, as WhatsApp does: the composer owns the
- *   bottom edge there, and a tab bar under it would push the field the
- *   keyboard has to sit on halfway up the screen.
+ * ★ HIDDEN ON A SCREEN THAT COVERS THE LIST (a conversation, an approval, a
+ *   customer), as the design draws them: those are full screens with a way
+ *   back, and in a conversation the composer owns the bottom edge.
  */
 export function MobileTabs() {
-  const t = useTranslations('navigation');
+  const t = useTranslations('mobile');
+  const nav = useTranslations('navigation');
   const pathname = usePathname();
   const { canSee } = usePermissions();
 
-  if (inMobileThread(pathname)) return null;
-  const tabs = MOBILE_TABS.filter((tab) => canSee(tab.permission));
+  if (inMobileOverlay(pathname)) return null;
+  const tabs = MOBILE_TABS.filter((tab) => tab.permission === null || canSee(tab.permission));
   if (tabs.length === 0) return null;
 
   return (
-    <nav className={styles.tabs} aria-label={t('mainNavigation')}>
+    <nav className={styles.tabs} aria-label={nav('mainNavigation')}>
       {tabs.map((tab) => {
         const current = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         const Icon = tab.icon;
@@ -78,8 +85,10 @@ export function MobileTabs() {
             aria-current={current ? 'page' : undefined}
             data-testid={`mobile-tab-${tab.id}`}
           >
-            <Icon aria-hidden size={22} strokeWidth={current ? 2.2 : 1.8} />
-            <span className={styles.tabLabel}>{t(`primary.${tab.id}`)}</span>
+            <span className={styles.tabPill}>
+              <Icon aria-hidden size={22} strokeWidth={2} />
+            </span>
+            <span className={styles.tabLabel}>{t(`tabs.${tab.id}`)}</span>
           </Link>
         );
       })}

@@ -49,3 +49,32 @@ export function sentShare(
     ? Math.min(1, campaign.sentCount / campaign.totalRecipients)
     : null;
 }
+
+/**
+ * The phone's chips: running, scheduled, finished. A draft is in "all" only.
+ *
+ * ★ NO "WAITING FOR YOU". The design's fourth chip is a campaign held for
+ *   approval, and `Broadcast` carries no approval field: a chip that always
+ *   counts zero would be a control that does nothing.
+ */
+export const CAMPAIGN_GROUPS = ['live', 'sched', 'done'] as const;
+export type CampaignGroup = (typeof CAMPAIGN_GROUPS)[number];
+
+export function groupOf(status: Campaign['status']): CampaignGroup | null {
+  if (status === 'SENDING') return 'live';
+  if (status === 'SCHEDULED') return 'sched';
+  if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELLED') return 'done';
+  return null;
+}
+
+/** `?show=` as a group, or `null` for everything - an unknown value is everything. */
+export function parseGroup(raw: string | undefined): CampaignGroup | null {
+  return (CAMPAIGN_GROUPS as readonly string[]).includes(raw ?? '') ? (raw as CampaignGroup) : null;
+}
+
+/** The status tag's tone: sending is good news, a halt is bad, the rest is quiet. */
+export function statusTone(status: Campaign['status']): 'ok' | 'bad' | 'mute' {
+  if (status === 'SENDING') return 'ok';
+  if (status === 'FAILED') return 'bad';
+  return 'mute';
+}

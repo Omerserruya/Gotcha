@@ -2,7 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { approvalSchema } from '@/api/contracts/approvals';
 
-import { amountOf, planAsked, requestersOf, rowClock, spanOf } from './mobile-approvals';
+import {
+  amountOf,
+  decidedOn,
+  decidedOutcome,
+  isUrgent,
+  planAsked,
+  requestersOf,
+  rowClock,
+  spanOf,
+  tagTone,
+} from './mobile-approvals';
 
 const NOW = new Date('2026-11-02T12:00:00.000Z');
 const row = (over: Record<string, unknown> = {}) =>
@@ -97,5 +107,39 @@ describe('an amount only as the call stated it', () => {
     expect(amountOf(row({ params: { amount: 179, currency: 'ILS' } }), 'en')).toMatch(/₪|ILS/);
     expect(amountOf(row({ params: { amount: 179 } }), 'en')).toBe('179');
     expect(amountOf(row(), 'en')).toBeNull();
+  });
+});
+
+describe('a card’s one tag and its tone', () => {
+  it('danger, money, the AI’s own, and every other tag quiet', () => {
+    expect(tagTone('IRREVERSIBLE')).toBe('bad');
+    expect(tagTone('HIGH')).toBe('bad');
+    expect(tagTone('FINANCIAL')).toBe('warn');
+    expect(tagTone('PLAN')).toBe('ai');
+    expect(tagTone('cancel_order')).toBe('mute');
+  });
+
+  it('the time is urgent inside the hour and past the deadline, not while it waits', () => {
+    expect(isUrgent({ kind: 'left', ms: 1 })).toBe(true);
+    expect(isUrgent({ kind: 'lapsed' })).toBe(true);
+    expect(isUrgent({ kind: 'waited', ms: 1 })).toBe(false);
+  });
+});
+
+describe('★ decided today, and what each decision came to', () => {
+  it('only rows decided on today’s date; an undated decision is not today’s', () => {
+    const today = row({ id: 't', status: 'APPROVED', decidedAt: '2026-11-02T09:00:00.000Z' });
+    const before = row({ id: 'y', status: 'APPROVED', decidedAt: '2026-10-30T09:00:00.000Z' });
+    const undated = row({ id: 'u', status: 'REJECTED' });
+    expect(decidedOn([today, before, undated], NOW).map((a) => a.id)).toEqual(['t']);
+  });
+
+  it('rejected; approved and ran; approved and did not run; approved, run not known', () => {
+    expect(decidedOutcome(row({ status: 'REJECTED' }))).toBe('rejected');
+    expect(decidedOutcome(row({ status: 'APPROVED', executionState: 'SUCCEEDED' }))).toBe('ran');
+    expect(decidedOutcome(row({ status: 'APPROVED', executionState: 'FAILED' }))).toBe('didntRun');
+    expect(decidedOutcome(row({ status: 'APPROVED', executionState: 'LEGACY_UNVERIFIED' }))).toBe(
+      'approved',
+    );
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleUserRound } from 'lucide-react';
+import { EllipsisVertical } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 
 import { signOut } from '@/auth/sign-out';
@@ -55,7 +55,7 @@ export function MobileAccountMenu() {
           aria-label={t('account.menu')}
           data-testid="mobile-account"
         >
-          <CircleUserRound aria-hidden size={22} strokeWidth={1.8} />
+          <EllipsisVertical aria-hidden size={22} strokeWidth={2} />
         </button>
       </MenuTrigger>
       <MenuContent align="end" side="bottom">

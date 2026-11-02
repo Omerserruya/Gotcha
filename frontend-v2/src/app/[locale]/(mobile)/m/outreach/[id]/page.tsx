@@ -3,12 +3,16 @@ import { getTranslations } from 'next-intl/server';
 import { loadCampaign } from '@/features/outreach/load-outreach';
 import { MobileCampaignSummary } from '@/features/mobile/outreach/MobileCampaigns';
 import styles from '@/features/mobile/outreach/mobile-outreach.module.css';
+import ui from '@/features/mobile/mobile-ui.module.css';
 import { OnWebsite } from '@/features/mobile/OnWebsite';
 import { MobileBar } from '@/shell/mobile/MobileBar';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * One campaign on the phone: what it is and what reached people.
+ * One campaign on the phone: the design's campaign sheet, as its own screen.
+ *
+ * ★ A PAGE, NOT A SHEET OVER THE LIST, so `/m/outreach/<id>` - the link a
+ *   push notification carries - opens straight onto the campaign.
  *
  * ★ `loadCampaign`, the desktop's, with its three answers: the campaign;
  *   `missing` (no such campaign here - a fact); `failed` (we could not read
@@ -27,13 +31,15 @@ export default async function Page({
 
   if (read.state !== 'ok') {
     return (
-      <div className={styles.screen}>
+      <div className={ui.screen}>
         <MobileBar back={back} title={t('outreach.title')} />
-        <div className={styles.scroll}>
-          <p className={styles.note} role="status" data-testid={`mobile-campaign-${read.state}`}>
+        <div className={ui.scroll}>
+          <p className={ui.empty} role="status" data-testid={`mobile-campaign-${read.state}`}>
             {read.state === 'missing' ? to('results.missing') : to('results.unavailable')}
           </p>
-          <OnWebsite path="/outreach" label={t('outreach.website')} />
+          <p className={ui.foot}>
+            <OnWebsite path="/outreach" label={t('outreach.website')} className={ui.footLink} />
+          </p>
         </div>
       </div>
     );
@@ -41,14 +47,17 @@ export default async function Page({
 
   const { campaign } = read;
   return (
-    <div className={styles.screen} data-testid="mobile-campaign">
+    <div className={ui.screen} data-testid="mobile-campaign">
       <MobileBar back={back} title={t('outreach.title')} />
-      <div className={styles.scroll}>
-        <MobileCampaignSummary campaign={campaign} now={new Date()} />
-        <OnWebsite
-          path={`/outreach?campaign=${encodeURIComponent(campaign.id)}`}
-          label={t('outreach.websiteOne')}
-        />
+      <div className={ui.scroll}>
+        <div className={styles.sheet}>
+          <MobileCampaignSummary campaign={campaign} now={new Date()} />
+          <OnWebsite
+            path={`/outreach?campaign=${encodeURIComponent(campaign.id)}`}
+            label={t('outreach.websiteOne')}
+            className={styles.cta}
+          />
+        </div>
       </div>
     </div>
   );

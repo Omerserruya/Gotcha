@@ -1,0 +1,403 @@
+@layer features {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE PHONE'S SHARED PARTS - `GOTCHA Mobile App.dc.html`
+   * ════════════════════════════════════════════════════════════════════════
+   * What every `/m` screen draws the same way: a screen that scrolls, the
+   * search field, the filter chips with their counts, a white card, a tag,
+   * a section label, the floating action button, an empty state. One module,
+   * so the inbox's chip and the customers' chip cannot drift apart.
+   */
+  .screen {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* The list under the bar. Bottom padding clears a floating action button. */
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-block-end: 90px;
+  }
+
+  /* ── Search: a 44px pill on the chip colour ───────────────────────── */
+  .searchWrap {
+    padding-block: var(--space-2) var(--space-10);
+    padding-inline: var(--space-14);
+  }
+
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    block-size: 44px;
+    padding-inline: var(--space-16);
+    border-radius: 22px;
+    background-color: var(--mobile-chip);
+    color: var(--text-muted);
+  }
+
+  .searchInput {
+    flex: 1;
+    min-inline-size: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    color: var(--mobile-ink);
+  }
+
+  .searchInput::placeholder {
+    color: var(--text-subtle);
+  }
+
+  /* ── Chips: one row, scrolled sideways, the current one in the accent ── */
+  .chips {
+    display: flex;
+    gap: var(--space-8);
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-block: 0 var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  /* A scroller drops its end padding: the gutter is a box. */
+  .chips::after {
+    content: '';
+    flex: none;
+    inline-size: var(--space-6);
+  }
+
+  .chip {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    block-size: 34px;
+    box-sizing: border-box;
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid transparent;
+    border-radius: 17px;
+    background-color: var(--mobile-chip);
+    color: var(--text-secondary);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .chip[aria-current='page'],
+  .chip[aria-pressed='true'] {
+    background-color: var(--mobile-accent-tint);
+    border-color: var(--mobile-accent-edge);
+    color: var(--mobile-accent-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .chipCount {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-subtle);
+  }
+
+  .chip[aria-current='page'] .chipCount,
+  .chip[aria-pressed='true'] .chipCount {
+    color: var(--mobile-accent);
+  }
+
+  /* ── Cards, sections ───────────────────────────────────────────────── */
+  .card {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mobile-surface);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--radius-panel);
+    /* Clips its corners without becoming a scroll box: it keeps its height (no-clipped-cards). */
+    overflow: clip;
+    min-inline-size: 0;
+  }
+
+  .cardPadded {
+    padding: var(--space-16);
+    gap: var(--space-10);
+  }
+
+  .cardTitle {
+    margin: 0;
+    font-size: 15px;
+    font-weight: var(--font-weight-bold);
+  }
+
+  /* A hairline between rows inside a card. */
+  .cardRow + .cardRow {
+    border-block-start: var(--border-width-thin) solid var(--mobile-row-rule);
+  }
+
+  .section {
+    padding-block: var(--space-4) var(--space-8);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-subtle);
+  }
+
+  /* A screen's lead line under its title: "3 things are waiting for you". */
+  .lead {
+    margin: 0;
+    padding-block: 0 var(--space-14);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    color: var(--text-muted);
+    text-wrap: pretty;
+  }
+
+  /* ── A tag: what a row is, in one of five tones ────────────────────── */
+  .tag {
+    flex: none;
+    padding-block: 5px;
+    padding-inline: var(--space-8);
+    border-radius: 7px;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    background-color: var(--mobile-tag-mute);
+    color: var(--mobile-tag-mute-text);
+  }
+
+  .tag[data-tone='bad'] {
+    background-color: var(--mobile-tag-bad);
+    color: var(--mobile-tag-bad-text);
+  }
+
+  .tag[data-tone='ok'] {
+    background-color: var(--mobile-tag-ok);
+    color: var(--mobile-tag-ok-text);
+  }
+
+  .tag[data-tone='warn'] {
+    background-color: var(--mobile-tag-warn);
+    color: var(--mobile-tag-warn-text);
+  }
+
+  .tag[data-tone='ai'] {
+    background-color: var(--mobile-tag-ai);
+    color: var(--mobile-tag-ai-text);
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+  }
+
+  /* ── A list row: avatar, two lines, something at the end ───────────── */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .row:active {
+    background-color: var(--mobile-press);
+  }
+
+  .row:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--space-2));
+  }
+
+  .avatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 50px;
+    block-size: 50px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-avatar);
+    color: var(--text-secondary);
+    font-size: 15.5px;
+    font-weight: var(--font-weight-bold);
+  }
+
+  .rowBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .rowTitle {
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  .rowSub {
+    font-size: var(--font-size-item);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rowTime {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  /* ── Buttons ───────────────────────────────────────────────────────── */
+  .primary,
+  .secondary,
+  .quiet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    block-size: 42px;
+    padding-inline: var(--space-16);
+    border-radius: 21px;
+    border: 0;
+    font: inherit;
+    font-size: var(--font-size-body);
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .primary {
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .secondary {
+    background: transparent;
+    border: var(--border-width-thin) solid var(--mobile-control-edge);
+    color: var(--mobile-ink);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .quiet {
+    background: transparent;
+    padding-inline: var(--space-14);
+    color: var(--text-muted);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .primary:disabled,
+  .secondary:disabled,
+  .quiet:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .primary:focus-visible,
+  .secondary:focus-visible,
+  .quiet:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  /* The floating action, at the bottom's inline end: left in Hebrew, as the design puts it. */
+  .fab {
+    position: absolute;
+    inset-block-end: var(--space-16);
+    inset-inline-end: var(--space-16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-8);
+    min-inline-size: 58px;
+    block-size: 58px;
+    box-sizing: border-box;
+    padding-inline: var(--space-18);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    box-shadow: var(--mobile-shadow-float);
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+  }
+
+  /* ── Nothing here / it did not load ────────────────────────────────── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-8);
+    margin: 0;
+    padding-block: 48px;
+    padding-inline: var(--space-24);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  .emptyTitle {
+    font-size: 17px;
+    font-weight: var(--font-weight-bold);
+    color: var(--mobile-ink);
+  }
+
+  /* The quiet line at the foot of a list: a link to the website, a reassurance. */
+  .foot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    padding-block: var(--space-18) var(--space-4);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-align: center;
+  }
+
+  .footLink {
+    color: var(--mobile-accent-text);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+  }
+
+  .more {
+    display: block;
+    padding: var(--space-16);
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+  }
+
+  /* A number in Archivo, as the design sets every figure. */
+  .figure {
+    font-family: var(--font-archivo), var(--font-sans);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -9,9 +9,12 @@
 
 const MOBILE_ROOT = '/m';
 
-/** `/m/inbox/<id>`: one conversation open, where the composer owns the bottom edge. */
-export function inMobileThread(pathname: string): boolean {
-  return /^\/m\/inbox\/[^/]+\/?$/.test(pathname);
+/**
+ * One thing open over its list - a conversation, an approval, a campaign, a
+ * customer (`/m/<list>/<id>`): a full screen with a way back, and no tabs.
+ */
+export function inMobileOverlay(pathname: string): boolean {
+  return /^\/m\/(?:inbox|approvals|outreach|customers)\/[^/]+\/?$/.test(pathname);
 }
 
 /**

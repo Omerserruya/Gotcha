@@ -239,35 +239,33 @@ export function conversationTone(
   return lastDirection === 'INBOUND' ? 'attention' : 'conversation';
 }
 
-interface Row {
+export interface TimelineRow {
   readonly key: string;
   readonly at: string;
   readonly tone: ConversationTone | 'action' | 'order' | 'note' | 'handover';
   readonly title: string;
   readonly line: string | null;
+  /** A conversation's row: the conversation, for a screen that opens it. */
+  readonly conversationId?: string;
 }
 
 /**
- * 02's timeline: conversations, orders, actions and notes in ONE stream, a
- * date in mono, a coloured dot, a title and a line. Channel is a mark on the
- * line, never a section - 02's own rule.
+ * 02's timeline as rows, newest first: one per conversation, GOTCHA's
+ * actions, handovers, orders and notes. The website's list and the phone's
+ * card both draw these, so the two cannot say different things.
  */
-export async function CustomerTimelineList({
-  detail,
-  only,
-}: {
-  readonly detail: CustomerDetail;
+export async function timelineRows(
+  detail: CustomerDetail,
   /** Everything, or the conversations alone (04c's tab, until its own frame). */
-  readonly only?: 'conversations';
-}) {
+  only?: 'conversations',
+): Promise<readonly TimelineRow[]> {
   const t = await getTranslations('customers');
   const toolWords = await toolWordsOf();
   const channels = await getTranslations('channels');
   const format = await getFormatter();
-  const now = new Date();
   const events = detail.timeline?.events ?? [];
 
-  const rows: Row[] = [];
+  const rows: TimelineRow[] = [];
   // One row per conversation: its latest moment, what the customer last said.
   const byConversation = new Map<string, TimelineEvent[]>();
   for (const event of events.filter((e) => e.type === 'message')) {
@@ -283,6 +281,7 @@ export async function CustomerTimelineList({
       sorted.find((m) => m.body?.trim());
     rows.push({
       key: `c-${conversationId}`,
+      conversationId,
       at: sorted[0]!.createdAt,
       tone: conversationTone(
         detail.conversationStatus?.get(conversationId),
@@ -379,6 +378,26 @@ export async function CustomerTimelineList({
     }
   }
   rows.sort((a, b) => b.at.localeCompare(a.at));
+  return rows;
+}
+
+/**
+ * 02's timeline: conversations, orders, actions and notes in ONE stream, a
+ * date in mono, a coloured dot, a title and a line. Channel is a mark on the
+ * line, never a section - 02's own rule.
+ */
+export async function CustomerTimelineList({
+  detail,
+  only,
+}: {
+  readonly detail: CustomerDetail;
+  /** Everything, or the conversations alone (04c's tab, until its own frame). */
+  readonly only?: 'conversations';
+}) {
+  const t = await getTranslations('customers');
+  const format = await getFormatter();
+  const now = new Date();
+  const rows = await timelineRows(detail, only);
 
   const dateOf = (iso: string) => shortDate(iso, now, format, t('card.today'));
 

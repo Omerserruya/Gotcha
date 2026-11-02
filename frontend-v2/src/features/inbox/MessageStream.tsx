@@ -44,18 +44,21 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 export async function MessageStream({
   messages,
   channel,
+  variant,
 }: {
   /** `null` when the read failed. Never an empty conversation. */
   readonly messages: readonly InboxMessage[] | null;
   /** Drives nothing here yet; carried so the caller cannot forget it exists. */
   readonly channel: string | null;
+  /** The phone app's look (`/m`); the same messages, drawn its way. */
+  readonly variant?: 'phone';
 }) {
   const t = await getTranslations('inbox');
   const format = await getFormatter();
 
   if (messages === null) {
     return (
-      <div className={styles.stream} data-testid="stream-unavailable">
+      <div className={styles.stream} data-variant={variant} data-testid="stream-unavailable">
         <p className={styles.note}>{t('stream.unavailable')}</p>
       </div>
     );
@@ -63,7 +66,7 @@ export async function MessageStream({
 
   if (messages.length === 0) {
     return (
-      <div className={styles.stream} data-testid="stream-empty">
+      <div className={styles.stream} data-variant={variant} data-testid="stream-empty">
         <p className={styles.note}>{t('stream.empty')}</p>
       </div>
     );
@@ -72,6 +75,7 @@ export async function MessageStream({
   return (
     <ol
       className={styles.stream}
+      data-variant={variant}
       data-testid="message-stream"
       data-channel={channel ?? 'unknown'}
       /* What `StreamPin` scrolls to the latest message. */

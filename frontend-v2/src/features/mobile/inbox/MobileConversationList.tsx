@@ -1,3 +1,4 @@
+import { CheckCheck, Inbox } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
@@ -14,11 +15,14 @@ import { quoteOf } from '@/features/inbox/media';
 import { Link } from '@/i18n/navigation';
 import { listTime } from '@/lib/list-time';
 
+import ui from '../mobile-ui.module.css';
 import styles from './mobile-inbox.module.css';
+import { rowOwner } from './row-owner';
 
 /**
- * The conversations, as WhatsApp lists chats: the person, the time, the last
- * thing said and how much of it is unread - one tap to open.
+ * The conversations, as `GOTCHA Mobile App.dc.html` lists them: the person on
+ * their channel, the time, the last thing said, how much is unread, and who
+ * has it - one tap to open.
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE DESKTOP ROW'S FACTS, FROM THE DESKTOP ROW'S HELPERS
@@ -31,10 +35,17 @@ import styles from './mobile-inbox.module.css';
 export async function MobileConversationList({
   rows,
   now,
+  meId,
+  colleagues,
+  filtered,
 }: {
   /** `null` is a failed read, not an empty inbox. */
   readonly rows: readonly ConversationRow[] | null;
   readonly now: Date;
+  readonly meId: string | null;
+  readonly colleagues: readonly { readonly id: string; readonly name: string }[];
+  /** A search or a channel is narrowing the list: an empty one says so. */
+  readonly filtered: boolean;
 }) {
   const t = await getTranslations('mobile');
   const inbox = await getTranslations('inbox');
@@ -43,15 +54,16 @@ export async function MobileConversationList({
 
   if (rows === null) {
     return (
-      <p className={styles.note} role="status" data-testid="mobile-inbox-unavailable">
+      <p className={ui.empty} role="status" data-testid="mobile-inbox-unavailable">
         {t('inbox.unavailable')}
       </p>
     );
   }
   if (rows.length === 0) {
     return (
-      <p className={styles.note} data-testid="mobile-inbox-empty">
-        {t('inbox.empty')}
+      <p className={ui.empty} data-testid="mobile-inbox-empty">
+        <Inbox aria-hidden size={30} strokeWidth={2} />
+        {filtered ? t('inbox.noMatch') : t('inbox.empty')}
       </p>
     );
   }
@@ -62,11 +74,12 @@ export async function MobileConversationList({
         const mark = unreadMark(row);
         const said = quoteOf({ body: row.lastMessageBody ?? '', messageType: row.lastMessageType });
         const channel = channelName(row.channel, channelNames) ?? inbox('queue.unknownChannel');
+        const owner = rowOwner(row, meId, colleagues);
         return (
           <li key={row.id}>
             <Link
               href={`/m/inbox/${row.id}` as '/m/inbox'}
-              className={styles.row}
+              className={`${ui.row} ${styles.row}`}
               data-unread={mark === null ? undefined : ''}
               data-testid={`mobile-row-${row.id}`}
             >
@@ -97,6 +110,10 @@ export async function MobileConversationList({
                   )}
                 </span>
                 <span className={styles.bottom}>
+                  {/* The last word was ours: the double tick, as a chat list marks a reply. */}
+                  {row.lastMessageDirection === 'OUTBOUND' ? (
+                    <CheckCheck aria-hidden size={16} strokeWidth={2} className={styles.tick} />
+                  ) : null}
                   <span
                     className={styles.preview}
                     data-kind={said !== null && 'kind' in said ? said.kind : undefined}
@@ -123,6 +140,17 @@ export async function MobileConversationList({
                     </span>
                   )}
                 </span>
+                {owner === null ? null : (
+                  <span className={ui.tags}>
+                    <span className={ui.tag} data-tone={owner.tone}>
+                      {owner.kind === 'colleague' ? (
+                        <PersonName name={owner.name} />
+                      ) : (
+                        t(`inbox.owner.${owner.kind}`)
+                      )}
+                    </span>
+                  </span>
+                )}
               </span>
             </Link>
           </li>

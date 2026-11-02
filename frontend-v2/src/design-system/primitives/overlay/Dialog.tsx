@@ -83,3 +83,41 @@ export function DrawerContent({
     </RadixDialog.Portal>
   );
 }
+
+/**
+ * Bottom sheet - the phone's dialog (`GOTCHA Mobile App.dc.html`: a white
+ * sheet from the bottom edge, radius 26 on its top corners, a handle, the
+ * screen dimmed behind it). Dialog's semantics and focus trap; only the
+ * place differs, so a phone and a desktop dialog behave as one thing.
+ */
+export const Sheet = RadixDialog.Root;
+export const SheetTrigger = RadixDialog.Trigger;
+export const SheetClose = RadixDialog.Close;
+
+export function SheetContent({
+  title,
+  hideTitle,
+  children,
+  ...rest
+}: ComponentPropsWithoutRef<typeof RadixDialog.Content> & {
+  title: string;
+  hideTitle?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <RadixDialog.Portal>
+      <RadixDialog.Overlay className={styles.sheetOverlay} />
+      <RadixDialog.Content className={styles.sheetContent} aria-describedby={undefined} {...rest}>
+        <span className={styles.sheetHandle} aria-hidden="true" />
+        {hideTitle ? (
+          <VisuallyHidden.Root>
+            <RadixDialog.Title>{title}</RadixDialog.Title>
+          </VisuallyHidden.Root>
+        ) : (
+          <RadixDialog.Title className={styles.sheetTitle}>{title}</RadixDialog.Title>
+        )}
+        {children}
+      </RadixDialog.Content>
+    </RadixDialog.Portal>
+  );
+}

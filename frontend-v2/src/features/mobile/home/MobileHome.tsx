@@ -1,0 +1,240 @@
+import { Check, CircleAlert, Clock } from 'lucide-react';
+import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
+
+import { channelName } from '@/api/contracts/inbox';
+import { Logo } from '@/design-system/brand/Logo';
+import { UserText } from '@/design-system/primitives/text/UserText';
+import { PersonName } from '@/features/customers/PersonName';
+import { clockTime, describe } from '@/features/home/ActivityCard';
+import { homeFace } from '@/features/home/first-steps';
+import { loadHomeData, loadViewerFirstName } from '@/features/home/load-home-data';
+import { waitLabel } from '@/features/home/queue-row';
+import { TenantGateNotice } from '@/features/tenant-gate/TenantGateNotice';
+import { Link } from '@/i18n/navigation';
+
+import ui from '../mobile-ui.module.css';
+import styles from './mobile-home.module.css';
+import { greetingKey, rowTone } from './mobile-home';
+
+const OUTCOME_ICON = {
+  completed: Check,
+  failed: CircleAlert,
+  awaiting_approval: Clock,
+} as const;
+
+/**
+ * The phone's Home, as `GOTCHA Mobile App.dc.html` draws it: the mark and the
+ * wordmark, the greeting, the day on a dark card, who needs you, and what
+ * GOTCHA did.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ THE WEBSITE'S LOADER, AND ONLY WHAT IT LOADS
+ * ════════════════════════════════════════════════════════════════════════════
+ * `loadHomeData` and `loadViewerFirstName`, the reads the desktop Home makes,
+ * so a figure here is the figure there. The design's card says "since last
+ * night" over sales and a response time; the overview is today's and has no
+ * sales, so the card says "today" over today's counts. The bell, the ask bar
+ * and the avatar are not drawn: the notifications and the ask are website
+ * panels with no phone screen behind them, and the account menu is the bar's
+ * end.
+ *
+ * ★ Unknown is not empty. A failed queue read says it failed; an empty one
+ *   says nobody is waiting. A failed overview drops the card rather than
+ *   showing zeros, and a failed or empty activity feed drops "Updates".
+ */
+export async function MobileHome({ account }: { readonly account: ReactNode }) {
+  const t = await getTranslations('mobile.home');
+  const home = await getTranslations('home');
+  const needsYou = await getTranslations('home.needsYou');
+  const working = await getTranslations('home.working');
+  const channelNames = await getTranslations('channels');
+  const format = await getFormatter();
+
+  const [data, firstName] = await Promise.all([loadHomeData(), loadViewerFirstName()]);
+  const { overview, queue, queueItems, activity, isQuiet, setup, gate } = data;
+  const now = new Date();
+
+  const bar = (
+    <header className={styles.bar}>
+      <span className={styles.brand}>
+        <Logo size={30} />
+        <span className={styles.wordmark}>GOTCHA</span>
+      </span>
+      <span className={styles.fill} />
+      {account}
+    </header>
+  );
+
+  // The tenant is locked out: every figure would be absent for that one reason.
+  if (homeFace({ setup, gate }) === 'gated' && gate) {
+    return (
+      <div className={ui.screen} data-testid="mobile-home">
+        {bar}
+        <div className={styles.scroll}>
+          <TenantGateNotice gate={gate} />
+        </div>
+      </div>
+    );
+  }
+
+  const waiting = queue?.waiting ?? null;
+  const events = activity ?? [];
+
+  return (
+    <div className={ui.screen} data-testid="mobile-home">
+      {bar}
+      <div className={styles.scroll}>
+        <header className={styles.greeting}>
+          <span className={styles.date}>{format.dateTime(now, 'greeting')}</span>
+          <h1 className={styles.hello}>
+            {home(`greeting.${greetingKey(now.getHours(), isQuiet, firstName !== null)}`, {
+              name: firstName ?? '',
+            })}
+          </h1>
+        </header>
+
+        {overview ? (
+          <section className={styles.summary} data-testid="mobile-home-summary">
+            <div className={styles.summaryHead}>
+              <span className={styles.eyebrow}>{t('today')}</span>
+              <p className={styles.headline}>
+                {waiting === null
+                  ? t('handled', { handled: overview.aiHandledCount })
+                  : t('handledWaiting', { handled: overview.aiHandledCount, waiting })}
+              </p>
+            </div>
+            <div className={styles.tiles}>
+              <Tile
+                value={format.number(overview.totalConversations)}
+                label={t('tiles.conversations')}
+              />
+              <Tile
+                value={format.number(overview.humanHandledCount)}
+                label={t('tiles.byYourTeam')}
+              />
+              <Tile
+                value={format.number(overview.pendingApprovalCount)}
+                label={t('tiles.approvals')}
+              />
+            </div>
+          </section>
+        ) : null}
+
+        <section className={styles.block} data-testid="mobile-home-needs-you">
+          <div className={styles.blockHead}>
+            <h2 className={styles.blockTitle}>{t('needsYou')}</h2>
+            {queueItems && queueItems.totalWaiting > 0 ? (
+              <span className={styles.blockCount}>{format.number(queueItems.totalWaiting)}</span>
+            ) : null}
+          </div>
+          <div className={ui.card}>
+            {queueItems === null ? (
+              <p className={styles.note} role="status">
+                {needsYou('unavailable')}
+              </p>
+            ) : queueItems.data.length === 0 ? (
+              <p className={styles.note}>{needsYou('empty')}</p>
+            ) : (
+              <>
+                {queueItems.data.map((item) => (
+                  <div key={item.conversationId} className={`${ui.cardRow} ${styles.need}`}>
+                    <span
+                      className={styles.needDot}
+                      data-tone={rowTone(item.intent)}
+                      aria-hidden="true"
+                    />
+                    <div className={styles.needBody}>
+                      <div className={styles.needTop}>
+                        <span className={styles.needTitle}>
+                          {/* No name means no contact record: the identifier as itself, as on the website. */}
+                          {item.customer.name ? (
+                            <PersonName name={item.customer.name} />
+                          ) : (
+                            item.customer.id
+                          )}
+                        </span>
+                        <span className={styles.needTime}>
+                          {waitLabel(item.waitingSince, now.getTime(), needsYou)}
+                        </span>
+                      </div>
+                      <span className={styles.needSub}>
+                        <bdi dir="auto">
+                          {channelName(item.channel, channelNames) ?? channelNames('name.other')}
+                        </bdi>
+                        {item.preview ? (
+                          <>
+                            {' · '}
+                            <UserText>{item.preview}</UserText>
+                          </>
+                        ) : null}
+                      </span>
+                      <Link
+                        href={`/m/inbox/${encodeURIComponent(item.conversationId)}` as '/m/inbox'}
+                        className={styles.cta}
+                        data-testid="mobile-home-need"
+                      >
+                        {t('open')}
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+                {queueItems.totalWaiting > queueItems.data.length ? (
+                  <Link
+                    href={{ pathname: '/m/inbox', query: { view: 'queue' } }}
+                    className={`${ui.cardRow} ${ui.more}`}
+                  >
+                    {t('more', { count: queueItems.totalWaiting - queueItems.data.length })}
+                  </Link>
+                ) : null}
+              </>
+            )}
+          </div>
+        </section>
+
+        {events.length > 0 ? (
+          <section className={styles.block} data-testid="mobile-home-updates">
+            <h2 className={styles.blockTitle}>{t('updates')}</h2>
+            <ul className={styles.updates}>
+              {events.map((event) => {
+                const Icon = OUTCOME_ICON[event.outcome];
+                const line = (
+                  <>
+                    <span className={styles.updateIcon} data-outcome={event.outcome}>
+                      <Icon size={19} strokeWidth={2} aria-hidden="true" />
+                    </span>
+                    <span className={styles.updateText}>{describe(event, working, format)}</span>
+                    <time className={styles.updateTime} dateTime={event.at}>
+                      {clockTime(event.at, format)}
+                    </time>
+                  </>
+                );
+                return (
+                  <li key={event.id}>
+                    {/* Still waiting on a person: the one entry that can still be decided. */}
+                    {event.outcome === 'awaiting_approval' ? (
+                      <Link href="/m/approvals" className={styles.update}>
+                        {line}
+                      </Link>
+                    ) : (
+                      <div className={styles.update}>{line}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Tile({ value, label }: { readonly value: string; readonly label: string }) {
+  return (
+    <div className={styles.tile}>
+      <span className={`${ui.figure} ${styles.tileValue}`}>{value}</span>
+      <span className={styles.tileLabel}>{label}</span>
+    </div>
+  );
+}

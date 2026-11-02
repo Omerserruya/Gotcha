@@ -6,32 +6,44 @@ import { Link } from '@/i18n/navigation';
 
 import styles from './MobileBar.module.css';
 import { MobileAccountMenu } from './MobileAccountMenu';
+import type { MobileTabHref } from './MobileTabs';
 
 /**
- * A screen's top bar on the phone.
+ * A screen's top bar on the phone, as `GOTCHA Mobile App.dc.html` draws it.
  *
- * Two shapes, as WhatsApp has: a list screen names itself and carries the
- * account menu; a screen inside a list (one conversation) has a way back and
- * says who or what it is, with room for its own actions at the end.
+ * Two shapes: a list screen names itself in large type (the inbox writes the
+ * GOTCHA wordmark instead) with its actions and the account menu at the end;
+ * a screen over a list (a conversation, an approval, a customer) has a way
+ * back, then whatever says what it is.
  */
 export function MobileBar({
   title,
+  brand = false,
   back,
   lead,
   actions,
+  edge = false,
   children,
 }: {
   readonly title?: ReactNode;
+  /** The inbox's bar: the wordmark, not a screen name. */
+  readonly brand?: boolean;
   /** The list this screen sits in. Present = the back arrow, absent = the account menu. */
-  readonly back?: { readonly href: '/m/inbox' | '/m/approvals' | '/m/outreach' | '/m/customers'; readonly label: string };
+  readonly back?: { readonly href: MobileTabHref; readonly label: string };
   /** Before the title: an avatar, on a conversation. */
   readonly lead?: ReactNode;
   readonly actions?: ReactNode;
-  /** Under the bar's row, still part of it: the inbox's view chips. */
+  /** A hairline under the bar: a conversation's, where the stream scrolls under it. */
+  readonly edge?: boolean;
+  /** Under the bar's row, still part of it. */
   readonly children?: ReactNode;
 }) {
   return (
-    <header className={styles.bar}>
+    <header
+      className={styles.bar}
+      data-back={back === undefined ? undefined : ''}
+      data-edge={edge ? '' : undefined}
+    >
       <div className={styles.row}>
         {back === undefined ? null : (
           <Link
@@ -41,12 +53,17 @@ export function MobileBar({
             data-testid="mobile-back"
           >
             <DirectionalIcon>
-              <ArrowLeft size={22} strokeWidth={1.8} />
+              <ArrowLeft size={23} strokeWidth={2} />
             </DirectionalIcon>
           </Link>
         )}
         {lead}
-        <div className={styles.title}>{title}</div>
+        {brand ? (
+          <span className={styles.brand}>GOTCHA</span>
+        ) : (
+          <div className={styles.title}>{title}</div>
+        )}
+        {brand ? <span className={styles.fill} /> : null}
         {actions}
         {back === undefined ? <MobileAccountMenu /> : null}
       </div>

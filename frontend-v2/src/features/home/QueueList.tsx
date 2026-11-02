@@ -4,7 +4,7 @@ import type { QueueItem } from '@/api/contracts/analytics';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Home.module.css';
-import { initials, waitLabel } from './queue-row';
+import { initials, TONE_BY_INTENT, waitLabel } from './queue-row';
 import { channelName } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { PersonName } from '@/features/customers/PersonName';
@@ -18,21 +18,6 @@ import { PersonName } from '@/features/customers/PersonName';
  *
  * A row opens the conversation in Inbox, as the design states.
  */
-
-/**
- * How an intent reads on the row.
- *
- * The design marks a row only when it is angry, valuable or blocked;
- * everything else is neutral. `COMPLAINT` joins `FRUSTRATED` because the
- * ranker weighs them identically, and an unrecognised intent is neutral rather
- * than guessed at - a wrongly coloured row is worse than an uncoloured one.
- */
-const TONE_BY_INTENT: Record<string, 'urgent' | 'opportunity' | 'blocked'> = {
-  FRUSTRATED: 'urgent',
-  COMPLAINT: 'urgent',
-  HIGH_INTENT: 'opportunity',
-  WAITING_EXTERNAL: 'blocked',
-};
 
 const ROW_TONE_CLASS = {
   urgent: styles.queueRowUrgent,
