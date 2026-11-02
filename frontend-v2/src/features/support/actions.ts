@@ -41,7 +41,11 @@ export type SupportRefusal =
   | 'system_tenant'
   /** `support_session_active`: this login is already in a session (`activeName`). */
   | 'active'
-  /** `support_requires_session`: a login with no console session behind it. */
+  /**
+   * `support_requires_session`: the platform found no session for this login
+   * to bind to. Never said as "sign in again" - a new sign-in is the same kind
+   * of login, and it answered the same (prod, 2026-11-02).
+   */
   | 'no_session'
   /** The session started but this browser could not keep it (it expired at once). */
   | 'not_kept'
@@ -72,7 +76,11 @@ const BY_CODE: Readonly<Record<string, SupportRefusal>> = {
 function refusalOf(cause: unknown, event: string): SupportRefusal {
   if (isApiError(cause)) {
     const known = cause.code ? BY_CODE[cause.code] : undefined;
-    if (known) return known;
+    if (known) {
+      // Said on screen in words; the code is kept here, where it can be read.
+      logger.warn(event, { code: cause.code, status: cause.status });
+      return known;
+    }
     if (cause.kind === 'validation') return 'reason_invalid';
     if (cause.kind === 'authorization') return 'forbidden';
     if (cause.kind === 'not_found') return 'not_found';

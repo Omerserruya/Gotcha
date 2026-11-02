@@ -556,7 +556,7 @@
         "not_found": "This workspace no longer exists.",
         "system_tenant": "Support mode is for a customer's workspace, not System or your own.",
         "active": "You are already in support mode in another workspace.",
-        "no_session": "Sign in again to enter support mode.",
+        "no_session": "Support mode could not be started. Nothing was changed.",
         "not_kept": "Support mode started, but this browser could not keep it. Try again.",
         "none": "There is no support session to return to.",
         "failed": "Support mode could not be started. Try again."

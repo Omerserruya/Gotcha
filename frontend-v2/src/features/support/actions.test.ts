@@ -78,6 +78,15 @@ describe('★★ entering support mode', () => {
     expect(cookie.write).not.toHaveBeenCalled();
   });
 
+  it('★ a refusal the platform named is logged with its code', async () => {
+    api.post.mockRejectedValue(refused(400, 'support_requires_session', 'validation'));
+    await startSupport('t9', 'r');
+    expect(warn).toHaveBeenCalledWith('support.start_failed', {
+      code: 'support_requires_session',
+      status: 400,
+    });
+  });
+
   it('★ already in a session: which workspace it is in, read from the platform', async () => {
     api.post.mockRejectedValue(refused(409, 'support_session_active', 'conflict'));
     api.get.mockResolvedValue({ ...SESSION, tenantName: 'Other shop' });

@@ -102,6 +102,11 @@ describe('★★ entering support mode from the console', () => {
     expect(screen.getByTestId('support-ended')).toHaveTextContent('Support mode ended.');
   });
 
+  it('★★ no session to bind to never reads as "sign in again" - a new sign-in answered the same', () => {
+    expect(consoleEn.support.enter.refusal.no_session).not.toMatch(/sign/i);
+    expect(consoleHe.support.enter.refusal.no_session).not.toMatch(/התחבר/);
+  });
+
   it('every refusal has words in both languages', () => {
     const en = Object.keys(consoleEn.support.enter.refusal).sort();
     expect(Object.keys(consoleHe.support.enter.refusal).sort()).toEqual(en);
