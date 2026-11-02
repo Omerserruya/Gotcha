@@ -971,11 +971,12 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
       data: { id: conversation.id, status: "WAITING", channel: "SHOPIFY_LIVE_CHAT" },
     });
     // The form is the shopper writing, and it never passes the incoming
-    // worker: the assignee's phone hears it when a person owns the chat
-    // (usually nobody does yet, and then nothing is sent).
+    // worker. The update above just handed the chat to the team, so it
+    // reaches the assignee's phone, else the team's (unless the bot still
+    // holds it). The row read before that update does not say so yet.
     emitInboundMessage({
       tenantId: session.tenantId,
-      conversation,
+      conversation: { ...conversation, isHandedOver: true },
       messageId: offlineMessage.id,
       body: note || "(no message)",
       messageType: "text",

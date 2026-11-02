@@ -736,10 +736,17 @@ describe("★ POST /lead: the assignee's phone hears the form (mobile push)", ()
     });
   });
 
-  it("the AI handling it, or nobody assigned: the rule queues nothing", async () => {
+  it("nobody assigned: the form hands the chat to the team, so the team is told", async () => {
+    H.conversationRow.current = { id: "conv9", tenantId: "t1", customerName: "Shopper", assignedAgentId: null, handledBy: null, isHandedOver: false, origin: "LIVE" };
+    await lead();
+    expect(INBOUND.calls).toHaveLength(1);
+    expect(INBOUND.calls[0]).toMatchObject({ queued: true, input: { conversation: { id: "conv9", assignedAgentId: null, isHandedOver: true } } });
+  });
+
+  it("the AI still handling it: the rule queues nothing", async () => {
     H.conversationRow.current = { id: "conv8", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "ai_agent", origin: "LIVE" };
     await lead();
-    H.conversationRow.current = { id: "conv9", tenantId: "t1", customerName: "Shopper", assignedAgentId: null, handledBy: null, origin: "LIVE" };
+    H.conversationRow.current = { id: "conv10", tenantId: "t1", customerName: "Shopper", assignedAgentId: null, handledBy: "ai_agent", origin: "LIVE" };
     await lead();
     expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false]);
   });

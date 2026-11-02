@@ -143,8 +143,17 @@ describe("★ through dispatch()", () => {
     }
   });
 
-  it("unassigned and waiting for a person: no message.inbound (nobody to send it to)", async () => {
-    S.conv = baseConv({ isHandedOver: true, handledBy: "human" });
+  it("handed over, nobody assigned (a person replied from the queue): emitted for the team, the bot silent", async () => {
+    S.conv = baseConv({ isHandedOver: true, handledBy: "human", departmentId: "sales" });
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0].data).toMatchObject({ departmentId: "sales", data: { conversationId: "c1", assignedAgentId: null } });
+    expect(mocks.processAIBot).not.toHaveBeenCalled();
+  });
+
+  it("the bot handling it with nobody assigned: no event", async () => {
+    S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya", isHandedOver: false });
     await dispatch(JOB);
     await flush();
     expect(inbound()).toHaveLength(0);

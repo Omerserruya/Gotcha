@@ -128,31 +128,15 @@ export async function processEvent(event: SystemEvent): Promise<void> {
     return;
   }
 
-  // 1. Load matching preferences. We OR (departmentId = event.departmentId)
-  //    OR (departmentId = NULL) and post-filter to prefer department-scoped
-  //    rows. If departmentId is undefined we only match tenant-default rows.
-  const where: any = {
-    tenantId: event.tenantId,
-    eventType: event.type,
-    enabled: true,
-  };
-  if (event.departmentId) {
-    where.OR = [{ departmentId: event.departmentId }, { departmentId: null }];
-  } else {
-    where.departmentId = null;
+  // 1. The workspace's rules for this event (department-scoped preferred).
+  let effective = await rulesFor(event.tenantId, event.type, event.departmentId);
+  // An inbound customer message is never routed by its own rules: a rule
+  // could otherwise broadcast every customer message to the admins, by email.
+  // With an assignee it goes to them (defaultRoute); in the team's queue, to
+  // everyone who can read conversations (push only).
+  if (ASSIGNEE_PUSH_ONLY.has(event.type)) {
+    effective = (event.data as any)?.assignedAgentId ? [] : teamQueueRoutes(event);
   }
-
-  const prefs: any[] = await (prisma as any).notificationPreference.findMany({ where });
-
-  // Department-scoped preferences override tenant-default ones for the same
-  // event type. If both exist, drop the tenant-default - the department row
-  // is more specific and the operator clearly meant to override.
-  const hasDeptScoped = prefs.some((p) => p.departmentId);
-  let effective = hasDeptScoped ? prefs.filter((p) => p.departmentId) : prefs;
-  // An inbound customer message goes to its assignee's phone and nowhere
-  // else, whatever a workspace rule says: a rule could otherwise broadcast
-  // every customer message to the admins, by email.
-  if (ASSIGNEE_PUSH_ONLY.has(event.type)) effective = [];
   // No rule for this event in the workspace: the built-in route, so it
   // reaches someone (design 15, Step 1). It was silently dropped.
   if (effective.length === 0) {
@@ -232,6 +216,33 @@ export async function processEvent(event: SystemEvent): Promise<void> {
 }
 
 /**
+ * The workspace's enabled rules for an event. We OR (departmentId =
+ * event.departmentId) OR (departmentId = NULL); department-scoped rows then
+ * override tenant-default ones - the department row is more specific and the
+ * operator clearly meant to override. No departmentId: tenant-default rows only.
+ */
+async function rulesFor(tenantId: string, eventType: string, departmentId?: string): Promise<any[]> {
+  const where: any = { tenantId, eventType, enabled: true };
+  if (departmentId) where.OR = [{ departmentId }, { departmentId: null }];
+  else where.departmentId = null;
+  const prefs: any[] = await (prisma as any).notificationPreference.findMany({ where });
+  return prefs.some((p) => p.departmentId) ? prefs.filter((p) => p.departmentId) : prefs;
+}
+
+/**
+ * A customer message in a conversation the TEAM has and nobody claimed
+ * (handed over, or a person replied from the queue): EVERYONE in the
+ * workspace who can read conversations - "if the chat isn't assigned, alert
+ * everyone" (Omer, 2026-11-03). Not the department and not an escalation
+ * rule's recipients: everyone, the department set or not. Push only (no rule
+ * channels; push is added per person), and each person's push switch,
+ * per-event switch and quiet hours still decide.
+ */
+function teamQueueRoutes(_event: SystemEvent): any[] {
+  return [{ priority: "MEDIUM", conditions: null, channels: [] as string[], departmentId: null, recipients: { type: "conversation_readers" } as RecipientSpec }];
+}
+
+/**
  * Who hears of an event when the workspace set no rule for it: the person it
  * is about, else the workspace's admins. In-app always; email too for the
  * events below (Omer, 2026-10-12): the ones that need someone to act. Same
@@ -261,9 +272,10 @@ export const PUSH_BY_DEFAULT: ReadonlySet<string> = new Set([
   "conversation.waiting",
 ]);
 /**
- * Push only, to the conversation's assignee only (Omer, 2026-11-03): every
- * inbound customer message in a conversation a PERSON owns. The emitter
- * (incoming-worker) already refuses one the bot is handling.
+ * Push only (Omer, 2026-11-03): every inbound customer message in a
+ * conversation people handle - to its assignee, or with nobody assigned, to
+ * everyone who can read conversations (teamQueueRoutes). The emitter
+ * (shared lib/notifications/inbound-push) already refuses one the bot handles.
  */
 export const ASSIGNEE_PUSH_ONLY: ReadonlySet<string> = new Set(["message.inbound"]);
 /** Whether this event is pushed to the phones of the people it reaches. */

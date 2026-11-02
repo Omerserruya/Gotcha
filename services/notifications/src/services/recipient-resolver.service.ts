@@ -17,9 +17,12 @@
  * All queries are tenantId-scoped.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, hasPermission } from "@chatcenter/shared";
 
-export type RecipientType = "tenant_owner" | "department_manager" | "users";
+export type RecipientType = "tenant_owner" | "department_manager" | "users" | "conversation_readers";
+
+/** The permission that lets someone read a customer conversation (permission-catalog). */
+export const CONVERSATION_READ = "conversation:messages:read";
 
 export interface RecipientSpec {
   type: RecipientType;
@@ -77,6 +80,27 @@ export async function resolveRecipients(opts: {
       });
       for (const m of managers) {
         if (m.user?.isActive) out.set(m.user.id, m.user);
+      }
+    }
+  } else if (spec.type === "conversation_readers") {
+    // Everyone in the workspace who may read its conversations (2026-11-03,
+    // an unclaimed chat's messages "alert everyone"). Members only: a support
+    // principal (kind "support") is not a teammate, and inactive users are
+    // gone. The permission is checked per person, and a check that fails
+    // leaves that person out: a push carries the customer's words, so it
+    // must never reach someone who could not open the conversation.
+    const members = await (prisma as any).user.findMany({
+      where: { tenantId, isActive: true, kind: "member" },
+      select: { id: true, tenantId: true, email: true, name: true, notificationSoundEnabled: true, role: true },
+    });
+    for (const u of members) {
+      const allowed = await hasPermission({ userId: u.id, tenantId, role: u.role }, CONVERSATION_READ).catch((err: any) => {
+        console.warn(`[notifications] permission check failed for user=${u.id}; left out:`, err?.message);
+        return false;
+      });
+      if (allowed) {
+        const { role: _role, ...user } = u;
+        out.set(u.id, user);
       }
     }
   } else if (spec.type === "users") {

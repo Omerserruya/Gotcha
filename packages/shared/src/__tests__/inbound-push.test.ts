@@ -22,8 +22,14 @@ describe("★ who is told", () => {
     expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy: "human" })).toBe(true);
     expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy: null })).toBe(true);
   });
-  it("no assignee: no (the recipient IS the assignee)", () => {
-    expect(shouldEmitInbound({ assignedAgentId: null, handledBy: "human" })).toBe(false);
+  it("no assignee but with the team (handed over, or a person replied from the queue): yes, for the team", () => {
+    expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: true, handledBy: "human" })).toBe(true);
+    expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: true, handledBy: null })).toBe(true);
+    expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: false, handledBy: "human" })).toBe(true);
+  });
+  it("no assignee and nobody has it (unrouted): no", () => {
+    expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: false, handledBy: null })).toBe(false);
+    expect(shouldEmitInbound({})).toBe(false);
   });
   it("not real traffic: a sandbox rehearsal, a test conversation, imported history", () => {
     const human = { assignedAgentId: "matan", handledBy: "human" };
@@ -33,9 +39,10 @@ describe("★ who is told", () => {
     expect(shouldEmitInbound({ ...human, origin: "LIVE", isTest: false, customerExternalId: "9725" })).toBe(true);
   });
 
-  it("the bot, a flow, a pending approval or the sandbox driving: no, even with an assignee left on the row", () => {
+  it("the bot, a flow, a pending approval or the sandbox driving: no, assignee or handed over or not", () => {
     for (const handledBy of ["ai_agent", "awaiting_approval", "flow", "sandbox"]) {
       expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy }), handledBy).toBe(false);
+      expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: true, handledBy }), handledBy).toBe(false);
     }
   });
 });
@@ -72,6 +79,13 @@ describe("★ the event", () => {
       metadata: { conversationId: "c1", userId: "matan" },
     });
     expect(opts.jobId).toBe(`evt-${data.id}`);
+  });
+
+  it("the team's queue: queued with no assignee, for the engine to route as an escalation", async () => {
+    expect(emitInboundMessage({ tenantId: "t1", conversation: { id: "c2", assignedAgentId: null, isHandedOver: true, handledBy: "human", departmentId: "sales" }, messageId: "m2", body: "still there?", messageType: "text", channel: "WEBCHAT" })).toBe(true);
+    await flush();
+    expect(Q.adds[0].data).toMatchObject({ departmentId: "sales", data: { conversationId: "c2", assignedAgentId: null, preview: "still there?" }, metadata: { conversationId: "c2" } });
+    expect(Q.adds[0].data.metadata.userId).toBeUndefined();
   });
 
   it("refused: nothing queued", async () => {

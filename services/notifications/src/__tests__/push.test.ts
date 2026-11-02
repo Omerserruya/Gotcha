@@ -25,6 +25,9 @@ const H = vi.hoisted(() => ({
   devices: [] as any[],
   logs: [] as any[],
   deviceQueries: 0,
+  members: [] as Array<{ tenantId: string; departmentId: string; userId: string }>,
+  cannotRead: new Set<string>(),
+  permissionDown: false,
   dedup: new Set<string>(),
 }));
 
@@ -71,9 +74,10 @@ vi.mock("@chatcenter/shared", async () => ({
     user: {
       findMany: async (a: any) => H.users.filter((u) => u.tenantId === a.where.tenantId && u.isActive
         && (a.where.role ? u.role === a.where.role : true)
+        && (a.where.kind ? (u.kind ?? "member") === a.where.kind : true)
         && (a.where.id?.in ? a.where.id.in.includes(u.id) : true)),
     },
-    departmentMember: { findMany: async () => [] },
+    departmentMember: { findMany: async (a: any) => H.members.filter((m) => m.tenantId === a.where?.tenantId && m.departmentId === a.where?.departmentId) },
     userNotificationPreference: { findMany: async (a: any) => H.personal.filter((p) => a.where.userId.in.includes(p.userId)) },
     inAppNotification: { create: async ({ data }: any) => { H.inApp.push(data); return { id: `n${H.inApp.length}`, createdAt: new Date(), read: false, ...data }; } },
     pushDevice: {
@@ -88,6 +92,10 @@ vi.mock("@chatcenter/shared", async () => ({
     tenantSetting: { findMany: async () => [] },
   },
   publishEvent: async () => undefined,
+  hasPermission: async (p: any, key: string) => {
+    if (H.permissionDown) throw new Error("rbac unavailable");
+    return key === "conversation:messages:read" && !H.cannotRead.has(p.userId);
+  },
   getRedis: () => ({
     set: async (key: string, _v: string, _ex: string, _ttl: number, mode: string) => {
       if (mode !== "NX") return "OK";
@@ -169,7 +177,7 @@ const iphone = (id: string, userId: string, tenantId = "T") => ({ id, userId, te
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
-  H.rules = []; H.personal = []; H.timezone = null; H.inApp = []; H.emails = []; H.devices = []; H.logs = []; H.deviceQueries = 0; H.dedup = new Set();
+  H.rules = []; H.personal = []; H.timezone = null; H.inApp = []; H.emails = []; H.devices = []; H.logs = []; H.deviceQueries = 0; H.members = []; H.cannotRead = new Set(); H.permissionDown = false; H.dedup = new Set();
   const u = (id: string, role: string, tenantId = "T") => ({ id, tenantId, role, isActive: true, email: `${id}@x.test`, name: id, notificationSoundEnabled: true });
   H.users = [u("dana", "ADMIN"), u("noa", "ADMIN"), u("matan", "AGENT")];
   fcmReply = () => ({ status: 200, json: { name: "projects/p/messages/1" } });
@@ -325,10 +333,84 @@ describe("★ message.inbound: push only, the assignee only", () => {
     expect(fcmCalls[0]!.body.message.notification.body).toBe("Photo");
   });
 
-  it("no assignee in the payload: no one", async () => {
-    H.devices = [device("d1", "matan")];
-    await processEvent(ev("message.inbound", { conversationId: "c7", preview: "hi" }, { conversationId: "c7" }));
+});
+
+describe("★ message.inbound in the team's queue (handed over, nobody assigned; 2026-11-03)", () => {
+  const queued = (departmentId?: string, data: Record<string, unknown> = {}) => ({
+    ...ev("message.inbound", { conversationId: "c7", assignedAgentId: null, messageId: `m${seq}`, preview: "Still there?", previewKind: "text", messageType: "text", channel: "WEBCHAT", customerName: "Omer", ...data }, { conversationId: "c7" }),
+    ...(departmentId ? { departmentId } : {}),
+  }) as SystemEvent;
+
+  it("everyone in the workspace who can read conversations, push only (an agent too, not just the admins)", async () => {
+    H.devices = [device("d1", "dana"), device("d2", "noa"), device("d3", "matan")];
+    await processEvent(queued());
+    expect(fcmCalls.map((c) => c.body.message.token).sort()).toEqual(["tok-d1", "tok-d2", "tok-d3"]);
+    expect(fcmCalls[0]!.body.message.data.link).toBe("/m/inbox/c7");
+    expect(H.inApp).toHaveLength(0);
+    expect(H.emails).toHaveLength(0);
+  });
+
+  it("a department set: still everyone, not only its members", async () => {
+    H.members = [{ tenantId: "T", departmentId: "sales", userId: "matan" }];
+    H.devices = [device("d1", "dana"), device("d3", "matan")];
+    await processEvent(queued("sales"));
+    expect(fcmCalls.map((c) => c.body.message.token).sort()).toEqual(["tok-d1", "tok-d3"]);
+  });
+
+  it("not a support principal, not an inactive user, not someone who cannot read conversations, not another workspace", async () => {
+    H.users.push(
+      { id: "support-actor", tenantId: "T", role: "ADMIN", kind: "support", isActive: true, email: "s@x.test", name: "s", notificationSoundEnabled: true },
+      { id: "gone", tenantId: "T", role: "AGENT", isActive: false, email: "g@x.test", name: "g", notificationSoundEnabled: true },
+      { id: "viewer", tenantId: "T", role: "AGENT", isActive: true, email: "v@x.test", name: "v", notificationSoundEnabled: true },
+      { id: "other", tenantId: "OTHER", role: "ADMIN", isActive: true, email: "o@x.test", name: "o", notificationSoundEnabled: true },
+    );
+    H.cannotRead = new Set(["viewer"]);
+    H.devices = [device("d1", "dana"), device("s1", "support-actor"), device("g1", "gone"), device("v1", "viewer"), device("o1", "other", "OTHER")];
+    await processEvent(queued());
+    expect(fcmCalls.map((c) => c.body.message.token)).toEqual(["tok-d1"]);
+  });
+
+  it("the permission check failing leaves people out rather than in", async () => {
+    H.permissionDown = true;
+    H.devices = [device("d1", "dana")];
+    await processEvent(queued());
     expect(fcmCalls).toHaveLength(0);
+  });
+
+  it("a workspace rule (for this event or for escalations) does not narrow or widen it", async () => {
+    H.rules = [rule("conversation.escalated", ["in_app", "email"], { type: "users", userIds: ["matan"] }), rule("message.inbound", ["email"], { type: "users", userIds: ["noa"] })];
+    H.devices = [device("d1", "dana"), device("d2", "noa"), device("d3", "matan")];
+    await processEvent(queued());
+    expect(fcmCalls.map((c) => c.body.message.token).sort()).toEqual(["tok-d1", "tok-d2", "tok-d3"]);
+    expect(H.emails).toHaveLength(0);
+  });
+
+  it("each person's own switches still hold: push off, the event off, quiet hours", async () => {
+    H.timezone = "Asia/Jerusalem"; // 14:00 local
+    for (const id of ["omer", "ron"]) H.users.push({ id, tenantId: "T", role: "ADMIN", isActive: true, email: `${id}@x.test`, name: id, notificationSoundEnabled: true });
+    H.personal = [
+      { userId: "dana", push: false },
+      { userId: "noa", quietHoursFrom: "13:00", quietHoursTo: "15:00" },
+      { userId: "ron", events: { "message.inbound": { push: false } } },
+    ];
+    H.devices = [device("d1", "dana"), device("d2", "noa"), device("d4", "omer"), device("d5", "ron")];
+    await processEvent(queued());
+    expect(fcmCalls.map((c) => c.body.message.token)).toEqual(["tok-d4"]);
+  });
+
+  it("a burst stays one notification per phone: every push of the conversation shares its collapse id", async () => {
+    H.devices = [device("d1", "dana")];
+    await processEvent(queued(undefined, { messageId: "m-a", preview: "hello?" }));
+    await processEvent(queued(undefined, { messageId: "m-b", preview: "anyone?" }));
+    expect(fcmCalls).toHaveLength(2);
+    expect(new Set(fcmCalls.map((c) => c.body.message.android.collapse_key))).toEqual(new Set(["c7"]));
+  });
+
+  it("assigned: the assignee only, even with an escalation rule", async () => {
+    H.rules = [rule("conversation.escalated", ["in_app"])];
+    H.devices = [device("d1", "dana"), device("d3", "matan")];
+    await processEvent(queued(undefined, { assignedAgentId: "matan" }));
+    expect(fcmCalls.map((c) => c.body.message.token)).toEqual(["tok-d3"]);
   });
 });
 

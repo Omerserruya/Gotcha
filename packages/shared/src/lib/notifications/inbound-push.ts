@@ -1,6 +1,6 @@
 /**
- * "message.inbound": the assignee's phone hears every customer message in a
- * conversation a person owns (mobile push, 2026-11-03).
+ * "message.inbound": every customer message in a conversation people handle
+ * reaches a phone - the assignee's, else the team's (mobile push, 2026-11-03).
  *
  * In shared because customer messages are persisted in two services: the
  * incoming worker (every channel's webhook path, the website widget and the
@@ -46,6 +46,8 @@ export interface InboundConversation {
   id: string;
   assignedAgentId?: string | null;
   handledBy?: string | null;
+  /** Handed to the team: no assignee yet, but people (not the bot) answer it. */
+  isHandedOver?: boolean | null;
   customerName?: string | null;
   departmentId?: string | null;
   /** The product's definition of real traffic (lib/real-conversation.ts): optional, checked when present. */
@@ -55,14 +57,20 @@ export interface InboundConversation {
 }
 
 /**
- * Whether this inbound message is announced to the assignee's phone: a
- * person is assigned (they are the recipient), the bot is not driving it, and
- * it is real traffic - not a sandbox rehearsal, a test conversation or
+ * Whether this inbound message is announced to someone's phone:
+ *   - a person is assigned: to them (the notifications service sends it to
+ *     the assignee only);
+ *   - nobody is assigned but the conversation is with the TEAM (handed over,
+ *     or handled by a human - someone replied from the queue without claiming
+ *     it, 2026-11-03): to the people an escalation of it would reach;
+ *   - the bot or a flow driving it, assignee or not: never.
+ * And only real traffic - not a sandbox rehearsal, a test conversation or
  * imported history.
  */
 export function shouldEmitInbound(conversation: Omit<InboundConversation, "id">): boolean {
-  if (!conversation.assignedAgentId) return false;
   if (BOT_HANDLED.has(String(conversation.handledBy ?? ""))) return false;
+  const withPeople = !!conversation.assignedAgentId || !!conversation.isHandedOver || conversation.handledBy === "human";
+  if (!withPeople) return false;
   if (conversation.isTest) return false;
   if (String(conversation.customerExternalId ?? "").startsWith("sandbox:")) return false;
   if (conversation.origin && conversation.origin !== "LIVE") return false;
@@ -85,7 +93,8 @@ export function emitInboundMessage(input: {
   customerName?: string | null;
 }): boolean {
   if (!shouldEmitInbound(input.conversation)) return false;
-  const assignedAgentId = input.conversation.assignedAgentId!;
+  // null = the team's queue: the engine routes it as an escalation would.
+  const assignedAgentId = input.conversation.assignedAgentId ?? null;
   setImmediate(() => {
     try {
       q ??= new Queue("notifications", { connection: { url: REDIS_URL } });
@@ -110,7 +119,7 @@ export function emitInboundMessage(input: {
               channel: input.channel,
               customerName: input.customerName ?? input.conversation.customerName ?? null,
             },
-            metadata: { conversationId: input.conversation.id, userId: assignedAgentId, timestamp: new Date().toISOString() },
+            metadata: { conversationId: input.conversation.id, userId: assignedAgentId ?? undefined, timestamp: new Date().toISOString() },
           },
           { removeOnComplete: 1000, removeOnFail: 100, attempts: 5, backoff: { type: "exponential", delay: 2_000 }, jobId: `evt-${id}` },
         )

@@ -347,17 +347,25 @@ describe("★ the visitor's words kept on a WhatsApp handoff announce themselves
     });
   });
 
-  it("the bot handling it, a sandbox rehearsal, or nobody assigned: nothing is queued", async () => {
+  it("nobody assigned but handed to the team: the team is told", async () => {
+    own({ assignedAgentId: null, handledBy: "human", isHandedOver: true, isTest: false, origin: "LIVE" });
+    await handoff({ sessionId: "conv_web", sessionToken: "sess_abc", text: "hello" });
+    expect(INBOUND.calls).toHaveLength(1);
+    expect(INBOUND.calls[0]).toMatchObject({ queued: true, input: { conversation: { assignedAgentId: null, isHandedOver: true } } });
+  });
+
+  it("the bot handling it (assigned or not), a sandbox rehearsal, a test chat, or nobody has it: nothing is queued", async () => {
     for (const o of [
-      { assignedAgentId: "matan", handledBy: "ai_agent" },
-      { assignedAgentId: "matan", handledBy: "sandbox" },
+      { assignedAgentId: "matan", handledBy: "ai_agent", isHandedOver: false },
+      { assignedAgentId: null, handledBy: "ai_agent", isHandedOver: false },
+      { assignedAgentId: "matan", handledBy: "sandbox", isHandedOver: false },
       { assignedAgentId: "matan", handledBy: "human", isTest: true },
-      { assignedAgentId: null, handledBy: "human" },
+      { assignedAgentId: null, handledBy: null, isHandedOver: false },
     ]) {
       own({ isTest: false, ...o });
       await handoff({ sessionId: "conv_web", sessionToken: "sess_abc", text: "hello" });
     }
-    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false, false, false]);
+    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false, false, false, false]);
   });
 
   it("no words, no message and no announcement", async () => {

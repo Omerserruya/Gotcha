@@ -302,7 +302,7 @@ async function visitorConversation(conversationId: string, token: unknown) {
       id: true, tenantId: true, channel: true, channelAccountId: true, customerExternalId: true, customerName: true,
       // Who owns it, for message.inbound (a customer message written here
       // rather than by the incoming worker).
-      assignedAgentId: true, handledBy: true, departmentId: true, isTest: true, origin: true,
+      assignedAgentId: true, handledBy: true, isHandedOver: true, departmentId: true, isTest: true, origin: true,
     },
   });
   if (!c || c.channel !== "WEBCHAT" || !c.customerExternalId) return null;
