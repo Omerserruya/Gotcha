@@ -8,6 +8,7 @@ import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, Inco
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
+import { emitInboundMessage } from "../services/notifications-emit";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
@@ -784,6 +785,21 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     event: "message_received",
     data: { conversationId: conversation.id, messageId: message.id, channel },
     timestamp: new Date().toISOString(),
+  });
+
+  // The assignee's phone hears every customer message in a conversation a
+  // person owns (mobile push, 2026-11-03). Before the opt-out intercept on
+  // purpose: a "STOP" is still the customer writing to them. Never while the
+  // bot handles it - the same test as the bot branch below (no assignee, or
+  // handledBy is the bot's) - and fire-and-forget like the analytics above.
+  emitInboundMessage({
+    tenantId,
+    conversation: conversation as any,
+    messageId: message.id,
+    body,
+    messageType,
+    channel,
+    customerName: conversation.customerName || displayName || senderDisplayName || null,
   });
 
   // A "הסר" / "STOP" reply opts the customer out of marketing on this channel
