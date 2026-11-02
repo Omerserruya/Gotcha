@@ -7,8 +7,9 @@ import styles from './Workspace.module.css';
 
 /**
  * The response target's row on Settings · Workspace (W2). Its Edit opens the
- * drawer (`?panel=sla`) - for an Owner only: anyone else's read is a 403, and
- * the row says whose it is instead of offering an Edit that could not save.
+ * drawer (`?panel=sla`) - for the admin role only. Anyone else who can read
+ * it sees the value and no Edit, since their save would be refused. A 403 on
+ * the read: the row says whose it is.
  */
 export function SlaRow({ setup }: { readonly setup: SlaSetup }) {
   const t = useTranslations('workspace');
@@ -25,7 +26,7 @@ export function SlaRow({ setup }: { readonly setup: SlaSetup }) {
                 minutes: setup.settings.slaMinutes,
                 warning: setup.settings.warningThreshold,
               });
-  const quiet = setup.kind !== 'owner' || !setup.settings.enabled;
+  const quiet = setup.kind === 'forbidden' || setup.kind === 'failed' || !setup.settings.enabled;
   return (
     <div className={styles.row} data-testid="fact-sla">
       <div className={styles.label}>{t('fact.sla')}</div>
