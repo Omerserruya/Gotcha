@@ -19,6 +19,7 @@ const H = vi.hoisted(() => ({
 
 vi.mock("@chatcenter/shared", async () => ({
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
+  normalizeWhatsappPhone: (await import("@chatcenter/shared/src/lib/shopify-chat-ux")).normalizeWhatsappPhone,
   authenticate: (req: any, _r: any, n: any) => { req.user = H.me; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
@@ -128,5 +129,37 @@ describe("PATCH { events }", () => {
   it("is per person: an internal service call has no 'me'", async () => {
     H.me = { userId: "system", role: "ADMIN", isInternal: true };
     expect((await request(app).patch("/api/notification-preferences/me").send({ events: {} })).status).toBe(403);
+  });
+});
+
+describe("★ WhatsApp on the personal preferences (2026-11-02)", () => {
+  beforeEach(() => { H.personal = null; delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID; delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN; });
+
+  it("GET says whether WhatsApp can be offered, and the confirmed number", async () => {
+    const r = await request(app).get("/api/notification-preferences/me");
+    expect(r.body.data).toMatchObject({ whatsapp: false, whatsappAvailable: false, whatsappPhone: null, whatsappOptedInAt: null });
+  });
+
+  it("WhatsApp cannot be switched on without a number confirmed by code: 422 whatsapp_phone_required", async () => {
+    const r = await request(app).patch("/api/notification-preferences/me").send({ whatsapp: true });
+    expect([r.status, r.body.code]).toEqual([422, "whatsapp_phone_required"]);
+  });
+
+  it("with a confirmed number it can; whatsappPhone: null removes it and turns WhatsApp off", async () => {
+    H.personal = { userId: "dana", whatsapp: false, whatsappPhone: "+972521234567", whatsappOptedInAt: new Date() };
+    expect((await request(app).patch("/api/notification-preferences/me").send({ whatsapp: true })).status).toBe(200);
+    const off = await request(app).patch("/api/notification-preferences/me").send({ whatsappPhone: null });
+    expect(off.status).toBe(200);
+    expect(H.personal).toMatchObject({ whatsapp: false, whatsappPhone: null, whatsappOptedInAt: null });
+  });
+
+  it("a number cannot be set directly, only by a code: 400 whatsapp_phone_requires_code", async () => {
+    const r = await request(app).patch("/api/notification-preferences/me").send({ whatsappPhone: "+972521234567" });
+    expect([r.status, r.body.code]).toEqual([400, "whatsapp_phone_requires_code"]);
+  });
+
+  it("verify without GOTCHA's number: 409 whatsapp_unavailable", async () => {
+    const r = await request(app).post("/api/notification-preferences/me/whatsapp/verify").send({ phone: "+972521234567" });
+    expect([r.status, r.body.code]).toEqual([409, "whatsapp_unavailable"]);
   });
 });

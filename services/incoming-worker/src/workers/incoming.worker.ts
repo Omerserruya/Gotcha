@@ -1025,6 +1025,13 @@ async function processAutomationEvent(job: Job<AutomationEventJob>): Promise<voi
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
 export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob | OutboundEchoJob | HistoricalImportChunkJob>): Promise<void> {
+  // A manager's Approve / Reject on GOTCHA's own WhatsApp number (2026-11-02):
+  // no workspace channel received it, so it is only ever an approval reply.
+  if (job.name === "platform-approval-reply") {
+    const { payload, senderId } = (job.data ?? {}) as { payload?: string; senderId?: string };
+    if (payload && senderId) await handleApprovalButtonReply(payload, senderId, { viaPlatform: true });
+    return;
+  }
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
     return;

@@ -13,7 +13,8 @@
  *   support_denied:ownership  removing a user, changing a role, inviting an admin;
  *                             signing a member out (one session or all others),
  *                             removing an MFA device, changing the MFA policy;
- *                             any change to roles, role assignments or grants
+ *                             any change to roles, role assignments or grants;
+ *                             a person's own notification settings
  *                             (an invite into a role id is refused at the
  *                             resolved role, auth lib/grant-ceiling)
  *   support_denied:secrets    rotating credentials
@@ -60,6 +61,8 @@ const RULES: Rule[] = [
   { methods: ["DELETE"], path: new RegExp(`^/api/account/security/device/${ID}/${ID}$`), code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/tenant\/security$/, code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/permissions\/(users|roles)(\/|$)/, code: "support_denied:ownership" },
+  // A person's own notification settings (and their WhatsApp number): theirs, not support's (2026-11-02).
+  { methods: "WRITE", path: /^\/api\/notification-preferences\/me(\/|$)/, code: "support_denied:ownership" },
 
   { methods: ["POST"], path: new RegExp(`^/api/voice-channels/${ID}/rotate-secrets$`), code: "support_denied:secrets" },
 ];

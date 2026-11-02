@@ -8050,6 +8050,11 @@ model UserNotificationPreference {
   /// Not among the tenant-admin channels. A WhatsApp notification costs money
   /// and reaches a personal phone, so it is off unless the person says yes.
   whatsapp  Boolean @default(false)
+  /// The person's own WhatsApp number for GOTCHA alerts, "+<digits>", set only
+  /// by a confirmed one-time code (2026-11-02). whatsapp cannot be on without it.
+  whatsappPhone      String?   @map("whatsapp_phone")
+  /// When that code was confirmed: the opt-in record.
+  whatsappOptedInAt  DateTime? @map("whatsapp_opted_in_at")
   /// Approvals are opt-OUT: an action waiting on you is the one notification
   /// whose default cannot be silence.
   approvals Boolean @default(true)

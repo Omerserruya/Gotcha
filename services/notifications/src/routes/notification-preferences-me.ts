@@ -19,6 +19,8 @@ import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatc
 import { EVENT_PREFS_KEY, type EventChannels } from "../services/personal-preferences.service";
 import { receivableEvents } from "../services/receivable-events";
 import { EVENT_CATALOGUE } from "../services/event-catalogue";
+import { getPlatformWhatsAppSender } from "../services/platform-whatsapp";
+import { startVerification, confirmVerification } from "../services/whatsapp-verify.service";
 
 const router = Router();
 router.use("/notification-preferences/me", authenticate, resolveTenant, requireActiveTenant());
@@ -55,6 +57,11 @@ function shape(row: Record<string, unknown> | null) {
     // rather than two independent fields the client has to correlate.
     quietHours:
       r.quietHoursFrom && r.quietHoursTo ? { from: r.quietHoursFrom, to: r.quietHoursTo } : null,
+    // WhatsApp alerts (2026-11-02): offered only when GOTCHA's number is set
+    // up; on only with a number confirmed by code.
+    whatsappAvailable: !!getPlatformWhatsAppSender(),
+    whatsappPhone: ((row ?? {}) as any).whatsappPhone ?? null,
+    whatsappOptedInAt: ((row ?? {}) as any).whatsappOptedInAt ?? null,
   };
 }
 
@@ -75,11 +82,12 @@ async function eventsFor(me: { userId: string; tenantId: string }) {
     prisma.tenantSetting.findFirst({ where: { tenantId: me.tenantId, key: EVENT_PREFS_KEY(me.userId) }, select: { value: true } }),
   ]);
   const own = (((stored?.value as any)?.events ?? {}) as Record<string, EventChannels>);
-  const events: Record<string, { email?: boolean; inApp?: boolean }> = {};
+  const events: Record<string, { email?: boolean; inApp?: boolean; whatsapp?: boolean }> = {};
   for (const t of types) {
     events[t.type] = {
       ...(t.channels.includes("email") ? { email: own[t.type]?.email ?? true } : {}),
       ...(t.channels.includes("in_app") ? { inApp: own[t.type]?.inApp ?? true } : {}),
+      ...(t.channels.includes("whatsapp") ? { whatsapp: own[t.type]?.whatsapp ?? true } : {}),
     };
   }
   return { events, eventTypes: types };
@@ -123,6 +131,25 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
         return;
       }
       data[key] = body[key];
+    }
+  }
+
+  // WhatsApp needs a number confirmed by code (POST .../whatsapp/confirm);
+  // { whatsappPhone: null } removes it and turns WhatsApp off.
+  if ("whatsappPhone" in body) {
+    if (body.whatsappPhone !== null) {
+      res.status(400).json({ error: "whatsappPhone is set by confirming a code", code: "whatsapp_phone_requires_code" });
+      return;
+    }
+    data.whatsappPhone = null;
+    data.whatsappOptedInAt = null;
+    data.whatsapp = false;
+  }
+  if (data.whatsapp === true) {
+    const cur = await prisma.userNotificationPreference.findUnique({ where: { userId: me.userId } }).catch(() => null) as any;
+    if (!cur?.whatsappPhone || !cur?.whatsappOptedInAt) {
+      res.status(422).json({ error: "Confirm a WhatsApp number first", code: "whatsapp_phone_required" });
+      return;
     }
   }
 
@@ -175,7 +202,7 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
         return;
       }
       const entry: EventChannels = {};
-      for (const ch of ["email", "inApp"] as const) {
+      for (const ch of ["email", "inApp", "whatsapp"] as const) {
         if (ch in (v as object)) {
           const b = (v as Record<string, unknown>)[ch];
           if (typeof b !== "boolean") {
@@ -217,6 +244,37 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
   } catch (err) {
     console.error("Update own notification preferences error:", err);
     res.status(500).json({ error: "Failed to update notification preferences" });
+  }
+});
+
+router.post("/notification-preferences/me/whatsapp/verify", async (req: Request, res: Response) => {
+  const me = currentUser(req);
+  if (!me) { res.status(403).json({ error: "Preferences are per-user" }); return; }
+  try {
+    const r = await startVerification(me, (req.body ?? {}).phone);
+    if (!r.ok) {
+      const status = r.code === "whatsapp_rate_limited" ? 429 : r.code === "whatsapp_unavailable" ? 409 : r.code === "whatsapp_send_failed" ? 502 : 422;
+      res.status(status).json({ error: "Could not send a code", code: r.code });
+      return;
+    }
+    res.status(202).json({ data: { expiresInSeconds: r.expiresInSeconds } });
+  } catch (err) {
+    console.error("WhatsApp verify error:", err);
+    res.status(500).json({ error: "Failed to send a code" });
+  }
+});
+
+router.post("/notification-preferences/me/whatsapp/confirm", async (req: Request, res: Response) => {
+  const me = currentUser(req);
+  if (!me) { res.status(403).json({ error: "Preferences are per-user" }); return; }
+  try {
+    const r = await confirmVerification(me, (req.body ?? {}).phone, (req.body ?? {}).code);
+    if (!r.ok) { res.status(422).json({ error: "The code did not confirm the number", code: r.code }); return; }
+    const row = await prisma.userNotificationPreference.findUnique({ where: { userId: me.userId } });
+    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
+  } catch (err) {
+    console.error("WhatsApp confirm error:", err);
+    res.status(500).json({ error: "Failed to confirm the code" });
   }
 });
 

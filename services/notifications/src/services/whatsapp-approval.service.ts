@@ -21,6 +21,7 @@
 import {
   prisma,
   getOutboundAdapter,
+  toolDisplayName,
   decryptCredentials,
   mintApprovalRefs,
   resolveApprovalRecipient,
@@ -28,7 +29,7 @@ import {
   type ChannelCredentials,
   resolvePrimaryWhatsAppAccount,
 } from "@chatcenter/shared";
-import { localeForRecipient, type TemplateLocale } from "./platform-whatsapp";
+import { localeForRecipient, getPlatformWhatsAppSender, templateFor, APPROVAL_REVIEW_TEMPLATE, buildComponents, type TemplateLocale } from "./platform-whatsapp";
 import { workspaceTimeZone } from "./personal-preferences.service";
 
 /** Risk levels above this are never one-tap; the manager is sent to the UI. */
@@ -175,7 +176,14 @@ export async function notifyManagerOfApproval(tenantId: string, data: ApprovalEv
     return;
   }
 
-  // 2. Can this tenant send WhatsApp at all?
+  // 2. GOTCHA's own number when it is set up (2026-11-02: approvals off the
+  // merchant's customer-facing number). Until it is, the workspace's number,
+  // as before, so approvals do not stop arriving while the number is created.
+  const platform = getPlatformWhatsAppSender();
+  if (platform) {
+    await sendApprovalFromPlatform(tenantId, approvalId, data, plan, resolved.recipient, riskLevel);
+    return;
+  }
   const sender = await resolveWhatsAppSender(tenantId);
   if (!sender) {
     await markNotifyState(approvalId, "skipped", "No active WhatsApp channel is connected, so approval requests cannot be delivered there.");
@@ -241,5 +249,53 @@ export async function notifyManagerOfApproval(tenantId: string, data: ApprovalEv
     // inbox; we just record why the phone never rang.
     await markNotifyState(approvalId, "failed", `WhatsApp delivery failed: ${err?.message ?? "unknown error"}`);
     console.warn(`[wa-approval] ${approvalId} delivery failed:`, err?.message);
+  }
+}
+
+/**
+ * The approval request from GOTCHA's number: a template (the 24h window to a
+ * manager is normally closed), with Approve / Reject quick replies whose
+ * payloads are the same opaque refs; a high-risk one has no buttons. The
+ * reply comes back to GOTCHA's number (webhook -> incoming-worker
+ * platform_approval_reply), not into any workspace's inbox.
+ */
+async function sendApprovalFromPlatform(
+  tenantId: string,
+  approvalId: string,
+  data: ApprovalEventData,
+  plan: PingPlan | null,
+  recipient: { userId: string; phoneE164: string },
+  riskLevel: string,
+): Promise<void> {
+  const platform = getPlatformWhatsAppSender()!;
+  const fromHome = plan && (plan.source === "home_assistant" || plan.source === "command_bar");
+  if (fromHome && plan.requester?.userId && plan.requester.userId === recipient.userId) {
+    await markNotifyState(approvalId, "skipped", "The approver is the person who proposed this plan in GOTCHA, so it was not sent to them again.");
+    return;
+  }
+  const adapter = getOutboundAdapter("WHATSAPP") as any;
+  if (!adapter?.sendTemplateMessage) {
+    await markNotifyState(approvalId, "skipped", "WhatsApp template sending is not available.");
+    return;
+  }
+  const locale = await localeForRecipient(tenantId, recipient.userId);
+  const ping = approvalPingText(data, plan, { locale, recipientUserId: recipient.userId, timeZone: await workspaceTimeZone(tenantId) });
+  const action = (toolDisplayName(data.tool ?? "", null, locale) || data.summary || (locale === "he" ? "פעולה" : "an action")).slice(0, 60);
+  const to = recipient.phoneE164.replace(/^\+/, "");
+  try {
+    if (ping.highRisk) {
+      await adapter.sendTemplateMessage({ accessToken: platform.accessToken }, platform.externalId, to, APPROVAL_REVIEW_TEMPLATE.name, locale, buildComponents(APPROVAL_REVIEW_TEMPLATE, [action]));
+      await markNotifyState(approvalId, "sent", "Sent for in-app review (high risk - no one-tap buttons).");
+      return;
+    }
+    const refs = await mintApprovalRefs({ tenantId, approvalId, recipientUserId: recipient.userId, tool: data.tool ?? "", channel: "whatsapp" });
+    const tpl = templateFor("tool.approval_required")!;
+    await adapter.sendTemplateMessage({ accessToken: platform.accessToken }, platform.externalId, to, tpl.name, locale,
+      buildComponents(tpl, [action], { quickReplyPayloads: [refs.approve, refs.reject] }));
+    await markNotifyState(approvalId, "sent");
+    console.log(`[wa-approval] ${approvalId} sent from GOTCHA's number (risk ${riskLevel})`);
+  } catch (err: any) {
+    await markNotifyState(approvalId, "failed", `WhatsApp delivery failed: ${err?.message ?? "unknown error"}`);
+    console.warn(`[wa-approval] ${approvalId} platform delivery failed:`, err?.message);
   }
 }

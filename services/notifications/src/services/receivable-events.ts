@@ -12,11 +12,13 @@
 import { prisma } from "@chatcenter/shared";
 import { EVENT_CATALOGUE } from "./event-catalogue";
 import { defaultRoute, DELIVERABLE_CHANNELS } from "./notification-engine.service";
+import { wantsWhatsApp } from "./whatsapp-notice.service";
+import { getPlatformWhatsAppSender } from "./platform-whatsapp";
 import { resolveRecipients, type RecipientSpec } from "./recipient-resolver.service";
 
 export interface ReceivableEvent { type: string; label: string; group: string; channels: string[] }
 
-/** The two channels a person switches per event; WhatsApp is all-or-nothing. */
+/** The two channels a person switches per event; WhatsApp is added where it can be sent (a template, the platform number). */
 const PER_EVENT_CHANNELS = ["email", "in_app"];
 
 export async function receivableEvents(tenantId: string, userId: string): Promise<ReceivableEvent[]> {
@@ -31,6 +33,7 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
     return resolved.get(key)!;
   };
   const deliverable = new Set<string>(DELIVERABLE_CHANNELS as readonly string[]);
+  const whatsappReady = !!getPlatformWhatsAppSender();
   const out: ReceivableEvent[] = [];
   for (const entry of EVENT_CATALOGUE) {
     if (!entry.emitted) continue;
@@ -48,7 +51,12 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
       if (!r.recipients?.type) continue;
       if (await reaches(r.recipients, r.departmentId)) for (const c of r.channels) if (PER_EVENT_CHANNELS.includes(c) && deliverable.has(c)) channels.add(c);
     }
-    if (channels.size) out.push({ type: entry.key, label: entry.label, group: entry.group, channels: PER_EVENT_CHANNELS.filter((c) => channels.has(c)) });
+    if (channels.size) {
+      const list = PER_EVENT_CHANNELS.filter((c) => channels.has(c));
+      // WhatsApp per event: only where a template exists and GOTCHA's number is set up.
+      if (whatsappReady && wantsWhatsApp(entry.key)) list.push("whatsapp");
+      out.push({ type: entry.key, label: entry.label, group: entry.group, channels: list });
+    }
   }
   return out;
 }

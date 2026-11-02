@@ -349,6 +349,17 @@ router.post("/", async (req: Request, res: Response) => {
     });
 
     if (!channelAccount) {
+      // GOTCHA's own number (approval requests to managers) belongs to no
+      // workspace: only its button replies are taken, as approval decisions.
+      const platformId = (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+      if (adapter.channel === "WHATSAPP" && platformId && channelExternalId === platformId) {
+        for (const msg of adapter.extractMessages(body)) {
+          const payload = msg.content.interactiveReply?.payload;
+          if (!payload) continue;
+          await incomingMessageQueue.add("platform-approval-reply", { payload, senderId: msg.senderId }, { jobId: `platform-approval-${msg.externalMessageId}` });
+        }
+        return;
+      }
       console.warn(`No channel account found for ${adapter.channel} account: ${channelExternalId}`);
       return;
     }

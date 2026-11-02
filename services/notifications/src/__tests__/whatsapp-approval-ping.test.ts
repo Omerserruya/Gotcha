@@ -7,7 +7,7 @@
  *   - a plan's risk is its steps' own; high risk sends no one-tap buttons
  *   - the person who proposed a plan in Home is not sent it
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const H = vi.hoisted(() => ({ sent: [] as any[], notify: [] as any[], recipient: { userId: "boss", phoneE164: "+972500000000" }, locale: "he", primaryAsked: [] as any[], from: [] as string[] }));
 
@@ -32,7 +32,9 @@ vi.mock("@chatcenter/shared", async () => ({
   getOutboundAdapter: () => ({
     sendTextMessage: async (_c: any, f: string, to: string, text: string) => { H.from.push(f); H.sent.push({ to, text, buttons: null }); },
     sendInteractiveMessage: async (_c: any, f: string, to: string, text: string, buttons: any[]) => { H.from.push(f); H.sent.push({ to, text, buttons }); },
+    sendTemplateMessage: async (_c: any, f: string, to: string, name: string, locale: string, components: any[]) => { H.from.push(f); H.sent.push({ to, template: name, locale, components }); },
   }),
+  toolDisplayName: (raw: string) => raw,
 }));
 
 import { approvalPingText, notifyManagerOfApproval } from "../services/whatsapp-approval.service";
@@ -94,5 +96,23 @@ describe("★ who is sent it", () => {
     // Proposed elsewhere: the same person is still the approver to ask.
     await notifyManagerOfApproval("T", DATA, plan({ source: null }));
     expect(H.sent).toHaveLength(1);
+  });
+});
+
+describe("★ from GOTCHA's own number (2026-11-02)", () => {
+  afterEach(() => { delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID; delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN; });
+  it("set up: the approval template from GOTCHA's number, Approve / Reject as quick replies carrying the refs; the workspace's number is not asked", async () => {
+    process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "pn_gotcha";
+    process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok";
+    await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
+    expect(H.from).toEqual(["pn_gotcha"]);
+    expect(H.primaryAsked).toEqual([]);
+    expect(H.sent[0]).toMatchObject({ to: "972500000000", template: "gotcha_approval_request", locale: "he" });
+    expect(H.sent[0].components.filter((c: any) => c.sub_type === "quick_reply").map((c: any) => c.parameters[0].payload)).toEqual(["ref_a", "ref_r"]);
+    expect(H.notify.at(-1)).toMatchObject({ managerNotifyState: "sent" });
+  });
+  it("not set up yet: the workspace's number, as before (approvals keep arriving while the number is created)", async () => {
+    await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
+    expect(H.from).toEqual(["pn_primary"]);
   });
 });

@@ -103,6 +103,29 @@ describe("Webhook Service", () => {
   });
 
   describe("POST /api/webhook (handler -> queue)", () => {
+    it("★ GOTCHA's own number (no workspace channel): a button reply is queued as an approval decision; anything else is ignored", async () => {
+      process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "pn-gotcha";
+      (prisma.channelAccount.findFirst as any).mockResolvedValue(null);
+      const mockAdapter = {
+        channel: "WHATSAPP",
+        getSignatureHeader: () => "x-hub-signature-256",
+        verifySignature: vi.fn().mockReturnValue(true),
+        resolveChannelAccountExternalId: vi.fn().mockReturnValue("pn-gotcha"),
+        extractMessages: vi.fn().mockReturnValue([
+          { externalMessageId: "wamid.B1", senderId: "972500000001", timestamp: new Date(), content: { type: "interactive", interactiveReply: { type: "button", payload: "apr_ref_1", title: "אישור" } } },
+          { externalMessageId: "wamid.B2", senderId: "972500000001", timestamp: new Date(), content: { type: "text", text: "hi" } },
+        ]),
+        extractStatusUpdates: vi.fn().mockReturnValue([]),
+      };
+      (detectInboundAdapter as any).mockReturnValue(mockAdapter);
+      const res = await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "pn-gotcha" } } }] }] });
+      expect(res.status).toBe(200);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(incomingMessageQueue.add).toHaveBeenCalledTimes(1);
+      expect(incomingMessageQueue.add).toHaveBeenCalledWith("platform-approval-reply", { payload: "apr_ref_1", senderId: "972500000001" }, { jobId: "platform-approval-wamid.B1" });
+      delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
+    });
+
     it("should respond 200 immediately and queue messages via adapter", async () => {
       const mockChannelAccount = { id: "ca-1", tenantId: "tenant-1", externalId: "phone-1" };
       (prisma.channelAccount.findFirst as any).mockResolvedValue(mockChannelAccount);

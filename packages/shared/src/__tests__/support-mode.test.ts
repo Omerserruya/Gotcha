@@ -77,6 +77,9 @@ describe("what support mode may not do", () => {
     ["PUT", "/api/permissions/users/u2/grants/billing", "support_denied:ownership"],
     ["POST", "/api/permissions/roles", "support_denied:ownership"],
     ["PUT", "/api/permissions/roles/r1/features", "support_denied:ownership"],
+    ["PATCH", "/api/notification-preferences/me", "support_denied:ownership"],
+    ["POST", "/api/notification-preferences/me/whatsapp/verify", "support_denied:ownership"],
+    ["POST", "/api/notification-preferences/me/whatsapp/confirm", "support_denied:ownership"],
     ["POST", "/api/voice-channels/v1/rotate-secrets", "support_denied:secrets"],
   ])("%s %s -> %s", (m, path, code) => {
     expect(supportDenial(m, path, {})).toBe(code);

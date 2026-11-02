@@ -25,6 +25,7 @@ import type { SystemEvent } from "./event-emitter.service";
 import { resolveRecipients, type RecipientSpec, type ResolvedUser } from "./recipient-resolver.service";
 import { renderTemplate } from "./templates";
 import { localeForRecipient } from "./platform-whatsapp";
+import { deliverWhatsAppNotice, wantsWhatsApp } from "./whatsapp-notice.service";
 import { createInAppNotification } from "./in-app.service";
 import { loadPersonal, personalAllows, workspaceTimeZone, localTime, PERSONAL_DEFAULTS } from "./personal-preferences.service";
 import {
@@ -196,9 +197,12 @@ export async function processEvent(event: SystemEvent): Promise<void> {
     const personal = await loadPersonal(recipients.map((u) => u.id), event.tenantId);
     hhmm ??= localTime(new Date(), await workspaceTimeZone(event.tenantId));
 
+    // WhatsApp is personal, not a workspace rule's channel: added for everyone
+    // the event reaches when it has a template; personalAllows decides.
+    const withPersonal = wantsWhatsApp(event.type) && !channels.includes("whatsapp") ? [...channels, "whatsapp"] : channels;
     for (const user of recipients) {
       if (user.id === skip) continue;
-      for (const channel of channels) {
+      for (const channel of withPersonal) {
         const key = `${user.id}|${channel}`;
         if (delivered.has(key)) continue;
         if (!personalAllows(personal.get(user.id) ?? PERSONAL_DEFAULTS, channel, event, hhmm)) continue;
@@ -209,6 +213,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
           event,
           tpl: await tplFor(user.id),
           priority: pref.priority || "MEDIUM",
+          whatsappPhone: personal.get(user.id)?.whatsappPhone ?? null,
         });
       }
     }
@@ -369,6 +374,7 @@ async function deliverChannel(opts: {
   event: SystemEvent;
   tpl: { title: string; body: string; link?: string };
   priority: string;
+  whatsappPhone?: string | null;
 }): Promise<void> {
   const { channel, user, event, tpl, priority } = opts;
   try {
@@ -387,6 +393,9 @@ async function deliverChannel(opts: {
         // without it every row was "none", and nothing could be resolved later.
         metadata: { ...(event.data ?? {}), ...(event.metadata ?? {}) },
       });
+    } else if (channel === "whatsapp") {
+      // A personal channel (whatsapp-notice.service): the person's confirmed number.
+      await deliverWhatsAppNotice({ user, event, phone: opts.whatsappPhone });
     } else if (channel === "email") {
       const opts: JobsOptions = { ...DEFAULT_NOTIF_JOB_OPTS };
       await getNotificationsEmailQueue().add(

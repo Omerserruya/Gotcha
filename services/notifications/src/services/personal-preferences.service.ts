@@ -21,8 +21,14 @@
  */
 import { prisma, readDurableSetting, parseBusinessHours } from "@chatcenter/shared";
 
-export type EventChannels = { email?: boolean; inApp?: boolean };
-export interface Personal { inApp: boolean; email: boolean; whatsapp: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null; events?: Record<string, EventChannels> }
+export type EventChannels = { email?: boolean; inApp?: boolean; whatsapp?: boolean };
+export interface Personal {
+  inApp: boolean; email: boolean; whatsapp: boolean; approvals: boolean; quietHoursFrom: string | null; quietHoursTo: string | null;
+  events?: Record<string, EventChannels>;
+  /** The confirmed number for GOTCHA alerts on WhatsApp, and when it was confirmed (2026-11-02). */
+  whatsappPhone?: string | null;
+  whatsappOptedInAt?: Date | string | null;
+}
 
 export const EVENT_PREFS_KEY = (userId: string) => `notify:events:${userId}`;
 
@@ -37,7 +43,7 @@ export async function loadPersonal(userIds: string[], tenantId?: string): Promis
   const [rows, eventRows] = await Promise.all([
     (prisma as any).userNotificationPreference.findMany({
       where: { userId: { in: userIds } },
-      select: { userId: true, inApp: true, email: true, whatsapp: true, approvals: true, quietHoursFrom: true, quietHoursTo: true },
+      select: { userId: true, inApp: true, email: true, whatsapp: true, approvals: true, quietHoursFrom: true, quietHoursTo: true, whatsappPhone: true, whatsappOptedInAt: true },
     }),
     // The per-event overrides are optional: if they cannot be read, every
     // event is delivered as it was before them - a lost notice is worse than
@@ -95,7 +101,9 @@ export function personalAllows(p: Personal, channel: string, event: { type: stri
     const moneyFailed = event.type === "tool.action_failed" && MONEY_KINDS.has(String(event.data?.kind ?? ""));
     return moneyFailed || !inQuietHours(p, hhmm);
   }
-  if (channel === "whatsapp") return p.whatsapp && !inQuietHours(p, hhmm);
+  // WhatsApp: on, with a number the person confirmed by code, this event not
+  // switched off, and not in quiet hours.
+  if (channel === "whatsapp") return p.whatsapp && !!p.whatsappPhone && !!p.whatsappOptedInAt && own?.whatsapp !== false && !inQuietHours(p, hhmm);
   // Any other channel: not the person's to switch (the dispatcher records it as undeliverable).
   return true;
 }

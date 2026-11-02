@@ -568,6 +568,20 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
           title: msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "",
         },
       };
+    // A tap on a TEMPLATE's quick-reply button (a campaign's, or GOTCHA's own
+    // approval request) is type "button", not "interactive" (2026-11-02). It
+    // used to fall to the default case, so "Button tapped" never saw a
+    // template's buttons.
+    case "button":
+      return {
+        type: "interactive",
+        text: "",
+        interactiveReply: {
+          type: "button",
+          payload: msg.button?.payload || "",
+          title: msg.button?.text || "",
+        },
+      };
     case "image":
       return {
         type: "image",

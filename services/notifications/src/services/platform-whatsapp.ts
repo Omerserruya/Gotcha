@@ -69,33 +69,42 @@ export interface PlatformTemplate {
   body: Record<TemplateLocale, string>;
   /** How many body parameters the template takes, derived from the text. */
   parameterCount: number;
+  /** A URL button whose dynamic suffix is a parameter (app.gotcha.co.il/inbox?c={{1}}). */
+  urlButton?: boolean;
+  /** Quick-reply buttons whose payloads are set per send (the approval refs). */
+  quickReplies?: number;
 }
 
 /**
  * One template per notification event that may be delivered on WhatsApp.
+ * Category UTILITY, languages he + en; the list submitted to Meta (2026-11-02).
  *
  * ★ KEYED BY EVENT TYPE ON PURPOSE. An event offered on the WhatsApp column
  * with no template here cannot be delivered outside the 24-hour window, so
  * `templateFor()` returning null is what a caller must check BEFORE offering
  * the channel - the same shape as a tool that must not be surfaced when it
- * cannot execute.
+ * cannot execute. Meta refuses a body that starts or ends with a variable.
  */
 export const PLATFORM_TEMPLATES: Record<string, PlatformTemplate> = {
+  // Sent by the approval sender (whatsapp-approval.service), with Approve /
+  // Reject quick replies; never by the generic dispatcher.
   "tool.approval_required": {
-    name: "gotcha_approval_required",
+    name: "gotcha_approval_request",
     body: {
-      en: "An action is waiting for your approval in GOTCHA: {{1}}. Open the app to review and decide.",
-      he: "פעולה ממתינה לאישור שלך ב-GOTCHA: {{1}}. פתחו את האפליקציה כדי לבדוק ולהחליט.",
+      en: "An action is waiting for your approval in GOTCHA: {{1}}. Tap a button below, or open the app to review.",
+      he: "פעולה ממתינה לאישור שלך ב-GOTCHA: {{1}}. אפשר לבחור בכפתור למטה, או לפתוח את האפליקציה כדי לבדוק.",
     },
     parameterCount: 1,
+    quickReplies: 2,
   },
   "conversation.escalated": {
     name: "gotcha_conversation_escalated",
     body: {
-      en: "A conversation was passed to a person in GOTCHA and is waiting: {{1}}.",
-      he: "שיחה הועברה לטיפול אנושי ב-GOTCHA וממתינה: {{1}}.",
+      en: "A conversation was passed to a person in GOTCHA: {{1}}. It is waiting for a reply.",
+      he: "שיחה הועברה לטיפול אנושי ב-GOTCHA: {{1}}. היא ממתינה למענה.",
     },
     parameterCount: 1,
+    urlButton: true,
   },
   "tool.action_failed": {
     name: "gotcha_action_failed",
@@ -123,7 +132,66 @@ export const PLATFORM_TEMPLATES: Record<string, PlatformTemplate> = {
     // in it would only ever be 100.
     parameterCount: 0,
   },
+  "conversation.waiting": {
+    name: "gotcha_customer_waiting",
+    body: {
+      en: "A customer has been waiting {{1}} minutes for a reply on {{2}} in GOTCHA. Open the conversation to answer.",
+      he: "לקוח ממתין כבר {{1}} דקות למענה ב-{{2}} ב-GOTCHA. פתחו את השיחה כדי לענות.",
+    },
+    parameterCount: 2,
+    urlButton: true,
+  },
 };
+
+/** High-risk approvals: review in GOTCHA, no one-tap buttons. */
+export const APPROVAL_REVIEW_TEMPLATE: PlatformTemplate = {
+  name: "gotcha_approval_required",
+  body: {
+    en: "An action is waiting for your approval in GOTCHA: {{1}}. Open the app to review and decide.",
+    he: "פעולה ממתינה לאישור שלך ב-GOTCHA: {{1}}. פתחו את האפליקציה כדי לבדוק ולהחליט.",
+  },
+  parameterCount: 1,
+};
+
+/**
+ * The opt-in code (category AUTHENTICATION). Meta fixes the body for this
+ * category; we send the code as the body parameter and as the copy-code
+ * button's parameter.
+ */
+export const VERIFICATION_TEMPLATE_NAME = "gotcha_verification_code";
+export function verificationComponents(code: string): any[] {
+  return [
+    { type: "body", parameters: [{ type: "text", text: code }] },
+    { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+  ];
+}
+
+const CHANNEL_NAME: Record<TemplateLocale, Record<string, string>> = {
+  en: { WHATSAPP: "WhatsApp", INSTAGRAM: "Instagram", FACEBOOK: "Messenger", WEBCHAT: "the website chat", SHOPIFY_LIVE_CHAT: "the store chat", EMAIL: "email", SMS: "SMS", VOICE: "a phone call" },
+  he: { WHATSAPP: "וואטסאפ", INSTAGRAM: "אינסטגרם", FACEBOOK: "מסנג'ר", WEBCHAT: "צ'אט האתר", SHOPIFY_LIVE_CHAT: "צ'אט החנות", EMAIL: "מייל", SMS: "SMS", VOICE: "שיחת טלפון" },
+};
+const channelName = (ch: unknown, locale: TemplateLocale) =>
+  CHANNEL_NAME[locale][String(ch ?? "").toUpperCase()] ?? (locale === "he" ? "אחד הערוצים" : "a channel");
+const clip = (v: unknown, n = 60) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+
+/**
+ * The body parameters for an event, in the recipient's language. Never the
+ * customer's personal data: a channel, a number, an action's name.
+ */
+export function templateParams(eventType: string, data: Record<string, unknown>, locale: TemplateLocale): string[] {
+  switch (eventType) {
+    case "tool.approval_required": return [clip(data.toolLabel ?? data.tool, 60) || (locale === "he" ? "פעולה" : "an action")];
+    case "conversation.escalated": {
+      const reason = clip(data.reason, 60);
+      return [`${channelName(data.channel, locale)}${reason ? `, ${reason}` : ""}`];
+    }
+    case "tool.action_failed": return [clip(data.toolLabel ?? data.tool ?? data.action, 60) || (locale === "he" ? "פעולה" : "an action")];
+    case "credit.threshold": return [String(Math.round(Number(data.percent ?? data.threshold ?? 80)))];
+    case "credit.exhausted": return [];
+    case "conversation.waiting": return [String(Math.max(1, Math.round(Number(data.minutes) || 1))), channelName(data.channel, locale)];
+    default: return [];
+  }
+}
 
 export interface PlatformSender {
   /** The phone number id Meta sends from. */
@@ -177,19 +245,32 @@ export function whatsAppReadiness(eventType: string): WhatsAppReadiness {
  * parameter mismatch with a generic failure, so a caller would learn only that
  * "WhatsApp failed" - and the count is knowable here, before the request.
  */
-export function buildComponents(template: PlatformTemplate, params: string[]): any[] {
+export function buildComponents(
+  template: PlatformTemplate,
+  params: string[],
+  buttons: { urlSuffix?: string; quickReplyPayloads?: string[] } = {},
+): any[] {
   if (params.length !== template.parameterCount) {
     throw new Error(
       `template ${template.name} takes ${template.parameterCount} parameter(s), received ${params.length}`,
     );
   }
-  if (template.parameterCount === 0) return [];
-  return [
+  const out: any[] = template.parameterCount === 0 ? [] : [
     {
       type: "body",
       parameters: params.map((text) => ({ type: "text", text })),
     },
   ];
+  if (template.urlButton) {
+    if (!buttons.urlSuffix) throw new Error(`template ${template.name} needs its URL button's suffix`);
+    out.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: buttons.urlSuffix }] });
+  }
+  if (template.quickReplies) {
+    const payloads = buttons.quickReplyPayloads ?? [];
+    if (payloads.length !== template.quickReplies) throw new Error(`template ${template.name} takes ${template.quickReplies} quick-reply payload(s)`);
+    payloads.forEach((payload, i) => out.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] }));
+  }
+  return out;
 }
 
 /**

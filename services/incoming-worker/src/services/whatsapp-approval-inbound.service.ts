@@ -42,8 +42,18 @@ async function replyToManager(
   tenantId: string,
   toPhone: string,
   text: string,
+  viaPlatform = false,
 ): Promise<void> {
   try {
+    // The request came from GOTCHA's own number: answer from it (the manager
+    // just wrote, so the 24h window is open for plain text).
+    if (viaPlatform) {
+      const id = (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+      const token = (process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN ?? "").trim();
+      const adapter = getOutboundAdapter("WHATSAPP");
+      if (id && token && adapter) await adapter.sendTextMessage({ accessToken: token } as ChannelCredentials, id, toPhone, text);
+      return;
+    }
     // Same number the request went out on: the tenant's primary.
     const { account } = await resolvePrimaryWhatsAppAccount(tenantId, {
       select: { externalId: true, credentials: true },
@@ -70,6 +80,7 @@ async function replyToManager(
 export async function handleApprovalButtonReply(
   buttonPayload: string | undefined,
   senderPhone: string,
+  opts: { viaPlatform?: boolean } = {},
 ): Promise<InboundApprovalResult> {
   if (!isApprovalRef(buttonPayload)) return { handled: false };
 
@@ -95,11 +106,11 @@ export async function handleApprovalButtonReply(
     return { handled: true };
   }
   if (row.status !== "PENDING") {
-    await replyToManager(tenantId, senderPhone, `This request was already ${String(row.status).toLowerCase()}. No action taken.`);
+    await replyToManager(tenantId, senderPhone, `This request was already ${String(row.status).toLowerCase()}. No action taken.`, !!opts.viaPlatform);
     return { handled: true };
   }
   if (row.expiresAt && new Date(row.expiresAt) < new Date()) {
-    await replyToManager(tenantId, senderPhone, "This request has expired, so it can no longer be approved. Open GOTCHA if it still needs doing.");
+    await replyToManager(tenantId, senderPhone, "This request has expired, so it can no longer be approved. Open GOTCHA if it still needs doing.", !!opts.viaPlatform);
     return { handled: true };
   }
 
@@ -118,13 +129,13 @@ export async function handleApprovalButtonReply(
   const normalizedSender = senderPhone.startsWith("+") ? senderPhone : `+${senderPhone}`;
   if (!recipientRow?.enabled || recipientRow.phoneE164 !== normalizedSender) {
     console.error(`[wa-approval-in] sender/recipient mismatch on ${approvalId}`);
-    await replyToManager(tenantId, senderPhone, "This approval link isn't valid for this number.");
+    await replyToManager(tenantId, senderPhone, "This approval link isn't valid for this number.", !!opts.viaPlatform);
     return { handled: true };
   }
 
   // (5) Re-authorise NOW, not when the message was sent.
   if (!(await userMayApprove(tenantId, recipientUserId))) {
-    await replyToManager(tenantId, senderPhone, "You no longer have permission to approve actions in this workspace.");
+    await replyToManager(tenantId, senderPhone, "You no longer have permission to approve actions in this workspace.", !!opts.viaPlatform);
     console.warn(`[wa-approval-in] ${recipientUserId} no longer authorised on ${tenantId}`);
     return { handled: true };
   }
@@ -143,6 +154,7 @@ export async function handleApprovalButtonReply(
     await replyToManager(
       tenantId, senderPhone,
       rejected ? "Rejected. The action will not run, and I've let the customer know." : "This request was already decided elsewhere.",
+      !!opts.viaPlatform,
     );
     return { handled: true };
   }
@@ -153,7 +165,7 @@ export async function handleApprovalButtonReply(
   );
   await revokeApprovalRefs(approvalId);
   if (!approved) {
-    await replyToManager(tenantId, senderPhone, "This request was already decided elsewhere.");
+    await replyToManager(tenantId, senderPhone, "This request was already decided elsewhere.", !!opts.viaPlatform);
     return { handled: true };
   }
 
@@ -161,7 +173,7 @@ export async function handleApprovalButtonReply(
   // dispatch path (claim → execute → record → notify-customer-once). We only
   // acknowledge the decision here, and deliberately do NOT tell the manager
   // the action succeeded - it has not run yet.
-  await replyToManager(tenantId, senderPhone, "Approved. I'll run it now and update the customer once it's done.");
+  await replyToManager(tenantId, senderPhone, "Approved. I'll run it now and update the customer once it's done.", !!opts.viaPlatform);
   await triggerApprovedDispatch(tenantId, approvalId);
   return { handled: true };
 }

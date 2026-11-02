@@ -16,6 +16,8 @@ vi.mock("@chatcenter/shared", () => {
 
   return {
     prisma: mockPrisma,
+    // The setup route's marker (2026-11-02): the legacy DELETE refuses it.
+    isSetupRoute: (c: any) => c?.origin === "setup",
     authenticate: (req: any, _res: any, next: any) => {
       req.user = { userId: "user-1", tenantId: "tenant-1", role: "ADMIN", email: "admin@test.com" };
       req.tenantId = "tenant-1";

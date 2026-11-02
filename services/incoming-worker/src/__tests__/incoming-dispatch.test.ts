@@ -54,6 +54,9 @@ vi.mock("../services/flow-executor.service", () => ({ executeWebhookFlow }));
 vi.mock("../services/call-automation.service", () => ({ onCallEvent }));
 vi.mock("../services/order.service", () => ({ onOrderEvent }));
 
+const approvalReply = vi.hoisted(() => vi.fn(async () => ({ handled: true })));
+vi.mock("../services/whatsapp-approval-inbound.service", () => ({ handleApprovalButtonReply: approvalReply }));
+
 import { dispatch } from "../workers/incoming.worker";
 
 const WEBHOOK_JOB = {
@@ -139,5 +142,14 @@ describe("incoming worker dispatch - order events", () => {
     const data = { tenantId: "t1", source: "shopify", orderId: "5001", status: "fulfilled", orderNumber: "#1042", customer: {}, items: [] };
     await dispatch({ name: "order-event", data } as any);
     expect(onOrderEvent).toHaveBeenCalledWith(data);
+  });
+});
+
+describe("incoming worker dispatch - a manager's reply on GOTCHA's own number (2026-11-02)", () => {
+  it("goes to the approval handler, answered from GOTCHA's number; nothing else runs", async () => {
+    approvalReply.mockClear();
+    await dispatch({ name: "platform-approval-reply", data: { payload: "apr_ref_1", senderId: "972500000001" } } as any);
+    expect(approvalReply).toHaveBeenCalledWith("apr_ref_1", "972500000001", { viaPlatform: true });
+    expect(tenant.findUnique).not.toHaveBeenCalled();
   });
 });

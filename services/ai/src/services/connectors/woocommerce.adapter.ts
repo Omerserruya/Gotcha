@@ -943,11 +943,16 @@ export function wooRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): numbe
 /**
  * DEV ONLY: an artificial delay before every store request, to reproduce a slow
  * store end to end (2026-11-02). Read from the Redis key "debug:woo-delay-ms"
- * (set with an expiry, so it switches itself off); never consulted in production.
+ * (set with an expiry, so it switches itself off); only on the dev stack.
  */
 export async function debugStoreDelay(env: NodeJS.ProcessEnv = process.env): Promise<number> {
-  if (env.NODE_ENV === "production") return 0;
-  const ms = Number(await getRedis().get("debug:woo-delay-ms").catch(() => null));
+  // The dev stack only (NODE_ENV=development): never production, never tests.
+  if (env.NODE_ENV !== "development") return 0;
+  // Never a reason for a store request to fail or wait: no Redis, no delay.
+  let ms = 0;
+  try {
+    ms = Number(await Promise.race([getRedis().get("debug:woo-delay-ms"), new Promise<null>((r) => setTimeout(() => r(null), 250))]));
+  } catch { return 0; }
   if (!Number.isFinite(ms) || ms <= 0) return 0;
   const wait = Math.min(ms, 60_000);
   await new Promise((r) => setTimeout(r, wait));
