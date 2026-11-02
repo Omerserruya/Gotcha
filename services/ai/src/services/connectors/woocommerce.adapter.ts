@@ -18,7 +18,7 @@
  * API: WC REST v3 - /wp-json/wc/v3/
  */
 
-import { assertPublicUrl } from "@chatcenter/shared";
+import { assertPublicUrl, getRedis } from "@chatcenter/shared";
 import { orderPhoneSearchTerms } from "../../lib/order-phone-search";
 export { orderPhoneSearchTerms };
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
@@ -940,10 +940,25 @@ export function wooRequestTimeoutMs(env: NodeJS.ProcessEnv = process.env): numbe
   return Number.isFinite(n) && n > 0 ? n : 20_000;
 }
 
+/**
+ * DEV ONLY: an artificial delay before every store request, to reproduce a slow
+ * store end to end (2026-11-02). Read from the Redis key "debug:woo-delay-ms"
+ * (set with an expiry, so it switches itself off); never consulted in production.
+ */
+export async function debugStoreDelay(env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  if (env.NODE_ENV === "production") return 0;
+  const ms = Number(await getRedis().get("debug:woo-delay-ms").catch(() => null));
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  const wait = Math.min(ms, 60_000);
+  await new Promise((r) => setTimeout(r, wait));
+  return wait;
+}
+
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
   // SSRF guard: storeUrl is free-form tenant config. Block private/metadata
   // targets at DNS resolution before dispatching.
   await assertPublicUrl(url);
+  await debugStoreDelay();
   const init: RequestInit = {
     method,
     headers: {

@@ -225,6 +225,26 @@ export async function loadConnection(opts: {
   status: string;
   expiresAt: Date | null;
 } | null> {
+  // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
+  // token merely expired latches to ERROR, but it is recoverable via its refresh
+  // token - excluding ERROR here is what created the deadlock (ERROR → never
+  // loaded → never refreshed → stays ERROR forever). We load it and let
+  // ensureFreshToken / the 401-retry recover it. DISCONNECTED stays excluded.
+  // Prefer a CONNECTED row when both somehow exist (CONNECTED < ERROR lexically).
+  const ti = await (prisma as any).tenantIntegration.findFirst({
+    where: {
+      tenantId: opts.tenantId,
+      status: { in: ["CONNECTED", "ERROR"] },
+      integration: { slug: opts.slug },
+    },
+    orderBy: { status: "asc" },
+    include: { integration: true },
+  });
+  if (!ti) return null;
+  // The Shopify entitlement gate runs once a Shopify connection exists: a
+  // workspace with no Shopify (WooCommerce only) is not "denied", it simply has
+  // none, and must not log it on every turn (Tehila, 2026-11-02). Still before
+  // any credential is read.
   if (opts.slug === SHOPIFY_SLUG && (opts.purpose ?? "data") === "data") {
     if (!opts.capability) {
       console.warn(
@@ -244,22 +264,6 @@ export async function loadConnection(opts: {
       return null;
     }
   }
-  // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
-  // token merely expired latches to ERROR, but it is recoverable via its refresh
-  // token - excluding ERROR here is what created the deadlock (ERROR → never
-  // loaded → never refreshed → stays ERROR forever). We load it and let
-  // ensureFreshToken / the 401-retry recover it. DISCONNECTED stays excluded.
-  // Prefer a CONNECTED row when both somehow exist (CONNECTED < ERROR lexically).
-  const ti = await (prisma as any).tenantIntegration.findFirst({
-    where: {
-      tenantId: opts.tenantId,
-      status: { in: ["CONNECTED", "ERROR"] },
-      integration: { slug: opts.slug },
-    },
-    orderBy: { status: "asc" },
-    include: { integration: true },
-  });
-  if (!ti) return null;
   let credentials: Record<string, any> = {};
   try {
     credentials = typeof ti.credentials === "string"
