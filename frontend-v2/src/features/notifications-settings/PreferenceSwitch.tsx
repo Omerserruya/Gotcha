@@ -26,7 +26,7 @@ export function PreferenceSwitch({
   const t = useTranslations('notifications-settings.matrix');
   const router = useRouter();
   const [shown, setShown] = useState(on);
-  const [problem, setProblem] = useState<'forbidden' | 'failed' | null>(null);
+  const [problem, setProblem] = useState<'forbidden' | 'phone' | 'failed' | null>(null);
   const [isPending, startTransition] = useTransition();
 
   return (

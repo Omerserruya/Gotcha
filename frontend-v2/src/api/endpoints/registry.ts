@@ -417,6 +417,10 @@ export const notificationEndpoints = {
    * department and carries recipients, which is a different question.
    */
   preferences: () => endpoint('/api/notification-preferences/me'),
+  /** Sends a code to `{phone}` - 202 `{expiresInSeconds}` (Backend 73f76d2c). */
+  whatsappVerify: () => endpoint('/api/notification-preferences/me/whatsapp/verify'),
+  /** `{phone, code}` - 200 the preferences, the number kept and WhatsApp on. */
+  whatsappConfirm: () => endpoint('/api/notification-preferences/me/whatsapp/confirm'),
   /**
    * The TENANT's notification rules - event type × channels × recipients,
    * scoped to a department. ADMIN only.

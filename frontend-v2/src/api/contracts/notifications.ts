@@ -76,6 +76,16 @@ export const notificationPreferencesSchema = z.object({
   inApp: z.boolean().default(true),
   email: z.boolean().default(true),
   whatsapp: z.boolean().default(false),
+  /**
+   * WhatsApp to a person (Backend 73f76d2c): only where the deployment has
+   * the platform's number. Absent (an older service) is not available - the
+   * channel is not drawn at all, never a switch that sends nothing.
+   */
+  whatsappAvailable: z.boolean().catch(false).default(false),
+  /** The person's own number, "+<digits>", once confirmed by a code; else none. */
+  whatsappPhone: z.string().nullable().catch(null).default(null),
+  /** When the code was confirmed - the opt-in. Read only. */
+  whatsappOptedInAt: z.string().nullable().catch(null).default(null),
   /** The one event-specific preference the platform has. */
   approvals: z.boolean().default(true),
   /**
@@ -101,6 +111,7 @@ export const notificationPreferencesSchema = z.object({
       z.looseObject({
         email: z.boolean().optional().catch(undefined),
         inApp: z.boolean().optional().catch(undefined),
+        whatsapp: z.boolean().optional().catch(undefined),
       }),
     )
     .optional()
@@ -109,8 +120,17 @@ export const notificationPreferencesSchema = z.object({
 
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
-/** A per-event channel: the two the platform lets a person switch per event. */
-export type EventChannel = 'inApp' | 'email';
+/**
+ * A per-event channel the platform lets a person switch: in app and email,
+ * and WhatsApp on the events that have a template for it.
+ */
+export type EventChannel = 'inApp' | 'email' | 'whatsapp';
+
+const WIRE: Readonly<Record<EventChannel, string>> = {
+  inApp: 'in_app',
+  email: 'email',
+  whatsapp: 'whatsapp',
+};
 
 /**
  * What one event's cell is for this person:
@@ -129,7 +149,7 @@ export function eventCell(
   | { readonly kind: 'unreachable' }
   | { readonly kind: 'switch'; readonly on: boolean } {
   if (preferences.eventTypes === undefined) return { kind: 'legacy' };
-  const wire = channel === 'inApp' ? 'in_app' : 'email';
+  const wire = WIRE[channel];
   const entry = preferences.eventTypes.find((e) => e.type === eventType);
   if (!entry || !entry.channels.includes(wire)) return { kind: 'unreachable' };
   return { kind: 'switch', on: preferences.events?.[eventType]?.[channel] ?? true };

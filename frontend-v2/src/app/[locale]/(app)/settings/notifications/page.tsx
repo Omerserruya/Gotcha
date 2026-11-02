@@ -25,7 +25,7 @@ import { SettingsSection } from '@/shell/SettingsSection';
  */
 export default async function Page() {
   const t = await getTranslations('notifications-settings');
-  const { preferences, volume, whatsappDestination } = await loadPreferences();
+  const { preferences, volume } = await loadPreferences();
 
   /*
     15, measured: "Tell me when" × In app · Email · WhatsApp, then quiet
@@ -35,11 +35,7 @@ export default async function Page() {
   */
   return (
     <SettingsSection title={t('title')} description={t('description')}>
-      <PreferenceMatrix
-        preferences={preferences}
-        volume={volume}
-        whatsappDestination={whatsappDestination}
-      />
+      <PreferenceMatrix preferences={preferences} volume={volume} />
     </SettingsSection>
   );
 }

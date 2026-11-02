@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -19,7 +20,8 @@ const KEYS: readonly PreferenceSwitchKey[] = ['inApp', 'email', 'whatsapp', 'app
 
 export type PreferenceSave =
   | { readonly ok: true; readonly preferences: NotificationPreferences }
-  | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
+  /** `phone`: WhatsApp on without a confirmed number (422 whatsapp_phone_required). */
+  | { readonly ok: false; readonly reason: 'forbidden' | 'phone' | 'failed' };
 
 /**
  * One of the person's own switches - `PATCH /api/notification-preferences/me`,
@@ -43,6 +45,9 @@ export async function savePreferenceSwitch(
     await signInIfSignedOut(cause);
     // 403 "Preferences are per-user": an internal account has none.
     if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    if (isApiError(cause) && cause.code === 'whatsapp_phone_required') {
+      return { ok: false, reason: 'phone' };
+    }
     logger.warn('notification_settings.save_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
@@ -104,7 +109,11 @@ export async function saveEventChannel(
   channel: EventChannel,
   on: boolean,
 ): Promise<EventSave> {
-  if ((channel !== 'inApp' && channel !== 'email') || typeof on !== 'boolean' || !eventType) {
+  if (
+    (channel !== 'inApp' && channel !== 'email' && channel !== 'whatsapp') ||
+    typeof on !== 'boolean' ||
+    !eventType
+  ) {
     return { ok: false, reason: 'failed' };
   }
   try {
@@ -120,6 +129,117 @@ export async function saveEventChannel(
     if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
     if (isApiError(cause) && cause.status === 400) return { ok: false, reason: 'unknown' };
     logger.warn('notification_settings.event_save_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+/** Why a code was not sent, or not accepted - each said in its own words. */
+export type WhatsAppRefusal =
+  | 'invalid'
+  | 'unavailable'
+  | 'rateLimited'
+  | 'sendFailed'
+  | 'codeInvalid'
+  | 'codeExpired'
+  | 'forbidden'
+  | 'failed';
+
+const WHATSAPP_CODES: Readonly<Record<string, WhatsAppRefusal>> = {
+  whatsapp_phone_invalid: 'invalid',
+  whatsapp_unavailable: 'unavailable',
+  whatsapp_rate_limited: 'rateLimited',
+  whatsapp_send_failed: 'sendFailed',
+  whatsapp_code_invalid: 'codeInvalid',
+  whatsapp_code_expired: 'codeExpired',
+};
+
+function whatsappRefusal(cause: unknown, event: string): WhatsAppRefusal {
+  if (isApiError(cause)) {
+    const known = cause.code ? WHATSAPP_CODES[cause.code] : undefined;
+    if (known) return known;
+    if (cause.status === 429) return 'rateLimited';
+    // support_denied:ownership, or an account with no preferences of its own.
+    if (cause.status === 403) return 'forbidden';
+  }
+  logger.warn(event, { status: isApiError(cause) ? cause.status : undefined });
+  return 'failed';
+}
+
+const verifySchema = z.object({ expiresInSeconds: z.number().int().positive().catch(600) });
+
+/**
+ * Sends a code to the number by WhatsApp (Backend 73f76d2c), the only way a
+ * number is kept: an unverified one would be our number writing to a
+ * stranger. Nothing is stored until the code comes back.
+ */
+export async function sendWhatsAppCode(
+  phone: string,
+): Promise<
+  | { readonly ok: true; readonly expiresInSeconds: number }
+  | { readonly ok: false; readonly reason: WhatsAppRefusal }
+> {
+  const number = phone.trim();
+  if (!number) return { ok: false, reason: 'invalid' };
+  try {
+    const answer = await serverApi().post({
+      endpoint: notificationEndpoints.whatsappVerify(),
+      body: { phone: number },
+      payload: verifySchema,
+      raw: true,
+    });
+    return { ok: true, expiresInSeconds: answer.expiresInSeconds };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    return {
+      ok: false,
+      reason: whatsappRefusal(cause, 'notification_settings.whatsapp_verify_failed'),
+    };
+  }
+}
+
+/** The code back: the number is kept, and WhatsApp alerts are on. */
+export async function confirmWhatsAppCode(
+  phone: string,
+  code: string,
+): Promise<
+  | { readonly ok: true; readonly preferences: NotificationPreferences }
+  | { readonly ok: false; readonly reason: WhatsAppRefusal }
+> {
+  const digits = code.trim();
+  if (!/^\d{4,8}$/.test(digits)) return { ok: false, reason: 'codeInvalid' };
+  try {
+    const preferences = await serverApi().post({
+      endpoint: notificationEndpoints.whatsappConfirm(),
+      body: { phone: phone.trim(), code: digits },
+      payload: notificationPreferencesSchema,
+    });
+    revalidatePath('/[locale]/settings/notifications', 'page');
+    return { ok: true, preferences };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    return {
+      ok: false,
+      reason: whatsappRefusal(cause, 'notification_settings.whatsapp_confirm_failed'),
+    };
+  }
+}
+
+/** The number removed: WhatsApp alerts off, and the opt-in cleared (`{whatsappPhone: null}`). */
+export async function removeWhatsAppNumber(): Promise<PreferenceSave> {
+  try {
+    const preferences = await serverApi().patch({
+      endpoint: notificationEndpoints.preferences(),
+      body: { whatsappPhone: null },
+      payload: notificationPreferencesSchema,
+    });
+    revalidatePath('/[locale]/settings/notifications', 'page');
+    return { ok: true, preferences };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    logger.warn('notification_settings.whatsapp_remove_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
     return { ok: false, reason: 'failed' };
