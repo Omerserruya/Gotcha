@@ -20,7 +20,10 @@
  * answers the NEXT inbound message.
  */
 import crypto from "crypto";
-import { prisma, readDurableSetting, writeDurableSetting, defaultIntegrationAccess } from "@chatcenter/shared";
+import {
+  prisma, readDurableSetting, writeDurableSetting, defaultIntegrationAccess,
+  buildRoutingGraph, straightRouteStep, routingChannels, isSetupRoute, setupTriggerConfig, SETUP_ROUTE_NAME, ROUTING_TRIGGER,
+} from "@chatcenter/shared";
 import { buildAgentFields, type BusinessProfileData, type DepartmentData } from "./agent-config-generator";
 import { whereEmployeeAnswers } from "./employee-reach.service";
 import { installOf } from "./website-widget.service";
@@ -418,15 +421,63 @@ export async function grantOrderReadTools(tenantId: string, agentId: string): Pr
   return { platform, granted: granted.sort() };
 }
 
-/** "routed": the canvas now answers with this employee; "customized": the owner's playbook, left alone. */
+/**
+ * "routed": the setup route now hands every new conversation to this employee;
+ * "customized": the owner's own routing, left alone.
+ *
+ * The setup route is a "New conversation" automation (2026-11-02, Omer: "it's
+ * an automation too"), so it shows in Automations and opens in the builder.
+ * Automations run before the playbook and the first that answers ends the
+ * message, so it must not compete with routing the owner built:
+ *   - a playbook the owner built (anything but the two onboarding nodes): left alone;
+ *   - the setup route the owner extended (anything but trigger -> hand to AI): left alone;
+ *   - another every-channel routing automation already active: left alone.
+ * Otherwise the setup route is created, or re-pointed at this employee, and an
+ * old onboarding canvas is emptied in the same transaction, so nothing routes twice.
+ */
 export async function routeToEmployee(tenantId: string, agentId: string, actor: string | null): Promise<"routed" | "customized"> {
-  const canvas = await (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true } });
+  const [canvas, flows] = await Promise.all([
+    (prisma as any).flowCanvas.findUnique({ where: { tenantId }, select: { nodes: true } }),
+    (prisma as any).chatbotFlow.findMany({
+      where: { tenantId, triggerType: ROUTING_TRIGGER },
+      select: { id: true, isActive: true, triggerConfig: true, nodes: true, edges: true },
+    }) as Promise<Array<{ id: string; isActive: boolean; triggerConfig: unknown; nodes: any; edges: any }>>,
+  ]);
   const nodes: any[] = Array.isArray(canvas?.nodes) ? canvas.nodes : [];
-  const ours = nodes.length === 2 && nodes.some((n) => n.id === START_ID) && nodes.some((n) => n.id === ROUTE_ID);
-  if (nodes.length && !ours) return "customized";
-  const start = { id: START_ID, type: "start", data: { trigger: "message_received" }, position: { x: 400, y: 100 } };
-  const route = { id: ROUTE_ID, type: "route_target", data: { routeType: "agent", targetId: agentId }, position: { x: 750, y: 100 } };
-  const data = { nodes: [start, route], edges: [{ id: `e-${START_ID}-${ROUTE_ID}`, source: START_ID, target: ROUTE_ID }], updatedBy: actor };
-  await (prisma as any).flowCanvas.upsert({ where: { tenantId }, create: { tenantId, ...data }, update: data });
+  const oursOnCanvas = nodes.length === 2 && nodes.some((n) => n.id === START_ID) && nodes.some((n) => n.id === ROUTE_ID);
+  if (nodes.length && !oursOnCanvas) return "customized";
+
+  const now = new Date();
+  const clearCanvas = oursOnCanvas
+    ? [(prisma as any).flowCanvas.update({ where: { tenantId }, data: { nodes: [], edges: [], updatedBy: actor } })]
+    : [];
+  const setup = flows.find((f) => isSetupRoute(f.triggerConfig));
+  if (setup) {
+    const flowNodes: any[] = Array.isArray(setup.nodes) ? setup.nodes : [];
+    const step = straightRouteStep(flowNodes, Array.isArray(setup.edges) ? setup.edges : []);
+    if (!step) return "customized";
+    const repointed = flowNodes.map((n) => (n?.id === step.id ? { ...n, data: { ...(n.data ?? {}), aiAgentId: agentId } } : n));
+    await (prisma as any).$transaction([
+      (prisma as any).chatbotFlow.updateMany({
+        where: { id: setup.id, tenantId },
+        data: { nodes: repointed, ...(setup.isActive ? {} : { isActive: true, activatedAt: now, activatedBy: actor, pausedAt: null, pausedBy: null }) },
+      }),
+      ...clearCanvas,
+    ]);
+    return "routed";
+  }
+  if (flows.some((f) => f.isActive && routingChannels(f.triggerConfig).length === 0)) return "customized";
+  const graph = buildRoutingGraph(agentId);
+  await (prisma as any).$transaction([
+    (prisma as any).chatbotFlow.create({
+      data: {
+        tenantId, name: SETUP_ROUTE_NAME, channel: null,
+        triggerType: ROUTING_TRIGGER, triggerConfig: setupTriggerConfig(),
+        nodes: graph.nodes, edges: graph.edges,
+        isActive: true, activatedAt: now, activatedBy: actor,
+      },
+    }),
+    ...clearCanvas,
+  ]);
   return "routed";
 }

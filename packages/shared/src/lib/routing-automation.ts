@@ -49,3 +49,22 @@ export function routingChannels(triggerConfig: unknown): string[] {
   const ch = (triggerConfig as any)?.channels;
   return Array.isArray(ch) ? ch.map((c: unknown) => String(c).toUpperCase()) : [];
 }
+
+/**
+ * The setup route (2026-11-02): the routing automation onboarding writes, so
+ * "who answers" is an automation the owner can see and edit, not a hidden
+ * playbook. Marked in triggerConfig.origin, a machine value; the UI owns the
+ * words. It cannot be deleted (pausing is allowed) and it does not count
+ * toward the plan's automation limit.
+ */
+export const SETUP_ORIGIN = "setup";
+export const SETUP_ROUTE_NAME = "Who answers new conversations";
+
+export function isSetupRoute(triggerConfig: unknown): boolean {
+  return (triggerConfig as any)?.origin === SETUP_ORIGIN;
+}
+
+/** The setup route's trigger config: every channel, marked. */
+export function setupTriggerConfig(): { channels: string[]; origin: string } {
+  return { channels: [], origin: SETUP_ORIGIN };
+}
