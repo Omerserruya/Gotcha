@@ -162,11 +162,11 @@
       "title": "לאן הולכות התראות WhatsApp",
       "none": "לא הוגדר מספר",
       "note": "המספר שלכם. קודם נשלח אליו קוד, והתראות WhatsApp יתחילו אחרי שתאשרו אותו.",
-      "numberLabel": "מספר ה-WhatsApp שלכם",
+      "numberLabel": "מספר ה‑WhatsApp שלכם",
       "send": "שליחת קוד",
       "sending": "שולחים…",
       "cancel": "ביטול",
-      "sent": "שלחנו קוד ב-WhatsApp, בתוקף ל-{minutes} דקות, אל",
+      "sent": "שלחנו קוד ב‑WhatsApp, בתוקף ל‑{minutes} דקות, אל",
       "codeLabel": "הקוד",
       "confirm": "אישור",
       "confirming": "מאשרים…",
@@ -206,11 +206,11 @@
       "forbidden": "לחשבון הזה אין העדפות משלו.",
       "failed": "לא נשמר. אפשר לנסות שוב.",
       "unknown": "ההתראה הזו כבר לא זמינה.",
-      "phone": "קודם הוסיפו את מספר ה-WhatsApp שלכם ואשרו את הקוד."
+      "phone": "קודם הוסיפו את מספר ה‑WhatsApp שלכם ואשרו את הקוד."
     },
     "notByEmail": "לא נשלח במייל בסביבת העבודה הזו",
     "notInApp": "לא מגיע אליך באפליקציה בסביבת העבודה הזו",
-    "notByWhatsApp": "לא נשלח ב-WhatsApp - אין לזה הודעת WhatsApp",
+    "notByWhatsApp": "לא נשלח ב‑WhatsApp - אין לזה הודעת WhatsApp",
     "rowSwitch": "{channel} - {event}",
     "whatsappNoNumber": {
       "tag": "הוסיפו את המספר שלכם",
