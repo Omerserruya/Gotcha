@@ -2428,6 +2428,23 @@
     flex: none;
   }
 
+  /*
+   * ⚠ A product card is a light card inside GOTCHA's ink bubble: it inherited
+   *   the bubble's white text, and its name and price vanished on the card's
+   *   white (dev, 390px, 2026-11-03).
+   */
+  .stream[data-variant='phone'] .product {
+    color: var(--text-primary);
+  }
+
+  /*
+   * The website's hover bar ("השב") has no hover on a phone: a tap focused it
+   * and it stayed over the bubble below. Quoting is the website's.
+   */
+  .stream[data-variant='phone'] .messageActions {
+    display: none;
+  }
+
   .stream[data-variant='phone'] .message {
     max-inline-size: 82%;
     gap: var(--space-3);
