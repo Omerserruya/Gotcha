@@ -195,6 +195,13 @@ function conversationEvent(
   return { type, tenantId, at: Date.now(), conversationId };
 }
 
+/** A request left the queue: decided either way, or its time ran out. */
+const RESOLVED_APPROVAL_EVENTS = new Set([
+  'approval:approved',
+  'approval:rejected',
+  'approval:expired',
+]);
+
 export const translators: readonly EventTranslator[] = [
   /*
    * The wall's suggestions changed (Backend 9c5e96cc). Sent to `conv:{id}`
@@ -359,6 +366,38 @@ export const translators: readonly EventTranslator[] = [
       conversationId,
       suggestions: Array.isArray(raw) ? raw.filter((s): s is string => typeof s === 'string') : [],
     };
+  },
+
+  /*
+   * ★★ THE APPROVAL EVENTS (2026-11-03). The union named `approval.requested`
+   *   and `approval.resolved` from the start and nothing produced them, so a
+   *   listener for either never fired. Read off the publishers, not guessed:
+   *
+   *     `approval:created`    shared lib/approval-requests.ts, on every
+   *                           request written: `{ id, conversationId, tool,
+   *                           summary, riskLevel, requestedBy, createdAt,
+   *                           expiresAt }` - the request is `id`.
+   *     `approval:approved`   conversation routes/approvals.ts (three paths)
+   *     `approval:rejected`   the same file
+   *     `approval:expired`    incoming-worker idle-conversation.worker.ts
+   *                           - each `{ approvalId, … }`.
+   *
+   *   None names a room, so the bridge broadcasts them to `tenant:<id>` and
+   *   adds the tenant when `data` has none (socket-bridge.ts).
+   */
+  (wireEvent, payload) => {
+    if (wireEvent !== 'approval:created') return null;
+    const tenantId = str(payload, 'tenantId');
+    const approvalId = str(payload, 'id') ?? str(payload, 'approvalId');
+    if (!tenantId || !approvalId) return null;
+    return { type: 'approval.requested', tenantId, at: Date.now(), approvalId };
+  },
+  (wireEvent, payload) => {
+    if (!RESOLVED_APPROVAL_EVENTS.has(wireEvent)) return null;
+    const tenantId = str(payload, 'tenantId');
+    const approvalId = str(payload, 'approvalId') ?? str(payload, 'id');
+    if (!tenantId || !approvalId) return null;
+    return { type: 'approval.resolved', tenantId, at: Date.now(), approvalId };
   },
 
   (wireEvent, payload) => {

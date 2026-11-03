@@ -22,7 +22,8 @@ import { appPath } from '@/lib/base-path';
 
 import ui from '../mobile-ui.module.css';
 import styles from './mobile-customers.module.css';
-import { phoneOf, worthOf } from './mobile-customers';
+import { loadContactOrders, ORDERS_SHOWN } from './load-contact-orders';
+import { orderStatus, ordersNote, phoneOf, worthOf, type OrdersNote } from './mobile-customers';
 
 /** A phone shows the newest of the history; the rest is the website's. */
 const HISTORY_SHOWN = 15;
@@ -213,9 +214,13 @@ export async function MobileCustomerList({
  *   its own, and a part with nothing true to say is not drawn.
  *
  * ★ THE TILES DO SOMETHING OR ARE NOT THERE: Message opens their newest
- *   conversation, Call dials a number we hold, Orders opens them on the
- *   website. The design's Note tile is not drawn - a note is written on the
+ *   conversation, Call dials a number we hold, Orders scrolls to the orders
+ *   below. The design's Note tile is not drawn - a note is written on the
  *   website.
+ * ★ THE ORDERS ARE ON THE PROFILE (Omer, 2026-11-03): the newest ten by
+ *   contact, the inbox wall's read (`loadContactOrders`), each with its
+ *   number, date, total and the store's own status words. No store, no
+ *   match, a failed read: each said in the wall's sentence, never as "none".
  */
 export async function MobileCustomerProfile({
   id,
@@ -228,10 +233,13 @@ export async function MobileCustomerProfile({
 }) {
   const t = await getTranslations('customers');
   const m = await getTranslations('mobile');
+  const wall = await getTranslations('inbox.wall.orders');
   const format = await getFormatter();
   const locale = await getLocale();
   const contact = detail.timeline?.contact ?? null;
   const name = contact?.displayName ?? contact?.externalId ?? null;
+  // Started first, read beside the rest. The person resolved through a merge is the one asked for.
+  const ordersRead = loadContactOrders(contact?.id ?? id);
   const facts = await customerFacts(detail);
   const phone = phoneOf(channelHandles(detail.timeline));
   const summary =
@@ -247,6 +255,9 @@ export async function MobileCustomerProfile({
     .slice(0, MEMORY_SHOWN);
   const history = (await timelineRows(detail)).slice(0, HISTORY_SHOWN);
   const note = detail.notes === null ? null : (detail.notes.find((n) => !n.deletedAt) ?? null);
+  const orders = await ordersRead;
+  const ordersEmpty = ordersNote(orders);
+  const ordersEmptyText = ordersEmpty ? await ordersNoteText(ordersEmpty) : null;
 
   const figures = worth
     ? [
@@ -296,10 +307,10 @@ export async function MobileCustomerProfile({
             {m('customers.call')}
           </a>
         ) : null}
-        {worth && worth.orders > 0 ? (
-          // The website, a full load: the native shell opens it in the browser (`OnWebsite`).
+        {orders && orders.orders.length > 0 ? (
+          // Down to the orders below: they are on this screen now, not the website's.
           <a
-            href={appPath(`/${locale}/customers/${encodeURIComponent(id)}?tab=orders`)}
+            href="#mobile-customer-orders"
             className={styles.tile}
             data-testid="mobile-customer-orders"
           >
@@ -337,6 +348,79 @@ export async function MobileCustomerProfile({
           ))}
         </section>
       ) : null}
+
+      <section
+        id="mobile-customer-orders"
+        className={ui.card}
+        data-testid="mobile-customer-orders-list"
+        data-state={ordersEmpty?.kind ?? 'ok'}
+      >
+        <h2 className={styles.cardHeading}>{t('card.orders')}</h2>
+        {ordersEmpty || !orders ? (
+          <p className={styles.none} role={ordersEmpty?.kind === 'unread' ? 'status' : undefined}>
+            {ordersEmptyText}
+          </p>
+        ) : (
+          <>
+            <ul className={styles.orders}>
+              {orders.orders.map((order) => {
+                const status = orderStatus(order);
+                const total =
+                  order.total.amount === null
+                    ? null
+                    : money(order.total.amount, order.total.currency ?? '', locale);
+                return (
+                  <li
+                    key={order.orderId}
+                    className={styles.order}
+                    data-testid={`mobile-order-${order.orderId}`}
+                  >
+                    <span className={styles.orderTop}>
+                      <span className={styles.orderNumber}>
+                        {order.orderNumber
+                          ? wall('number', { number: order.orderNumber })
+                          : wall('title')}
+                      </span>
+                      <span className={`${ui.figure} ${styles.orderTotal}`}>
+                        {total ?? t('orders.amountUnknown')}
+                      </span>
+                    </span>
+                    <span className={styles.orderSub}>
+                      {order.createdAt ? (
+                        <time dateTime={order.createdAt}>
+                          {format.dateTime(new Date(order.createdAt), {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </time>
+                      ) : null}
+                      {status ? (
+                        <span
+                          className={ui.tag}
+                          data-tone={status.kind === 'cancelled' ? 'bad' : undefined}
+                          dir="auto"
+                        >
+                          {status.kind === 'cancelled' ? wall('cancelled') : status.label}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {orders.orders.length >= ORDERS_SHOWN ? (
+              // The website, a full load: the native shell opens it in the browser (`OnWebsite`).
+              <a
+                href={appPath(`/${locale}/customers/${encodeURIComponent(id)}?tab=orders`)}
+                className={`${ui.cardRow} ${ui.more}`}
+              >
+                {m('customers.ordersMore')}
+              </a>
+            ) : null}
+          </>
+        )}
+      </section>
 
       <section className={ui.card} data-testid="mobile-customer-history">
         <h2 className={styles.cardHeading}>{m('customers.history')}</h2>
@@ -398,4 +482,31 @@ export async function MobileCustomerProfile({
       ) : null}
     </div>
   );
+}
+
+/** The empty or failed orders line, in the wall's and the customers' own sentences. */
+async function ordersNoteText(note: OrdersNote): Promise<string> {
+  const t = await getTranslations('customers');
+  const wall = await getTranslations('inbox.wall.orders');
+  switch (note.kind) {
+    case 'unread':
+      return t('orders.unread');
+    case 'storeNotChosen':
+      return wall('storeNotChosen');
+    case 'notConnected':
+      return t('orders.state.not_connected');
+    case 'storeUnreachable':
+      return wall('storeUnreachable');
+    case 'noIdentifiers':
+      return wall('noIdentifiers');
+    case 'noWooOrders':
+      return wall('noWooOrders');
+    case 'missingScopes':
+      // Reading orders is the one scope this read needs.
+      return t('orders.missingScopes', { scopes: 'read_orders' });
+    case 'state':
+      return t.has(`orders.state.${note.state}` as 'orders.state.no_orders')
+        ? t(`orders.state.${note.state}` as 'orders.state.no_orders')
+        : t('orders.unread');
+  }
 }

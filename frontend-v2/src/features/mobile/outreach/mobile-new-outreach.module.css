@@ -1,0 +1,141 @@
+@layer features {
+  /*
+   * "New outreach" - the design's sheet (`sCreate`): the choices as tiles on
+   * the paper, two to a row, each an icon on the accent's tint, a title and
+   * a line. Then the picker (the phone's search and rows) and the call's
+   * confirmation.
+   */
+  .options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-10);
+  }
+
+  .options[data-count='1'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-8);
+    padding-block: var(--space-16);
+    padding-inline: var(--space-14);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-ground);
+    color: var(--mobile-ink);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .option:active {
+    background-color: var(--mobile-press);
+  }
+
+  .option:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  .optionIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: 13px;
+    background-color: var(--mobile-accent-tint);
+    color: var(--mobile-accent-text);
+  }
+
+  .optionTitle {
+    font-size: 15.5px;
+    font-weight: var(--font-weight-bold);
+  }
+
+  .optionSub {
+    font-size: var(--font-size-item);
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .foot {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    text-align: center;
+  }
+
+  /* ── The picker ────────────────────────────────────────────────────── */
+  .people {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    margin-inline: calc(-1 * var(--space-18));
+    padding: 0;
+    list-style: none;
+  }
+
+  .person {
+    inline-size: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .person:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .status {
+    margin: 0;
+    font-size: var(--font-size-item);
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .status:empty {
+    display: none;
+  }
+
+  .notice {
+    margin: 0;
+    padding: var(--space-12);
+    border-radius: var(--space-14);
+    background-color: var(--mobile-quiet-card);
+    font-size: var(--font-size-item);
+    line-height: 1.45;
+    color: var(--mobile-ink);
+  }
+
+  .notice[data-kind='problem'] {
+    background-color: var(--mobile-tag-bad);
+    color: var(--mobile-tag-bad-text);
+  }
+
+  .notice[data-kind='ok'] {
+    background-color: var(--mobile-tag-ok);
+    color: var(--mobile-tag-ok-text);
+  }
+
+  /* ── The call's confirmation ───────────────────────────────────────── */
+  .confirmBody {
+    margin: 0;
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+}

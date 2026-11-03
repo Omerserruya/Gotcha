@@ -23,6 +23,9 @@ import { pageMetadata } from '@/shell/page-metadata';
  *   the store for an order number, `peopleToday` collapses identities into
  *   people, `?segment=quiet` is the website's own, and `loadCommerce` is the
  *   website's bulk read of what each shown person is worth.
+ * ★ Not the website's in one way: a website visitor who never left a phone or
+ *   an email is not listed (`identified`), since the phone can do nothing
+ *   with them. The website still lists them.
  *
  * ★ A failed read is said as one - never as an empty workspace.
  */
@@ -38,7 +41,8 @@ export default async function Page({
   // Only everyone and the quiet: the phone draws no "talking now" chip.
   const segment = segmentOf(rawSegment) === 'quiet' ? 'quiet' : 'everyone';
   const { rows, truncated, searchedField, orderSearched, conversations, quiet } =
-    await loadCustomers(query, { today: true });
+    // Anonymous website visitors left out (Omer, 2026-11-03): nobody to reach on a phone.
+    await loadCustomers(query, { today: true, identified: true });
   const now = new Date();
   const everyone = rows === null ? [] : peopleToday(rows, conversations, quiet?.ids ?? null, now);
   const people = everyone.filter((person) => inSegment(person, segment));

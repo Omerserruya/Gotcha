@@ -1,4 +1,5 @@
 import type { Campaign } from '@/api/contracts/outreach';
+import { dialable } from '@/features/calls/dial';
 
 /**
  * A campaign as the phone says it - the desktop card's sentences, chosen
@@ -77,4 +78,51 @@ export function statusTone(status: Campaign['status']): 'ok' | 'bad' | 'mute' {
   if (status === 'SENDING') return 'ok';
   if (status === 'FAILED') return 'bad';
   return 'mute';
+}
+
+/* ── "New outreach": one person, a message or a call (2026-11-03) ─────────── */
+
+/** Channels whose handle IS a phone number, so a call can be placed to it. */
+const PHONE_KEYED = new Set(['WHATSAPP', 'VOICE', 'SMS']);
+
+/**
+ * The number a call to this contact goes to, as the line dials it (E.164):
+ * the stored phone, else a phone-keyed channel's own handle. `null` when
+ * there is none - never a guess at a local number's country.
+ */
+export function callableNumber(row: {
+  readonly phone: string | null;
+  readonly channel: string;
+  readonly externalId: string;
+}): string | null {
+  return (
+    dialable(row.phone) ??
+    (PHONE_KEYED.has(row.channel.toUpperCase()) ? dialable(row.externalId) : null)
+  );
+}
+
+/** Longest search sent from the picker: a name, a number or an email, not a paragraph. */
+export const PICK_QUERY_MAX = 80;
+/** People the picker lists for one search; a narrower search finds the rest. */
+export const PICK_SHOWN = 20;
+
+/** The picker's search as it is sent: trimmed and capped; empty asks for nothing. */
+export function pickQuery(raw: string): string {
+  return raw.trim().slice(0, PICK_QUERY_MAX);
+}
+
+/**
+ * What a call's outcome is said as, from `startCall`'s answer: the key under
+ * `calls.dialer`. AGENT_FIRST rings the line's agent first; IN_PLATFORM dials
+ * from a browser phone the app does not have, so nothing was dialled; a
+ * refusal is the server's own reason when we have words for it.
+ */
+export function callOutcomeKey(
+  result:
+    | { readonly ok: true; readonly mode: 'AGENT_FIRST' | 'IN_PLATFORM' }
+    | { readonly ok: false; readonly reason: string },
+  known: (key: string) => boolean,
+): string {
+  if (result.ok) return result.mode === 'AGENT_FIRST' ? 'ringing' : 'inPlatform';
+  return known(`error.${result.reason}`) ? `error.${result.reason}` : 'error.failed';
 }

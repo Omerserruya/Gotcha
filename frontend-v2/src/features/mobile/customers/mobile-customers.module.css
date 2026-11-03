@@ -223,6 +223,52 @@
     font-weight: var(--font-weight-bold);
   }
 
+  /* ── Orders: the number and the total, then the date and the store's status ── */
+  .orders {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .order {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-block: var(--space-11);
+    padding-inline: var(--space-16);
+  }
+
+  .order + .order {
+    border-block-start: var(--border-width-thin) solid var(--mobile-row-rule);
+  }
+
+  .orderTop,
+  .orderSub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .orderNumber {
+    min-inline-size: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .orderTotal {
+    flex: none;
+    font-size: var(--font-size-body);
+  }
+
+  .orderSub {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-muted);
+  }
+
   /* ── The history: a mono date, a coloured dot, a title and a line ─── */
   .history {
     margin: 0;
