@@ -221,7 +221,8 @@
   "copilot": {
     "label": "Copilot",
     "ready": "Copilot · Reply ready",
-    "more": "{count, plural, =1 {1 more option} other {# more options}}"
+    "more": "{count, plural, =1 {1 more option} other {# more options}}",
+    "dismiss": "Close the suggestion"
   },
   "loading": {
     "home": "Loading Home",

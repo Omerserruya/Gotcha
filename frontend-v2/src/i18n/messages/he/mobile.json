@@ -221,7 +221,8 @@
   "copilot": {
     "label": "Copilot",
     "ready": "Copilot · תשובה מוכנה",
-    "more": "{count, plural, =1 {עוד אפשרות אחת} other {עוד # אפשרויות}}"
+    "more": "{count, plural, =1 {עוד אפשרות אחת} other {עוד # אפשרויות}}",
+    "dismiss": "סגירת ההצעה"
   },
   "loading": {
     "home": "טוענים את הבית",

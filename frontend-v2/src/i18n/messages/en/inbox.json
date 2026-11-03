@@ -264,6 +264,10 @@
     },
     "attachImage": "Attach a photo",
     "attachFile": "Attach a file",
+    "attach": "Attach",
+    "attachPhotos": "Photos",
+    "attachCamera": "Camera",
+    "attachFiles": "Files",
     "removeFile": "Remove {name}",
     "attached": "Will be sent with your reply",
     "compose": {
