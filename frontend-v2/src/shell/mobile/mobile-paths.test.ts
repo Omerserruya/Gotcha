@@ -14,6 +14,10 @@ describe('inMobileOverlay', () => {
     expect(inMobileOverlay('/m/inbox/c1/customer/')).toBe(true);
   });
 
+  it('★ asking GOTCHA from Home is a full screen too', () => {
+    expect(inMobileOverlay('/m/home/ask')).toBe(true);
+  });
+
   it('the lists keep them, and nothing else deeper counts', () => {
     for (const path of ['/m/inbox', '/m/home', '/m/customers/p1/customer', '/m/inbox/c1/other']) {
       expect(inMobileOverlay(path)).toBe(false);

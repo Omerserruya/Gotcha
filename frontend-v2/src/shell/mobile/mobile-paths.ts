@@ -16,7 +16,7 @@ const MOBILE_ROOT = '/m';
  * a screen over the thread.
  */
 export function inMobileOverlay(pathname: string): boolean {
-  return /^\/m\/(?:(?:inbox|approvals|outreach|customers)\/[^/]+|inbox\/[^/]+\/customer)\/?$/.test(
+  return /^\/m\/(?:(?:home|inbox|approvals|outreach|customers)\/[^/]+|inbox\/[^/]+\/customer)\/?$/.test(
     pathname,
   );
 }
