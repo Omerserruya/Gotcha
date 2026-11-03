@@ -11,6 +11,8 @@
  * reopens without assigning the hidden support actor.
  */
 import type { Prisma } from "@prisma/client";
+import { prisma, publishEvent } from "@chatcenter/shared";
+import { getIO } from "../lib/socket";
 
 export interface SendingPrincipal { userId?: string; isInternal?: boolean; support?: unknown }
 
@@ -32,4 +34,21 @@ export function reopenOnSend(
     automationRunId: null,
     ...(conversation.assignedAgentId || user.support ? {} : { assignedAgentId: user.userId }),
   };
+}
+
+/**
+ * Apply the reopen and tell every inbox, the way claim/release/close do
+ * (conversation.service emitToTenant): conversation:updated with the full row
+ * and its assignee, to the tenant room and the event bus. Without it the
+ * sender and everyone else still see it closed until a refresh.
+ */
+export async function applyReopenOnSend(tenantId: string, conversationId: string, data: Prisma.ConversationUncheckedUpdateInput) {
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data,
+    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+  });
+  try { getIO()?.to(`tenant:${tenantId}`).emit("conversation:updated", updated); } catch { /* socket not ready */ }
+  publishEvent({ event: "conversation:updated", tenantId, data: updated }).catch(() => {});
+  return updated;
 }
