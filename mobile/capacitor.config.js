@@ -144,15 +144,15 @@ const config = {
     // WebView honest about insets and exposes --safe-area-inset-* to the page.
     SystemBars: {
       insetsHandling: 'css',
-      // The frame behind the status bar is the product's dark ground: light icons.
-      style: 'DARK',
+      // The app's ground is the warm paper (GOTCHA Mobile App design): dark icons.
+      style: 'LIGHT',
     },
 
     // iOS, and Android below 15 (where backgroundColor / overlaysWebView still apply).
     StatusBar: {
       // Capacitor naming: 'LIGHT' = dark text for a light background.
-      style: 'DARK',
-      backgroundColor: '#121212',
+      style: 'LIGHT',
+      backgroundColor: '#FAF8F4',
       overlaysWebView: false,
     },
   },

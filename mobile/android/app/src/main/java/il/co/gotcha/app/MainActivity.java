@@ -11,6 +11,9 @@ public class MainActivity extends BridgeActivity {
         // Local plugins must be registered BEFORE super.onCreate() builds the bridge.
         registerPlugin(NavigationPolicyPlugin.class);
         super.onCreate(savedInstanceState);
+        // The image button opens the gallery (GotchaWebChromeClient). Set here,
+        // in onCreate, because it registers activity-result launchers.
+        getBridge().getWebView().setWebChromeClient(new GotchaWebChromeClient(getBridge()));
     }
 
     /*
