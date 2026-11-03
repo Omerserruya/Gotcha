@@ -2242,6 +2242,11 @@
     flex: 0 0 220px;
   }
 
+  /*
+   * ⚠ A light card, also inside GOTCHA's ink bubble: it inherited the bubble's
+   *   light text, and its name and price nearly vanished on the card (dev,
+   *   1440px, 2026-11-03). Its own text colour, on the website and the phone.
+   */
   .product {
     display: flex;
     gap: var(--space-8);
@@ -2250,6 +2255,7 @@
     border: var(--border-width-thin) solid var(--border-subtle);
     border-radius: 10px;
     background-color: var(--panel-field);
+    color: var(--text-primary);
   }
 
   .productImage {
@@ -2426,15 +2432,6 @@
   /* A flex column's items would shrink to fit instead of overflowing it. */
   .stream[data-variant='phone'] > * {
     flex: none;
-  }
-
-  /*
-   * ⚠ A product card is a light card inside GOTCHA's ink bubble: it inherited
-   *   the bubble's white text, and its name and price vanished on the card's
-   *   white (dev, 390px, 2026-11-03).
-   */
-  .stream[data-variant='phone'] .product {
-    color: var(--text-primary);
   }
 
   /*
