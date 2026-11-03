@@ -4,6 +4,7 @@ import { requireVisibleConversation } from "../lib/require-visible-conversation"
 import * as conversationService from "../services/conversation.service";
 import { getIO } from "../lib/socket";
 import { unreadStates } from "../lib/unread-state";
+import { parseChannelList } from "../lib/channel-filter";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
   if (!authHeader) return;
@@ -74,11 +75,13 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly, view, from, to, total } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit, cursor, includeAutomated, automatedOnly, excludeClosed, view, from, to, total } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
-      channel: channel as string | undefined,
+      // One channel or `a,b`, each checked against the enum: an unknown one is
+      // a 400 by name (it was a 500 from Postgres), see lib/channel-filter.ts.
+      channel: parseChannelList(channel),
       departmentId: departmentId as string | undefined,
       search: search as string | undefined,
       page: page ? parseInt(page as string, 10) : undefined,
@@ -88,6 +91,7 @@ router.get("/", async (req: Request, res: Response) => {
       cursor: typeof cursor === "string" ? cursor : undefined,
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
+      excludeClosed: excludeClosed === "true",
       view: view === "queue" ? "queue" : undefined,
       // Present-but-invalid is refused (400), not ignored: a link that says
       // "this week" must never open every conversation.
@@ -107,7 +111,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /**
- * GET /unread-counts?views=queue,mine,active,gotcha,all
+ * GET /unread-counts?views=queue,mine,active,gotcha,all,resolved,mine_open
  *   -> { data: { queue: n, mine: n, ..., totals: { queue: n, mine: n, ... } } }
  * The view keys are the unread counts (unchanged); `totals` is each view's
  * size, equal to that view's list `viewTotal`.

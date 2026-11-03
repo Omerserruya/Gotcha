@@ -8,6 +8,7 @@ import { unreadStates } from "../lib/unread-state";
 import { waitingSinceFor } from "../lib/waiting-since";
 import * as messageService from "./message.service";
 import { presentMessageMedia } from "../lib/message-media";
+import { channelWhere } from "../lib/channel-filter";
 
 /**
  * Keyset pagination for the conversation list.
@@ -77,7 +78,11 @@ export function conversationKeysetClause(c: { at: Date | null; id: string }): Re
 export interface ConversationFilters {
   status?: string;
   assignedAgentId?: string;
-  channel?: string;
+  /**
+   * One channel, or several (`lib/channel-filter.ts`): one is today's exact
+   * match, a list is `{ in }`. The route parses and validates it.
+   */
+  channel?: string | readonly string[];
   departmentId?: string;
   search?: string;
   page?: number;
@@ -96,6 +101,13 @@ export interface ConversationFilters {
    * is the narrower, more specific ask.
    */
   automatedOnly?: boolean;
+  /**
+   * Leave out resolved (CLOSED) conversations when no `status` was asked for.
+   * The phone's "Assigned to me" (2026-11-03): a conversation the reader
+   * resolved no longer sits under "mine". An explicit `status` wins, and the
+   * queue view defines its own.
+   */
+  excludeClosed?: boolean;
   /**
    * "queue": the inbox's "Waiting in queue" view - exactly the conversations
    * waiting for a person (the shared waitingForPersonClause, the same one Home
@@ -139,7 +151,7 @@ const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
  * can never disagree with the rows it counts. No cursor: that is the page's.
  */
 export async function listWhere(tenantId: string, filters: ConversationFilters): Promise<any> {
-  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, view, from, to, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, excludeClosed = false, view, from, to, userRole, userId, userDepartmentId } = filters;
   const where: any = { tenantId };
   if (view === "queue") {
     // One AND element carrying the whole definition (its own OR inside), so the
@@ -177,13 +189,15 @@ export async function listWhere(tenantId: string, filters: ConversationFilters):
       ],
     });
   }
+  if (excludeClosed && view !== "queue" && !status) where.status = { not: "CLOSED" };
   if (assignedAgentId) where.assignedAgentId = assignedAgentId;
   if (from || to) {
     const tz = await workspaceTimeZone(tenantId);
     where.AND = where.AND || [];
     where.AND.push({ createdAt: { ...(from ? { gte: dayStart(from, tz) } : {}), ...(to ? { lt: dayStart(nextWorkspaceDay(to), tz) } : {}) } });
   }
-  if (channel) where.channel = channel;
+  const channels = (typeof channel === "string" ? [channel] : channel ?? []).filter(Boolean);
+  if (channels.length) where.channel = channelWhere(channels);
   if (departmentId) where.departmentId = departmentId;
 
   // Scope: ADMIN sees all, agents see only unassigned + assigned to them.
@@ -416,7 +430,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
  * The inbox views, as list filters: the same mapping as frontend-v2's
  * `viewQuery` (features/inbox/inbox-views.ts), so a count and its list agree.
  */
-export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved"] as const;
+export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved", "mine_open"] as const;
 export type UnreadCountView = (typeof UNREAD_COUNT_VIEWS)[number];
 
 function viewFilters(view: UnreadCountView, userId: string): Partial<ConversationFilters> {
@@ -427,6 +441,9 @@ function viewFilters(view: UnreadCountView, userId: string): Partial<Conversatio
     case "gotcha": return { automatedOnly: true };
     case "all": return { includeAutomated: true };
     case "resolved": return { status: "CLOSED", includeAutomated: true };
+    // The phone's "Assigned to me": the same list without what was resolved
+    // (the list's `excludeClosed=true`), so its chip counts what it shows.
+    case "mine_open": return { assignedAgentId: userId, includeAutomated: true, excludeClosed: true };
   }
 }
 
