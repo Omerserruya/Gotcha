@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[], raw: [] as any[], rows: null as any[] | null }));
+const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[], raw: [] as any[], rows: null as any[] | null, lastWhere: null as any }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -32,7 +32,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           && (a.where.channelAccountId === undefined || c.channelAccountId === a.where.channelAccountId)) ?? null,
         create: async (a: any) => { const c = { id: `conv_${H.created.length + 1}`, ...a.data }; H.created.push(c); H.conversations.push(c); return c; },
       },
-      message: { findMany: async () => { H.messageReads++; return H.rows ?? [{ id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI", createdAt: new Date(0) }]; } },
+      message: { findMany: async (a: any) => { H.lastWhere = a?.where; H.messageReads++; return H.rows ?? [{ id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI", createdAt: new Date(0) }]; } },
       user: {
         findMany: async (a: any) =>
           a.where.tenantId === "T" && a.where.email.in.includes("tehila@shop.co.il") ? [{ email: "tehila@shop.co.il", name: "תהילה רוזן" }] : [],
@@ -88,6 +88,12 @@ describe("★ who wrote it, as the widget draws it", () => {
     expect(r.status).toBe(200);
     expect(r.body.data.map((m: any) => [m.authorKind, m.author])).toEqual([["ai", null], ["agent", "תהילה"], ["visitor", null]]);
     expect(JSON.stringify(r.body)).not.toContain("@");
+  });
+
+  // A handoff's system row drew as an EMPTY shopper bubble in the widget (dev walk, 2026-11-03).
+  it("the team's system rows are never read for the shopper", async () => {
+    await request(app()).get("/api/embedded-chat/messages/conv_web?token=sess_secret_abc");
+    expect(H.lastWhere.messageType).toEqual({ not: "system" });
   });
 });
 

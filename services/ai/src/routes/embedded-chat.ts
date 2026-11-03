@@ -781,7 +781,10 @@ router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Respon
       return;
     }
 
-    const where: any = { tenantId: conversation.tenantId, conversationId: sessionId };
+    // ⚠ A system row (a handoff divider, an assignment) is the team's, with no
+    //   text for a shopper: the widget drew it as an empty bubble of theirs.
+    //   The socket relay already skips them; the poll now does too.
+    const where: any = { tenantId: conversation.tenantId, conversationId: sessionId, messageType: { not: "system" } };
     if (after) {
       where.createdAt = { gt: new Date(after) };
     }
