@@ -3,6 +3,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { serverApi } from '@/api/client/server-api';
+import { signInIfSignedOut } from '@/api/client/signed-out';
 import { newestConversationId, timelineSchema } from '@/api/contracts/customer-detail';
 import { personLabel } from '@/api/contracts/customers';
 import { customerEndpoints } from '@/api/endpoints/registry';
@@ -77,6 +78,7 @@ export async function newestConversationOf(contactId: string): Promise<NewestCon
     });
     return { ok: true, conversationId: newestConversationId(timeline.events) };
   } catch (cause) {
+    await signInIfSignedOut(cause);
     logger.warn('mobile.outreach_conversation_failed', { cause });
     return { ok: false };
   }
