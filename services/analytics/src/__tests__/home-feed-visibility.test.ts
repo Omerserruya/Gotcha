@@ -14,6 +14,7 @@ const H = vi.hoisted(() => ({
   conversations: [] as any[],
   executions: [] as any[],
   approvals: [] as any[],
+  requests: [] as any[],
   upserts: [] as any[],
   calls: 0,
 }));
@@ -30,6 +31,7 @@ function matches(row: any, where: any): boolean {
         if (op === "in") { if (!x.includes(val)) return false; }
         else if (op === "not") { if (val === x) return false; }
         else if (op === "startsWith") { if (!(typeof val === "string" && val.startsWith(x))) return false; }
+        else if (op === "endsWith") { if (!(typeof val === "string" && val.endsWith(x))) return false; }
         else if (op === "lt") { if (!(val !== null && val < x)) return false; }
         else if (op === "gt") { if (!(val !== null && val > x)) return false; }
         else throw new Error(`double: unknown operator ${op}`);
@@ -39,9 +41,9 @@ function matches(row: any, where: any): boolean {
   return true;
 }
 
-function page(rows: any[], a: any) {
+function page(rows: any[], a: any, key = "createdAt") {
   const hit = rows.filter((r) => matches(r, a.where))
-    .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime() || (y.id < x.id ? -1 : 1));
+    .sort((x, y) => y[key].getTime() - x[key].getTime() || (y.id < x.id ? -1 : 1));
   return hit.slice(a.skip ?? 0, (a.skip ?? 0) + (a.take ?? hit.length));
 }
 
@@ -64,6 +66,14 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       conversationIntelligence: { findMany: async () => { H.calls++; return []; } },
       toolExecution: { findMany: async (a: any) => { H.calls++; return page(H.executions, a); } },
       approvalRequest: { findMany: async (a: any) => { H.calls++; return page(H.approvals, a); } },
+      // The AI employees' actions (2026-11-03): ordered by when they finished.
+      toolExecutionRequest: {
+        findMany: async (a: any) => {
+          H.calls++;
+          expect(a.orderBy).toEqual([{ completedAt: "desc" }, { id: "desc" }]);
+          return page(H.requests, a, "completedAt").map((r) => Object.fromEntries(Object.keys(a.select).map((k) => [k, r[k] ?? null])));
+        },
+      },
       insightDismissal: { upsert: async (a: any) => { H.calls++; H.upserts.push(a); return {}; } },
     },
   };
@@ -97,6 +107,10 @@ const conv = (id: string, o: any = {}) => ({
 const exec = (id: string, conversationId: string, min: number, tenantId = "T") => ({
   id, tenantId, conversationId, toolName: "lookup_order", input: {}, output: {}, success: true, createdAt: at(min),
 });
+const req = (id: string, conversationId: string | null, min: number, tool = "shopify.process_refund", status = "completed", o: any = {}) => ({
+  id, tenantId: "T", conversationId, tool, status, args: {}, result: {},
+  proposedAt: at(min + 1), completedAt: status === "completed" || status === "failed" ? at(min) : null, ...o,
+});
 const appr = (id: string, conversationId: string | null, min: number) => ({
   id, tenantId: "T", conversationId, tool: "issue_refund", params: {}, status: "PENDING",
   expiresAt: new Date(Date.now() + 86_400_000), createdAt: at(min),
@@ -120,6 +134,7 @@ beforeEach(() => {
     exec("e-cross", "other-tenant", 9),
   ];
   H.approvals = [appr("a-d2", "d2", 6), appr("a-d1", "d1", 7), appr("a-system", null, 8)];
+  H.requests = [];
 });
 
 describe("GET /queue/items", () => {
@@ -198,6 +213,79 @@ describe("GET /activity", () => {
     const r = await request(app).get("/api/analytics/activity?limit=5").set(as(MANAGER_D1));
     expect(r.body.data).toEqual([]);
     expect(r.body.nextCursor).toBe(at(1999).toISOString());
+  });
+});
+
+describe("GET /activity: the AI employees' actions (tool_execution_requests, 2026-11-03)", () => {
+  it("a completed, mapped action is on the feed in the same event shape, its bare tool naming the noun", async () => {
+    H.executions = [];
+    H.approvals = [];
+    H.requests = [
+      req("r-refund", "d1", 0, "shopify.process_refund", "completed", {
+        args: { orderId: "gid://1", reason: "damaged" },
+        result: { orderNumber: "#1842", amount: 179, currency: "ILS", address: "secret st 1" },
+      }),
+    ];
+    const r = await request(app).get("/api/analytics/activity").set(as(ADMIN));
+    expect(r.status).toBe(200);
+    expect(r.body.data).toEqual([{
+      id: "r-refund",
+      at: at(0).toISOString(),
+      outcome: "completed",
+      kind: "refund.completed",
+      values: { amount: 179, currency: "ILS", reason: "damaged" },
+      subject: { type: "order", id: "#1842" },
+      conversationId: "d1",
+    }]);
+  });
+
+  it("only completed, only tools the contract names: catalogue reads, proposals, denials and failures stay off", async () => {
+    H.executions = [];
+    H.approvals = [];
+    H.requests = [
+      req("r-list", "d1", 1, "woocommerce.list_products"),
+      req("r-escalate", "d1", 2, "escalate_to_human"),
+      req("r-proposed", "d1", 3, "shopify.cancel_order", "proposed"),
+      req("r-denied", "d1", 4, "shopify.cancel_order", "denied"),
+      req("r-failed", "d1", 5, "shopify.cancel_order", "failed"),
+      req("r-bare", "d1", 6, "cancel_order"),
+      req("r-woo", "d1", 7, "woocommerce.get_order"),
+      req("r-other", "other-tenant", 8, "cancel_order", "completed", { tenantId: "U" }),
+    ];
+    const r = await request(app).get("/api/analytics/activity").set(as(ADMIN));
+    expect(r.body.data.map((x: any) => [x.id, x.kind])).toEqual([
+      ["r-bare", "order_cancel.completed"],
+      ["r-woo", "order_lookup.completed"],
+    ]);
+  });
+
+  it("merged with the legacy runs and the approvals on one timeline, newest first", async () => {
+    H.requests = [req("r-d1", "d1", 2.5), req("r-sys", null, 7.5)];
+    const r = await request(app).get("/api/analytics/activity").set(as(ADMIN));
+    expect(r.body.data.map((x: any) => x.id)).toEqual(
+      ["e-d1", "e-d2", "r-d1", "e-nodept", "e-mine", "a-d2", "a-d1", "r-sys", "a-system", "e-cross"]);
+  });
+
+  it("a department-restricted viewer never sees another department's actions", async () => {
+    H.executions = [];
+    H.approvals = [];
+    H.requests = [req("r-d1", "d1", 1), req("r-d2", "d2", 2), req("r-mine", "mine-d2", 3), req("r-sys", null, 4)];
+    const r = await request(app).get("/api/analytics/activity").set(as(MANAGER_D1));
+    expect(r.body.data.map((x: any) => x.id)).toEqual(["r-d1", "r-mine", "r-sys"]);
+  });
+
+  it("pages through actions by when they finished: a cursor, then the rest, nothing twice", async () => {
+    H.executions = [];
+    H.approvals = [];
+    H.requests = [req("r1", "d1", 1), req("r2", "d1", 2), req("r3", "d1", 3)];
+    for (const u of [ADMIN, MANAGER_D1]) {
+      const r = await request(app).get("/api/analytics/activity?limit=2").set(as(u));
+      expect(r.body.data.map((x: any) => x.id)).toEqual(["r1", "r2"]);
+      expect(r.body.nextCursor).toBe(at(2).toISOString());
+      const next = await request(app).get(`/api/analytics/activity?limit=2&cursor=${r.body.nextCursor}`).set(as(u));
+      expect(next.body.data.map((x: any) => x.id)).toEqual(["r3"]);
+      expect(next.body.nextCursor).toBeNull();
+    }
   });
 });
 

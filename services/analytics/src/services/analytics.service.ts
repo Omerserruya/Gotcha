@@ -12,6 +12,7 @@ import {
   visibilityClause, type Viewer,
   buildQuietDayList, waitingForPersonWhere } from "@chatcenter/shared";
 import { intentLabel } from "@chatcenter/shared/src/lib/conversation-intents";
+import { bareTool, feedToolWhere, requestSelect, requestToExecutionLike, type RequestRow } from "../lib/action-requests";
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -552,7 +553,15 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
   // from the connector path too would duplicate the same event into two tables,
   // add a write to the AI hot path, and still show nothing until the day it
   // shipped. This surfaces the history that already exists.
-  const [executions, adapterCalls] = await Promise.all([
+  //
+  // 2026-11-03, a THIRD source: the AI employees' actions run through the
+  // action orchestrator and land in tool_execution_requests. Only the
+  // UNDOTTED tools are read from it (escalate_to_human, send_product_card,
+  // integration_order_lookup...): a dotted tool (shopify.*, woocommerce.*)
+  // runs through the integration framework, which already writes the
+  // adapter.* audit row counted below, so reading it here too would count
+  // every connector call twice.
+  const [executions, adapterCalls, requests] = await Promise.all([
     prisma.toolExecution.findMany({
       where: { tenantId, createdAt: dateFilter },
       select: {
@@ -571,6 +580,15 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
     prisma.auditLog.findMany({
       where: { tenantId, action: { startsWith: "adapter." }, createdAt: dateFilter },
       select: { metadata: true },
+    }),
+    prisma.toolExecutionRequest.findMany({
+      where: {
+        tenantId,
+        proposedAt: dateFilter,
+        status: { in: ["completed", "failed", "denied"] },
+        NOT: { tool: { contains: "." } },
+      },
+      select: { tool: true, status: true, startedAt: true, completedAt: true },
     }),
   ]);
 
@@ -622,6 +640,16 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
     }
     const ms = meta.durationMs;
     if (typeof ms === "number" && Number.isFinite(ms)) b.durations.push(ms);
+  }
+
+  for (const r of requests) {
+    const b = bucket(r.tool, r.tool);
+    b.total += 1;
+    if (r.status === "completed") b.successes += 1;
+    // Denied is the policy or the owner saying no: a refusal, not a breakage.
+    else if (r.status === "denied") b.refused += 1;
+    else b.errored += 1;
+    if (r.startedAt && r.completedAt) b.durations.push(r.completedAt.getTime() - r.startedAt.getTime());
   }
 
   return Object.entries(byTool)
@@ -1243,6 +1271,19 @@ export async function getActivity(
     ...(timeFilter ? { createdAt: timeFilter } : {}),
   };
   const approvalSelect = { id: true, tool: true, params: true, createdAt: true, conversationId: true } as const;
+  // The AI employees' completed actions (lib/action-requests.ts): mapped tools
+  // only, placed on the timeline by when they finished.
+  const requestWhere = {
+    tenantId,
+    status: "completed",
+    completedAt: timeFilter ?? { not: null },
+    ...feedToolWhere(),
+  };
+  const requestOrder = [{ completedAt: "desc" as const }, { id: "desc" as const }];
+  const fetchRequests = async (skip: number, take: number) =>
+    ((await prisma.toolExecutionRequest.findMany({
+      where: requestWhere, orderBy: requestOrder, skip, take, select: requestSelect,
+    })) as RequestRow[]).map(requestToExecutionLike);
 
   // 2026-10-09: a restricted viewer (department agent) sees only rows from
   // conversations the inbox shows them. `null` = unrestricted, unchanged path.
@@ -1250,11 +1291,12 @@ export async function getActivity(
   let floor: Date | null = null;
   let executions;
   let approvals;
+  let requests;
   if (!clause) {
     // Over-fetch from each source: the merge keeps only the newest `limit` of the
     // combined set, and taking exactly `limit` from each would drop older rows
     // from one source that belong on this page.
-    [executions, approvals] = await Promise.all([
+    [executions, approvals, requests] = await Promise.all([
       prisma.toolExecution.findMany({
         where: executionWhere,
         orderBy: { createdAt: "desc" },
@@ -1267,10 +1309,11 @@ export async function getActivity(
         take: limit + 1,
         select: approvalSelect,
       }),
+      fetchRequests(0, limit + 1),
     ]);
   } else {
     const order = [{ createdAt: "desc" as const }, { id: "desc" as const }];
-    const [e, a] = await Promise.all([
+    const [e, a, r] = await Promise.all([
       scanVisible(
         (skip, take) => prisma.toolExecution.findMany({ where: executionWhere, orderBy: order, skip, take, select: executionSelect }),
         tenantId, clause, limit + 1,
@@ -1279,18 +1322,24 @@ export async function getActivity(
         (skip, take) => prisma.approvalRequest.findMany({ where: approvalWhere, orderBy: order, skip, take, select: approvalSelect }),
         tenantId, clause, limit + 1,
       ),
+      scanVisible(fetchRequests, tenantId, clause, limit + 1),
     ]);
     executions = e.rows;
     approvals = a.rows;
+    requests = r.rows;
     // A source that hit the scan cap was not read below its floor, so the
     // other source's older rows would jump that gap: nothing below it here.
-    floor = [e.floor, a.floor].reduce<Date | null>((x, y) => (y && (!x || y > x) ? y : x), null);
+    floor = [e.floor, a.floor, r.floor].reduce<Date | null>((x, y) => (y && (!x || y > x) ? y : x), null);
   }
 
   let merged = [
     ...executions.map((e) => ({
       at: e.createdAt,
       event: toActivityEvent({ ...e, conversationId: e.conversationId ?? null }),
+    })),
+    ...requests.map((r) => ({
+      at: r.createdAt,
+      event: toActivityEvent(r),
     })),
     ...approvals.map((a) => ({
       at: a.createdAt,
@@ -1303,7 +1352,7 @@ export async function getActivity(
   // Only claim another page when a source actually had more to give. Saying so
   // on a short merge would hand the client a cursor that returns nothing.
   const hasMore =
-    merged.length > limit || executions.length > limit || approvals.length > limit || floor !== null;
+    merged.length > limit || executions.length > limit || approvals.length > limit || requests.length > limit || floor !== null;
   const last = page.length > 0 ? page[page.length - 1]!.at : floor;
 
   return {
@@ -1992,7 +2041,7 @@ export async function getInFlight(tenantId: string) {
   const since = new Date(Date.now() - IN_FLIGHT_WINDOW_MS);
   const now = new Date();
 
-  const [conversationsHandling, recentExecutions, awaitingApproval] = await Promise.all([
+  const [conversationsHandling, recentExecutions, awaitingApproval, recentRequests] = await Promise.all([
     // Driven by automation, not closed, and spoken in inside the window. A
     // conversation the AI opened yesterday and has said nothing in since is
     // not something it is doing "right now".
@@ -2015,10 +2064,17 @@ export async function getInFlight(tenantId: string) {
     prisma.approvalRequest.count({
       where: { tenantId, status: "PENDING", expiresAt: { gt: now } },
     }),
+    // The AI employees' actions (lib/action-requests.ts): running now, or
+    // started inside the window. A row stuck in "running" from yesterday is
+    // not something it is doing right now, so the start bounds both.
+    prisma.toolExecutionRequest.findMany({
+      where: { tenantId, status: { in: ["running", "completed"] }, startedAt: { gte: since } },
+      select: { tool: true },
+    }),
   ]);
 
   const bySubject = new Map<string, number>();
-  for (const e of recentExecutions) {
+  for (const e of [...recentExecutions, ...recentRequests.map((r) => ({ toolName: bareTool(r.tool) }))]) {
     const subject = toolSubject(e.toolName);
     // An unmapped tool has no honest noun, and inventing one would put
     // "checking 4 orders" on the card for something that touched no order.
