@@ -44,7 +44,9 @@
     "filter": {
       "open": "Filter by channel",
       "title": "Filter by channel",
-      "all": "All channels"
+      "all": "All channels",
+      "apply": "Show",
+      "clear": "Clear"
     }
   },
   "account": {
@@ -118,11 +120,51 @@
     "menu": "Conversation actions",
     "website": "Open on the full website",
     "cancel": "Cancel",
+    "customer": "Customer info",
     "ai": {
-      "active": "AI on",
-      "paused": "AI paused",
-      "pause": "Pause the AI in this conversation",
-      "resume": "Hand this conversation back to the AI"
+      "return": "Back to AI",
+      "pause": "Pause the AI"
+    }
+  },
+  "customerInfo": {
+    "title": "Customer info",
+    "back": "Back to the conversation",
+    "loading": "Loading the customer's info",
+    "failed": "We couldn't load this part",
+    "failedAll": "We couldn't load the customer's info",
+    "noContact": "This customer isn't identified yet, so nothing has been saved about them.",
+    "memory": {
+      "title": "What GOTCHA remembers",
+      "empty": "GOTCHA hasn't learned anything about this customer yet"
+    },
+    "history": {
+      "title": "Previous conversations",
+      "empty": "No previous conversations",
+      "noSummary": "No summary yet",
+      "resolved": "Resolved",
+      "messages": "{count, plural, one {# message} other {# messages}}"
+    },
+    "orders": {
+      "title": "Orders",
+      "empty": "No orders to show",
+      "number": "Order #{number}",
+      "unnumbered": "Order",
+      "cancelled": "Cancelled"
+    },
+    "notes": {
+      "title": "Team notes",
+      "empty": "No notes about this customer"
+    },
+    "crm": {
+      "title": "In the CRM",
+      "empty": "Nothing in the CRM",
+      "kind": {
+        "note": "Note",
+        "task": "Task",
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting"
+      }
     }
   },
   "copilot": {

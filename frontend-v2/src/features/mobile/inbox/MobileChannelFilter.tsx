@@ -7,17 +7,21 @@ import { useState } from 'react';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { Sheet, SheetContent, SheetTrigger } from '@/design-system/primitives/overlay/Dialog';
 import type { FilterChip, QueueChannelFilter } from '@/features/inbox/inbox-views';
-import { Link } from '@/i18n/navigation';
+import { useRouter } from '@/i18n/navigation';
 
+import ui from '../mobile-ui.module.css';
 import styles from './mobile-inbox.module.css';
+import { toggleChannel } from './channel-selection';
 
 /**
  * The bar's filter: a sheet of the workspace's channels, as the design's
- * "סינון לפי ערוץ" - with a dot on the icon while one is in force.
+ * "סינון לפי ערוץ" - with a dot on the icon while any is in force.
  *
- * ★ ONE CHANNEL, NOT A SET. The design ticks several; the route matches one
- *   exact `channel` (`inbox-views.ts`), so the sheet is a choice of one and
- *   "All". Ticking three and getting one would be worse than choosing one.
+ * ★ SEVERAL, AS THE DESIGN TICKS THEM (2026-11-03). The route now takes a
+ *   list (`channel=a,b`, conversation `lib/channel-filter.ts`), so a tick is
+ *   a tick: rows toggle in the sheet, "הצג" applies them to the address and
+ *   "נקה" clears the ticks (then "הצג" is every channel). Nothing changes
+ *   under the sheet until "הצג": one read for one decision.
  */
 export function MobileChannelFilter({
   chips,
@@ -26,38 +30,27 @@ export function MobileChannelFilter({
   keep,
 }: {
   readonly chips: readonly FilterChip[];
-  readonly current: QueueChannelFilter | null;
+  readonly current: readonly QueueChannelFilter[];
   /** Each channel's name, already translated. */
   readonly names: Readonly<Partial<Record<QueueChannelFilter, string>>>;
   /** The view and search in force, carried into the new address. */
   readonly keep: Readonly<Record<string, string>>;
 }) {
   const t = useTranslations('mobile.inbox.filter');
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-
-  const option = (channel: QueueChannelFilter | null, label: string, mark: string | null) => (
-    <li key={channel ?? 'all'}>
-      <Link
-        href={{ pathname: '/m/inbox', query: { ...keep, ...(channel === null ? {} : { channel }) } }}
-        replace
-        className={styles.filterRow}
-        aria-current={channel === current ? 'true' : undefined}
-        data-testid={`mobile-filter-${channel ?? 'all'}`}
-        onClick={() => setOpen(false)}
-      >
-        <span className={styles.filterMark}>
-          {mark === null ? null : <ChannelPlate channel={mark} label={label} size="lg" />}
-        </span>
-        <span className={styles.filterName}>{label}</span>
-        <span className={styles.filterBox} aria-hidden="true">
-          {channel === current ? <Check size={15} strokeWidth={3} /> : null}
-        </span>
-      </Link>
-    </li>
-  );
+  const [picked, setPicked] = useState<readonly QueueChannelFilter[]>(current);
+  const order = chips.map((chip) => chip.channel);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        // Every opening starts from what the list shows, not from an unapplied tick.
+        if (next) setPicked(current);
+        setOpen(next);
+      }}
+    >
       <SheetTrigger asChild>
         <button
           type="button"
@@ -66,14 +59,61 @@ export function MobileChannelFilter({
           data-testid="mobile-inbox-filter"
         >
           <ListFilter aria-hidden size={23} strokeWidth={2} />
-          {current === null ? null : <span className={styles.barDot} aria-hidden="true" />}
+          {current.length === 0 ? null : <span className={styles.barDot} aria-hidden="true" />}
         </button>
       </SheetTrigger>
       <SheetContent title={t('title')}>
         <ul className={styles.filterList}>
-          {option(null, t('all'), null)}
-          {chips.map((chip) => option(chip.channel, names[chip.channel] ?? chip.channel, chip.mark))}
+          {chips.map((chip) => {
+            const on = picked.includes(chip.channel);
+            const label = names[chip.channel] ?? chip.channel;
+            return (
+              <li key={chip.channel}>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  className={styles.filterRow}
+                  data-testid={`mobile-filter-${chip.channel}`}
+                  onClick={() => setPicked((was) => toggleChannel(was, chip.channel, order))}
+                >
+                  <span className={styles.filterMark}>
+                    <ChannelPlate channel={chip.mark} label={label} size="lg" />
+                  </span>
+                  <span className={styles.filterName}>{label}</span>
+                  <span className={styles.filterBox} aria-hidden="true">
+                    {on ? <Check size={15} strokeWidth={3} /> : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
+        <div className={styles.filterActions}>
+          <button
+            type="button"
+            className={ui.secondary}
+            disabled={picked.length === 0}
+            data-testid="mobile-filter-clear"
+            onClick={() => setPicked([])}
+          >
+            {t('clear')}
+          </button>
+          <button
+            type="button"
+            className={ui.primary}
+            data-testid="mobile-filter-apply"
+            onClick={() => {
+              setOpen(false);
+              router.replace({
+                pathname: '/m/inbox',
+                query: { ...keep, ...(picked.length === 0 ? {} : { channel: picked.join(',') }) },
+              });
+            }}
+          >
+            {t('apply')}
+          </button>
+        </div>
       </SheetContent>
     </Sheet>
   );

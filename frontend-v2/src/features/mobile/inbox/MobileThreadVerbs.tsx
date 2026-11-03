@@ -1,6 +1,6 @@
 'use client';
 
-import { EllipsisVertical, Pause, Sparkles } from 'lucide-react';
+import { EllipsisVertical, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
@@ -19,10 +19,12 @@ import { useRouter } from '@/i18n/navigation';
 
 import ui from '../mobile-ui.module.css';
 import styles from './mobile-inbox.module.css';
+import { threadAiControl } from './thread-verbs';
 
 /**
- * A conversation's verbs on the phone, where the design puts them: the AI
- * switch in the bar ("AI פעיל" / "AI מושהה"), the rest behind the bar's menu.
+ * A conversation's verbs on the phone: "החזר ל‑AI" in the bar when a person
+ * holds it and there is an AI to hand it back to, the rest behind the bar's
+ * menu (`thread-verbs.ts` says which, and why there is no switch any more).
  *
  * ════════════════════════════════════════════════════════════════════════════
  * ★★ THE INBOX'S OWN ACTIONS, NOT THE DESKTOP'S BUTTONS
@@ -31,6 +33,10 @@ import styles from './mobile-inbox.module.css';
  * here what it refuses there. Not that component: it lands on the WEBSITE's
  * inbox after a claim (`router.push('/inbox')`), which on the phone left the
  * app. Here a verb refreshes the screen it was pressed on.
+ *
+ * ★ HANDED BACK, IT IS NO LONGER "MINE": `returnToAi` unassigns the person, so
+ *   the screen goes back to the inbox rather than staying on a conversation
+ *   that has just left the reader's list.
  *
  * ★ Pausing the AI is `stopAi`, which assigns nobody and greets nobody. Taking
  *   the conversation is a separate, louder verb, because it sends the
@@ -46,6 +52,7 @@ export function MobileThreadVerbs({
   colleagues,
   resolved,
   websiteHref,
+  customerHref,
 }: {
   readonly conversationId: string;
   readonly mine: boolean;
@@ -56,6 +63,8 @@ export function MobileThreadVerbs({
   readonly resolved: boolean;
   /** The conversation on the website: the copilot wall, the commerce panel. */
   readonly websiteHref: string;
+  /** The phone's own screen of what is known about the customer. */
+  readonly customerHref: string;
 }) {
   const t = useTranslations('mobile.thread');
   const verbs = useTranslations('inbox.verbs');
@@ -64,38 +73,32 @@ export function MobileThreadVerbs({
   const [problem, setProblem] = useState<VerbResult | null>(null);
   const [sheet, setSheet] = useState<'claim' | 'transfer' | null>(null);
 
-  const run = (verb: () => Promise<VerbResult>) => {
+  /** A verb, then this screen again - or, with `leave`, the inbox. */
+  const run = (verb: () => Promise<VerbResult>, leave = false) => {
     setProblem(null);
     setSheet(null);
     startTransition(async () => {
       const outcome = await verb();
-      if (outcome.ok) router.refresh();
-      else setProblem(outcome);
+      if (!outcome.ok) setProblem(outcome);
+      else if (leave) router.replace('/m/inbox');
+      else router.refresh();
     });
   };
 
-  // The AI's switch: only where there is an AI to switch, or one to hand back to.
-  const aiSwitch = !resolved && (hasAiEmployee || handedOver);
-  const paused = handedOver;
+  const ai = threadAiControl({ resolved, handedOver, hasAiEmployee });
 
   return (
     <>
-      {aiSwitch ? (
+      {ai.returnToAi ? (
         <button
           type="button"
           className={styles.aiSwitch}
-          data-paused={paused ? '' : undefined}
-          disabled={isPending || (paused && !hasAiEmployee)}
-          aria-label={paused ? t('ai.resume') : t('ai.pause')}
-          data-testid="mobile-ai-switch"
-          onClick={() => run(() => (paused ? returnToAi(conversationId) : stopAi(conversationId)))}
+          disabled={isPending}
+          data-testid="mobile-return-to-ai"
+          onClick={() => run(() => returnToAi(conversationId), true)}
         >
-          {paused ? (
-            <Pause aria-hidden size={15} strokeWidth={2} />
-          ) : (
-            <Sparkles aria-hidden size={15} strokeWidth={2} />
-          )}
-          <span>{paused ? t('ai.paused') : t('ai.active')}</span>
+          <Sparkles aria-hidden size={15} strokeWidth={2} />
+          <span>{t('ai.return')}</span>
         </button>
       ) : null}
 
@@ -120,11 +123,17 @@ export function MobileThreadVerbs({
           {mine && colleagues.length > 0 ? (
             <MenuItem onSelect={() => setSheet('transfer')}>{verbs('transfer')}</MenuItem>
           ) : null}
+          {ai.pauseInMenu ? (
+            <MenuItem onSelect={() => run(() => stopAi(conversationId))}>{t('ai.pause')}</MenuItem>
+          ) : null}
           {!resolved ? (
             <MenuItem onSelect={() => run(() => closeConversation(conversationId))}>
               {verbs('resolve')}
             </MenuItem>
           ) : null}
+          <MenuItem onSelect={() => router.push(customerHref as '/m/inbox')}>
+            {t('customer')}
+          </MenuItem>
           <MenuSeparator />
           <MenuItem
             onSelect={() => {

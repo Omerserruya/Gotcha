@@ -321,8 +321,14 @@ export function Composer({
               /*
                * A text reply revalidates on the server; a file goes through the
                * BFF, so the page is re-read from here.
+               *
+               * ★ And after any send into a RESOLVED conversation: the send
+               *   reopens it and gives it to the sender (Backend, 2026-11-03),
+               *   so the status, the owner and the AI's verbs all change. The
+               *   server's revalidation names the website's inbox only, and
+               *   the phone's thread is a different route.
                */
-              if (file !== null) router.refresh();
+              if (file !== null || resolved) router.refresh();
             }
           } catch {
             setResult({ ok: false, reason: 'failed' });

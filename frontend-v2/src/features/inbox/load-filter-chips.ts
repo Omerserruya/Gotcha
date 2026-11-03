@@ -15,7 +15,8 @@ import { filterChips, type FilterChip, type QueueChannelFilter } from './inbox-v
  * was; an integrations read that fails gives web chat its own globe.
  */
 export async function loadFilterChips(
-  current: QueueChannelFilter | null,
+  /** The one in force, or the phone's several (each is drawn, connected or not). */
+  current: QueueChannelFilter | readonly QueueChannelFilter[] | null,
 ): Promise<readonly FilterChip[]> {
   const api = serverApi();
   const [states, integrations] = await Promise.all([

@@ -1,17 +1,28 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 import { typedDir } from '@/lib/typed-dir';
 
 import ui from '../mobile-ui.module.css';
+import { liveSearch, SEARCH_DEBOUNCE_MS, SEARCH_MAX, searchQuery } from './inbox-search';
 
 /**
  * The inbox's search pill: the route's own `search` (the customer's name or
- * handle), sent on Enter as `?q=` with the view and the channel kept. Typing
- * reads nothing: one search per question, not one per letter.
+ * handle), as `?q=` with the view and the channel kept.
+ *
+ * ★ LIVE (2026-11-03): the list follows the field a pause after the last key,
+ *   for an empty field or two characters and more (`inbox-search.ts`). Enter
+ *   sends at once, whatever is there.
+ *
+ * ⚠ NO STALE ANSWER. Each key cancels the pending send, so only the last
+ *   pause reads; `sent` is what the address already asks, so a key that
+ *   changes nothing after trimming sends nothing; and `keep` is read when
+ *   the send happens, not when the key was pressed, so a chip tapped in the
+ *   pause is not undone by it. Navigations themselves are Next's: the last
+ *   `replace` is the page that renders.
  */
 export function MobileInboxSearch({
   value,
@@ -25,6 +36,32 @@ export function MobileInboxSearch({
 }) {
   const router = useRouter();
   const [text, setText] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sent = useRef(value);
+  const kept = useRef(keep);
+
+  useEffect(() => {
+    kept.current = keep;
+  }, [keep]);
+  // The address moved without the field (a back, a notification): it is what is asked now.
+  useEffect(() => {
+    sent.current = value;
+  }, [value]);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const send = (q: string) => {
+    sent.current = q;
+    router.replace({ pathname: '/m/inbox', query: { ...kept.current, ...(q === '' ? {} : { q }) } });
+  };
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
 
   return (
     <form
@@ -32,8 +69,8 @@ export function MobileInboxSearch({
       className={ui.searchWrap}
       onSubmit={(event) => {
         event.preventDefault();
-        const q = text.trim();
-        router.replace({ pathname: '/m/inbox', query: { ...keep, ...(q === '' ? {} : { q }) } });
+        cancel();
+        send(searchQuery(text));
       }}
     >
       <label className={ui.search}>
@@ -43,16 +80,25 @@ export function MobileInboxSearch({
           enterKeyHint="search"
           className={ui.searchInput}
           value={text}
+          maxLength={SEARCH_MAX}
           dir={typedDir(text)}
           placeholder={placeholder}
           aria-label={placeholder}
           data-testid="mobile-inbox-search"
           onChange={(event) => {
-            setText(event.target.value);
+            const next = event.target.value;
+            setText(next);
+            cancel();
             // Cleared with the field's own ×: the whole list again, at once.
-            if (event.target.value === '' && value !== '') {
-              router.replace({ pathname: '/m/inbox', query: keep });
+            if (next === '') {
+              if (sent.current !== '') send('');
+              return;
             }
+            timer.current = setTimeout(() => {
+              timer.current = null;
+              const q = liveSearch(next, sent.current);
+              if (q !== null) send(q);
+            }, SEARCH_DEBOUNCE_MS);
           }}
         />
       </label>
