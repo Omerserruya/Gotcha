@@ -2406,9 +2406,26 @@
    * button beside it, round and ink, and the rewrite chips and the channel's
    * name stay on the website: the bar above already says where this goes.
    */
+  /*
+   * ⚠ The `<ol>` IS the scroller, as on the desktop (`.conversationPane
+   *   .stream`): `StreamPin` scrolls `[data-stream-scroller]`, and the phone's
+   *   wrapper clips. Without this a long conversation was cut at the
+   *   composer, opened at its top and could not be scrolled at all.
+   */
   .stream[data-variant='phone'] {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
     gap: var(--space-6);
     padding-block: var(--space-12) var(--space-8);
+  }
+
+  /* A flex column's items would shrink to fit instead of overflowing it. */
+  .stream[data-variant='phone'] > * {
+    flex: none;
   }
 
   .stream[data-variant='phone'] .message {
