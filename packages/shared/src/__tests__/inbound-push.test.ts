@@ -39,11 +39,23 @@ describe("★ who is told", () => {
     expect(shouldEmitInbound({ ...human, origin: "LIVE", isTest: false, customerExternalId: "9725" })).toBe(true);
   });
 
-  it("the bot, a flow, a pending approval or the sandbox driving: no, assignee or handed over or not", () => {
+  it("the bot, a flow or a pending approval driving with nobody on it: no", () => {
     for (const handledBy of ["ai_agent", "awaiting_approval", "flow", "sandbox"]) {
-      expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy }), handledBy).toBe(false);
-      expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: true, handledBy }), handledBy).toBe(false);
+      expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: false, handledBy }), handledBy).toBe(false);
     }
+  });
+
+  // Dev, 2026-11-03: claimed (assignee + latch) but handledBy still "ai_agent"; two phones heard nothing.
+  it("★ a person on it wins over a handledBy the claim never changed", () => {
+    for (const handledBy of ["ai_agent", "awaiting_approval", "flow"]) {
+      expect(shouldEmitInbound({ assignedAgentId: "matan", isHandedOver: true, handledBy }), handledBy).toBe(true);
+      expect(shouldEmitInbound({ assignedAgentId: "matan", handledBy }), handledBy).toBe(true);
+      expect(shouldEmitInbound({ assignedAgentId: null, isHandedOver: true, handledBy }), handledBy).toBe(true);
+    }
+  });
+
+  it("the sandbox: never, whoever is on it", () => {
+    expect(shouldEmitInbound({ assignedAgentId: "matan", isHandedOver: true, handledBy: "sandbox" })).toBe(false);
   });
 });
 
@@ -89,7 +101,7 @@ describe("★ the event", () => {
   });
 
   it("refused: nothing queued", async () => {
-    expect(emitInboundMessage({ tenantId: "t1", conversation: { id: "c1", assignedAgentId: "matan", handledBy: "ai_agent" }, messageId: "m1", body: "hi", messageType: "text", channel: "WHATSAPP" })).toBe(false);
+    expect(emitInboundMessage({ tenantId: "t1", conversation: { id: "c1", assignedAgentId: null, handledBy: "ai_agent" }, messageId: "m1", body: "hi", messageType: "text", channel: "WHATSAPP" })).toBe(false);
     await flush();
     expect(Q.adds).toHaveLength(0);
   });

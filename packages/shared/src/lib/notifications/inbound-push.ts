@@ -21,13 +21,6 @@ const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
 let q: Queue | null = null;
 
-/**
- * The bot is driving this conversation: its reply is on the way, and a person
- * pinged for every message of a conversation they do not have to answer would
- * learn to ignore the pings that matter. Same values the worker routes to the
- * bot on (incoming.worker.ts, "Ongoing AI conversation").
- */
-const BOT_HANDLED = new Set(["ai_agent", "awaiting_approval", "flow", "sandbox"]);
 
 /** A media message with no words of its own: the channel stores "[Image]" and the like. */
 const PLACEHOLDER = /^\[[^\]]{1,40}\]$/;
@@ -63,12 +56,20 @@ export interface InboundConversation {
  *   - nobody is assigned but the conversation is with the TEAM (handed over,
  *     or handled by a human - someone replied from the queue without claiming
  *     it, 2026-11-03): to the people an escalation of it would reach;
- *   - the bot or a flow driving it, assignee or not: never.
+ *   - the bot or a flow driving it with nobody on it: never.
+ *
+ * ⚠ A person on it wins over `handledBy`. Claiming a conversation sets the
+ *   assignee and the handover latch but leaves `handledBy` as it was, so a
+ *   conversation a person had just taken still read "ai_agent" - and every
+ *   customer message in it went unannounced, to a phone that was waiting for
+ *   it (dev, 2026-11-03). The bot's own rule (incoming.worker: it answers only
+ *   with no assignee and no handover) and the inbox's "automated" rule
+ *   (conversation.service listWhere) already read it this way.
  * And only real traffic - not a sandbox rehearsal, a test conversation or
  * imported history.
  */
 export function shouldEmitInbound(conversation: Omit<InboundConversation, "id">): boolean {
-  if (BOT_HANDLED.has(String(conversation.handledBy ?? ""))) return false;
+  if (conversation.handledBy === "sandbox") return false;
   const withPeople = !!conversation.assignedAgentId || !!conversation.isHandedOver || conversation.handledBy === "human";
   if (!withPeople) return false;
   if (conversation.isTest) return false;

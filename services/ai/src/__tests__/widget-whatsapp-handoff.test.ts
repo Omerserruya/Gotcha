@@ -354,9 +354,9 @@ describe("★ the visitor's words kept on a WhatsApp handoff announce themselves
     expect(INBOUND.calls[0]).toMatchObject({ queued: true, input: { conversation: { assignedAgentId: null, isHandedOver: true } } });
   });
 
-  it("the bot handling it (assigned or not), a sandbox rehearsal, a test chat, or nobody has it: nothing is queued", async () => {
+  it("the bot handling it with nobody on it, a sandbox rehearsal, a test chat, or nobody has it: nothing is queued", async () => {
     for (const o of [
-      { assignedAgentId: "matan", handledBy: "ai_agent", isHandedOver: false },
+      { assignedAgentId: null, handledBy: "flow", isHandedOver: false },
       { assignedAgentId: null, handledBy: "ai_agent", isHandedOver: false },
       { assignedAgentId: "matan", handledBy: "sandbox", isHandedOver: false },
       { assignedAgentId: "matan", handledBy: "human", isTest: true },
