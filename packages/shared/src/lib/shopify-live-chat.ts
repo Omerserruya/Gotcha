@@ -1110,6 +1110,34 @@ export function visitorSenderName(senderName: string | null | undefined): string
 }
 
 /**
+ * Who wrote a website-chat message, as the widget draws it (2026-11-03).
+ *
+ * ★ A reply typed in the inbox is the ONLY outbound row whose senderName is
+ *   an email (the composer stamps `req.user.email`); the AI, flows and system
+ *   rows carry a marker or an employee's own name. So that is what makes a
+ *   row a person's.
+ *
+ * ⚠ Without `authorKind: "agent"` the widget drew a person's reply as the
+ *   assistant's, with no name, under a "connecting you with someone" banner
+ *   that only an agent's message closes. A shopper read the store owner's
+ *   answers and wrote that nobody human had replied (One Of A Kind, 2026-11-02).
+ *
+ * `staffName` is the person's own name when the caller looked it up; without
+ * it, the email's local part, never the email.
+ */
+export function visitorAuthor(
+  message: { direction: string; senderName?: string | null },
+  staffName?: string | null,
+): { author: string | null; authorKind: "visitor" | "agent" | "ai" } {
+  if (message.direction === "INBOUND") return { author: null, authorKind: "visitor" };
+  const sender = String(message.senderName ?? "").trim();
+  // The assistant's rows stay unlabelled, as the widget has always drawn them.
+  if (!sender.includes("@")) return { author: null, authorKind: "ai" };
+  const first = String(staffName ?? "").trim().split(/\s+/)[0] ?? "";
+  return { author: sanitizeToken(first, 40) || displayAgentName(sender), authorKind: "agent" };
+}
+
+/**
  * Staff identities arrive from the inbox composer as email addresses.
  * A shopper gets a first name, never a way to contact an agent directly.
  */

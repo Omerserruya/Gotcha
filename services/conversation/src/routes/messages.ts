@@ -129,6 +129,9 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
         channel,
         senderName: req.user!.email,
         replyToMessageId: quoted?.id,
+        // Writing it IS the delivery (above). PENDING here meant a reply the
+        // widget had already fetched showed in the inbox as never sent.
+        status: "SENT",
       });
 
       await prisma.conversation.update({

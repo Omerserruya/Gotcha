@@ -793,6 +793,7 @@ export {
   isRenderableCommercePayload,
   projectVisitorMessage,
   visitorSenderName,
+  visitorAuthor,
 } from "./lib/shopify-live-chat";
 export type {
   ShopifyMessageType,

@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
-const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[], raw: [] as any[] }));
+const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], messageReads: 0, created: [] as any[], raw: [] as any[], rows: null as any[] | null }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -32,7 +32,11 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           && (a.where.channelAccountId === undefined || c.channelAccountId === a.where.channelAccountId)) ?? null,
         create: async (a: any) => { const c = { id: `conv_${H.created.length + 1}`, ...a.data }; H.created.push(c); H.conversations.push(c); return c; },
       },
-      message: { findMany: async () => { H.messageReads++; return [{ id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI", createdAt: new Date(0) }]; } },
+      message: { findMany: async () => { H.messageReads++; return H.rows ?? [{ id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI", createdAt: new Date(0) }]; } },
+      user: {
+        findMany: async (a: any) =>
+          a.where.tenantId === "T" && a.where.email.in.includes("tehila@shop.co.il") ? [{ email: "tehila@shop.co.il", name: "תהילה רוזן" }] : [],
+      },
       $executeRaw: async (strings: TemplateStringsArray, ...values: any[]) => { H.raw.push({ sql: strings.join("?"), values }); return 1; },
     },
   };
@@ -43,7 +47,7 @@ import router from "../routes/embedded-chat";
 const app = () => { const a = express(); a.use(express.json()); a.use("/api/embedded-chat", router); return a; };
 
 beforeEach(() => {
-  H.queued = []; H.messageReads = 0; H.created = []; H.raw = [];
+  H.queued = []; H.messageReads = 0; H.created = []; H.raw = []; H.rows = null;
   H.conversations = [
     { id: "conv_web", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_secret_abc", customerName: "Visitor", status: "OPEN" },
     { id: "conv_other", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_other_xyz", customerName: "Other", status: "OPEN" },
@@ -68,6 +72,22 @@ describe("★ reading a conversation needs its visitor token", () => {
     const r = await request(app()).get("/api/embedded-chat/messages/conv_web?token=sess_secret_abc");
     expect(r.status).toBe(200);
     expect(r.body.data).toHaveLength(1);
+  });
+});
+
+describe("★ who wrote it, as the widget draws it", () => {
+  // One Of A Kind, 2026-11-02: the owner's replies were drawn as the
+  // assistant's, under a "connecting you" banner only an agent's message closes.
+  it("a reply typed in the inbox is a person's, by their first name; the assistant's stays unlabelled", async () => {
+    H.rows = [
+      { id: "m1", direction: "OUTBOUND", body: "hi", senderName: "AI Bot", createdAt: new Date(0) },
+      { id: "m2", direction: "OUTBOUND", body: "זאת תהילה", senderName: "tehila@shop.co.il", createdAt: new Date(1) },
+      { id: "m3", direction: "INBOUND", body: "תודה", senderName: "Visitor", createdAt: new Date(2) },
+    ];
+    const r = await request(app()).get("/api/embedded-chat/messages/conv_web?token=sess_secret_abc");
+    expect(r.status).toBe(200);
+    expect(r.body.data.map((m: any) => [m.authorKind, m.author])).toEqual([["ai", null], ["agent", "תהילה"], ["visitor", null]]);
+    expect(JSON.stringify(r.body)).not.toContain("@");
   });
 });
 

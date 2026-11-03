@@ -19,6 +19,7 @@ import {
   projectVisitorMessage,
   type ServiceEvent,
   visitorSenderName,
+  visitorAuthor,
 } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 // Deep import: the pure rule, because this service's tests mock the barrel.
@@ -83,6 +84,12 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
       const storeUrl = typeof (store?.config as any)?.storeUrl === "string" ? (store!.config as any).storeUrl as string : null;
       commerce = projectWooCommerce(message.metadata, { storeUrl, channelAccountId: conv?.channelAccountId ?? "" });
     }
+    // A reply from the inbox carries its writer's email: their own name, as
+    // the poll gives it, so a pushed reply and a polled one say the same.
+    const sender = String(message.senderName ?? "");
+    const staff = sender.includes("@")
+      ? await prisma.user.findFirst({ where: { tenantId: event.tenantId, email: sender }, select: { name: true } })
+      : null;
     room.emit("visitor:message", {
       conversationId,
       message: {
@@ -91,6 +98,7 @@ export async function relayToVisitor(event: ServiceEvent): Promise<void> {
         body: message.body ?? "",
         // A person's first name only, never their email (visitorSenderName).
         senderName: visitorSenderName(message.senderName),
+        ...visitorAuthor({ direction: message.direction, senderName: message.senderName }, staff?.name),
         createdAt: message.createdAt ?? new Date().toISOString(),
         commerce,
       },

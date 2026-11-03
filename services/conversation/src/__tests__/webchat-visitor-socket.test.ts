@@ -33,6 +33,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findFirst: async (a: any) => H.conversations.find((c) => c.id === a.where.id && c.tenantId === a.where.tenantId) ?? null,
       },
       channelAccount: { findFirst: async () => null },
+      user: {
+        findFirst: async (a: any) =>
+          a.where.tenantId === "T" && a.where.email === "tehila@shop.co.il" ? { name: "תהילה רוזן" } : null,
+      },
     },
   };
 });
@@ -85,8 +89,18 @@ describe("★ the relay pushes web chat messages", () => {
     expect(H.to).toContain("visitor:web1");
     expect(H.emit).toHaveBeenCalledWith("visitor:message", {
       conversationId: "web1",
-      message: { id: "m1", direction: "OUTBOUND", body: "Hi!", senderName: "Maya", createdAt: "2026-10-07T10:00:00.000Z", commerce: null },
+      message: { id: "m1", direction: "OUTBOUND", body: "Hi!", senderName: "Maya", author: null, authorKind: "ai", createdAt: "2026-10-07T10:00:00.000Z", commerce: null },
     });
+  });
+
+  // One Of A Kind, 2026-11-02: the owner's replies reached the shopper drawn as
+  // the assistant's, under a banner that only an agent's message closes.
+  it("a reply typed in the inbox goes as a person's, by their first name, never their email", async () => {
+    await relayToVisitor(ev({ senderName: "tehila@shop.co.il" }) as any);
+    const sent = H.emit.mock.calls[0][1].message;
+    expect(sent.authorKind).toBe("agent");
+    expect(sent.author).toBe("תהילה");
+    expect(JSON.stringify(sent)).not.toContain("@");
   });
 
   it("system events are not pushed; nobody listening means no work", async () => {

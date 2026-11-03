@@ -14,7 +14,7 @@ import {
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
   visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce, wooCartLine,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, plainHandoffMessage, handoffButtonLabel, waMeUrl,
-  type HandoffRecord, type WebchatConfig, visitorSenderName } from "@chatcenter/shared";
+  type HandoffRecord, type WebchatConfig, visitorSenderName, visitorAuthor } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
@@ -807,11 +807,23 @@ router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Respon
     const store = anyCards
       ? await withCrossTenantAccess(() => connectedWooStore(conversation.tenantId)).catch(() => null)
       : null;
+    // The people who replied from the inbox, by their own name (the rows carry
+    // their email): the widget labels a person's reply and closes its
+    // "connecting you" banner on it.
+    const emails = [...new Set(messages.map((m) => m.senderName ?? "").filter((s) => s.includes("@")))];
+    const staff = emails.length
+      ? await prisma.user.findMany({
+          where: { tenantId: conversation.tenantId, email: { in: emails } },
+          select: { email: true, name: true },
+        })
+      : [];
+    const staffName = new Map(staff.map((u) => [u.email, u.name]));
     res.json({
       data: messages.map(({ metadata, senderName, ...m }) => ({
         ...m,
         // A person's first name only, never their email.
         senderName: visitorSenderName(senderName),
+        ...visitorAuthor({ direction: m.direction, senderName }, staffName.get(senderName ?? "")),
         commerce: projectWooCommerce(metadata, { storeUrl: store?.storeUrl ?? null, channelAccountId: conversation.channelAccountId ?? "" }),
       })),
     });
