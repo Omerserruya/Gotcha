@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { reopenOnSend } from "../services/reopen-on-send";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
@@ -120,6 +121,8 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
     // visitor socket and re-reads it on reconnect. Enqueuing an outbound
     // send here would only produce a no-op job and a misleading PENDING.
     if (channel === "WEBCHAT" || channel === "SHOPIFY_LIVE_CHAT") {
+      const reopen = reopenOnSend(conversation, req.user as any);
+      if (reopen) await prisma.conversation.update({ where: { id: conversationId }, data: reopen });
       const message = await messageService.create({
         tenantId: req.tenantId!,
         conversationId,
@@ -160,6 +163,11 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
     // The customer-service window, before anything is written (B7).
     const refused = await replyWindowRefusal(conversation as any);
     if (refused) { res.status(refused.status).json(refused.body); return; }
+
+    // A person writing into a CLOSED conversation reopens it (reopen-on-send);
+    // after the window check, so a refused send changes nothing.
+    const reopen = reopenOnSend(conversation, req.user as any);
+    if (reopen) await prisma.conversation.update({ where: { id: conversationId }, data: reopen });
 
     // ── Email threading ──
     //
