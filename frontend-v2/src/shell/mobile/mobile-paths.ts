@@ -12,9 +12,13 @@ const MOBILE_ROOT = '/m';
 /**
  * One thing open over its list - a conversation, an approval, a campaign, a
  * customer (`/m/<list>/<id>`): a full screen with a way back, and no tabs.
+ * And what is known about a conversation's customer (`/m/inbox/<id>/customer`),
+ * a screen over the thread.
  */
 export function inMobileOverlay(pathname: string): boolean {
-  return /^\/m\/(?:inbox|approvals|outreach|customers)\/[^/]+\/?$/.test(pathname);
+  return /^\/m\/(?:(?:home|inbox|approvals|outreach|customers)\/[^/]+|inbox\/[^/]+\/customer)\/?$/.test(
+    pathname,
+  );
 }
 
 /**

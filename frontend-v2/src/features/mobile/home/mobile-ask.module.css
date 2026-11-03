@@ -1,0 +1,265 @@
+@layer features {
+  /*
+   * "Ask GOTCHA" on the phone: the questions as the person's bubbles, the
+   * answers on the paper beneath them, and the dock - the ask bar's own pill,
+   * now a field - at the foot. The answer's own parts (its text, blocks and
+   * sources) keep the website's renderers and their styles.
+   */
+  .chat {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stream {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-block: var(--space-6) var(--space-16);
+    padding-inline: var(--space-16);
+  }
+
+  .title {
+    margin: 0;
+    padding-block: 0 var(--space-12);
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-bold);
+    color: var(--mobile-ink);
+  }
+
+  .turns {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-22);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .turn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+  }
+
+  /* The question: the person's own bubble, at the inline end. */
+  .question {
+    align-self: flex-end;
+    max-inline-size: 84%;
+    margin: 0;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14);
+    border-radius: 18px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    font-size: 15px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .answer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--mobile-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .text {
+    min-inline-size: 0;
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-item);
+    color: var(--text-muted);
+  }
+
+  .problem {
+    margin: 0;
+    padding: var(--space-12);
+    border-radius: var(--space-14);
+    background-color: var(--mobile-tag-bad);
+    color: var(--mobile-tag-bad-text);
+    font-size: var(--font-size-item);
+    line-height: 1.45;
+  }
+
+  .link {
+    color: var(--mobile-accent-text);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+  }
+
+  /* ── The work, as it happens ───────────────────────────────────────── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .step {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6);
+    font-size: var(--font-size-item);
+    color: var(--text-secondary);
+  }
+
+  .stepMark {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 18px;
+    block-size: 18px;
+    color: var(--mobile-dot-ai);
+  }
+
+  .step[data-status='failed'] .stepMark {
+    color: var(--mobile-accent);
+  }
+
+  .stepText {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .stepState {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .spinner {
+    inline-size: 12px;
+    block-size: 12px;
+    border: var(--border-width-thick) solid var(--mobile-chip);
+    border-block-start-color: var(--mobile-dot-ai);
+    border-radius: var(--radius-round);
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      animation: none;
+    }
+  }
+
+  /* ── A plan the answer proposes: decided in Approvals ─────────────── */
+  .proposal {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-10);
+    padding: var(--space-14);
+    border-radius: var(--space-16);
+    background-color: var(--mobile-tag-ai);
+    color: var(--mobile-tag-ai-text);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .proposalText {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--font-size-item);
+    line-height: 1.4;
+  }
+
+  .proposalTitle {
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .emptyMark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: var(--space-16);
+    background-color: var(--mobile-tag-ai);
+    color: var(--mobile-dot-ai);
+  }
+
+  /* ── The dock: the ask bar's pill, as a field ─────────────────────── */
+  .dock {
+    flex: none;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-8);
+    margin-block: var(--space-4) var(--space-12);
+    margin-inline: var(--space-12);
+    padding-block: 7px;
+    padding-inline: var(--space-18) 7px;
+    border-radius: 26px;
+    background-color: var(--mobile-surface);
+    border: var(--border-width-thin) solid var(--mobile-float-edge);
+    box-shadow: var(--mobile-shadow-soft);
+  }
+
+  .input {
+    flex: 1;
+    min-inline-size: 0;
+    max-block-size: 120px;
+    padding-block: var(--space-8);
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.4;
+    color: var(--mobile-ink);
+    field-sizing: content;
+  }
+
+  .input::placeholder {
+    color: var(--text-subtle);
+  }
+
+  .go {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 38px;
+    block-size: 38px;
+    border: 0;
+    border-radius: 19px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .go:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .go:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+}

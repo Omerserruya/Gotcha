@@ -46,7 +46,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-22);
-    padding-block: var(--space-6) var(--space-24);
+    /* The foot clears the ask bar that floats over it (52px and its 12px). */
+    padding-block: var(--space-6) 84px;
     padding-inline: var(--space-16);
   }
 
@@ -322,5 +323,57 @@
     flex: none;
     font-size: var(--font-size-label);
     color: var(--text-subtle);
+  }
+
+  /* ── Ask GOTCHA: the design's bar, floating over the foot ─────────── */
+  .ask {
+    position: absolute;
+    inset-block-end: var(--space-12);
+    inset-inline: var(--space-12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    block-size: 52px;
+    box-sizing: border-box;
+    padding-inline: var(--space-18) var(--space-8);
+    border-radius: 26px;
+    background-color: var(--mobile-surface);
+    border: var(--border-width-thin) solid var(--mobile-float-edge);
+    box-shadow: var(--mobile-shadow-soft);
+    color: var(--mobile-ink);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ask:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  .askMark {
+    flex: none;
+    color: var(--mobile-dot-ai);
+  }
+
+  .askText {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: 15px;
+    color: var(--text-subtle);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .askGo {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 19px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
   }
 }

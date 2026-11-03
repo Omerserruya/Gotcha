@@ -32,6 +32,12 @@ import { pageMetadata } from '@/shell/page-metadata';
  * what the website refuses. The commerce panel and the full Copilot wall stay
  * on the website, one tap away in the bar's menu.
  *
+ * ★ A RESOLVED CONVERSATION KEEPS ITS COMPOSER (Omer, 2026-11-03). A person
+ *   who writes into a CLOSED conversation reopens it and takes it - the send
+ *   route's rule (Backend) - so the field is not blocked here, and the
+ *   composer re-reads the screen after that send: the status, the owner and
+ *   the AI button all change with it.
+ *
  * ⚠⚠ THE COMPOSER SENDS TO A REAL PERSON. Nothing automated presses it, on
  *    dev or anywhere, without Omer's word: the same rule as the desktop.
  */
@@ -117,6 +123,7 @@ export default async function Page({ params }: { readonly params: Promise<{ read
             colleagues={data.colleagues}
             resolved={resolved}
             websiteHref={`/${locale}/inbox?c=${encodeURIComponent(open.id)}`}
+            customerHref={`/m/inbox/${encodeURIComponent(open.id)}/customer`}
           />
         }
       />

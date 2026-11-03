@@ -7,17 +7,21 @@ import {
   MobileCampaignList,
 } from '@/features/mobile/outreach/MobileCampaigns';
 import { groupOf, parseGroup } from '@/features/mobile/outreach/mobile-outreach';
+import { MobileNewOutreach } from '@/features/mobile/outreach/MobileNewOutreach';
 import ui from '@/features/mobile/mobile-ui.module.css';
 import { OnWebsite } from '@/features/mobile/OnWebsite';
 import { MobileBar } from '@/shell/mobile/MobileBar';
 import { pageMetadata } from '@/shell/page-metadata';
 
 /**
- * The mobile outreach: the campaigns, to look at - VIEW ONLY.
+ * The mobile outreach: the campaigns, to look at, and "New outreach" for
+ * one person - a message in their conversation, or a phone call.
  *
  * ★ The desktop's loader (`loadOutreach`), so a campaign's status and
- *   numbers are the website's. Creating, sending and stopping stay there,
- *   behind the one link at the foot - so no "new outreach" button here.
+ *   numbers are the website's. Creating, sending and stopping a campaign
+ *   stay there, behind the one link at the foot. The design's floating
+ *   "New outreach" opens a sheet for one person (`MobileNewOutreach`,
+ *   Omer 2026-11-03); a campaign from it is the website's too.
  *
  * ★ The chips filter by `?show=`, counted from the whole list (the route
  *   returns every campaign in one read). The design's figures card is not
@@ -53,6 +57,7 @@ export default async function Page({
           </p>
           {website}
         </div>
+        <MobileNewOutreach />
       </div>
     );
   }
@@ -101,6 +106,7 @@ export default async function Page({
         )}
         {website}
       </div>
+      <MobileNewOutreach />
     </div>
   );
 }

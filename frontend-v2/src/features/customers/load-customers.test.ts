@@ -105,3 +105,25 @@ describe('★★ 04’s search: an order number finds its customer too - added, 
     expect(get).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ the phone leaves out anonymous website visitors; the website does not', () => {
+  const sent = () => (post.mock.calls[0]![0] as { body: { rules: unknown[] } }).body.rules;
+
+  it('`identified`: the segment rule beside the query’s own', async () => {
+    await loadCustomers('dana', { identified: true });
+    expect(sent()).toEqual([
+      { field: 'name', operator: 'contains', value: 'dana' },
+      { field: 'identified', operator: 'equals', value: 'true' },
+    ]);
+  });
+
+  it('with no query, the rule alone', async () => {
+    await loadCustomers('', { identified: true });
+    expect(sent()).toEqual([{ field: 'identified', operator: 'equals', value: 'true' }]);
+  });
+
+  it('without it (the website), the rules exactly as before', async () => {
+    await loadCustomers('dana');
+    expect(sent()).toEqual([{ field: 'name', operator: 'contains', value: 'dana' }]);
+  });
+});

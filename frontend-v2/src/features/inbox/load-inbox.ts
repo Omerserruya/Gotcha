@@ -188,8 +188,12 @@ export async function loadInbox(
   conversationId?: string,
   cursor?: string,
   view: InboxView = DEFAULT_INBOX_VIEW,
-  /** `null` is "All". Sent as the route's own `channel` filter. */
-  channel: QueueChannelFilter | null = null,
+  /**
+   * `null` is "All". Sent as the route's own `channel` filter. The website
+   * sends one; the phone may send several (`a,b`), which the route reads as
+   * any of them. An empty list is "All" too.
+   */
+  channel: QueueChannelFilter | readonly QueueChannelFilter[] | null = null,
   /** The period, as the route's own `from` / `to` (workspace days, `to` inclusive). */
   period: InboxPeriod | null = null,
   /**
@@ -203,8 +207,15 @@ export async function loadInbox(
    * sends none.
    */
   search: string | null = null,
+  /**
+   * Each view's query. The website's is `viewQuery`; the phone passes
+   * `phoneViewQuery`, whose "mine" leaves out what was resolved.
+   */
+  queryOf: (view: InboxView, meId: string | null) => Record<string, string> | null = viewQuery,
 ): Promise<InboxData> {
   const api = serverApi();
+  const channelParam =
+    channel === null ? '' : typeof channel === 'string' ? channel : channel.join(',');
 
   /*
    * ═════════════════════════════════════════════════════════════════════════
@@ -278,7 +289,7 @@ export async function loadInbox(
              */
             query: {
               ...query,
-              ...(channel === null ? {} : { channel }),
+              ...(channelParam === '' ? {} : { channel: channelParam }),
               ...(search === null || search === '' ? {} : { search }),
               ...(period?.from ? { from: period.from } : {}),
               ...(period?.to ? { to: period.to } : {}),
@@ -300,8 +311,8 @@ export async function loadInbox(
 
   const queueRead =
     view === 'mine'
-      ? meRead.then((id) => fetchQueue(viewQuery(shownView(view, explicit, id !== null), id)))
-      : fetchQueue(viewQuery(view, null));
+      ? meRead.then((id) => fetchQueue(queryOf(shownView(view, explicit, id !== null), id)))
+      : fetchQueue(queryOf(view, null));
 
   const [queue, viewerMe, colleagues, greeting] = await Promise.all([
     queueRead,

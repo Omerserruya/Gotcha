@@ -221,7 +221,8 @@ export function filterChips(
       }[]
     | null,
   wooConnected: boolean,
-  current: QueueChannelFilter | null,
+  /** The one in force, or the phone's several. */
+  current: QueueChannelFilter | readonly QueueChannelFilter[] | null,
 ): readonly FilterChip[] {
   if (states === null) return FALLBACK_FILTER_CHIPS;
   const live = new Set(
@@ -231,7 +232,10 @@ export function filterChips(
       )
       .map((s) => s.channel),
   );
-  return QUEUE_CHANNEL_FILTERS.filter((channel) => live.has(channel) || channel === current).map(
+  const forced = new Set<string>(
+    current === null ? [] : typeof current === 'string' ? [current] : current,
+  );
+  return QUEUE_CHANNEL_FILTERS.filter((channel) => live.has(channel) || forced.has(channel)).map(
     (channel) => ({
       channel,
       mark: channel === 'WEBCHAT' && wooConnected ? 'WOOCOMMERCE' : channel,
@@ -250,6 +254,40 @@ export function parseChannelFilter(raw: string | undefined): QueueChannelFilter 
   return (QUEUE_CHANNEL_FILTERS as readonly string[]).includes(raw ?? '')
     ? (raw as QueueChannelFilter)
     : null;
+}
+
+/**
+ * The phone's `?channel=a,b` (2026-11-03): the channels ticked in its sheet,
+ * in the header's order, each one the header draws. Unknown values are
+ * dropped one by one rather than voiding the list - and an empty answer is
+ * "All", as `parseChannelFilter`'s null is.
+ *
+ * ★ PHONE ONLY. The website's header is a choice of one and keeps
+ *   `parseChannelFilter`; the route takes either (one value is today's
+ *   exact match, several are `{ in }`, conversation `lib/channel-filter.ts`).
+ */
+export function parseChannelFilters(raw: string | undefined): readonly QueueChannelFilter[] {
+  const asked = new Set((raw ?? '').split(',').map((part) => part.trim()));
+  return QUEUE_CHANNEL_FILTERS.filter((channel) => asked.has(channel));
+}
+
+/**
+ * The phone's "Assigned to me" leaves out what was resolved (Omer,
+ * 2026-11-03): a conversation the reader closed no longer sits under "mine".
+ * The route's own `excludeClosed`, on that view only; every other view is
+ * `viewQuery`'s, so the phone and the website still mean one thing by them.
+ *
+ * ★ Its chip counts the same set: `phoneCountView("mine")` is the count route's
+ *   `mine_open`, which is this query.
+ */
+export function phoneViewQuery(view: InboxView, meId: string | null): Record<string, string> | null {
+  const query = viewQuery(view, meId);
+  return view === 'mine' && query !== null ? { ...query, excludeClosed: 'true' } : query;
+}
+
+/** The count route's view for each phone chip: its own id, except "mine". */
+export function phoneCountView(view: InboxView): string {
+  return view === 'mine' ? 'mine_open' : view;
 }
 
 /**

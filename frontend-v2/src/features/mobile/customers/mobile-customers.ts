@@ -66,3 +66,82 @@ export function worthOf(
     refunds: summary.refundedOrCancelledCount ?? null,
   };
 }
+
+/* ── Orders on the profile (2026-11-03) ───────────────────────────────────── */
+
+/** The fields of an order the phone's list reads (`OrderCard` from the contract). */
+interface OrderLike {
+  readonly orderNumber: string;
+  readonly createdAt: string | null;
+  readonly total: { readonly amount: number | null; readonly currency: string | null };
+  readonly cancelled: boolean;
+  readonly financial?: { readonly label: string } | null;
+  readonly fulfillment?: { readonly label: string } | null;
+  readonly shipping?: { readonly label: string } | null;
+}
+
+/**
+ * An order's status in one line: cancelled is said as that; otherwise the
+ * furthest the store reports - shipping, then fulfilment, then payment - in
+ * the store's own localised words. `null` when the store gave none.
+ */
+export function orderStatus(
+  order: OrderLike,
+): { readonly kind: 'cancelled' } | { readonly kind: 'label'; readonly label: string } | null {
+  if (order.cancelled) return { kind: 'cancelled' };
+  const chip = order.shipping ?? order.fulfillment ?? order.financial ?? null;
+  return chip?.label ? { kind: 'label', label: chip.label } : null;
+}
+
+/**
+ * Why the profile shows no order, as the inbox's wall says it (`OrdersCarousel`),
+ * from `GET …/customers/:contactId/orders` - or `null` when there are orders.
+ *
+ *   unread         the read failed, or an answer we have no words for
+ *   storeNotChosen two stores, none chosen as the business's
+ *   notConnected   no store at all
+ *   storeUnreachable / noIdentifiers   the platform's own reasons
+ *   noWooOrders    WooCommerce answered, with nothing
+ *   state          Shopify's state for this customer, in the customers catalogue
+ *
+ * ★ A failed read is never "no orders": unknown is not empty.
+ */
+export type OrdersNote =
+  | { readonly kind: 'unread' }
+  | { readonly kind: 'storeNotChosen' }
+  | { readonly kind: 'notConnected' }
+  | { readonly kind: 'storeUnreachable' }
+  | { readonly kind: 'noIdentifiers' }
+  | { readonly kind: 'noWooOrders' }
+  | { readonly kind: 'missingScopes' }
+  | { readonly kind: 'state'; readonly state: string };
+
+export function ordersNote(
+  read: {
+    readonly source: string | null;
+    readonly state: string | null;
+    readonly reason: string | null;
+    readonly orders: readonly unknown[];
+  } | null,
+): OrdersNote | null {
+  if (read === null) return { kind: 'unread' };
+  if (read.orders.length > 0) return null;
+  if (read.source === null) {
+    switch (read.reason) {
+      case 'store_not_chosen':
+        return { kind: 'storeNotChosen' };
+      case 'no_store_connected':
+        return { kind: 'notConnected' };
+      case 'store_unreachable':
+        return { kind: 'storeUnreachable' };
+      case 'no_identifiers':
+        return { kind: 'noIdentifiers' };
+      default:
+        return { kind: 'unread' };
+    }
+  }
+  if (read.source === 'woocommerce') return { kind: 'noWooOrders' };
+  if (read.state === null) return { kind: 'unread' };
+  if (read.state === 'missing_scopes') return { kind: 'missingScopes' };
+  return { kind: 'state', state: read.state === 'ok' ? 'no_orders' : read.state };
+}

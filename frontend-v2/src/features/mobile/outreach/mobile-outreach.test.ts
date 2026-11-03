@@ -4,7 +4,11 @@ import { campaignSchema } from '@/api/contracts/outreach';
 
 import {
   audienceWords,
+  callableNumber,
+  callOutcomeKey,
   groupOf,
+  pickQuery,
+  PICK_QUERY_MAX,
   parseGroup,
   sentShare,
   statusTone,
@@ -114,5 +118,38 @@ describe('the chips: running, scheduled, finished', () => {
     expect(statusTone('FAILED')).toBe('bad');
     expect(statusTone('SENDING')).toBe('ok');
     expect(statusTone('CANCELLED')).toBe('mute');
+  });
+});
+
+describe('★ New outreach: who a call can go to, and what the line answered', () => {
+  it('the stored phone first, else a phone-keyed handle; an Instagram id is no number', () => {
+    expect(
+      callableNumber({ phone: '972 52-418 9930', channel: 'INSTAGRAM', externalId: '1784' }),
+    ).toBe('+972524189930');
+    expect(callableNumber({ phone: null, channel: 'WHATSAPP', externalId: '972524189930' })).toBe(
+      '+972524189930',
+    );
+    expect(
+      callableNumber({ phone: null, channel: 'INSTAGRAM', externalId: '17841400000000' }),
+    ).toBeNull();
+    expect(
+      callableNumber({ phone: '052-1234567', channel: 'WEBCHAT', externalId: 'v-1' }),
+    ).toBeNull();
+  });
+
+  it('the search as sent: trimmed and capped', () => {
+    expect(pickQuery('  dana  ')).toBe('dana');
+    expect(pickQuery('x'.repeat(200))).toHaveLength(PICK_QUERY_MAX);
+  });
+
+  it('★★ AGENT_FIRST rings the agent; IN_PLATFORM dialled nothing; a refusal in its own words', () => {
+    const known = (key: string) =>
+      key === 'error.no_active_voice_channel' || key === 'error.failed';
+    expect(callOutcomeKey({ ok: true, mode: 'AGENT_FIRST' }, known)).toBe('ringing');
+    expect(callOutcomeKey({ ok: true, mode: 'IN_PLATFORM' }, known)).toBe('inPlatform');
+    expect(callOutcomeKey({ ok: false, reason: 'no_active_voice_channel' }, known)).toBe(
+      'error.no_active_voice_channel',
+    );
+    expect(callOutcomeKey({ ok: false, reason: 'teapot' }, known)).toBe('error.failed');
   });
 });

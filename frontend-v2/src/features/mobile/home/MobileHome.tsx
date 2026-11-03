@@ -1,4 +1,4 @@
-import { Check, CircleAlert, Clock } from 'lucide-react';
+import { ArrowUp, Check, CircleAlert, Clock, Sparkles } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
@@ -34,14 +34,15 @@ const OUTCOME_ICON = {
  * `loadHomeData` and `loadViewerFirstName`, the reads the desktop Home makes,
  * so a figure here is the figure there. The design's card says "since last
  * night" over sales and a response time; the overview is today's and has no
- * sales, so the card says "today" over today's counts. The bell, the ask bar
- * and the avatar are not drawn: the notifications and the ask are website
- * panels with no phone screen behind them, and the account menu is the bar's
- * end.
+ * sales, so the card says "today" over today's counts. The bell and the
+ * avatar are not drawn: the notifications are a website panel with no phone
+ * screen behind it, and the account menu is the bar's end. The ask bar is
+ * drawn (Omer, 2026-11-03) and opens `/m/home/ask`: the website's own
+ * assistant thread, on a phone screen.
  *
  * ★ Unknown is not empty. A failed queue read says it failed; an empty one
  *   says nobody is waiting. A failed overview drops the card rather than
- *   showing zeros, and a failed or empty activity feed drops "Updates".
+ *   showing zeros. "Updates" is always there: empty says so, failed says so.
  */
 export async function MobileHome({ account }: { readonly account: ReactNode }) {
   const t = await getTranslations('mobile.home');
@@ -55,16 +56,7 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
   const { overview, queue, queueItems, activity, isQuiet, setup, gate } = data;
   const now = new Date();
 
-  const bar = (
-    <header className={styles.bar}>
-      <span className={styles.brand}>
-        <Logo size={30} />
-        <span className={styles.wordmark}>GOTCHA</span>
-      </span>
-      <span className={styles.fill} />
-      {account}
-    </header>
-  );
+  const bar = <MobileHomeBar account={account} />;
 
   // The tenant is locked out: every figure would be absent for that one reason.
   if (homeFace({ setup, gate }) === 'gated' && gate) {
@@ -80,6 +72,16 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
 
   const waiting = queue?.waiting ?? null;
   const events = activity ?? [];
+  const ask = (
+    // The design's ask bar, floating over the screen's foot: a tap opens the full-screen chat.
+    <Link href="/m/home/ask" className={styles.ask} data-testid="mobile-home-ask">
+      <Sparkles size={19} strokeWidth={2} className={styles.askMark} aria-hidden="true" />
+      <span className={styles.askText}>{t('ask')}</span>
+      <span className={styles.askGo} aria-hidden="true">
+        <ArrowUp size={18} strokeWidth={2} />
+      </span>
+    </Link>
+  );
 
   return (
     <div className={ui.screen} data-testid="mobile-home">
@@ -192,9 +194,26 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
           </div>
         </section>
 
-        {events.length > 0 ? (
-          <section className={styles.block} data-testid="mobile-home-updates">
-            <h2 className={styles.blockTitle}>{t('updates')}</h2>
+        {/*
+          Always drawn (Omer, 2026-11-03: "I see no updates"): a section that
+          vanishes when empty reads as a screen that is missing a part. None
+          is said as none, and a failed read as a failed read.
+        */}
+        <section className={styles.block} data-testid="mobile-home-updates">
+          <h2 className={styles.blockTitle}>{t('updates')}</h2>
+          {activity === null ? (
+            <p
+              className={`${ui.card} ${styles.note}`}
+              role="status"
+              data-testid="mobile-home-updates-unavailable"
+            >
+              {t('updatesUnavailable')}
+            </p>
+          ) : events.length === 0 ? (
+            <p className={`${ui.card} ${styles.note}`} data-testid="mobile-home-updates-empty">
+              {t('updatesEmpty')}
+            </p>
+          ) : (
             <ul className={styles.updates}>
               {events.map((event) => {
                 const Icon = OUTCOME_ICON[event.outcome];
@@ -223,10 +242,28 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
                 );
               })}
             </ul>
-          </section>
-        ) : null}
+          )}
+        </section>
       </div>
+      {ask}
     </div>
+  );
+}
+
+/**
+ * Home's bar: the mark, the wordmark, the account menu at the end. Its own
+ * function so the loading screen draws the same bar and nothing jumps.
+ */
+export function MobileHomeBar({ account }: { readonly account: ReactNode }) {
+  return (
+    <header className={styles.bar}>
+      <span className={styles.brand}>
+        <Logo size={30} />
+        <span className={styles.wordmark}>GOTCHA</span>
+      </span>
+      <span className={styles.fill} />
+      {account}
+    </header>
   );
 }
 

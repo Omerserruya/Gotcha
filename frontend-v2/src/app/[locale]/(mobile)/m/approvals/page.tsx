@@ -3,6 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { loadApprovalCustomers } from '@/features/approvals/approval-customers';
 import { handledToday } from '@/features/approvals/handled';
 import { loadApprovals, requesterName } from '@/features/approvals/load-approvals';
+import { ApprovalsLive } from '@/features/mobile/approvals/ApprovalsLive';
 import { MobileApprovalList } from '@/features/mobile/approvals/MobileApprovalList';
 import { MobileDecidedList } from '@/features/mobile/approvals/MobileDecidedList';
 import { decidedOn, requestersOf } from '@/features/mobile/approvals/mobile-approvals';
@@ -73,6 +74,8 @@ export default async function Page({
 
   return (
     <div className={ui.screen} data-testid="mobile-approvals">
+      {/* Renders nothing: re-reads the queue when a request is written or decided. */}
+      <ApprovalsLive />
       {bar}
       <div className={styles.scroll}>
         <p className={ui.lead} data-testid="mobile-approvals-count">
