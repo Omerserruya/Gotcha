@@ -38,8 +38,8 @@ export function MobileCopilotCard({ conversationId }: { readonly conversationId:
   const [at, setAt] = useState(0);
   const [used, setUsed] = useState<string | null>(null);
   /*
-   * ★ Closed by hand, per suggestion: a new one Copilot writes later has a new
-   *   id and shows again (Omer, 2026-11-03). Nothing is written back; the
+   * ★ Closed by hand: X hides the card with all its current options. What
+   *   Copilot writes later has new ids and shows again (Omer, 2026-11-03). Nothing is written back; the
    *   website's wall still lists it.
    */
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
@@ -107,7 +107,8 @@ export function MobileCopilotCard({ conversationId }: { readonly conversationId:
           aria-label={t('dismiss')}
           data-testid="mobile-copilot-dismiss"
           onClick={() => {
-            setDismissed((now) => new Set(now).add(card.id));
+            // The whole card: every option on it now, not only the one shown.
+            setDismissed((now) => new Set([...now, ...cards.map((c) => c.id)]));
             setAt(0);
           }}
         >
