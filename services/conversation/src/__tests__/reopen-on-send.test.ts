@@ -15,6 +15,8 @@ const H = vi.hoisted(() => ({
   user: { userId: "u_agent", email: "agent@acme.test" } as any,
   lastInbound: new Date() as Date | null,
   order: [] as string[],
+  emits: [] as Array<{ room: string; event: string; data: any }>,
+  published: [] as any[],
 }));
 const { prisma, outgoingMessageQueue, messageCreate } = vi.hoisted(() => ({
   prisma: {
@@ -42,9 +44,12 @@ vi.mock("@chatcenter/shared", async () => {
     },
     decryptCredentials: (v: any) => v,
     lastInboundAtForRecipient: async () => H.lastInbound,
+    publishEvent: async (e: any) => { H.published.push(e); },
   };
 });
-vi.mock("../lib/socket", () => ({ getIO: () => null }));
+vi.mock("../lib/socket", () => ({
+  getIO: () => ({ to: (room: string) => ({ emit: (event: string, data: any) => { H.emits.push({ room, event, data }); } }) }),
+}));
 vi.mock("../services/message.service", () => ({ create: messageCreate, listByConversation: vi.fn() }));
 
 import messagesRouter from "../routes/messages";
@@ -60,8 +65,8 @@ const reopened = () => prisma.conversation.update.mock.calls.map((c: any[]) => c
 
 beforeEach(() => {
   vi.clearAllMocks();
-  H.user = { userId: "u_agent", email: "agent@acme.test" }; H.lastInbound = new Date(); H.order = [];
-  prisma.conversation.update.mockImplementation(async (a: any) => { if (a.data.status === "OPEN") H.order.push("reopen"); return {}; });
+  H.user = { userId: "u_agent", email: "agent@acme.test" }; H.lastInbound = new Date(); H.order = []; H.emits = []; H.published = [];
+  prisma.conversation.update.mockImplementation(async (a: any) => { if (a.data.status === "OPEN") H.order.push("reopen"); return { id: a.where.id, ...a.data, assignedAgent: { id: "u_agent", name: "Agent", email: "agent@acme.test" } }; });
   prisma.message.findMany.mockResolvedValue([]);
   messageCreate.mockImplementation(async (d: any) => { H.order.push("message"); return { id: "m1", ...d }; });
 });
@@ -75,6 +80,25 @@ describe("a person sends into a CLOSED conversation", () => {
       chatbotNodeId: null, chatbotFlowId: null, automationRunId: null, assignedAgentId: "u_agent",
     });
     expect(H.order).toEqual(["reopen", "message"]);
+  });
+
+  it("every inbox hears it: conversation:updated with the open row and its assignee, to the tenant room and the bus", async () => {
+    prisma.conversation.findFirst.mockResolvedValue(closed("WHATSAPP"));
+    await send();
+    const upd = H.emits.filter((e) => e.event === "conversation:updated");
+    expect(upd).toHaveLength(1);
+    expect(upd[0].room).toBe("tenant:t1");
+    expect(upd[0].data).toMatchObject({ id: "c1", status: "OPEN", assignedAgentId: "u_agent", assignedAgent: { id: "u_agent" } });
+    expect(H.published).toEqual([expect.objectContaining({ event: "conversation:updated", tenantId: "t1", data: expect.objectContaining({ status: "OPEN" }) })]);
+    const upd2 = prisma.conversation.update.mock.calls.find((c: any[]) => c[0].data.status === "OPEN")![0];
+    expect(upd2.include).toEqual({ assignedAgent: { select: { id: true, name: true, email: true } } });
+  });
+
+  it("an open conversation sends no status event", async () => {
+    prisma.conversation.findFirst.mockResolvedValue(closed("WEBCHAT", { status: "OPEN" }));
+    await send();
+    expect(H.emits.filter((e) => e.event === "conversation:updated")).toHaveLength(0);
+    expect(H.published).toHaveLength(0);
   });
 
   it("WhatsApp inside the 24h window: reopened, then sent", async () => {
