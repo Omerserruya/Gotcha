@@ -106,6 +106,20 @@ describe('★★ it never says "sent"', () => {
     expect(screen.queryByText(/\bsent\b/i)).toBeNull();
   });
 
+  // The phone says it with the tick inside the bubble; the note stayed under its composer (dev walk, 2026-11-03).
+  it('the phone keeps no "queued" line under its composer', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    await user.type(screen.getByTestId('composer-body'), 'On its way today');
+    await user.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(sent).toHaveBeenCalled());
+    expect(screen.queryByTestId('composer-queued')).toBeNull();
+  });
+
   it('★★ the button names the outward action, not a save', async () => {
     show();
     expect(screen.getByTestId('composer-send')).toHaveTextContent(/send to the customer/i);
