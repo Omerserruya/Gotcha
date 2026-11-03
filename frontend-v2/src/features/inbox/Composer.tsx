@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Camera, Image as ImageIcon, Paperclip, Plus, X } from 'lucide-react';
 
 import { replyWindowOf, type ConversationRow, type ReplyMode } from '@/api/contracts/inbox';
 
@@ -184,6 +184,9 @@ export function Composer({
   const [isComposing, setComposing] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  /** The phone's "+" sheet: photos, camera, files. */
+  const [attaching, setAttaching] = useState(false);
   const body = useRef<HTMLTextAreaElement>(null);
   /*
    * ★ THE MESSAGE BEING ANSWERED - 02's Reply. Set by a message's button in
@@ -441,6 +444,40 @@ export function Composer({
         />
       ) : null}
 
+      {/*
+        ★ THE PHONE'S "+" SHEET. One button beside the pill instead of two
+          icons inside it, so the field gets the width (Omer, 2026-11-03).
+          Photos open the gallery, Camera takes one, Files opens the files.
+      */}
+      {variant === 'phone' && attaching ? (
+        <div className={styles.composerAttachSheet} data-testid="composer-attach-sheet">
+          {(
+            [
+              ['image', imageInput, ImageIcon, t('attachPhotos')],
+              ['camera', cameraInput, Camera, t('attachCamera')],
+              ['file', fileInput, Paperclip, t('attachFiles')],
+            ] as const
+          ).map(([key, input, Icon, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={styles.composerAttachOption}
+              data-testid={`composer-attach-${key}`}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => {
+                setAttaching(false);
+                input.current?.click();
+              }}
+            >
+              <span className={styles.composerAttachBadge} data-kind={key} aria-hidden="true">
+                <Icon size={20} />
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <textarea
         ref={body}
         id="composer-body"
@@ -452,6 +489,11 @@ export function Composer({
         placeholder={variant === 'phone' ? t('placeholderPhone') : t('placeholder')}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
+          /*
+           * ★ On the phone Enter is a new line, as in WhatsApp: the send button
+           *   sends (Omer, 2026-11-03). A phone keyboard has no Shift+Enter.
+           */
+          if (variant === 'phone') return;
           if (event.key !== 'Enter' || event.shiftKey) return;
           // An IME's Enter confirms a candidate (229 where isComposing is missing).
           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -528,28 +570,56 @@ export function Composer({
             event.target.value = '';
           }}
         />
-        <button
-          type="button"
-          className={styles.composerIcon}
-          data-testid="composer-attach-image"
-          aria-label={t('attachImage')}
-          title={t('attachImage')}
-          disabled={busy || locked || files.length >= MAX_FILES}
-          onClick={() => imageInput.current?.click()}
-        >
-          <ImageIcon size={15} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.composerIcon}
-          data-testid="composer-attach-file"
-          aria-label={t('attachFile')}
-          title={t('attachFile')}
-          disabled={busy || locked || files.length >= MAX_FILES}
-          onClick={() => fileInput.current?.click()}
-        >
-          <Paperclip size={15} aria-hidden="true" />
-        </button>
+        <input
+          ref={cameraInput}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          data-testid="composer-camera-input"
+          onChange={(event) => {
+            add(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        {variant === 'phone' ? (
+          <button
+            type="button"
+            className={styles.composerPlus}
+            data-testid="composer-attach"
+            aria-label={t('attach')}
+            aria-expanded={attaching}
+            disabled={busy || locked}
+            onClick={() => setAttaching((open) => !open)}
+          >
+            {attaching ? <X size={20} aria-hidden="true" /> : <Plus size={22} aria-hidden="true" />}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={styles.composerIcon}
+              data-testid="composer-attach-image"
+              aria-label={t('attachImage')}
+              title={t('attachImage')}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => imageInput.current?.click()}
+            >
+              <ImageIcon size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.composerIcon}
+              data-testid="composer-attach-file"
+              aria-label={t('attachFile')}
+              title={t('attachFile')}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Paperclip size={15} aria-hidden="true" />
+            </button>
+          </>
+        )}
 
         <span className={styles.composerDivider} aria-hidden="true" />
 

@@ -2564,11 +2564,11 @@
   }
 
   /*
-   * ★ The pill grows as ONE piece, as WhatsApp's does: the field grows with
-   *   what is typed (`field-sizing: content`, up to about six lines, then it
-   *   scrolls), and the icons beside it stretch with it, their white filling
-   *   the whole height and the icon itself staying at the bottom line. Before,
-   *   only the field grew and the icons stayed a 48px stub beside a tall box.
+   * ★ The pill is the field alone, rounded on both sides, so all of it grows
+   *   with what is typed (`field-sizing: content`, up to about six lines, then
+   *   it scrolls). The attach icons used to sit inside it, took the width and
+   *   stayed a stub beside a tall box; they are one "+" beside it now
+   *   (Omer, 2026-11-03).
    */
   .composer[data-variant='phone'] .composerInput {
     order: 1;
@@ -2578,9 +2578,8 @@
     line-height: 1.4;
     box-sizing: border-box;
     padding-block: var(--space-12);
-    padding-inline: var(--space-16) var(--space-4);
-    border-start-start-radius: 24px;
-    border-end-start-radius: 24px;
+    padding-inline: var(--space-16);
+    border-radius: 24px;
     background-color: var(--mobile-surface);
     font-size: var(--font-size-lead);
     color: var(--mobile-ink);
@@ -2590,7 +2589,7 @@
     color: var(--text-subtle);
   }
 
-  /* The bar's own children join the row: the pill's icons, then Send. */
+  /* The bar's own children join the row: Send, the pill, then "+". */
   .composer[data-variant='phone'] .composerBar {
     display: contents;
   }
@@ -2601,27 +2600,67 @@
     display: none;
   }
 
-  .composer[data-variant='phone'] .composerIcon {
+  /* "+" on the far side from Send, on the bottom line as the pill grows. */
+  .composer[data-variant='phone'] .composerPlus {
     order: 2;
-    align-self: stretch;
-    align-items: flex-end;
-    /* A pixel of overlap: rounding left a hairline seam once the pill grew. */
-    margin-inline-start: -1px;
-    padding-block-end: 13px;
-    inline-size: 34px;
-    min-block-size: 48px;
-    block-size: auto;
-    border-radius: 0;
-    background-color: var(--mobile-surface);
+    flex: none;
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: var(--space-6);
+    inline-size: 40px;
+    block-size: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
     color: var(--text-muted);
+    cursor: pointer;
   }
 
-  /* The paperclip is the bar's last icon: it closes the pill. */
-  .composer[data-variant='phone'] .composerIcon[data-testid='composer-attach-file'] {
-    padding-inline-end: var(--space-8);
-    inline-size: 42px;
-    border-start-end-radius: 24px;
-    border-end-end-radius: 24px;
+  .composer[data-variant='phone'] .composerPlus[aria-expanded='true'] {
+    color: var(--mobile-ink);
+  }
+
+  /* The sheet "+" opens, above the row: photos, camera, files. */
+  .composer[data-variant='phone'] .composerAttachSheet {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-8);
+    padding: var(--space-14) var(--space-8);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-card);
+  }
+
+  .composer[data-variant='phone'] .composerAttachOption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--mobile-ink);
+    cursor: pointer;
+  }
+
+  .composer[data-variant='phone'] .composerAttachOption:disabled {
+    opacity: 0.4;
+  }
+
+  .composer[data-variant='phone'] .composerAttachBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
   }
 
   /*

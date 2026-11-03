@@ -456,6 +456,8 @@
   }
 
   .copilotMore {
+    /* With the close button after it, the two sit together at the far end. */
+    margin-inline-start: auto;
     padding: 0;
     border: 0;
     background: transparent;
@@ -463,6 +465,28 @@
     font: inherit;
     font-size: var(--font-size-label);
     cursor: pointer;
+  }
+
+  /* The way to close the card: the far end of its head. */
+  .copilotClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-block: calc(-1 * var(--space-6));
+    margin-inline-end: calc(-1 * var(--space-6));
+    inline-size: 32px;
+    block-size: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--mobile-copilot-muted);
+    cursor: pointer;
+  }
+
+  .copilotClose:focus-visible {
+    outline: var(--border-width-thick) solid var(--mobile-copilot-accent);
+    outline-offset: var(--space-2);
   }
 
   .copilotText {

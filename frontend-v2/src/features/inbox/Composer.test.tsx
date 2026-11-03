@@ -120,6 +120,42 @@ describe('★★ it never says "sent"', () => {
     expect(screen.queryByTestId('composer-queued')).toBeNull();
   });
 
+  // Omer, 2026-11-03: on the phone Enter goes down a line; the button sends.
+  it('★ on the phone Enter is a new line, not a send', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    const box = screen.getByTestId('composer-body');
+    await user.type(box, 'one{Enter}two');
+    expect(box).toHaveValue('one\ntwo');
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  // One "+" beside the pill, opening photos, camera and files.
+  it('the phone has one "+" that opens photos, camera and files', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByTestId('composer-attach-file')).toBeNull();
+    expect(screen.queryByTestId('composer-attach-sheet')).toBeNull();
+    await user.click(screen.getByTestId('composer-attach'));
+    expect(screen.getByTestId('composer-attach-image')).toHaveTextContent('Photos');
+    expect(screen.getByTestId('composer-attach-camera')).toHaveTextContent('Camera');
+    expect(screen.getByTestId('composer-attach-file')).toHaveTextContent('Files');
+    expect(screen.getByTestId('composer-camera-input')).toHaveAttribute('capture', 'environment');
+    const picked = vi.fn();
+    screen.getByTestId('composer-camera-input').addEventListener('click', picked);
+    await user.click(screen.getByTestId('composer-attach-camera'));
+    expect(picked).toHaveBeenCalled();
+    expect(screen.queryByTestId('composer-attach-sheet')).toBeNull();
+  });
+
   it('★★ the button names the outward action, not a save', async () => {
     show();
     expect(screen.getByTestId('composer-send')).toHaveTextContent(/send to the customer/i);

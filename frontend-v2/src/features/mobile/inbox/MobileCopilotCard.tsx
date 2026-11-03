@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 
@@ -36,6 +37,12 @@ export function MobileCopilotCard({ conversationId }: { readonly conversationId:
   const [read, setRead] = useState<CopilotRead | null>(null);
   const [at, setAt] = useState(0);
   const [used, setUsed] = useState<string | null>(null);
+  /*
+   * ★ Closed by hand, per suggestion: a new one Copilot writes later has a new
+   *   id and shows again (Omer, 2026-11-03). Nothing is written back; the
+   *   website's wall still lists it.
+   */
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
   const [, startTransition] = useTransition();
   const asked = useRef(false);
 
@@ -66,7 +73,8 @@ export function MobileCopilotCard({ conversationId }: { readonly conversationId:
   );
 
   const view = read === null ? null : suggestionView(read);
-  const cards = view?.kind === 'cards' ? view.suggestions.filter(canUse) : [];
+  const cards =
+    view?.kind === 'cards' ? view.suggestions.filter((s) => canUse(s) && !dismissed.has(s.id)) : [];
   const card = cards[at % Math.max(cards.length, 1)];
   if (card === undefined || card.id === used) return null;
   const others = cards.length - 1;
@@ -93,6 +101,18 @@ export function MobileCopilotCard({ conversationId }: { readonly conversationId:
             {t('more', { count: others })}
           </button>
         ) : null}
+        <button
+          type="button"
+          className={styles.copilotClose}
+          aria-label={t('dismiss')}
+          data-testid="mobile-copilot-dismiss"
+          onClick={() => {
+            setDismissed((now) => new Set(now).add(card.id));
+            setAt(0);
+          }}
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
       </div>
       <UserText className={styles.copilotText}>{card.text}</UserText>
       <div className={styles.copilotActions}>

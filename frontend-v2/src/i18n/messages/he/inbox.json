@@ -264,6 +264,10 @@
     },
     "attachImage": "צירוף תמונה",
     "attachFile": "צירוף קובץ",
+    "attach": "צירוף",
+    "attachPhotos": "תמונות",
+    "attachCamera": "מצלמה",
+    "attachFiles": "קבצים",
     "removeFile": "הסרת {name}",
     "attached": "יישלח יחד עם התשובה",
     "compose": {
