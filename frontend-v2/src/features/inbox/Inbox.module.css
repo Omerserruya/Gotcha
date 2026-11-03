@@ -2563,10 +2563,19 @@
     flex-basis: 100%;
   }
 
+  /*
+   * ★ The pill grows as ONE piece, as WhatsApp's does: the field grows with
+   *   what is typed (`field-sizing: content`, up to about six lines, then it
+   *   scrolls), and the icons beside it stretch with it, their white filling
+   *   the whole height and the icon itself staying at the bottom line. Before,
+   *   only the field grew and the icons stayed a 48px stub beside a tall box.
+   */
   .composer[data-variant='phone'] .composerInput {
     order: 1;
     flex: 1 1 0;
     min-block-size: 48px;
+    max-block-size: 152px;
+    line-height: 1.4;
     box-sizing: border-box;
     padding-block: var(--space-12);
     padding-inline: var(--space-16) var(--space-4);
@@ -2594,8 +2603,14 @@
 
   .composer[data-variant='phone'] .composerIcon {
     order: 2;
+    align-self: stretch;
+    align-items: flex-end;
+    /* A pixel of overlap: rounding left a hairline seam once the pill grew. */
+    margin-inline-start: -1px;
+    padding-block-end: 13px;
     inline-size: 34px;
-    block-size: 48px;
+    min-block-size: 48px;
+    block-size: auto;
     border-radius: 0;
     background-color: var(--mobile-surface);
     color: var(--text-muted);
@@ -2609,9 +2624,15 @@
     border-end-end-radius: 24px;
   }
 
+  /*
+   * Send leads the row, on the side the language reads from: the right in
+   * Hebrew, the left in English (Omer, 2026-11-03, after WhatsApp). It stays on
+   * the bottom line as the pill grows.
+   */
   .composer[data-variant='phone'] .composerSend {
-    order: 3;
-    margin-inline-start: var(--space-8);
+    order: 0;
+    align-self: flex-end;
+    margin-inline-end: var(--space-8);
     inline-size: 48px;
     block-size: 48px;
     border-radius: var(--radius-round);
