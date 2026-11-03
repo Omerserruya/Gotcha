@@ -16,6 +16,22 @@ import {
   AuditAction,
 } from "@chatcenter/shared";
 
+/**
+ * A website visitor nobody can reach again: a contact on a website chat - the
+ * widget (WEBCHAT) or the Shopify storefront's live chat (SHOPIFY_LIVE_CHAT,
+ * the same visitor on a store's theme) - with neither a phone nor an email
+ * (null or empty). The segment's `identified` rule
+ * excludes it. Every part is non-null in SQL (`IS NULL` / `= ''` under an
+ * OR with `IS NULL`), so the NOT never meets a NULL and drops a row by accident.
+ */
+export const ANONYMOUS_VISITOR = {
+  channel: { in: ["WEBCHAT", "SHOPIFY_LIVE_CHAT"] },
+  AND: [
+    { OR: [{ phone: null }, { phone: "" }] },
+    { OR: [{ email: null }, { email: "" }] },
+  ],
+} as const;
+
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 // Customer-context reads are permissioned (crm:contacts:read is part of every
@@ -346,6 +362,20 @@ router.post("/segment", async (req: Request, res: Response) => {
                   { optOutChannels: { equals: null } },
                 ],
               });
+            }
+            break;
+          // Leaves out the anonymous website visitor (the phone app's list,
+          // 2026-11-03): a website chat opens a contact for every browser,
+          // and one that never left a phone or an email is nobody the
+          // business can reach again. Exactly that row and no other: a
+          // website contact WITH a phone or an email stays, and every other
+          // channel stays - its externalId is a way back (a number, a handle).
+          // A name alone does not count: a visitor types any name. Empty
+          // strings are treated as absent, as a form writes them. In the
+          // shared `where`, so the total counts what the list shows.
+          case "identified":
+            if (rule.value !== false && rule.value !== "false") {
+              AND.push({ NOT: ANONYMOUS_VISITOR });
             }
             break;
         }
