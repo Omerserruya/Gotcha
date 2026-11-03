@@ -669,7 +669,8 @@ export function Composer({
             "sent" would be a claim about a phone we have heard nothing from, and
             the operator who believes it stops watching the one message that failed.
           */}
-          {result?.ok ? (
+          {/* The phone says it in the bubble itself: the tick inside it. */}
+          {result?.ok && variant !== 'phone' ? (
             <p className={styles.composerNote} data-testid="composer-queued">
               {t('queued')}
             </p>
