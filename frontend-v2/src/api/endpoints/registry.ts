@@ -1906,6 +1906,18 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/messages/media', { conversationId }),
 
   /**
+   * A five-minute signed link to one message's stored file (Backend
+   * 79dd2609): `{ data: { url: "/api/media/s/:m?exp=&sig=", expiresAt } }`.
+   * For the phone app, which opens a document outside the WebView, where
+   * there is no login. 404 for a file not stored here.
+   */
+  mediaLink: (conversationId: string, messageId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages/{messageId}/media-link', {
+      conversationId,
+      messageId,
+    }),
+
+  /**
    * The approved templates of this conversation's WhatsApp number (Backend
    * 47e376a4): `{ data: [{ id, name, language, category, body, headerType,
    * headerContent, footer, buttons, placeholders: [{ key, sample }] }] }`,

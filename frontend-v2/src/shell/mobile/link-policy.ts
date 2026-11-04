@@ -16,3 +16,22 @@ export function outsideUrl(anchor: HTMLAnchorElement, here: Location | URL): str
   if (sameSite && (isAppPath(url.pathname) || url.pathname.includes('/api/auth/'))) return null;
   return url.href;
 }
+
+/**
+ * The message a document link is for, read from its logged-in URL
+ * (`…/conversations/:c/messages/:m/media/:name`), when the link is marked
+ * `data-signed-file`. `null` for any other link.
+ */
+export function signedFileOf(
+  anchor: HTMLAnchorElement,
+): { readonly conversationId: string; readonly messageId: string } | null {
+  if (!anchor.hasAttribute('data-signed-file')) return null;
+  const match = /\/conversations\/([^/?#]+)\/messages\/([^/?#]+)\/media\/[^/?#]+/.exec(
+    new URL(anchor.href, 'https://x.invalid').pathname,
+  );
+  if (!match) return null;
+  return {
+    conversationId: decodeURIComponent(match[1]!),
+    messageId: decodeURIComponent(match[2]!),
+  };
+}
