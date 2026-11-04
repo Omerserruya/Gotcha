@@ -12,7 +12,7 @@ import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
 import { requireVisibleConversation } from "../lib/require-visible-conversation";
 import { replyWindowRefusal } from "../lib/reply-window-gate";
 import { mediaNotFound, serveStoredUpload } from "../lib/media-serving";
-import { STORED_UPLOAD_NAME, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
+import { STORED_UPLOAD_NAME, signMediaUrl, signedMediaPath, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -499,6 +499,29 @@ router.get("/:conversationId/messages/:messageId/media/:storedName", async (req:
     }));
     if (!message || storedUploadName(message.mediaUrl) !== storedName) return mediaNotFound(res);
     serveStoredUpload(res, UPLOADS_DIR, storedName);
+  } catch {
+    mediaNotFound(res);
+  }
+});
+
+// ─── A short-lived link to a message's file (logged in) ──────
+// The phone app opens a document (a PDF) in the phone's own viewer, outside
+// the app, where there is no GOTCHA login: the logged-in URL above answered
+// 401 there (Omer, 2026-11-04). This mints the same signed link the providers
+// fetch with (GET /api/media/s/:m), for five minutes, for a caller who may
+// open the file here: same tenant, the visibility check above, and a file the
+// message stored. Anything else is the same bare 404.
+export const MEDIA_LINK_TTL_SECONDS = 300;
+router.get("/:conversationId/messages/:messageId/media-link", async (req: Request, res: Response) => {
+  try {
+    const message = await withHistoricalRecords(() => prisma.message.findFirst({
+      where: { id: req.params.messageId as string, conversationId: req.params.conversationId as string, tenantId: req.tenantId! },
+      select: { id: true, mediaUrl: true },
+    }));
+    if (!message || !storedUploadName(message.mediaUrl)) return mediaNotFound(res);
+    const signed = signMediaUrl({ messageId: message.id, tenantId: req.tenantId!, ttlSeconds: MEDIA_LINK_TTL_SECONDS });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ data: { url: signedMediaPath(message.id, signed), expiresAt: new Date(signed.exp * 1000).toISOString() } });
   } catch {
     mediaNotFound(res);
   }

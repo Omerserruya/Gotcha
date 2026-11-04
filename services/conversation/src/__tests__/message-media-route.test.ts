@@ -329,3 +329,46 @@ describe("★ messages leave with the logged-in URL; the DB keeps the stored pat
     expect(JSON.stringify(H.queued[0])).not.toContain("https://app.example.test/api/uploads");
   });
 });
+
+// Omer, 2026-11-04: a PDF tapped in the phone app opened in the phone's own
+// viewer, with no GOTCHA login, and the logged-in URL answered 401.
+describe("★ a short-lived link to a message's file, for the phone app", () => {
+  const link = (c: string, m: string) => request(app).get(`/api/conversations/${c}/messages/${m}/media-link`);
+
+  it("★★ a signed link, five minutes, that opens the file with no login", async () => {
+    const r = await link("c_sales", "m_pdf");
+    expect(r.status).toBe(200);
+    expect(r.headers["cache-control"]).toBe("private, no-store");
+    const url: string = r.body.data.url;
+    expect(url).toMatch(/^\/api\/media\/s\/m_pdf\?exp=\d+&sig=[0-9a-f]+$/);
+    const exp = Number(new URL(url, "https://x").searchParams.get("exp"));
+    const now = Math.floor(Date.now() / 1000);
+    expect(exp - now).toBeGreaterThan(290);
+    expect(exp - now).toBeLessThanOrEqual(300);
+    H.viewer = null;
+    const opened = await request(app).get(url);
+    expect(opened.status).toBe(200);
+    expect(opened.headers["content-disposition"]).toBe("attachment");
+  });
+
+  it("401 without a login", async () => {
+    H.viewer = null;
+    expect((await link("c_sales", "m_pdf")).status).toBe(401);
+  });
+
+  it("★ no link for another tenant, another conversation's message, or a file not stored here", async () => {
+    expectBare404(await link("c_sales", "m_support"));
+    expectBare404(await link("c_sales", "m_cdn"));
+    expectBare404(await link("c_sales", "m_trav"));
+    expectBare404(await link("c_sales", "nope"));
+    H.viewer = { userId: "admin2", role: "ADMIN", tenantId: "T2" };
+    expectBare404(await link("c_sales", "m_pdf"));
+  });
+  it("★ no link to a conversation the viewer may not see (an agent of another department)", async () => {
+    H.viewer = { userId: "agent1", role: "AGENT", departmentId: "sales", tenantId: "T" };
+    H.messages.push(msg("m_support_pdf", `/api/uploads/${PDF}`, { conversationId: "c_support" }));
+    const r = await link("c_support", "m_support_pdf");
+    expect(r.status).toBe(404);
+    expect(r.body?.data?.url).toBeUndefined();
+  });
+});
