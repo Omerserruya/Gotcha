@@ -2,9 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 
+import { z } from 'zod';
+
+import { browserApi } from '@/api/client/browser-api';
+import { inboxEndpoints } from '@/api/endpoints/registry';
 import { useRouter } from '@/i18n/navigation';
 
-import { outsideUrl } from './link-policy';
+import { outsideUrl, signedFileOf } from './link-policy';
 import { mobileLinkFrom } from './mobile-paths';
 import {
   browserPlugin,
@@ -15,6 +19,9 @@ import {
   type PushAction,
 } from './native';
 import { registerPushDevice } from './push-actions';
+
+/** `media-link`'s answer, unwrapped: only the path is used. */
+const mediaLinkSchema = z.object({ url: z.string().startsWith('/api/media/s/') });
 
 /**
  * What only the app does: push, and leaving the app for the website.
@@ -99,6 +106,24 @@ export function NativeBridge() {
       if (event.defaultPrevented || event.button !== 0) return;
       const anchor = (event.target as Element | null)?.closest?.('a[href]');
       if (!(anchor instanceof HTMLAnchorElement)) return;
+      /*
+       * ★ A document (a PDF) opens in the phone's own viewer, which has no
+       *   GOTCHA login: the logged-in URL answered 401 (Omer, 2026-11-04).
+       *   So it goes out as a five-minute signed link.
+       */
+      const file = signedFileOf(anchor);
+      if (file !== null) {
+        event.preventDefault();
+        const fallback = anchor.href;
+        void browserApi
+          .get({
+            endpoint: inboxEndpoints.mediaLink(file.conversationId, file.messageId),
+            payload: mediaLinkSchema,
+          })
+          .then((link) => browser.open({ url: new URL(link.url, window.location.origin).href }))
+          .catch(() => browser.open({ url: fallback }));
+        return;
+      }
       const outside = outsideUrl(anchor, window.location);
       if (outside === null) return;
       event.preventDefault();

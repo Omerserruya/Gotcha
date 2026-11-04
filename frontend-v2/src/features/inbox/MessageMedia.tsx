@@ -193,6 +193,8 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
       download={name ?? undefined}
       className={styles.file}
       data-testid={`file-${message.id}`}
+      // The native app opens it with a signed link (shell `NativeBridge`).
+      data-signed-file=""
     >
       <FileText size={16} aria-hidden="true" />
       <span className={styles.fileName}>

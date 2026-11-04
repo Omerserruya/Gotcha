@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { outsideUrl } from './link-policy';
+import { outsideUrl, signedFileOf } from './link-policy';
 
 const here = new URL('https://dev.gotcha.co.il/he/m/inbox/c1');
 const link = (href: string, inApp = false) => {
@@ -26,5 +26,22 @@ describe('outsideUrl', () => {
     expect(outsideUrl(link('https://dev.gotcha.co.il/api/auth/sign-in'), here)).toBeNull();
     expect(outsideUrl(link('https://example.com/p'), here)).toBe('https://example.com/p');
     expect(outsideUrl(link('tel:+972500000000'), here)).toBeNull();
+  });
+});
+
+describe('signedFileOf', () => {
+  // Omer, 2026-11-04: a PDF in the app opened the browser with no login: 401.
+  it('★ a marked document link names its conversation and message', () => {
+    const a = link('https://dev.gotcha.co.il/api/conversations/c1/messages/m1/media/x.pdf');
+    a.setAttribute('data-signed-file', '');
+    expect(signedFileOf(a)).toEqual({ conversationId: 'c1', messageId: 'm1' });
+  });
+  it('unmarked, or not a stored file, is none', () => {
+    expect(
+      signedFileOf(link('https://dev.gotcha.co.il/api/conversations/c1/messages/m1/media/x.pdf')),
+    ).toBeNull();
+    const cdn = link('https://scontent.xx.fbcdn.net/v/abc.pdf');
+    cdn.setAttribute('data-signed-file', '');
+    expect(signedFileOf(cdn)).toBeNull();
   });
 });
