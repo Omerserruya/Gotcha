@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { inboxEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
 
 /**
  * A conversation's NEWEST messages, oldest first, as the stream draws them.
@@ -40,7 +41,16 @@ export async function readNewestMessages<M extends z.ZodType>(
     api.get({ endpoint, payload: schema, raw: true, query: { page, limit: PAGE } });
 
   const first = await read(1);
-  const total = first.meta?.total ?? first.data.length;
+  const total = first.meta?.total;
+  if (total === undefined) {
+    /*
+     * ⚠ The route always sends `meta.total`. Without it there is no way to
+     *   find the newest page, so the first page is shown - which is the bug
+     *   this reader exists for - and said, never silently.
+     */
+    logger.warn('inbox.messages_total_missing', { conversationId });
+    return first.data;
+  }
   if (total <= PAGE) return first.data;
 
   const last = Math.ceil(total / PAGE);
