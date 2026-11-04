@@ -31,7 +31,7 @@ const TREE = [
   { id: 126, name: "עד 99 ש&quot;ח", count: 43 },
 ];
 const p = (id: number, name: string, cats: number[], stock = "instock") =>
-  ({ id, name, status: "publish", catalog_visibility: "visible", stock_status: stock, categories: cats.map((c) => ({ id: c })) });
+  ({ id, name, status: "publish", catalog_visibility: "visible", stock_status: stock, categories: cats.map((c) => ({ id: c, name: TREE.find((t) => t.id === c)?.name })) });
 const PRODUCTS = [
   p(25563, "פרינט- קרואלה", [19, 20, 35, 123]), p(25493, "אנה", [19, 20]), p(25473, "טיאנה", [19, 20], "outofstock"),
   p(25454, "פוקהונטס", [19, 24]), p(25439, "מיראבל", [19, 24, 35]),
@@ -52,6 +52,9 @@ function store() {
       const cat = u.searchParams.get("category");
       // Woo: a substring of the title (her titles never hold "מטפחת" alone).
       body = cat ? PRODUCTS.filter((x) => x.categories.some((c) => String(c.id) === cat)) : q ? PRODUCTS.filter((x) => x.name.includes(q)) : PRODUCTS;
+      // Woo's search also reads descriptions: "במלאי" is in the sold-out Tiana's copy.
+      if (q === "במלאי" || q === "מה יש כרגע במלאי") body = PRODUCTS.filter((x) => x.id === 25473);
+      if (u.searchParams.get("stock_status") === "instock") body = body.filter((x: any) => x.stock_status === "instock");
     }
     return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
   }));
@@ -122,6 +125,30 @@ describe("her asks, from the prod conversations", () => {
     const ids = (await s.run({ query: "scarf" })).map((x) => x.id);
     expect(s.calls.some((u) => /[?&]category=19(&|$)/.test(u))).toBe(true);
     expect(ids.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("a general stock ask (cmw11vyau / cmw1s1vit: \"מה יש כרגע במלאי\")", () => {
+  it("is a browse of what is in stock, a scarf and a piece of jewellery, never a title search for במלאי", async () => {
+    for (const query of ["מה יש כרגע במלאי", "במלאי", "מה יש"]) {
+      const s = store();
+      const got = await s.run({ query });
+      expect(got.length).toBeGreaterThan(0);
+      expect(got.every((x) => x.stock_status === "instock")).toBe(true);
+      expect(got.map((x) => x.id)).not.toContain(25473);
+      // Different kinds near the top, not only scarves.
+      expect(got.slice(0, 3).some((x) => x.categories.some((c: any) => [27, 30].includes(c.id)))).toBe(true);
+      expect(s.calls.some((u) => /[?&]search=/.test(u))).toBe(false);
+      expect(s.calls.some((u) => /stock_status=instock/.test(u))).toBe(true);
+    }
+  });
+  it("a stock ask that names a kind is that kind's category, in stock first", async () => {
+    const s = store();
+    const ids = (await s.run({ query: "אילו מטפחות יש במלאי" })).map((x) => x.id);
+    expect(s.calls.some((u) => /[?&]category=19(&|$)/.test(u))).toBe(true);
+    expect(ids).not.toContain(25473); // sold out, and "במלאי" in its copy is not a match
+    expect(ids).toEqual(expect.arrayContaining([25563, 25493, 25454, 25439]));
+    expect(s.calls.some((u) => /search=במלאי/.test(u))).toBe(false);
   });
 });
 

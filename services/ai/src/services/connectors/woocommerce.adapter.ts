@@ -466,6 +466,9 @@ export function hebrewVariants(word: string): string[] {
   return Array.from(new Set([s + "ת", s + "ה", s + "ות", s + "ים", s])).filter((v) => v !== word);
 }
 
+/** Words of a general stock ask, stemmed ("מה יש כרגע במלאי", "אילו מוצרים זמינים"). */
+const STOCK_ASK = new Set(["במלאי", "מלאי", "כרגע", "עכשיו", "זמינ", "זמין", "מוצר", "הכל", "אצלכ", "אצלכם", "אילו", "חדש"].map((w) => hebrewStem(w)));
+
 /** In stock first, keeping each group's order. */
 function inStockFirst(list: any[]): any[] {
   const out = (p: any) => p?.stock_status === "outofstock";
@@ -481,21 +484,43 @@ async function hebrewProductSearch(
 ): Promise<any[]> {
   const get = async (p: URLSearchParams) => { const l = visible(await wooRequest(auth, "GET", `${base}/products?${p}`)); return Array.isArray(l) ? l : []; };
   const words = searchWords(query).filter((w) => !HEBREW_STOP.has(hebrewStem(w)));
+  const log = (hit: string, n: number) => console.log(`[woo-search] query=${JSON.stringify(query.slice(0, 60))} hit=${hit} results=${n}`);
+  // "מה יש כרגע במלאי" names no product (Tehila, cmw11vyau / cmw1s1vit): the
+  // title search for "במלאי" found one sold-out scarf by its description. A
+  // general stock ask is a browse of what is in stock, newest first, one from
+  // each kind in turn so it is not ten of the same.
+  if (words.every((w) => STOCK_ASK.has(hebrewStem(w)))) {
+    const browse = new URLSearchParams(params);
+    browse.delete("search");
+    browse.set("stock_status", "instock");
+    browse.set("orderby", "date");
+    browse.set("per_page", String(Math.max(per * 3, 30)));
+    const all = await get(browse);
+    const kindOf = (p: any) => String((p?.categories ?? []).map((c: any) => c?.name).find((n: any) => n && !/uncategori[sz]ed|new in|NEW|ש"ח|ש&quot;ח|\d/.test(String(n))) ?? "");
+    const groups = new Map<string, any[]>();
+    for (const p of all) { const k = kindOf(p); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(p); }
+    const out: any[] = [];
+    for (let i = 0; out.length < all.length; i++) for (const g of groups.values()) if (g[i]) out.push(g[i]);
+    log("browse:instock", out.length);
+    return out.slice(0, per);
+  }
   const cat = await categoryForQuery(auth, base, query);
   const catStems = new Set(cat ? queryStems(cat.name) : []);
   // Words the category does not account for: a name, a colour, a print.
-  const rest = words.filter((w) => !queryStems(w).some((s) => catStems.has(s)));
+  // A stock word ("אילו מטפחות יש במלאי") is a filter, never a word to search.
+  const wantsStock = words.some((w) => STOCK_ASK.has(hebrewStem(w)));
+  const rest = words.filter((w) => !STOCK_ASK.has(hebrewStem(w)) && !queryStems(w).some((s) => catStems.has(s)));
   const byCat = new URLSearchParams(params);
   byCat.delete("search");
   if (cat) { byCat.set("category", cat.id); byCat.set("per_page", String(Math.max(per, 30))); }
+  if (wantsStock) byCat.set("stock_status", "instock");
   const restSearch = (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return get(p); };
   const [inCat, whole, ...perWord] = await Promise.all([
     cat ? get(byCat) : Promise.resolve([] as any[]),
     get(params),
     ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
   ]);
-  const named = [...perWord.flat(), ...whole];
-  const log = (hit: string, n: number) => console.log(`[woo-search] query=${JSON.stringify(query.slice(0, 60))} hit=${hit} results=${n}`);
+  const named = [...perWord.flat(), ...(wantsStock && !rest.length ? [] : whole)].filter((p: any) => !wantsStock || p?.stock_status !== "outofstock");
   if (inCat.length) {
     const catIds = new Set(inCat.map((p: any) => String(p?.id)));
     // A product the words name AND in the category first ("מטפחת אנה"), then the category, then other title hits.
