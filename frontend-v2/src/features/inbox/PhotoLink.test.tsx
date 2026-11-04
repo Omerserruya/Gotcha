@@ -28,6 +28,8 @@ describe('PhotoLink', () => {
       link.dispatchEvent(click);
     });
     expect(click.defaultPrevented).toBe(true);
+    // The native shell's link rule leaves it alone (`outsideUrl`).
+    expect(link).toHaveAttribute('data-in-app');
     expect(screen.getByTestId('photo-m1-viewer')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('photo-m1-viewer-close'));
     expect(screen.queryByTestId('photo-m1-viewer')).toBeNull();
