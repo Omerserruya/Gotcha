@@ -78,9 +78,12 @@ export function browserPlugin(): BrowserPlugin | null {
 }
 
 /**
- * The phone's document viewer, or `null`. An app built before 2026-11-04 has
- * the plugin without `openDocument`: then `null`, and the caller uses the
- * browser as before.
+ * The phone's document viewer, or `null` outside the app.
+ *
+ * ⚠ Not a feature check. Capacitor's plugin proxy answers with a function for
+ *   any method name, so an app built before 2026-11-04 (no `openDocument` in
+ *   Java) gets one too, and its call rejects. The caller treats a rejection
+ *   as "use the browser", which is what such an app did before.
  */
 export function documentPlugin(): DocumentPlugin | null {
   const plugin = capacitor()?.Plugins?.NavigationPolicy;
