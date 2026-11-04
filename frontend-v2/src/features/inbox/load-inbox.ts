@@ -28,6 +28,8 @@ import {
 import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+
+import { readNewestMessages } from './newest-messages';
 import { z } from 'zod';
 
 /**
@@ -118,10 +120,6 @@ const queuePageSchema = z.object({
  * could not disagree with the author.
  */
 export const queuePageSchemaForTests = queuePageSchema;
-
-const streamPageSchema = z.object({
-  data: z.array(messageSchema),
-});
 
 /**
  * Everything about the OPEN conversation - the second round.
@@ -439,13 +437,10 @@ export async function loadConversation(conversationId: string): Promise<Conversa
   const api = serverApi();
   const open = { id: conversationId };
   const [messages, timeline, orders] = await Promise.all([
-    api
-      .get({ endpoint: inboxEndpoints.messages(open.id), payload: streamPageSchema, raw: true })
-      .then((page) => page.data)
-      .catch((cause: unknown) => {
-        logger.warn('inbox.stream_failed', { cause });
-        return null;
-      }),
+    readNewestMessages(api, open.id, messageSchema).catch((cause: unknown) => {
+      logger.warn('inbox.stream_failed', { cause });
+      return null;
+    }),
     /*
      * ★★ NOT READ, AND NOT BECAUSE IT FAILED.
      *
