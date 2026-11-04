@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 
+import { BACK_REQUEST_EVENT } from '@/lib/back-request';
+
 import styles from './Inbox.module.css';
 
 /**
@@ -39,6 +41,12 @@ export function PhotoLink({
       if (event.key === 'Escape') setOpen(false);
     };
     window.addEventListener('keydown', onKey);
+    // Android's Back closes it (shell NativeBridge asks; the viewer answers).
+    const onBack = (event: Event) => {
+      event.preventDefault();
+      setOpen(false);
+    };
+    window.addEventListener(BACK_REQUEST_EVENT, onBack);
     /*
      * The thread under it does not scroll while it is open: a swipe on the
      * photo moved the conversation behind it.
@@ -48,6 +56,7 @@ export function PhotoLink({
     if (scroller) scroller.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener(BACK_REQUEST_EVENT, onBack);
       if (scroller) scroller.style.overflow = before;
     };
   }, [open]);
