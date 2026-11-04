@@ -8,7 +8,9 @@
  *   - the rules name the neighbour-topic case (points of sale vs pickup).
  */
 import { describe, it, expect } from "vitest";
-import { buildKnowledgeContext, KNOWLEDGE_GAP_SCORE } from "../services/knowledge.service";
+import { buildKnowledgeContext, KNOWLEDGE_GAP_SCORE, NO_KNOWLEDGE_MATCH_BLOCK } from "../services/knowledge.service";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const chunk = (title: string, score: number, content = "x") => ({ documentTitle: title, content, score, chunkIndex: 0, documentId: title } as any);
 
@@ -35,5 +37,28 @@ describe("knowledge context: a neighbouring topic is not an answer", () => {
     const ctx = buildKnowledgeContext([{ documentTitle: "t", content: "c", chunkIndex: 0 } as any]);
     expect(ctx).not.toContain("weak match");
     expect(ctx).not.toContain("None of the sources below");
+  });
+});
+
+describe("the customer path: all weak means no sources at all (dev walk 2026-11-04)", () => {
+  const weakPickup = [chunk("משלוחים", KNOWLEDGE_GAP_SCORE - 0.03, "איסוף עצמי מהסטודיו בתל אביב ביום העסקים הבא"), chunk("Terms", KNOWLEDGE_GAP_SCORE - 0.08)];
+  it("every source weak: the pickup text never reaches the model; the do-not-know block does", () => {
+    const ctx = buildKnowledgeContext(weakPickup, { dropWhenAllWeak: true });
+    expect(ctx).toBe(NO_KNOWLEDGE_MATCH_BLOCK);
+    expect(ctx).not.toContain("איסוף");
+    expect(ctx).toMatch(/not that it does not/);
+    expect(ctx).toMatch(/Do not offer something nearby/);
+  });
+  it("one strong source: the sources as before, the strong one answers", () => {
+    const ctx = buildKnowledgeContext([chunk("נקודות רכישה", KNOWLEDGE_GAP_SCORE + 0.1, "חנות הכובע, ירושלים"), ...weakPickup], { dropWhenAllWeak: true });
+    expect(ctx).toContain("חנות הכובע, ירושלים");
+    expect(ctx).not.toBe(NO_KNOWLEDGE_MATCH_BLOCK);
+  });
+  it("other callers (copilot, tuning) keep the marked sources", () => {
+    expect(buildKnowledgeContext(weakPickup)).toContain("(weak match");
+  });
+  it("the live bot path asks for it", () => {
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("buildKnowledgeContext(chunks, { dropWhenAllWeak: true })");
   });
 });

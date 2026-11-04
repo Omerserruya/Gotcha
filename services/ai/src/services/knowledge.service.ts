@@ -202,8 +202,26 @@ export async function retrieveRelevantChunks(
   }
 }
 
-export function buildKnowledgeContext(chunks: SearchResult[]): string {
+/**
+ * The customer-facing block when every retrieved source is weak (Tehila
+ * 2026-11-04 dev walk: with the five weak sources marked and rule 7 present,
+ * "איפה יש נקודות מכירה" still got "אין לנו רשימת נקודות מכירה פיזיות, אפשר
+ * איסוף מהסטודיו": a made-up negative and the neighbouring pickup). The weak
+ * sources are not shown at all, so there is nothing nearby to answer with.
+ */
+export const NO_KNOWLEDGE_MATCH_BLOCK = `## KNOWLEDGE BASE CONTEXT
+
+Nothing in this business's Knowledge answers this message.
+
+If the customer asks about the business itself - where it sells or has points of sale, its locations, opening hours, policies, people, contact details, or anything else no tool result in this turn answers - you do NOT know it.
+- Do not state anything about it either way: not that it exists, and not that it does not ("אין לנו", "we don't have").
+- Do not offer something nearby instead (pickup, shipping, another branch).
+- Say plainly that you do not have that information here, and offer to have the team get back to them.
+Questions about products, stock and orders are answered from the tools as usual.`;
+
+export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean } = {}): string {
   if (chunks.length === 0) return "";
+  if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return NO_KNOWLEDGE_MATCH_BLOCK;
 
   // A source that scored below the gap line is probably about something else
   // (Tehila 2026-11-03: "איפה יש נקודות מכירה" was answered from the shipping

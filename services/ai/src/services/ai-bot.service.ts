@@ -2015,7 +2015,8 @@ async function generateAIBotReplyInner(
           askerKey: opts.conversationId ?? null,
         },
       );
-      kbBlock = buildKnowledgeContext(chunks) || undefined;
+      // The live customer path: a turn whose every source is weak gets no sources, only the "you do not know this" block.
+      kbBlock = buildKnowledgeContext(chunks, { dropWhenAllWeak: true }) || undefined;
       markStage("knowledge");
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
