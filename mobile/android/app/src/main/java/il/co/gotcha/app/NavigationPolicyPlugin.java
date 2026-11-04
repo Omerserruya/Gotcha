@@ -4,9 +4,20 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.text.TextUtils;
+import android.webkit.MimeTypeMap;
+import androidx.core.content.FileProvider;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
 import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -93,6 +104,75 @@ public class NavigationPolicyPlugin extends Plugin {
         } catch (ActivityNotFoundException e) {
             Logger.warn("NavigationPolicy", "No browser to open " + url);
         }
+    }
+
+    /**
+     * A message's document (a PDF), opened in the phone's own viewer, not the
+     * browser: the browser only downloaded it (Omer, 2026-11-04).
+     *
+     * The page passes a short-lived signed link on the app's own origin (the
+     * conversation service's /api/media/s/...). It is fetched here into the
+     * app's cache and handed to whichever app views that type, by a
+     * FileProvider content URI with a one-off read grant. Only the app's own
+     * origin is fetched: this is not a general downloader.
+     *
+     * Resolves { opened: true }, or rejects ("no_viewer", "failed") so the page
+     * can fall back to the browser.
+     */
+    @PluginMethod
+    public void openDocument(PluginCall call) {
+        String raw = call.getString("url");
+        String name = call.getString("fileName", "document");
+        Uri url = raw == null ? null : Uri.parse(raw);
+        if (url == null || appOrigin == null || !"https".equals(url.getScheme()) ||
+            url.getHost() == null || !url.getHost().equalsIgnoreCase(appOrigin.getHost()) ||
+            url.getPath() == null || !url.getPath().startsWith("/api/media/s/")) {
+            call.reject("refused");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(url.toString()).openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(60000);
+                if (connection.getResponseCode() != 200) throw new IllegalStateException("status " + connection.getResponseCode());
+                String type = connection.getContentType();
+                if (type != null && type.contains(";")) type = type.substring(0, type.indexOf(';')).trim();
+                String safe = name.replaceAll("[^\\p{L}\\p{N}._-]+", "_");
+                if (safe.isEmpty() || safe.startsWith(".")) safe = "document" + safe;
+                if (type == null || type.isEmpty() || "application/octet-stream".equals(type)) {
+                    String ext = MimeTypeMap.getFileExtensionFromUrl(safe);
+                    String guess = ext == null ? null : MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(Locale.ROOT));
+                    type = guess != null ? guess : "application/octet-stream";
+                }
+                File dir = new File(getContext().getCacheDir(), "documents");
+                if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("cache");
+                File file = new File(dir, safe);
+                try (InputStream in = connection.getInputStream(); OutputStream out = new FileOutputStream(file)) {
+                    byte[] buffer = new byte[16384];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                }
+                Uri content = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", file);
+                Intent view = new Intent(Intent.ACTION_VIEW);
+                view.setDataAndType(content, type);
+                view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    getActivity().startActivity(view);
+                    JSObject result = new JSObject();
+                    result.put("opened", true);
+                    call.resolve(result);
+                } catch (ActivityNotFoundException e) {
+                    call.reject("no_viewer");
+                }
+            } catch (Exception e) {
+                Logger.warn("NavigationPolicy", "openDocument failed: " + e.getMessage());
+                call.reject("failed");
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }).start();
     }
 
     private static List<String> lower(String[] values) {
