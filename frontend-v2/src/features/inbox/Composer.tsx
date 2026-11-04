@@ -239,7 +239,16 @@ export function Composer({
   const add = (chosen: FileList | readonly File[] | null | undefined) => {
     setResult(null);
     if (!chosen) return;
-    setFiles((now) => [...now, ...Array.from(chosen)].slice(0, MAX_FILES));
+    /*
+     * ⚠⚠ COPIED NOW, NOT IN THE UPDATER. A FileList is live: the inputs clear
+     *    their value right after this call (so the same file can be picked
+     *    again), which empties it - and React runs the updater later. Read
+     *    there, every pick arrived empty and nothing could be sent
+     *    (Omer, 2026-11-04).
+     */
+    const picked = Array.from(chosen);
+    if (picked.length === 0) return;
+    setFiles((now) => [...now, ...picked].slice(0, MAX_FILES));
   };
   const remove = (index: number) => {
     setResult(null);

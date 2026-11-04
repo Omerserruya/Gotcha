@@ -2445,6 +2445,99 @@
     display: none;
   }
 
+  /*
+   * ★ A photo fills its bubble edge to edge, and the bubble is the photo's
+   *   width: the image was 240px at the start of a wider bubble, which left a
+   *   band of bubble on one side (Omer, 2026-11-04).
+   */
+  .stream[data-variant='phone'] .message:has(.photo) {
+    inline-size: min(82%, 280px);
+  }
+
+  .stream[data-variant='phone'] .bubble:has(.photo) {
+    padding-inline: 4px;
+    padding-block-start: 4px;
+  }
+
+  .stream[data-variant='phone'] .bubble:has(.photo) > :not(.photo) {
+    padding-inline: var(--space-6);
+  }
+
+  .stream[data-variant='phone'] .photo {
+    margin: 0;
+    border-radius: 11px;
+  }
+
+  .stream[data-variant='phone'] .photo img {
+    inline-size: 100%;
+    max-block-size: 340px;
+    aspect-ratio: auto;
+  }
+
+  /*
+   * ★ Product cards stay inside their bubble: the row is the bubble's width
+   *   and scrolls, where its cards used to push the bubble past the screen's
+   *   edge (Omer, 2026-11-04).
+   */
+  .stream[data-variant='phone'] .message:has(.productRow) {
+    inline-size: 82%;
+  }
+
+  .stream[data-variant='phone'] .bubble,
+  .stream[data-variant='phone'] .productRow {
+    min-inline-size: 0;
+  }
+
+  .stream[data-variant='phone'] .message:has(.productRow) .bubble {
+    max-inline-size: 100%;
+  }
+
+  .stream[data-variant='phone'] .productRow {
+    max-inline-size: 100%;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  .stream[data-variant='phone'] .productRow .product {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+
+  /* The phone's photo, whole, over the thread: tap anywhere or X to close. */
+  .photoViewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-16);
+    background-color: color-mix(in srgb, var(--mobile-ink) 96%, transparent);
+  }
+
+  .photoViewerImage {
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    object-fit: contain;
+  }
+
+  .photoViewerClose {
+    position: absolute;
+    inset-block-start: calc(env(safe-area-inset-top, 0px) + var(--space-12));
+    inset-inline-end: var(--space-12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 44px;
+    block-size: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background-color: color-mix(in srgb, var(--mobile-ink-text) 16%, transparent);
+    color: var(--mobile-ink-text);
+    cursor: pointer;
+  }
+
   .stream[data-variant='phone'] .message {
     max-inline-size: 82%;
     gap: var(--space-3);

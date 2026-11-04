@@ -10,6 +10,7 @@ import { loadPermissions } from '@/shell/load-permissions';
 import { loadMessages } from '@/i18n/load-messages';
 import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { AppProviders } from '@/shell/AppProviders';
+import { loadViewerId } from '@/features/roles/load-person';
 import { MobileShell } from '@/shell/mobile/MobileShell';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
@@ -103,7 +104,11 @@ export default async function AuthenticatedLayout({
     );
   }
 
-  const { permissions, roleKey, status } = await loadPermissions();
+  const [{ permissions, roleKey, status }, meId] = await Promise.all([
+    loadPermissions(),
+    // Who is looking: the incoming-message banner speaks for their conversations and nobody's.
+    loadViewerId(),
+  ]);
   /*
     ★★ A 401 IS "SIGN IN AGAIN", NEVER A SCREEN OF "COULDN'T READ" (Omer,
     2026-10-04). Every page waits behind this layout, and its first read uses
@@ -130,7 +135,7 @@ export default async function AuthenticatedLayout({
         support={support}
       >
         <WithSupportBanner>
-          <MobileShell>{children}</MobileShell>
+          <MobileShell meId={meId}>{children}</MobileShell>
         </WithSupportBanner>
       </AppProviders>
     </NextIntlClientProvider>

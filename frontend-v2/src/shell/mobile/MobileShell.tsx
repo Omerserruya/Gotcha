@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import styles from './MobileShell.module.css';
+import { MobileInboundBanner } from './MobileInboundBanner';
 import { MobileTabs } from './MobileTabs';
 import { NativeBridge } from './NativeBridge';
 
@@ -19,11 +20,19 @@ import { NativeBridge } from './NativeBridge';
  * the screen, a conversation's bar is the person with a way back. A shared
  * bar here would have to know which of the two it was.
  */
-export function MobileShell({ children }: { readonly children: ReactNode }) {
+export function MobileShell({
+  children,
+  meId = null,
+}: {
+  readonly children: ReactNode;
+  /** Who is looking, for the incoming-message banner (`MobileInboundBanner`). */
+  readonly meId?: string | null;
+}) {
   return (
     <div className={styles.frame} data-mobile-shell="">
       {/* Renders nothing: push registration and notification taps, inside the app only. */}
       <NativeBridge />
+      <MobileInboundBanner meId={meId} />
       <main id="main-content" className={styles.main} tabIndex={-1}>
         {children}
       </main>

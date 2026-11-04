@@ -473,6 +473,45 @@ describe('★★ 02’s bar - the four controls that have a backend', () => {
     expect(screen.getByTestId('composer-send')).toBeEnabled();
   });
 
+  // Omer, 2026-11-04: nothing chosen on the phone could be sent. A real
+  // browser's FileList is LIVE: clearing the input's value empties it.
+  it('⚠⚠ a pick is held even though the input clears itself right after', () => {
+    show();
+    const input = screen.getByTestId('composer-image-input') as HTMLInputElement;
+    const live: File[] = [];
+    const list = {
+      get length() {
+        return live.length;
+      },
+      item: (i: number) => live[i] ?? null,
+      [Symbol.iterator]: () => live[Symbol.iterator](),
+    };
+    Object.defineProperty(input, 'files', { configurable: true, get: () => list });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: () => (live.length ? 'picked' : ''),
+      set: () => {
+        live.length = 0;
+      },
+    });
+    const pick = (name: string) => {
+      live.push(new File(['x'], name, { type: 'image/png' }));
+      fireEvent.change(input);
+    };
+    /*
+     * Two picks before React renders: the second one's update cannot be
+     * computed eagerly, so an updater that reads the list reads it emptied -
+     * what a phone with other work pending does on every pick.
+     */
+    act(() => {
+      pick('one.png');
+      pick('two.png');
+    });
+    expect(screen.getByTestId('composer-file-0')).toHaveTextContent('one.png');
+    expect(screen.getByTestId('composer-file-1')).toHaveTextContent('two.png');
+    expect(screen.getByTestId('composer-send')).toBeEnabled();
+  });
+
   it('★★ Send with a file sends the file, with the text as its caption', async () => {
     const u = user();
     show();

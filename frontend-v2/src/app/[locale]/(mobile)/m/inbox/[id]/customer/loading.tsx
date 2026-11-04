@@ -1,6 +1,3 @@
-'use client';
-
-import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
 import { Skeleton, SkeletonRegion } from '@/design-system/primitives/skeleton/Skeleton';
@@ -12,21 +9,21 @@ import { MobileBar } from '@/shell/mobile/MobileBar';
 const SECTIONS = [96, 150, 120, 80, 80] as const;
 
 /**
- * The customer screen while it loads: the bar for real, with its way back to
- * the thread (a `loading.tsx` is given no params, so the id is read from the
- * address here), then a face and five sections in their shape.
+ * The customer screen while it loads: the bar, then a face and five sections
+ * in their shape.
+ *
+ * ⚠⚠ A SERVER COMPONENT, LIKE EVERY OTHER `loading.tsx` HERE. It was a client
+ *    one (to read the id for its back link), and from inside the app the
+ *    screen then never left its loading state: the page arrived and was not
+ *    shown (Omer, 2026-11-04). A `loading.tsx` is given no params, so while
+ *    it shows, back goes to the inbox, as the thread's own loading does.
  */
 export default function Loading() {
   const t = useTranslations('mobile');
-  const params = useParams<{ id?: string }>();
-  const id = typeof params?.id === 'string' ? params.id : null;
   return (
     <div className={ui.screen} data-testid="mobile-customer-info-loading">
       <MobileBar
-        back={{
-          href: (id === null ? '/m/inbox' : `/m/inbox/${encodeURIComponent(id)}`) as '/m/inbox',
-          label: t('customerInfo.back'),
-        }}
+        back={{ href: '/m/inbox', label: t('inbox.back') }}
         title={t('customerInfo.title')}
       />
       <div className={ui.scroll}>

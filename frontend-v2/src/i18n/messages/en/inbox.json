@@ -71,6 +71,8 @@
     "replyTo": "Reply to this message",
     "mediaUnavailable": "This attachment couldn't be fetched - WhatsApp keeps media only a few days.",
     "openPhoto": "Open the photo",
+    "closePhoto": "Close the photo",
+    "bannerClose": "Dismiss",
     "file": "Download the file",
     "fileSize": {
       "kb": "{size, number} KB",
