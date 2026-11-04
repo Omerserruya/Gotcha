@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { Skeleton, SkeletonRegion } from '@/design-system/primitives/skeleton/Skeleton';
 import styles from '@/features/mobile/inbox/mobile-inbox.module.css';
 import ui from '@/features/mobile/mobile-ui.module.css';
-import { MobileBar } from '@/shell/mobile/MobileBar';
+import { MobileBarStill } from '@/shell/mobile/MobileBarStill';
 
 /** The sections, in the screen's order, each at the height its card usually is. */
 const SECTIONS = [96, 150, 120, 80, 80] as const;
@@ -22,7 +22,7 @@ export default function Loading() {
   const t = useTranslations('mobile');
   return (
     <div className={ui.screen} data-testid="mobile-customer-info-loading">
-      <MobileBar
+      <MobileBarStill
         back={{ href: '/m/inbox', label: t('inbox.back') }}
         title={t('customerInfo.title')}
       />

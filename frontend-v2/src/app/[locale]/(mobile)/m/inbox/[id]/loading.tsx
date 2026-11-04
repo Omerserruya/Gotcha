@@ -2,7 +2,7 @@ import { useTranslations } from 'next-intl';
 
 import { MobileThreadSkeleton } from '@/features/mobile/MobileSkeletons';
 import ui from '@/features/mobile/mobile-ui.module.css';
-import { MobileBar } from '@/shell/mobile/MobileBar';
+import { MobileBarStill } from '@/shell/mobile/MobileBarStill';
 
 /**
  * A conversation while it loads: the bar with its way back for real (who it
@@ -13,7 +13,7 @@ export default function Loading() {
   const t = useTranslations('mobile');
   return (
     <div className={ui.screen} data-testid="mobile-thread-loading">
-      <MobileBar back={{ href: '/m/inbox', label: t('inbox.back') }} edge />
+      <MobileBarStill back={{ href: '/m/inbox', label: t('inbox.back') }} edge />
       <MobileThreadSkeleton label={t('loading.thread')} />
     </div>
   );
