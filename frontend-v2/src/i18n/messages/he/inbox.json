@@ -71,6 +71,8 @@
     "replyTo": "השב להודעה הזו",
     "mediaUnavailable": "לא הצלחנו להביא את הקובץ המצורף - WhatsApp שומר מדיה רק כמה ימים.",
     "openPhoto": "פתיחת התמונה",
+    "closePhoto": "סגירת התמונה",
+    "bannerClose": "סגירת ההתראה",
     "file": "הורדת הקובץ",
     "fileSize": {
       "kb": "{size, number} KB",
