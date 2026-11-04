@@ -1,9 +1,11 @@
 # Runs on the mobile-android branch, which carries only mobile/ on top of main.
 # Builds the GOTCHA Android app (mobile/) into an installable debug APK.
 #
-# A debug build pointed at dev (GOTCHA_ENV=dev): for installing on a test
-# phone by hand, not for the Play Store. The APK is the run's artifact
-# ("gotcha-android-dev"), kept 14 days.
+# Two debug builds, one per environment: "gotcha-android-dev" points at
+# dev.gotcha.co.il, "gotcha-android-prod" at app.gotcha.co.il (Omer,
+# 2026-11-04). For installing on a phone by hand, not for the Play Store
+# (that needs a release build signed with a kept key). Kept 14 days.
+# Both have the same application id, so one replaces the other on a phone.
 #
 # google-services.json is not in git; it comes from the repository secret
 # GOOGLE_SERVICES_JSON (the file's contents, as they are). Without it the
@@ -27,6 +29,10 @@ concurrency:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, prod]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -60,8 +66,8 @@ jobs:
             echo "::warning::GOOGLE_SERVICES_JSON is not set: the APK will build without push."
           fi
 
-      - name: Sync (dev)
-        run: GOTCHA_ENV=dev npx cap sync android
+      - name: Sync (${{ matrix.env }})
+        run: GOTCHA_ENV=${{ matrix.env }} npx cap sync android
 
       - name: Build debug APK
         working-directory: mobile/android
@@ -69,7 +75,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: gotcha-android-dev
+          name: gotcha-android-${{ matrix.env }}
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
           if-no-files-found: error
