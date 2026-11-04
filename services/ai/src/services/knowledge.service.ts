@@ -205,9 +205,17 @@ export async function retrieveRelevantChunks(
 export function buildKnowledgeContext(chunks: SearchResult[]): string {
   if (chunks.length === 0) return "";
 
+  // A source that scored below the gap line is probably about something else
+  // (Tehila 2026-11-03: "איפה יש נקודות מכירה" was answered from the shipping
+  // doc's "pickup from the studio in Nahariya"). It is marked, and when every
+  // source is weak the model is told so before it reads them.
+  const weak = (c: SearchResult) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE;
   const contextParts = chunks.map((chunk, i) => {
-    return `### Source ${i + 1}: ${chunk.documentTitle}\n${chunk.content}`;
+    return `### Source ${i + 1}: ${chunk.documentTitle}${weak(chunk) ? " (weak match: probably NOT about this question)" : ""}\n${chunk.content}`;
   });
+  const allWeak = chunks.every(weak)
+    ? "\nNone of the sources below clearly matches this question. Unless one of them states the answer outright, say you do not have that information and offer to have the team answer.\n"
+    : "";
 
   return `## KNOWLEDGE BASE CONTEXT (HIGH PRIORITY)
 
@@ -220,8 +228,9 @@ Rules:
 4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently.
 5. When you use a fact from a specific source, you may reference it by its title or number; never invent sources.
 6. Information NOT present here is treated as unknown for this turn.
+7. A source about a NEIGHBOURING topic is not an answer. A shipping or pickup policy does not say where the products are sold in shops (points of sale, נקודות מכירה, חנויות); opening hours of one place are not the hours of another. When the exact thing asked is not stated, say you do not have that information and offer to have the team answer; do not answer with the nearest policy instead.
 
----BEGIN KNOWLEDGE---
+${allWeak}---BEGIN KNOWLEDGE---
 
 ${contextParts.join("\n\n---\n\n")}
 
