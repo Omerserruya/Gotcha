@@ -1,7 +1,8 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 
 import styles from './Inbox.module.css';
 
@@ -30,6 +31,7 @@ export function PhotoLink({
   readonly testId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const link = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +39,17 @@ export function PhotoLink({
       if (event.key === 'Escape') setOpen(false);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    /*
+     * The thread under it does not scroll while it is open: a swipe on the
+     * photo moved the conversation behind it.
+     */
+    const scroller = link.current?.closest<HTMLElement>('[data-stream-scroller]') ?? null;
+    const before = scroller?.style.overflow ?? '';
+    if (scroller) scroller.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (scroller) scroller.style.overflow = before;
+    };
   }, [open]);
 
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -49,6 +61,7 @@ export function PhotoLink({
   return (
     <>
       <a
+        ref={link}
         href={url}
         target="_blank"
         rel="noopener noreferrer"
@@ -62,34 +75,43 @@ export function PhotoLink({
         {/* eslint-disable-next-line @next/next/no-img-element -- a customer's file, from our host or theirs */}
         <img src={url} alt={alt} loading="lazy" />
       </a>
-      {open ? (
-        <div
-          className={styles.photoViewer}
-          role="dialog"
-          aria-modal="true"
-          aria-label={openLabel}
-          data-testid={`${testId}-viewer`}
-          onClick={() => setOpen(false)}
-        >
-          <button
-            type="button"
-            className={styles.photoViewerClose}
-            aria-label={closeLabel}
-            data-testid={`${testId}-viewer-close`}
-            autoFocus
-            onClick={() => setOpen(false)}
-          >
-            <X size={22} aria-hidden="true" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element -- the same file, whole */}
-          <img
-            className={styles.photoViewerImage}
-            src={url}
-            alt={alt}
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      ) : null}
+      {/*
+        ⚠⚠ PORTALED TO <body>. Drawn inside the thread, the viewer sat in the
+           scroller's layers: a photo near the top or bottom of the screen
+           opened it under the bar or the composer, and there was no way out
+           (Omer, 2026-11-04). At the body it is over everything, always.
+      */}
+      {open && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={styles.photoViewer}
+              role="dialog"
+              aria-modal="true"
+              aria-label={openLabel}
+              data-testid={`${testId}-viewer`}
+              onClick={() => setOpen(false)}
+            >
+              <button
+                type="button"
+                className={styles.photoViewerClose}
+                aria-label={closeLabel}
+                data-testid={`${testId}-viewer-close`}
+                autoFocus
+                onClick={() => setOpen(false)}
+              >
+                <X size={22} aria-hidden="true" />
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element -- the same file, whole */}
+              <img
+                className={styles.photoViewerImage}
+                src={url}
+                alt={alt}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

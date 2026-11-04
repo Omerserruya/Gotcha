@@ -16,13 +16,14 @@ describe('PhotoLink', () => {
   // Omer, 2026-11-04: in the app a photo opened the phone's browser, which answered 401.
   it('★ on the phone a photo opens full screen in the app, and closes', () => {
     render(
-      <ol data-variant="phone">
+      <ol data-variant="phone" data-stream-scroller="" data-testid="scroller">
         <li>
           <PhotoLink {...props} />
         </li>
       </ol>,
     );
     const link = screen.getByTestId('photo-m1');
+    const scroller = screen.getByTestId('scroller');
     const click = new MouseEvent('click', { bubbles: true, cancelable: true });
     act(() => {
       link.dispatchEvent(click);
@@ -31,8 +32,12 @@ describe('PhotoLink', () => {
     // The native shell's link rule leaves it alone (`outsideUrl`).
     expect(link).toHaveAttribute('data-in-app');
     expect(screen.getByTestId('photo-m1-viewer')).toBeInTheDocument();
+    // Over everything, not inside the thread's layers (Omer, 2026-11-04).
+    expect(screen.getByTestId('photo-m1-viewer').parentElement).toBe(document.body);
+    expect(scroller).toHaveStyle({ overflow: 'hidden' });
     fireEvent.click(screen.getByTestId('photo-m1-viewer-close'));
     expect(screen.queryByTestId('photo-m1-viewer')).toBeNull();
+    expect(scroller.style.overflow).toBe('');
   });
 
   it('on the website it stays a link to a new tab', () => {

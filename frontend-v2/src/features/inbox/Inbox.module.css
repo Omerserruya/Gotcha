@@ -2527,13 +2527,18 @@
 
   .photoViewerClose {
     position: absolute;
-    inset-block-start: calc(env(safe-area-inset-top, 0px) + var(--space-12));
+    /*
+     * ⚠ Below the phone's status bar even where the WebView reports no safe
+     *   area (Android draws under it): under the clock it could not be tapped.
+     */
+    inset-block-start: calc(max(env(safe-area-inset-top, 0px), 28px) + var(--space-12));
     inset-inline-end: var(--space-12);
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    inline-size: 44px;
-    block-size: 44px;
+    inline-size: 48px;
+    block-size: 48px;
     padding: 0;
     border: 0;
     border-radius: var(--radius-round);
