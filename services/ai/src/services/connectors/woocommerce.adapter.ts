@@ -20,6 +20,8 @@
 
 import { assertPublicUrl, getRedis } from "@chatcenter/shared";
 import { orderPhoneSearchTerms } from "../../lib/order-phone-search";
+import { rememberListed } from "./woo-listed-products";
+export { recentlyListedWooProduct } from "./woo-listed-products";
 export { orderPhoneSearchTerms };
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { SHIPMENT_TRACKING_NAMESPACE, recordShipmentTracking } from "./woo-shipment-tracking";
@@ -378,15 +380,62 @@ function categoryStem(word: string): string {
 }
 
 /**
- * The store's category a search names, when its title search found nothing
- * (urban replay 2026-10-28: "accessory" found no title, and the store's own
- * search of category names misses "Accessories" too, so the customer was told
- * there were none). Matched by stem against the store's non-empty categories;
- * never a Men / Women one, which is the audience param's. Ten minutes' cache.
+ * A Hebrew word's stem for matching (Tehila 2026-11-04: her titles are names,
+ * "אנה", "פרינט- קרואלה", so her 83 scarves are found only by her Hebrew
+ * categories, and "מטפחה" / "מטפחת" / "מטפחות" must all reach "מטפחות").
+ * Drops a leading ו/ה (only on a long word), a plural ות/ים, then a final ה/ת:
+ * מטפחה = מטפחת = מטפחות -> מטפח, חגיגית = חגיגיות -> חגיגי, החדשה -> חדש.
  */
-async function categoryForQuery(auth: string, base: string, query: unknown): Promise<{ id: string } | null> {
-  const words = String(query ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? [];
-  if (!words.length) return null;
+export function hebrewStem(word: string): string {
+  let w = word.replace(/[֑-ׇ"'׳״]/g, "");
+  if (w.length > 4 && w.startsWith("וה")) w = w.slice(2);
+  else if (w.length > 4 && /^[הו]/.test(w)) w = w.slice(1);
+  if (w.length > 4 && /(ות|ים)$/.test(w)) w = w.slice(0, -2).replace(/א$/, "");
+  if (w.length > 3 && /[הת]$/.test(w)) w = w.slice(0, -1);
+  return w;
+}
+
+/**
+ * Words that name the same thing across the two languages, or a store's own
+ * name for it ("הקולקציה החדשה" is the "new in" category). Stems on both sides.
+ */
+const STEM_SYNONYMS: Record<string, string[]> = {
+  "חדש": ["new"], "קולקצי": ["new"], "new": ["חדש"],
+  scarf: ["מטפח"], scarv: ["מטפח"], hijab: ["מטפח"], headscarf: ["מטפח"], "מטפח": ["scarf"],
+  earring: ["עגיל"], "עגיל": ["earring"], necklace: ["שרשר"], "שרשר": ["necklace"],
+  bracelet: ["צמיד"], "צמיד": ["bracelet"], jewelri: ["תכשיט"], jewelleri: ["תכשיט"], "תכשיט": ["jewelri"],
+};
+
+/** Hebrew words that name nothing in a catalogue ("יש לכם", "עד 99 ש"ח"). */
+const HEBREW_STOP = new Set(["עד", "של", "יש", "לי", "את", "עם", "על", "אני", "לכם", "אתם", "מה", "זה", "גם", "או", "כל", "אם", "רק", "בלי", "יותר", "פחות", "אפשר", "רוצ", "מחפש", "שח", "ש\"ח", "בשביל", "משהו", "איז", "איזה"]);
+
+/** A text's Hebrew stems, catalogue words only. */
+function hebrewStems(t: string): string[] {
+  return (t.match(/[א-ת"'׳״]{2,}/g) ?? []).map(hebrewStem).filter((w) => w.length >= 2 && !HEBREW_STOP.has(w));
+}
+
+/** The stems a text's words stand for, Latin and Hebrew, with their synonyms. */
+export function queryStems(text: unknown): string[] {
+  const t = String(text ?? "").toLowerCase()
+    .replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#8211;|&#8212;/g, "-").replace(/&#\d+;/g, " ");
+  const latin = (t.match(/[a-z]{3,}/g) ?? []).map(categoryStem);
+  const hebrew = hebrewStems(t);
+  const own = Array.from(new Set([...latin, ...hebrew]));
+  return Array.from(new Set([...own, ...own.flatMap((s) => STEM_SYNONYMS[s] ?? [])]));
+}
+
+/**
+ * The store's category a search names (urban replay 2026-10-28: "accessory"
+ * found no title, and the store's own search of category names misses
+ * "Accessories" too, so the customer was told there were none). Matched by
+ * stem, Latin or Hebrew, against the store's non-empty categories; the most
+ * query words wins, then the narrowest name ("מטפחה חגיגית" is "מטפחות
+ * חגיגיות", not all "מטפחות"). Never a Men / Women one, which is the audience
+ * param's. Ten minutes' cache.
+ */
+async function categoryForQuery(auth: string, base: string, query: unknown): Promise<{ id: string; name: string } | null> {
+  const wanted = new Set(queryStems(query));
+  if (!wanted.size) return null;
   let hit = categoryCache.get(base);
   if (!hit || Date.now() - hit.at >= 10 * 60_000) {
     const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`).catch(() => null);
@@ -394,16 +443,81 @@ async function categoryForQuery(auth: string, base: string, query: unknown): Pro
     hit = { at: Date.now(), list };
     categoryCache.set(base, hit);
   }
-  const wanted = new Set(words.map(categoryStem));
-  let best: { id: string; score: number; size: number } | null = null;
+  let best: { id: string; name: string; score: number; size: number; count: number } | null = null;
   for (const c of hit.list) {
     const name = String(c?.name ?? "").replace(/&amp;/g, "&").trim();
     if (!(Number(c?.count) > 0) || AUDIENCE_NAME.men.test(name) || AUDIENCE_NAME.women.test(name)) continue;
-    const stems = (name.toLowerCase().match(/[a-z]{3,}/g) ?? []).map(categoryStem);
+    // The name's own stems, without synonyms: a match is the query's word in the name.
+    const t = name.toLowerCase().replace(/&quot;/g, '"').replace(/&#\d+;/g, " ");
+    const stems = Array.from(new Set([...(t.match(/[a-z]{3,}/g) ?? []).map(categoryStem), ...hebrewStems(t)]));
     const score = stems.filter((x) => wanted.has(x)).length;
-    if (score && (!best || score > best.score || (score === best.score && stems.length < best.size))) best = { id: String(c.id), score, size: stems.length };
+    const count = Number(c.count);
+    if (score && (!best || score > best.score || (score === best.score && stems.length < best.size))) {
+      best = { id: String(c.id), name, score, size: stems.length, count };
+    }
   }
-  return best ? { id: best.id } : null;
+  return best ? { id: best.id, name: best.name } : null;
+}
+
+/** "מטפחה" -> ["מטפחת", "מטפחות", "מטפח"]: the other forms of a Hebrew word, to retry an empty title search. */
+export function hebrewVariants(word: string): string[] {
+  const s = hebrewStem(word);
+  if (s.length < 2) return [];
+  return Array.from(new Set([s + "ת", s + "ה", s + "ות", s + "ים", s])).filter((v) => v !== word);
+}
+
+/** In stock first, keeping each group's order. */
+function inStockFirst(list: any[]): any[] {
+  const out = (p: any) => p?.stock_status === "outofstock";
+  return [...list.filter((p) => !out(p)), ...list.filter(out)];
+}
+
+/**
+ * A Hebrew product ask, deterministic (see list_products). Logs which route
+ * found it: [woo-search] hit=category:<id> | title | variant:<word> | none.
+ */
+async function hebrewProductSearch(
+  auth: string, base: string, params: URLSearchParams, query: string, per: number, visible: (l: any) => any,
+): Promise<any[]> {
+  const get = async (p: URLSearchParams) => { const l = visible(await wooRequest(auth, "GET", `${base}/products?${p}`)); return Array.isArray(l) ? l : []; };
+  const words = searchWords(query).filter((w) => !HEBREW_STOP.has(hebrewStem(w)));
+  const cat = await categoryForQuery(auth, base, query);
+  const catStems = new Set(cat ? queryStems(cat.name) : []);
+  // Words the category does not account for: a name, a colour, a print.
+  const rest = words.filter((w) => !queryStems(w).some((s) => catStems.has(s)));
+  const byCat = new URLSearchParams(params);
+  byCat.delete("search");
+  if (cat) { byCat.set("category", cat.id); byCat.set("per_page", String(Math.max(per, 30))); }
+  const restSearch = (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return get(p); };
+  const [inCat, whole, ...perWord] = await Promise.all([
+    cat ? get(byCat) : Promise.resolve([] as any[]),
+    get(params),
+    ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
+  ]);
+  const named = [...perWord.flat(), ...whole];
+  const log = (hit: string, n: number) => console.log(`[woo-search] query=${JSON.stringify(query.slice(0, 60))} hit=${hit} results=${n}`);
+  if (inCat.length) {
+    const catIds = new Set(inCat.map((p: any) => String(p?.id)));
+    // A product the words name AND in the category first ("מטפחת אנה"), then the category, then other title hits.
+    const both = named.filter((p: any) => catIds.has(String(p?.id)));
+    const seen = new Set<string>();
+    const out = [...both, ...inStockFirst(inCat), ...named].filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
+    log(`category:${cat!.id}`, out.length);
+    return out.slice(0, per);
+  }
+  if (named.length) {
+    const seen = new Set<string>();
+    const out = named.filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
+    log("title", out.length);
+    return inStockFirst(out).slice(0, per);
+  }
+  // The other forms of each Hebrew word, in parallel; the first that finds anything.
+  const variants = words.filter((w) => /[א-ת]/.test(w)).flatMap(hebrewVariants).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+  const found = await Promise.all(variants.map(restSearch));
+  const i = found.findIndex((l) => l.length);
+  if (i >= 0) { log(`variant:${variants[i]}`, found[i].length); return inStockFirst(found[i]).slice(0, per); }
+  log("none", 0);
+  return [];
 }
 
 const VALIDATE_TIMEOUT_MS = 10_000;
@@ -682,6 +796,15 @@ const WooCommerceAdapter: ProviderAdapter = {
               return [...first, ...all.filter((p: any) => !first.includes(p))].slice(0, Math.min(100, Number(args.per_page ?? 10)));
             }
           }
+        }
+        // A Hebrew ask (Tehila 2026-11-04): her titles are names ("אנה",
+        // "פרינט- קרואלה"), so "מטפחה חגיגית" or "הקולקציה החדשה" is found
+        // only by her category. The category the words name, its products in
+        // stock first; a word the category does not account for ("מטפחת אנה")
+        // is searched in titles too, in parallel, and those come first. An
+        // empty result retries the words' other forms (מטפחה -> מטפחת, מטפחות).
+        if (/[֐-׿]/.test(String(args.query ?? "")) && !params.has("category") && !params.has("include")) {
+          return await hebrewProductSearch(auth, base, params, String(args.query), Math.min(100, Number(args.per_page ?? 10)), visible);
         }
         const list: any = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
         // Woo matches the whole phrase as a substring of the title: "black tank
@@ -964,6 +1087,7 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
   // targets at DNS resolution before dispatching.
   await assertPublicUrl(url);
   await debugStoreDelay();
+  const startedAt = Date.now();
   const init: RequestInit = {
     method,
     headers: {
@@ -983,7 +1107,12 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
     throw new Error(`woocommerce_${res.status}: ${text.slice(0, 240)}`);
   }
   if (res.status === 204) return null;
-  return await res.json();
+  const out = await res.json();
+  const ms = Date.now() - startedAt;
+  // One line per store request: which kind, how long (her host is slow only at moments).
+  if (ms > 3000) console.warn(`[woo-request] slow ${method} ${new URL(url).pathname.replace(/^.*\/wc\/v3/, "")} ${ms}ms`);
+  if (method === "GET") rememberListed(url, out);
+  return out;
 }
 
 registerAdapter(WooCommerceAdapter);

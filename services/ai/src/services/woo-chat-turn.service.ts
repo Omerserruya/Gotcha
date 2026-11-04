@@ -25,6 +25,7 @@ import {
   type WooProductCard,
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
+import { recentlyListedWooProduct } from "./connectors/woo-listed-products";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
@@ -80,9 +81,13 @@ export async function prepareWebchatCommerceTurn(opts: { tenantId: string; conve
 }
 
 async function readCard(tenantId: string, storeUrl: string, currency: string | null, productId: string, reason: string | null): Promise<WooProductCard | null> {
-  const got = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.get_product", args: { product_id: productId }, accessScope: "internal" });
-  if (!got.ok) return null;
-  const raw: any = got.result;
+  // Listed by the store in the last two minutes: that listing, not one more read.
+  let raw: any = recentlyListedWooProduct(storeUrl, productId);
+  if (!raw) {
+    const got = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.get_product", args: { product_id: productId }, accessScope: "internal" });
+    if (!got.ok) return null;
+    raw = got.result;
+  }
   let variations: any[] | null = null;
   if (raw?.type === "variable") {
     const v = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.list_product_variations", args: { product_id: productId, per_page: 30 }, accessScope: "internal" });
@@ -312,10 +317,11 @@ export async function wooComplementaryProducts(
     };
     const audience = new Set(target ? audienceCats[target] : anchorCats.filter(isAudience));
     const taken = new Set([...excluded, ...linked.map((p) => String(p.id))]);
-    const pools = await Promise.all([
-      ...accessories.slice(0, 2).map((category) => read("woocommerce.list_products", { category, in_stock: true, per_page: 20 })),
-      ...(accessoryAnchor ? [] : [read("woocommerce.list_products", { in_stock: true, per_page: 50 })]),
-    ]);
+    // One store read at a time (Tehila 2026-11-04: two parallel reads at
+    // 05:38 and 07:10 both took 24-30s on her shared host).
+    const pools: Awaited<ReturnType<typeof read>>[] = [];
+    for (const category of accessories.slice(0, 2)) pools.push(await read("woocommerce.list_products", { category, in_stock: true, per_page: 20 }));
+    if (!accessoryAnchor) pools.push(await read("woocommerce.list_products", { in_stock: true, per_page: 50 }));
     const seen = new Set<string>();
     const pool = pools
       .flatMap((g) => (g.ok && Array.isArray(g.result) ? (g.result as any[]) : []))
