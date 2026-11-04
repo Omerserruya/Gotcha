@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 
+import { logger } from '@/observability/logger';
+
 import { PAGE, readNewestMessages } from './newest-messages';
 
 const row = z.object({ id: z.number() });
@@ -39,5 +41,16 @@ describe('readNewestMessages', () => {
     expect(got.at(-1)).toEqual({ id: PAGE + 7 });
     expect(got).toHaveLength(PAGE);
     expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('⚠ no total from the route: the first page, and a warning, never silence', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const get = vi.fn(async () => ({ data: [{ id: 1 }] })) as unknown as Parameters<
+      typeof readNewestMessages
+    >[0]['get'];
+    const got = await readNewestMessages({ get }, 'c1', row);
+    expect(got).toEqual([{ id: 1 }]);
+    expect(warn).toHaveBeenCalledWith('inbox.messages_total_missing', { conversationId: 'c1' });
+    warn.mockRestore();
   });
 });
