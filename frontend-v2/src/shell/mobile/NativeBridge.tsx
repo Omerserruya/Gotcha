@@ -12,6 +12,7 @@ import { outsideUrl, signedFileOf } from './link-policy';
 import { mobileLinkFrom } from './mobile-paths';
 import {
   browserPlugin,
+  documentPlugin,
   nativePlatform,
   pushPlugin,
   storePushToken,
@@ -115,12 +116,30 @@ export function NativeBridge() {
       if (file !== null) {
         event.preventDefault();
         const fallback = anchor.href;
+        const fileName = anchor.getAttribute('download') || 'document';
         void browserApi
           .get({
             endpoint: inboxEndpoints.mediaLink(file.conversationId, file.messageId),
             payload: mediaLinkSchema,
           })
-          .then((link) => browser.open({ url: new URL(link.url, window.location.origin).href }))
+          .then(async (link) => {
+            const signed = new URL(link.url, window.location.origin).href;
+            /*
+             * ★ In the phone's own viewer, not the browser, which only
+             *   downloaded it (Omer, 2026-11-04). An older app, or no viewer
+             *   for the type: the browser, as before.
+             */
+            const viewer = documentPlugin();
+            if (viewer !== null) {
+              try {
+                await viewer.openDocument({ url: signed, fileName });
+                return;
+              } catch {
+                // fall through to the browser
+              }
+            }
+            await browser.open({ url: signed });
+          })
           .catch(() => browser.open({ url: fallback }));
         return;
       }

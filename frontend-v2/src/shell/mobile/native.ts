@@ -42,12 +42,18 @@ interface BrowserPlugin {
   open(options: { url: string }): Promise<void>;
 }
 
+/** The app's own plugin (NavigationPolicyPlugin.java): a document in the phone's viewer. */
+interface DocumentPlugin {
+  openDocument(options: { url: string; fileName: string }): Promise<{ opened: boolean }>;
+}
+
 interface CapacitorGlobal {
   isNativePlatform?(): boolean;
   getPlatform?(): string;
   Plugins?: {
     PushNotifications?: PushNotificationsPlugin;
     Browser?: BrowserPlugin;
+    NavigationPolicy?: Partial<DocumentPlugin>;
   };
 }
 
@@ -69,6 +75,16 @@ export function pushPlugin(): PushNotificationsPlugin | null {
 
 export function browserPlugin(): BrowserPlugin | null {
   return capacitor()?.Plugins?.Browser ?? null;
+}
+
+/**
+ * The phone's document viewer, or `null`. An app built before 2026-11-04 has
+ * the plugin without `openDocument`: then `null`, and the caller uses the
+ * browser as before.
+ */
+export function documentPlugin(): DocumentPlugin | null {
+  const plugin = capacitor()?.Plugins?.NavigationPolicy;
+  return typeof plugin?.openDocument === 'function' ? (plugin as DocumentPlugin) : null;
 }
 
 /** Where this phone's token is kept between starts, so sign-out can forget it. */
