@@ -114,7 +114,17 @@ const config = {
       appOrigin: target.origin,
       authHosts: [target.authHost],
       // `/<locale>/m/...` is matched by pattern; these are literal prefixes.
-      inAppPathPrefixes: ['/api/auth/'],
+      /*
+       * ★ Sign-in and password recovery stay in the app. On prod they are
+       *   served on the app's own origin (app.gotcha.co.il/he/sign-in); dev
+       *   serves them on the auth host, which is why dev never showed it. On
+       *   prod the login opened the system browser and the flow broke there
+       *   (Omer, 2026-11-04).
+       */
+      inAppPathPrefixes: [
+        '/api/auth/',
+        ...['', '/he', '/en'].flatMap((locale) => [`${locale}/sign-in`, `${locale}/recover`]),
+      ],
       locales: ['he', 'en'],
     },
 
