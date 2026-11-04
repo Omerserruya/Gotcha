@@ -141,7 +141,7 @@ import {
   BudgetExceededError,
   auditBudgetAbort,
 } from "./cost-budget.service";
-import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "./knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, NO_KNOWLEDGE_MATCH_BLOCK, withTeamOffer } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock, invalidateCrmPrefetch } from "./crm-prefetch.service";
 import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
 import type { CrmVendor } from "./connectors/crm-adapter.types";
@@ -1998,6 +1998,8 @@ async function generateAIBotReplyInner(
   // (dev 2026-10-27, the urban rerun).
   // ── KB retrieval - strategy-controlled, NOT regex ──────
   let kbBlock: string | undefined;
+  // Every source was weak, so the model was told it does not know (see NO_KNOWLEDGE_MATCH_BLOCK).
+  let noKnowledgeMatch = false;
   // Which sources actually fed this answer. Recorded for the sandbox's "why did
   // it answer this way?" panel: an operator debugging a wrong answer needs to
   // know whether the employee read the right document or retrieved nothing at
@@ -2017,6 +2019,7 @@ async function generateAIBotReplyInner(
       );
       // The live customer path: a turn whose every source is weak gets no sources, only the "you do not know this" block.
       kbBlock = buildKnowledgeContext(chunks, { dropWhenAllWeak: true }) || undefined;
+      noKnowledgeMatch = kbBlock === NO_KNOWLEDGE_MATCH_BLOCK;
       markStage("knowledge");
       for (const c of chunks as any[]) {
         const title = String(c?.documentTitle ?? c?.title ?? "").trim();
@@ -5526,6 +5529,13 @@ async function generateAIBotReplyInner(
       console.warn(`[ai-bot] close after thanks replaced a ${replyText.length}-char reply conv=${opts.conversationId}`);
       replyText = closed;
     }
+  }
+  // Nothing in the Knowledge matched and no tool ran: the "I don't have that"
+  // reply offers the team rather than dead-ending (dev re-walk 2026-11-04).
+  if (replyText && noKnowledgeMatch && !awaitingApproval && !pendingEscalation && !toolCallLog.some((c) => !String(c.tool).startsWith("__"))) {
+    const offered = withTeamOffer(replyText, replyLocale);
+    if (offered !== replyText) console.log(`[ai-bot] no knowledge match: the team offer added conv=${opts.conversationId}`);
+    replyText = offered;
   }
   markStage("checker_done");
   traceReply("checked");

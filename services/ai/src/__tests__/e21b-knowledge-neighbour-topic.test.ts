@@ -62,3 +62,33 @@ describe("the customer path: all weak means no sources at all (dev walk 2026-11-
     expect(src).toContain("buildKnowledgeContext(chunks, { dropWhenAllWeak: true })");
   });
 });
+
+describe("the do-not-know reply offers the team (dev re-walk 2026-11-04: 0/3 did)", () => {
+  it("a dead-end reply gets the offer, in the reply's language", async () => {
+    const { withTeamOffer } = await import("../services/knowledge.service");
+    expect(withTeamOffer("היי, אין לי כאן את רשימת נקודות המכירה.", "he")).toBe("היי, אין לי כאן את רשימת נקודות המכירה.\nרוצים שאעביר את השאלה לצוות שיחזור אליכם?");
+    expect(withTeamOffer("I don't have that here.", "en")).toMatch(/pass your question to the team/);
+  });
+  it("a reply that already asks or offers the team is left as it is", async () => {
+    const { withTeamOffer } = await import("../services/knowledge.service");
+    for (const r of ["אין לי את המידע. רוצה שאבדוק?", "אין לי את המידע, אעביר לצוות שיחזור אליך.", "I can ask the team to get back to you."]) expect(withTeamOffer(r, "he")).toBe(r);
+  });
+  it("the bot adds it only after the no-knowledge block and with no tool run", () => {
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("noKnowledgeMatch = kbBlock === NO_KNOWLEDGE_MATCH_BLOCK");
+    expect(src).toMatch(/noKnowledgeMatch && !awaitingApproval && !pendingEscalation && !toolCallLog\.some/);
+  });
+});
+
+describe("the final gate keeps the team offer", () => {
+  it("no final-gate issue and no polish removes it", async () => {
+    const { withTeamOffer } = await import("../services/knowledge.service");
+    const { finalTextIssues, polishReply, normalizePunctuation, stripTrailingOffer } = await import("../services/reply-style-check.service");
+    const reply = withTeamOffer("היי, אין לי כאן את רשימת נקודות המכירה.", "he");
+    const ctx = { locale: "he", isFirstReply: false, incomingMessage: "איפה יש נקודות מכירה?", productFactsAvailable: false, cardsShown: false, previousReplies: [] } as any;
+    expect(finalTextIssues(reply, ctx)).toEqual([]);
+    expect(normalizePunctuation(reply)).toContain("רוצים שאעביר את השאלה לצוות");
+    expect(stripTrailingOffer(reply)).toBe(reply);
+    expect(String(polishReply(reply, { locale: "he", incomingMessage: "איפה יש נקודות מכירה?" }))).toContain("לצוות שיחזור אליכם");
+  });
+});

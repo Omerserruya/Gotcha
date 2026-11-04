@@ -219,6 +219,20 @@ If the customer asks about the business itself - where it sells or has points of
 - Say plainly that you do not have that information here, and offer to have the team get back to them.
 Questions about products, stock and orders are answered from the tools as usual.`;
 
+const TEAM_OFFER = /צוות|נציג|יחזור|יחזרו|אעביר|נעביר|team|get back to you|representative/i;
+
+/**
+ * The "I don't have that" reply after NO_KNOWLEDGE_MATCH_BLOCK ends with the
+ * team offer (dev re-walk 2026-11-04: 3/3 replies said they did not have it,
+ * 0/3 offered anything, and the conversation dead-ended). Left alone when the
+ * reply already asks something or offers the team.
+ */
+export function withTeamOffer(reply: string, locale: "he" | "en"): string {
+  const t = String(reply ?? "").trim();
+  if (!t || /[?؟]/.test(t) || TEAM_OFFER.test(t)) return reply;
+  return `${t}\n${locale === "he" ? "רוצים שאעביר את השאלה לצוות שיחזור אליכם?" : "Would you like me to pass your question to the team so they can get back to you?"}`;
+}
+
 export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean } = {}): string {
   if (chunks.length === 0) return "";
   if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return NO_KNOWLEDGE_MATCH_BLOCK;
