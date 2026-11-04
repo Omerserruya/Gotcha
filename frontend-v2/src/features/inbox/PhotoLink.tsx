@@ -55,6 +55,8 @@ export function PhotoLink({
         className={className}
         aria-label={openLabel}
         data-testid={testId}
+        // Not the native shell's "out to the browser": on the phone it opens here.
+        data-in-app=""
         onClick={onClick}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- a customer's file, from our host or theirs */}

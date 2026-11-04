@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
-import { isAppPath, mobileLinkFrom } from './mobile-paths';
+import { outsideUrl } from './link-policy';
+import { mobileLinkFrom } from './mobile-paths';
 import {
   browserPlugin,
   nativePlatform,
@@ -98,12 +99,10 @@ export function NativeBridge() {
       if (event.defaultPrevented || event.button !== 0) return;
       const anchor = (event.target as Element | null)?.closest?.('a[href]');
       if (!(anchor instanceof HTMLAnchorElement)) return;
-      const url = new URL(anchor.href, window.location.href);
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-      const sameSite = url.origin === window.location.origin;
-      if (sameSite && (isAppPath(url.pathname) || url.pathname.includes('/api/auth/'))) return;
+      const outside = outsideUrl(anchor, window.location);
+      if (outside === null) return;
       event.preventDefault();
-      void browser.open({ url: url.href });
+      void browser.open({ url: outside });
     };
     document.addEventListener('click', onClick, true);
     return () => document.removeEventListener('click', onClick, true);
