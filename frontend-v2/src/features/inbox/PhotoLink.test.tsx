@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { requestBack } from '@/lib/back-request';
+
 import { PhotoLink } from './PhotoLink';
 
 const props = {
@@ -50,5 +52,25 @@ describe('PhotoLink', () => {
     });
     expect(click.defaultPrevented).toBe(false);
     expect(screen.queryByTestId('photo-m1-viewer')).toBeNull();
+  });
+
+  it("★ Android's Back closes the viewer, and with it closed Back is not spent", () => {
+    render(
+      <ol data-variant="phone">
+        <li>
+          <PhotoLink {...props} />
+        </li>
+      </ol>,
+    );
+    act(() => {
+      screen.getByTestId('photo-m1').click();
+    });
+    let spent = false;
+    act(() => {
+      spent = requestBack();
+    });
+    expect(spent).toBe(true);
+    expect(screen.queryByTestId('photo-m1-viewer')).toBeNull();
+    expect(requestBack()).toBe(false);
   });
 });

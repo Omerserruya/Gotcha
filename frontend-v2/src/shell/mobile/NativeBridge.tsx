@@ -7,10 +7,12 @@ import { z } from 'zod';
 import { browserApi } from '@/api/client/browser-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { useRouter } from '@/i18n/navigation';
+import { requestBack } from '@/lib/back-request';
 
 import { outsideUrl, signedFileOf } from './link-policy';
 import { mobileLinkFrom } from './mobile-paths';
 import {
+  appPlugin,
   browserPlugin,
   documentPlugin,
   nativePlatform,
@@ -86,6 +88,34 @@ export function NativeBridge() {
     return () => {
       cancelled = true;
       for (const listener of listeners) void listener.remove();
+    };
+  }, []);
+
+  /*
+   * ★ ANDROID'S BACK BUTTON CLOSES WHAT IS OPEN FIRST (supervisor, 2026-11-04):
+   *   the photo viewer. Listening replaces Capacitor's own Back, so with
+   *   nothing open this does what it did - back a page, or leave the app on
+   *   the first one.
+   */
+  useEffect(() => {
+    const app = appPlugin();
+    if (app === null) return;
+    let handle: { remove(): void | Promise<void> } | null = null;
+    let cancelled = false;
+    void app
+      .addListener('backButton', ({ canGoBack }) => {
+        if (requestBack()) return;
+        if (canGoBack) window.history.back();
+        else void app.exitApp();
+      })
+      .then((listener) => {
+        if (cancelled) void listener.remove();
+        else handle = listener;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      void handle?.remove();
     };
   }, []);
 

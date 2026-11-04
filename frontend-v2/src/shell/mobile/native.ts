@@ -42,6 +42,15 @@ interface BrowserPlugin {
   open(options: { url: string }): Promise<void>;
 }
 
+/** @capacitor/app: the Android Back button. */
+interface AppPlugin {
+  addListener(
+    event: 'backButton',
+    fn: (event: { readonly canGoBack: boolean }) => void,
+  ): Promise<Listener>;
+  exitApp(): Promise<void>;
+}
+
 /** The app's own plugin (NavigationPolicyPlugin.java): a document in the phone's viewer. */
 interface DocumentPlugin {
   openDocument(options: { url: string; fileName: string }): Promise<{ opened: boolean }>;
@@ -54,6 +63,7 @@ interface CapacitorGlobal {
     PushNotifications?: PushNotificationsPlugin;
     Browser?: BrowserPlugin;
     NavigationPolicy?: Partial<DocumentPlugin>;
+    App?: AppPlugin;
   };
 }
 
@@ -71,6 +81,10 @@ export function nativePlatform(): 'ios' | 'android' | null {
 
 export function pushPlugin(): PushNotificationsPlugin | null {
   return capacitor()?.Plugins?.PushNotifications ?? null;
+}
+
+export function appPlugin(): AppPlugin | null {
+  return capacitor()?.Plugins?.App ?? null;
 }
 
 export function browserPlugin(): BrowserPlugin | null {
