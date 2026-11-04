@@ -1,7 +1,6 @@
 'use server';
 
 import { getLocale } from 'next-intl/server';
-import { z } from 'zod';
 
 import { isApiError } from '@/api/client/api-error';
 import { featureRefusalFrom } from '@/api/client/tenant-gate';
@@ -14,6 +13,7 @@ import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { loadCopilot, type CopilotRead } from '../load-copilot';
+import { readNewestMessages } from '../newest-messages';
 
 /**
  * The stored suggestions - once when the wall opens on a conversation, and
@@ -84,8 +84,6 @@ export async function refreshSuggestions(conversationId: string): Promise<Refres
 }
 
 // Strict, as the stream's own: a page that does not parse is a failed read, not an empty one.
-const pageSchema = z.object({ data: z.array(messageSchema) });
-
 /** History, level 3: the whole conversation, to read - never to answer from here. */
 export async function conversationMessages(
   conversationId: string,
@@ -93,12 +91,9 @@ export async function conversationMessages(
   { readonly ok: true; readonly messages: readonly InboxMessage[] } | { readonly ok: false }
 > {
   try {
-    const page = await serverApi().get({
-      endpoint: inboxEndpoints.messages(conversationId),
-      payload: pageSchema,
-      raw: true,
-    });
-    return { ok: true, messages: page.data };
+    // The newest messages, not the first 50 (`readNewestMessages`).
+    const messages = await readNewestMessages(serverApi(), conversationId, messageSchema);
+    return { ok: true, messages };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('inbox.wall_messages_failed', { cause });

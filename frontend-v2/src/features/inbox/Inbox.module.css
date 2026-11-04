@@ -2451,7 +2451,14 @@
     inline-size: min(82%, 280px);
   }
 
+  /*
+   * ⚠⚠ STRETCHED, OR THE PHOTO IS 0 WIDE. A bubble shrinks to its content,
+   *    and an image at 100% of a shrink-to-fit box resolves to nothing: no
+   *    photo was drawn, and a lazy image of no size never even loaded
+   *    (Omer, 2026-11-04). The message has the width; the bubble takes it.
+   */
   .stream[data-variant='phone'] .bubble:has(.photo) {
+    align-self: stretch;
     padding-inline: 4px;
     padding-block-start: 4px;
   }
