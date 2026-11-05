@@ -1,0 +1,76 @@
+# Runs on the mobile-android branch, which carries only mobile/ on top of main.
+# Builds the GOTCHA iPhone app (mobile/ios) for the iOS Simulator, unsigned.
+#
+# Before there is a paid Apple developer account (Omer, 2026-11-05): a
+# simulator build needs no signing, so it can be tried on a Mac's simulator
+# or uploaded to a browser simulator (Appetize). It does NOT install on a real
+# iPhone; that needs Xcode on a Mac, or the paid account for TestFlight.
+#
+# One build per environment: "gotcha-ios-sim-dev" (dev.gotcha.co.il) and
+# "gotcha-ios-sim-prod" (app.gotcha.co.il). Each is App.app, zipped. Kept 14 days.
+name: iOS simulator build
+
+on:
+  push:
+    branches: [mobile-android]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/ios-simulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, prod]
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install Capacitor
+        run: npm ci --no-audit --no-fund
+
+      - name: Sync (${{ matrix.env }})
+        run: GOTCHA_ENV=${{ matrix.env }} npx cap sync ios
+
+      - name: Build for the simulator
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Zip App.app
+        working-directory: mobile/ios/App/build/Build/Products/Debug-iphonesimulator
+        run: ditto -c -k --sequesterRsrc --keepParent App.app "$GITHUB_WORKSPACE/gotcha-ios-sim-${{ matrix.env }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gotcha-ios-sim-${{ matrix.env }}
+          path: gotcha-ios-sim-${{ matrix.env }}.zip
+          retention-days: 14
+          if-no-files-found: error
