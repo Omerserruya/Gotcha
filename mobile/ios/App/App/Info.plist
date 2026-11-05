@@ -38,6 +38,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>כדי לצלם תמונה ולשלוח אותה ללקוח בשיחה.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>כדי לבחור תמונה מהגלריה ולשלוח אותה ללקוח בשיחה.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -1,4 +1,5 @@
 import Capacitor
+import QuickLook
 import UIKit
 import WebKit
 
@@ -25,12 +26,16 @@ import WebKit
 public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NavigationPolicyPlugin"
     public let jsName = "NavigationPolicy"
-    public let pluginMethods: [CAPPluginMethod] = []
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "openDocument", returnType: CAPPluginReturnPromise)
+    ]
 
     private var appOrigin: URL?
     private var authHosts: Set<String> = []
     private var inAppPathPrefixes: [String] = []
     private var locales: [String] = ["he", "en"]
+    /// Quick Look holds its data source weakly: keep the open one alive here.
+    private var preview: DocumentPreview?
 
     override public func load() {
         let config = getConfig()
@@ -83,5 +88,94 @@ public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
+    }
+
+    /// A message's document (a PDF), shown in the phone's own viewer (Quick
+    /// Look) inside the app, not the browser (Omer, 2026-11-04). Mirror of
+    /// openDocument in NavigationPolicyPlugin.java; keep the two in step.
+    ///
+    /// The page passes a short-lived signed link on the app's own origin
+    /// (/api/media/s/...). Only that is fetched: this is not a general
+    /// downloader. Resolves { opened: true }, or rejects ("refused",
+    /// "no_viewer", "failed") so the page falls back to the browser.
+    @objc func openDocument(_ call: CAPPluginCall) {
+        guard let raw = call.getString("url"), let url = URL(string: raw), let origin = appOrigin,
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == origin.host?.lowercased(),
+              url.path.hasPrefix("/api/media/s/") else {
+            call.reject("refused")
+            return
+        }
+        let name = Self.safeName(call.getString("fileName") ?? "document")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        URLSession.shared.downloadTask(with: request) { [weak self] location, response, _ in
+            guard let self = self, let location = location,
+                  (response as? HTTPURLResponse)?.statusCode == 200 else {
+                call.reject("failed")
+                return
+            }
+            do {
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("documents", isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let file = dir.appendingPathComponent(name)
+                try? FileManager.default.removeItem(at: file)
+                try FileManager.default.moveItem(at: location, to: file)
+                DispatchQueue.main.async {
+                    guard QLPreviewController.canPreview(file as NSURL),
+                          let host = self.bridge?.viewController else {
+                        call.reject("no_viewer")
+                        return
+                    }
+                    let source = DocumentPreview(file: file) { [weak self] in self?.preview = nil }
+                    self.preview = source
+                    let controller = QLPreviewController()
+                    controller.dataSource = source
+                    controller.delegate = source
+                    host.present(controller, animated: true)
+                    call.resolve(["opened": true])
+                }
+            } catch {
+                call.reject("failed")
+            }
+        }.resume()
+    }
+
+    /// Letters, digits, dot, dash, underscore; never a hidden or empty name.
+    private static func safeName(_ raw: String) -> String {
+        var out = ""
+        var lastWasJoin = false
+        for scalar in raw.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) || ".-_".unicodeScalars.contains(scalar) {
+                out.unicodeScalars.append(scalar)
+                lastWasJoin = false
+            } else if !lastWasJoin {
+                out.append("_")
+                lastWasJoin = true
+            }
+        }
+        if out.isEmpty || out.hasPrefix(".") { out = "document" + out }
+        return out
+    }
+}
+
+/// Quick Look's data source for one file; tells the plugin when it closes.
+private final class DocumentPreview: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
+    private let file: URL
+    private let onClose: () -> Void
+
+    init(file: URL, onClose: @escaping () -> Void) {
+        self.file = file
+        self.onClose = onClose
+    }
+
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        file as NSURL
+    }
+
+    func previewControllerDidDismiss(_ controller: QLPreviewController) {
+        onClose()
     }
 }
