@@ -97,17 +97,25 @@ export function NativeBridge() {
    *   nothing open this does what it did - back a page, or leave the app on
    *   the first one.
    */
+  /*
+   * ★ ANDROID ONLY, AND NEVER `.then` ON WHAT addListener RETURNS: on iOS the
+   *   bridge hands back the listener itself, not a promise, so `.then` threw
+   *   inside this effect and the whole inbox fell to the error page (Omer,
+   *   2026-11-05). iPhones have no Back button anyway.
+   */
   useEffect(() => {
     const app = appPlugin();
-    if (app === null) return;
+    if (app === null || nativePlatform() !== 'android') return;
     let handle: { remove(): void | Promise<void> } | null = null;
     let cancelled = false;
-    void app
-      .addListener('backButton', ({ canGoBack }) => {
-        if (requestBack()) return;
-        if (canGoBack) window.history.back();
-        else void app.exitApp();
-      })
+    void Promise.resolve()
+      .then(() =>
+        app.addListener('backButton', ({ canGoBack }) => {
+          if (requestBack()) return;
+          if (canGoBack) window.history.back();
+          else void app.exitApp();
+        }),
+      )
       .then((listener) => {
         if (cancelled) void listener.remove();
         else handle = listener;
