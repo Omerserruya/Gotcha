@@ -25,16 +25,24 @@ interface Listener {
   remove(): Promise<void> | void;
 }
 
+/*
+ * ★ addListener answers a promise on Android and the listener itself on iOS
+ *   (its bridge's legacy plugin object). Never call `.then` on it: `await`
+ *   it, or wrap it in Promise.resolve.
+ */
 interface PushNotificationsPlugin {
   checkPermissions(): Promise<{ receive: string }>;
   requestPermissions(): Promise<{ receive: string }>;
   register(): Promise<void>;
-  addListener(event: 'registration', fn: (token: PushToken) => void): Promise<Listener>;
-  addListener(event: 'registrationError', fn: (error: unknown) => void): Promise<Listener>;
+  addListener(event: 'registration', fn: (token: PushToken) => void): Promise<Listener> | Listener;
+  addListener(
+    event: 'registrationError',
+    fn: (error: unknown) => void,
+  ): Promise<Listener> | Listener;
   addListener(
     event: 'pushNotificationActionPerformed',
     fn: (action: PushAction) => void,
-  ): Promise<Listener>;
+  ): Promise<Listener> | Listener;
   removeAllDeliveredNotifications?(): Promise<void>;
 }
 
@@ -47,7 +55,7 @@ interface AppPlugin {
   addListener(
     event: 'backButton',
     fn: (event: { readonly canGoBack: boolean }) => void,
-  ): Promise<Listener>;
+  ): Promise<Listener> | Listener;
   exitApp(): Promise<void>;
 }
 
