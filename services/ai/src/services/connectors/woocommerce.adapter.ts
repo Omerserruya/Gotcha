@@ -1230,7 +1230,9 @@ const WooCommerceAdapter: ProviderAdapter = {
       }
       case "list_product_variations": {
         const per = Math.min(100, Number(args.per_page ?? 50));
-        return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}`);
+        // In the product's language (WPML: a Hebrew product's variations are not
+        // in the default language's answer, Smoovee 4057 carded with none).
+        return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}/variations?per_page=${per}${lang ? `&lang=${lang}` : ""}`);
       }
       case "list_coupons": {
         const params = new URLSearchParams();

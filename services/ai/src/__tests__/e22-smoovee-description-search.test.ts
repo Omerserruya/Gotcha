@@ -222,6 +222,14 @@ describe("a store that reads products in the conversation's language (WPML)", ()
     expect(s.calls.at(-1)).toMatch(/\/products\/1433\?lang=he$/);
     expect(got).toBeDefined();
   });
+  it("a product's variations are read in that language too (Smoovee 4057 carded with none)", async () => {
+    const s = store(CATALOG, { storeLanguage: "he" });
+    await s.tool("list_product_variations", { product_id: "4057", per_page: 30 });
+    expect(s.calls.at(-1)).toMatch(/\/products\/4057\/variations\?per_page=30&lang=he$/);
+    const t = store();
+    await t.tool("list_product_variations", { product_id: "4057", per_page: 30 });
+    expect(t.calls.at(-1)).toMatch(/\/products\/4057\/variations\?per_page=30$/);
+  });
   it("an English turn on that store reads lang=en", async () => {
     const s = store(CATALOG, { storeLanguage: "he" });
     await s.run({ query: "Tami 4", lang: "en" });
