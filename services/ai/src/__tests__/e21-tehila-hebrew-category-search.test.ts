@@ -165,3 +165,47 @@ describe("a card for a product the store just listed costs no more reads", () =>
     try { expect(recentlyListedWooProduct(base, "25493")).toBeNull(); } finally { vi.useRealTimers(); }
   });
 });
+
+describe("the model searched in Latin; the customer wrote Hebrew (walk 2026-11-08: \"מטפחה חגיגית\" sent as \"scarf\")", () => {
+  it("on her Hebrew catalogue the customer's words run too, and the festive category comes first", async () => {
+    const s = store();
+    const ids = (await s.run({ query: "scarf", customer_query: "מטפחה חגיגית" })).map((x) => x.id);
+    expect(s.calls.some((u) => /[?&]category=20(&|$)/.test(u))).toBe(true);
+    expect(ids.slice(0, 2)).toEqual(expect.arrayContaining([25563, 25493]));
+    expect(ids.indexOf(25454)).toBeGreaterThan(ids.indexOf(25493)); // an everyday scarf after the festive ones
+  });
+  it("without the customer's words: the model's query as before (all scarves)", async () => {
+    const s = store();
+    await s.run({ query: "scarf" });
+    expect(s.calls.some((u) => /[?&]category=20(&|$)/.test(u))).toBe(false);
+  });
+  it("an English-title store (urban) keeps the model's translation exactly", async () => {
+    const base = `https://urban${++n}.example.com`;
+    const calls: string[] = [];
+    const CATS = [{ id: 1, name: "Jackets & Coats", count: 6 }, { id: 2, name: "Shirts", count: 8 }, { id: 3, name: "Uncategorized", count: 1 }];
+    const COATS = [{ id: 11, name: "Wool Overcoat", status: "publish", catalog_visibility: "visible", stock_status: "instock", categories: [{ id: 1 }] }];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      calls.push(decodeURIComponent(url));
+      const u = new URL(url);
+      const body = u.pathname.endsWith("/categories") ? CATS : u.searchParams.get("search") === "coat" ? COATS : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    }));
+    const run = (args: any) => Woo.execute({ toolName: "list_products", args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base } } as any) as Promise<any[]>;
+    const withOwn = await run({ query: "coat", customer_query: "מעיל לגברים" });
+    const callsWith = calls.length; calls.length = 0;
+    const without = await run({ query: "coat" });
+    expect(withOwn.map((p) => p.id)).toEqual(without.map((p) => p.id));
+    expect(calls.filter((u) => /search=/.test(u))).toEqual([expect.stringMatching(/search=coat/)]);
+    expect(callsWith).toBeGreaterThanOrEqual(calls.length); // only the categories read is added
+  });
+});
+
+describe("the bot passes the customer's Hebrew words with a Latin search", () => {
+  it("only on list_products, only when the model's query has no Hebrew", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain(`if (toolFunctionName === "woocommerce.list_products" && wooTurn && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {`);
+    expect(src).toContain("if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };");
+  });
+});

@@ -433,9 +433,8 @@ export function queryStems(text: unknown): string[] {
  * חגיגיות", not all "מטפחות"). Never a Men / Women one, which is the audience
  * param's. Ten minutes' cache.
  */
-async function categoryForQuery(auth: string, base: string, query: unknown, lang?: string | null): Promise<{ id: string; name: string } | null> {
-  const wanted = new Set(queryStems(query));
-  if (!wanted.size) return null;
+/** The store's non-empty categories, ten minutes per store and language. */
+async function storeCategories(auth: string, base: string, lang?: string | null): Promise<{ at: number; list: any[] } | null> {
   const key = lang ? `${base}|${lang}` : base;
   let hit = categoryCache.get(key);
   if (!hit || Date.now() - hit.at >= 10 * 60_000) {
@@ -444,6 +443,26 @@ async function categoryForQuery(auth: string, base: string, query: unknown, lang
     hit = { at: Date.now(), list };
     categoryCache.set(key, hit);
   }
+  return hit;
+}
+
+/**
+ * Is this store's catalogue in Hebrew? Read in Hebrew (a WPML store with
+ * storeLanguage he), or most of its named categories are Hebrew (Tehila's
+ * "מטפחות חגיגיות"; urban's "Jackets & Coats" is not).
+ */
+async function storeCatalogIsHebrew(auth: string, base: string, lang: string | null): Promise<boolean> {
+  if (lang === "he") return true;
+  const hit = await storeCategories(auth, base, lang);
+  const names = (hit?.list ?? []).map((c: any) => String(c?.name ?? "")).filter((n: string) => n && !/^uncategori[sz]ed$/i.test(n));
+  return names.length > 0 && names.filter((n: string) => /[א-ת]/.test(n)).length * 2 > names.length;
+}
+
+async function categoryForQuery(auth: string, base: string, query: unknown, lang?: string | null): Promise<{ id: string; name: string } | null> {
+  const wanted = new Set(queryStems(query));
+  if (!wanted.size) return null;
+  const hit = await storeCategories(auth, base, lang);
+  if (!hit) return null;
   let best: { id: string; name: string; score: number; size: number; count: number } | null = null;
   for (const c of hit.list) {
     const name = String(c?.name ?? "").replace(/&amp;/g, "&").trim();
@@ -963,6 +982,31 @@ const WooCommerceAdapter: ProviderAdapter = {
           } as any);
           if (!cat || !Array.isArray(found)) return Array.isArray(found) ? found.slice(0, per) : found;
           return found.filter((p: any) => (p?.categories ?? []).some((c: any) => String(c?.id) === cat)).slice(0, per);
+        }
+        // The customer wrote Hebrew and the model searched in Latin (Tehila:
+        // "מטפחה חגיגית" sent as "scarf", every scarf instead of the festive
+        // ones). On a store whose catalogue is Hebrew, the customer's own words
+        // run the Hebrew route alongside the model's query, and what they find
+        // comes first, unless they found only copy and the model found more.
+        // An English-title store (urban) keeps the model's translation as it is.
+        const own = typeof args.customer_query === "string" ? args.customer_query.trim() : "";
+        if (own && /[א-ת]/.test(own) && !/[א-ת]/.test(String(args.query ?? "")) && !args.include && !args.category) {
+          const rest = { ...args, customer_query: undefined };
+          if (await storeCatalogIsHebrew(auth, base, lang).catch(() => false)) {
+            const per = Math.min(100, Number(args.per_page ?? 10));
+            const [mine, theirs]: any[] = await Promise.all([
+              WooCommerceAdapter.execute({ toolName, args: { ...rest, query: own, kind: undefined, rank: undefined }, credentials, config } as any).catch(() => []),
+              WooCommerceAdapter.execute({ toolName, args: rest, credentials, config } as any),
+            ]);
+            const a = Array.isArray(mine) ? mine : [], b = Array.isArray(theirs) ? theirs : [];
+            const copyOnly = (l: any[]) => l.length > 0 && l.every((p) => p?.matched_in === "description");
+            const first = copyOnly(a) && b.length && !copyOnly(b) ? [b, a] : [a, b];
+            const seen = new Set<string>();
+            const merged = first.flat().filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
+            console.log(`[woo-search] customer-words query=${JSON.stringify(own.slice(0, 60))} model=${JSON.stringify(String(args.query ?? "").slice(0, 40))} own=${a.length} model_results=${b.length} first=${first[0] === a ? "customer" : "model"}`);
+            return Array.isArray(theirs) || a.length ? merged.slice(0, per) : theirs;
+          }
+          args = rest;
         }
         // A colour or a size: search the noun, then keep what comes in it.
         const wanted = attributeWords(args.query);

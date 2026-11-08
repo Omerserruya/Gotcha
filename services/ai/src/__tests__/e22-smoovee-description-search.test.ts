@@ -168,7 +168,7 @@ describe("an empty search is retried once in the customer's words (cmw7p00cq: \"
   it("the bot retries an empty woocommerce search once, and keeps the retry only when it found something", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     expect(src).toContain("const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);");
-    expect(src).toMatch(/args: \{ \.\.\.effectiveArgs, query: own, kind: undefined, rank: undefined \}/);
+    expect(src).toMatch(/args: \{ \.\.\.effectiveArgs, query: own, kind: undefined, rank: undefined, customer_query: undefined \}/);
     expect(src).toMatch(/\(result as any\)\.result\.length === 0 \|\| copyOnly\(\(result as any\)\.result\)\)/);
     expect(src).toMatch(/if \(again\.ok && Array\.isArray\(\(again as any\)\.result\) && \(again as any\)\.result\.length\) result = again;/);
   });

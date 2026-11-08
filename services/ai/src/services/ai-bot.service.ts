@@ -2316,6 +2316,12 @@ async function generateAIBotReplyInner(
       if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName) && wooTurn) {
         effectiveArgs = { ...effectiveArgs, lang: conversationLang() };
       }
+      // The customer's own Hebrew words ride along when the model searched in
+      // Latin; the adapter uses them only on a store whose catalogue is Hebrew.
+      if (toolFunctionName === "woocommerce.list_products" && wooTurn && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {
+        const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
+        if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };
+      }
       // The person the customer is shopping for goes with every store search
       // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
       // searched for no one). The model's own audience stands.
@@ -2363,7 +2369,7 @@ async function generateAIBotReplyInner(
             conversationId: opts.conversationId,
             contactId: contactRow?.id,
             toolFunctionName,
-            args: { ...effectiveArgs, query: own, kind: undefined, rank: undefined },
+            args: { ...effectiveArgs, query: own, kind: undefined, rank: undefined, customer_query: undefined },
             // The same scope as the search it retries.
             accessScope: opts.onboardingTest ? "internal" : "customer",
             ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
