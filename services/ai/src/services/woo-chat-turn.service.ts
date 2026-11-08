@@ -26,7 +26,7 @@ import {
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { recentlyListedWooProduct } from "./connectors/woo-listed-products";
-import { discountFor, priceString } from "./woo-rendered-price.service";
+import { discountFor, priceString, wholePercentOff } from "./woo-rendered-price.service";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
@@ -106,6 +106,21 @@ async function readCard(tenantId: string, storeUrl: string, currency: string | n
       card.compareAtPrice = was;
       if (card.variants.length && card.variants.every((v) => Number(v.price) === d.was)) {
         card.variants = card.variants.map((v) => ({ ...v, price: now, compareAtPrice: was }));
+      } else {
+        // Variants at other prices (Smoovee Alexa: white 227, bamboo 237):
+        // the widget shows the picked variant's price, so a variant left at
+        // its full price jumps the card from ₪147.55 back to ₪227. A rule
+        // that takes a whole percent off (awdr: 35%) is the same on every
+        // variant; a fixed-amount rule is not, and then the variants stay.
+        const off = wholePercentOff(d.was, d.now);
+        if (off != null) {
+          card.variants = card.variants.map((v) => {
+            const full = Number(v.price);
+            if (v.compareAtPrice || !Number.isFinite(full) || full <= 0) return v;
+            const sale = Math.round(full * (100 - off)) / 100;
+            return { ...v, price: priceString(sale), compareAtPrice: v.price };
+          });
+        }
       }
     }
   }

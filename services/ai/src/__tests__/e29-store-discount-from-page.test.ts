@@ -91,3 +91,22 @@ describe("a store that prices by rules (prod 13:04: wc/v3 says on_sale:false, ev
     expect(safeFetch.mock.calls.length - before).toBe(1);
   });
 });
+
+describe("variants at other prices keep a whole-percent rule discount (Alexa: white 227, bamboo 237)", () => {
+  it("35% off 262 → 170.30 is a whole percent; 15 off 100 → 85 is too, 10 off 227 is not", async () => {
+    const { wholePercentOff } = await import("../services/woo-rendered-price.service");
+    expect(wholePercentOff(262, 170.3)).toBe(35);
+    expect(wholePercentOff(227, 147.55)).toBe(35);
+    expect(wholePercentOff(100, 85)).toBe(15);
+    expect(wholePercentOff(227, 217)).toBeNull();
+    expect(wholePercentOff(227, 227)).toBeNull();
+    expect(wholePercentOff(0, 10)).toBeNull();
+  });
+  it("the card applies it to every variant without its own compareAtPrice, and to none for a fixed cut", () => {
+    const w = readFileSync(join(__dirname, "../services/woo-chat-turn.service.ts"), "utf8");
+    expect(w).toContain("const off = wholePercentOff(d.was, d.now)");
+    expect(w).toContain("if (v.compareAtPrice || !Number.isFinite(full) || full <= 0) return v;");
+    expect(w).toContain("Math.round(full * (100 - off)) / 100");
+    expect(w).toContain("compareAtPrice: v.price");
+  });
+});

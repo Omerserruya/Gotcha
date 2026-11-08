@@ -104,5 +104,16 @@ export async function renderedDiscount(productUrl: string): Promise<RenderedDisc
   return value;
 }
 
+/**
+ * The whole percent a rule took off (262 → 170.30: 35), when it is one: the
+ * same percent then holds on the product's other variants. null for a cut that
+ * is not a whole percent (a fixed amount off), which says nothing of them.
+ */
+export function wholePercentOff(was: number, now: number): number | null {
+  if (!(was > 0) || !(now > 0) || now >= was) return null;
+  const off = Math.round((1 - now / was) * 100);
+  return off > 0 && off < 100 && Math.abs(Math.round(was * (100 - off)) / 100 - now) < 0.011 ? off : null;
+}
+
 /** A price as the store writes it ("170.30" stays, "262" stays). */
 export const priceString = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));

@@ -1832,3 +1832,52 @@ describe("★★ the visitor's language (live widget L7, W10)", () => {
     }
   });
 });
+
+describe("a rule discount on a product with variants (Smoovee Alexa, prod 2026-11-08)", () => {
+  // The card as prod's metadata had it: the product at the page's 147.55 / 227,
+  // its variants at their full prices with no compareAtPrice.
+  const alexa = (variants: any[]) => ({
+    id: "w-alexa",
+    direction: "OUTBOUND",
+    body: "Alexa",
+    messageType: "woo_product",
+    author: "AI",
+    authorKind: "ai",
+    createdAt: new Date().toISOString(),
+    commerce: {
+      addToCartEnabled: true,
+      products: [makeProduct({
+        productId: "1433", title: "Alexa", currency: "ILS", price: "147.55", compareAtPrice: "227",
+        selectedVariantId: null, optionNames: ["Colour"],
+        productUrl: "https://shop.example/he/product/alexa/", variants,
+      })],
+    },
+  });
+  const pick = (shadow: ShadowRoot, title: string) =>
+    (Array.from(shadow.querySelectorAll("button.chip")).find((b) => b.textContent === title) as HTMLButtonElement).click();
+  const priceText = (shadow: ShadowRoot) => shadow.querySelector(".card-pr")!.textContent;
+
+  it("before: picking a colour jumps the card back to the full price, the discount gone", async () => {
+    const { shadow } = await boot({ messages: [alexa([
+      { variantId: "1501", title: "White", price: "227", compareAtPrice: null, available: true, options: ["White"], requiresSellingPlan: false },
+      { variantId: "1502", title: "Bamboo", price: "237", compareAtPrice: null, available: true, options: ["Bamboo"], requiresSellingPlan: false },
+    ])] });
+    expect(priceText(shadow)).toContain("147.55");
+    expect(shadow.querySelector(".pr-was")).toBeTruthy();
+    pick(shadow, "White");
+    expect(priceText(shadow)).toContain("227");
+    expect(priceText(shadow)).not.toContain("147.55");
+    expect(shadow.querySelector(".pr-was")).toBeNull();
+  });
+
+  it("with the server's variants carrying the same 35%: the picked colour keeps its discount", async () => {
+    const { shadow } = await boot({ messages: [alexa([
+      { variantId: "1501", title: "White", price: "147.55", compareAtPrice: "227", available: true, options: ["White"], requiresSellingPlan: false },
+      { variantId: "1502", title: "Bamboo", price: "154.05", compareAtPrice: "237", available: true, options: ["Bamboo"], requiresSellingPlan: false },
+    ])] });
+    pick(shadow, "Bamboo");
+    expect(priceText(shadow)).toContain("154.05");
+    expect(shadow.querySelector(".pr-was")!.textContent).toContain("237");
+    expect(priceText(shadow)).toContain("-35%");
+  });
+});
