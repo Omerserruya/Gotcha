@@ -112,7 +112,7 @@ const T: Record<string, Record<string, string>> = {
     profile: "על העסק ויצירת קשר", brand: "הקול של המותג", source: "מקור", window: "חלון החזרה (ימים)",
     exchangeAllowed: "החלפה אפשרית", how: "איך", times: "זמני משלוח", costs: "עלויות משלוח", freeOver: "משלוח חינם מעל",
     refundMethod: "אופן ההחזר", refundDays: "ימים להחזר", months: "חודשי אחריות", yes: "כן", no: "לא",
-    count: "מספר מוצרים", categories: "קטגוריות", price: "טווח מחירים", examples: "דוגמאות", live: "מידע עדכני על מוצרים והזמנות מגיע מחיבור החנות.",
+    count: "מספר מוצרים", categories: "קטגוריות", itemPrice: "מחיר", itemCategory: "קטגוריה", itemLink: "קישור", price: "טווח מחירים", examples: "דוגמאות", live: "מידע עדכני על מוצרים והזמנות מגיע מחיבור החנות.",
     hours: "שעות פעילות", address: "כתובת", contact: "יצירת קשר",
   },
   en: {
@@ -121,7 +121,7 @@ const T: Record<string, Record<string, string>> = {
     profile: "About the business and contact", brand: "Brand voice", source: "Source", window: "Return window (days)",
     exchangeAllowed: "Exchange allowed", how: "How", times: "Shipping times", costs: "Shipping costs", freeOver: "Free shipping over",
     refundMethod: "Refund method", refundDays: "Days to refund", months: "Warranty months", yes: "yes", no: "no",
-    count: "Number of products", categories: "Categories", price: "Price range", examples: "Examples", live: "Live product and order details come from the store connection.",
+    count: "Number of products", categories: "Categories", itemPrice: "Price", itemCategory: "Category", itemLink: "Link", price: "Price range", examples: "Examples", live: "Live product and order details come from the store connection.",
     hours: "Hours", address: "Address", contact: "Contact",
   },
 };
@@ -161,6 +161,9 @@ export function faqDoc(faq: Array<{ q: string; a: string }>, lang: string): Know
   return { key: "faq", title: tr(lang).faq!, content: faq.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n"), sourceUrl: null };
 }
 
+/** A section break the knowledge chunker honours (a form feed on its own line). */
+export const SECTION_BREAK = "\f";
+
 export function productsDoc(p: ProductsSummary, currency: string | null, lang: string): KnowledgeDoc {
   const t = tr(lang);
   const cur = p.priceRange?.currency ?? currency ?? "";
@@ -171,7 +174,17 @@ export function productsDoc(p: ProductsSummary, currency: string | null, lang: s
     p.highlights.length ? `${t.examples}:\n${p.highlights.map((h) => `- ${h.title}${h.price != null ? ` (${h.price} ${cur})`.replace(" )", ")") : ""}`).join("\n")}` : null,
     t.live,
   ].filter(Boolean);
-  return { key: "products", title: t.products!, content: lines.join("\n"), sourceUrl: null };
+  // Every product of a small catalogue, one section each, so a question about
+  // what fits "תמי 4" finds the Alexa's own section (Smoovee 2026-11-08). The
+  // form feed between sections is the knowledge chunker's section break.
+  const items = (p.items ?? []).map((i) => [
+    i.title,
+    i.price != null ? `${t.itemPrice}: ${i.price} ${cur}`.trim() : null,
+    i.categories.length ? `${t.itemCategory}: ${i.categories.join(", ")}` : null,
+    i.details || null,
+    i.url ? `${t.itemLink}: ${i.url}` : null,
+  ].filter(Boolean).join("\n"));
+  return { key: "products", title: t.products!, content: [lines.join("\n"), ...items].join(`\n${SECTION_BREAK}\n`), sourceUrl: null };
 }
 
 export function profileDoc(r: any, lang: string): KnowledgeDoc {
@@ -299,7 +312,9 @@ export function learnStages(deps: LearnDeps = {}) {
     // ── products: exact from the platform feed, or "sampled" from product pages ──
     if (harvest.products) {
       await write(productsDoc(harvest.products, null, lang));
-      await mergeDiscovery(tenantId, (d) => ({ business: { ...d.business, productsSummary: harvest.products } }));
+      // The item list lives in the document; the discovery row keeps the summary.
+      const { items: _items, ...summary } = harvest.products;
+      await mergeDiscovery(tenantId, (d) => ({ business: { ...d.business, productsSummary: summary } }));
       learned++;
     } else {
       const sampled = pages.filter((p) => p.kind === "product").length;

@@ -37,7 +37,27 @@ export interface ProductsSummary {
   priceRange: { min: number; max: number; currency: string | null } | null;
   inStock: number;
   highlights: Array<{ title: string; url: string | null; price: number | null }>;
+  /**
+   * Every product, for a catalogue of at most ITEMS_MAX (Smoovee 2026-11-08:
+   * what a product fits, "מתאים ל: תמי 4", is only in its short description,
+   * and the 8 highlights never carried it). Written to the products document,
+   * one section each; not kept in the discovery row.
+   */
+  items?: Array<{ title: string; url: string | null; price: number | null; categories: string[]; details: string }>;
   source: "shopify_feed" | "woo_store_api";
+}
+
+/** The most products the products document lists one by one. */
+export const ITEMS_MAX = 200;
+const DETAILS_MAX = 400;
+
+/** A product's HTML copy as one line of text, cut at a word near DETAILS_MAX. */
+export function plainDetails(html: unknown): string {
+  const t = decodeEntities(String(html ?? "").replace(/<\/(li|p|div|h\d)>|<br\s*\/?>/gi, " · ").replace(/<[^>]*>/g, " "))
+    .replace(/\s+/g, " ").replace(/(\s*·\s*)+/g, " · ").replace(/^\s*·\s*|\s*·\s*$/g, "").trim();
+  if (t.length <= DETAILS_MAX) return t;
+  const cut = t.slice(0, DETAILS_MAX);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), DETAILS_MAX - 40)).trim() + "…";
 }
 
 export interface PlatformHarvest {
@@ -158,12 +178,19 @@ export async function harvestShopify(origin: string, fetch: Fetcher = defaultFet
 const WOO_PAGE_SIZE = 100;
 const WOO_MAX_PAGES = 5;
 
-export async function harvestWoo(origin: string, fetch: Fetcher = defaultFetcher): Promise<PlatformHarvest> {
+/**
+ * `lang` is the site's own language (its home page's <html lang>). On a WPML
+ * or Polylang store the Store API answers its default language unless asked
+ * (Smoovee: English, though her customers read /he/); a store without them
+ * ignores the parameter.
+ */
+export async function harvestWoo(origin: string, fetch: Fetcher = defaultFetcher, lang?: string): Promise<PlatformHarvest> {
   const products: any[] = [];
   let more = false;
   let unavailable: PlatformHarvest["feedUnavailable"];
   for (let page = 1; page <= WOO_MAX_PAGES; page++) {
-    const r = await fetch(new URL(`/wp-json/wc/store/v1/products?per_page=${WOO_PAGE_SIZE}&page=${page}`, origin).toString());
+    const langParam = lang && /^[a-z]{2}$/.test(lang) ? `&lang=${lang}` : "";
+    const r = await fetch(new URL(`/wp-json/wc/store/v1/products?per_page=${WOO_PAGE_SIZE}&page=${page}${langParam}`, origin).toString());
     const body = json(r);
     if (!Array.isArray(body)) {
       if (page === 1) unavailable = r && (r.status === 401 || r.status === 403 || r.status === 404) ? "disabled" : "unreadable";
@@ -198,6 +225,17 @@ export async function harvestWoo(origin: string, fetch: Fetcher = defaultFetcher
         url: typeof p.permalink === "string" ? p.permalink : null,
         price: price(p),
       })),
+      ...(!more && products.length <= ITEMS_MAX
+        ? {
+            items: products.map((p) => ({
+              title: decodeEntities(String(p.name ?? "")).slice(0, 160),
+              url: typeof p.permalink === "string" ? p.permalink : null,
+              price: price(p),
+              categories: Array.isArray(p.categories) ? p.categories.map((c: any) => decodeEntities(String(c?.name ?? ""))).filter(Boolean) : [],
+              details: plainDetails(p.short_description),
+            })),
+          }
+        : {}),
       source: "woo_store_api",
     };
   }
@@ -205,8 +243,8 @@ export async function harvestWoo(origin: string, fetch: Fetcher = defaultFetcher
   return { platform: "woocommerce", products: summary, policyUrls: [], ...(unavailable ? { feedUnavailable: unavailable } : {}) };
 }
 
-export async function harvestPlatform(origin: string, platform: Platform, fetch: Fetcher = defaultFetcher): Promise<PlatformHarvest> {
+export async function harvestPlatform(origin: string, platform: Platform, fetch: Fetcher = defaultFetcher, lang?: string): Promise<PlatformHarvest> {
   if (platform === "shopify") return harvestShopify(origin, fetch);
-  if (platform === "woocommerce") return harvestWoo(origin, fetch);
+  if (platform === "woocommerce") return harvestWoo(origin, fetch, lang);
   return { platform: null, products: null, policyUrls: [] };
 }

@@ -181,7 +181,8 @@ export async function runDiscoverJob(tenantId: string, jobId: string, deps: Pipe
     let harvest: PlatformHarvest = { platform: null, products: null, policyUrls: [] };
     if (platform) {
       await emit(stage, "progress", "products.reading", { platform });
-      harvest = await harvestPlatform(origin, platform, fetch);
+      // The site's language: a WPML store's Store API answers its default one otherwise.
+      harvest = await harvestPlatform(origin, platform, fetch, homePage ? siteLanguage(homePage.html, "") : "");
       if (harvest.products) {
         await emit(stage, "found", "products.found", { count: harvest.products.count, more: harvest.products.more }, {
           found: { productCount: harvest.products.count },
