@@ -124,7 +124,7 @@ import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
 import { capped } from "./judgement-cap";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards, unbackedOffer, shownOptionsOf } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -5586,6 +5586,16 @@ async function generateAIBotReplyInner(
     const offered = withTeamOffer(replyText, replyLocale);
     if (offered !== replyText) console.log(`[ai-bot] no knowledge match: the team offer added conv=${opts.conversationId}`);
     replyText = offered;
+  }
+  // An offer the bot cannot carry out becomes the team offer, or goes (P4);
+  // a colour / size question over products that come in one goes too.
+  if (replyText && !awaitingApproval && !pendingEscalation) {
+    const shown = productEnvelope?.candidates?.length ? shownOptionsOf(productEnvelope.candidates.map((c) => c.details)) : undefined;
+    const u = unbackedOffer(replyText, { locale: replyLocale, canHandOver: toolFunctionNames.includes("escalate_to_human"), shownOptions: shown });
+    if (u.kind) {
+      console.log(`[ai-bot] unbacked ${u.kind === "offer" ? "offer replaced" : "option question dropped"} conv=${opts.conversationId}`);
+      replyText = u.text;
+    }
   }
   markStage("checker_done");
   traceReply("checked");

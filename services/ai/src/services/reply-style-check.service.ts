@@ -767,6 +767,45 @@ export function proseOutnumbersCards(text: string | null | undefined, keys: numb
     || (t.match(/,/g) ?? []).length >= 2;
 }
 
+/**
+ * Offers the bot cannot carry out (P4): sending something over another
+ * channel ("לשלוח הוראות מדויקות לתיבת וואטסאפ או אימייל?", Tehila
+ * cmw4lyhod), "checking" a product detail it should answer from what it read
+ * ("נוכל לבדוק עבורך איזה חומר בכל דגם, להמשיך?", 15:40), telling the
+ * customer when something is back, a preorder ("לבדוק אפשרות להזמנה מראש?",
+ * Smoovee). And a colour or size question when no product shown comes in more
+ * than one ("איזה צבע מעניין אותך?" over three single-colour surfaces).
+ */
+const UNBACKED_OFFER = /(?:לשלוח|ששלח|שאשלח|נשלח)[^.!?؟\n]*(?:וואטסאפ|ווטסאפ|whatsapp|אימייל|מייל|email|sms|הודעת טקסט)|(?:לבדוק|נבדוק|אבדוק|שאבדוק|שנבדוק)[^.!?؟\n]*(?:חומר|מידות|מידה|אורך|רוחב|גודל|זמינות|מלאי|אפשרות|הזמנה מראש|דגם)|(?:להודיע|לעדכן|שאודיע|שאעדכן|נעדכן|נודיע)[^.!?؟\n]*(?:כש|ברגע ש|when)|הזמנה מראש|להזמין מראש|pre-?order|(?:send|email|text)[^.!?\n]*(?:whatsapp|e-?mail|sms)|(?:let you know|notify you) when/iu;
+const CHOICE_QUESTION = /(?:איזה|איזו|באיזה|באיזו|איזה סוג של)\s+(?:צבע|גוון|מידה|גודל)|which (?:colou?r|size)|what (?:colou?r|size)/iu;
+
+export function unbackedOffer(
+  reply: string,
+  o: { locale: "he" | "en"; canHandOver: boolean; shownOptions?: { colours: boolean; sizes: boolean } },
+): { text: string; kind: "offer" | "choice" | null } {
+  const t = String(reply ?? "").trim();
+  const parts = t.split(/(?<=[.!?؟\n])\s+/);
+  const last = parts[parts.length - 1] ?? "";
+  if (!/[?؟]\s*\S{0,3}\s*$/.test(last)) return { text: reply, kind: null };
+  const rest = parts.slice(0, -1).join(" ").trim();
+  if (UNBACKED_OFFER.test(last)) {
+    const team = o.locale === "he" ? "רוצים שאעביר את השאלה לצוות שיחזור אליכם?" : "Would you like me to pass your question to the team so they can get back to you?";
+    if (o.canHandOver) return { text: rest ? `${rest}\n${team}` : team, kind: "offer" };
+    return rest.length >= 3 ? { text: rest, kind: "offer" } : { text: reply, kind: null };
+  }
+  if (o.shownOptions && CHOICE_QUESTION.test(last)) {
+    const colour = /צבע|גוון|colou?r/i.test(last), size = /מידה|גודל|size/i.test(last);
+    if ((colour && !o.shownOptions.colours) || (size && !o.shownOptions.sizes)) return rest.length >= 3 ? { text: rest, kind: "choice" } : { text: reply, kind: null };
+  }
+  return { text: reply, kind: null };
+}
+
+/** Do the products shown come in more than one colour / size? Read from their store text ("צבע: אדום, כחול"). */
+export function shownOptionsOf(details: Array<string | undefined>): { colours: boolean; sizes: boolean } {
+  const many = (re: RegExp) => details.some((d) => { const m = re.exec(String(d ?? "")); return !!m && /,/.test(m[1]); });
+  return { colours: many(/(?:צבע|גוון|colou?r)[^:·]{0,12}:\s*([^·]*)/i), sizes: many(/(?:מידה|מידות|גודל|size)[^:·]{0,12}:\s*([^·]*)/i) };
+}
+
 // ─── The final gate (urban-e23) ──────────────────────────────────────────────
 //
 // Every transform that removes text left new broken punctuation, and the
