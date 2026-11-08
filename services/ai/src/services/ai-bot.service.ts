@@ -5596,6 +5596,15 @@ async function generateAIBotReplyInner(
   const emptySearch = !!productEnvelope && productEnvelope.status === "no_results" && productEnvelope.candidates.length === 0;
   if (emptySearch && replyText?.trim()) {
     console.log(`[ai-bot] empty product search: the model's reply stands conv=${opts.conversationId}`);
+    // ...and never ends at "לא מצאתי" (P7, Smoovee cmw7p00cq 10:33): with
+    // no question in it, it offers the team, when this turn can hand over.
+    if (!awaitingApproval && !pendingEscalation && toolFunctionNames.includes("escalate_to_human")) {
+      const offered = withTeamOffer(replyText, replyLocale);
+      if (offered !== replyText) {
+        console.log(`[ai-bot] empty product search: the team offer added conv=${opts.conversationId}`);
+        replyText = offered;
+      }
+    }
   } else if (productEnvelope) {
     // Does this channel have somewhere better to put products than a
     // sentence? The capability map answers, not this file.

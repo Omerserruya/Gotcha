@@ -468,7 +468,10 @@ export function buildKeyedModelSummary(
       " State honestly that nothing matched. Do NOT invent products and do NOT offer something you were not shown." +
       (budgeted
         ? " Before replying, run the SAME search again WITHOUT price_max so you can tell the customer the real lowest price in this category, then let them decide whether to raise their budget. Never guess that number."
-        : " Offer ONE controlled refinement (widen length, raise budget, or preorder).")
+        // Not a refinement or a preorder we cannot take (P4/P7, Smoovee
+        // 2026-11-08: "לבדוק אפשרות להזמנה מראש?" after a search that missed
+        // the product): what the store has is not known from an empty search.
+        : " Say you did not find it in the catalogue (never that the store lacks it), and offer to pass the question to the team so they can check and get back to the customer. Do NOT suggest searching by colour or other details, and do NOT offer a preorder.")
     );
   }
   const lines = env.candidates.map((c, i) => {
