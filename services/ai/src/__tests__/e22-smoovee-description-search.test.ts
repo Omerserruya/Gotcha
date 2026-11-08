@@ -22,8 +22,14 @@ import Woo, { descriptionTokens } from "../services/connectors/woocommerce.adapt
 const CATALOG: { he: any[]; en: any[] } = JSON.parse(readFileSync(join(__dirname, "fixtures/smoovee-catalog.json"), "utf8"));
 const EN_CATS = [{ id: 63, name: "Accessories", count: 2 }, { id: 15, name: "Kitchen", count: 10 }, { id: 86, name: "Shop Smoovee", count: 12 }, { id: 99, name: "Smoovee Woody", count: 11 }];
 
+// What her store answers for ?category=86 / 87 (public Store API, 2026-11-08):
+// the same 12 per language, whatever each product's own categories list says.
+const SHOP_EN = [10261, 4820, 4061, 4046, 2186, 2171, 450, 449, 444, 56, 54, 52];
+const SHOP_HE = [32551, 4831, 4068, 4057, 2196, 2183, 611, 614, 620, 624, 1433, 634];
+const SHOP_IDS: Record<string, number[]> = { "86": SHOP_EN, "87": SHOP_EN };
+
 let n = 0;
-function store(catalog = CATALOG) {
+function store(catalog = CATALOG, extra: Record<string, unknown> = {}) {
   const base = `https://smoovee${++n}.example.com`;
   const calls: string[] = [];
   vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -32,20 +38,32 @@ function store(catalog = CATALOG) {
     const u = new URL(url);
     let body: any = [];
     const list = u.searchParams.get("lang") === "he" ? catalog.he : catalog.en;
-    if (u.pathname.endsWith("/products/categories")) body = EN_CATS;
+    const byId = /\/products\/(\d+)$/.exec(u.pathname);
+    if (byId) body = [...catalog.he, ...catalog.en].find((p) => String(p.id) === byId[1]) ?? null;
+    else if (u.pathname.endsWith("/products/categories")) body = EN_CATS;
     else if (u.pathname.endsWith("/products")) {
       const q = u.searchParams.get("search") ?? "";
       const page = Number(u.searchParams.get("page") ?? 1);
       const per = Number(u.searchParams.get("per_page") ?? 10);
       // Her store's search: titles only (search=Tami and search=תמי find nothing).
-      const hits = q ? list.filter((p) => p.name.toLowerCase().includes(q.toLowerCase())) : list;
-      body = hits.slice((page - 1) * per, page * per);
+      const cat = u.searchParams.get("category");
+      // Her store's category query, not the products' own (broken) category lists.
+      const shop = u.searchParams.get("lang") === "he" ? (SHOP_IDS[cat ?? ""] ? SHOP_HE : []) : (SHOP_IDS[cat ?? ""] ?? []);
+      const inCat = cat ? list.filter((p) => shop.includes(p.id)) : list;
+      // Her store's search with lang=he (live run 2026-11-08) also reads the copy:
+      // search=דגם returned five surfaces whose Hebrew text says "דגם".
+      const he = u.searchParams.get("lang") === "he";
+      const hits = q ? inCat.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()) || (he && q.split(/\s+/).some((t) => t.length > 1 && `${p.short_description} ${p.description}`.includes(t)))) : inCat;
+      const inStock = u.searchParams.get("stock_status") === "instock" ? hits.filter((x) => x.stock_status === "instock") : hits;
+      body = inStock.slice((page - 1) * per, page * per);
     }
     return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
   }));
   const run = (args: Record<string, unknown>) =>
-    Woo.execute({ toolName: "list_products", args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base } } as any) as Promise<any[]>;
-  return { run, calls };
+    Woo.execute({ toolName: "list_products", args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base, ...extra } } as any) as Promise<any[]>;
+  const tool = (toolName: string, args: Record<string, unknown>) =>
+    Woo.execute({ toolName, args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base, ...extra } } as any) as Promise<any>;
+  return { run, tool, calls, base };
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -153,5 +171,71 @@ describe("an empty search is retried once in the customer's words (cmw7p00cq: \"
     expect(src).toMatch(/args: \{ \.\.\.effectiveArgs, query: own, kind: undefined, rank: undefined \}/);
     expect(src).toMatch(/\(result as any\)\.result\.length === 0 \|\| copyOnly\(\(result as any\)\.result\)\)/);
     expect(src).toMatch(/if \(again\.ok && Array\.isArray\(\(again as any\)\.result\) && \(again as any\)\.result\.length\) result = again;/);
+  });
+});
+
+// "Shop Smoovee": 86 in the default language, 87 in Hebrew; "Smoovee Woody" is 99 / 100.
+const SHOP = { productCategoryIds: ["86", "87"] };
+const inShop = (p: any) => [...SHOP_EN, ...SHOP_HE].includes(p.id);
+
+describe("a connection that allows only some categories (Smoovee: only Shop Smoovee can be ordered)", () => {
+  it("\"מה יש כרגע במלאי\" shows no Woody (cmw7p00cq 10:45Z: Woody Alexa, Adam, Asaf)", async () => {
+    const got = await store(CATALOG, SHOP).run({ query: "מה יש כרגע במלאי" });
+    expect(got.length).toBeGreaterThan(0);
+    expect(got.every(inShop)).toBe(true);
+    expect(got.some((p) => /woody|וודי/i.test(p.name))).toBe(false);
+  });
+  it("every route: the description match, a Latin ask, a name", async () => {
+    expect((await store(CATALOG, SHOP).run({ query: "דגם לתמי 4" })).map((p) => p.id)).toEqual([1433]);
+    expect((await store(CATALOG, SHOP).run({ query: "Tami 4" })).map((p) => p.id)).toEqual([54]);
+    const names = await store(CATALOG, SHOP).run({ query: "אלכסה" });
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every(inShop)).toBe(true);
+  });
+  it("a card: get_product and the two-minute listing never give a product outside them", async () => {
+    const s = store(CATALOG, SHOP);
+    await s.run({ query: "Smoovee" });
+    const { recentlyListedWooProduct } = await import("../services/connectors/woocommerce.adapter");
+    expect(recentlyListedWooProduct(s.base, "59951")).toBeNull(); // Woody Alexa (he)
+    await expect(s.tool("get_product", { product_id: "59951" })).rejects.toThrow(/product_not_found/);
+    expect((await s.tool("get_product", { product_id: "1433" })).id).toBe(1433);
+  });
+  it("no allow-list: Woody is a product like any other (today's behaviour)", async () => {
+    const s = store();
+    expect((await s.tool("get_product", { product_id: "59951" })).id).toBe(59951);
+    expect((await s.run({ query: "דגם לתמי 4" })).map((p) => p.id).sort()).toEqual([1433, 59951]);
+  });
+});
+
+describe("a store that reads products in the conversation's language (WPML)", () => {
+  it("storeLanguage he: a Hebrew turn reads lang=he, names and ids of the Hebrew catalogue", async () => {
+    const s = store(CATALOG, { storeLanguage: "he" });
+    const got = await s.run({ query: "Smoovee", lang: "he" });
+    expect(s.calls.filter((u) => /\/products\?/.test(u)).every((u) => /lang=he/.test(u))).toBe(true);
+    await s.tool("get_product", { product_id: "1433" });
+    expect(s.calls.at(-1)).toMatch(/\/products\/1433\?lang=he$/);
+    expect(got).toBeDefined();
+  });
+  it("an English turn on that store reads lang=en", async () => {
+    const s = store(CATALOG, { storeLanguage: "he" });
+    await s.run({ query: "Tami 4", lang: "en" });
+    expect(s.calls.filter((u) => /\/products\?/.test(u)).every((u) => /lang=en/.test(u))).toBe(true);
+  });
+  it("a store without storeLanguage: no lang parameter at all, whatever the turn says (Tehila's store)", async () => {
+    const s = store();
+    await s.run({ query: "Tami 4", lang: "he" });
+    await s.tool("get_product", { product_id: "54", lang: "he" });
+    expect(s.calls.some((u) => /lang=/.test(u))).toBe(false);
+  });
+});
+
+describe("the store's own search reads copy in Hebrew: a title hit must hold the word (live run 2026-11-08)", () => {
+  it("\"דגם לתמי 4\" on the Hebrew catalogue is the Alexa, not five surfaces whose copy says דגם", async () => {
+    const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "דגם לתמי 4", lang: "he" });
+    expect(got.map((p) => p.id)).toEqual([1433]);
+  });
+  it("a name still finds its product (\"אלכסה\", lang=he)", async () => {
+    const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "אלכסה", lang: "he" });
+    expect(got.map((p) => p.id)).toEqual([1433]);
   });
 });

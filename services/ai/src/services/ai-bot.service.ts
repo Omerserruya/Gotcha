@@ -1939,6 +1939,8 @@ async function generateAIBotReplyInner(
       });
   // The one place cards are staged this turn, whichever store they come from.
   const productTurn = shopifyTurn ?? wooTurn;
+  // The conversation's language, for a store that reads products in one.
+  const conversationLang = (): "he" | "en" => detectLocale([...messages.map((m) => m.body || ""), opts.incomingMessage ?? ""]);
   // A web chat on a WooCommerce store's site: the product the visitor is
   // looking at, resolved against the store (Shopify's turn has its own block).
   if (!shopifyTurn && !ctxSlot.storefrontBlock) {
@@ -2308,6 +2310,12 @@ async function generateAIBotReplyInner(
         toolName: toolFunctionName,
         args: args as Record<string, any>,
       });
+      // The conversation's language for a store that reads in one (WPML: the
+      // Hebrew catalogue's names and prices, Smoovee 2026-11-08). The adapter
+      // ignores it unless the connection names a store language.
+      if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName) && wooTurn) {
+        effectiveArgs = { ...effectiveArgs, lang: conversationLang() };
+      }
       // The person the customer is shopping for goes with every store search
       // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
       // searched for no one). The model's own audience stands.
@@ -3354,7 +3362,7 @@ async function generateAIBotReplyInner(
       const found = await executeAdapterTool({
         tenantId: opts.tenantId,
         toolFunctionName: "woocommerce.list_products",
-        args: { query: mention.title, per_page: 5 },
+        args: { query: mention.title, per_page: 5, lang: conversationLang() },
         accessScope: opts.onboardingTest ? "internal" : "customer",
       }).catch(() => null);
       const list: any[] = found?.ok && Array.isArray(found.result) ? (found.result as any[]) : [];
@@ -3474,7 +3482,7 @@ async function generateAIBotReplyInner(
     }
     if (predicted) {
       try {
-        const args = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", args: predicted });
+        const args = { ...(await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", args: predicted })), lang: conversationLang() };
         const got = await executeAdapterTool({
           tenantId: opts.tenantId,
           conversationId: opts.conversationId,

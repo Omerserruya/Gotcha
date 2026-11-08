@@ -1532,4 +1532,63 @@ router.put("/:slug/audience-config", canManageSystems, async (req: Request, res:
   }
 });
 
+// PUT /:slug/catalog-config - what a WooCommerce store shows customers.
+//
+// productCategoryIds: the only categories customers are shown (Smoovee
+// 2026-11-08: only "Shop Smoovee" can be ordered; a WPML store's languages
+// have their own ids, so list both). [] or null clears it: every category.
+// storeLanguage: "he" | "en" for a WPML / Polylang store, so products are read
+// in the conversation's language (else its default language's names and
+// prices); null clears it. A field left out is left as it is.
+router.put("/:slug/catalog-config", canManageSystems, async (req: Request, res: Response) => {
+  try {
+    if (req.params.slug !== "woocommerce") {
+      res.status(400).json({ error: "catalog-config applies to WooCommerce only" });
+      return;
+    }
+    const body = req.body || {};
+    const cfgPatch: Record<string, unknown> = {};
+    if ("productCategoryIds" in body) {
+      const v = body.productCategoryIds;
+      if (v !== null && !(Array.isArray(v) && v.length <= 50 && v.every((x: unknown) => /^\d{1,12}$/.test(String(x ?? "").trim())))) {
+        res.status(400).json({ error: "productCategoryIds must be up to 50 numeric category ids, [] or null" });
+        return;
+      }
+      cfgPatch.productCategoryIds = Array.isArray(v) && v.length ? Array.from(new Set(v.map((x: unknown) => String(x).trim()))) : null;
+    }
+    if ("storeLanguage" in body) {
+      const v = body.storeLanguage;
+      if (v !== null && v !== "he" && v !== "en") {
+        res.status(400).json({ error: "storeLanguage must be \"he\", \"en\" or null" });
+        return;
+      }
+      cfgPatch.storeLanguage = v;
+    }
+    if (!Object.keys(cfgPatch).length) {
+      res.status(400).json({ error: "nothing to change: productCategoryIds and/or storeLanguage" });
+      return;
+    }
+    const entry = await prisma.integrationCatalog.findUnique({ where: { slug: "woocommerce" }, select: { id: true } });
+    const ti = entry ? await prisma.tenantIntegration.findFirst({
+      where: { tenantId: req.tenantId!, integrationId: entry.id },
+      select: { id: true, config: true },
+    }) : null;
+    if (!ti) {
+      res.status(404).json({ error: "No WooCommerce connection for this workspace" });
+      return;
+    }
+    const cfg = { ...((ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>) };
+    for (const [k, v] of Object.entries(cfgPatch)) {
+      if (v === null) delete cfg[k];
+      else cfg[k] = v;
+    }
+    await prisma.tenantIntegration.update({ where: { id: ti.id }, data: { config: cfg as any } });
+    console.log(`[integrations] catalog-config tenant=${req.tenantId} productCategoryIds=${JSON.stringify(cfg.productCategoryIds ?? null)} storeLanguage=${JSON.stringify(cfg.storeLanguage ?? null)}`);
+    res.json({ data: { productCategoryIds: cfg.productCategoryIds ?? null, storeLanguage: cfg.storeLanguage ?? null } });
+  } catch (err: any) {
+    console.error("catalog-config error:", err);
+    res.status(500).json({ error: "Failed to update catalog config" });
+  }
+});
+
 export default router;

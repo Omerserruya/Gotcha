@@ -19,9 +19,32 @@ export function rememberListed(url: string, out: unknown) {
   if (listedProducts.size > 2000) for (const [k, v] of listedProducts) if (now - v.at > LISTED_TTL_MS) listedProducts.delete(k);
 }
 
+/**
+ * The products a store's connection limits customers to (Smoovee 2026-11-08:
+ * only "Shop Smoovee" can be ordered), as product ids: the store's own answer
+ * to "which products are in these categories", because a WPML product's
+ * categories list does not say (her Alexa lists only "מטבח" yet is one of
+ * Shop Smoovee's 12). Set by the adapter on every call, so a listing read for
+ * another purpose never becomes a card.
+ */
+const storeAllowed = new Map<string, Set<string>>();
+export function setStoreAllowedProducts(storeUrl: string, ids: Set<string> | null) {
+  if (ids) storeAllowed.set(storeKey(storeUrl), ids);
+  else storeAllowed.delete(storeKey(storeUrl));
+}
+/** Does this store (its URL, or its wc/v3 base) limit customers to some products? */
+export function wooStoreHasAllowList(storeOrBase: string): boolean {
+  return storeAllowed.has(storeKey(String(storeOrBase ?? "").replace(/\/wp-json\/wc\/v3\/?$/, "")));
+}
+/** Is this product one the store's connection allows (any, when none is set)? */
+export function wooProductAllowed(storeUrl: string, p: any): boolean {
+  const ids = storeAllowed.get(storeKey(storeUrl));
+  return !ids || ids.has(String(p?.id ?? ""));
+}
+
 /** A product this store listed in the last two minutes, or null (then read it). */
 export function recentlyListedWooProduct(storeUrl: string, productId: string): any | null {
   const e = listedProducts.get(`${storeKey(storeUrl)}:${productId}`);
-  return e && Date.now() - e.at < LISTED_TTL_MS ? e.p : null;
+  return e && Date.now() - e.at < LISTED_TTL_MS && wooProductAllowed(storeUrl, e.p) ? e.p : null;
 }
 

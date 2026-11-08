@@ -20,7 +20,7 @@
 
 import { assertPublicUrl, getRedis } from "@chatcenter/shared";
 import { orderPhoneSearchTerms } from "../../lib/order-phone-search";
-import { rememberListed } from "./woo-listed-products";
+import { rememberListed, setStoreAllowedProducts, wooProductAllowed, wooStoreHasAllowList } from "./woo-listed-products";
 export { recentlyListedWooProduct } from "./woo-listed-products";
 export { orderPhoneSearchTerms };
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
@@ -407,7 +407,7 @@ const STEM_SYNONYMS: Record<string, string[]> = {
 };
 
 /** Hebrew words that name nothing in a catalogue ("יש לכם", "עד 99 ש"ח"). */
-const HEBREW_STOP = new Set(["עד", "של", "יש", "לי", "את", "עם", "על", "אני", "לכם", "אתם", "מה", "זה", "גם", "או", "כל", "אם", "רק", "בלי", "יותר", "פחות", "אפשר", "רוצ", "מחפש", "שח", "ש\"ח", "בשביל", "משהו", "איז", "איזה"]);
+const HEBREW_STOP = new Set(["דגם", "דגמ", "עד", "של", "יש", "לי", "את", "עם", "על", "אני", "לכם", "אתם", "מה", "זה", "גם", "או", "כל", "אם", "רק", "בלי", "יותר", "פחות", "אפשר", "רוצ", "מחפש", "שח", "ש\"ח", "בשביל", "משהו", "איז", "איזה"]);
 
 /** A text's Hebrew stems, catalogue words only. */
 function hebrewStems(t: string): string[] {
@@ -433,15 +433,16 @@ export function queryStems(text: unknown): string[] {
  * חגיגיות", not all "מטפחות"). Never a Men / Women one, which is the audience
  * param's. Ten minutes' cache.
  */
-async function categoryForQuery(auth: string, base: string, query: unknown): Promise<{ id: string; name: string } | null> {
+async function categoryForQuery(auth: string, base: string, query: unknown, lang?: string | null): Promise<{ id: string; name: string } | null> {
   const wanted = new Set(queryStems(query));
   if (!wanted.size) return null;
-  let hit = categoryCache.get(base);
+  const key = lang ? `${base}|${lang}` : base;
+  let hit = categoryCache.get(key);
   if (!hit || Date.now() - hit.at >= 10 * 60_000) {
-    const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`).catch(() => null);
+    const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true${lang ? `&lang=${lang}` : ""}`).catch(() => null);
     if (!Array.isArray(list)) return null;
     hit = { at: Date.now(), list };
-    categoryCache.set(base, hit);
+    categoryCache.set(key, hit);
   }
   let best: { id: string; name: string; score: number; size: number; count: number } | null = null;
   for (const c of hit.list) {
@@ -459,6 +460,15 @@ async function categoryForQuery(auth: string, base: string, query: unknown): Pro
   return best ? { id: best.id, name: best.name } : null;
 }
 
+/** Does a product's name hold this word, in any of its forms (Hebrew stem, or the word itself)? */
+function nameHolds(p: any, word: string): boolean {
+  const name = String(p?.name ?? "").toLowerCase();
+  const w = word.toLowerCase();
+  if (name.includes(w)) return true;
+  const stem = /[א-ת]/.test(w) ? hebrewStem(w) : categoryStem(w);
+  return stem.length >= 2 && (hebrewStems(name).includes(stem) || name.includes(stem));
+}
+
 /** "מטפחה" -> ["מטפחת", "מטפחות", "מטפח"]: the other forms of a Hebrew word, to retry an empty title search. */
 export function hebrewVariants(word: string): string[] {
   const s = hebrewStem(word);
@@ -473,6 +483,58 @@ const STOCK_ASK = new Set(["במלאי", "מלאי", "כרגע", "עכשיו", "
 function inStockFirst(list: any[]): any[] {
   const out = (p: any) => p?.stock_status === "outofstock";
   return [...list.filter((p) => !out(p)), ...list.filter(out)];
+}
+
+/**
+ * The categories a connection limits customers to: config.productCategoryIds,
+ * numeric ids (a WPML store's languages have their own, so both). Null: all.
+ */
+export function categoryAllowList(config: any): Set<string> | null {
+  const ids = (Array.isArray(config?.productCategoryIds) ? config.productCategoryIds : []).map((v: unknown) => String(v ?? "").trim()).filter((v: string) => /^\d{1,12}$/.test(v));
+  return ids.length ? new Set(ids) : null;
+}
+
+const allowedIdsCache = new Map<string, { at: number; ids: Set<string>; failed: boolean }>();
+
+/**
+ * The ids of the products in the allowed categories, as the store answers
+ * ?category=<id>, in its default language, in Hebrew and in English (on a
+ * WPML store each language has its own ids).
+ * Ten minutes per store; a read that failed is retried after one, and until
+ * then nothing is allowed (closed, never every product).
+ */
+async function allowedProductIds(auth: string, base: string, cats: Set<string>): Promise<Set<string>> {
+  // Every language a read may use (a Hebrew ask reads lang=he); one answer on a store without WPML.
+  const langs: Array<string | null> = [null, "he", "en"];
+  const key = `${base}|${[...cats].sort().join(",")}|${langs.join(",")}`;
+  const hit = allowedIdsCache.get(key);
+  if (hit && Date.now() - hit.at < (hit.failed ? 60_000 : 10 * 60_000)) return hit.ids;
+  const ids = new Set<string>();
+  let failed = false;
+  await Promise.all([...cats].flatMap((cat) => langs.map(async (lang) => {
+    for (let page = 1; page <= 3; page++) {
+      const p = new URLSearchParams({ category: cat, status: "publish", per_page: "100", page: String(page), _fields: "id" });
+      if (lang) p.set("lang", lang);
+      const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`).catch(() => { failed = true; return []; });
+      for (const x of Array.isArray(l) ? l : []) if (/^\d{1,12}$/.test(String(x?.id ?? ""))) ids.add(String(x.id));
+      if (!Array.isArray(l) || l.length < 100) break;
+    }
+  })));
+  allowedIdsCache.set(key, { at: Date.now(), ids, failed });
+  return ids;
+}
+
+/**
+ * The language to read products in, only for a connection that declares one
+ * (config.storeLanguage, a WPML / Polylang store): the conversation's
+ * (args.lang, which the bot sets), else that one. Any other store: null, its
+ * requests exactly as before. "he" or "en" only.
+ */
+export function productLanguage(args: any, config: any): "he" | "en" | null {
+  const ok = (v: unknown) => { const x = String(v ?? "").trim().toLowerCase(); return x === "he" || x === "en" ? x : null; };
+  const store = ok(config?.storeLanguage);
+  if (!store) return null;
+  return ok(args?.lang) ?? store;
 }
 
 /**
@@ -529,7 +591,7 @@ const catalogCache = new Map<string, { at: number; list: any[] | null }>();
  * catalogue (its own ids, which the cards then use); a store without them
  * ignores the parameter and answers its one catalogue.
  */
-async function wholeCatalog(auth: string, base: string, lang: "he" | null): Promise<any[] | null> {
+async function wholeCatalog(auth: string, base: string, lang: string | null): Promise<any[] | null> {
   const key = `${base}|${lang ?? ""}`;
   const hit = catalogCache.get(key);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
@@ -563,7 +625,8 @@ async function descriptionSearch(
 ): Promise<any[]> {
   const words = descriptionTokens(query);
   if (!words.length) return [];
-  const lang = /[א-ת]/.test(query) ? "he" : null;
+  // The store's language when the connection names one (lang in params), else the ask's.
+  const lang = params.get("lang") || (/[א-ת]/.test(query) ? "he" : null);
   const all = await wholeCatalog(auth, base, lang).catch(() => null);
   if (!all) return [];
   const minP = Number(params.get("min_price") ?? NaN), maxP = Number(params.get("max_price") ?? NaN);
@@ -610,7 +673,8 @@ async function hebrewProductSearch(
     browse.delete("search");
     browse.set("stock_status", "instock");
     browse.set("orderby", "date");
-    browse.set("per_page", String(Math.max(per * 3, 30)));
+    // An allow-list of categories filters what comes back: read a whole page.
+    browse.set("per_page", String(wooStoreHasAllowList(base) ? 100 : Math.max(per * 3, 30)));
     const all = await get(browse);
     const kindOf = (p: any) => String((p?.categories ?? []).map((c: any) => c?.name).find((n: any) => n && !/uncategori[sz]ed|new in|NEW|ש"ח|ש&quot;ח|\d/.test(String(n))) ?? "");
     const groups = new Map<string, any[]>();
@@ -620,7 +684,7 @@ async function hebrewProductSearch(
     log("browse:instock", out.length);
     return out.slice(0, per);
   }
-  const cat = await categoryForQuery(auth, base, query);
+  const cat = await categoryForQuery(auth, base, query, params.get("lang"));
   const catStems = new Set(cat ? queryStems(cat.name) : []);
   // Words the category does not account for: a name, a colour, a print.
   // A stock word ("אילו מטפחות יש במלאי") is a filter, never a word to search.
@@ -630,10 +694,13 @@ async function hebrewProductSearch(
   byCat.delete("search");
   if (cat) { byCat.set("category", cat.id); byCat.set("per_page", String(Math.max(per, 30))); }
   if (wantsStock) byCat.set("stock_status", "instock");
-  const restSearch = (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return get(p); };
+  // The store's search also reads copy (Smoovee, lang=he: "דגם" is in a juicer's
+  // "בראון דגם SJ3100BK"): a title hit is one whose name holds the word.
+  const named_ = (w: string) => (p: any) => nameHolds(p, w);
+  const restSearch = async (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return (await get(p)).filter(named_(w)); };
   const [inCat, whole, ...perWord] = await Promise.all([
     cat ? get(byCat) : Promise.resolve([] as any[]),
-    get(params),
+    get(params).then((l) => l.filter((p: any) => words.some((w) => nameHolds(p, w)))),
     ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
   ]);
   const named = [...perWord.flat(), ...(wantsStock && !rest.length ? [] : whole)].filter((p: any) => !wantsStock || p?.stock_status !== "outofstock");
@@ -826,6 +893,12 @@ const WooCommerceAdapter: ProviderAdapter = {
     if (!storeUrl) throw new Error("no_store_url");
     const base = `${storeUrl}/wp-json/wc/v3`;
     const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
+    // The connection's allowed categories (Smoovee: only "Shop Smoovee" can be
+    // ordered) and the store's language (a WPML store answers its default
+    // language otherwise: English names and prices for a Hebrew customer).
+    const lang = productLanguage(args, config);
+    const allowedCats = categoryAllowList(config);
+    setStoreAllowedProducts(storeUrl, allowedCats ? await allowedProductIds(auth, base, allowedCats) : null);
 
     switch (toolName) {
       case "list_orders": {
@@ -911,6 +984,7 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (args.query) params.set("search", String(args.query));
         // Only what the store itself shows: published, not hidden (W9).
         params.set("status", "publish");
+        if (lang) params.set("lang", lang);
         const price = (v: unknown) => (typeof v === "number" || typeof v === "string") && Number.isFinite(Number(v)) && Number(v) >= 0 ? String(Number(v)) : null;
         if (price(args.price_min)) params.set("min_price", price(args.price_min)!);
         if (price(args.price_max)) params.set("max_price", price(args.price_max)!);
@@ -921,14 +995,15 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (ids(args.include).length) params.set("include", ids(args.include).join(","));
         if (ids(args.exclude).length) params.set("exclude", ids(args.exclude).join(","));
         if (/^\d{1,12}$/.test(String(args.category ?? ""))) params.set("category", String(args.category));
-        const visible = (l: any) => (Array.isArray(l) ? l.filter((p: any) => p?.catalog_visibility !== "hidden") : l);
+        // ...and only the connection's allowed categories, when it names some.
+        const visible = (l: any) => (Array.isArray(l) ? l.filter((p: any) => p?.catalog_visibility !== "hidden" && wooProductAllowed(storeUrl, p)) : l);
         // Internal (the web chat, not in the model's schema): a broad kind the
         // customer named is the store's whole category, ranked by the kind's
         // own title word (urban replay 2026-10-28: "מעיל לגברים" searched
         // "Jacket", and the overcoat was ranked out). No such category: the
         // search as asked.
         if (typeof args.kind === "string" && args.kind.trim() && !params.has("category")) {
-          const cat = await categoryForQuery(auth, base, args.kind);
+          const cat = await categoryForQuery(auth, base, args.kind, params.get("lang"));
           if (cat?.id) {
             const byKind = new URLSearchParams(params);
             byKind.delete("search");
@@ -971,7 +1046,7 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (Array.isArray(list) && (list.length === 0 || (titleHits && !titleHits.length)) && words.length) {
           const seen = new Map<string, any>();
           const add = (l: any) => { if (Array.isArray(l)) for (const p of l) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p); };
-          const cat = await categoryForQuery(auth, base, args.query);
+          const cat = await categoryForQuery(auth, base, args.query, params.get("lang"));
           if (cat?.id) {
             const byCat = new URLSearchParams(params);
             byCat.delete("search");
@@ -1088,11 +1163,15 @@ const WooCommerceAdapter: ProviderAdapter = {
         // names it, often in Hebrew); the model's schema still takes the id.
         if (!args.product_id && typeof args.slug === "string" && args.slug.trim()) {
           const params = new URLSearchParams({ slug: args.slug.trim(), status: "publish", per_page: "1" });
+          if (lang) params.set("lang", lang);
           const list: any = await wooRequest(auth, "GET", `${base}/products?${params}`);
-          if (!Array.isArray(list) || !list[0]) throw new Error("woocommerce_404: product_not_found");
+          if (!Array.isArray(list) || !list[0] || !wooProductAllowed(storeUrl, list[0])) throw new Error("woocommerce_404: product_not_found");
           return list[0];
         }
-        return await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}`);
+        const one: any = await wooRequest(auth, "GET", `${base}/products/${encodeURIComponent(String(args.product_id))}${lang ? `?lang=${lang}` : ""}`);
+        // Outside the allowed categories is not a product this store offers.
+        if (!wooProductAllowed(storeUrl, one)) throw new Error("woocommerce_404: product_not_found");
+        return one;
       }
       case "list_product_categories": {
         // Internal callers only (the web chat's add-ons): not in the model's tools.
