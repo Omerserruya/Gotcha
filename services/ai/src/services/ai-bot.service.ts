@@ -124,7 +124,7 @@ import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
 import { capped } from "./judgement-cap";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -5658,6 +5658,45 @@ async function generateAIBotReplyInner(
         outcome = staged.ok ? { ok: true } : { ok: false, reason: staged.reason };
       } catch (err) {
         outcome = { threw: err };
+      }
+    }
+
+    // The text describes only what is carded (P5): when it speaks of more
+    // products than went out as cards, it is rewritten once to those cards.
+    const carded: any[] = outcome && "ok" in outcome && outcome.ok
+      ? (((productTurn?.staged ?? []).at(-1) as any)?.metadata?.commerce?.products ?? [])
+      : [];
+    const namedKeys = new Set(String(namingDraft ?? "").match(/PRODUCT_\d+/gi) ?? []).size;
+    if (replyText?.trim() && carded.length && proseOutnumbersCards(replyText, namedKeys, carded.length)) {
+      try {
+        const titles = carded.map((p: any) => `«${String(p?.title ?? "").replace(/[«»]/g, "")}»`).join(", ");
+        const fix = await generateResponse({
+          tenantId: opts.tenantId,
+          sessionId: opts.conversationId,
+          model,
+          messages: [
+            ...chatMessages,
+            { role: "assistant", content: replyText },
+            {
+              role: "system",
+              content: `The cards under your message show only ${carded.length === 1 ? "this product" : `these ${carded.length} products`}: ${titles}. ` +
+                `Your reply describes more than that. Rewrite it to describe only ${carded.length === 1 ? "it" : "them"}, in a sentence or two, in ${replyLocale === "he" ? "Hebrew" : "English"}. ` +
+                "No product keys, no store titles inside a sentence, no prices, no list, no SHOW line.",
+            },
+          ],
+          temperature: 0.3,
+          maxTokens: 300,
+          metadata: { type: "ai_bot_cards_match_rewrite", conversationId: opts.conversationId, aiAgentId: config.id },
+          signal,
+        });
+        totalTokens += fix.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(fix.usage);
+        budget.addUsage(fix.usage.total_tokens || 0);
+        const rewritten = takeShowLine(fix.content ?? "").text.trim();
+        console.warn(`[ai-bot] prose described more than the ${carded.length} card(s) (keys=${namedKeys}): ${rewritten ? "rewritten" : "rewrite empty, kept"} conv=${opts.conversationId}`);
+        if (rewritten && !isInterimOnlyReply(rewritten)) replyText = rewritten;
+      } catch (err: any) {
+        if (err?.name === "AbortError") throw err;
+        console.warn(`[ai-bot] cards-match rewrite failed (kept): ${err?.message} conv=${opts.conversationId}`);
       }
     }
 

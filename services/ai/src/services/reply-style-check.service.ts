@@ -752,6 +752,21 @@ export function takeShowLine(text: string | null | undefined): { text: string; k
   return { text: out.replace(/\n{3,}/g, "\n\n").trim(), keys: [...new Set(keys)] };
 }
 
+/**
+ * Does the text describe more products than the cards show (P5, Tehila
+ * cmw26crzp 13:51: three scarves described, one card, "אנה")? With SHOW keys:
+ * more keys than cards that went out. Without: one card, and the text speaks
+ * of several ("כמה", "שלוש", "אפשרויות", or a list: two commas or more).
+ */
+export function proseOutnumbersCards(text: string | null | undefined, keys: number, cards: number): boolean {
+  if (cards <= 0) return false;
+  if (keys > 0) return keys > cards;
+  if (cards !== 1) return false;
+  const t = String(text ?? "");
+  return /(?<![א-ת])(?:כמה|שלוש|שלושה|שתי|שני|שניים|שתיים|אפשרויות|דגמים|מבחר)(?![א-ת])|\b(?:several|a few|two|three|options)\b/i.test(t)
+    || (t.match(/,/g) ?? []).length >= 2;
+}
+
 // ─── The final gate (urban-e23) ──────────────────────────────────────────────
 //
 // Every transform that removes text left new broken punctuation, and the
