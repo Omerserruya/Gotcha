@@ -185,6 +185,12 @@ describe("a connection that allows only some categories (Smoovee: only Shop Smoo
     expect(got.every(inShop)).toBe(true);
     expect(got.some((p) => /woody|וודי/i.test(p.name))).toBe(false);
   });
+  it("a browse with no words (in_stock only) is the allowed products, though the newest ten are all Woody", async () => {
+    const got = await store(CATALOG, SHOP).run({ in_stock: true, per_page: 10, lang: "he" });
+    expect(got.length).toBeGreaterThan(0);
+    expect(got.length).toBeLessThanOrEqual(10);
+    expect(got.every(inShop)).toBe(true);
+  });
   it("every route: the description match, a Latin ask, a name", async () => {
     expect((await store(CATALOG, SHOP).run({ query: "דגם לתמי 4" })).map((p) => p.id)).toEqual([1433]);
     expect((await store(CATALOG, SHOP).run({ query: "Tami 4" })).map((p) => p.id)).toEqual([54]);

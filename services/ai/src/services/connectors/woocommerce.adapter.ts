@@ -1025,7 +1025,13 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (/[֐-׿]/.test(String(args.query ?? "")) && !params.has("category") && !params.has("include")) {
           return await hebrewProductSearch(auth, base, params, String(args.query), Math.min(100, Number(args.per_page ?? 10)), visible);
         }
-        const list: any = visible(await wooRequest(auth, "GET", `${base}/products?${params}`));
+        // An allow-list filters after the read: read a whole page, then cut (the
+        // store's newest ten may all be outside it, Smoovee's Woody line).
+        const perAsked = Number(params.get("per_page") ?? 10);
+        const read = new URLSearchParams(params);
+        if (wooStoreHasAllowList(storeUrl)) read.set("per_page", "100");
+        const listed: any = visible(await wooRequest(auth, "GET", `${base}/products?${read}`));
+        const list: any = Array.isArray(listed) ? listed.slice(0, perAsked) : listed;
         // Woo matches the whole phrase as a substring of the title: "black tank
         // top" misses "Organic Rib Tank" (eval H02), and a plural or a category
         // name misses everything: "hoodies" vs "Cropped Hoodie", "chinos" vs
@@ -1311,7 +1317,21 @@ export async function debugStoreDelay(env: NodeJS.ProcessEnv = process.env): Pro
   return wait;
 }
 
+/**
+ * A replay seam for dev walk harnesses (2026-11-08): answers store requests
+ * in-process from a recorded catalogue, so a real bot turn can run against a
+ * store whose keys we do not hold. Set only by code in the same process (no
+ * env, no route); unset in every service. No network call is made while set.
+ */
+let requestSeam: ((method: string, url: string, body?: unknown) => Promise<unknown>) | null = null;
+export function setWooRequestSeam(fn: typeof requestSeam) { requestSeam = fn; }
+
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
+  if (requestSeam) {
+    const out = await requestSeam(method, url, body);
+    if (method === "GET") rememberListed(url, out);
+    return out;
+  }
   // SSRF guard: storeUrl is free-form tenant config. Block private/metadata
   // targets at DNS resolution before dispatching.
   await assertPublicUrl(url);
