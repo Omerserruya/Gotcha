@@ -52,6 +52,10 @@ export async function renderedDiscount(productUrl: string): Promise<RenderedDisc
     if (r?.ok && typeof r.text === "string") value = parseRenderedDiscount(r.text);
   } catch { value = null; }
   cache.set(productUrl, { at: Date.now(), value });
+  // One line per page read (not per cache hit): which product, what the page said.
+  let path = productUrl;
+  try { path = new URL(productUrl).pathname; } catch { /* keep the url */ }
+  console.log(`[woo-discount] ${path.slice(0, 80)} ${value ? `was=${value.was} now=${value.now}` : "none"}`);
   if (cache.size > 500) for (const [k, v] of cache) if (Date.now() - v.at > TTL_MS) cache.delete(k);
   return value;
 }

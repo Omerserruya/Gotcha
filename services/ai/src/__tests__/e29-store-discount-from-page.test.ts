@@ -36,12 +36,15 @@ describe("the store's discount, from its own page", () => {
     expect(hiddenSale({ on_sale: true, regular_price: "262", sale_price: "200" })).toBe(false); // the API already says it
     expect(hiddenSale({ on_sale: false, regular_price: "262", sale_price: "262" })).toBe(false);
   });
-  it("read once per page for ten minutes", async () => {
+  it("read once per page for ten minutes, with one [woo-discount] line per read", async () => {
     const { safeFetch } = await import("@chatcenter/shared") as any;
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const before = safeFetch.mock.calls.length;
     expect(await renderedDiscount("https://smoovee-ltd.com/he/product/alice/")).toEqual({ was: 262, now: 170.3 });
     await renderedDiscount("https://smoovee-ltd.com/he/product/alice/");
     expect(safeFetch.mock.calls.length - before).toBe(1);
+    expect(log.mock.calls.flat().filter((l) => String(l).startsWith("[woo-discount]"))).toEqual(["[woo-discount] /he/product/alice/ was=262 now=170.3"]);
+    log.mockRestore();
   });
 });
 
