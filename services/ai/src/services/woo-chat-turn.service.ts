@@ -903,7 +903,19 @@ export function namesProduct(text: string | null | undefined): boolean {
 export function storeQuestion(text: string | null | undefined): boolean {
   const t = String(text ?? "");
   if (namesProduct(t)) return false;
-  return /קופון|קוד|הנחה|מבצע|החזר|החזרה|להחזיר|החלפה|להחליף|מדיניות|תשלום|תשלומים|לשלם|ביט|אשראי|פייפאל|משלוח|משלוחים|חינם|אספקה|יגיע|יגיעו|שליח|איסוף|שעות|פתוחים|כתובת|סניף|חנות פיזית|למדוד|לכבס|כביסה|כיבסתי|יום הולדת|הזמנה|הזמנתי|coupon|discount|promo|refund|return|exchange|shipping|delivery|payment|installments|hours|address|store location/i.test(t);
+  return /קופון|קוד|הנחה|מבצע|החזר|החזרה|להחזיר|החלפה|להחליף|מדיניות|תשלום|תשלומים|לשלם|ביט|אשראי|פייפאל|משלוח|משלוחים|חינם|אספקה|יגיע|יגיעו|שליח|איסוף|שעות|פתוחים|כתובת|סניף|חנות פיזית|למדוד|לכבס|כביסה|כיבסתי|יום הולדת|הזמנה|הזמנתי|coupon|discount|promo|refund|return|exchange|shipping|\bship\b|courier|pick ?up|delivery|payment|installments|hours|address|store location/i.test(t);
+}
+
+/**
+ * A question about getting the order: shipping, delivery, a courier, pickup,
+ * how long it takes (Tehila 2026-11-05 15:38: "וכמה עולה שליח עד הבית" ran a
+ * product search and was answered with three scarves). Never a product search,
+ * unless the message also names a product.
+ */
+export function shippingQuestion(text: string | null | undefined): boolean {
+  const t = String(text ?? "");
+  if (namesProduct(t)) return false;
+  return /שליח|משלוח|משלוחים|לשלוח|ישלחו|אספקה|יגיע|יגיעו|זמן הגעה|איסוף|לאסוף|נקודת חלוקה|דואר|delivery|deliver|shipping|ship|courier|pick ?up/i.test(t);
 }
 
 /** A question about a product: it names one, or asks a colour or size. */

@@ -247,7 +247,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2467,7 +2467,7 @@ async function generateAIBotReplyInner(
   // The tools later stages took OFF the surface, by stage, for the audit. A
   // stock question with no stock tool behind it is otherwise invisible: the
   // transcript of "no tool was called" and "no tool was offered" is the same.
-  const surfaceDrops: { allowedActions?: string[]; policy?: string[]; otherStore?: string[]; cap?: string[] } = {};
+  const surfaceDrops: { allowedActions?: string[]; policy?: string[]; otherStore?: string[]; shippingQuestion?: string[]; cap?: string[] } = {};
 
   // ── Adapter framework tools ── (only for tenants with the integration CONNECTED)
   try {
@@ -2765,6 +2765,15 @@ async function generateAIBotReplyInner(
     const kept = new Set((tools as any[]).map((t) => String(t?.function?.name ?? "")));
     const gone = before.filter((n) => !kept.has(n));
     if (gone.length) surfaceDrops.otherStore = gone;
+  }
+  // A shipping / delivery / pickup question is answered from the store's
+  // policy, never with products (P3, Tehila 2026-11-05: "וכמה עולה שליח עד
+  // הבית" got three scarves): no product search on this turn.
+  if (wooTurn && shippingQuestion(opts.incomingMessage)) {
+    const SEARCH = new Set(["woocommerce.list_products", "woocommerce.complementary_products"]);
+    const before = (tools as any[]).length;
+    tools = (tools as any[]).filter((t) => !SEARCH.has(String(t?.function?.name ?? ""))) as typeof tools;
+    if ((tools as any[]).length !== before) surfaceDrops.shippingQuestion = [...SEARCH];
   }
 
   // ── Hard cap: OpenAI rejects a tools array longer than 128 ──
@@ -3422,7 +3431,9 @@ async function generateAIBotReplyInner(
   // A gift with a budget is enough to show something (urban-e24: "מתנה לאחותי עד
   // 300 שקל" got "אפשר לעזור לבחור מתנה עד ₪300." and nothing else).
   const giftWithBudget = GIFT_WITH_BUDGET.test(opts.incomingMessage ?? "");
-  const recommendNow = !!wooTurn && toolFunctionNames.includes("woocommerce.list_products")
+  // Never on a question about the store (P3: two discovery questions, then
+  // "וכמה עולה שליח עד הבית", and the nudge searched products).
+  const recommendNow = !!wooTurn && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)
     && (DONT_MIND.test(opts.incomingMessage ?? "") || giftWithBudget || discoveryStreak(messages as any[]) >= 2);
   // An acknowledgement with the cards just shown: they are on screen. No new
   // search, no cards again, no description again (urban-e24); one short nudge.
