@@ -1109,8 +1109,26 @@ export function finalizeRewrite(text: string, ctx: StyleCheckContext): { text: s
   return { text: out, fixed };
 }
 
+/**
+ * Hebrew verb forms the model gets wrong, fixed in code (P6, Tehila): "רוצים
+ * שאנחם אתכם" is "to console you", not "to guide you" (שאנחה); "להתאם איסוף"
+ * is no word (לתאם). Whole words only; a form that is a real word elsewhere is
+ * fixed only in the phrase it was wrong in.
+ */
+const HEBREW_FORM_FIXES: Array<[RegExp, string]> = [
+  [/(?<![א-ת])(ש?)אנחם(?=\s+(?:אתכם|אותכם|אותך|אתך|אתכן|אותכן)(?![א-ת]))/gu, "$1אנחה"],
+  [/(?<![א-ת])(ש?)ננחם(?=\s+(?:אתכם|אותכם|אותך|אתך)(?![א-ת]))/gu, "$1ננחה"],
+  [/(?<![א-ת])להתאם(?![א-ת])/gu, "לתאם"],
+];
+export function fixHebrewForms(text: string): string {
+  let t = String(text ?? "");
+  for (const [re, to] of HEBREW_FORM_FIXES) t = t.replace(re, to);
+  return t;
+}
+
 export function polishReply(text: string, opts: { locale: "he" | "en"; productTitles?: string[]; incomingMessage?: string; cardsShown?: boolean }): string {
   if (!text) return text;
+  text = fixHebrewForms(text);
   // Invisible direction marks copied from scraped pages ("‎₪299", urban-e26):
   // the chat lays out the text itself; a stray mark only shifts it.
   text = text.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
