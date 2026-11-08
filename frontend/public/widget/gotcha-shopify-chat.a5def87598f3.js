@@ -2240,7 +2240,12 @@ window.__gotchaShopifyChatApp = function (boot) {
       // In a carousel, only offer Add to Cart when there is genuinely
       // nothing left to choose. Otherwise the button would either lie or
       // pick a size for the shopper.
-      var offerAdd = addToCartAllowed && features.addToCart && (!compact || canAdd);
+      // And never a button that cannot work (Smoovee 2026-11-08, 4057: a
+      // variable product whose card had no variants and available:false
+      // showed Add to Cart, and it failed): it is offered when this variant
+      // can be bought now, or when the picker above holds one that can.
+      var choosable = needsChoice && product.variants.some(function (v) { return v.available && !v.requiresSellingPlan; });
+      var offerAdd = addToCartAllowed && features.addToCart && (canAdd || (!compact && choosable));
       if (offerAdd) {
         var add = el("button", "btn btn-p", vState.busy ? T.adding : T.addToCart);
         attr(add, { type: "button" });

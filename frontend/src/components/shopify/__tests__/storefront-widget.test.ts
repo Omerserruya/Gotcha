@@ -707,6 +707,25 @@ describe("product card", () => {
     expect(chip.disabled).toBe(true);
   });
 
+  it("no Add to Cart on a card nothing can be bought from (Smoovee 4057: variable, no variants read, available false)", async () => {
+    const broken = makeProduct({ available: false, selectedVariantId: null, optionNames: ["Color"], variants: [] });
+    const { shadow } = await cardHarness(broken);
+    expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Add to cart")).toBe(false);
+    expect(Array.from(shadow.querySelectorAll("a")).some((a) => a.textContent === "View product")).toBe(true);
+  });
+
+  it("no Add to Cart when every option is sold out", async () => {
+    const soldOut = makeProduct({
+      available: false,
+      variants: [
+        { variantId: "9001", title: "41", price: "120.00", compareAtPrice: null, available: false, options: ["41"], requiresSellingPlan: false },
+        { variantId: "9002", title: "42", price: "120.00", compareAtPrice: null, available: false, options: ["42"], requiresSellingPlan: false },
+      ],
+    });
+    const { shadow } = await cardHarness(soldOut);
+    expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Add to cart")).toBe(false);
+  });
+
   it("auto-selects the only variant of a single-variant product", async () => {
     const single = makeProduct({
       optionNames: [],
