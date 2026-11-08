@@ -674,6 +674,36 @@ async function descriptionSearch(
 }
 
 /**
+ * A product's footprint in cm, from its title ("35*28 ס\"מ", "35x28cm",
+ * "14×40.5") or its copy ("אורך: 28 ס\"מ ... רוחב: 35 ס\"מ", "Length: 28 cm
+ * Width: 35 cm"). Null when it names none (a round one, "בקוטר 21", is not a
+ * rectangle and is left out).
+ */
+export function footprintOf(p: any): [number, number] | null {
+  const num = (v: string) => Number(v.replace(",", "."));
+  const name = decodeEntities(String(p?.name ?? ""));
+  const m = /(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)/i.exec(name);
+  if (m) return [num(m[1]), num(m[2])];
+  const t = decodeEntities(String(p?.short_description ?? "").replace(/<[^>]*>/g, " "));
+  const len = /(?:אורך|length)\s*:?\s*(\d+(?:[.,]\d+)?)/i.exec(t), wid = /(?:רוחב|width)\s*:?\s*(\d+(?:[.,]\d+)?)/i.exec(t);
+  return len && wid ? [num(len[1]), num(wid[1])] : null;
+}
+
+/**
+ * What fits under a base of a x b cm (Smoovee prod 2026-11-08: a KitchenAid
+ * mixer, base 40 x 20, was offered Alice 31 x 41 while Christina 23 x 40 fits
+ * and is smaller): the products at least that size both ways, turned either
+ * way, smallest first. Null when no product names a footprint (not such a
+ * store: the search goes on as usual).
+ */
+export function fitsBase(list: any[], a: number, b: number): any[] | null {
+  const sized = list.map((p) => ({ p, f: footprintOf(p) })).filter((x) => x.f);
+  if (!sized.length) return null;
+  const fits = sized.filter(({ f }) => (f![0] >= a && f![1] >= b) || (f![0] >= b && f![1] >= a));
+  return fits.sort((x, y) => x.f![0] * x.f![1] - y.f![0] * y.f![1]).map((x) => x.p);
+}
+
+/**
  * A Hebrew product ask, deterministic (see list_products). Logs which route
  * found it: [woo-search] hit=category:<id> | title | variant:<word> | none.
  */
@@ -989,6 +1019,23 @@ const WooCommerceAdapter: ProviderAdapter = {
         // run the Hebrew route alongside the model's query, and what they find
         // comes first, unless they found only copy and the model found more.
         // An English-title store (urban) keeps the model's translation as it is.
+        // A base size the customer gave (fits_cm, set by the bot from their own
+        // words): the catalogue's products that fit it, smallest first, in stock
+        // first; the model only phrases them. A store whose products name no size
+        // searches as usual.
+        const fit = Array.isArray(args.fits_cm) && args.fits_cm.length === 2 && args.fits_cm.every((n: unknown) => Number(n) > 0 && Number(n) < 1000)
+          ? [Number(args.fits_cm[0]), Number(args.fits_cm[1])] : null;
+        if (fit && !args.include && !args.category) {
+          const visibleNow = (l: any[]) => l.filter((p: any) => p?.catalog_visibility !== "hidden" && (p?.status ?? "publish") === "publish" && wooProductAllowed(storeUrl, p));
+          const all = await wholeCatalog(auth, base, lang ?? (/[א-ת]/.test(String(args.customer_query ?? args.query ?? "")) ? "he" : null)).catch(() => null);
+          const fitting = all ? fitsBase(visibleNow(all), fit[0], fit[1]) : null;
+          if (fitting) {
+            const per = Math.min(10, Number(args.per_page ?? 10));
+            const out = inStockFirst(fitting).slice(0, per).map((p: any) => ({ ...p, matched_in: "dimensions", footprint_cm: footprintOf(p) }));
+            console.log(`[woo-search] fits=${fit.join("x")} results=${out.length} first=${out[0] ? `${out[0].id}:${(out[0].footprint_cm ?? []).join("x")}` : "none"}`);
+            return out;
+          }
+        }
         const own = typeof args.customer_query === "string" ? args.customer_query.trim() : "";
         if (own && /[א-ת]/.test(own) && !/[א-ת]/.test(String(args.query ?? "")) && !args.include && !args.category) {
           const rest = { ...args, customer_query: undefined };

@@ -934,6 +934,29 @@ export function shippingQuestion(text: string | null | undefined): boolean {
   return /שליח|משלוח|משלוחים|לשלוח|ישלחו|אספקה|יגיע|יגיעו|זמן הגעה|איסוף|לאסוף|נקודת חלוקה|דואר|delivery|deliver|shipping|ship|courier|pick ?up/i.test(t);
 }
 
+/**
+ * A base size the customer gave ("הבסיס 40 על 20", "40x20 ס\"מ"), in cm: this
+ * message's, or the one before when this one is a short reply. Null otherwise.
+ */
+export function baseSizeAsked(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming: string | null | undefined,
+): [number, number] | null {
+  const read = (t: string): [number, number] | null => {
+    const m = /(\d{1,3}(?:[.,]\d)?)\s*(?:ס["״']?מ|cm)?\s*(?:[x×*]|על|by)\s*(\d{1,3}(?:[.,]\d)?)/i.exec(t);
+    if (!m) return null;
+    const a = Number(m[1].replace(",", ".")), b = Number(m[2].replace(",", "."));
+    return a > 0 && b > 0 && a < 300 && b < 300 ? [a, b] : null;
+  };
+  const now = String(incoming ?? "");
+  const hit = read(now);
+  if (hit) return hit;
+  if (now.trim().length > 12) return null;
+  const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? ""));
+  if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
+  return earlier.length ? read(earlier[earlier.length - 1]) : null;
+}
+
 /** A question about a product: it names one, or asks a colour or size. */
 export function productQuestion(text: string | null | undefined, colours: number, size: boolean): boolean {
   return !storeQuestion(text) && (namesProduct(text) || colours > 0 || size);

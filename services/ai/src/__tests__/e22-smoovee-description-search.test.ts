@@ -253,3 +253,43 @@ describe("the store's own search reads copy in Hebrew: a title hit must hold the
     expect(got.map((p) => p.id)).toEqual([1433]);
   });
 });
+
+describe("what fits a base size (cmw7r76pj 11:33: a 40 x 20 mixer base was offered Alice 31 x 41)", () => {
+  it("the supervisor's three: 40x20 Christina, 30x20 Gefen, 34x40 nothing", async () => {
+    const ids = async (fits_cm: number[]) => (await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "mixer", fits_cm, lang: "he" })).map((p) => p.id);
+    expect((await ids([40, 20]))[0]).toBe(614);   // כריסטינה 23*40
+    expect((await ids([30, 20]))[0]).toBe(4831);  // גפן 20*30
+    expect(await ids([34, 40])).toEqual([]);
+  });
+  it("smallest first, either way round, marked for the model", async () => {
+    const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "x", fits_cm: [20, 40], lang: "he" });
+    expect(got[0].id).toBe(614);
+    expect(got.every((p) => p.matched_in === "dimensions")).toBe(true);
+    const area = (p: any) => p.footprint_cm[0] * p.footprint_cm[1];
+    expect(got.map(area)).toEqual([...got.map(area)].sort((a, b) => a - b));
+  });
+  it("a store whose products name no size searches as usual", async () => {
+    const plain = { he: CATALOG.he.map((p) => ({ ...p, name: "מוצר", short_description: "" })), en: CATALOG.en.map((p) => ({ ...p, name: "Item", short_description: "" })) };
+    const got = await store(plain).run({ query: "Tami 4", fits_cm: [40, 20] });
+    expect(got.some((p) => p.matched_in === "dimensions")).toBe(false);
+  });
+  it("the size the customer gave, from their words", async () => {
+    const { baseSizeAsked } = await import("../services/woo-chat-turn.service");
+    expect(baseSizeAsked([], "הבסיס של המיקסר 40 על 20")).toEqual([40, 20]);
+    expect(baseSizeAsked([], "40x20 ס\"מ")).toEqual([40, 20]);
+    expect(baseSizeAsked([{ direction: "INBOUND", body: "קיצ'נאייד, בסיס 40×20" }], "כן")).toEqual([40, 20]);
+    expect(baseSizeAsked([], "יש לכם משהו לתמי 4?")).toBeNull();
+  });
+  it("the bot passes the customer's base size on its Woo searches", () => {
+    const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("const size = baseSizeAsked(messages as any[], opts.incomingMessage);");
+    expect(src).toContain("if (size) effectiveArgs = { ...effectiveArgs, fits_cm: size };");
+  });
+  it("the model is told the store picked them and to recommend the first", async () => {
+    const { normalizeWooProducts, buildKeyedModelSummary } = await import("../services/product-search.service");
+    const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "x", fits_cm: [40, 20], lang: "he" });
+    const s = buildKeyedModelSummary(normalizeWooProducts(got, { storeUrl: "https://smoovee-ltd.com", storeCurrency: "ILS" }), "he", true);
+    expect(s).toMatch(/PRODUCT_1: "סמובי כריסטינה[^"]*" .*FITS the customer's base \(23 x 40 cm\)/);
+    expect(s).toMatch(/Recommend PRODUCT_1 as the best fit/);
+  });
+});

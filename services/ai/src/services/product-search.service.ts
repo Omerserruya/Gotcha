@@ -31,6 +31,8 @@ export interface ProductCandidate {
   details?: string;
   /** A store discount the API does not carry, read from the product page (woo-rendered-price). */
   discount?: { was: string; now: string };
+  /** Picked because it fits the customer's base size: its footprint, "23 x 40 cm". */
+  fit?: string;
 }
 
 /** The store's own discount on a candidate: its price is the discounted one, the old one kept. */
@@ -423,6 +425,7 @@ export function normalizeWooProducts(
       unknownAttributes: [],
       matchQuality: deriveMatchQuality(price, comparableBudget),
       details: productCopy(raw, detailsMax),
+      ...(raw?.matched_in === "dimensions" && Array.isArray(raw?.footprint_cm) ? { fit: `${raw.footprint_cm[0]} x ${raw.footprint_cm[1]} cm` } : {}),
     };
   });
 
@@ -497,8 +500,9 @@ export function buildKeyedModelSummary(
     );
     const unknown = askedUnknown.length ? ` | unknown: ${askedUnknown.join(", ")}` : "";
     const details = c.details ? ` | store text: «${c.details.replace(/[«»]/g, '"')}»` : "";
+    const fitNote = c.fit ? ` | FITS the customer's base (${c.fit})` : "";
     const disc = c.discount ? ` | DISCOUNT: was ${c.currency ?? ""} ${c.discount.was}, now ${c.currency ?? ""} ${c.discount.now}` : "";
-    return `${key}: "${c.title}" | ${price}${disc} | ${avail} | ${match}${unknown}${details}`;
+    return `${key}: "${c.title}" | ${price}${disc} | ${avail} | ${match}${fitNote}${unknown}${details}`;
   });
   // ── Too few in budget to fill a recommendation ──
   //
@@ -534,6 +538,9 @@ export function buildKeyedModelSummary(
   return [
     "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
     ...lines,
+    ...(env.candidates.some((c) => c.fit)
+      ? ["", "FITS: these were picked by the store because they are at least the customer's base size both ways, smallest first. Recommend PRODUCT_1 as the best fit (the next ones are larger). Do not recommend a product that is not marked FITS for this base, and do not work out sizes yourself."]
+      : []),
     ...(env.candidates.some((c) => c.discount)
       ? ["", "DISCOUNT marks a product the store sells below its regular price right now. When you recommend one, say it is on sale and the price it is now. Never state or work out a percentage, and never call a product discounted that is not marked."]
       : []),

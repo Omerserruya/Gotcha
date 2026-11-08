@@ -247,7 +247,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2321,6 +2321,12 @@ async function generateAIBotReplyInner(
       if (toolFunctionName === "woocommerce.list_products" && wooTurn && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {
         const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
         if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };
+      }
+      // A base size the customer gave: the store picks what fits it (Smoovee
+      // 2026-11-08: 40 x 20 was offered 31 x 41 while 23 x 40 fits).
+      if (toolFunctionName === "woocommerce.list_products" && wooTurn) {
+        const size = baseSizeAsked(messages as any[], opts.incomingMessage);
+        if (size) effectiveArgs = { ...effectiveArgs, fits_cm: size };
       }
       // The person the customer is shopping for goes with every store search
       // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
