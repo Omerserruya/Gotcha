@@ -44,6 +44,14 @@ describe("the store's product text reaches the model", () => {
     const env = normalizeWooProducts([{ ...necklace(24118, "בנדנה"), description: "", attributes: [{ name: "חומר", options: ["כותנה"] }], dimensions: { length: "70", width: "70", height: "" } }], { storeUrl: "https://tehila.example.com" });
     expect(env.candidates[0].details).toBe("חומר: כותנה · dimensions (L x W x H, the store's unit): 70 x 70 x -");
   });
+  it("a list: a real short description stands alone (Smoovee's long text is shared boilerplate)", () => {
+    const alexa = SMOOVEE.he.find((p: any) => p.id === 1433);
+    const env = normalizeWooProducts([alexa, { ...alexa, id: 2 }], { storeUrl: "https://smoovee-ltd.com", storeCurrency: "ILS" });
+    expect(env.candidates[0].details).toMatch(/תמי 4/);
+    expect(env.candidates[0].details).not.toMatch(/מיץ תפוזים|Product Advantages/);
+    // One product still gets the description too.
+    expect(normalizeWooProducts([alexa], { storeUrl: "https://smoovee-ltd.com" }).candidates[0].details!.length).toBeGreaterThan(env.candidates[0].details!.length);
+  });
   it("Shopify: body_html is the product's text too", () => {
     const env = normalizeShopifyProducts([{ id: 1, title: "Board", handle: "board", body_html: "<p>Camber profile, 154cm.</p>", variants: [{ id: 11, price: "500", available: true }] }], { shopDomain: "x.myshopify.com", shopCurrency: "USD" });
     expect(env.candidates[0].details).toBe("Camber profile, 154cm.");

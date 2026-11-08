@@ -75,7 +75,11 @@ export function productCopy(raw: any, max: number): string | undefined {
   }
   if (String(raw?.weight ?? "").trim() && typeof raw?.dimensions === "object") facts.push(`weight (the store's unit): ${String(raw.weight).trim()}`);
   const short = plainCopy(raw?.short_description, max);
-  const long = plainCopy(raw?.description ?? raw?.body_html ?? raw?.descriptionHtml, max);
+  // In a list, a real short description is the product's own summary; the long
+  // description is often shared boilerplate (Smoovee's: 11,500 characters of
+  // tabs, FAQ and jokes, the same on every product), which the model misread
+  // in a stock answer. One product (max = DETAILS_ONE) gets both.
+  const long = max < DETAILS_ONE && short.length >= 80 ? "" : plainCopy(raw?.description ?? raw?.body_html ?? raw?.descriptionHtml, max);
   const both = short && long && !long.includes(short.slice(0, 60)) ? `${short} · ${long}` : short || long;
   const out = plainCopy([...facts, both].filter(Boolean).join(" · "), max);
   return out || undefined;
