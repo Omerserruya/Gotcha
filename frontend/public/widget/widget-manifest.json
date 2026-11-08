@@ -3,5 +3,11 @@
   "chatHash": "a5def87598f3",
   "site": "gotcha-site.462a873622ee.js",
   "siteHash": "462a873622ee",
-  "bootstrapHash": "0d87bfbe1398"
+  "bootstrapHash": "0d87bfbe1398",
+  "previous": {
+    "chat": [
+      "gotcha-shopify-chat.fd5d86cae08b.js"
+    ],
+    "site": []
+  }
 }

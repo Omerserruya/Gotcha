@@ -99,12 +99,25 @@ const nextLiquid = liquidSource.replace(
   `gotcha-shopify-bootstrap.js?b=${bootstrapHash}`,
 );
 
+// Previous bundles stay served (2026-11-08): installed themes and edge caches
+// can hold an older bootstrap for hours, and it names the bundle it was built
+// with. Deleting that file 404s the chat on live stores. The manifest keeps
+// the last few names of each kind; only files beyond them are dropped.
+const KEEP_PREVIOUS = 5;
+const prior = fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync(MANIFEST, "utf8")) : {};
+const keepList = (kind, current) => {
+  const before = [prior[kind], ...((prior.previous && prior.previous[kind]) || [])].filter((n) => typeof n === "string" && n && n !== current);
+  return [...new Set(before)].slice(0, KEEP_PREVIOUS);
+};
+const previous = { chat: keepList("chat", chatName), site: keepList("site", siteName) };
+
 const manifest = {
   chat: chatName,
   chatHash,
   site: siteName,
   siteHash,
   bootstrapHash,
+  previous,
   // Deliberately no timestamp: a rebuild with identical bytes must produce
   // an identical manifest, or `--check` becomes noise in CI.
 };
@@ -117,6 +130,9 @@ if (checkOnly) {
   if (!fs.existsSync(path.join(DIR, siteName))) problems.push(`missing hashed site script ${siteName}`);
   if (!onDisk || onDisk.chat !== chatName || onDisk.site !== siteName) problems.push("widget-manifest.json is stale");
   if (nextLiquid !== liquidSource) problems.push("the theme block does not reference the current bootstrap hash");
+  for (const f of [...((onDisk && onDisk.previous && onDisk.previous.chat) || []), ...((onDisk && onDisk.previous && onDisk.previous.site) || [])]) {
+    if (!fs.existsSync(path.join(DIR, f))) problems.push(`a previous bundle an old bootstrap may still load is missing: ${f}`);
+  }
   if (problems.length) {
     console.error("✗ widget build is out of date:");
     for (const p of problems) console.error("   • " + p);
@@ -127,9 +143,11 @@ if (checkOnly) {
   process.exit(0);
 }
 
-// Drop previous hashed bundles so the directory does not grow forever.
+// Drop only bundles older than the kept previous ones, so the directory does
+// not grow forever and no bundle an old bootstrap names disappears.
+const keep = new Set([chatName, siteName, ...previous.chat, ...previous.site]);
 for (const f of fs.readdirSync(DIR)) {
-  if ((/^gotcha-shopify-chat\.[0-9a-f]{12}\.js$/.test(f) && f !== chatName) || (/^gotcha-site\.[0-9a-f]{12}\.js$/.test(f) && f !== siteName)) {
+  if (/^gotcha-(?:shopify-chat|site)\.[0-9a-f]{12}\.js$/.test(f) && !keep.has(f)) {
     fs.unlinkSync(path.join(DIR, f));
   }
 }
