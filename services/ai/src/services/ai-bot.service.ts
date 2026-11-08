@@ -247,7 +247,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked, storeProductAsk } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3535,6 +3535,52 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // A product, fit or stock ask on a connected store is searched before the
+  // model writes (Smoovee prod 2026-11-08, cmw7ugbvb: "ומה יש לכם לתמי 4" and
+  // "נגיד 20*40" got answers from the knowledge text, no search, no card, and
+  // wrong). The customer's own words, their base size when they gave one, the
+  // conversation's language. Found: the model answers from it and it is carded;
+  // nothing: the model is told so (and the empty-search team offer follows).
+  let storeAskSearched = false;
+  if (!choiceShortCircuit && !presearch2 && !discoveryForceTool && !ackOverCards && wooTurn
+    && toolFunctionNames.includes("woocommerce.list_products") && storeProductAsk(messages as any[], opts.incomingMessage)) {
+    try {
+      const words = customerSearchQuery(messages as any[], opts.incomingMessage, "") ?? String(opts.incomingMessage ?? "").slice(0, 120);
+      const size = baseSizeAsked(messages as any[], opts.incomingMessage);
+      const args: Record<string, unknown> = { query: words, per_page: 10, lang: conversationLang(), ...(size ? { fits_cm: size } : {}) };
+      const got = await executeAdapterTool({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        contactId: contactRow?.id,
+        toolFunctionName: "woocommerce.list_products",
+        args,
+        accessScope: opts.onboardingTest ? "internal" : "customer",
+        ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
+      });
+      const content = JSON.stringify(got.ok ? { ok: true, result: got.result } : { ok: false, reason: (got as any).reason });
+      const envlp = got.ok ? await groundProductSearchResult({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: "woocommerce.list_products", rawContent: content }) : null;
+      // Nothing found in the customer's words is told only for a size (what fits
+      // is the store's answer); otherwise the model searches as before (an
+      // English-title store needs its translation, urban).
+      if (envlp && envlp.status !== "error" && (envlp.candidates.length > 0 || size)) {
+        productEnvelope = envlp;
+        productBudget = envlp.budget ?? null;
+        presearch2 = { args, content };
+        storeAskSearched = envlp.candidates.length > 0;
+        chatMessages.push({
+          role: "system",
+          content:
+            `LIVE STORE SEARCH, already run this turn for what the customer just asked (${JSON.stringify(args)}). ` +
+            "Answer ONLY from these results, never from the knowledge text, and do NOT work out sizes or fits yourself. " +
+            "Call the search again only for a different ask.\n\n" + buildKeyedModelSummary(envlp, replyLocale, cardChannel),
+        });
+        console.log(`[ai-bot][store-ask] searched ${JSON.stringify(args).slice(0, 160)} results=${envlp.candidates.length} conv=${opts.conversationId}`);
+      }
+    } catch (err: any) {
+      console.warn(`[ai-bot][store-ask] the search failed (the model searches as before): ${err?.message} conv=${opts.conversationId}`);
+    }
+  }
+
   // The customer names a kind of product and nothing searched for it this turn:
   // search, so a live card shows (urban-e28: "היא אוהבת צעיפים" was answered from
   // the knowledge text, a Latin title and a snapshot price, and no card).
@@ -5639,13 +5685,13 @@ async function generateAIBotReplyInner(
       // A complaint or a shipping/returns question is not shopping (eval e7
       // T2: a complaint got five tees): no cards unless the reply names one.
       // "תראה לי" is a request for cards, whatever turn of the discovery it is.
-      unnamedAllowed: (discoveryRecommend || discoveryLookup || SHOW_ME.test(opts.incomingMessage ?? "")) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
+      unnamedAllowed: (discoveryRecommend || discoveryLookup || storeAskSearched || SHOW_ME.test(opts.incomingMessage ?? "")) && !["complaint", "shipping"].includes(classifySituation(opts.incomingMessage ?? "", false) ?? ""),
       // A complaint gets no cards at all, named or not (eval e10 X7: the rule in
       // the prompt did not hold).
       // ...and neither does a question about the store: a coupon, shipping,
       // returns, payment (eval e12 C01, C07, C08, C09).
       noCards: classifySituation(opts.incomingMessage ?? "", false) === "complaint" || storeQuestion(opts.incomingMessage) || ackOverCards,
-      unnamedMax: discoveryRecommend || SHOW_ME.test(opts.incomingMessage ?? "") ? undefined : 1,
+      unnamedMax: discoveryRecommend || SHOW_ME.test(opts.incomingMessage ?? "") ? undefined : storeAskSearched ? 3 : 1,
       excludeIds: colourMisses,
       envelope: productEnvelope,
       // Staging is Shopify Live Chat's mechanism. A channel that renders

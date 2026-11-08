@@ -957,6 +957,22 @@ export function baseSizeAsked(
   return earlier.length ? read(earlier[earlier.length - 1]) : null;
 }
 
+/**
+ * A message asking the store for a product, a fit or what is in stock, in any
+ * words (Smoovee prod 2026-11-08, cmw7ugbvb: "ומה יש לכם לתמי 4" and "נגיד
+ * 20*40" were answered from the knowledge text, with no search and no card,
+ * and wrongly). Not a store question (shipping, returns, a coupon).
+ */
+export function storeProductAsk(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming: string | null | undefined,
+): boolean {
+  const t = String(incoming ?? "");
+  if (storeQuestion(t) || shippingQuestion(t)) return false;
+  if (baseSizeAsked(messages, t)) return true;
+  return namesProduct(t) || /מה יש לכם|יש לכם|יש לך|מתאים|מתאימה|איזה משטח|איזה דגם|איזו|תואם|מחפש|מחפשת|צריך|צריכה|דגם|מוצר|במלאי|ממליצ|תמליצ|המלצה|do you have|what fits|fits? (?:a|my|the)|looking for|recommend|in stock/i.test(t);
+}
+
 /** A question about a product: it names one, or asks a colour or size. */
 export function productQuestion(text: string | null | undefined, colours: number, size: boolean): boolean {
   return !storeQuestion(text) && (namesProduct(text) || colours > 0 || size);
