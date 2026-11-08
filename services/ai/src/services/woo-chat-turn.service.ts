@@ -491,6 +491,31 @@ export function carriedColour(
   return null;
 }
 
+/**
+ * The customer's own words, for one retry of an empty product search (Smoovee
+ * prod 2026-11-08, cmw7p00cq: "דגם לתמי 4", then "כן", was searched as
+ * "plate", and found nothing; the store lists what fits "תמי 4" in its copy).
+ * The incoming message, with the one before it when this one is a short reply
+ * ("כן"). Null when those words are the model's query already, or name nothing.
+ */
+export function customerSearchQuery(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming: string | null | undefined,
+  modelQuery: unknown,
+): string | null {
+  const now = String(incoming ?? "").trim();
+  const words = (t: string) => t.toLowerCase().match(/[a-z\u0590-\u05ff]{3,}|\d+/g) ?? [];
+  const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? "").trim()).filter(Boolean);
+  if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
+  const parts = [now];
+  if (words(now).filter((w) => !/^\d+$/.test(w)).length < 2 && earlier.length) parts.unshift(earlier[earlier.length - 1]!);
+  const q = parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 120);
+  const mine = new Set(words(String(modelQuery ?? "")));
+  const theirs = words(q);
+  if (!theirs.some((w) => !/^\d+$/.test(w)) || theirs.every((w) => mine.has(w))) return null;
+  return q;
+}
+
 // A Hebrew word for a whole kind, its store category and the title word to rank by.
 const BROAD_KIND: Array<[RegExp, string, string]> = [
   [/(?<![\u0590-\u05FF])[ובלהש]?(?:מעיל|מעילים)(?![\u0590-\u05FF])/u, "coats", "coat"],

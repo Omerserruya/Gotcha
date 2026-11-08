@@ -21,6 +21,13 @@ export async function generateEmbedding(
 }
 
 export function chunkDocument(text: string, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP): string[] {
+  // A form feed on its own line is a section break its writer put (the
+  // onboarding products document: one product per section, Smoovee
+  // 2026-11-08): each section is its own chunk, so "תמי 4" retrieves the
+  // product that fits it rather than 500 words of seven products.
+  if (/\n\f\n/.test(text)) {
+    return text.split(/\n\f\n/).map((s) => s.trim()).filter(Boolean).flatMap((s) => chunkDocument(s, chunkSize, overlap));
+  }
   const words = text.split(/\s+/);
   if (words.length <= chunkSize) return [text.trim()];
 

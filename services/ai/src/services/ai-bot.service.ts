@@ -247,7 +247,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2324,7 +2324,7 @@ async function generateAIBotReplyInner(
         const broad = broadKind(opts.incomingMessage, modelQuery);
         if (broad) effectiveArgs = { ...effectiveArgs, ...broad };
       }
-      const result = await executeAdapterTool({
+      let result = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         contactId: contactRow?.id,
@@ -2339,6 +2339,31 @@ async function generateAIBotReplyInner(
         accessScope: opts.onboardingTest ? "internal" : "customer",
         ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
       });
+      // An empty store search, retried once in the customer's own words: the
+      // model's translation can drop what names the product (Smoovee
+      // 2026-11-08: "דגם לתמי 4" searched as "plate"). The search stays the
+      // store's; only its words change.
+      // A result found only in product copy counts as empty here: the model's
+      // "plate" matched two other surfaces' spec label "Plate: Perspex".
+      const copyOnly = (l: unknown) => Array.isArray(l) && l.length > 0 && l.every((p: any) => p?.matched_in === "description");
+      if (toolFunctionName === "woocommerce.list_products" && wooTurn && result.ok && Array.isArray((result as any).result)
+        && ((result as any).result.length === 0 || copyOnly((result as any).result)) && !effectiveArgs?.include && !effectiveArgs?.category) {
+        const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
+        if (own) {
+          const again = await executeAdapterTool({
+            tenantId: opts.tenantId,
+            conversationId: opts.conversationId,
+            contactId: contactRow?.id,
+            toolFunctionName,
+            args: { ...effectiveArgs, query: own, kind: undefined, rank: undefined },
+            // The same scope as the search it retries.
+            accessScope: opts.onboardingTest ? "internal" : "customer",
+            ...(opts.onboardingTest ? { actingFor: { userId: opts.onboardingTest.actorUserId, reason: "onboarding_test" } } : {}),
+          });
+          console.log(`[ai-bot] empty product search: retried in the customer's words count=${Array.isArray((again as any).result) ? (again as any).result.length : -1} conv=${opts.conversationId}`);
+          if (again.ok && Array.isArray((again as any).result) && (again as any).result.length) result = again;
+        }
+      }
       // Fire-and-forget notification emit on success only. The classify
       // helper maps refund/discount/meeting tool names to SystemEvents;
       // anything else returns null and skips. Wrapped in tryEmit() so a

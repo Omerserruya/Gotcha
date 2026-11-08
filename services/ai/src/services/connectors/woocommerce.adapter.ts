@@ -476,6 +476,122 @@ function inStockFirst(list: any[]): any[] {
 }
 
 /**
+ * Brand and kind words that a Hebrew ask spells in Hebrew and a store writes in
+ * Latin ("ורטואו" vs "vertuo plus", Smoovee 2026-11-08), stems on both sides.
+ */
+const DESCRIPTION_SYNONYMS: Record<string, string[]> = {
+  "תמי": ["tami"], tami: ["תמי"], "רטואו": ["vertuo"], vertuo: ["רטואו"],
+  "נספרסו": ["nespresso"], nespresso: ["נספרסו"], "נינג": ["ninja"], ninja: ["נינג"],
+  "לוואצ": ["lavazza"], lavazza: ["לוואצ"], "קנווד": ["kenwood"], kenwood: ["קנווד"],
+  "דלונגי": ["delonghi", "longhi"], delonghi: ["דלונגי"], "משטח": ["surface"], surface: ["משטח"],
+  "מכונ": ["machine"], machine: ["מכונ"], "קפה": ["coffee"], coffee: ["קפה"],
+};
+const DESCRIPTION_STOP = new Set(["the", "and", "for", "with", "a", "an", "in", "of", "to", "model", "fits", "suitable", "דגמ", "דגם", "מתאימ", "מתאים", "תואמ", "תואם"]);
+
+function decodeEntities(t: string): string {
+  return t.replace(/&#(\d+);/g, (_, n) => { const c = Number(n); return c === 8217 || c === 8216 || c === 8221 || c === 8220 || c === 8243 ? "" : String.fromCharCode(c); })
+    .replace(/&amp;/g, "&").replace(/&quot;/g, "").replace(/&nbsp;/g, " ").replace(/&[a-z]+;/g, " ");
+}
+
+/**
+ * A text's words for a description match, each with the forms it can stand
+ * for: Hebrew stems, also without a one-letter prefix ("לתמי" is "תמי",
+ * "למכונת" is "מכונ"); Latin stems; digits kept as words ("4" in "תמי 4").
+ */
+export function descriptionTokens(text: unknown): string[][] {
+  const t = decodeEntities(String(text ?? "").replace(/<[^>]*>/g, " ")).toLowerCase().replace(/['"׳״]/g, "");
+  const out: string[][] = [];
+  for (const w of t.split(/[^a-z0-9א-ת]+/).filter(Boolean)) {
+    if (DESCRIPTION_STOP.has(w)) continue;
+    let forms: string[];
+    if (/^[0-9]+$/.test(w)) forms = [w];
+    else if (/[א-ת]/.test(w)) {
+      if (w.length < 2 || HEBREW_STOP.has(hebrewStem(w))) continue;
+      forms = [hebrewStem(w)];
+      if (w.length > 3 && /^[לבמשכ]/.test(w)) forms.push(hebrewStem(w.slice(1)));
+    } else {
+      if (w.length < 2) continue;
+      forms = [w.length >= 3 ? categoryStem(w) : w];
+    }
+    forms = forms.filter((f) => !DESCRIPTION_STOP.has(f));
+    if (!forms.length) continue;
+    out.push(Array.from(new Set([...forms, ...forms.flatMap((f) => DESCRIPTION_SYNONYMS[f] ?? [])])));
+  }
+  return out;
+}
+
+const catalogCache = new Map<string, { at: number; list: any[] | null }>();
+
+/**
+ * The store's whole published catalogue, at most two pages of 100, ten
+ * minutes per store and language; null when it is bigger (a full second page).
+ * A Hebrew ask reads lang=he: on a WPML / Polylang store that is the Hebrew
+ * catalogue (its own ids, which the cards then use); a store without them
+ * ignores the parameter and answers its one catalogue.
+ */
+async function wholeCatalog(auth: string, base: string, lang: "he" | null): Promise<any[] | null> {
+  const key = `${base}|${lang ?? ""}`;
+  const hit = catalogCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+  const page = async (n: number) => {
+    const p = new URLSearchParams({ per_page: "100", page: String(n), status: "publish" });
+    if (lang) p.set("lang", lang);
+    const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`);
+    return Array.isArray(l) ? l : [];
+  };
+  let list: any[] | null = await page(1);
+  if (list.length >= 100) {
+    const second = await page(2);
+    list = second.length >= 100 ? null : [...list, ...second];
+  }
+  catalogCache.set(key, { at: Date.now(), list });
+  return list;
+}
+
+/**
+ * Smoovee (2026-11-08, cmw7p00cq): "דגם לתמי 4" found nothing, because what a
+ * product fits is only in its short description ("מתאים ל: תמי 4 באבלס"), and
+ * the store's own search reads neither. When every other route found nothing:
+ * the query's words against each product's name, short description and
+ * description. The most words matched wins; a word most of the catalogue holds
+ * ("משטח" on a store of surfaces) never counts alone, nor does a number; name
+ * or short description over description; in stock first. Only the top score:
+ * a product that fits "תמי 3" is not offered for "תמי 4".
+ */
+async function descriptionSearch(
+  auth: string, base: string, params: URLSearchParams, query: string, per: number, visible: (l: any) => any,
+): Promise<any[]> {
+  const words = descriptionTokens(query);
+  if (!words.length) return [];
+  const lang = /[א-ת]/.test(query) ? "he" : null;
+  const all = await wholeCatalog(auth, base, lang).catch(() => null);
+  if (!all) return [];
+  const minP = Number(params.get("min_price") ?? NaN), maxP = Number(params.get("max_price") ?? NaN);
+  const pool: any[] = (visible(all) as any[]).filter((p: any) =>
+    (p?.status ?? "publish") === "publish"
+    && (params.get("stock_status") !== "instock" || p?.stock_status !== "outofstock")
+    && (!Number.isFinite(minP) || Number(p?.price) >= minP)
+    && (!Number.isFinite(maxP) || Number(p?.price) <= maxP));
+  if (!pool.length) return [];
+  const flat = (t: unknown) => new Set(descriptionTokens(t).flat());
+  const docs = pool.map((p) => ({ p, strong: flat(`${p?.name ?? ""} ${p?.short_description ?? ""}`), weak: flat(p?.description ?? "") }));
+  const has = (d: { strong: Set<string>; weak: Set<string> }, w: string[]) => w.some((f) => d.strong.has(f)) ? 2 : w.some((f) => d.weak.has(f)) ? 1 : 0;
+  // A word most of the catalogue holds names nothing in particular.
+  const generic = words.map((w) => /^[0-9]+$/.test(w[0]) || docs.filter((d) => has(d, w)).length > docs.length / 2);
+  if (generic.every(Boolean)) return [];
+  const scored = docs.map((d) => {
+    const m = words.map((w) => has(d, w));
+    return { p: d.p, n: m.filter(Boolean).length, strong: m.filter((x) => x === 2).length, specific: m.some((x, i) => x && !generic[i]) };
+  }).filter((x) => x.specific);
+  if (!scored.length) return [];
+  const top = Math.max(...scored.map((x) => x.n));
+  // Marked: a match in the copy, not the title ("plate" is the spec label
+  // "Plate: Perspex"), which the bot's turn may retry in the customer's words.
+  const out = scored.filter((x) => x.n === top).sort((a, b) => b.strong - a.strong).map((x) => ({ ...x.p, matched_in: "description" }));
+  return inStockFirst(out).slice(0, per);
+}
+
+/**
  * A Hebrew product ask, deterministic (see list_products). Logs which route
  * found it: [woo-search] hit=category:<id> | title | variant:<word> | none.
  */
@@ -541,6 +657,9 @@ async function hebrewProductSearch(
   const found = await Promise.all(variants.map(restSearch));
   const i = found.findIndex((l) => l.length);
   if (i >= 0) { log(`variant:${variants[i]}`, found[i].length); return inStockFirst(found[i]).slice(0, per); }
+  // What a product fits is in its description (Smoovee: "מתאים ל: תמי 4").
+  const described = await descriptionSearch(auth, base, params, query, per, visible);
+  if (described.length) { log("description", described.length); return described; }
   log("none", 0);
   return [];
 }
@@ -870,7 +989,13 @@ const WooCommerceAdapter: ProviderAdapter = {
             params.set("search", w);
             add(visible(await wooRequest(auth, "GET", `${base}/products?${params}`)));
           }
-          return rankByTitleWords(Array.from(seen.values()), stems);
+          const ranked = rankByTitleWords(Array.from(seen.values()), stems);
+          if (ranked.length) return ranked;
+          // "Tami 4": what a product fits is in its description only (Smoovee 2026-11-08).
+          params.delete("search");
+          const described = await descriptionSearch(auth, base, params, String(args.query), Math.min(100, Number(args.per_page ?? 10)), visible);
+          console.log(`[woo-search] query=${JSON.stringify(String(args.query).slice(0, 60))} hit=${described.length ? "description" : "none"} results=${described.length}`);
+          return described;
         }
         return list;
       }
