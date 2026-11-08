@@ -26,6 +26,7 @@ import {
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { recentlyListedWooProduct } from "./connectors/woo-listed-products";
+import { hiddenSale, renderedDiscount, priceString } from "./woo-rendered-price.service";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
@@ -93,7 +94,22 @@ async function readCard(tenantId: string, storeUrl: string, currency: string | n
     const v = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.list_product_variations", args: { product_id: productId, per_page: 30 }, accessScope: "internal" });
     variations = v.ok && Array.isArray(v.result) ? (v.result as any[]) : [];
   }
-  return buildWooProductCard(raw, variations, { storeUrl, currency, reason });
+  const card = buildWooProductCard(raw, variations, { storeUrl, currency, reason });
+  // A store discount the API does not carry (Smoovee: ₪262 → ₪170.30 from a
+  // discount-rules plugin): the page's price, with the old one struck through.
+  // Variants get it only when they all sell at the price that was discounted.
+  if (card && !card.compareAtPrice && hiddenSale(raw)) {
+    const d = await renderedDiscount(card.productUrl).catch(() => null);
+    if (d) {
+      const was = priceString(d.was), now = priceString(d.now);
+      card.price = now;
+      card.compareAtPrice = was;
+      if (card.variants.length && card.variants.every((v) => Number(v.price) === d.was)) {
+        card.variants = card.variants.map((v) => ({ ...v, price: now, compareAtPrice: was }));
+      }
+    }
+  }
+  return card;
 }
 
 /** batch: which card message showed it (products of one carousel share it). */
