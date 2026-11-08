@@ -26,7 +26,7 @@ import {
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { recentlyListedWooProduct } from "./connectors/woo-listed-products";
-import { hiddenSale, renderedDiscount, priceString } from "./woo-rendered-price.service";
+import { discountFor, priceString } from "./woo-rendered-price.service";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
@@ -98,8 +98,8 @@ async function readCard(tenantId: string, storeUrl: string, currency: string | n
   // A store discount the API does not carry (Smoovee: ₪262 → ₪170.30 from a
   // discount-rules plugin): the page's price, with the old one struck through.
   // Variants get it only when they all sell at the price that was discounted.
-  if (card && !card.compareAtPrice && hiddenSale(raw)) {
-    const d = await renderedDiscount(card.productUrl).catch(() => null);
+  if (card && !card.compareAtPrice) {
+    const d = await discountFor(raw, card.productUrl).catch(() => null);
     if (d) {
       const was = priceString(d.was), now = priceString(d.now);
       card.price = now;

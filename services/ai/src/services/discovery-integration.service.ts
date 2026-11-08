@@ -26,7 +26,7 @@ import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { capped, extractionCapMs } from "./judgement-cap";
 import { prisma } from "@chatcenter/shared";
 import { normalizeShopifyProducts, normalizeWooProducts, applyDiscount, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
-import { hiddenSale, renderedDiscount, priceString } from "./woo-rendered-price.service";
+import { discountFor, priceString } from "./woo-rendered-price.service";
 import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
 import { detectProductInquiry, type ProductInquiryKind } from "./product-intent.service";
 // STATIC import on purpose. A dynamic `await import(...)` of this module
@@ -289,8 +289,8 @@ export async function groundProductSearchResult(opts: {
     // lower price. Not found: the API price stands.
     const byId = new Map(products.map((p: any) => [String(p?.id), p]));
     env.candidates = await Promise.all(env.candidates.map(async (c, i) => {
-      if (i >= 5 || !hiddenSale(byId.get(c.productId))) return c;
-      const d = await renderedDiscount(c.url).catch(() => null);
+      if (i >= 5) return c;
+      const d = await discountFor(byId.get(c.productId), c.url).catch(() => null);
       return d ? applyDiscount(c, priceString(d.was), priceString(d.now), env.budget) : c;
     }));
     return env;

@@ -11,14 +11,18 @@ import { join } from "node:path";
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
-  return { ...actual, safeFetch: vi.fn(async (url: string) => ({ ok: true, status: 200, text: url.includes("alice") ? ALICE_PAGE : "<p class=\"price\"><span class=\"amount\"><bdi>&#8362;99</bdi></span></p>" })) };
+  return { ...actual, safeFetch: vi.fn(async (url: string) => ({ ok: true, status: 200, text: url.includes("smoovee") ? (url.includes("alice") ? ALICE_PAGE : CHRISTINA_PAGE) : PLAIN_PAGE })) };
 });
 
 // Her page's own main price block (2026-11-08), with a related product's price after it.
-const ALICE_PAGE = `<html><body><div class="summary"><p class="price"><del><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol" translate="no" dir="auto">&#8362;</span>262</bdi></span></del><br><ins><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol" translate="no" dir="auto">&#8362;</span>170.30</bdi></span></ins></p></div>
+const ALICE_PAGE = `<html><head><script id='awdr-main-js-extra'>var awdr_params = {"ajaxurl":"x"};</script></head><body><div class="summary"><p class="price"><del><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol" translate="no" dir="auto">&#8362;</span>262</bdi></span></del><br><ins><span class="woocommerce-Price-amount amount"><bdi><span class="woocommerce-Price-currencySymbol" translate="no" dir="auto">&#8362;</span>170.30</bdi></span></ins></p></div>
 <section class="related"><p class="price"><del><bdi>&#8362;15</bdi></del><ins><bdi>&#8362;9.75</bdi></ins></p></section></body></html>`;
 
-import { parseRenderedDiscount, hiddenSale, renderedDiscount } from "../services/woo-rendered-price.service";
+// Her pages carry the plugin's markers (awdr_params, awdr-main-js-extra).
+const CHRISTINA_PAGE = `<script id="awdr-main-js-extra">var awdr_params = {};</script><p class="price"><del><bdi>&#8362;219</bdi></del><ins><bdi>&#8362;142.35</bdi></ins></p>`;
+const PLAIN_PAGE = `<p class="price"><span class="amount"><bdi>&#8362;99</bdi></span></p>`;
+
+import { parseRenderedDiscount, hiddenSale, renderedDiscount, discountFor, hasRuleDiscountMarkers } from "../services/woo-rendered-price.service";
 import { normalizeWooProducts, applyDiscount, buildKeyedModelSummary } from "../services/product-search.service";
 
 describe("the store's discount, from its own page", () => {
@@ -57,12 +61,33 @@ describe("what the model and the card get", () => {
     expect(s).toMatch(/Never state or work out a percentage/);
     expect(env.candidates[0].price).toBe("170.30");
   });
-  it("grounding reads it for the first five on-sale products; the card gets price and compareAtPrice", () => {
+  it("grounding reads it for the first five products; the card gets price and compareAtPrice", () => {
     const g = readFileSync(join(__dirname, "../services/discovery-integration.service.ts"), "utf8");
-    expect(g).toContain("if (i >= 5 || !hiddenSale(byId.get(c.productId))) return c;");
+    expect(g).toContain("if (i >= 5) return c;");
+    expect(g).toContain("await discountFor(byId.get(c.productId), c.url)");
     const w = readFileSync(join(__dirname, "../services/woo-chat-turn.service.ts"), "utf8");
-    expect(w).toContain("if (card && !card.compareAtPrice && hiddenSale(raw)) {");
+    expect(w).toContain("const d = await discountFor(raw, card.productUrl)");
     expect(w).toContain("card.compareAtPrice = was;");
     expect(w).toContain("card.variants.every((v) => Number(v.price) === d.was)");
+  });
+});
+
+describe("a store that prices by rules (prod 13:04: wc/v3 says on_sale:false, every card had no discount)", () => {
+  it("her markers are recognised; a plain page is not", () => {
+    expect(hasRuleDiscountMarkers(ALICE_PAGE)).toBe(true);
+    expect(hasRuleDiscountMarkers(PLAIN_PAGE)).toBe(false);
+  });
+  it("on her store a product with on_sale:false still gets its page price", async () => {
+    const d = await discountFor({ on_sale: false, regular_price: "219", sale_price: "" }, "https://smoovee-ltd.com/he/product/christina/");
+    expect(d).toEqual({ was: 219, now: 142.35 });
+  });
+  it("a store without the plugin: one page read a day to learn so, then no price reads", async () => {
+    const { safeFetch } = await import("@chatcenter/shared") as any;
+    const before = safeFetch.mock.calls.length;
+    const plain = { on_sale: false, regular_price: "99", sale_price: "" };
+    expect(await discountFor(plain, "https://plain.example.com/p/a/")).toBeNull();
+    expect(await discountFor(plain, "https://plain.example.com/p/b/")).toBeNull();
+    expect(await discountFor(plain, "https://plain.example.com/p/c/")).toBeNull();
+    expect(safeFetch.mock.calls.length - before).toBe(1);
   });
 });

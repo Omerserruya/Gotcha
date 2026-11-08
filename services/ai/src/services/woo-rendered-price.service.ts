@@ -43,15 +43,59 @@ export function parseRenderedDiscount(html: string): RenderedDiscount | null {
   return was != null && now != null && now < was ? { was, now } : null;
 }
 
+/** A page of a store that prices by rules at render time (Flycart "Discount Rules for WooCommerce"). */
+export function hasRuleDiscountMarkers(html: string): boolean {
+  return /awdr[_-]|\bwdr[_-]|woo-discount-rules|advanced-woo-discount-rules/i.test(html);
+}
+
+const storeRules = new Map<string, { at: number; rules: boolean }>();
+const STORE_TTL_MS = 24 * 60 * 60_000;
+const originOf = (u: string) => { try { return new URL(u).origin.toLowerCase(); } catch { return ""; } };
+
+/**
+ * Does this store price by rules? Smoovee prod 2026-11-08: through wc/v3 her
+ * products say on_sale:false (sale_price is empty), so the on-sale trigger
+ * never fired. Read once per store per day from one product page (which also
+ * fills that page's price), then every shown product of a rules store has its
+ * page price read; a store without the plugin makes no further page reads.
+ */
+export async function storeHasRuleDiscounts(sampleProductUrl: string): Promise<boolean> {
+  const origin = originOf(sampleProductUrl);
+  if (!origin) return false;
+  const hit = storeRules.get(origin);
+  if (hit && Date.now() - hit.at < STORE_TTL_MS) return hit.rules;
+  const html = await pageHtml(sampleProductUrl);
+  const rules = !!html && hasRuleDiscountMarkers(html);
+  storeRules.set(origin, { at: Date.now(), rules });
+  console.log(`[woo-discount] store ${origin} rules=${rules}`);
+  if (html) remember(sampleProductUrl, parseRenderedDiscount(html));
+  return rules;
+}
+
+async function pageHtml(url: string): Promise<string | null> {
+  try {
+    const r: any = await safeFetch(url, { timeoutMs: 4000, maxBytes: 2_000_000, headers: { Accept: "text/html" } });
+    return r?.ok && typeof r.text === "string" ? r.text : null;
+  } catch { return null; }
+}
+
+function remember(productUrl: string, value: RenderedDiscount | null) {
+  cache.set(productUrl, { at: Date.now(), value });
+}
+
+/** Read this product's page price when the store hides its discount from the API, or prices by rules. */
+export async function discountFor(raw: any, productUrl: string): Promise<RenderedDiscount | null> {
+  if (!productUrl) return null;
+  if (!hiddenSale(raw) && !(await storeHasRuleDiscounts(productUrl).catch(() => false))) return null;
+  return renderedDiscount(productUrl);
+}
+
 export async function renderedDiscount(productUrl: string): Promise<RenderedDiscount | null> {
   const hit = cache.get(productUrl);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
-  let value: RenderedDiscount | null = null;
-  try {
-    const r: any = await safeFetch(productUrl, { timeoutMs: 4000, maxBytes: 2_000_000, headers: { Accept: "text/html" } });
-    if (r?.ok && typeof r.text === "string") value = parseRenderedDiscount(r.text);
-  } catch { value = null; }
-  cache.set(productUrl, { at: Date.now(), value });
+  const html = await pageHtml(productUrl);
+  const value: RenderedDiscount | null = html ? parseRenderedDiscount(html) : null;
+  remember(productUrl, value);
   // One line per page read (not per cache hit): which product, what the page said.
   let path = productUrl;
   try { path = new URL(productUrl).pathname; } catch { /* keep the url */ }
