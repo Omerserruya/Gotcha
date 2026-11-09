@@ -254,11 +254,21 @@ Three things that will bite whoever touches this next:
    a managed keypair.
 6. **Branding**: point `AUTHENTIK_BRANDING_LOGO` / `AUTHENTIK_BRANDING_FAVICON`
    at real GOTCHA assets and apply the email templates.
-7. **MFA enforcement**: TOTP, WebAuthn/passkeys, and recovery codes are enabled
-   and enrollable. Enforcement is currently optional
-   (`not_configured_action=skip`). Tenant-level enforcement needs a policy
-   binding per tenant - Authentik enforces per-flow, not per-tenant, so this
-   needs design.
+7. **MFA enforcement** (2026-11-09, Option B): TOTP, WebAuthn/passkeys and
+   recovery codes are enrollable. Two layers enforce it, both from
+   `mfaRequirementFor` (SYSTEM_ADMIN always; ADMIN / AGENT per the workspace):
+   - **Server (the authority):** `authenticate()` -> `mfaServerGate` answers
+     403 `mfa_enrollment_required` on every route but enrolment, `/me`, logout
+     (`packages/shared/src/middleware/mfa-server-gate.ts`).
+   - **Login:** `default-authentication-mfa-validation` stays
+     `not_configured_action=skip` but now serves only users who are NOT
+     required (negated policy `gotcha-mfa-required`); required users get
+     `gotcha-required-mfa-validation` (`configure`, TOTP setup inline) plus
+     recovery-code setup when they have none. The branch keys on the Authentik
+     user attribute `gotcha_mfa_required`, kept in step by the auth service
+     (`mfa-required-flag.service.ts`, backfill `src/scripts/mfa-required-backfill.ts`).
+     Applied by `scripts/authentik/required-mfa.mjs apply` (also run by
+     bootstrap); `rollback` returns the flow to stock skip for everyone.
 
 ### 8.3 Backups
 

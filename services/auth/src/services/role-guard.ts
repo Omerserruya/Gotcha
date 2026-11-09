@@ -98,4 +98,6 @@ export async function changeRoles(opts: {
     for (const m of members) if (await isAdmin(m)) admins++;
     if (admins === 0) throw new RoleChangeRefused("LAST_ADMIN");
   });
+  // A role can change who must have MFA: tell Authentik's login (Option B).
+  void import("./mfa-required-flag.service").then((m) => m.syncMfaRequiredFlagForUser(opts.targetUserId)).catch(() => {});
 }

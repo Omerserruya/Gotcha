@@ -17,6 +17,8 @@
  *   node scripts/authentik/bootstrap.mjs
  */
 
+import { applyRequiredMfa } from "./required-mfa.mjs";
+
 const BASE = (process.env.AUTHENTIK_URL || "http://localhost:9000").replace(/\/$/, "");
 const TOKEN = process.env.AUTHENTIK_BOOTSTRAP_TOKEN;
 const APP_SLUG = process.env.AUTHENTIK_APP_SLUG || "gotcha";
@@ -303,6 +305,8 @@ async function ensureMfaEnforcement() {
   // it only stops Authentik from forcing enrolment on users who have none.
   // (configuration_stages kept so the validation stage can still offer inline
   // enrolment if a future flow ever sets the action back to "configure".)
+  // The users GOTCHA DOES require MFA of are forced to enrol at login by a
+  // second validation stage, bound only for them: required-mfa.mjs (Option B).
   await api(`/stages/authenticator/validate/${validate.pk}/`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -709,6 +713,8 @@ async function main() {
   const selfRecoveryFlowPk = await ensureSelfServiceRecoveryFlow();
   await ensureMfaEnrollment();
   await ensureMfaEnforcement();
+  // Option B (2026-11-09): MFA forced at login only for gotcha_mfa_required users.
+  await applyRequiredMfa(api, (m) => console.log(m.replace("[required-mfa]", "[bootstrap]")));
   await ensurePasswordPolicy(recoveryFlowPk);
   // The login page's "Forgot username or password?" link points at the
   // self-service flow (identification + email verification), NOT the bare

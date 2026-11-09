@@ -26,7 +26,7 @@ vi.mock("../../lib/authentik", () => ({
 }));
 
 import { authenticate } from "../auth";
-import { mfaGateExempt, resetMfaGateCache } from "../mfa-server-gate";
+import { mfaGateExempt, resetMfaGateCache, observeMfaRequirement } from "../mfa-server-gate";
 
 const res = () => { const r: any = {}; r.status = vi.fn(() => r); r.json = vi.fn(() => r); return r; };
 const call = async (method: string, url: string) => {
@@ -117,5 +117,19 @@ describe("who else", () => {
     expect(mfaGateExempt("GET", "/api/account/security/")).toBe(true);
     expect(mfaGateExempt("POST", "/api/account")).toBe(false);
     expect(mfaGateExempt("GET", "/api/accounts")).toBe(false);
+  });
+});
+
+describe("Authentik's marker hears every verdict (Option B)", () => {
+  it("the observer is told the identity, for a required and a not-required user alike", async () => {
+    const seen: string[] = [];
+    observeMfaRequirement((id) => seen.push(id));
+    user("SYSTEM_ADMIN", null);
+    await call("GET", "/api/system/tenants");
+    resetMfaGateCache();
+    user("AGENT", null);
+    await call("GET", "/api/conversations");
+    observeMfaRequirement(null);
+    expect(seen).toEqual(["id1", "id1"]);
   });
 });

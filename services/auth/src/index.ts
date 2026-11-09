@@ -26,6 +26,7 @@ import { startAirtableLeadSync } from "./services/airtable-lead-sync.service";
 import { startOnboardingDiscoverWorker } from "./services/onboarding-discover/queue";
 import { learnStages } from "./services/onboarding-discover/learn";
 import rateLimit from "express-rate-limit";
+import { startMfaRequiredFlagSync } from "./services/mfa-required-flag.service";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
 import workspaceRoutes from "./routes/workspace";
@@ -95,6 +96,10 @@ app.use("/api/waitlist", waitlistRoutes);
 app.use("/api", internalRoutes);
 
 startService(app, config);
+
+// Option B MFA: keep Authentik's gotcha_mfa_required marker in step with who
+// GOTCHA requires MFA of (the login's required-MFA stage keys on it).
+startMfaRequiredFlagSync();
 
 // Lifecycle Nudge Engine - repeatable sweep that sends due onboarding nudges.
 // Best-effort: a failure here must never stop the auth service from serving.

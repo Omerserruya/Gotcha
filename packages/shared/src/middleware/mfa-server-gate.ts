@@ -44,6 +44,14 @@ const VERDICT_TTL_MS = 60_000;
 const live = new Map<string, { at: number; enrolled: boolean }>();
 const LIVE_TTL_MS = 60_000;
 
+/**
+ * Someone who keeps Authentik's "gotcha_mfa_required" marker in step (the auth
+ * service): told the identity whenever a verdict is computed. Never awaited,
+ * never able to fail the request.
+ */
+let requirementObserver: ((identityId: string) => void) | null = null;
+export function observeMfaRequirement(fn: ((identityId: string) => void) | null): void { requirementObserver = fn; }
+
 /** Test seam: forget cached verdicts. */
 export function resetMfaGateCache(): void { verdicts.clear(); live.clear(); }
 
@@ -85,6 +93,7 @@ async function verdictFor(userId: string): Promise<Verdict> {
     mfaRequiredForAdmins: !!row.tenant?.mfaRequiredForAdmins,
     mfaRequiredForAllUsers: !!row.tenant?.mfaRequiredForAllUsers,
   });
+  if (requirementObserver && row.identityId) { try { requirementObserver(row.identityId); } catch { /* never the request's problem */ } }
   let v: Verdict = { ok: true };
   if (need.required && row.identity?.mfaEnrolledAt == null) {
     const now = await liveEnrolled(row.identityId, row.identity?.authentikSubject ?? null);

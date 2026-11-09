@@ -489,6 +489,25 @@ export async function findIdentityByEmail(email: string): Promise<AuthentikIdent
   return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
 }
 
+/** The Authentik user attribute the login flow's required-MFA stage keys on (bootstrap.mjs ensureRequiredMfaEnforcement). */
+export const MFA_REQUIRED_ATTRIBUTE = "gotcha_mfa_required";
+
+/**
+ * Mark whether this identity must have MFA at login (Option B, 2026-11-09).
+ * A security marker for Authentik's required-MFA validation stage, never an
+ * authorization fact (GOTCHA decides it from mfaRequirementFor). The user's
+ * other attributes are kept: read, merge this one key, write. Returns whether
+ * it changed anything.
+ */
+export async function setMfaRequiredAttribute(userPk: number, required: boolean): Promise<boolean> {
+  const u = await api<{ attributes?: Record<string, unknown> }>(`/core/users/${userPk}/`);
+  const attributes = { ...(u?.attributes ?? {}) };
+  if (attributes[MFA_REQUIRED_ATTRIBUTE] === required) return false;
+  attributes[MFA_REQUIRED_ATTRIBUTE] = required;
+  await api(`/core/users/${userPk}/`, { method: "PATCH", body: JSON.stringify({ attributes }) });
+  return true;
+}
+
 export async function findIdentityBySubject(subject: string): Promise<AuthentikIdentity | null> {
   const res = await api<{ results: any[] }>(`/core/users/?uuid=${encodeURIComponent(subject)}`);
   const u = res.results?.find((x) => x.uuid === subject);

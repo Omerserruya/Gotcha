@@ -393,6 +393,8 @@ export {
   getMfaEnrollmentMap,
   getUserLastLogin,
   getLastLoginBySubject,
+  setMfaRequiredAttribute,
+  MFA_REQUIRED_ATTRIBUTE,
   type AuthentikIdentity,
   type AuthentikSession,
   type AuthentikLoginEvent,
@@ -1043,6 +1045,7 @@ export type { SecretProvider } from "./secrets";
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { enforceMfaEnrollment } from "./middleware/mfa-guard";
+export { observeMfaRequirement } from "./middleware/mfa-server-gate";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
 export { visibilityClause, canViewConversation, requireVisibleConversation, visibleConversationFrom, viewerOf, type Viewer } from "./lib/conversation-visibility";

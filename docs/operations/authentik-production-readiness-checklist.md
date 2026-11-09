@@ -60,7 +60,7 @@
 - [ ] **Invitation flow**: owner invites → Authentik identity created **first**, then the local `User` row (`services/auth/src/services/invitation.service.ts:41,55`); invitee sets their own password via the recovery link; logs in; lands in the correct tenant with the role from the server-side `TenantInvite` row (never client input, `onboarding.ts:2900-2905`).
 - [ ] **Logout**: clears local tokens **and** redirects to Authentik `end_session_endpoint` so the IdP session ends (`frontend/src/context/AuthContext.tsx:168`, `oidc.ts:191-198`) - the next login is not silently re-authenticated.
 - [ ] **Channel connect** (Messenger/IG/WhatsApp/Gmail/Outlook/Slack): `GET /api/channels/oauth/init` now verifies the Authentik token via `resolvePrincipal` (fixed this pass - it previously HS256-verified an RS256 token and 401'd every user). Re-test at least one provider on prod.
-- [~] **MFA**: TOTP/WebAuthn/recovery-codes are enabled and enrollable, but enforcement is optional (`not_configured_action=skip`). Decide whether to enforce, and note Authentik enforces **per-flow, not per-tenant** - per-tenant enforcement needs a policy-binding design.
+- [~] **MFA**: enforced per GOTCHA policy, not flow-wide (Option B, 2026-11-09): the server gate (`mfa_enrollment_required`) plus a login branch on the Authentik attribute `gotcha_mfa_required` (`scripts/authentik/required-mfa.mjs`; see authentik-architecture.md 8.2 item 7). On prod: apply the stage, run the auth backfill, then verify one required and one not-required login.
 - [~] **Passkeys (WebAuthn)**: available via the same MFA stage. Confirm the WebAuthn RP ID matches the prod domain (`auth.gotcha.co.il`) or registration fails; decide if passkeys are offered at launch.
 
 ## 9. Rollback plan

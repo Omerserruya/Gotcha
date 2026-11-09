@@ -523,9 +523,10 @@ class was swept repo-wide, not just at the cited instance.
   delete/activate), role & permission changes, feature grants, invites, password-
   reset link issuance, and all GDPR/consent/retention actions. ~39 audit call
   sites (was ~3).
-- **MFA + password policy** - `scripts/authentik/bootstrap.mjs` enforces MFA
-  (`not_configured_action=configure` on the validation stage, covers ADMIN/
-  SYSTEM_ADMIN) and binds a 12-char + complexity + HIBP + zxcvbn password policy
+- **MFA + password policy** - MFA is enforced per GOTCHA policy (corrected
+  2026-11-09: the flow-wide `configure` described here was reverted to `skip`;
+  Option B adds a login branch for required users only, `required-mfa.mjs`,
+  plus the server gate in `authenticate()`), and `bootstrap.mjs` binds a 12-char + complexity + HIBP + zxcvbn password policy
   to the recovery flow. Both wired into `main()`.
 - **M-7 dev Docker socket** - removed the host `docker.sock` mount from the dev
   `authentik-worker`.

@@ -224,10 +224,14 @@ password).
 
 - **Enrolment** is bound into `default-user-settings-flow` (TOTP, WebAuthn/passkeys,
   static recovery codes - `bootstrap.mjs:129`).
-- **Enforcement:** `default-authentication-mfa-validation` is set to
-  `not_configured_action: "configure"` (`bootstrap.mjs:161`), so a user without a
-  device is forced to enrol inline at login. This covers ADMIN + SYSTEM_ADMIN
-  (flow-wide).
+- **Enforcement (2026-11-09, Option B):** `default-authentication-mfa-validation`
+  stays `not_configured_action: "skip"` and serves only users GOTCHA does not
+  require MFA of. Required users (SYSTEM_ADMIN always; ADMIN / AGENT per the
+  workspace policy) are routed to `gotcha-required-mfa-validation`
+  (`configure`: TOTP setup inline) and then recovery-code setup if they have
+  none - keyed on the Authentik user attribute `gotcha_mfa_required`
+  (`scripts/authentik/required-mfa.mjs`). The server gate in `authenticate()`
+  refuses a required, unenrolled user on every API regardless.
 - **Login with MFA:** after password, Authentik challenges the enrolled factor.
 - **Recovery codes / passkeys:** managed in the Authentik user portal (see 4).
 
