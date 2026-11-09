@@ -117,6 +117,15 @@ describe("never touched", () => {
     expect(await botIdleForTenant("T")).toEqual({ reminders: 0, closes: 0 });
   });
 
+  it("the customer replied after the reminder: no close", async () => {
+    H.convs = [conv("answered")];
+    msg("answered", "OUTBOUND", 30);
+    msg("answered", "OUTBOUND", 15, { metadata: { source: "idle_reminder" } });
+    msg("answered", "INBOUND", 12);
+    expect(await botIdleForTenant("T")).toEqual({ reminders: 0, closes: 0 });
+    expect(H.convs[0].status).toBe("OPEN");
+  });
+
   it("handed over between the check and the send: nothing sent", async () => {
     H.convs = [conv("race")];
     msg("race", "OUTBOUND", 30);
