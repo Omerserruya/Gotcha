@@ -1363,6 +1363,61 @@ describe('★★ the route onboarding wrote: a normal automation, said as made a
     expect(screen.getByText('None chosen: any channel')).toBeInTheDocument();
   });
 
+  it('★★ F2: the setup route’s employee reads as chosen - its name when listed', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('node-hand_to_ai'));
+    const pick = screen.getByTestId('inspector-employee') as HTMLSelectElement;
+    expect(pick).toHaveValue('e1');
+    expect(pick.selectedOptions[0]).toHaveTextContent(/^Yaara$/);
+    expect(screen.queryByTestId('inspector-employee-not-listed')).toBeNull();
+  });
+
+  it('★★ F2: a saved employee no option carries is kept and said - never "Choose…"', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'gone' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('node-hand_to_ai'));
+    const pick = screen.getByTestId('inspector-employee') as HTMLSelectElement;
+    expect(pick).toHaveValue('gone');
+    expect(pick.selectedOptions[0]).toHaveTextContent(/^A choice no longer in the list$/);
+    expect(within(pick).queryByText('Choose…')).toBeNull();
+    expect(screen.getByTestId('inspector-employee-not-listed')).toHaveTextContent(
+      'The step still keeps it and runs with it.',
+    );
+    // Picking a listed one replaces it, and the note goes.
+    fireEvent.change(pick, { target: { value: 'e1' } });
+    expect(screen.getByTestId('inspector-employee')).toHaveValue('e1');
+    expect(screen.queryByTestId('inspector-employee-not-listed')).toBeNull();
+  });
+
   it('★ Delete is refused for it: said why, the way to turn it off, and no retry', async () => {
     actions.deleteAutomation.mockResolvedValue('setup_route');
     wrap(<AutomationsList automations={[setup()]} />);

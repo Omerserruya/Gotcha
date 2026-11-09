@@ -388,6 +388,8 @@
     "comment_postPermalink": "Post link"
   },
   "inspector": {
+    "notListed": "A choice no longer in the list",
+    "notListedNote": "The step still keeps it and runs with it. To replace it, choose from the list.",
     "type": "Step type",
     "typeRefused": {
       "reply_pair": "A wait for the reply reads this step's buttons. Remove the wait first.",
