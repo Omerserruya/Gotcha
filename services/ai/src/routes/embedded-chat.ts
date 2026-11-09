@@ -26,6 +26,7 @@ import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { tryEmit } from "../services/notifications-emit";
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
 import { offerCrossSellAfterCart } from "../services/woo-chat-turn.service";
+import { mintWebchatDraft, draftChannelAccount, createDraftConversation, visitorNameFromOrigin } from "../services/webchat-draft.service";
 
 const router = Router();
 
@@ -312,6 +313,23 @@ async function visitorConversation(conversationId: string, token: unknown) {
 }
 
 /**
+ * The visitor's conversation, created now when (id, token) is a draft /init
+ * minted (the first message, "talk to a person", "continue on WhatsApp").
+ * Opening the widget alone never writes a conversation.
+ */
+async function visitorConversationOrCreate(conversationId: string, token: unknown, req: Request) {
+  const found = await visitorConversation(conversationId, token);
+  if (found) return found;
+  const channelAccountId = draftChannelAccount(conversationId, token);
+  if (!channelAccountId) return null;
+  const made = await withCrossTenantAccess(() => createDraftConversation(prisma, {
+    id: conversationId, token: String(token), channelAccountId,
+    customerName: visitorNameFromOrigin(req.get("origin")),
+  }));
+  return made ? visitorConversation(conversationId, token) : null;
+}
+
+/**
  * POST /handoff { sessionId, sessionToken } -> { handedOver: true }
  * The widget's "talk to a person" button (2026-10-26). It had no route here:
  * the site adapter answered it locally with an empty success, so the visitor
@@ -323,7 +341,7 @@ async function visitorConversation(conversationId: string, token: unknown) {
  */
 router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
   try {
-    const conv = await withCrossTenantAccess(() => visitorConversation(String(req.body?.sessionId ?? ""), req.body?.sessionToken));
+    const conv = await withCrossTenantAccess(() => visitorConversationOrCreate(String(req.body?.sessionId ?? ""), req.body?.sessionToken, req));
     if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
     const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
       where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
@@ -391,7 +409,7 @@ router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
  */
 router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Response) => {
   try {
-    const conv = await withCrossTenantAccess(() => visitorConversation(String(req.body?.sessionId ?? ""), req.body?.sessionToken));
+    const conv = await withCrossTenantAccess(() => visitorConversationOrCreate(String(req.body?.sessionId ?? ""), req.body?.sessionToken, req));
     if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
     const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
       where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
@@ -658,6 +676,14 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
       });
     }
 
+    // Nothing to resume: a draft, nothing written. The conversation is created
+    // by the visitor's first message under this same id (webchat-draft).
+    const draft = conversation ? null : mintWebchatDraft(channelAccount.id);
+    if (draft) {
+      res.json({ data: { sessionId: draft.id, visitorId: finalVisitorId, sessionToken: draft.token } });
+      return;
+    }
+
     if (!conversation) {
       // Generate a readable visitor name. Anonymous input - sanitize and
       // cap length so this string can never carry prompt-injection into
@@ -726,7 +752,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    const conversation = await visitorConversation(sessionId, sessionToken);
+    const conversation = await visitorConversationOrCreate(sessionId, sessionToken, req);
     if (!conversation) {
       res.status(404).json({ error: "Session not found" });
       return;
