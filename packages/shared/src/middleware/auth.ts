@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { resolvePrincipal, AuthError } from "../lib/principal";
+import { mfaServerGate } from "./mfa-server-gate";
 import { readSessionCookie, resolvePrincipalFromSessionToken } from "../lib/session-principal";
 import { readSessionFlags } from "../lib/session-flags";
 import { prisma } from "../lib/prisma";
@@ -48,10 +49,11 @@ async function enterSupportMode(req: Request, res: Response, next: NextFunction,
   }
   req.user = principal as any;
   req.tenantId = principal.tenantId;
-  runWithRequestContext(
+  // Support mode counts the ADMIN's own MFA (a SYSTEM_ADMIN always needs it).
+  await mfaServerGate(req, res, () => runWithRequestContext(
     { supportSessionId: principal.support!.sessionId, supportAdminUserId: principal.support!.adminUserId },
     next,
-  );
+  ), principal.support!.adminUserId);
 }
 
 function respondToAuthFailure(res: Response, err: unknown): void {
@@ -204,7 +206,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
         const principal = await resolvePrincipalFromSessionToken(rawSession, tenantHintOf(req));
         req.user = principal as any;
         req.tenantId = principal.tenantId;
-        next();
+        await mfaServerGate(req, res, next, principal.userId);
         return;
       } catch (err) {
         // A presented-but-invalid session is a hard failure, never a silent
@@ -241,7 +243,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const principal = await resolvePrincipal(bearer, tenantHintOf(req));
     req.user = principal as any;
     req.tenantId = principal.tenantId;
-    next();
+    await mfaServerGate(req, res, next, principal.userId);
   } catch (err) {
     respondToAuthFailure(res, err);
   }
