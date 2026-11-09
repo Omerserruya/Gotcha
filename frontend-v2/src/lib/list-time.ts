@@ -40,11 +40,10 @@ export type DaysAgo = (days: number) => string;
 
 /** The calendar day `at` falls on in the formatter's zone, as a UTC day number. */
 function dayNumber(at: Date, format: DateFormatter): number {
-  const part = (options: Parameters<DateFormatter['dateTime']>[1]) =>
-    Number(format.dateTime(at, options).replace(/\D/g, ''));
-  const year = part({ year: 'numeric' });
-  const month = part({ month: 'numeric' });
-  const day = part({ day: 'numeric' });
+  const digits = (text: string) => Number(text.replace(/\D/g, ''));
+  const year = digits(format.dateTime(at, { year: 'numeric' }));
+  const month = digits(format.dateTime(at, { month: 'numeric' }));
+  const day = digits(format.dateTime(at, { day: 'numeric' }));
   return Date.UTC(year, month - 1, day) / DAY;
 }
 
