@@ -186,7 +186,7 @@
       "comment_received": "Instagram or Facebook, any post or chosen ones"
     },
     "condition_group": "If, else if, else",
-    "opening_hours": "Open, closed, holiday",
+    "opening_hours": "Open or closed",
     "wait": "Minutes, hours, until a time",
     "wait_for_reply": "With a timeout branch",
     "split_channel": "One path per channel",

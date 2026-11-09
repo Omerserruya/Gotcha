@@ -54,6 +54,9 @@ import {
   removeSteps,
   isLabelled,
   layout,
+  fanOf,
+  linePath,
+  linePoint,
   type Graph,
 } from './graph';
 import { DeleteAutomation } from './DeleteAutomation';
@@ -161,6 +164,8 @@ export function Builder({
     JSON.stringify({ nodes: graph.nodes, edges: graph.edges }) !==
       JSON.stringify({ nodes: automation.nodes ?? [], edges: automation.edges ?? [] });
   const { at, width, height } = layout(graph);
+  // Branches to the same next step: one line each, bowed apart (F2).
+  const fan = fanOf(graph);
 
   /*
     ★★ AU5 (dev, 2026-10-14): a line started at a fixed 112px under its card,
@@ -769,11 +774,11 @@ export function Builder({
                         const y1 = from.y + 20 + bottomOf(edge.source);
                         const x2 = to.x + NODE_W / 2 + NODE_W / 2;
                         const y2 = to.y + 20;
-                        const mid = (y1 + y2) / 2;
                         return (
                           <path
                             key={edge.id ?? `${edge.source}-${edge.target}-${i}`}
-                            d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
+                            d={linePath(x1, y1, x2, y2, fan.get(edge) ?? 0)}
+                            data-testid={`line-${edge.source}-${edge.sourceHandle ?? 'next'}`}
                           />
                         );
                       })}
@@ -785,15 +790,22 @@ export function Builder({
                       if (!from || !to) return null;
                       const y1 = from.y + 20 + bottomOf(edge.source);
                       const y2 = to.y + 20;
+                      const bow = fan.get(edge) ?? 0;
+                      // A line alone: its middle. One of a fan: higher, clear of its label.
+                      const plus = linePoint(
+                        from.x + NODE_W,
+                        y1,
+                        to.x + NODE_W,
+                        y2,
+                        bow,
+                        bow === 0 ? 0.5 : 0.3,
+                      );
                       return (
                         <button
                           key={`between-${edge.id ?? i}`}
                           type="button"
                           className={styles.between}
-                          style={{
-                            insetInlineStart: (from.x + to.x) / 2 + NODE_W,
-                            insetBlockStart: (y1 + y2) / 2,
-                          }}
+                          style={{ insetInlineStart: plus.x, insetBlockStart: plus.y }}
                           aria-label={t('builder.addBetween', {
                             from: stepName(graph.nodes.find((n) => n.id === edge.source)!),
                             to: stepName(graph.nodes.find((n) => n.id === edge.target)!),
@@ -811,12 +823,30 @@ export function Builder({
                       const to = at.get(edge.target);
                       if (!from || !to || !isLabelled(edge.sourceHandle)) return null;
                       const source = graph.nodes.find((n) => n.id === edge.source);
+                      const bow = fan.get(edge) ?? 0;
+                      /*
+                       * A line alone: just above the step it leads to. One of a fan
+                       * (lines that meet at that step): on its own line, where the
+                       * lines are furthest apart, so each label reads.
+                       */
+                      const spot =
+                        bow === 0
+                          ? { x: to.x + NODE_W, y: to.y + 2 }
+                          : linePoint(
+                              from.x + NODE_W,
+                              from.y + 20 + bottomOf(edge.source),
+                              to.x + NODE_W,
+                              to.y + 20,
+                              bow,
+                              0.55,
+                            );
                       return (
                         <span
                           key={`label-${edge.id ?? i}`}
                           className={styles.branch}
-                          // Just above the step it leads to.
-                          style={{ insetInlineStart: to.x + NODE_W, insetBlockStart: to.y + 2 }}
+                          data-fan={bow === 0 ? undefined : ''}
+                          data-testid={`label-${edge.source}-${edge.sourceHandle}`}
+                          style={{ insetInlineStart: spot.x, insetBlockStart: spot.y }}
                         >
                           {source
                             ? branchName(source, edge.sourceHandle!, graph, t, locale)

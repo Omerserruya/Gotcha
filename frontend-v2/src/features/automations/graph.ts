@@ -350,7 +350,14 @@ export function layout(graph: Graph): {
     const id = queue.shift()!;
     const node = byId.get(id);
     if (!node) continue;
-    const kids = order(node).filter((k) => byId.has(k) && !placed.has(k));
+    /*
+     * ★★ Each step once, however many lines reach it (F2: every branch of an
+     * inserted step runs to the old next one). Listed twice, the step was
+     * visited twice: the second visit found its own children already placed
+     * and replaced them with none, so they were never drawn (dev, 6c4b5459:
+     * a menu inserted above opening hours hid the AI step under it).
+     */
+    const kids = [...new Set(order(node))].filter((k) => byId.has(k) && !placed.has(k));
     kids.forEach((k) => placed.add(k));
     children.set(id, kids);
     queue.push(...kids);
@@ -380,6 +387,65 @@ export function layout(graph: Graph): {
   const columns = Math.max(slot, loose.length, 1);
   const rows = deepest + 1 + (loose.length > 0 ? 1 : 0);
   return { at, width: columns * (NODE_W + GAP) - GAP, height: rows * ROW_H };
+}
+
+/** How far apart, sideways, the lines of one step's branches to the same next step bow. */
+export const FAN = 150;
+
+/**
+ * ★★ Branches that run to the same next step are drawn as separate lines.
+ *
+ * F2 connects every branch of an inserted step to the old next step, so
+ * "open" and "closed" share both ends: drawn alike they were one line with
+ * the labels stacked, and the owner could not see that each branch answers
+ * (dev, 6c4b5459). Each line of such a group bows sideways by its own
+ * offset, in the step's own branch order; a line alone keeps 0.
+ */
+export function fanOf(graph: Graph): ReadonlyMap<AutomationEdge, number> {
+  const groups = new Map<string, AutomationEdge[]>();
+  for (const edge of graph.edges) {
+    const key = `${edge.source}\u0000${edge.target}`;
+    groups.set(key, [...(groups.get(key) ?? []), edge]);
+  }
+  const offsets = new Map<AutomationEdge, number>();
+  for (const group of groups.values()) {
+    const node = graph.nodes.find((n) => n.id === group[0]!.source);
+    const handles = node ? outputsOf(node, graph) : [];
+    const rank = (e: AutomationEdge) => {
+      const i = handles.indexOf(e.sourceHandle ?? 'next');
+      return i === -1 ? handles.length : i;
+    };
+    const sorted = [...group].sort((a, b) => rank(a) - rank(b));
+    sorted.forEach((edge, i) => offsets.set(edge, (i - (sorted.length - 1) / 2) * FAN));
+  }
+  return offsets;
+}
+
+/** A line's path: down from the source, bowed sideways by `bow`, into the target's top. */
+export function linePath(x1: number, y1: number, x2: number, y2: number, bow: number): string {
+  const mid = (y1 + y2) / 2;
+  return `M ${x1} ${y1} C ${x1 + bow} ${mid}, ${x2 + bow} ${mid}, ${x2} ${y2}`;
+}
+
+/** The point at `t` (0 at the source, 1 at the target) on that path. */
+export function linePoint(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  bow: number,
+  t: number,
+): { readonly x: number; readonly y: number } {
+  const mid = (y1 + y2) / 2;
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return {
+    x: a * x1 + b * (x1 + bow) + c * (x2 + bow) + d * x2,
+    y: a * y1 + (b + c) * mid + d * y2,
+  };
 }
 
 /**

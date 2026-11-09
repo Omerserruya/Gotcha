@@ -403,6 +403,11 @@
     transform: translate(-50%, -100%);
   }
 
+  /* One of a fan: its top on its own line, below that line's "+". */
+  .branch[data-fan] {
+    transform: translate(-50%, 0);
+  }
+
   .slot {
     position: absolute;
     display: flex;

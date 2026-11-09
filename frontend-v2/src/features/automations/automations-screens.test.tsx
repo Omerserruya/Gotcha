@@ -1388,6 +1388,56 @@ describe('★★ F2: a card names who its step hands to (Omer, 2026-11-09)', () 
     }
   });
 
+  it('★★ dev 6c4b5459: a wait above opening hours above the AI - every step drawn, every branch its own line and label', () => {
+    const { container } = wrap(
+      <Builder
+        automation={automation({
+          id: 'r2',
+          name: 'Routing',
+          status: 'draft',
+          trigger: { type: 'conversation_started', config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'w', type: 'wait_for_reply', data: {} },
+            { id: 'oh', type: 'opening_hours', data: {} },
+            { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          // The supervisor's draft, as the two inserts wrote it.
+          edges: [
+            { id: 'e1', source: 'trigger', target: 'w' },
+            { id: 'e2', source: 'w', target: 'oh', sourceHandle: 'reply' },
+            { id: 'e3', source: 'w', target: 'oh', sourceHandle: 'timeout' },
+            { id: 'e4', source: 'oh', target: 'ai', sourceHandle: 'open' },
+            { id: 'e5', source: 'oh', target: 'ai', sourceHandle: 'closed' },
+          ],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    // BUG 2: the AI step was placed nowhere, and so not drawn.
+    expect(container.querySelector('[data-node-id="ai"]')).not.toBeNull();
+    // BUG 1: two branches into one step drew one line, one "+", two labels on one spot.
+    const left = (id: string) => screen.getByTestId(id).style.insetInlineStart;
+    for (const [a, b] of [
+      ['label-oh-open', 'label-oh-closed'],
+      ['label-w-reply', 'label-w-timeout'],
+    ] as const) {
+      expect(screen.getByTestId(a)).toBeVisible();
+      expect(left(a)).not.toBe(left(b));
+    }
+    const lines = ['line-oh-open', 'line-oh-closed'].map((id) =>
+      screen.getByTestId(id).getAttribute('d'),
+    );
+    expect(lines[0]).not.toBe(lines[1]);
+    const plus = screen
+      .getAllByTestId('between-oh-ai')
+      .map((b) => `${b.style.insetInlineStart},${b.style.insetBlockStart}`);
+    expect(new Set(plus).size).toBe(2);
+  });
+
   it('★★ in Hebrew: the website chat’s route reads in Hebrew, and publishing keeps its stored name', async () => {
     const web = automation({
       id: 'w1',
