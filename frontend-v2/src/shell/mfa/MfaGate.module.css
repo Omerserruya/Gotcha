@@ -1,19 +1,25 @@
 @layer shell {
   /* The workspace gate's closed door (WorkspaceGate.module.css), wider for the flow. */
+  /*
+   * ★ Exactly one screen, never more (dev walk, iPhone 13 at 390x664: the
+   * footer sat 24px below the fold). The card shrinks to what is left and the
+   * frame takes the rest, so the footer is always on screen.
+   */
   .gate {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
     align-items: center;
     justify-content: center;
-    min-block-size: 100dvh;
-    padding: 24px 16px;
+    block-size: 100dvh;
+    padding: 16px;
     background-color: var(--copilot-surface);
     color: var(--frame-text);
     line-height: normal;
   }
 
   .brand {
+    flex: none;
     display: flex;
     gap: 12px;
     align-items: center;
@@ -25,8 +31,9 @@
   .card {
     display: flex;
     flex-direction: column;
+    flex: 0 1 820px;
+    min-block-size: 0;
     inline-size: min(520px, 100%);
-    max-block-size: calc(100dvh - 48px);
     overflow: clip;
     border-radius: 16px;
     background-color: var(--panel-base);
@@ -34,6 +41,7 @@
   }
 
   .head {
+    flex: none;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -98,16 +106,20 @@
     color: var(--frame-text);
   }
 
+  /*
+   * ★ The frame gets the card's remaining height (dev walk, desktop: a fixed
+   * 540px opened Authentik's page scrolled, its title cut at the top).
+   */
   .flow {
     position: relative;
-    flex: 1 0 auto;
+    flex: 1 1 auto;
+    min-block-size: 0;
   }
 
   .frame {
     display: block;
     inline-size: 100%;
-    block-size: min(540px, calc(100dvh - 260px));
-    min-block-size: 360px;
+    block-size: 100%;
     border: 0;
   }
 
@@ -124,6 +136,7 @@
   }
 
   .foot {
+    flex: none;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;

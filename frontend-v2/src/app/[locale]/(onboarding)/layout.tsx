@@ -12,6 +12,7 @@ import { redirect as localeRedirect } from '@/i18n/navigation';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { asksForPreview } from '@/shell/workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
+import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
@@ -44,6 +45,12 @@ export default async function OnboardingLayout({
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
   const { route, setupAdmin, mayPreview } = await readWorkspaceGate();
   if (route === 'signed_out') redirect(await signInHere());
+  /*
+    ★★ Two-step sign-in owed: the enrolment step instead of this area
+    (supervisor, 2026-11-09: every signed-in door, one rule).
+  */
+  const mfa = await mfaGateScreen(resolved);
+  if (mfa) return mfa;
   const previewing =
     route === 'product' && mayPreview && asksForPreview((await headers()).get(RETURN_TO_HEADER));
   if (route === 'product' && !previewing) localeRedirect({ href: '/home', locale: resolved });

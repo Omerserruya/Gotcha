@@ -18,9 +18,8 @@ import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
 import { isConsolePath } from '@/shell/workspace-gate';
-import { MfaGate } from '@/shell/mfa/MfaGate';
 import { MfaWatch } from '@/shell/mfa/MfaWatch';
-import { authOrigin, readMfaGate } from '@/shell/mfa/read-mfa-gate';
+import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
 /**
@@ -94,14 +93,8 @@ export default async function AuthenticatedLayout({
     until it is done. `/api/auth/me` above and the gate's own read are the
     routes it leaves open. Unread: the product, as legacy (the 403 still holds).
   */
-  const mfa = await readMfaGate();
-  if (mfa?.mustEnroll) {
-    return (
-      <NextIntlClientProvider messages={await loadMessages(resolved)}>
-        <MfaGate initial={mfa} authOrigin={authOrigin()} />
-      </NextIntlClientProvider>
-    );
-  }
+  const mfa = await mfaGateScreen(resolved);
+  if (mfa) return mfa;
   /*
     ★★ SUPPORT MODE, said on every page this layout draws - the gate's
     screens and the console's included (Omer, 2026-11-01).

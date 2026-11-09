@@ -1,7 +1,9 @@
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 
+import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
+import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
 import { CHECKOUT_NAMESPACES } from '@/i18n/namespaces';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
@@ -28,6 +30,15 @@ export default async function CheckoutLayout({
 }) {
   const { locale } = await params;
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+  /*
+    ★★ Two-step sign-in owed: the enrolment step instead of checkout
+    (supervisor, 2026-11-09). Checkout opens signed out too: asked only
+    behind a session, since there is nothing to enrol without one.
+  */
+  if (await activeSession()) {
+    const mfa = await mfaGateScreen(resolved);
+    if (mfa) return mfa;
+  }
   /*
    * ★ SUPPORT MODE IS SAID HERE TOO, and pays nothing: the banner, and every
    *   payment control refused (the platform refuses `/api/checkout` writes,
