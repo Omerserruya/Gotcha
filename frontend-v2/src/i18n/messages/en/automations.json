@@ -314,6 +314,7 @@
       "wait": "{duration}",
       "upTo": "Up to {duration}",
       "split": "{a}% / {b}%",
+      "anyTeam": "General queue, no team",
       "toFill": "To fill in"
     },
     "more": "More",

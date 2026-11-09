@@ -314,6 +314,7 @@
       "wait": "{duration}",
       "upTo": "עד {duration}",
       "split": "{a}% / {b}%",
+      "anyTeam": "תור כללי, בלי צוות",
       "toFill": "למלא"
     },
     "more": "עוד",

@@ -95,6 +95,21 @@ export const pathStepSchema = z.looseObject({
   type: z.string(),
   /** The author's `data.label`, else the route's ENGLISH catalogue name. */
   label: z.string().catch(''),
+  /**
+   * Who the step hands to (Backend 36cd836b, F2): on `hand_to_ai` and
+   * `run_skill` the AI employee, on `assign` the person or team; ABSENT on
+   * every other step. `name` is null when the id is unset or no longer in the
+   * tenant; a team `id` of null is the general queue. Tolerant: a target this
+   * screen cannot read is no target, never a list that fails to parse.
+   */
+  target: z
+    .object({
+      kind: z.enum(['ai', 'person', 'team']),
+      id: z.string().nullable().catch(null),
+      name: z.string().nullable().catch(null),
+    })
+    .optional()
+    .catch(undefined),
 });
 export type PathStep = z.infer<typeof pathStepSchema>;
 

@@ -1275,6 +1275,106 @@ describe('★★ a duration in the largest unit it fills whole (dev: "1,440 minu
   });
 });
 
+describe('★★ F2: a card names who its step hands to (Omer, 2026-11-09)', () => {
+  const choices = {
+    employees: [{ id: 'e1', name: 'שרי' }],
+    teams: [{ id: 'd1', name: 'Support' }],
+    members: [{ id: 'u1', name: 'Noa' }],
+    skills: [{ id: 's1', name: 'Order status' }],
+  };
+  const card = (type: string, data: Record<string, unknown>, given: typeof choices | null) =>
+    wrap(
+      <NodeCard
+        node={{ id: 'n', type, position: { x: 0, y: 0 }, data }}
+        trigger={{ type: 'conversation_started', config: {} } as never}
+        selected={false}
+        marked={false}
+        choices={given}
+        onSelect={vi.fn()}
+      />,
+    );
+
+  it.each([
+    ['hand_to_ai', { aiAgentId: 'e1' }, 'שרי'],
+    ['hand_to_ai', { aiAgentId: '' }, 'Not set up yet'],
+    ['hand_to_ai', { aiAgentId: 'gone' }, 'A choice no longer in the list'],
+    ['run_skill', { skillId: 's1', aiAgentId: 'e1' }, 'Order status'],
+    ['assign', { to: 'person', userId: 'u1' }, 'Noa'],
+    ['assign', { to: 'team', departmentId: 'd1' }, 'Support'],
+    ['assign', { to: 'team' }, 'General queue, no team'],
+  ])('%s %o reads "%s"', (type, data, words) => {
+    card(type, data, choices);
+    expect(screen.getByTestId('node-n')).toHaveTextContent(words);
+    expect(screen.getByTestId('node-n')).not.toHaveTextContent('Continues in the same chat');
+  });
+
+  it('without the names (not passed): the type’s own line, as before', () => {
+    card('hand_to_ai', { aiAgentId: 'e1' }, null);
+    expect(screen.getByTestId('node-n')).toHaveTextContent('Continues in the same chat');
+  });
+
+  it('★ on the list row: the step chip names its target, as the route sends it', () => {
+    const row = (target: unknown) =>
+      automation({
+        id: 'r1',
+        name: 'Routing',
+        trigger: { type: 'conversation_started', config: {} },
+        path: [
+          { nodeId: 'trigger', type: 'automation_trigger', label: 'New conversation' },
+          { nodeId: 'h', type: 'hand_to_ai', label: 'Hand to AI employee', target },
+        ],
+      });
+    const chip = () => screen.getByTestId('automation-target-r1-h');
+    const cases: [unknown, string][] = [
+      [{ kind: 'ai', id: 'e1', name: 'שרי' }, ' · שרי'],
+      [{ kind: 'ai', id: 'gone', name: null }, ' · A choice no longer in the list'],
+      [{ kind: 'ai', id: null, name: null }, ' · Not set up yet'],
+      [{ kind: 'team', id: null, name: null }, ' · General queue, no team'],
+      [{ kind: 'person', id: 'u1', name: 'Noa' }, ' · Noa'],
+    ];
+    for (const [target, words] of cases) {
+      const { unmount } = wrap(<AutomationsList automations={[row(target)]} />);
+      expect(chip().textContent).toBe(words);
+      unmount();
+    }
+  });
+
+  it('a step without a target, or one this screen cannot read, is a chip without one', () => {
+    const steps = automationSchema.parse({
+      ...automation({}),
+      path: [
+        { nodeId: 'a', type: 'wait', label: 'Wait' },
+        { nodeId: 'b', type: 'hand_to_ai', label: 'Hand', target: { kind: 'robot', id: 1 } },
+      ],
+    }).path;
+    expect(steps.map((p) => p.target)).toEqual([undefined, undefined]);
+  });
+
+  it('★ the setup route on the canvas: its card says Sheri', () => {
+    wrap(
+      <Builder
+        automation={automation({
+          id: 's1',
+          name: 'Who answers new conversations',
+          origin: 'setup',
+          status: 'live',
+          trigger: { type: 'conversation_started', config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    expect(screen.getByTestId('node-hand_to_ai')).toHaveTextContent('שרי');
+  });
+});
+
 describe('★★ the route onboarding wrote: a normal automation, said as made at setup', () => {
   const setup = (over: Record<string, unknown> = {}) =>
     automation({

@@ -841,6 +841,7 @@ export function Builder({
                           <NodeCard
                             node={node}
                             trigger={trigger}
+                            choices={choices}
                             selected={node.id === selected || picked.has(node.id)}
                             marked={marked.has(node.id) || checked.has(node.id)}
                             issue={checked.has(node.id) ? issueText(checked.get(node.id)!) : null}

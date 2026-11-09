@@ -419,6 +419,24 @@ function Row({
                 ) : (
                   <bdi dir="auto">{step.label}</bdi>
                 )}
+                {/*
+                  ★★ WHO IT HANDS TO, ON THE ROW (F2, Omer, 2026-11-09): the
+                    setup route read "Hand to AI employee" and named nobody.
+                */}
+                {step.target ? (
+                  <span data-testid={`automation-target-${automation.id}-${step.nodeId}`}>
+                    {' · '}
+                    {step.target.name !== null ? (
+                      <bdi dir="auto">{step.target.name}</bdi>
+                    ) : step.target.kind === 'team' && step.target.id === null ? (
+                      t('builder.card.anyTeam')
+                    ) : step.target.id === null ? (
+                      t('builder.card.empty')
+                    ) : (
+                      t('inspector.notListed')
+                    )}
+                  </span>
+                ) : null}
               </span>
             </span>
           );

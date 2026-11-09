@@ -7,6 +7,7 @@ import { wholeUnit } from '@/lib/duration';
 import type { AutomationNode, Trigger } from '@/api/contracts/automations';
 
 import { fileNameOf, TRIGGER_NODE } from './graph';
+import type { Choices } from './Inspector';
 import { needsFilling } from './templates';
 import styles from './Builder.module.css';
 
@@ -44,9 +45,15 @@ export function NodeCard({
   selected,
   marked,
   issue = null,
+  choices = null,
   onSelect,
 }: {
   readonly node: AutomationNode;
+  /**
+   * The names a step's chosen employee, skill, team or person is shown by.
+   * `null` (not passed): the type's own line, as before.
+   */
+  readonly choices?: Choices | null;
   readonly trigger: Trigger;
   readonly selected: boolean;
   /** Named by the last refusal. */
@@ -102,7 +109,7 @@ export function NodeCard({
         <span className={styles.cardLine}>
           {node.type === TRIGGER_NODE
             ? t(`lines.trigger.${trigger.type ?? 'unknown'}` as 'lines.trigger.webhook')
-            : summary(node, t, td)}
+            : summary(node, t, td, choices)}
         </span>
       )}
       {issue ? (
@@ -123,12 +130,44 @@ export function NodeCard({
   );
 }
 
+/**
+ * The name a step's saved id is shown by, or what to say instead: nothing
+ * saved, a saved id no option carries, or the options not read.
+ */
+function chosen(
+  options: readonly { readonly id: string; readonly name: string }[] | null | undefined,
+  id: unknown,
+): { readonly name: string } | 'empty' | 'not_listed' | 'unread' {
+  if (typeof id !== 'string' || id === '') return 'empty';
+  if (!options) return 'unread';
+  const found = options.find((o) => o.id === id);
+  return found ? { name: found.name } : 'not_listed';
+}
+
 function summary(
   node: AutomationNode,
   t: ReturnType<typeof useTranslations<'automations'>>,
   td: ReturnType<typeof useTranslations<'common.duration'>>,
+  choices: Choices | null,
 ): string {
   const d = node.data;
+  /*
+   * ★★ WHO THE STEP HANDS TO, ON THE CARD (F2, Omer, 2026-11-09). The setup
+   *   route's "Hand to AI employee" card read "Continues in the same chat" -
+   *   the type's line - and named nobody, while the step sent every new
+   *   conversation to Sheri: "nothing is shown as selected". The card says
+   *   the name; the type's line only when the options were not read.
+   */
+  const named = (
+    options: readonly { readonly id: string; readonly name: string }[] | null | undefined,
+    id: unknown,
+  ) => {
+    const c = chosen(options, id);
+    if (c === 'empty') return t('builder.card.empty');
+    if (c === 'not_listed') return t('inspector.notListed');
+    if (c === 'unread') return t(`lines.${node.type}` as 'lines.wait');
+    return c.name;
+  };
   // In the largest unit it fills whole: "1 day", never "1,440 minutes".
   const duration = (ms: unknown) => {
     if (typeof ms !== 'number' || ms <= 0) return null;
@@ -152,11 +191,28 @@ function summary(
       return str(d.message) || t('builder.card.empty');
     case 'send_message_file':
       return fileNameOf(d) || str(d.url) || t('builder.card.empty');
+    case 'hand_to_ai':
+      if (choices === null) break;
+      return named(choices.employees, d.aiAgentId);
+    case 'run_skill':
+      if (choices === null) break;
+      return named(choices.skills, d.skillId);
+    case 'assign':
+      if (choices === null) break;
+      if (d.to === 'person') return named(choices.members, d.userId);
+      if (d.to === 'team') {
+        // No team: the human queue nobody owns (Backend: handledBy human, WAITING).
+        return str(d.departmentId) === ''
+          ? t('builder.card.anyTeam')
+          : named(choices.teams, d.departmentId);
+      }
+      break;
     case 'ab_split':
       return typeof d.percentA === 'number'
         ? t('builder.card.split', { a: d.percentA, b: 100 - d.percentA })
         : t('builder.card.empty');
     default:
-      return t(`lines.${node.type}` as 'lines.wait');
+      break;
   }
+  return t(`lines.${node.type}` as 'lines.wait');
 }
