@@ -42,6 +42,15 @@ vi.mock('@/support/load-support', () => ({ loadSupport: async () => support.valu
 const WithSupportBanner = vi.hoisted(() => vi.fn(() => null));
 vi.mock('@/features/support/SupportBanner', () => ({ WithSupportBanner }));
 
+/* The MFA gate: drawn instead of the product; the issuer's origin is the frame's. */
+const MfaGate = vi.hoisted(() => vi.fn(() => null));
+vi.mock('@/shell/mfa/MfaGate', () => ({ MfaGate }));
+vi.mock('@/shell/mfa/MfaWatch', () => ({ MfaWatch: () => null }));
+vi.mock('@/config/env.server', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  serverEnv: () => ({ OIDC_ISSUER: 'https://auth.example.test/application/o/gotcha/' }),
+}));
+
 const { default: Layout } = await import('./layout');
 const render = () => Layout({ children: null, params: Promise.resolve({ locale: 'en' }) });
 const SIGN_IN = `REDIRECT /api/auth/login?returnTo=${encodeURIComponent('/en/approvals?tab=done')}`;
@@ -252,5 +261,68 @@ describe('★★ the realtime socket is for the workspace /auth/me names (2026-1
   it('outside support mode: no session in the providers', async () => {
     me({ tenantId: 't9' });
     expect(propsOf(AppProviders, await render())).toMatchObject({ support: null });
+  });
+});
+
+describe('★★ two-step sign-in is a gate (Omer, 2026-11-09; the legacy MfaEnrollmentGate)', () => {
+  const gate = (over: Record<string, unknown> = {}) => ({
+    required: true,
+    reason: 'system_admin',
+    enrolled: false,
+    hasAuthenticator: false,
+    hasRecovery: false,
+    mustEnroll: true,
+    identityAvailable: true,
+    ...over,
+  });
+  const reads: string[] = [];
+  const answer = (mfa: unknown) =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      reads.push(endpoint.path);
+      if (endpoint.path === '/api/auth/me')
+        return { user: { id: 'u', role: 'SYSTEM_ADMIN' }, tenantStatus: 'ACTIVE' };
+      if (endpoint.path === '/api/account/mfa-gate') {
+        if (mfa instanceof Error) throw mfa;
+        return mfa;
+      }
+      return { permissions: [], features: [] };
+    });
+
+  beforeEach(() => {
+    reads.length = 0;
+    MfaGate.mockClear();
+    AppShellMock.mockClear();
+  });
+
+  it('★★ required, not enrolled: the gate INSTEAD of the product - and no other platform read', async () => {
+    answer(gate());
+    at.path = '/en/system/tenants';
+    const tree = await render();
+    expect(propsOf(MfaGate, tree)).toMatchObject({
+      initial: { mustEnroll: true, reason: 'system_admin' },
+      authOrigin: 'https://auth.example.test',
+    });
+    expect(propsOf(AppShellMock, tree)).toBeNull();
+    // Every other route answers 403 mfa_enrollment_required until it is done.
+    expect(reads).toEqual(['/api/auth/me', '/api/account/mfa-gate']);
+  });
+
+  it('enrolled, or not required: the product', async () => {
+    for (const over of [
+      { mustEnroll: false, enrolled: true },
+      { required: false, mustEnroll: false },
+    ]) {
+      answer(gate(over));
+      const tree = await render();
+      expect(propsOf(MfaGate, tree)).toBeNull();
+      expect(propsOf(AppShellMock, tree)).not.toBeNull();
+    }
+  });
+
+  it('the gate unread: the product, as the legacy gate - the platform’s 403 still holds', async () => {
+    answer(new ApiError({ kind: 'server', status: 503 }));
+    const tree = await render();
+    expect(propsOf(MfaGate, tree)).toBeNull();
+    expect(propsOf(AppShellMock, tree)).not.toBeNull();
   });
 });

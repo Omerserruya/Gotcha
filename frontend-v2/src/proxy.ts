@@ -137,6 +137,8 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
     credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
     // 13c: Meta's Embedded Signup frames facebook.com - on the channels pages only.
     metaSignupSurface: META_SIGNUP_PATH.test(pathname),
+    // The MFA gate frames the identity provider's enrolment flows.
+    authFrameOrigin: originOf(process.env.OIDC_ISSUER),
   });
 
   /*
@@ -442,6 +444,16 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
 }
 
 /** Where 13c's Meta launcher runs: Settings · Channels, in any locale. */
+/** A URL's origin, or nothing: a missing or unparsable issuer frames nothing. */
+function originOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export const META_SIGNUP_PATH = /^\/[a-z]{2}\/settings\/channels(\/|$)/;
 
 /** next-intl's request header for the resolved locale. */

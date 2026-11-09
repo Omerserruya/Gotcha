@@ -322,3 +322,13 @@
     min-inline-size: 0;
   }
 }
+
+@layer features {
+  /* Console · Security: an Authentik flow, framed (as the MFA gate frames it). */
+  .flowFrame {
+    display: block;
+    inline-size: min(480px, 100%);
+    block-size: min(540px, 70dvh);
+    border: 0;
+  }
+}

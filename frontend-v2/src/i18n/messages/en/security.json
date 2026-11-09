@@ -243,5 +243,25 @@
       "unfinished": "We could not finish the change, and nothing was changed. Try again in a moment.",
       "failed": "That did not go through. Try again in a moment."
     }
+  },
+  "gate": {
+    "title": "Set up two-step sign-in",
+    "reason": {
+      "system_admin": "Two-step sign-in is required for platform administrators.",
+      "tenant_admins": "Your workspace requires admins to use two-step sign-in.",
+      "all_users": "Your workspace requires two-step sign-in for everyone.",
+      "other": "To continue, set up two-step sign-in."
+    },
+    "step": {
+      "authenticator": "Authenticator app",
+      "recovery": "Recovery codes",
+      "done": "done"
+    },
+    "frame": {
+      "authenticator": "Authenticator setup"
+    },
+    "finishing": "Finishing setup…",
+    "restart": "Restart this step",
+    "finished": "I've finished this step"
   }
 }

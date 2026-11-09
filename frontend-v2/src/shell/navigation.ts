@@ -347,4 +347,5 @@ export const CONSOLE_NAVIGATION: NavigationItem = {
 export const CONSOLE_SECTIONS: readonly NavigationChild[] = [
   { id: 'tenants', labelKey: 'sections.tenants', href: '/system/tenants' },
   { id: 'coupons', labelKey: 'sections.coupons', href: '/system/coupons' },
+  { id: 'security', labelKey: 'sections.security', href: '/system/security' },
 ];

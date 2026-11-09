@@ -1,0 +1,177 @@
+@layer shell {
+  /* The workspace gate's closed door (WorkspaceGate.module.css), wider for the flow. */
+  .gate {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+    min-block-size: 100dvh;
+    padding: 24px 16px;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    inline-size: min(520px, 100%);
+    max-block-size: calc(100dvh - 48px);
+    overflow: clip;
+    border-radius: 16px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 24px 16px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .lead {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .steps li {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .steps li[data-state='todo'] {
+    color: var(--text-muted);
+  }
+
+  .dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: 50%;
+    background-color: var(--border-subtle);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .steps li[data-state='current'] .dot {
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .steps li[data-state='done'] .dot {
+    background-color: var(--intent-calm-text);
+    color: var(--frame-text);
+  }
+
+  .flow {
+    position: relative;
+    flex: 1 0 auto;
+  }
+
+  .frame {
+    display: block;
+    inline-size: 100%;
+    block-size: min(540px, calc(100dvh - 260px));
+    min-block-size: 360px;
+    border: 0;
+  }
+
+  .mask {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--panel-base);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .quiet,
+  .primary {
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .quiet {
+    background: none;
+    color: var(--text-muted);
+  }
+
+  .primary {
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+    font-weight: 600;
+  }
+
+  .primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .srOnly {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

@@ -18,6 +18,9 @@ import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
 import { isConsolePath } from '@/shell/workspace-gate';
+import { MfaGate } from '@/shell/mfa/MfaGate';
+import { MfaWatch } from '@/shell/mfa/MfaWatch';
+import { authOrigin, readMfaGate } from '@/shell/mfa/read-mfa-gate';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
 /**
@@ -84,6 +87,22 @@ export default async function AuthenticatedLayout({
   const at = consoleOnly ? (await headers()).get(RETURN_TO_HEADER) : null;
   if (at !== null && !isConsolePath(at)) localeRedirect({ href: '/system', locale: resolved });
   /*
+    ★★ TWO-STEP SIGN-IN IS A GATE (Omer, 2026-11-09; the legacy
+    MfaEnrollmentGate). Required and not enrolled: the enrolment steps
+    INSTEAD of the product, before any other platform read, since the
+    platform answers every other route with 403 mfa_enrollment_required
+    until it is done. `/api/auth/me` above and the gate's own read are the
+    routes it leaves open. Unread: the product, as legacy (the 403 still holds).
+  */
+  const mfa = await readMfaGate();
+  if (mfa?.mustEnroll) {
+    return (
+      <NextIntlClientProvider messages={await loadMessages(resolved)}>
+        <MfaGate initial={mfa} authOrigin={authOrigin()} />
+      </NextIntlClientProvider>
+    );
+  }
+  /*
     ★★ SUPPORT MODE, said on every page this layout draws - the gate's
     screens and the console's included (Omer, 2026-11-01).
   */
@@ -135,6 +154,7 @@ export default async function AuthenticatedLayout({
         support={support}
       >
         <WithSupportBanner>
+          <MfaWatch />
           <MobileShell meId={meId}>{children}</MobileShell>
         </WithSupportBanner>
       </AppProviders>

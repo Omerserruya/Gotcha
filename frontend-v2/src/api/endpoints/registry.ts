@@ -1035,6 +1035,13 @@ export const securityEndpoints = {
    * different settings and the design is right to separate them.
    */
   me: () => endpoint('/api/account'),
+  /** Required and not enrolled (authenticator + recovery codes): the MFA gate. */
+  mfaGate: () => endpoint('/api/account/mfa-gate'),
+  /** The caller's own factors: `{ available, totp, passkeys, recoveryCodes }`. */
+  accountSecurity: () => endpoint('/api/account/security'),
+  /** Removes one of the caller's own factors (`totp` | `webauthn` | `static`). */
+  removeMfaDevice: (type: string, id: string) =>
+    endpoint('/api/account/security/device/{type}/{id}', { type, id }),
   sessions: () => endpoint('/api/account/sessions'),
   revokeSession: (id: string) => endpoint('/api/account/sessions/{id}', { id }),
   /** Revokes every OTHER session, keeping the caller's. */

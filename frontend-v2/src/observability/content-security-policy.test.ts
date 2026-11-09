@@ -226,3 +226,31 @@ describe('★★ 13c - Meta’s frames on the channels pages, and nowhere else',
     expect(frames({ metaSignupSurface: true, credentialSurface: true })).toBe("frame-src 'none'");
   });
 });
+
+describe('★★ the MFA gate frames our own identity provider, and nothing else', () => {
+  const AUTH = 'https://auth.example.test';
+  const frames = (options: { metaSignupSurface?: boolean; credentialSurface?: boolean }) =>
+    buildContentSecurityPolicy({
+      nonce: 'N',
+      isDevelopment: false,
+      authFrameOrigin: AUTH,
+      ...options,
+    })
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.startsWith('frame-src'));
+
+  it('a product page: self and the identity provider', () => {
+    expect(frames({})).toBe(`frame-src 'self' ${AUTH}`);
+  });
+
+  it('★ the channels pages too: the gate replaces any product page, Meta’s included', () => {
+    expect(frames({ metaSignupSurface: true })).toBe(
+      `frame-src 'self' ${AUTH} https://www.facebook.com https://web.facebook.com`,
+    );
+  });
+
+  it('★★ a password page: still none', () => {
+    expect(frames({ credentialSurface: true })).toBe("frame-src 'none'");
+  });
+});

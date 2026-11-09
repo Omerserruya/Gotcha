@@ -7,7 +7,9 @@
     "tenants": "Tenants",
     "tenantsLine": "Every organization on the platform: the plan it holds and what it owes.",
     "coupons": "Coupons",
-    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off."
+    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off.",
+    "security": "Security",
+    "securityLine": "Your two-step sign-in: set up, replace, recovery codes."
   },
   "tenants": {
     "title": "Tenants",
@@ -563,5 +565,42 @@
       }
     },
     "refused": "Not allowed in support mode."
+  },
+  "security": {
+    "title": "Security",
+    "description": "Your two-step sign-in: an authenticator app and recovery codes. Platform admins need both.",
+    "unread": "We couldn't read your two-step sign-in settings, so they aren't shown. This doesn't mean it's off.",
+    "unavailable": "The sign-in server didn't answer, so what's set up can't be known right now. This doesn't mean two-step sign-in is off.",
+    "status": {
+      "on": "Two-step sign-in is on: an authenticator app and recovery codes.",
+      "off": "Two-step sign-in isn't complete: it needs both an authenticator app and recovery codes."
+    },
+    "authenticator": {
+      "title": "Authenticator app",
+      "none": "No authenticator app is set up.",
+      "some": "{count, plural, =1 {One app is set up.} other {# apps are set up.}}",
+      "replace": "To replace an app, add the new one, then remove the old one.",
+      "setUp": "Set up an authenticator app",
+      "add": "Add an app",
+      "unnamed": "Authenticator app",
+      "added": "added {date}"
+    },
+    "recovery": {
+      "title": "Recovery codes",
+      "made": "Recovery codes have been made.",
+      "none": "No recovery codes have been made.",
+      "make": "Make codes",
+      "again": "Make new codes"
+    },
+    "remove": {
+      "action": "Remove",
+      "sentence": "Remove this app? Its codes will no longer be accepted.",
+      "lastSentence": "This is the only app. Without an authenticator app, you'll be asked to set one up again before you can continue.",
+      "yes": "Remove",
+      "no": "Cancel",
+      "gone": "This app no longer exists. Refresh the page.",
+      "failed": "That didn't remove. Try again."
+    },
+    "close": "Close"
   }
 }

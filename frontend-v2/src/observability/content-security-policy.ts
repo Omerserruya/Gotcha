@@ -85,6 +85,13 @@ export function buildContentSecurityPolicy(options: {
    * policy allows - and only on this surface, never app-wide.
    */
   readonly metaSignupSurface?: boolean;
+  /**
+   * ★ The identity provider's origin (the OIDC issuer's), framed by the MFA
+   * gate: a person who must enrol sets up the authenticator and recovery
+   * codes in Authentik's own flows, as the legacy gate does. Our own IdP and
+   * nothing else; never on a credential surface, where `frame-src` is `none`.
+   */
+  readonly authFrameOrigin?: string;
 }): string {
   const {
     nonce,
@@ -92,6 +99,7 @@ export function buildContentSecurityPolicy(options: {
     isDevelopment,
     credentialSurface = false,
     metaSignupSurface = false,
+    authFrameOrigin,
   } = options;
 
   // The realtime gateway is a separate origin, and Socket.IO upgrades to a
@@ -99,6 +107,9 @@ export function buildContentSecurityPolicy(options: {
   const realtimeOrigins = realtimeUrl
     ? [realtimeUrl, realtimeUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')]
     : [];
+
+  // The MFA gate replaces any product page, the Meta-signup ones included.
+  const authFrame = authFrameOrigin ? [authFrameOrigin] : [];
 
   const directives: Record<string, readonly string[]> = {
     'default-src': ["'self'"],
@@ -134,8 +145,8 @@ export function buildContentSecurityPolicy(options: {
     'frame-src': credentialSurface
       ? ["'none'"]
       : metaSignupSurface
-        ? ["'self'", 'https://www.facebook.com', 'https://web.facebook.com']
-        : ["'self'"],
+        ? ["'self'", ...authFrame, 'https://www.facebook.com', 'https://web.facebook.com']
+        : ["'self'", ...authFrame],
     ...(isDevelopment ? {} : { 'upgrade-insecure-requests': [] }),
   };
 
