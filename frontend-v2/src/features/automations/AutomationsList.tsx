@@ -45,7 +45,7 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { setLive } from './automation-actions';
 import { DeleteAutomation } from './DeleteAutomation';
 import { PauseSetupRoute } from './PauseSetupRoute';
-import { shownName } from './shown-name';
+import { routeNames, shownName } from './shown-name';
 import { modLabel, shortcutsAllowed, withMod } from './shortcuts';
 import styles from './Automations.module.css';
 
@@ -259,7 +259,7 @@ export function AutomationsList({ automations }: { readonly automations: readonl
         <PauseSetupRoute
           name={shownName(
             pausing.find((a) => a.origin === 'setup')!,
-            t('origin.setupName'),
+            routeNames(t),
           )}
           onClose={() => setPausing(null)}
           onPause={() => {
@@ -271,7 +271,7 @@ export function AutomationsList({ automations }: { readonly automations: readonl
       ) : null}
       {deleting ? (
         <DeleteAutomation
-          targets={deleting.map((a) => ({ id: a.id, name: shownName(a, t('origin.setupName')) }))}
+          targets={deleting.map((a) => ({ id: a.id, name: shownName(a, routeNames(t)) }))}
           onClose={() => setDeleting(null)}
           onDeleted={(gone) => {
             setItems((now) => now.filter((a) => !gone.includes(a.id)));
@@ -372,7 +372,7 @@ function Row({
         ? t(`issues.${issue.code}` as 'issues.no_steps')
         : issue.message || t('cantGoLiveUnknown');
 
-  const name = shownName(automation, t('origin.setupName'));
+  const name = shownName(automation, routeNames(t));
   const lastRun = automation.stats.lastRunAt;
 
   return (

@@ -47,6 +47,7 @@ import {
   duplicateStep,
   appendTarget,
   freeHandles,
+  UNREACHABLE_HANDLE,
   insertAfter,
   insertBetween,
   insertRefusal,
@@ -56,7 +57,7 @@ import {
   type Graph,
 } from './graph';
 import { DeleteAutomation } from './DeleteAutomation';
-import { shownName } from './shown-name';
+import { routeNames, savedName, shownName } from './shown-name';
 import { Inspector, type Choices } from './Inspector';
 import { nodeIcon } from './node-icons';
 import { NodeCard } from './NodeCard';
@@ -111,7 +112,7 @@ export function Builder({
     nodes: initial.nodes ?? [],
     edges: initial.edges ?? [],
   });
-  const [name, setName] = useState(() => shownName(initial, t('origin.setupName')));
+  const [name, setName] = useState(() => shownName(initial, routeNames(t)));
   const [trigger, setTrigger] = useState<Trigger>(initial.trigger);
   /* AU4: a cart reminder's first send step has its "unreachable" exit - read from the trigger, never stored. */
   const cart = trigger.type === 'cart_abandoned';
@@ -154,7 +155,7 @@ export function Builder({
   const [, startRead] = useTransition();
 
   const dirty =
-    name.trim() !== shownName(automation, t('origin.setupName')) ||
+    name.trim() !== shownName(automation, routeNames(t)) ||
     JSON.stringify(trigger) !== JSON.stringify(automation.trigger) ||
     // The steps and lines only: `cart` is read from the trigger, never saved.
     JSON.stringify({ nodes: graph.nodes, edges: graph.edges }) !==
@@ -377,7 +378,7 @@ export function Builder({
     startPublish(async () => {
       setOutcome(null);
       const result = await publishAutomation(automation.id, {
-        name: name.trim(),
+        name: savedName(name, automation, routeNames(t)),
         trigger: { type: trigger.type ?? '', config: trigger.config },
         nodes: graph.nodes,
         edges: graph.edges,
@@ -395,7 +396,7 @@ export function Builder({
       setGraph({ nodes: result.automation.nodes ?? [], edges: result.automation.edges ?? [] });
       // Published: there is nothing before it to undo to.
       setHistory([]);
-      setName(shownName(result.automation, t('origin.setupName')));
+      setName(shownName(result.automation, routeNames(t)));
       setTrigger(result.automation.trigger);
       setOutcome(
         result.live
@@ -853,29 +854,51 @@ export function Builder({
                           />
                           {free.length > 0 ? (
                             <span className={styles.adds}>
-                              {free.map((handle) => (
-                                <button
-                                  key={handle}
-                                  type="button"
-                                  className={styles.add}
-                                  onClick={() => openSheet(node.id, handle)}
-                                  {...dropOn((item) => add(node.id, handle, item))}
-                                  aria-label={
-                                    isLabelled(handle)
-                                      ? t('builder.addOn', {
-                                          step: stepName(node),
-                                          branch: branchName(node, handle, graph, t, locale),
-                                        })
-                                      : t('builder.addAfter', { step: stepName(node) })
-                                  }
-                                  data-testid={`add-${node.id}-${handle}`}
-                                >
-                                  <Plus size={12} aria-hidden="true" />
-                                  {isLabelled(handle) ? (
-                                    <span>{branchName(node, handle, graph, t, locale)}</span>
-                                  ) : null}
-                                </button>
-                              ))}
+                              {free.map((handle) => {
+                                /*
+                                 * ★★ A BRANCH THAT ANSWERS NOBODY (F2, 2026-11-09): a
+                                 *   customer who lands on it gets no answer - the run
+                                 *   halts. Said on the "+" itself, before any save.
+                                 *   Not a cart's "unreachable" exit: nothing was sent.
+                                 *   Only on a route that answers NEW conversations: the
+                                 *   halted run hands back to the previous owner, which
+                                 *   there is nobody. Elsewhere a free branch just ends.
+                                 */
+                                const unanswered =
+                                  trigger.type === 'conversation_started' &&
+                                  isLabelled(handle) &&
+                                  handle !== UNREACHABLE_HANDLE;
+                                const label = isLabelled(handle)
+                                  ? t('builder.addOn', {
+                                      step: stepName(node),
+                                      branch: branchName(node, handle, graph, t, locale),
+                                    })
+                                  : t('builder.addAfter', { step: stepName(node) });
+                                return (
+                                  <button
+                                    key={handle}
+                                    type="button"
+                                    className={styles.add}
+                                    onClick={() => openSheet(node.id, handle)}
+                                    {...dropOn((item) => add(node.id, handle, item))}
+                                    aria-label={
+                                      unanswered ? `${label}. ${t('builder.unanswered')}` : label
+                                    }
+                                    data-unanswered={unanswered ? '' : undefined}
+                                    data-testid={`add-${node.id}-${handle}`}
+                                  >
+                                    <Plus size={12} aria-hidden="true" />
+                                    {isLabelled(handle) ? (
+                                      <span>{branchName(node, handle, graph, t, locale)}</span>
+                                    ) : null}
+                                    {unanswered ? (
+                                      <span className={styles.unanswered}>
+                                        {t('builder.unansweredShort')}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
                             </span>
                           ) : null}
                         </div>
@@ -1013,7 +1036,7 @@ export function Builder({
 
       {deleting ? (
         <DeleteAutomation
-          targets={[{ id: automation.id, name: shownName(automation, t('origin.setupName')) }]}
+          targets={[{ id: automation.id, name: shownName(automation, routeNames(t)) }]}
           onClose={() => setDeleting(false)}
           onDeleted={() => router.push('/studio/automations?deleted=1')}
         />

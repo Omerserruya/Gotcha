@@ -98,7 +98,8 @@
     "via_not_connected": "הערוץ של אחת ההודעות לא מחובר",
     "via_mismatch": "ההודעות של אותה ריצה יוצאות בערוצים שונים",
     "unreachable_same_channel": "„אם אי אפשר להשיג אותו” מנסה שוב את אותו ערוץ",
-    "unreachable_only_on_first_send": "„אם אי אפשר להשיג אותו” קיים רק בהודעה הראשונה"
+    "unreachable_only_on_first_send": "„אם אי אפשר להשיג אותו” קיים רק בהודעה הראשונה",
+    "branch_unconnected": "לצעד יש ענף בלי צעד הבא: לקוח שמגיע אליו לא יקבל מענה"
   },
   "nodes": {
     "trigger": {
@@ -267,6 +268,8 @@
     "sat": "ש׳"
   },
   "builder": {
+    "unanswered": "לקוח שמגיע לכאן לא יקבל מענה",
+    "unansweredShort": "אין מענה",
     "addBetween": "הוספת צעד בין „{from}” ל‑„{to}”",
     "insertRefused": {
       "reply_pair": "אי אפשר להוסיף צעד בין הודעה עם כפתורים לבין ההמתנה שקוראת את התשובה.",
@@ -632,6 +635,8 @@
   },
   "origin": {
     "setup": "נוצרה בהגדרה הראשונית",
+    "webchatName": "מי עונה לצ׳אט באתר",
+    "shopifyChatName": "מי עונה לצ׳אט בחנות",
     "setupName": "מי עונה לשיחות חדשות"
   },
   "pauseSetup": {

@@ -98,7 +98,8 @@
     "via_not_connected": "a message's channel isn't connected",
     "via_mismatch": "one run's messages go on different channels",
     "unreachable_same_channel": "“If they can't be reached” tries the same channel again",
-    "unreachable_only_on_first_send": "“If they can't be reached” is only on the first message"
+    "unreachable_only_on_first_send": "“If they can't be reached” is only on the first message",
+    "branch_unconnected": "a step has a branch with no next step: a customer who takes it gets no answer"
   },
   "nodes": {
     "trigger": {
@@ -267,6 +268,8 @@
     "sat": "Sat"
   },
   "builder": {
+    "unanswered": "A customer who lands here gets no answer",
+    "unansweredShort": "No answer",
     "addBetween": "Add a step between {from} and {to}",
     "insertRefused": {
       "reply_pair": "Nothing can go between a message with buttons and the wait that reads its reply.",
@@ -632,6 +635,8 @@
   },
   "origin": {
     "setup": "Created at setup",
+    "webchatName": "Who answers the website chat",
+    "shopifyChatName": "Who answers the Shopify store chat",
     "setupName": "Who answers new conversations"
   },
   "pauseSetup": {

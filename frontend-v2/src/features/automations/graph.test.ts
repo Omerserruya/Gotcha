@@ -236,11 +236,78 @@ describe('★★ AU9 - a step on a line, between two steps', () => {
     expect(insertBetween(graph, graph.edges[1]!, 'add_tag', () => 'x', plain)).toBeNull();
   });
 
-  it('a final step, or one with branches, never on a line', () => {
+  it('a final step never on a line; one with branches now may (F2)', () => {
     const graph = g([node('t', 'automation_trigger'), node('a', 'add_tag')], [edge('t', 'a')]);
     expect(insertRefusal(graph, graph.edges[0]!, 'close_conversation', plain)).toBe('terminal');
-    expect(insertRefusal(graph, graph.edges[0]!, 'opening_hours', plain)).toBe('branching');
+    expect(insertRefusal(graph, graph.edges[0]!, 'opening_hours', plain)).toBeNull();
     expect(insertRefusal(graph, graph.edges[0]!, 'send_message_text', plain)).toBeNull();
+  });
+
+  describe('★★ F2 (Omer, 2026-11-09): a flow before the AI - every branch keeps answering', () => {
+    // The setup route: trigger → Hand to AI employee.
+    const route = () =>
+      g(
+        [node('t', 'automation_trigger'), node('ai', 'hand_to_ai', { aiAgentId: 'sheri' })],
+        [edge('t', 'ai')],
+      );
+    const into = (made: { graph: Graph; id: string }, target: string) =>
+      made.graph.edges
+        .filter((e) => e.source === made.id && e.target === target)
+        .map((e) => e.sourceHandle);
+
+    it.each([
+      ['opening_hours', ['open', 'closed']],
+      ['condition_group', ['true', 'false']],
+      ['segment', ['new', 'returning', 'vip']],
+    ])('%s before the AI: every branch (%o) leads to it, none free', (type, handles) => {
+      const r = route();
+      let n = 0;
+      const made = insertBetween(r, r.edges[0]!, type, () => `n${++n}`, plain)!;
+      expect(made.graph.edges).toContainEqual(
+        expect.objectContaining({ source: 't', target: made.id }),
+      );
+      expect(into(made, 'ai')).toEqual(handles);
+      const step = made.graph.nodes.find((x) => x.id === made.id)!;
+      expect(freeHandles(step, made.graph)).toEqual([]);
+    });
+
+    it('★ the menu: buttons, then the wait - each button, a typed reply and the timeout reach the AI', () => {
+      const r = route();
+      let n = 0;
+      const id = () => `n${++n}`;
+      const withButtons = insertBetween(r, r.edges[0]!, 'send_buttons', id, plain)!;
+      const buttons = withButtons.graph.nodes.find((x) => x.id === withButtons.id)!;
+      const b1 = (buttons.data.buttons as { id: string }[])[0]!.id;
+      // Buttons are a plain step: one line on, as before.
+      expect(into(withButtons, 'ai')).toEqual([null]);
+      const line = withButtons.graph.edges.find((e) => e.source === withButtons.id)!;
+      expect(insertRefusal(withButtons.graph, line, 'wait_for_reply', plain)).toBeNull();
+      const made = insertBetween(withButtons.graph, line, 'wait_for_reply', id, plain)!;
+      expect(into(made, 'ai')).toEqual([`btn:${b1}`, 'reply', 'timeout']);
+      const wait = made.graph.nodes.find((x) => x.id === made.id)!;
+      expect(freeHandles(wait, made.graph)).toEqual([]);
+    });
+
+    it('a plain step keeps its one line; a cart’s "unreachable" exit stays free', () => {
+      const cart: Graph = {
+        cart: true,
+        ...g([node('t', 'automation_trigger'), node('a', 'add_tag')], [edge('t', 'a')]),
+      };
+      const made = insertBetween(cart, cart.edges[0]!, 'send_message_text', () => 'm', plain)!;
+      expect(into(made, 'a')).toEqual([null]);
+      const send = made.graph.nodes.find((x) => x.id === 'm')!;
+      expect(freeHandles(send, made.graph)).toEqual(['unreachable']);
+    });
+
+    it('★ the canvas draws one step reached by several lines once, under its first parent', () => {
+      const r = route();
+      let n = 0;
+      const made = insertBetween(r, r.edges[0]!, 'opening_hours', () => `n${++n}`, plain)!;
+      const { at } = layout(made.graph);
+      expect([...at.keys()].sort()).toEqual(['ai', made.id, 't'].sort());
+      expect(at.get('ai')!.y).toBeGreaterThan(at.get(made.id)!.y);
+      expect(at.get(made.id)!.y).toBeGreaterThan(at.get('t')!.y);
+    });
   });
 
   it('★★ a comment automation, before its first wait: only comment-safe; after it, anything', () => {

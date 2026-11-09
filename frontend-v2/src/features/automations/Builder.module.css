@@ -546,6 +546,19 @@
     cursor: pointer;
   }
 
+  /*
+   * F2: a branch nothing is attached to - a customer who lands there gets no
+   * answer (the run halts "no_branch"). Said on the "+", not only on save.
+   */
+  .add[data-unanswered] {
+    border-color: var(--intent-urgent-text);
+    color: var(--intent-urgent-text);
+  }
+
+  .unanswered {
+    font-weight: 600;
+  }
+
   /* AU9: the "+" on a line, between two steps - quiet until reached. */
   .between {
     position: absolute;

@@ -198,6 +198,8 @@ export const ISSUE_CODES = [
   'via_mismatch',
   'unreachable_same_channel',
   'unreachable_only_on_first_send',
+  // B3 (Backend): a warning, never a refusal - a branch no line leaves.
+  'branch_unconnected',
 ] as const;
 
 export const issueSchema = z.looseObject({

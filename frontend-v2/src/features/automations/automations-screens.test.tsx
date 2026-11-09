@@ -1350,6 +1350,90 @@ describe('★★ F2: a card names who its step hands to (Omer, 2026-11-09)', () 
     expect(steps.map((p) => p.target)).toEqual([undefined, undefined]);
   });
 
+  it.each([
+    ['conversation_started', true],
+    ['message_received', false],
+  ])('★★ a free branch on %s: marked "No answer" = %s', (type, marked) => {
+    wrap(
+      <Builder
+        automation={automation({
+          id: 'r1',
+          name: 'Routing',
+          status: 'draft',
+          trigger: { type, config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'oh', type: 'opening_hours', data: {} },
+            { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [
+            { id: 'e1', source: 'trigger', target: 'oh' },
+            { id: 'e2', source: 'oh', target: 'ai', sourceHandle: 'open' },
+          ],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    const free = screen.getByTestId('add-oh-closed');
+    if (marked) {
+      expect(free).toHaveAttribute('data-unanswered');
+      expect(free).toHaveTextContent('No answer');
+      expect(free).toHaveAccessibleName(/A customer who lands here gets no answer/);
+    } else {
+      expect(free).not.toHaveAttribute('data-unanswered');
+      expect(free).not.toHaveTextContent('No answer');
+    }
+  });
+
+  it('★★ in Hebrew: the website chat’s route reads in Hebrew, and publishing keeps its stored name', async () => {
+    const web = automation({
+      id: 'w1',
+      name: 'Who answers the website chat',
+      status: 'draft',
+      trigger: { type: 'conversation_started', config: { channels: ['WEBCHAT'] } },
+      nodes: [
+        { id: 'trigger', type: 'automation_trigger', data: {} },
+        { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+      ],
+      edges: [{ id: 'e', source: 'trigger', target: 'ai' }],
+    });
+    actions.publishAutomation.mockResolvedValue({
+      ok: true,
+      live: true,
+      warnings: [],
+      blocked: [],
+      automation: web,
+    });
+    render(
+      <NextIntlClientProvider
+        locale="he"
+        timeZone="Asia/Jerusalem"
+        now={NOW}
+        messages={{ automations: heAutomationsMessages, common: heCommonMessages }}
+      >
+        <Builder
+          automation={web}
+          catalog={catalog(false)}
+          stats={{}}
+          webhook={null}
+          choices={choices}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByDisplayValue('מי עונה לצ׳אט באתר')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('builder-publish'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('builder-turn-on-yes'));
+    });
+    expect(actions.publishAutomation).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({ name: 'Who answers the website chat' }),
+    );
+  });
+
   it('★ the setup route on the canvas: its card says Sheri', () => {
     wrap(
       <Builder
