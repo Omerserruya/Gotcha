@@ -202,7 +202,7 @@ export const LIMITS = { buttons: 3, buttonTitle: 20, listOptions: 10, listTitle:
 const NODES: NodeDef[] = [
   // Logic
   { type: "condition_group", group: "logic", label: "Condition", description: "If, else if, else", channels: [], outputs: ["true", "false"], synonyms: ["if", "condition", "rule", "check"] },
-  { type: "opening_hours", group: "logic", label: "Opening hours", description: "Open, closed, holiday", channels: [], outputs: ["open", "closed"], synonyms: ["hours", "open", "closed", "after hours", "holiday"] },
+  { type: "opening_hours", group: "logic", label: "Opening hours", description: "Open or closed", channels: [], outputs: ["open", "closed"], synonyms: ["hours", "open", "closed", "after hours", "holiday"] },
   { type: "wait", group: "logic", label: "Wait", description: "Minutes, hours, until a time", channels: [], outputs: ["next"], synonyms: ["wait", "delay", "pause", "later"] },
   { type: "wait_for_reply", group: "logic", label: "Wait for reply", description: "With a timeout branch", channels: [], outputs: "dynamic", synonyms: ["wait", "reply", "answer", "timeout"] },
   { type: "split_channel", group: "logic", label: "Split by channel", description: "One path per channel", channels: [], outputs: "dynamic", synonyms: ["channel", "split", "whatsapp", "instagram"] },
