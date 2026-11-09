@@ -151,3 +151,22 @@ describe("the step rule", () => {
     expect(botIdleStep(m(9), closeOnly)).toBeNull();
   });
 });
+
+describe("switching it on never sweeps up old silences (dev 2026-11-09: 495 two-week-old conversations reminded and closed)", () => {
+  it("a bot message 2 weeks old, or a reminder 3 hours old: nothing; just due: acted on", async () => {
+    H.convs = [conv("old"), conv("old_reminded"), conv("due")];
+    msg("old", "OUTBOUND", 14 * 24 * 60);
+    msg("old_reminded", "OUTBOUND", 180, { metadata: { source: "idle_reminder" } });
+    msg("due", "OUTBOUND", 11);
+    expect(await botIdleForTenant("T")).toEqual({ reminders: 1, closes: 0 });
+    expect(H.queued.map((q) => q.conversationId)).toEqual(["due"]);
+  });
+  it("the step rule: due from the delay until an hour past it", () => {
+    const cfg = parseBotIdleConfig(JSON.stringify({ reminderEnabled: true, reminderDelayMinutes: 10, reminderMessage: A, autoCloseEnabled: true, autoCloseDelayMinutes: 10, autoCloseMessage: B }))!;
+    const at = (minutes: number, source = "ai_bot") => ({ direction: "OUTBOUND", createdAt: ago(minutes * MIN), metadata: { source }, senderName: "AI Bot" });
+    expect(botIdleStep(at(69), cfg)).toBe("remind");
+    expect(botIdleStep(at(71), cfg)).toBeNull();
+    expect(botIdleStep(at(69, "idle_reminder"), cfg)).toBe("close");
+    expect(botIdleStep(at(71, "idle_reminder"), cfg)).toBeNull();
+  });
+});

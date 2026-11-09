@@ -512,6 +512,8 @@ export async function idleAutomationForTenant(tenantId: string): Promise<{ remin
 export interface BotIdleConfig extends IdleAutomationConfig { channels: string[] }
 
 export const BOT_IDLE_KEY = "botIdleAutomation";
+/** How late a step may still be taken (the sweep runs every 5 minutes). */
+export const STEP_LATE_MINUTES = 60;
 export const BOT_IDLE_SOURCE = { reminder: "idle_reminder", close: "idle_close" } as const;
 /** The close's system event reason: the visitor's next message reopens such a conversation (embedded-chat). */
 export const BOT_IDLE_CLOSE_REASON = "bot_idle";
@@ -558,11 +560,15 @@ export function botIdleStep(
   if (!last || last.direction !== "OUTBOUND") return null;
   const source = String(((last.metadata ?? {}) as any).source ?? "");
   const minutes = (now - new Date(last.createdAt).getTime()) / 60000;
+  // Due, and not long past due: a step is taken only within STEP_LATE_MINUTES
+  // of falling due. Switching the rule on never sweeps up every old silent
+  // conversation (dev 2026-11-09: 495 two-week-old ones reminded and closed).
+  const due = (delay: number) => minutes >= delay && minutes < delay + STEP_LATE_MINUTES;
   if (source === BOT_IDLE_SOURCE.close) return null;
-  if (source === BOT_IDLE_SOURCE.reminder) return cfg.autoCloseEnabled && minutes >= cfg.autoCloseDelayMinutes ? "close" : null;
+  if (source === BOT_IDLE_SOURCE.reminder) return cfg.autoCloseEnabled && due(cfg.autoCloseDelayMinutes) ? "close" : null;
   if (!isBotOutbound(last)) return null;
-  if (cfg.reminderEnabled && cfg.reminderMessage) return minutes >= cfg.reminderDelayMinutes ? "remind" : null;
-  return cfg.autoCloseEnabled && minutes >= cfg.autoCloseDelayMinutes ? "close" : null;
+  if (cfg.reminderEnabled && cfg.reminderMessage) return due(cfg.reminderDelayMinutes) ? "remind" : null;
+  return cfg.autoCloseEnabled && due(cfg.autoCloseDelayMinutes) ? "close" : null;
 }
 
 /** Only the AI employee's: nobody assigned, never handed over, no flow, not a person's or an approval's. */
@@ -587,7 +593,10 @@ export async function botIdleForTenant(tenantId: string): Promise<{ reminders: n
   const cfg = parseBotIdleConfig(await readDurableSetting(tenantId, BOT_IDLE_KEY));
   if (!cfg) return { reminders, closes };
   const conversations = await prisma.conversation.findMany({
-    where: { tenantId, ...botOwned(cfg.channels), lastMessageAt: { not: null } } as any,
+    where: {
+      tenantId, ...botOwned(cfg.channels),
+      lastMessageAt: { gte: new Date(Date.now() - (Math.max(cfg.reminderDelayMinutes, cfg.autoCloseDelayMinutes) + STEP_LATE_MINUTES) * 60_000 * 2) },
+    } as any,
     select: { id: true, channel: true, channelAccountId: true, customerExternalId: true, channelAccount: { select: { id: true, channel: true } } },
     take: 500,
   });
