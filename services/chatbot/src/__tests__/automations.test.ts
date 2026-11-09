@@ -774,3 +774,30 @@ describe("the list row names who a step hands to (Smoovee 2026-11-09: \"nothing 
     ]);
   });
 });
+
+describe("a menu before the AI employee (2026-11-09): accepted; an open branch is warned", () => {
+  const menu = (wiredAll: boolean) => ({
+    nodes: [
+      { id: "t", type: "automation_trigger", data: {} },
+      { id: "b", type: "send_buttons", data: { text: "שלום! במה אפשר לעזור?", buttons: [{ id: "b1", title: "מוצרים" }, { id: "b2", title: "הזמנה" }] } },
+      { id: "w", type: "wait_for_reply", data: { timeoutMs: 600000 } },
+      { id: "ai", type: "hand_to_ai", data: { aiAgentId: "sheri" } },
+    ],
+    edges: [
+      { id: "e1", source: "t", target: "b" }, { id: "e2", source: "b", target: "w" },
+      { id: "e3", source: "w", target: "ai", sourceHandle: "btn:b1" },
+      ...(wiredAll ? ["btn:b2", "reply", "timeout"].map((h, i) => ({ id: `x${i}`, source: "w", target: "ai", sourceHandle: h })) : []),
+    ],
+  });
+  const v = (g: any) => validateAutomation({ type: "conversation_started", config: { channels: [] } } as any, g.nodes, g.edges, { voiceConnected: true });
+  it("btn:b1 → hand_to_ai: no error; b2, reply, timeout open: one branch_unconnected warning naming them", () => {
+    const r = v(menu(false));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.filter((w: any) => w.code === "branch_unconnected")).toEqual([
+      expect.objectContaining({ severity: "warning", nodeId: "w", message: expect.stringContaining("btn:b2, reply, timeout") }),
+    ]);
+  });
+  it("every branch wired: no warning", () => {
+    expect(v(menu(true)).warnings.filter((w: any) => w.code === "branch_unconnected")).toEqual([]);
+  });
+});

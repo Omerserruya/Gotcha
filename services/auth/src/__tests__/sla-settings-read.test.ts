@@ -117,3 +117,27 @@ describe("idle automation defaults follow the workspace language (2026-10-13)", 
     expect((await request(app).get("/api/agents/settings/idle-automation")).body.reminderMessage).toMatch(/^Hi!/);
   });
 });
+
+describe("bot idle settings (B3): only an Owner writes, validated, under the caller's tenant", () => {
+  const body = { reminderEnabled: true, reminderDelayMinutes: 10, reminderMessage: "היי, עדיין כאן?", autoCloseEnabled: true, autoCloseDelayMinutes: 10, autoCloseMessage: "סוגרת את השיחה בינתיים.", channels: ["WEBCHAT"] };
+  it("an Owner sets it; it is stored as botIdleAutomation and read back", async () => {
+    H.user = OWNER;
+    const r = await request(app).put("/api/agents/settings/bot-idle-automation").send(body);
+    expect(r.status).toBe(200);
+    expect(H.writes).toEqual([["t1", "botIdleAutomation", JSON.stringify(body)]]);
+    H.settings.set("t1:botIdleAutomation", H.writes[0][2]);
+    expect((await request(app).get("/api/agents/settings/bot-idle-automation")).body).toEqual(body);
+  });
+  it("channels default to WEBCHAT; an agent cannot write; an enabled step without its message, an unknown key or channel: refused", async () => {
+    H.user = OWNER;
+    const { channels: _c, ...noChannels } = body;
+    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send(noChannels)).body.channels).toEqual(["WEBCHAT"]);
+    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, reminderMessage: " " })).status).toBe(422);
+    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, extra: 1 })).status).toBe(400);
+    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, channels: ["SMS"] })).status).toBe(400);
+    H.user = AGENT;
+    H.writes = [];
+    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send(body)).status).toBe(403);
+    expect(H.writes).toHaveLength(0);
+  });
+});

@@ -207,6 +207,13 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
     } catch (err) {
       console.error(`[idle-check] Error processing tenant ${tenant.id}:`, err);
     }
+    try {
+      const b = await botIdleForTenant(tenant.id);
+      reminders += b.reminders;
+      closes += b.closes;
+    } catch (err) {
+      console.error(`[idle-check] bot idle failed for tenant ${tenant.id}:`, err);
+    }
   }
 
   console.log(`[idle-check] Complete: ${reminders} reminders sent, ${closes} conversations closed, ${skipped} messages skipped outside the reply window`);
@@ -488,6 +495,149 @@ export async function idleAutomationForTenant(tenantId: string): Promise<{ remin
     }
   }
   return { reminders, closes, skippedOutsideWindow };
+}
+
+// ─── Bot idle: the AI employee's own conversations (B3, Smoovee 2026-11-09) ───
+//
+// "idleAutomation" above acts only on conversations a PERSON holds
+// (assignedAgentId set) and counts any outbound message. A conversation only
+// the AI employee answers was never reminded or closed. This is that mode,
+// under its own key so the human one is unchanged:
+//   TenantSetting "botIdleAutomation" = the same shape + channels (default
+//   ["WEBCHAT"]). The silence counts from the BOT's last message only; the
+//   close counts from the reminder; a conversation a person has, or was
+//   handed to one, or a flow holds, is never touched (re-checked just before
+//   sending).
+
+export interface BotIdleConfig extends IdleAutomationConfig { channels: string[] }
+
+export const BOT_IDLE_KEY = "botIdleAutomation";
+export const BOT_IDLE_SOURCE = { reminder: "idle_reminder", close: "idle_close" } as const;
+/** The close's system event reason: the visitor's next message reopens such a conversation (embedded-chat). */
+export const BOT_IDLE_CLOSE_REASON = "bot_idle";
+
+const AI_SOURCES = new Set(["ai_bot", "approval_continuation"]);
+/** An outbound message the AI sent (analytics' isAiOutbound rule). */
+export function isBotOutbound(m: { direction?: string; metadata?: unknown; senderName?: string | null }): boolean {
+  if (m.direction !== "OUTBOUND") return false;
+  const meta = (m.metadata && typeof m.metadata === "object" ? m.metadata : {}) as Record<string, unknown>;
+  return AI_SOURCES.has(String(meta.source ?? "")) || meta.aiGenerated === true || m.senderName === "AI Bot";
+}
+
+export function parseBotIdleConfig(raw: string | null): BotIdleConfig | null {
+  if (!raw) return null;
+  try {
+    const c = JSON.parse(raw);
+    const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+    const cfg: BotIdleConfig = {
+      reminderEnabled: c?.reminderEnabled === true,
+      reminderDelayMinutes: num(c?.reminderDelayMinutes, 10),
+      reminderMessage: typeof c?.reminderMessage === "string" ? c.reminderMessage : "",
+      autoCloseEnabled: c?.autoCloseEnabled === true,
+      autoCloseDelayMinutes: num(c?.autoCloseDelayMinutes, 10),
+      autoCloseMessage: typeof c?.autoCloseMessage === "string" ? c.autoCloseMessage : "",
+      channels: Array.isArray(c?.channels) && c.channels.length ? c.channels.map(String) : ["WEBCHAT"],
+    };
+    return cfg.reminderEnabled || cfg.autoCloseEnabled ? cfg : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the newest non-system message calls for: "remind" (the bot spoke last,
+ * long enough ago), "close" (our reminder was last, long enough ago; or the
+ * bot, when there is no reminder step), else null (the customer, a person, or
+ * not yet).
+ */
+export function botIdleStep(
+  last: { direction: string; createdAt: Date; metadata?: unknown; senderName?: string | null } | null | undefined,
+  cfg: BotIdleConfig,
+  now = Date.now(),
+): "remind" | "close" | null {
+  if (!last || last.direction !== "OUTBOUND") return null;
+  const source = String(((last.metadata ?? {}) as any).source ?? "");
+  const minutes = (now - new Date(last.createdAt).getTime()) / 60000;
+  if (source === BOT_IDLE_SOURCE.close) return null;
+  if (source === BOT_IDLE_SOURCE.reminder) return cfg.autoCloseEnabled && minutes >= cfg.autoCloseDelayMinutes ? "close" : null;
+  if (!isBotOutbound(last)) return null;
+  if (cfg.reminderEnabled && cfg.reminderMessage) return minutes >= cfg.reminderDelayMinutes ? "remind" : null;
+  return cfg.autoCloseEnabled && minutes >= cfg.autoCloseDelayMinutes ? "close" : null;
+}
+
+/** Only the AI employee's: nobody assigned, never handed over, no flow, not a person's or an approval's. */
+const botOwned = (channels: string[]) => ({
+  status: { in: ["OPEN", "WAITING"] as any[] },
+  channel: { in: channels as any[] },
+  assignedAgentId: null,
+  isHandedOver: false,
+  automationRunId: null,
+  OR: [{ handledBy: null }, { handledBy: { notIn: ["human", "awaiting_approval", "flow"] } }],
+});
+
+const lastNonSystem = async (conversationId: string) =>
+  prisma.message.findFirst({
+    where: { conversationId, messageType: { not: "system" } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, direction: true, createdAt: true, metadata: true, senderName: true },
+  });
+
+export async function botIdleForTenant(tenantId: string): Promise<{ reminders: number; closes: number }> {
+  let reminders = 0, closes = 0;
+  const cfg = parseBotIdleConfig(await readDurableSetting(tenantId, BOT_IDLE_KEY));
+  if (!cfg) return { reminders, closes };
+  const conversations = await prisma.conversation.findMany({
+    where: { tenantId, ...botOwned(cfg.channels), lastMessageAt: { not: null } } as any,
+    select: { id: true, channel: true, channelAccountId: true, customerExternalId: true, channelAccount: { select: { id: true, channel: true } } },
+    take: 500,
+  });
+  for (const conv of conversations) {
+    try {
+      const last = await lastNonSystem(conv.id);
+      const step = botIdleStep(last as any, cfg);
+      if (!step || !last) continue;
+      // Just before acting: still the bot's, and nobody wrote since (a person
+      // took it, the customer replied, or a flow claimed it in the meantime).
+      const still = await prisma.conversation.findFirst({ where: { id: conv.id, tenantId, ...botOwned(cfg.channels) } as any, select: { id: true } });
+      const newest = await lastNonSystem(conv.id);
+      if (!still || newest?.id !== last.id) continue;
+      const text = step === "remind" ? cfg.reminderMessage : cfg.autoCloseMessage;
+      const allowed = !!(text && conv.channelAccount) && (await messageAllowed(conv as any));
+      if (allowed) {
+        const message = await prisma.message.create({
+          data: {
+            tenantId, conversationId: conv.id, direction: "OUTBOUND", body: text, messageType: "text",
+            senderName: "AI Bot", status: "PENDING",
+            metadata: { source: step === "remind" ? BOT_IDLE_SOURCE.reminder : BOT_IDLE_SOURCE.close },
+          },
+        });
+        await outgoingMessageQueue.add("send", {
+          tenantId, conversationId: conv.id, channel: conv.channelAccount!.channel, channelAccountId: conv.channelAccount!.id,
+          recipientExternalId: conv.customerExternalId, body: text, messageType: "text", senderName: "AI Bot", messageId: message.id,
+        }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+      }
+      if (step === "remind") {
+        await prisma.conversation.update({ where: { id: conv.id }, data: { reminderSentAt: new Date(), lastMessageAt: new Date() } });
+        publishEvent({ event: "conversation:updated", tenantId, data: { id: conv.id } }).catch(() => {});
+        if (allowed) reminders++;
+        console.log(`[idle-check][bot] reminder ${allowed ? "sent" : "skipped (window)"} conv=${conv.id}`);
+        continue;
+      }
+      await prisma.conversation.update({ where: { id: conv.id }, data: { status: "CLOSED", closedAt: new Date() } });
+      await prisma.message.create({
+        data: {
+          tenantId, conversationId: conv.id, direction: "INBOUND", body: "", messageType: "system", senderName: "System",
+          metadata: { systemEvent: "auto_closed", reason: BOT_IDLE_CLOSE_REASON },
+        },
+      });
+      publishEvent({ event: "conversation:closed", tenantId, data: { id: conv.id, status: "CLOSED" } }).catch(() => {});
+      closes++;
+      console.log(`[idle-check][bot] closed conv=${conv.id}`);
+    } catch (err) {
+      console.error(`[idle-check][bot] failed for ${conv.id}:`, (err as any)?.message ?? err);
+    }
+  }
+  return { reminders, closes };
 }
 
 // ─── Setup Repeatable Job + Start Worker ────────────────────

@@ -799,6 +799,47 @@ router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutom
   }
 });
 
+// ─── Bot idle (the AI employee's own conversations, B3 2026-11-09) ──
+// "idleAutomation" acts only on conversations a person holds. This one acts
+// only on conversations the AI employee alone answers: the silence counts
+// from the bot's last message, the close from the reminder, and a conversation
+// handed to a person is never touched (incoming-worker idle-conversation.worker).
+
+const botIdleSchema = z.object({
+  reminderEnabled: z.boolean(),
+  reminderDelayMinutes: z.number().int().min(1).max(10080),
+  reminderMessage: z.string().max(1000),
+  autoCloseEnabled: z.boolean(),
+  autoCloseDelayMinutes: z.number().int().min(1).max(10080),
+  autoCloseMessage: z.string().max(1000),
+  channels: z.array(z.enum(["WEBCHAT", "SHOPIFY_LIVE_CHAT", "WHATSAPP", "INSTAGRAM", "MESSENGER"])).min(1).default(["WEBCHAT"]),
+}).strict();
+
+router.get("/settings/bot-idle-automation", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const raw = await readDurableSetting(req.tenantId!, "botIdleAutomation");
+    res.json(raw ? JSON.parse(raw) : { reminderEnabled: false, reminderDelayMinutes: 10, reminderMessage: "", autoCloseEnabled: false, autoCloseDelayMinutes: 10, autoCloseMessage: "", channels: ["WEBCHAT"] });
+  } catch (err) {
+    console.error("Get bot idle automation error:", err);
+    res.status(500).json({ error: "Failed to get bot idle automation settings" });
+  }
+});
+
+router.put("/settings/bot-idle-automation", requireRole("ADMIN"), validate(botIdleSchema), async (req: Request, res: Response) => {
+  try {
+    const value = botIdleSchema.parse(req.body);
+    if ((value.reminderEnabled && !value.reminderMessage.trim()) || (value.autoCloseEnabled && !value.autoCloseMessage.trim())) {
+      res.status(422).json({ error: "An enabled step needs its message" });
+      return;
+    }
+    await writeDurableSetting(req.tenantId!, "botIdleAutomation", JSON.stringify(value), req.user?.userId);
+    res.json(value);
+  } catch (err) {
+    console.error("Update bot idle automation error:", err);
+    res.status(500).json({ error: "Failed to update bot idle automation settings" });
+  }
+});
+
 // ─── Bot Config (for tenant admins) ─────────────────────────
 
 router.get("/settings/bot-config", requireRole("ADMIN"), async (req: Request, res: Response) => {

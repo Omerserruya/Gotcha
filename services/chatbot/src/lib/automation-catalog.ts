@@ -662,6 +662,18 @@ export function validateAutomation(
     }
   }
 
+  // A branch with nothing after it ends the run there, and on a conversation
+  // nobody owns yet nobody answers the customer (a menu put before the AI
+  // employee: "reply" or "timeout" left open). Allowed, but said.
+  for (const n of nodes ?? []) {
+    if (!AUTOMATION_BRANCH_TYPES.has(n.type)) continue;
+    const outs = outputsOf(n, nodes, edges);
+    const open = outs.filter((o) => !(edges ?? []).some((e) => e.source === n.id && e.sourceHandle === o));
+    if (outs.length > 1 && open.length) {
+      warnings.push({ severity: "warning", code: "branch_unconnected", nodeId: n.id, message: `"${labelOfNode(n.type)}" has a branch with no next step (${open.join(", ")}): a customer who takes it gets no answer.` });
+    }
+  }
+
   // wait_for_reply must follow the message it waits on
   for (const n of nodes ?? []) {
     if (n.type !== "wait_for_reply") continue;

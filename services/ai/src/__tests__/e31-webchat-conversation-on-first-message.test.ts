@@ -11,7 +11,7 @@ import request from "supertest";
 
 process.env.CHANNEL_ENCRYPTION_KEY = "test-channel-key-0123456789abcdef";
 
-const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], created: [] as any[] }));
+const H = vi.hoisted(() => ({ conversations: [] as any[], queued: [] as any[], created: [] as any[], events: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -35,12 +35,20 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
           c.tenantId === a.where.tenantId && c.channel === a.where.channel && c.customerExternalId === a.where.customerExternalId
           && (!a.where.status || a.where.status.in.includes(c.status))
           && (a.where.channelAccountId === undefined || c.channelAccountId === a.where.channelAccountId)) ?? null,
+        updateMany: async (a: any) => {
+          const r = H.conversations.filter((c) => c.id === a.where.id && c.tenantId === a.where.tenantId && c.status === a.where.status);
+          r.forEach((c) => Object.assign(c, a.data));
+          return { count: r.length };
+        },
         create: async (a: any) => {
           if (a.data.id && H.conversations.some((c) => c.id === a.data.id)) { const e: any = new Error("unique"); e.code = "P2002"; throw e; }
           const c = { id: a.data.id ?? `conv_${H.created.length + 1}`, ...a.data }; H.created.push(c); H.conversations.push(c); return c;
         },
       },
-      message: { findMany: async () => [] },
+      message: {
+        findMany: async () => [],
+        findFirst: async (a: any) => H.events.filter((m) => m.conversationId === a.where.conversationId).at(-1) ?? null,
+      },
       user: { findMany: async () => [] },
       $executeRaw: async () => 1,
     },
@@ -55,7 +63,7 @@ const send = (sessionId: string, sessionToken: string, origin = "https://www.smo
   request(app()).post("/api/embedded-chat/message").set("Origin", origin).send({ sessionId, sessionToken, body: "שלום" });
 
 beforeEach(() => {
-  H.queued = []; H.created = [];
+  H.queued = []; H.created = []; H.events = [];
   H.conversations = [
     { id: "conv_closed", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_closed_abc", customerName: "Visitor", status: "CLOSED" },
     { id: "conv_open", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_open_abc", customerName: "Visitor", status: "OPEN" },
@@ -113,5 +121,24 @@ describe("the first message creates it, under the draft's id", () => {
     expect((await send("cdeadbeefdeadbeefdeadbeef", "sess_" + "0".repeat(32) + "_ca_web")).status).toBe(404);
     expect(H.created).toHaveLength(0);
     expect(H.queued).toHaveLength(0);
+  });
+});
+
+
+describe("closed for silence by the bot-idle rule: the visitor's next message reopens it (B3)", () => {
+  it("auto_closed / bot_idle: OPEN again, same id, the message queued into it; closed any other way: left closed", async () => {
+    H.conversations.push(
+      { id: "conv_idle", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_idle_abc", status: "CLOSED", closedAt: new Date(), reminderSentAt: new Date() },
+      { id: "conv_agent", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_agent_abc", status: "CLOSED", closedAt: new Date() },
+    );
+    H.events.push(
+      { conversationId: "conv_idle", metadata: { systemEvent: "auto_closed", reason: "bot_idle" } },
+      { conversationId: "conv_agent", metadata: { systemEvent: "closed" } },
+    );
+    expect((await send("conv_idle", "sess_idle_abc")).status).toBe(200);
+    expect(H.conversations.find((c) => c.id === "conv_idle")).toMatchObject({ status: "OPEN", closedAt: null, reminderSentAt: null });
+    expect((await send("conv_agent", "sess_agent_abc")).status).toBe(200);
+    expect(H.conversations.find((c) => c.id === "conv_agent")!.status).toBe("CLOSED");
+    expect(H.created).toHaveLength(0);
   });
 });

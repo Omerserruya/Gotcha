@@ -304,12 +304,30 @@ async function visitorConversation(conversationId: string, token: unknown) {
       // Who owns it, for message.inbound (a customer message written here
       // rather than by the incoming worker).
       assignedAgentId: true, handledBy: true, isHandedOver: true, departmentId: true, isTest: true, origin: true,
+      status: true,
     },
   });
   if (!c || c.channel !== "WEBCHAT" || !c.customerExternalId) return null;
   const a = Buffer.from(String(c.customerExternalId));
   const b = Buffer.from(token);
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? c : null;
+}
+
+/** Reopen a conversation the bot-idle rule closed (its newest system event says so). */
+async function reopenAfterBotIdle(conversationId: string, tenantId: string): Promise<boolean> {
+  const event = await prisma.message.findFirst({
+    where: { tenantId, conversationId, messageType: "system" },
+    orderBy: { createdAt: "desc" },
+    select: { metadata: true },
+  });
+  const meta: any = event?.metadata ?? {};
+  if (meta.systemEvent !== "auto_closed" || meta.reason !== "bot_idle") return false;
+  const r = await prisma.conversation.updateMany({
+    where: { id: conversationId, tenantId, status: "CLOSED" },
+    data: { status: "OPEN", closedAt: null, reminderSentAt: null },
+  });
+  if (r.count) console.log(`[embedded-chat] reopened after bot idle conv=${conversationId}`);
+  return r.count > 0;
 }
 
 /**
@@ -757,6 +775,11 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       res.status(404).json({ error: "Session not found" });
       return;
     }
+    // Closed for silence by the bot-idle rule ("write again and we'll carry on
+    // where we left off"): the visitor's next message reopens it. The widget
+    // keeps polling this id; a fresh conversation would hold the reply where
+    // the widget never looks. A conversation closed any other way is left as is.
+    if (conversation.status === "CLOSED") await reopenAfterBotIdle(conversation.id, conversation.tenantId);
 
     const externalMessageId = `widget_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 
