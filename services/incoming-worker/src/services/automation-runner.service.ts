@@ -273,6 +273,11 @@ export async function runAutomationsForEvent(ev: {
       if (isUniqueViolation(err)) continue; // this event already ran this automation
       throw err;
     }
+    // The automation's run count (executeWebhookFlow counts its own runs; a
+    // conversation's run never did, so the setup route read 0 after 18 runs).
+    if (ev.conversationId) {
+      await prisma.chatbotFlow.update({ where: { id: flow.id }, data: { runCount: { increment: 1 } } }).catch(() => {});
+    }
     const run: AutomationRunCtx = { id: row.id, flowId: flow.id, answered: false, currentNodeId: null, prevOwner, marketing: isMarketingRun(flow.triggerType, false) };
     let result: FlowExecutionResult | null = null;
     let error: unknown = null;

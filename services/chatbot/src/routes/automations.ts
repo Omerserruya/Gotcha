@@ -78,6 +78,9 @@ async function present(tenantId: string, flows: FlowRow[], full: boolean) {
       where: { tenantId, flowId: id }, orderBy: { startedAt: "desc" }, select: { flowId: true, startedAt: true, status: true },
     }))),
   ]);
+  // Who each "hand to AI" / "assign" step hands to, by name (the list row
+  // used to say only "Hand to AI employee": nothing showed who answers).
+  const targets = await stepTargetNames(tenantId, flows);
   const weekBy = new Map((week as any[]).map((w) => [w.flowId, w._count._all as number]));
   const nameBy = new Map((users as any[]).map((u) => [u.id, u.name as string]));
   const lastBy = new Map(lastRuns.filter(Boolean).map((r: any) => [r.flowId, r]));
@@ -93,11 +96,53 @@ async function present(tenantId: string, flows: FlowRow[], full: boolean) {
       activatedAt: f.activatedAt, activatedBy: who(f.activatedBy),
       pausedAt: f.pausedAt, pausedBy: who(f.pausedBy),
       ...(full ? { nodes: arr(f.nodes), edges: arr(f.edges) } : {}),
-      path: pathOf(arr(f.nodes), arr(f.edges), f.triggerType),
+      path: pathOf(arr(f.nodes), arr(f.edges), f.triggerType).map((step) => {
+        const target = stepTarget(arr(f.nodes).find((n: any) => n.id === step.nodeId), targets);
+        return target ? { ...step, target } : step;
+      }),
       stats: { runsThisWeek: weekBy.get(f.id) ?? 0, lastRunAt: last?.startedAt ?? null, lastRunStatus: last?.status ?? null },
       createdAt: f.createdAt, updatedAt: f.updatedAt,
     };
   });
+}
+
+type StepTarget = { kind: "ai" | "person" | "team"; id: string | null; name: string | null };
+type TargetNames = { ai: Map<string, string>; person: Map<string, string>; team: Map<string, string> };
+
+/** The names of every AI employee, person and department the flows' steps hand to (this tenant's only). */
+async function stepTargetNames(tenantId: string, flows: FlowRow[]): Promise<TargetNames> {
+  const ai = new Set<string>(), person = new Set<string>(), team = new Set<string>();
+  for (const f of flows) for (const n of arr(f.nodes) as any[]) {
+    const d = n?.data ?? {};
+    if ((n?.type === "hand_to_ai" || n?.type === "run_skill") && typeof d.aiAgentId === "string") ai.add(d.aiAgentId);
+    if (n?.type === "assign" && d.to === "person" && typeof d.userId === "string") person.add(d.userId);
+    if (n?.type === "assign" && d.to === "team" && typeof d.departmentId === "string") team.add(d.departmentId);
+  }
+  const [agents, users, departments] = await Promise.all([
+    ai.size ? prisma.aIAgent.findMany({ where: { tenantId, id: { in: [...ai] } }, select: { id: true, name: true } }) : Promise.resolve([]),
+    person.size ? prisma.user.findMany({ where: { tenantId, id: { in: [...person] } }, select: { id: true, name: true } }) : Promise.resolve([]),
+    team.size ? (prisma as any).department.findMany({ where: { tenantId, id: { in: [...team] } }, select: { id: true, name: true } }) : Promise.resolve([]),
+  ]);
+  const m = (rows: any[]) => new Map(rows.map((r) => [r.id as string, r.name as string]));
+  return { ai: m(agents as any[]), person: m(users as any[]), team: m(departments as any[]) };
+}
+
+/** A step's target: { kind, id, name } (name null when that employee/person/department is gone). */
+function stepTarget(node: any, names: TargetNames): StepTarget | null {
+  const d = node?.data ?? {};
+  if (node?.type === "hand_to_ai" || node?.type === "run_skill") {
+    const id = typeof d.aiAgentId === "string" ? d.aiAgentId : null;
+    return { kind: "ai", id, name: id ? names.ai.get(id) ?? null : null };
+  }
+  if (node?.type === "assign" && d.to === "person") {
+    const id = typeof d.userId === "string" ? d.userId : null;
+    return { kind: "person", id, name: id ? names.person.get(id) ?? null : null };
+  }
+  if (node?.type === "assign" && d.to === "team") {
+    const id = typeof d.departmentId === "string" ? d.departmentId : null;
+    return { kind: "team", id, name: id ? names.team.get(id) ?? null : null };
+  }
+  return null;
 }
 
 async function findAutomation(tenantId: string, id: string): Promise<FlowRow | null> {

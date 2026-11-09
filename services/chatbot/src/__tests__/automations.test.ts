@@ -108,6 +108,8 @@ vi.mock("@chatcenter/shared", async () => {
       automationRun: table("automationRun"),
       automationRunStep: table("automationRunStep"),
       user: table("user"),
+      aIAgent: table("aIAgent"),
+      department: table("department"),
       contact: table("contact"),
       conversation: table("conversation"),
       channelAccount: table("channelAccount"),
@@ -741,5 +743,34 @@ describe("★ the setup route (onboarding's who-answers, 2026-11-02)", () => {
   it("an ordinary automation is still deletable", async () => {
     const a = await create();
     expect((await request(app).delete(`/api/automations/${a.id}`)).status).toBe(200);
+  });
+});
+
+
+describe("the list row names who a step hands to (Smoovee 2026-11-09: \"nothing is marked\")", () => {
+  it("hand to AI, a person and a team carry target { kind, id, name }; another tenant's names never", async () => {
+    H.db.aIAgent = [{ id: "sheri", tenantId: "T", name: "שרי" }, { id: "x_agent", tenantId: "X", name: "Not yours" }];
+    H.db.department = [{ id: "sales", tenantId: "T", name: "Sales" }];
+    H.db.user.push({ id: "dana", tenantId: "T", name: "Dana" });
+    const base = { tenantId: "T", isActive: true, updatedAt: new Date(1), createdAt: new Date(1), activatedAt: new Date(1) };
+    H.db.chatbotFlow.push(
+      { ...base, id: "setup", name: "Who answers new conversations", triggerType: "conversation_started", triggerConfig: { origin: "setup", channels: [] },
+        nodes: [{ id: "trigger", type: "automation_trigger", data: {} }, { id: "hand_to_ai", type: "hand_to_ai", data: { aiAgentId: "sheri" } }], edges: [{ id: "e1", source: "trigger", target: "hand_to_ai" }] },
+      { ...base, id: "people", name: "To people", triggerType: "message_received", triggerConfig: {},
+        nodes: [{ id: "trigger", type: "automation_trigger", data: {} }, { id: "p", type: "assign", data: { to: "person", userId: "dana" } }, { id: "t", type: "assign", data: { to: "team", departmentId: "sales" } }, { id: "q", type: "assign", data: { to: "team" } }, { id: "x", type: "hand_to_ai", data: { aiAgentId: "x_agent" } }],
+        edges: [{ id: "a", source: "trigger", target: "p" }, { id: "b", source: "p", target: "t" }, { id: "c", source: "t", target: "q" }, { id: "d", source: "q", target: "x" }] },
+    );
+    const list = (await request(app).get("/api/automations")).body.data;
+    const setup = list.find((x: any) => x.id === "setup");
+    expect(setup.origin).toBe("setup");
+    expect(setup.path[1]).toMatchObject({ type: "hand_to_ai", target: { kind: "ai", id: "sheri", name: "שרי" } });
+    expect(setup.path[0]).not.toHaveProperty("target");
+    const people = list.find((x: any) => x.id === "people");
+    expect(people.path.slice(1).map((p: any) => p.target)).toEqual([
+      { kind: "person", id: "dana", name: "Dana" },
+      { kind: "team", id: "sales", name: "Sales" },
+      { kind: "team", id: null, name: null },
+      { kind: "ai", id: "x_agent", name: null },
+    ]);
   });
 });

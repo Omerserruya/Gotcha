@@ -232,6 +232,8 @@ describe("★ dispatch", () => {
     expect(again).toEqual({ answered: false, runs: [] });
     expect(H.sent).toHaveLength(1);
     expect(H.db.automationRun).toHaveLength(1);
+    // Counted once (the setup route read run_count 0 after 18 runs, Smoovee 2026-11-09).
+    expect(H.db.chatbotFlow.find((f: any) => f.id === "f1").runCount).toBe(1);
   });
 
   it("no match (keyword, inactive, other trigger) → no run, not answered", async () => {
