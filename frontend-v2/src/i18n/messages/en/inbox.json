@@ -98,6 +98,7 @@
     }
   },
   "queue": {
+    "daysAgo": "{days, plural, =1 {Yesterday} other {# days ago}}",
     "cap": "Showing the {count} most recent.",
     "empty": "Nothing is waiting.",
     "unavailable": "We couldn't read the queue just now.",

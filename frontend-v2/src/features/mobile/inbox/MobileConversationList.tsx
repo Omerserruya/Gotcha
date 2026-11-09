@@ -106,7 +106,11 @@ export async function MobileConversationList({
                     )}
                   </span>
                   {row.lastMessageAt === null ? null : (
-                    <span className={styles.time}>{listTime(row.lastMessageAt, now, format)}</span>
+                    <span className={styles.time}>
+                      {listTime(row.lastMessageAt, now, format, (days) =>
+                        inbox('queue.daysAgo', { days }),
+                      )}
+                    </span>
                   )}
                 </span>
                 <span className={styles.bottom}>
