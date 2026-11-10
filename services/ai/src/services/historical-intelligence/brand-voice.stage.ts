@@ -43,6 +43,31 @@ import {
  * correcting things.
  */
 
+/**
+ * Cut an over-long model string at the last whole line, else sentence, that
+ * fits, instead of failing the schema. Prod GOTCHA 2026-11-10: a guidance a
+ * little over its cap failed the parse, and the retry did too, so the whole
+ * voice (summary, rules, situations) was thrown away for a few extra lines.
+ */
+export function trimToBoundary(value: unknown, max: number): unknown {
+  if (typeof value !== "string") return value;
+  const t = value.trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  const floor = Math.floor(max * 0.5);
+  const line = head.lastIndexOf("\n");
+  if (line >= floor) return head.slice(0, line).trimEnd();
+  const sentence = Math.max(...[". ", "! ", "? ", "׃ "].map((m) => head.lastIndexOf(m)));
+  if (sentence >= floor) return head.slice(0, sentence + 1).trimEnd();
+  const space = head.lastIndexOf(" ");
+  return (space >= floor ? head.slice(0, space) : head).trimEnd();
+}
+const capped = (max: number) => z.preprocess((v) => trimToBoundary(v, max), z.string().max(max));
+
+/** The guidance cap, and what the prompt asks for (below it, so trimming is the exception). */
+export const GUIDANCE_MAX = 1800;
+export const GUIDANCE_ASK = 1400;
+
 export const VoiceSchema = z.object({
   /**
    * The prompt block. Instructions to a writer, not a description of a brand -
@@ -50,14 +75,12 @@ export const VoiceSchema = z.object({
    * is a horoscope.
    */
   guidance: z
-    .string()
-    .min(40)
-    .max(1800)
+    .preprocess((v) => trimToBoundary(v, GUIDANCE_MAX), z.string().min(40).max(GUIDANCE_MAX))
     .describe("Direct instructions for writing as this business, as short dash-prefixed lines"),
   /** One line the reviewer can judge at a glance. */
-  summary: z.string().min(10).max(300).describe("One sentence describing the voice"),
+  summary: z.preprocess((v) => trimToBoundary(v, 300), z.string().min(10).max(300)).describe("One sentence describing the voice"),
   /** The emoji an agent may actually use, drawn from the counted palette. */
-  emojiPalette: z.array(z.string()).max(10).describe("Emoji this business genuinely uses"),
+  emojiPalette: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 10) : v), z.array(z.string()).max(10)).describe("Emoji this business genuinely uses"),
   // 200 was too small and it failed the whole call twice, losing the guidance
   // while the counted evidence was already stored. This business opens with a
   // multi-line template that runs past 200 characters on its own, and the stage
@@ -65,21 +88,21 @@ export const VoiceSchema = z.object({
   // producing fragments - which makes a long example the expected case, not an
   // error. Trimmed rather than rejected if it still overruns.
   /** A greeting written in their voice, for the agent to open with. */
-  greetingExample: z.string().max(600).describe("One opening line in the business's own voice"),
+  greetingExample: capped(600).describe("One opening line in the business's own voice"),
   /** A sign-off in their voice. */
-  closingExample: z.string().max(600).describe("One closing line in the business's own voice"),
+  closingExample: capped(600).describe("One closing line in the business's own voice"),
   /**
    * How the agents handle each moment (P4), as rules. Empty where the evidence
    * shows nothing. Never a quoted message: the runtime prompt carries rules only.
    */
   situations: z
     .object({
-      opening: z.string().max(300).default(""),
-      price: z.string().max(300).default(""),
-      out_of_stock: z.string().max(300).default(""),
-      shipping: z.string().max(300).default(""),
-      complaint: z.string().max(300).default(""),
-      closing: z.string().max(300).default(""),
+      opening: capped(300).default(""),
+      price: capped(300).default(""),
+      out_of_stock: capped(300).default(""),
+      shipping: capped(300).default(""),
+      complaint: capped(300).default(""),
+      closing: capped(300).default(""),
     })
     .partial()
     .default({})
@@ -92,6 +115,7 @@ Turn these numbers into instructions that another writer could follow to sound l
 
 RULES
 - Use ONLY what the numbers show. If an emoji is not in the list, it is not in this brand's palette. If no closing line repeats, say that they usually do not sign off. Never add a trait because it is common for shops of this kind.
+- Keep the guidance under ${GUIDANCE_ASK} characters: at most 12 dash-prefixed lines, the most important first. Each situation rule and the summary under 300 characters.
 - Write the guidance as short dash-prefixed lines, each one actionable. "Open with היי followed by the customer's first name" is an instruction. "Friendly and warm" is not.
 - Be specific about frequency. There is a real difference between emoji in 8% of messages and in 22%, and an agent told simply to "use emoji" will overdo it. State roughly how often, in the guidance.
 - Match the length. If the median message is 3 words, say that replies are short and that long paragraphs would be out of character.
