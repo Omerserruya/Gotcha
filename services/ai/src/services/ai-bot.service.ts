@@ -247,7 +247,7 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked, storeProductAsk } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked, storeProductAsk, supportTurn } from "./woo-chat-turn.service";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -3056,7 +3056,11 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] catalogue facets failed (non-fatal):", err?.message);
   }
 
-  try {
+  // A support turn (a fault, setting up, an order, a return) is not a
+  // discovery turn: no forced store search and no carousel (Demo 2026-11-10).
+  const supportAsk = supportTurn(opts.incomingMessage);
+  if (supportAsk && wooTurn) console.log(`[ai-bot][support-turn] no product pre-search or forced search conv=${opts.conversationId}`);
+  if (!supportAsk) try {
     const disc = await runProductDiscoveryTurn({
       tenantId: opts.tenantId,
       conversationId: opts.conversationId,
@@ -3490,6 +3494,7 @@ async function generateAIBotReplyInner(
   let presearch2: { args: Record<string, unknown>; content: string } | null = null;
   if (!choiceShortCircuit && preSearch2Enabled() && wooTurn && !discoveryForceTool && !ackOverCards
     && toolFunctionNames.includes("woocommerce.list_products") && !storeQuestion(opts.incomingMessage)
+    && !supportTurn(opts.incomingMessage)
     // A colour or a size goes into the attribute search the model writes (urban-e29).
     && !askedColours(opts.incomingMessage ?? "").length && !asksSize(opts.incomingMessage ?? "")) {
     const last = await lastSearchArgs(opts.tenantId, opts.conversationId).catch((err: any) => {
@@ -3543,7 +3548,8 @@ async function generateAIBotReplyInner(
   // nothing: the model is told so (and the empty-search team offer follows).
   let storeAskSearched = false;
   if (!choiceShortCircuit && !presearch2 && !discoveryForceTool && !ackOverCards && wooTurn
-    && toolFunctionNames.includes("woocommerce.list_products") && storeProductAsk(messages as any[], opts.incomingMessage)) {
+    && toolFunctionNames.includes("woocommerce.list_products") && storeProductAsk(messages as any[], opts.incomingMessage)
+    && !supportTurn(opts.incomingMessage)) {
     try {
       const words = customerSearchQuery(messages as any[], opts.incomingMessage, "") ?? String(opts.incomingMessage ?? "").slice(0, 120);
       const size = baseSizeAsked(messages as any[], opts.incomingMessage);
@@ -3585,7 +3591,8 @@ async function generateAIBotReplyInner(
   // search, so a live card shows (urban-e28: "היא אוהבת צעיפים" was answered from
   // the knowledge text, a Latin title and a snapshot price, and no card).
   if (!choiceShortCircuit && !presearch2 && !discoveryForceTool && !ackOverCards && wooTurn
-    && toolFunctionNames.includes("woocommerce.list_products") && namesProduct(opts.incomingMessage ?? "") && !storeQuestion(opts.incomingMessage)) {
+    && toolFunctionNames.includes("woocommerce.list_products") && namesProduct(opts.incomingMessage ?? "") && !storeQuestion(opts.incomingMessage)
+    && !supportTurn(opts.incomingMessage)) {
     chatMessages.push({
       role: "system",
       content:

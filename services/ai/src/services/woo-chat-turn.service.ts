@@ -988,6 +988,30 @@ export function storeProductAsk(
   return namesProduct(t) || /מה יש לכם|יש לכם|יש לך|מתאים|מתאימה|איזה משטח|איזה דגם|איזו|תואם|מחפש|מחפשת|צריך|צריכה|דגם|מוצר|במלאי|ממליצ|תמליצ|המלצה|do you have|what fits|fits? (?:a|my|the)|looking for|recommend|in stock/i.test(t);
 }
 
+/**
+ * A support turn, not a shopping one (Demo Factory 2026-11-10: "התקנתי את
+ * הסוויצ'ר והאפליקציה לא מוצאת אותו" got good troubleshooting, then a
+ * five-product carousel from the pre-search). A technical problem, setting
+ * something up, an order's status, a return or a cancellation: the store is
+ * not searched before the model writes, and nothing presses it to search.
+ * The model may still search when the customer asks for a product.
+ */
+const SUPPORT_TURN = new RegExp([
+  // Hebrew: it does not work / a fault / setting up / connecting
+  "לא עובד", "לא עובדת", "לא מתחבר", "לא מתחברת", "לא נדלק", "לא נדלקת", "לא מוצא(?:ת)? אות", "לא מזהה", "לא מגיב", "לא מגיבה",
+  "תקלה", "תקול", "שגיאה", "נתקע", "נתקעה", "הפסיק", "הפסיקה", "התקנתי", "להתקין", "התקנה", "הגדרתי", "להגדיר", "חיברתי", "לחבר את", "איפוס", "לאפס",
+  "אפליקציה", "האפליקציה", "בלוטות", "וויי.?פיי", "wifi",
+  // Hebrew: my order, delivery, return, cancel, warranty
+  "ההזמנה שלי", "מספר הזמנה", "איפה ההזמנה", "מה עם ההזמנה", "לא הגיע", "לא הגיעה", "המשלוח שלי", "מעקב", "החזרה", "להחזיר", "החזר כספי", "זיכוי", "לבטל", "ביטול", "אחריות", "פגום", "פגומה", "שבור", "שבורה",
+  // English
+  "not working", "doesn'?t work", "does not work", "won'?t (?:turn on|connect|pair)", "can'?t (?:connect|pair|find it)", "broken", "error", "troubleshoot", "set ?up", "install(?:ed|ing)?", "pair(?:ed|ing)?", "reset",
+  "my order", "order status", "where is my", "tracking", "refund", "return(?:ed|ing)? (?:it|my|the)", "cancel", "warranty", "defective", "damaged",
+].join("|"), "i");
+
+export function supportTurn(text: string | null | undefined): boolean {
+  return SUPPORT_TURN.test(String(text ?? ""));
+}
+
 /** A question about a product: it names one, or asks a colour or size. */
 export function productQuestion(text: string | null | undefined, colours: number, size: boolean): boolean {
   return !storeQuestion(text) && (namesProduct(text) || colours > 0 || size);

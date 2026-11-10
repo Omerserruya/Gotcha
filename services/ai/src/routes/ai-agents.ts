@@ -9,6 +9,7 @@ import { GapAnswerError, MAX_ANSWER } from "../services/knowledge-gap-answer.ser
 import { readQuestionSet } from "../services/agent-readiness.service";
 import { readerLocale } from "../lib/reader-locale";
 import { whereEmployeeAnswers, routingAutomations } from "../services/employee-reach.service";
+import { grantConnectedSafeTools } from "../services/agent-builder.service";
 
 /**
  * Columns that still exist but are no longer part of the API. `channels`
@@ -613,7 +614,12 @@ router.post(
       });
     }
 
-    // Assign tools
+    // Assign tools: the ones named, else the same day-one defaults the hiring
+    // builder grants (safe tools of connected integrations).
+    if (!Array.isArray(toolIds)) {
+      const n = await grantConnectedSafeTools(req.tenantId! as string, agent.id);
+      console.log(`[ai-agents] created ${agent.id} with ${n} default tool permission(s)`);
+    }
     if (toolIds && Array.isArray(toolIds)) {
       // toolIds are TenantTool IDs
       await prisma.agentToolPermission.createMany({

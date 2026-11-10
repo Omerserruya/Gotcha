@@ -297,7 +297,21 @@ export async function seedDraftFromGoal(
 
   // Grant safe tools from CONNECTED integrations (high/critical risk stays an
   // explicit grant - day-one authority is conservative, like the generator).
-  let granted = 0;
+  const granted = await grantConnectedSafeTools(tenantId, agentId);
+
+  void profile; // org name flows through identity.companyOverview already
+  return { attachedKbCount: kbs.length, grantedToolCount: granted, proposedName };
+}
+
+/**
+ * A new employee's day-one tools: every enabled tool of a CONNECTED integration
+ * that is not high/critical risk (those stay an explicit grant). The one rule
+ * for every way an employee is created - the hiring builder here, and POST
+ * /api/ai-agents when the caller names no tools (Demo Factory 2026-11-10: an
+ * API-created employee had 0 permissions, so no product search and no cards).
+ * Additive (skipDuplicates); never throws. Returns how many rows were added.
+ */
+export async function grantConnectedSafeTools(tenantId: string, agentId: string): Promise<number> {
   try {
     const connectedTools = await prisma.tenantTool.findMany({
       where: { tenantId, isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
@@ -307,19 +321,16 @@ export async function seedDraftFromGoal(
     const grantable = connectedTools
       .filter((t: any) => !/high|critical/i.test(String(t.catalogTool?.riskLevel || "")))
       .map((t: any) => t.id);
-    if (grantable.length > 0) {
-      const r = await prisma.agentToolPermission.createMany({
-        data: grantable.map((tenantToolId: string) => ({ tenantId, aiAgentId: agentId, tenantToolId, isAllowed: true })),
-        skipDuplicates: true,
-      });
-      granted = (r as any)?.count ?? grantable.length;
-    }
+    if (!grantable.length) return 0;
+    const r = await prisma.agentToolPermission.createMany({
+      data: grantable.map((tenantToolId: string) => ({ tenantId, aiAgentId: agentId, tenantToolId, isAllowed: true })),
+      skipDuplicates: true,
+    });
+    return (r as any)?.count ?? grantable.length;
   } catch (err: any) {
     console.warn("[builder-seed] tool auto-grant failed:", err?.message);
+    return 0;
   }
-
-  void profile; // org name flows through identity.companyOverview already
-  return { attachedKbCount: kbs.length, grantedToolCount: granted, proposedName };
 }
 
 // ─── System prompt ──────────────────────────────────────────
