@@ -104,3 +104,24 @@ describe('★★ null percentages are a stage, not a broken response', () => {
     expect(parsed.knowledgeCandidateCount).toBe(0);
   });
 });
+
+describe('★★ failureCode: why the analysis stopped when the AI could not run (backend af202e03)', () => {
+  it.each(['units_exhausted', 'ai_access_denied'] as const)('%s is kept', (code) => {
+    const parsed = importStatusSchema.parse(
+      view({
+        status: 'FAILED',
+        stage: 'failed',
+        percent: null,
+        failureCode: code,
+        failedStage: 'ai-units:analytics',
+      }),
+    );
+    expect(parsed.failureCode).toBe(code);
+  });
+
+  it('absent, null or unknown: null, the ordinary failure, and the list still parses', () => {
+    expect(importStatusSchema.parse(view({})).failureCode).toBeNull();
+    expect(importStatusSchema.parse(view({ failureCode: null })).failureCode).toBeNull();
+    expect(importStatusSchema.parse(view({ failureCode: 'something_new' })).failureCode).toBeNull();
+  });
+});

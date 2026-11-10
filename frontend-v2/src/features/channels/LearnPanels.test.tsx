@@ -102,6 +102,13 @@ const candidate = (over: Record<string, unknown> = {}) =>
   });
 
 describe('★ 13b → 13e / 13f: one row while there is an import', () => {
+  it('★ out of AI units: the row says so, not "Stopped"', async () => {
+    render(
+      await LearningRow({ status: status({ stage: 'failed', failureCode: 'units_exhausted' }) }),
+    );
+    expect(screen.getByTestId('learning-row').textContent).toBe('Out of AI units›');
+  });
+
   it.each([
     [{ stage: 'transferring', percent: null }],
     [{ stage: 'analyzing', analysisPercent: null }],
@@ -128,6 +135,53 @@ describe('★ 13b → 13e / 13f: one row while there is an import', () => {
 });
 
 describe('★ 13e - the platform’s two stages, drawn as 02’s timeline', () => {
+  it.each([
+    [
+      'units_exhausted',
+      'The analysis stopped because the workspace ran out of AI units.',
+      'Top up AI units',
+      '/settings/billing?panel=buy',
+    ],
+    [
+      'ai_access_denied',
+      "AI analysis isn't available right now, so the analysis stopped.",
+      'Plan and billing',
+      '/settings/billing',
+    ],
+  ])(
+    '★★ %s: said in our words (never "done"), the way to fix it, then the rerun',
+    async (code, body, action, target) => {
+      render(
+        await ImportPanel({
+          status: status({
+            stage: 'failed',
+            failureCode: code,
+            failedStage: 'ai-units:analytics',
+            failureReason: 'Your workspace ran out of AI units.',
+            sourceCompletedAt: '2026-11-10T13:00:00.000Z',
+          }),
+          receiving: true,
+        }),
+      );
+      expect(screen.getByTestId('import-failed')).toHaveTextContent(body);
+      expect(screen.getByTestId('import-failed')).not.toHaveTextContent('ai-units');
+      expect(screen.getByTestId('import-billing')).toHaveTextContent(action);
+      expect(screen.getByTestId('import-billing')).toHaveAttribute('href', target);
+      expect(screen.getByTestId('rerun-failed')).toBeInTheDocument();
+      expect(screen.queryByTestId('import-review')).toBeNull();
+    },
+  );
+
+  it('an ordinary failure: no billing link', async () => {
+    render(
+      await ImportPanel({
+        status: status({ stage: 'failed', failedStage: 'analytics' }),
+        receiving: true,
+      }),
+    );
+    expect(screen.queryByTestId('import-billing')).toBeNull();
+  });
+
   it('★★ a null percentage is the stage alone: no bar, no 0% (prod, 2026-11-10)', async () => {
     const one = render(
       await ImportPanel({

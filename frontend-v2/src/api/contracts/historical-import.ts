@@ -35,6 +35,9 @@ import { z } from 'zod';
  * rather than "processed".
  */
 
+export const FAILURE_CODES = ['units_exhausted', 'ai_access_denied'] as const;
+export type FailureCode = (typeof FAILURE_CODES)[number];
+
 export const IMPORT_STAGES = [
   'transferring',
   'analyzing',
@@ -75,6 +78,14 @@ export const importStatusSchema = z.object({
   /** Which stage broke. Present only on a failure, and not always then. */
   failedStage: z.string().nullable().default(null),
   failureReason: z.string().nullable().default(null),
+  /**
+   * Why the ANALYSIS stopped when the AI could not run (backend af202e03):
+   * the workspace ran out of AI units, or billing refused the calls for
+   * another reason. The row is FAILED and the imported conversations stay.
+   * Never parsed out of `failedStage` ("ai-units:<stage>"); an unknown code
+   * reads as null, the ordinary failure.
+   */
+  failureCode: z.enum(FAILURE_CODES).nullable().catch(null).default(null),
   completedAt: z.string().nullable().default(null),
   /**
    * When the history finished arriving - set only once the transfer reached

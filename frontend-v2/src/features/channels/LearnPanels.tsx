@@ -73,7 +73,9 @@ export async function LearningRow({ status }: { readonly status: ImportStatus })
               ? status.analysisPercent === null
                 ? t('learn.rowInProgress')
                 : t('learn.rowLearning', { percent: status.analysisPercent })
-              : t(`import.stage.${status.stage}`)}
+              : status.failureCode
+                ? t(`import.failureCode.${status.failureCode}.row`)
+                : t(`import.stage.${status.stage}`)}
       </span>
       <span aria-hidden="true">›</span>
     </Link>
@@ -266,12 +268,32 @@ export async function ImportPanel({
 
         {failed ? (
           <p className={styles.learnFailed} data-testid="import-failed">
-            {status.failureReason
-              ? reasonInWords(status.failureReason)
-              : status.failedStage
-                ? t('import.failedWithStage', { stage: status.failedStage })
-                : t('import.failedBare')}
+            {status.failureCode
+              ? t(`import.failureCode.${status.failureCode}.body`)
+              : status.failureReason
+                ? reasonInWords(status.failureReason)
+                : status.failedStage
+                  ? t('import.failedWithStage', { stage: status.failedStage })
+                  : t('import.failedBare')}
           </p>
+        ) : null}
+        {failed && status.failureCode ? (
+          /*
+           * The AI could not run (backend af202e03): the way to fix it, then
+           * the foot's "Run the analysis again". Out of units goes straight to
+           * buying more; any other refusal to the plan and billing overview.
+           */
+          <Link
+            href={
+              status.failureCode === 'units_exhausted'
+                ? { pathname: '/settings/billing', query: { panel: 'buy' } }
+                : '/settings/billing'
+            }
+            className={styles.numberLink}
+            data-testid="import-billing"
+          >
+            {t(`import.failureCode.${status.failureCode}.action`)}
+          </Link>
         ) : null}
 
         {topics.length > 0 ? (
