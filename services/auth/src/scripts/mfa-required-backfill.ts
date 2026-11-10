@@ -6,12 +6,12 @@
  * Rollback: run the bootstrap with the required stage unbound (the marker on
  * its own changes nothing at login).
  */
-import { prisma, findIdentityBySubject, setMfaRequiredAttribute } from "@chatcenter/shared";
+import { prisma, findIdentityBySubject, setMfaRequiredAttribute, withCrossTenantAccess } from "@chatcenter/shared";
 import { mfaRequiredForIdentity } from "../services/mfa-required-flag.service";
 
 async function main() {
   const apply = process.argv.includes("--apply");
-  const identities = await prisma.identity.findMany({ where: { authentikSubject: { not: null } } as any, select: { id: true, authentikSubject: true } });
+  const identities = await withCrossTenantAccess(() => prisma.identity.findMany({ where: { authentikSubject: { not: null } } as any, select: { id: true, authentikSubject: true } }));
   let required = 0, notRequired = 0, changed = 0, missing = 0, failed = 0;
   for (const i of identities) {
     const need = await mfaRequiredForIdentity(i.id);

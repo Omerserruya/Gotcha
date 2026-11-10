@@ -19,7 +19,7 @@
  *   - by the backfill (scripts/mfa-required-backfill.ts).
  * The server gate stays the authority; this only lets Authentik ask at login.
  */
-import { prisma, mfaRequirementFor, findIdentityBySubject, setMfaRequiredAttribute, observeMfaRequirement } from "@chatcenter/shared";
+import { prisma, mfaRequirementFor, findIdentityBySubject, setMfaRequiredAttribute, observeMfaRequirement, withCrossTenantAccess } from "@chatcenter/shared";
 
 const CACHE_MS = 10 * 60_000;
 const synced = new Map<string, { at: number; required: boolean }>();
@@ -29,10 +29,11 @@ export function resetMfaFlagCache(): void { synced.clear(); inFlight.clear(); }
 
 /** Whether any active membership of this identity requires MFA. */
 export async function mfaRequiredForIdentity(identityId: string): Promise<boolean> {
-  const users = await prisma.user.findMany({
+  // An identity's memberships span workspaces: deliberately cross-tenant.
+  const users = await withCrossTenantAccess(() => prisma.user.findMany({
     where: { identityId, isActive: true },
     select: { role: true, tenant: { select: { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: true } } },
-  });
+  }));
   return users.some((u: any) => mfaRequirementFor(u.role, {
     mfaRequiredForAdmins: !!u.tenant?.mfaRequiredForAdmins,
     mfaRequiredForAllUsers: !!u.tenant?.mfaRequiredForAllUsers,
@@ -77,7 +78,7 @@ export async function syncMfaRequiredFlagsForTenant(tenantId: string): Promise<v
 
 /** Sync the identity behind one user (its role changed). */
 export async function syncMfaRequiredFlagForUser(userId: string): Promise<void> {
-  const u = await prisma.user.findUnique({ where: { id: userId }, select: { identityId: true } });
+  const u = await withCrossTenantAccess(() => prisma.user.findUnique({ where: { id: userId }, select: { identityId: true } }));
   if (u?.identityId) await syncMfaRequiredFlag(u.identityId, { force: true });
 }
 

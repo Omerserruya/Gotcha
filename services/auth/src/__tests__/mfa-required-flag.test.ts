@@ -11,6 +11,7 @@ vi.mock("@chatcenter/shared", async () => {
   const mfa = await vi.importActual<any>("../../../../packages/shared/src/lib/mfa");
   return {
     mfaRequirementFor: mfa.mfaRequirementFor,
+    withCrossTenantAccess: (fn: any) => fn(),
     prisma: {
       user: {
         findMany: vi.fn(async (a: any) => H.users.filter((u) => (a.where.identityId ? u.identityId === a.where.identityId && u.isActive === a.where.isActive : u.tenantId === a.where.tenantId))),

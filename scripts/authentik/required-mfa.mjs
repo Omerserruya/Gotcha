@@ -33,8 +33,12 @@ const TOTP_SETUP = "default-authenticator-totp-setup";
 const STATIC_SETUP = "default-authenticator-static-setup";
 const AUTH_FLOW = "default-authentication-flow";
 
-const USER = `u = request.context.get("pending_user") or request.user
+// The user being logged in is the flow plan's pending_user (as the stock
+// default-authentication-flow policies read it), not request.user.
+const USER = `flow_plan = request.context.get("flow_plan")
+u = (flow_plan.context.get("pending_user") if flow_plan else None) or request.user
 attrs = getattr(u, "attributes", None) or {}`;
+const STOCK_VALIDATE_POLICY = "default-authentication-flow-authenticator-validate-stage";
 const EXPR_REQUIRED = `${USER}
 return bool(attrs.get("gotcha_mfa_required", False))`;
 const EXPR_NEEDS_RECOVERY = `${USER}
@@ -68,6 +72,8 @@ async function bindings(api, flowPk) {
 async function policyByName(api, name) {
   return (await api(`/policies/expression/?name=${encodeURIComponent(name)}`)).results?.[0] ?? null;
 }
+/** A flow-stage binding is a policy target by its policybindingmodel_ptr_id, not its pk. */
+const pbm = (binding) => binding.policybindingmodel_ptr_id ?? binding.pk;
 async function policyBindingsOf(api, targetPk) {
   return (await api(`/policies/bindings/?target=${targetPk}&page_size=100`)).results;
 }
@@ -121,13 +127,17 @@ export async function applyRequiredMfa(api, log = console.log) {
   // The shared stage stays at skip; it now serves only the not-required.
   const sharedBinding = (await bindings(api, flow.pk)).find((b) => b.stage === shared.pk);
   if (!sharedBinding) throw new Error(`${SHARED_VALIDATE} is not bound to ${AUTH_FLOW}`);
-  await api(`/flows/bindings/${sharedBinding.pk}/`, { method: "PATCH", body: JSON.stringify({ evaluate_on_plan: false, re_evaluate_policies: true }) });
-  await ensurePolicyBinding(api, sharedBinding.pk, pRequired.pk, true);
+  // "all": the stock rule (skip on passwordless passkey login) AND not required.
+  await api(`/flows/bindings/${sharedBinding.pk}/`, { method: "PATCH", body: JSON.stringify({ evaluate_on_plan: false, re_evaluate_policies: true, policy_engine_mode: "all" }) });
+  await ensurePolicyBinding(api, pbm(sharedBinding), pRequired.pk, true);
 
+  const stock = await policyByName(api, STOCK_VALIDATE_POLICY);
   const b31 = await ensureFlowBinding(api, flow.pk, required.pk, sharedBinding.order + 1);
-  await ensurePolicyBinding(api, b31.pk, pRequired.pk, false);
+  await api(`/flows/bindings/${b31.pk}/`, { method: "PATCH", body: JSON.stringify({ policy_engine_mode: "all" }) });
+  await ensurePolicyBinding(api, pbm(b31), pRequired.pk, false);
+  if (stock) await ensurePolicyBinding(api, pbm(b31), stock.pk, false);
   const b32 = await ensureFlowBinding(api, flow.pk, stat.pk, sharedBinding.order + 2);
-  await ensurePolicyBinding(api, b32.pk, pRecovery.pk, false);
+  await ensurePolicyBinding(api, pbm(b32), pRecovery.pk, false);
   log(`[required-mfa] applied: ${SHARED_VALIDATE} for the not-required (skip), ${STAGE_REQUIRED} (configure) + recovery-code setup for gotcha_mfa_required users`);
 }
 
@@ -141,8 +151,9 @@ export async function rollbackRequiredMfa(api, log = console.log) {
   for (const b of await bindings(api, flow.pk)) {
     if ((required && b.stage === required.pk) || (stat && b.stage === stat.pk)) {
       await api(`/flows/bindings/${b.pk}/`, { method: "DELETE" });
-    } else if (shared && b.stage === shared.pk && pRequired) {
-      for (const pb of await policyBindingsOf(api, b.pk)) if (pb.policy === pRequired.pk) await api(`/policies/bindings/${pb.pk}/`, { method: "DELETE" });
+    } else if (shared && b.stage === shared.pk) {
+      if (pRequired) for (const pb of await policyBindingsOf(api, pbm(b))) if (pb.policy === pRequired.pk) await api(`/policies/bindings/${pb.pk}/`, { method: "DELETE" });
+      await api(`/flows/bindings/${b.pk}/`, { method: "PATCH", body: JSON.stringify({ policy_engine_mode: "any" }) });
     }
   }
   if (required) await api(`/stages/authenticator/validate/${required.pk}/`, { method: "DELETE" });
@@ -153,10 +164,10 @@ export async function rollbackRequiredMfa(api, log = console.log) {
 export async function showRequiredMfa(api, log = console.log) {
   const flow = await authFlow(api);
   for (const b of await bindings(api, flow.pk)) {
-    const pols = await policyBindingsOf(api, b.pk);
+    const pols = await policyBindingsOf(api, pbm(b));
     const names = [];
     for (const pb of pols) names.push(`${pb.negate ? "NOT " : ""}${pb.policy_obj?.name ?? pb.policy}`);
-    log(`  ${b.order} ${b.stage_obj?.name} plan=${b.evaluate_on_plan} re=${b.re_evaluate_policies}${names.length ? ` policies=[${names.join(", ")}]` : ""}`);
+    log(`  ${b.order} ${b.stage_obj?.name} mode=${b.policy_engine_mode} plan=${b.evaluate_on_plan} re=${b.re_evaluate_policies}${names.length ? ` policies=[${names.join(", ")}]` : ""}`);
   }
   for (const s of (await api(`/stages/authenticator/validate/`)).results) log(`  VALIDATE ${s.name} ${s.not_configured_action} cfg=${JSON.stringify(s.configuration_stages)}`);
 }
