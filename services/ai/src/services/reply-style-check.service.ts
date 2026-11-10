@@ -335,6 +335,29 @@ function lastQuestion(text: string): string | null {
   return n.length >= 6 ? n : null;
 }
 
+/**
+ * The customer asks for steps: how to install, connect, set up or do
+ * something, or for instructions (Omer 2026-11-10, Demo: "מה השלבים להתקנה של
+ * מתג לתריס?" was flattened into one paragraph by the length rule).
+ */
+export function stepsAsked(text: string | null | undefined): boolean {
+  return /שלבים|שלב אחר שלב|הוראות|מדריך|איך (?:מתקינים|להתקין|מחברים|לחבר|מגדירים|להגדיר|מפעילים|להפעיל|מאפסים|לאפס|עושים|משייכים|לשייך)|התקנה|להתקין|\bsteps?\b|instructions|how (?:do i|to|can i) (?:install|set ?up|connect|configure|pair|reset|use)|\bsetup\b/i.test(String(text ?? ""));
+}
+
+const STEP_LINE = /^\s*(\d{1,2})[.)]\s+\S/;
+/**
+ * A short numbered list, one step per line: 2 to 6 steps numbered 1, 2, 3...
+ * in order, each at most 140 characters, and at most two other lines (a
+ * lead-in and a closing question). Anything longer is still too long.
+ */
+export function isStepList(text: string | null | undefined): boolean {
+  const lines = String(text ?? "").split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const steps = lines.filter((l) => STEP_LINE.test(l));
+  if (steps.length < 2 || steps.length > 6 || lines.length - steps.length > 2) return false;
+  if (steps.some((l) => l.length > 140)) return false;
+  return steps.every((l, i) => Number(STEP_LINE.exec(l)![1]) === i + 1);
+}
+
 function sentences(text: string): number {
   return text.split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter((s) => s.length > 1).length;
 }
@@ -375,7 +398,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
     if (m) out.push({ kind, match: typeof m === "string" ? m : m[0] });
   };
 
-  const detailAsked = /פרט|תפרט|הסבר|תסביר|איך (?:עושים|מחזירים|מזמינים)|explain|details|step/i.test(ctx.incomingMessage);
+  // Steps asked for and answered as a short numbered list: the list is the answer, not "too long".
+  const detailAsked = /פרט|תפרט|הסבר|תסביר|איך (?:עושים|מחזירים|מזמינים)|explain|details|step/i.test(ctx.incomingMessage)
+    || (stepsAsked(ctx.incomingMessage) && isStepList(text));
   // A one-line question gets a short answer (eval e8 U7: "כמה עולה משלוח?" got
   // every rate there is): two sentences, not three.
   const oneLine = ctx.incomingMessage.trim().length <= 60 && !/\n/.test(ctx.incomingMessage.trim());
