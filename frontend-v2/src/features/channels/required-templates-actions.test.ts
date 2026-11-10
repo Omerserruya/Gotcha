@@ -48,6 +48,21 @@ beforeEach(() => {
 });
 
 describe('★★ the read', () => {
+  it.each([
+    ['he', 'he'],
+    ['en', 'en'],
+    [undefined, undefined],
+    // ★ 400 BAD_LANGUAGE on anything near: left out, never forwarded.
+    ['HE', undefined],
+    ['', undefined],
+  ])('language %o → the query carries %o (backend 7c3dfa35)', async (asked, sent) => {
+    get.mockResolvedValue({ channelAccountId: 'ca1', languages: ['he'], items: [] });
+    await loadRequiredTemplates('ca1', asked as 'he' | undefined);
+    const query = (get.mock.calls[0]![0] as { query: Record<string, unknown> }).query;
+    expect(query.language).toBe(sent);
+    expect(query.channelAccountId).toBe('ca1');
+  });
+
   it('?channelAccountId=, parsed from the route’s envelope', async () => {
     asTheClientDoes(get, {
       data: {
@@ -55,6 +70,7 @@ describe('★★ the read', () => {
         connectionStatus: 'CONNECTED',
         canSubmit: true,
         languages: ['he'],
+        defaultLanguage: 'en',
         items: [
           {
             role: 'reopen',
@@ -82,6 +98,7 @@ describe('★★ the read', () => {
         connectionStatus: 'CONNECTED',
         canSubmit: true,
         languages: ['he'],
+        defaultLanguage: 'en',
         items: [
           {
             role: 'reopen',

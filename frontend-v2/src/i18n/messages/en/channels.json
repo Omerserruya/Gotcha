@@ -550,6 +550,13 @@
         "rejected": "Rejected",
         "unknown": "Unknown state"
       },
+      "language": {
+        "label": "Template language",
+        "he": "Hebrew",
+        "en": "English",
+        "unread": "The templates in this language couldn't be read. Try again.",
+        "unavailable": "Choosing the language isn't available here yet."
+      },
       "bodyLabel": "Text",
       "variable": "{token} is replaced with the customer's name.",
       "button": "Button:",

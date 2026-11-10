@@ -187,7 +187,8 @@ describe('★★ Save keeps drafts; nothing is sent', () => {
     await waitFor(() =>
       expect(screen.getByTestId('required-state-reopen-en')).toHaveTextContent('Draft'),
     );
-    expect(actions.loadRequiredTemplates).toHaveBeenCalledWith('ca1');
+    // Read again in the language on screen, not the workspace's default.
+    expect(actions.loadRequiredTemplates).toHaveBeenCalledWith('ca1', 'en');
   });
 });
 
@@ -309,5 +310,84 @@ describe('★★ refusals, in words', () => {
     expect(await screen.findByTestId('required-outcome-reopen-en')).toHaveTextContent(
       "Saved as a draft, but Meta didn't accept it. Fix the text and send it again.",
     );
+  });
+});
+
+describe('★★ the language: chosen above the cards, he or en (Omer, 2026-11-10)', () => {
+  const heItems = [item({ language: 'he', body: 'שלום {{1}}' }), followup({ language: 'he' })];
+
+  it('starts on the language the items came in, the workspace default named by the route', () => {
+    show(data({ defaultLanguage: 'en' }));
+    expect(screen.getByTestId('required-language-en')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('required-language-he')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('another language: read in it, its own drafts shown, and Save writes in it', async () => {
+    actions.loadRequiredTemplates.mockResolvedValue({
+      ok: true,
+      data: data({ languages: ['he'], defaultLanguage: 'en', items: heItems }),
+    });
+    show(data({ defaultLanguage: 'en' }));
+    await userEvent.type(screen.getByTestId('required-body-reopen-en'), ' typed');
+    await userEvent.click(screen.getByTestId('required-language-he'));
+    expect(actions.loadRequiredTemplates).toHaveBeenCalledWith('ca1', 'he');
+    expect(await screen.findByTestId('required-body-reopen-he')).toHaveValue('שלום {{1}}');
+    expect(screen.queryByTestId('required-body-reopen-en')).toBeNull();
+    expect(screen.getByTestId('required-language-he')).toHaveAttribute('aria-checked', 'true');
+
+    await userEvent.click(screen.getByTestId('required-save'));
+    await waitFor(() => expect(actions.saveRequiredTemplate).toHaveBeenCalledTimes(2));
+    for (const [call] of actions.saveRequiredTemplate.mock.calls) {
+      expect(call).toMatchObject({ language: 'he', submit: false });
+    }
+  });
+
+  it('what was typed stays with its language: not in Hebrew, back in English', async () => {
+    actions.loadRequiredTemplates
+      .mockResolvedValueOnce({
+        ok: true,
+        data: data({ languages: ['he'], defaultLanguage: 'en', items: heItems }),
+      })
+      .mockResolvedValueOnce({ ok: true, data: data({ defaultLanguage: 'en' }) });
+    show(data({ defaultLanguage: 'en' }));
+    await userEvent.clear(screen.getByTestId('required-body-reopen-en'));
+    await userEvent.type(screen.getByTestId('required-body-reopen-en'), 'Mine');
+    await userEvent.click(screen.getByTestId('required-language-he'));
+    expect(await screen.findByTestId('required-body-reopen-he')).toHaveValue('שלום {{1}}');
+    await userEvent.click(screen.getByTestId('required-language-en'));
+    expect(await screen.findByTestId('required-body-reopen-en')).toHaveValue('Mine');
+  });
+
+  it('★ a backend that ignored the choice: said, and the screen stays truthfully on English', async () => {
+    actions.loadRequiredTemplates.mockResolvedValue({ ok: true, data: data() });
+    show(data({ defaultLanguage: 'en' }));
+    await userEvent.click(screen.getByTestId('required-language-he'));
+    expect(await screen.findByTestId('required-language-problem')).toHaveTextContent(
+      "Choosing the language isn't available here yet.",
+    );
+    expect(screen.getByTestId('required-language-en')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('required-body-reopen-en')).toBeInTheDocument();
+  });
+
+  it('a failed read: said, nothing swapped', async () => {
+    show(data({ defaultLanguage: 'en' }));
+    await userEvent.click(screen.getByTestId('required-language-he'));
+    expect(await screen.findByTestId('required-language-problem')).toHaveTextContent(
+      "The templates in this language couldn't be read. Try again.",
+    );
+    expect(screen.getByTestId('required-body-reopen-en')).toBeInTheDocument();
+  });
+
+  it('the language on screen again: nothing is read', async () => {
+    show(data({ defaultLanguage: 'en' }));
+    await userEvent.click(screen.getByTestId('required-language-en'));
+    expect(actions.loadRequiredTemplates).not.toHaveBeenCalled();
+  });
+
+  it('in Hebrew: its own words', () => {
+    show(data({ defaultLanguage: 'en' }), 'he');
+    expect(screen.getByTestId('required-language')).toHaveAccessibleName('שפת התבניות');
+    expect(screen.getByTestId('required-language-he')).toHaveTextContent('עברית');
+    expect(screen.getByTestId('required-language-en')).toHaveTextContent('אנגלית');
   });
 });

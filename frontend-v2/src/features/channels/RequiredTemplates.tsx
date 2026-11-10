@@ -5,11 +5,14 @@ import { useState, useTransition } from 'react';
 
 import {
   BODY_MAX,
+  TEMPLATE_LANGUAGES,
   isEditable,
+  isTemplateLanguage,
   roleOfItem,
   stateOfItem,
   type RequiredItem,
   type RequiredTemplates as Required,
+  type TemplateLanguage,
 } from '@/api/contracts/required-templates';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { Link } from '@/i18n/navigation';
@@ -55,8 +58,44 @@ export function RequiredTemplates({ initial }: { readonly initial: Required }) {
   const [outcomes, setOutcomes] = useState<Readonly<Record<string, Outcome>>>({});
   const [forbidden, setForbidden] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [running, setRunning] = useState<'save' | 'submit' | null>(null);
+  const [running, setRunning] = useState<'save' | 'submit' | 'language' | null>(null);
+  const [languageProblem, setLanguageProblem] = useState<'unread' | 'unavailable' | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  /*
+   * The language on screen is the one the items came back in - never the one
+   * asked for. A backend that ignored the choice would otherwise show English
+   * texts under a selected "Hebrew".
+   */
+  const shown: TemplateLanguage | null = isTemplateLanguage(data.languages[0])
+    ? data.languages[0]
+    : data.defaultLanguage;
+
+  /**
+   * Another language: its templates, read fresh. Each language is its own row
+   * on the platform. What was typed is kept per role AND language (`keyOf`),
+   * so it never lands in the other language, and coming back finds it. Save
+   * and Send act on the language shown.
+   */
+  function choose(language: TemplateLanguage) {
+    if (language === shown) return;
+    setLanguageProblem(null);
+    setConfirming(false);
+    setRunning('language');
+    startTransition(async () => {
+      const fresh = await loadRequiredTemplates(data.channelAccountId, language);
+      if (!fresh.ok) {
+        setLanguageProblem('unread');
+      } else if (fresh.data.languages[0] !== language) {
+        setLanguageProblem('unavailable');
+      } else {
+        setData(fresh.data);
+        setOutcomes({});
+        setForbidden(false);
+      }
+      setRunning(null);
+    });
+  }
 
   const editable = data.items.filter(isEditable);
   const textOf = (item: RequiredItem) => drafts[keyOf(item)] ?? item.body;
@@ -93,7 +132,7 @@ export function RequiredTemplates({ initial }: { readonly initial: Required }) {
       }
       setOutcomes(next);
       // States move on a save or a submit: read them again.
-      const fresh = await loadRequiredTemplates(data.channelAccountId);
+      const fresh = await loadRequiredTemplates(data.channelAccountId, shown ?? undefined);
       if (fresh.ok) setData(fresh.data);
       setRunning(null);
     });
@@ -104,6 +143,39 @@ export function RequiredTemplates({ initial }: { readonly initial: Required }) {
       {!data.canSubmit ? (
         <p className={styles.tabNote} data-testid="required-not-connected">
           {t('notConnected')}
+        </p>
+      ) : null}
+      {shown ? (
+        <div className={styles.reqLangs}>
+          <span className={styles.tabRowMeta} id={`required-language-${data.channelAccountId}`}>
+            {t('language.label')}
+          </span>
+          <span
+            className={styles.reqLangGroup}
+            role="radiogroup"
+            aria-labelledby={`required-language-${data.channelAccountId}`}
+            data-testid="required-language"
+          >
+            {TEMPLATE_LANGUAGES.map((language) => (
+              <button
+                key={language}
+                type="button"
+                role="radio"
+                aria-checked={shown === language}
+                className={styles.reqLang}
+                disabled={busy}
+                onClick={() => choose(language)}
+                data-testid={`required-language-${language}`}
+              >
+                {t(`language.${language}`)}
+              </button>
+            ))}
+          </span>
+        </div>
+      ) : null}
+      {languageProblem ? (
+        <p className={styles.footProblem} role="alert" data-testid="required-language-problem">
+          {t(`language.${languageProblem}`)}
         </p>
       ) : null}
       {data.items.length === 0 ? (

@@ -56,6 +56,19 @@ export const requiredItemSchema = z.object({
 });
 export type RequiredItem = z.infer<typeof requiredItemSchema>;
 
+/**
+ * The languages a required template can be written in (backend
+ * TemplateLanguage). The GET takes `language` as exactly one of these and
+ * answers 400 BAD_LANGUAGE to anything else, "HE" and "" included, so the
+ * screen leaves it out rather than send anything near it.
+ */
+export const TEMPLATE_LANGUAGES = ['he', 'en'] as const;
+export type TemplateLanguage = (typeof TEMPLATE_LANGUAGES)[number];
+
+export function isTemplateLanguage(value: unknown): value is TemplateLanguage {
+  return (TEMPLATE_LANGUAGES as readonly unknown[]).includes(value);
+}
+
 export const requiredTemplatesSchema = z.object({
   channelAccountId: z.string(),
   connectionStatus: z.string().nullable().catch(null).default(null),
@@ -65,6 +78,12 @@ export const requiredTemplatesSchema = z.object({
    */
   canSubmit: z.boolean().catch(false).default(false),
   languages: z.array(z.string()).catch([]).default([]),
+  /**
+   * The workspace's own language (backend 7c3dfa35): what the selector starts
+   * on. Null from a backend without it; the screen then reads the language
+   * of the items it was given.
+   */
+  defaultLanguage: z.enum(TEMPLATE_LANGUAGES).nullable().catch(null).default(null),
   items: z.array(requiredItemSchema).catch([]).default([]),
 });
 export type RequiredTemplates = z.infer<typeof requiredTemplatesSchema>;
