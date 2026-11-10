@@ -100,6 +100,33 @@ describe("GET /required", () => {
     expect(r.body.data.items[1].body).toMatch(/didn't hear back/);
   });
 
+  it("★ ?language=he on an English workspace: Hebrew items, default still reported as en", async () => {
+    H.locale = "English";
+    const r = await request(app).get("/api/templates/required?channelAccountId=ca1&language=he");
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ languages: ["he"], defaultLanguage: "en" });
+    expect(r.body.data.items.map((i: any) => [i.role, i.language, i.state])).toEqual([["reopen", "he", "missing"], ["followup", "he", "missing"]]);
+    expect(r.body.data.items[0].body).toMatch(/^היי \{\{1\}\}/);
+  });
+
+  it("without ?language the default is unchanged; an existing row in the other language is not this one", async () => {
+    H.locale = "English";
+    H.templates = [{ id: "x1", tenantId: "T", channel: "WHATSAPP", channelAccountId: "ca1", name: "gotcha_reopen", language: "en", status: "APPROVED" }];
+    const en = await getRequired();
+    expect(en.body.data).toMatchObject({ languages: ["en"], defaultLanguage: "en" });
+    expect(en.body.data.items[0]).toMatchObject({ language: "en", state: "approved", templateId: "x1" });
+    const he = await request(app).get("/api/templates/required?channelAccountId=ca1&language=he");
+    expect(he.body.data.items[0]).toMatchObject({ language: "he", state: "missing", templateId: null });
+  });
+
+  it("a language other than he|en is 400 BAD_LANGUAGE", async () => {
+    for (const q of ["fr", "HE", ""]) {
+      const r = await request(app).get(`/api/templates/required?channelAccountId=ca1&language=${q}`);
+      expect(r.status).toBe(400);
+      expect(r.body.code).toBe("BAD_LANGUAGE");
+    }
+  });
+
   it("the state of this number's row, else an unbound one; another number's is not it", async () => {
     H.templates = [
       { id: "a", tenantId: "T", channel: "WHATSAPP", channelAccountId: "ca1", name: "gotcha_reopen", language: "he", status: "APPROVED", body: "x", buttons: [] },
@@ -172,6 +199,19 @@ describe("POST /required", () => {
     const payload = JSON.parse(post.init.body);
     expect(payload).toMatchObject({ name: "gotcha_reopen", category: "UTILITY", language: "he" });
     expect(H.templates[0]).toMatchObject({ status: "PENDING_APPROVAL", metaTemplateId: "meta-777" });
+  });
+
+  it("★ Hebrew on an English workspace: saved and submitted in he, beside an approved en row of the same name", async () => {
+    H.locale = "English";
+    H.templates = [{ id: "x1", tenantId: "T", channel: "WHATSAPP", channelAccountId: "ca1", name: "gotcha_reopen", language: "en", status: "APPROVED", body: "Hi {{1}}" }];
+    const r = await save({ language: "he", submit: true });
+    expect(r.status).toBe(200);
+    expect(r.body.submitted).toBe(true);
+    const payload = JSON.parse(H.fetches.find((f) => f.init?.method === "POST")!.init.body);
+    expect(payload).toMatchObject({ name: "gotcha_reopen", language: "he" });
+    expect(H.templates).toHaveLength(2);
+    expect(H.templates.find((t) => t.language === "he")).toMatchObject({ status: "PENDING_APPROVAL", body: expect.stringMatching(/^היי/) });
+    expect(H.templates.find((t) => t.id === "x1")).toMatchObject({ language: "en", status: "APPROVED", body: "Hi {{1}}" });
   });
 
   it("refuses an unknown role, a bad language, an empty body", async () => {

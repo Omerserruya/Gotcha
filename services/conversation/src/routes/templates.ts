@@ -327,8 +327,14 @@ router.get("/required", authenticate, resolveTenant, requireOnboardingOrActiveTe
     const tenantId = req.tenantId! as string;
     const account = await whatsappAccount(tenantId, req.query.channelAccountId);
     if (!account) { res.status(404).json({ error: "WhatsApp number not found", code: "NUMBER_NOT_FOUND" }); return; }
+    // ?language=he|en picks the language; without it, the workspace's.
+    const asked = req.query.language;
+    if (asked !== undefined && asked !== "he" && asked !== "en") {
+      res.status(400).json({ error: "language must be he or en", code: "BAD_LANGUAGE" }); return;
+    }
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });
-    const languages = languagesFor(tenant?.defaultLocale);
+    const defaultLanguage = languagesFor(tenant?.defaultLocale)[0];
+    const languages: TemplateLanguage[] = asked ? [asked as TemplateLanguage] : [defaultLanguage];
     // missed_call only while a voice number uses it (B1).
     const roles = requiredRolesFor({ voiceMissedCall: await voiceMissedCallInUse(tenantId) });
     const origin = voiceOrigin();
@@ -366,6 +372,7 @@ router.get("/required", authenticate, resolveTenant, requireOnboardingOrActiveTe
         // Meta accepts a template only from a connected number.
         canSubmit: account.connectionStatus === "CONNECTED" && account.isActive,
         languages,
+        defaultLanguage,
         items,
       },
     });
