@@ -122,20 +122,42 @@ export async function mapLimited<T, R>(
 ): Promise<Array<R | null>> {
   const results: Array<R | null> = new Array(items.length).fill(null);
   let cursor = 0;
+  let halt: any = null;
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
     for (;;) {
       const index = cursor++;
       if (index >= items.length) return;
+      if (halt) return;
       try {
         results[index] = await fn(items[index], index);
       } catch (err: any) {
+        // Out of AI units (or AI not allowed at all): every later item fails
+        // the same way. Stop taking new items and let the stage halt.
+        if (isAiAccessDenied(err)) { halt ??= err; return; }
         console.warn(`[historical-intelligence] item ${index} failed: ${err?.message}`);
         results[index] = null;
       }
     }
   });
   await Promise.all(workers);
+  if (halt) throw halt;
   return results;
+}
+
+/**
+ * The billing gate refused the AI call (AiUnitsExhaustedError, "ai_units:<reason>").
+ * Not a model failure: nothing later in the import can succeed until the
+ * workspace has units again, so the import stops rather than "completing"
+ * with nothing learned (prod GOTCHA, 2026-11-10).
+ */
+export function isAiAccessDenied(err: any): boolean {
+  return err?.name === "AiUnitsExhaustedError" || /^ai_units:/.test(String(err?.message ?? ""));
+}
+
+/** "units_exhausted" for a spent wallet, else the gate's reason ("suspended", "trial_expired", ...). */
+export function aiDenyReason(err: any): string {
+  const r = err?.reason ?? String(err?.message ?? "").replace(/^ai_units:/, "");
+  return r === "credits_exhausted" ? "units_exhausted" : r || "units_exhausted";
 }
 
 /**

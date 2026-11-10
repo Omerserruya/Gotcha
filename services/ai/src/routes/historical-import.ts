@@ -20,7 +20,7 @@ import {
 import { processDocument } from "../services/embedding.service";
 import { findExistingKnowledge } from "../services/historical-intelligence/candidate-index";
 import { BULK_APPROVE_MIN_CONFIDENCE } from "../services/historical-intelligence/knowledge-clustering.stage";
-import { rerunIntelligence } from "../services/historical-intelligence";
+import { rerunIntelligence, historicalFailureCode } from "../services/historical-intelligence";
 import { privateNumbers, privateConversationIds, conversationIsPrivate, numberIsPrivate } from "../lib/private-numbers";
 
 /**
@@ -833,6 +833,9 @@ function toStatusView(row: {
     knowledgeConflictCount: row.knowledgeConflictCount,
     failureReason: row.failureReason,
     failedStage: row.failedStage,
+    // "units_exhausted" | "ai_access_denied" when the billing gate stopped the
+    // analysis (show "out of AI units" + rerun, never "done"); null otherwise.
+    failureCode: historicalFailureCode(row),
     startedAt: row.startedAt,
     sourceCompletedAt: row.sourceCompletedAt,
     completedAt: row.completedAt,

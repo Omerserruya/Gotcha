@@ -244,9 +244,14 @@ export async function runCustomerLearningStage(args: {
   const analyzed = await prisma.historicalCustomer.count({
     where: { importId, tenantId, learningStatus: { not: "PENDING" } },
   });
+  // The total from the same rows. The identity stage's count can be short:
+  // history chunks still arriving after it ran add customers (prod GOTCHA
+  // 2026-11-10: 279 at identity, 310 rows by learning), and "310 of 279"
+  // is a counter nobody can read.
+  const total = await prisma.historicalCustomer.count({ where: { importId, tenantId } });
   await prisma.historicalImport.update({
     where: { id: importId },
-    data: { customersAnalyzed: analyzed },
+    data: { customersAnalyzed: analyzed, customersTotal: total },
   });
 
   const remaining = await prisma.historicalCustomer.count({

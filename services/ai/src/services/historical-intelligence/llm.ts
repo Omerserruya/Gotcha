@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generateResponse, callWithRetry, getDefaultModel, getMicroModel } from "../ai.service";
+import { isAiAccessDenied } from "./stage-utils";
 
 /**
  * Schema-validated LLM output for the historical pipeline.
@@ -85,6 +86,9 @@ export async function structuredCall<T extends z.ZodTypeAny>(
       );
       raw = res.content;
     } catch (err: any) {
+      // Inside an import a billing refusal stops the import (index.ts): every
+      // later call would be refused the same way. Elsewhere it stays "no result".
+      if (args.importId && isAiAccessDenied(err)) throw err;
       // The provider failed after its own retries. The stage above decides
       // whether that is fatal; here it is simply "no result".
       console.warn(`[historical-intelligence] ${args.feature} llm call failed: ${err?.message}`);

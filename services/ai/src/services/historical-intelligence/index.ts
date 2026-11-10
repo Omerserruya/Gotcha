@@ -15,7 +15,7 @@ import { runKnowledgeCurationStage } from "./knowledge-curation.stage";
 import { runBrandVoiceStage } from "./brand-voice.stage";
 import { runAnalyticsStage } from "./analytics.stage";
 import { runFinalizeStage } from "./finalize.stage";
-import { recordEvent } from "./stage-utils";
+import { recordEvent, isAiAccessDenied, aiDenyReason } from "./stage-utils";
 import { dropImportClusters } from "./candidate-index";
 
 /**
@@ -165,6 +165,21 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       }
     }
   } catch (err: any) {
+    // Out of AI units / AI not allowed: no retry can succeed. Stop the import
+    // now - FAILED, so finalize (and its "completed" email) never runs and
+    // queued jobs drop - with the reason in failedStage ("ai-units:<stage>",
+    // read back as failureCode by the status view). The data stays; the
+    // rerun route starts the analysis again once units are topped up.
+    if (isAiAccessDenied(err)) {
+      const reason = aiDenyReason(err);
+      await recordEvent(importId, STAGE_STATUS[stage], "FAILED", `ai_units:${reason}`, { code: reason, final: true });
+      await prisma.historicalImport.updateMany({
+        where: { id: importId, tenantId, status: { notIn: ["COMPLETED", "NOT_AVAILABLE"] } },
+        data: { status: "FAILED", failedStage: `${reason === "units_exhausted" ? AI_UNITS_STAGE_PREFIX : AI_ACCESS_STAGE_PREFIX}${stage}`, failureReason: aiDeniedCopy(reason) },
+      });
+      console.warn(`[historical-intelligence] import ${importId} stopped at ${stage}: ai_units:${reason}`);
+      return;
+    }
     // BullMQ retries this job on throw. Only after the last attempt is the
     // import marked failed - failing it on the first blip would show the
     // customer an error for something that recovers thirty seconds later.
@@ -206,6 +221,24 @@ async function enqueue(
       removeOnFail: 200,
     },
   );
+}
+
+/** failedStage of an import the billing gate stopped: "ai-units:<stage>" (out of units), "ai-access:<stage>" (any other refusal). */
+export const AI_UNITS_STAGE_PREFIX = "ai-units:";
+export const AI_ACCESS_STAGE_PREFIX = "ai-access:";
+
+/** The status view's failureCode, from failedStage; null for every other failure. */
+export function historicalFailureCode(row: { status: string; failedStage: string | null }): "units_exhausted" | "ai_access_denied" | null {
+  if (row.status !== "FAILED" || !row.failedStage) return null;
+  if (row.failedStage.startsWith(AI_UNITS_STAGE_PREFIX)) return "units_exhausted";
+  if (row.failedStage.startsWith(AI_ACCESS_STAGE_PREFIX)) return "ai_access_denied";
+  return null;
+}
+
+export function aiDeniedCopy(reason: string): string {
+  return reason === "units_exhausted"
+    ? "You ran out of AI units while we were analyzing your conversations. Your conversations are imported; top up your AI units and run the analysis again."
+    : "AI analysis is not available on your workspace right now, so we stopped analyzing your conversations. Your conversations are imported; you can run the analysis again once AI is available.";
 }
 
 function failureCopy(stage: HistoricalIntelligenceJob["stage"]): string {
