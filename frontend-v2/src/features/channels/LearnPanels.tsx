@@ -66,9 +66,13 @@ export async function LearningRow({ status }: { readonly status: ImportStatus })
         {status.stage === 'ready'
           ? t('learn.rowReady', { count: status.knowledgeCandidateCount })
           : status.stage === 'transferring'
-            ? t('learn.rowImporting', { percent: status.percent })
+            ? status.percent === null
+              ? t('learn.rowInProgress')
+              : t('learn.rowImporting', { percent: status.percent })
             : status.stage === 'analyzing'
-              ? t('learn.rowLearning', { percent: status.analysisPercent })
+              ? status.analysisPercent === null
+                ? t('learn.rowInProgress')
+                : t('learn.rowLearning', { percent: status.analysisPercent })
               : t(`import.stage.${status.stage}`)}
       </span>
       <span aria-hidden="true">›</span>
@@ -219,8 +223,8 @@ export async function ImportPanel({
                 : done.conversationsTotal
                   ? t('learn.conversations', { count: n.format(done.conversationsTotal) })
                   : null,
-              importState === 'active' ? bar(status.percent) : null,
-              importState === 'active' ? pctOf(status.percent) : null,
+              importState === 'active' && status.percent !== null ? bar(status.percent) : null,
+              importState === 'active' && status.percent !== null ? pctOf(status.percent) : null,
             )}
             <li className={styles.timelineGroup} title={t('import.noOrder')}>
               <ol className={styles.timeline}>
@@ -229,8 +233,12 @@ export async function ImportPanel({
                   learnState,
                   t('learn.learning'),
                   t('learn.learningSub'),
-                  learnState === 'active' ? bar(status.analysisPercent) : null,
-                  learnState === 'active' ? pctOf(status.analysisPercent) : null,
+                  learnState === 'active' && status.analysisPercent !== null
+                    ? bar(status.analysisPercent)
+                    : null,
+                  learnState === 'active' && status.analysisPercent !== null
+                    ? pctOf(status.analysisPercent)
+                    : null,
                 )}
                 {step(
                   'answers',

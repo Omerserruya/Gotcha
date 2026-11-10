@@ -102,6 +102,14 @@ const candidate = (over: Record<string, unknown> = {}) =>
   });
 
 describe('★ 13b → 13e / 13f: one row while there is an import', () => {
+  it.each([
+    [{ stage: 'transferring', percent: null }],
+    [{ stage: 'analyzing', analysisPercent: null }],
+  ])('★★ %o: "Learning in progress", with no number', async (over) => {
+    render(await LearningRow({ status: status(over) }));
+    expect(screen.getByTestId('learning-row').textContent).toBe('Learning in progress›');
+  });
+
   it('learning leads to progress; ready leads to the report', async () => {
     const { unmount } = render(await LearningRow({ status: status({ analysisPercent: 64 }) }));
     expect(screen.getByTestId('learning-row')).toHaveTextContent('Learning in progress · 64%');
@@ -120,6 +128,21 @@ describe('★ 13b → 13e / 13f: one row while there is an import', () => {
 });
 
 describe('★ 13e - the platform’s two stages, drawn as 02’s timeline', () => {
+  it('★★ a null percentage is the stage alone: no bar, no 0% (prod, 2026-11-10)', async () => {
+    const one = render(
+      await ImportPanel({
+        status: status({ stage: 'transferring', percent: null }),
+        receiving: true,
+      }),
+    );
+    expect(screen.getByTestId('learn-step-imported')).toHaveAttribute('data-state', 'active');
+    expect(screen.getByTestId('learn-step-imported')).not.toHaveTextContent('%');
+    one.unmount();
+    render(await ImportPanel({ status: status({ analysisPercent: null }), receiving: true }));
+    expect(screen.getByTestId('learn-step-learning')).toHaveAttribute('data-state', 'active');
+    expect(screen.getByTestId('learn-step-learning')).not.toHaveTextContent('%');
+  });
+
   it('analyzing: the three kinds of learning share ONE state - they happen together', async () => {
     render(await ImportPanel({ status: status({ analysisPercent: 40 }), receiving: true }));
     for (const key of ['learning', 'answers', 'customers']) {

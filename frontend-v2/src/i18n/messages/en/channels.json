@@ -269,6 +269,7 @@
     },
     "addNumber": "+ Add another number",
     "learn": {
+      "rowInProgress": "Learning in progress",
       "rowImporting": "Learning in progress · importing {percent}%",
       "rowLearning": "Learning in progress · {percent}%",
       "rowReady": "Report ready · {count, plural, one {# answer} other {# answers}}",
