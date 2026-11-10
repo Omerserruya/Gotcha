@@ -966,7 +966,7 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   if (/^[ \t]*SHOW[ \t]*:/im.test(t) || /(?<![A-Za-z])SHOW(?![A-Za-z])/.test(t)) out.push("show_line");
   if (ctx.locale === "he" && ctx.cardsShown && (ctx.productTitles ?? []).some((x) => x && t.includes(x))) out.push("title");
   const sentencesOf = t.split(/(?<=[.!?؟\n])\s+/).map((x) => x.trim()).filter(Boolean);
-  // A line ending in ":" over the cards ("זה הולך מצוין עם:") introduces them.
+  // A line ending in ":" over the cards ("עוד מוצרים שיכולים להתאים לך:") introduces them.
   if (sentencesOf.some((x) => DANGLING_END.test(x) && !(ctx.cardsShown && /:\s*$/.test(x)))) out.push("dangling");
   if (VERBLESS_QUESTION.test(t)) out.push("verbless_question");
   const words = t.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;

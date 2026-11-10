@@ -375,7 +375,7 @@ describe("e23: what the gate does not let through", () => {
     expect(finalTextIssues("יש מעיל שמתאים לגבר, למשל.", gate())).toContain("dangling");
   });
   it("our own lines pass", () => {
-    for (const t of ["הנה שוב:", "בחירה מצוינת!\nזה הולך מצוין עם:", "הנה כמה אפשרויות שיכולות להתאים:"]) expect(finalTextIssues(t, gate()), t).toEqual([]);
+    for (const t of ["הנה שוב:", "בחירה מצוינת!\nעוד מוצרים שיכולים להתאים לך:", "More products that may suit you:", "הנה כמה אפשרויות שיכולות להתאים:"]) expect(finalTextIssues(t, gate()), t).toEqual([]);
     expect(finalTextIssues("בכיף 🙂", gate({ customerClosing: true, cardsShown: false }))).toEqual([]);
   });
   it("the safe line for the turn", () => {

@@ -127,7 +127,7 @@ beforeEach(() => {
 describe("1. the crossbody bag added after the men's coat (Omer, 2026-10-28)", () => {
   it("names the bag, and the add-ons are other accessories for her", async () => {
     expect(await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "425" })).toBe("sent");
-    expect(H.created[0].body).toBe("ראיתי שהוספת לסל את תיק הצד! הוא הולך מושלם עם:");
+    expect(H.created[0].body).toBe("ראיתי שהוספת לסל את תיק הצד! עוד מוצרים שיכולים להתאים לך:");
     const ids = H.created[1].metadata.commerce.products.map((p: any) => p.productId);
     // Not a bag (the tote is a substitute and was shown), not out of stock, not the men's wallet, no clothes.
     expect(ids).toEqual(["429", "435", "443"]);
@@ -158,20 +158,20 @@ describe("1. the crossbody bag added after the men's coat (Omer, 2026-10-28)", (
 
 describe("the line names what was added", () => {
   it.each([
-    ["Leather Crossbody Bag", "ראיתי שהוספת לסל את תיק הצד! הוא הולך מושלם עם:"],
-    ["Canvas Tote Bag", "ראיתי שהוספת לסל את תיק הבד! הוא הולך מושלם עם:"],
-    ["Leather Belt", "ראיתי שהוספת לסל את החגורה! היא הולכת מושלם עם:"],
-    ["Chino Pants", "ראיתי שהוספת לסל את המכנסיים! הם הולכים מושלם עם:"],
-    ["Cotton Trench Coat", "ראיתי שהוספת לסל את הטרנץ'! הוא הולך מושלם עם:"],
-    ["Linen Overshirt", "ראיתי שהוספת לסל את החולצה העליונה! היא הולכת מושלם עם:"],
+    ["Leather Crossbody Bag", "ראיתי שהוספת לסל את תיק הצד! עוד מוצרים שיכולים להתאים לך:"],
+    ["Canvas Tote Bag", "ראיתי שהוספת לסל את תיק הבד! עוד מוצרים שיכולים להתאים לך:"],
+    ["Leather Belt", "ראיתי שהוספת לסל את החגורה! עוד מוצרים שיכולים להתאים לך:"],
+    ["Chino Pants", "ראיתי שהוספת לסל את המכנסיים! עוד מוצרים שיכולים להתאים לך:"],
+    ["Cotton Trench Coat", "ראיתי שהוספת לסל את הטרנץ'! עוד מוצרים שיכולים להתאים לך:"],
+    ["Linen Overshirt", "ראיתי שהוספת לסל את החולצה העליונה! עוד מוצרים שיכולים להתאים לך:"],
   ])("%s", (title, line) => {
     expect(addedToCartLine("he", title)).toBe(line);
     expect(line).not.toMatch(/[–—־]/);
   });
   it("no safe Hebrew name: the generic line; English names the title", () => {
-    expect(addedToCartLine("he", "Gift Card")).toBe("זה הולך מצוין עם:");
-    expect(addedToCartLine("he", "")).toBe("זה הולך מצוין עם:");
-    expect(addedToCartLine("en", "Leather Belt")).toBe("I see you added the Leather Belt to your cart! It goes great with:");
+    expect(addedToCartLine("he", "Gift Card")).toBe("עוד מוצרים שיכולים להתאים לך:");
+    expect(addedToCartLine("he", "")).toBe("עוד מוצרים שיכולים להתאים לך:");
+    expect(addedToCartLine("en", "Leather Belt")).toBe("I see you added the Leather Belt to your cart! More products that may suit you:");
   });
 });
 

@@ -2,7 +2,7 @@
  * Cross-sell when the customer settles on a product (2026-10-26, Omer's urban
  * test: woocommerce.complementary_products was offered and never called).
  *
- *   (i)  "אני לוקח את הטרנץ'": the answer, then "זה הולך מצוין עם:" and the add-on cards.
+ *   (i)  "אני לוקח את הטרנץ'": the answer, then "עוד מוצרים שיכולים להתאים לך:" and the add-on cards.
  *   (ii) Add to cart on a card: the same line and cards, written by the server.
  *   Both: the widget's toggle on, the bot has the conversation, once per product
  *   across both signals (and the model's own call), nothing when the store has
@@ -144,7 +144,7 @@ describe("(ii) add to cart", () => {
     ]);
     // Names what was added (Omer 2026-10-28); the generic line only without a safe Hebrew name.
     expect(H.created[0].body).toBe(addedToCartLine("he", "Cotton Trench Coat"));
-    expect(H.created[0].body).toBe("ראיתי שהוספת לסל את הטרנץ'! הוא הולך מושלם עם:");
+    expect(H.created[0].body).toBe("ראיתי שהוספת לסל את הטרנץ'! עוד מוצרים שיכולים להתאים לך:");
     expect(H.events.map((e) => [e.event, e.data.channel])).toEqual([["message:new", "WEBCHAT"], ["message:new", "WEBCHAT"]]);
   });
   it("once: a second add of the same product, or after \"אני לוקח\" already offered it, sends nothing", async () => {
@@ -157,7 +157,7 @@ describe("(ii) add to cart", () => {
   it("in English when the customer writes English", async () => {
     H.lastInbound = { body: "looking for a coat please" };
     await offerCrossSellAfterCart({ tenantId: "T", conversationId: "c1", productId: "41" });
-    expect(H.created[0].body).toBe("I see you added the Cotton Trench Coat to your cart! It goes great with:");
+    expect(H.created[0].body).toBe("I see you added the Cotton Trench Coat to your cart! More products that may suit you:");
   });
   it("nothing: toggle off, a person has it, handed over, closed, no add-ons", async () => {
     H.account = { credentials: { commerce: { productMessagingEnabled: true, suggestComplementary: false } } };

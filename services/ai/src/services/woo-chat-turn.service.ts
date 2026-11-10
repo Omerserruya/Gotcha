@@ -382,7 +382,8 @@ export async function wooComplementaryProducts(
 // The complementary tool was offered and never called (Omer's urban test: zero
 // calls in 40 minutes). The model only sees text, so the moment the customer
 // chooses is decided here instead: they say they will take or order it, or they
-// press Add to cart on a card. Then one line, "זה הולך מצוין עם:", and the
+// press Add to cart on a card. Then one line, "עוד מוצרים שיכולים להתאים לך:"
+// (Omer 2026-11-10; it was "זה הולך מצוין עם:"), and the
 // store's add-ons as cards. Once per product, across both signals; only while
 // the widget's toggle is on and the bot has the conversation; nothing when the
 // store has no add-ons; never a product the customer already chose.
@@ -393,7 +394,7 @@ const crossSellChosenKey = (conversationId: string) => `woo:cross-sell-chosen:${
 
 /** The line over the add-on cards. */
 export function goesWellWithLine(locale: string): string {
-  return locale?.startsWith("he") ? "זה הולך מצוין עם:" : "This goes great with:";
+  return locale?.startsWith("he") ? "עוד מוצרים שיכולים להתאים לך:" : "More products that may suit you:";
 }
 
 // A store title's Hebrew name, with its gender for "הוא/היא הולך", most specific first.
@@ -410,17 +411,16 @@ const HEBREW_NAME: Array<[RegExp, string, "m" | "f" | "pl"]> = [
 
 /**
  * The line over the add-ons after Add to cart, naming what was added (Omer
- * 2026-10-28): "ראיתי שהוספת לסל את תיק הצד! הוא הולך מושלם עם:". The
+ * 2026-10-28): "ראיתי שהוספת לסל את תיק הצד! עוד מוצרים שיכולים להתאים לך:". The
  * generic line when the title has no safe Hebrew name.
  */
 export function addedToCartLine(locale: string, title: string | null | undefined): string {
   const t = String(title ?? "").trim();
-  if (!locale?.startsWith("he")) return t ? `I see you added the ${t} to your cart! It goes great with:` : goesWellWithLine(locale);
+  if (!locale?.startsWith("he")) return t ? `I see you added the ${t} to your cart! ${goesWellWithLine(locale)}` : goesWellWithLine(locale);
   const hit = HEBREW_NAME.find(([re]) => re.test(t.toLowerCase()));
   if (!hit) return goesWellWithLine(locale);
-  const [, name, g] = hit;
-  const goes = g === "m" ? "הוא הולך" : g === "f" ? "היא הולכת" : "הם הולכים";
-  return `ראיתי שהוספת לסל את ${name}! ${goes} מושלם עם:`;
+  const [, name] = hit;
+  return `ראיתי שהוספת לסל את ${name}! ${goesWellWithLine(locale)}`;
 }
 
 /**
