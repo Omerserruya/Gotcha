@@ -5954,6 +5954,7 @@ async function generateAIBotReplyInner(
         shopFloor: false,
         toolsOffered: toolFunctionNames,
         customerClosing: customerIsClosing(opts.incomingMessage),
+        supportTurn: supportAsk,
         // This turn's results and every product the conversation's cards showed.
         productTitles: [...(productEnvelope?.candidates.map((c) => c.title) ?? []), ...(wooTurn?.shown.map((p) => p.title) ?? [])],
         cardsShown: gateCards,

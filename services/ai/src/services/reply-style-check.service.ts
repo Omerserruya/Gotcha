@@ -952,6 +952,8 @@ export function dropIgnoredSizeQuestion(text: string, previousReplies: string[],
 export interface FinalGateContext extends StyleCheckContext {
   /** Cards go out with this message. */
   cardsShown: boolean;
+  /** A support turn (a fault, setting up, an order): Latin technical terms ("Access Point", "Wi-Fi") are not store titles. */
+  supportTurn?: boolean;
 }
 
 /** What is wrong with the text as it would leave; empty when it may go. */
@@ -982,7 +984,9 @@ export function finalTextIssues(text: string, ctx: FinalGateContext): string[] {
   if (ctx.locale === "he" && transliteratedTitleWord(t, ctx.productTitles ?? [])) out.push("transliteration");
   // A store title in the Hebrew sentence with no card under it (urban-e28:
   // "אצלנו יש Lambswool Scarf במחיר מבצע", answered from the knowledge text).
-  if (ctx.locale === "he" && !ctx.cardsShown && /\b[A-Z][a-z]{2,}(?: [A-Z][a-z]{2,})+\b/.test(t)) out.push("title");
+  // Not on a support turn: troubleshooting names "Access Point", "Wi-Fi Direct"
+  // (Demo 2026-11-10: the whole answer became the safe line over "Access Point").
+  if (ctx.locale === "he" && !ctx.cardsShown && !ctx.supportTurn && /\b[A-Z][a-z]{2,}(?: [A-Z][a-z]{2,})+\b/.test(t)) out.push("title");
   // A rewrite is not style-checked again, and urban-e26's came back as the
   // previous reply nearly word for word.
   const norm = (x: string) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();

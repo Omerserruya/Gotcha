@@ -54,3 +54,13 @@ describe("wired into every pre-search path", () => {
     expect(src).toContain("if (!supportAsk) try {\n    const disc = await runProductDiscoveryTurn({");
   });
 });
+
+describe("the final gate on a support turn (Demo 2026-11-10: the answer became the safe line over 'Access Point')", () => {
+  it("Latin technical terms are not a store title on a support turn; still caught on a shopping turn", async () => {
+    const { finalTextIssues } = await import("../services/reply-style-check.service");
+    const t = "נסו לבדוק שהטלפון מחובר לרשת בתדר 2.4GHz ושה‑Access Point בנתב פעילה. זה פתר את הבעיה?";
+    const base = { locale: "he", isFirstReply: true, incomingMessage: "", productFactsAvailable: true, shopFloor: false, toolsOffered: [], cardsShown: false } as any;
+    expect(finalTextIssues(t, { ...base, supportTurn: true })).not.toContain("title");
+    expect(finalTextIssues("אצלנו יש Lambswool Scarf במחיר מבצע.", { ...base, supportTurn: false })).toContain("title");
+  });
+});
