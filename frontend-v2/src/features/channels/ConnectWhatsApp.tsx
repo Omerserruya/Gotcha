@@ -319,7 +319,7 @@ function TemplatesStep({
 }) {
   const t = useTranslations('channels.whatsapp.required');
   return (
-    <div data-testid="connect-templates">
+    <div className={styles.connectStep} data-testid="connect-templates">
       <h3 className={styles.connectQuestion}>{t('title')}</h3>
       <p className={styles.connectLead}>{t('lead')}</p>
       {required === null ? (

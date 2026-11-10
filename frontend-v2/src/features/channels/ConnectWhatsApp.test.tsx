@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
@@ -6,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { requiredTemplatesSchema } from '@/api/contracts/required-templates';
 import { embeddedSignupLaunchSchema } from '@/api/contracts/whatsapp-connect';
+import drawer from '@/design-system/styles/drawer.module.css';
 import messages from '@/i18n/messages/en/channels.json';
+
+import styles from './Channels.module.css';
 
 /* Nothing here reaches Meta: the SDK is stubbed; inspect and connect are spies. */
 const inspectNumbers = vi.hoisted(() => vi.fn());
@@ -86,6 +92,34 @@ const candidate = (over: Record<string, unknown>) => ({
 });
 
 /** Through Meta to 13d, with these numbers. */
+/**
+ * ★★ `.connectLead` pulls itself up 10px (margin -10px): it assumes it sits
+ * straight in a flex column with a 16px gap - the drawer body, or a step's
+ * `.connectStep`. Step 4 wrapped its heading in a plain div and the lead rose
+ * into "Required templates" (Omer, prod 2026-11-10). Measured in Chromium:
+ * -10px before, 6px after.
+ */
+function expectLeadsInAGappedColumn() {
+  const leads = document.querySelectorAll(`.${styles.connectLead}`);
+  expect(leads.length).toBeGreaterThan(0);
+  for (const lead of leads) {
+    const parent = lead.parentElement!;
+    expect(
+      parent.classList.contains(drawer.drawerBody!) ||
+        parent.classList.contains(styles.connectStep!),
+      `the lead's parent is <${parent.tagName.toLowerCase()} class="${parent.className}">`,
+    ).toBe(true);
+  }
+  const css = readFileSync(
+    join(process.cwd(), 'src/features/channels/Channels.module.css'),
+    'utf8',
+  );
+  const rule = /\.connectStep \{([^}]*)\}/.exec(css)?.[1] ?? '';
+  expect(rule).toMatch(/display:\s*flex/);
+  expect(rule).toMatch(/flex-direction:\s*column/);
+  expect(rule).toMatch(/gap:\s*var\(--space-16\)/);
+}
+
 async function toNumbers(candidates: unknown[]) {
   inspectNumbers.mockResolvedValue({ sessionId: 's1', candidates });
   show();
@@ -247,6 +281,7 @@ describe('★★ 13d - exactly one number per pass', () => {
     expect(required.requiredForConnected).toHaveBeenCalledWith('p2', '+972 3 555 0000');
     // Step 4: the templates, and no move until Continue.
     expect(await screen.findByTestId('connect-templates')).toBeInTheDocument();
+    expectLeadsInAGappedColumn();
     expect(
       screen.getByTestId('connect-steps').querySelector('[aria-current="step"]'),
     ).toHaveTextContent('Required templates');

@@ -1417,6 +1417,18 @@
     color: var(--text-primary);
   }
 
+  /*
+   * ★ A step wrapped in its own element (step 4) keeps the drawer body's
+   * column and gap, which .connectLead's -10px assumes. Without it the lead
+   * rose 10px into the heading (Omer, prod 2026-11-10).
+   */
+  .connectStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-inline-size: 0;
+  }
+
   .connectLead {
     margin: -10px 0 0;
     font-size: 12.5px;
