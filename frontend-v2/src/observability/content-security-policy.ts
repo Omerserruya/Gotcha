@@ -133,7 +133,15 @@ export function buildContentSecurityPolicy(options: {
     'font-src': ["'self'", 'data:'],
     'connect-src': credentialSurface
       ? ["'self'"]
-      : ["'self'", ...realtimeOrigins, ...(isDevelopment ? ['ws:'] : [])],
+      : [
+          "'self'",
+          ...realtimeOrigins,
+          ...(isDevelopment ? ['ws:'] : []),
+          // Meta's SDK talks to facebook.com during FB.login on the signup surface.
+          ...(metaSignupSurface
+            ? ['https://www.facebook.com', 'https://web.facebook.com']
+            : []),
+        ],
     'media-src': credentialSurface ? ["'none'"] : ["'self'", 'blob:', 'https:'],
     // No plugins, ever.
     'object-src': ["'none'"],

@@ -136,7 +136,9 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
      */
     credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
     // 13c: Meta's Embedded Signup frames facebook.com - on the channels pages only.
-    metaSignupSurface: META_SIGNUP_PATH.test(pathname),
+    // Every product page: CSP is fixed per document, and a client navigation into
+    // channels or onboarding keeps the first page's policy (Meta's popup needs it).
+    metaSignupSurface: !PUBLIC_PATH_PATTERN.test(pathname),
     // The MFA gate frames the identity provider's enrolment flows.
     authFrameOrigin: originOf(process.env.OIDC_ISSUER),
   });
