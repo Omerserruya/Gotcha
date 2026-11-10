@@ -64,7 +64,12 @@ export function trimToBoundary(value: unknown, max: number): unknown {
 }
 const capped = (max: number) => z.preprocess((v) => trimToBoundary(v, max), z.string().max(max));
 
-/** The guidance cap, and what the prompt asks for (below it, so trimming is the exception). */
+/**
+ * The guidance cap, and what the prompt asks for (below it, so trimming is the
+ * exception). Every cap here equals packages/shared VOICE_LIMITS, which the
+ * voice editor derives its maximum from; voice-limits-contract.test.ts pins
+ * them (not imported at runtime: dev ai runs a baked shared).
+ */
 export const GUIDANCE_MAX = 1800;
 export const GUIDANCE_ASK = 1400;
 
@@ -80,7 +85,7 @@ export const VoiceSchema = z.object({
   /** One line the reviewer can judge at a glance. */
   summary: z.preprocess((v) => trimToBoundary(v, 300), z.string().min(10).max(300)).describe("One sentence describing the voice"),
   /** The emoji an agent may actually use, drawn from the counted palette. */
-  emojiPalette: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 10) : v), z.array(z.string()).max(10)).describe("Emoji this business genuinely uses"),
+  emojiPalette: z.preprocess((v) => (Array.isArray(v) ? v.slice(0, 10).map((e) => (typeof e === "string" ? e.trim().slice(0, 16) : e)) : v), z.array(z.string().max(16)).max(10)).describe("Emoji this business genuinely uses"),
   // 200 was too small and it failed the whole call twice, losing the guidance
   // while the counted evidence was already stored. This business opens with a
   // multi-line template that runs past 200 characters on its own, and the stage

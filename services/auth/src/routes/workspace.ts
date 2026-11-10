@@ -28,6 +28,7 @@ import {
   setPolicy,
   validateStringList,
   PolicyValidationError,
+  voiceEditError,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -45,8 +46,6 @@ const WRITE = requirePermission("settings:workspace:update");
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
 import { readProvenance, fieldSources, stampProvenance } from "../services/field-provenance.service";
 import { startProfileRescan, readScanRun, acceptScanProposal, type ScanRun } from "../services/business-scan.service";
-const VOICE_MIN = 40;
-const VOICE_MAX = 1800;
 
 // ─── Shape helpers ────────────────────────────────────────────
 
@@ -435,11 +434,10 @@ router.put("/workspace/voice", WRITE, async (req: Request, res: Response) => {
       return;
     }
 
-    if (guidance.length < VOICE_MIN || guidance.length > VOICE_MAX) {
-      res.status(422).json({
-        error: "Invalid voice",
-        details: [{ field: "guidance", message: `guidance must be between ${VOICE_MIN} and ${VOICE_MAX} characters` }],
-      });
+    // Up to the longest voice the learner can render, so a learned voice saves back unchanged.
+    const lengthError = voiceEditError(guidance);
+    if (lengthError) {
+      res.status(422).json({ error: "Invalid voice", details: [{ field: "guidance", message: lengthError }] });
       return;
     }
 

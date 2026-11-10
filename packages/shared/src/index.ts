@@ -39,6 +39,8 @@ export type {
   HistoricalImportStage,
 } from "./lib/historical-import";
 
+export { VOICE_LIMITS, VOICE_RENDERED_MAX, VOICE_EDIT_MIN, voiceEditError } from "./lib/voice-limits";
+
 // Numbers the owner keeps on their own phone - enforced at ingest, before any
 // Conversation, Contact or Message row exists.
 export {
