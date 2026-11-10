@@ -44,17 +44,34 @@ export const IMPORT_STAGES = [
 ] as const;
 export type ImportStage = (typeof IMPORT_STAGES)[number];
 
+/** A count the pipeline finished: absent or null is none yet, not a broken response. */
+const count = z
+  .number()
+  .nullish()
+  .transform((value) => value ?? 0);
+
 export const importStatusSchema = z.object({
   id: z.string(),
   stage: z.enum(IMPORT_STAGES),
-  percent: z.number().default(0),
-  analysisPercent: z.number().default(0),
-  /** Counts of rows the pipeline actually finished. */
-  customersAnalyzed: z.number().default(0),
-  customersTotal: z.number().default(0),
-  conversationsExtracted: z.number().default(0),
-  conversationsEligible: z.number().default(0),
-  knowledgeCandidateCount: z.number().default(0),
+  /*
+   * ★★ NULL IS A STATE HERE, NOT A MISSING NUMBER (prod, 2026-11-10).
+   * The platform (packages/shared historicalImportPercent /
+   * historicalAnalysisPercent) sends `percent` only while transferring (and
+   * 100 when ready), and `analysisPercent` only while analyzing with a band
+   * to report: "null = show plain stage, not a number". These were
+   * `z.number().default(0)`, and `default` covers `undefined`, not `null`,
+   * so ONE finished or failed import in the list failed the whole parse
+   * and the progress view showed nothing. Null renders as the stage alone,
+   * never as a fake 0%.
+   */
+  percent: z.number().nullable().default(null),
+  analysisPercent: z.number().nullable().default(null),
+  /** Counts of rows the pipeline actually finished. Never null today; a null reads as none counted. */
+  customersAnalyzed: count,
+  customersTotal: count,
+  conversationsExtracted: count,
+  conversationsEligible: count,
+  knowledgeCandidateCount: count,
   /** Which stage broke. Present only on a failure, and not always then. */
   failedStage: z.string().nullable().default(null),
   failureReason: z.string().nullable().default(null),

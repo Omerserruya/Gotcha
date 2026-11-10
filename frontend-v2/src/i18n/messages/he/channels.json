@@ -269,6 +269,7 @@
     },
     "addNumber": "+ הוספת מספר נוסף",
     "learn": {
+      "rowInProgress": "לומד",
       "rowImporting": "לומד · מייבא {percent}%",
       "rowLearning": "לומד · {percent}%",
       "rowReady": "הדוח מוכן · {count, plural, one {תשובה אחת} other {# תשובות}}",
