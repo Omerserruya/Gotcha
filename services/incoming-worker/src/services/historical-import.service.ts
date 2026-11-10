@@ -288,6 +288,57 @@ async function refreshProgress(importId: string, progress: number, phase: number
   });
 }
 
+/** Meta's last history phase (day 90-180). */
+export const FINAL_SOURCE_PHASE = 2;
+/** No chunk for this long, with every phase seen at 100: the transfer is over. */
+export const SOURCE_QUIET_MS = 10 * 60_000;
+
+/**
+ * Is the source transfer over? Meta sends history in phases (0 = day 0-1,
+ * 1 = day 1-90, 2 = day 90-180), out of order, each with its OWN progress.
+ * Prod GOTCHA 2026-11-10: phase 0 reached 100 first, the import completed on
+ * it, and 31 customers from phases 1 and 2 arrived after identity had run.
+ *
+ * Over when every phase seen is at 100 and either the final phase is among
+ * them, or nothing has arrived for SOURCE_QUIET_MS (a business with no older
+ * history may never get a later phase). Never past the 24h source deadline:
+ * the watchdog fails a transfer still open then.
+ */
+export function sourceTransferReady(input: { phases: Array<{ phase: number; progress: number; lastAt: Date | null }>; now: number }): { ready: boolean; why: string; phases: number[] } {
+  const phases = [...input.phases].sort((a, b) => a.phase - b.phase);
+  const seen = phases.map((p) => p.phase);
+  if (phases.length === 0) return { ready: false, why: "no chunks", phases: seen };
+  if (!phases.every((p) => p.progress >= 100)) return { ready: false, why: "a phase is still transferring", phases: seen };
+  if (seen.includes(FINAL_SOURCE_PHASE)) return { ready: true, why: "final phase complete", phases: seen };
+  const last = Math.max(...phases.map((p) => (p.lastAt ? new Date(p.lastAt).getTime() : 0)));
+  if (last > 0 && input.now - last >= SOURCE_QUIET_MS) return { ready: true, why: "quiet window", phases: seen };
+  return { ready: false, why: "waiting for later phases", phases: seen };
+}
+
+/**
+ * The quiet-window half of the handover. A transfer that ends before the final
+ * phase sends no further chunk to trigger maybeCompleteSourceSync, so this
+ * looks again at the transfers whose seen phases are done.
+ */
+const SOURCE_SWEEP_MS = 2 * 60_000;
+let sourceSweep: NodeJS.Timeout | null = null;
+export async function sweepQuietSourceTransfers(now: number = Date.now()): Promise<number> {
+  const open = await prisma.historicalImport.findMany({
+    where: { status: "SOURCE_SYNCING", sourceProgress: 100, sourceDeadlineAt: { gt: new Date(now) } },
+    select: { id: true },
+    take: 50,
+  });
+  for (const r of open) await withHistoricalRecords(() => maybeCompleteSourceSync(r.id, now));
+  return open.length;
+}
+export function startHistoricalSourceSweep(): void {
+  if (sourceSweep) return;
+  sourceSweep = setInterval(() => {
+    sweepQuietSourceTransfers().catch((err: any) => console.error(`[historical-import] source sweep failed: ${err?.message}`));
+  }, SOURCE_SWEEP_MS);
+  sourceSweep.unref?.();
+}
+
 /**
  * Hand over to the intelligence pipeline, once and only once.
  *
@@ -300,7 +351,7 @@ async function refreshProgress(importId: string, progress: number, phase: number
  * SOURCE_SYNCING enqueues; every other concurrent finisher updates zero rows
  * and enqueues nothing.
  */
-async function maybeCompleteSourceSync(importId: string): Promise<void> {
+export async function maybeCompleteSourceSync(importId: string, now: number = Date.now()): Promise<void> {
   const row = await prisma.historicalImport.findUnique({
     where: { id: importId },
     select: { id: true, tenantId: true, sourceProgress: true, status: true },
@@ -313,6 +364,18 @@ async function maybeCompleteSourceSync(importId: string): Promise<void> {
   });
   if (unprocessed > 0) return;
 
+  // Meta's progress is PER PHASE: phase 0 at 100 is not the transfer at 100.
+  const byPhase = await prisma.historicalImportChunk.groupBy({
+    by: ["phase"],
+    where: { importId },
+    _max: { progress: true, receivedAt: true },
+  });
+  const ready = sourceTransferReady({
+    phases: byPhase.map((p: any) => ({ phase: p.phase, progress: p._max?.progress ?? 0, lastAt: p._max?.receivedAt ?? null })),
+    now,
+  });
+  if (!ready.ready) return;
+
   const claimed = await prisma.historicalImport.updateMany({
     where: { id: importId, status: { in: ["SOURCE_SYNCING", "PENDING"] } },
     data: {
@@ -323,7 +386,7 @@ async function maybeCompleteSourceSync(importId: string): Promise<void> {
   });
   if (claimed.count === 0) return;
 
-  await recordEvent(importId, STEP.COMPLETE, "SUCCESS", "source transfer complete");
+  await recordEvent(importId, STEP.COMPLETE, "SUCCESS", "source transfer complete", { why: ready.why, phases: ready.phases });
 
   await historicalIntelligenceQueue.add(
     "stage",

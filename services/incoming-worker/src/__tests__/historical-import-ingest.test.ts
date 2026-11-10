@@ -21,6 +21,7 @@ const { prisma, historicalIntelligenceQueue, isInboundExcluded } = vi.hoisted(()
     historicalImport: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -30,6 +31,7 @@ const { prisma, historicalIntelligenceQueue, isInboundExcluded } = vi.hoisted(()
       findUnique: vi.fn(),
       update: vi.fn(),
       count: vi.fn(),
+      groupBy: vi.fn(),
     },
     historicalImportEvent: { create: vi.fn() },
     historicalCustomer: { upsert: vi.fn() },
@@ -57,7 +59,7 @@ vi.mock("@chatcenter/shared", () => ({
   createWorker: vi.fn(),
 }));
 
-import { processHistoricalChunk } from "../services/historical-import.service";
+import { processHistoricalChunk, sourceTransferReady, sweepQuietSourceTransfers, maybeCompleteSourceSync, SOURCE_QUIET_MS } from "../services/historical-import.service";
 
 const IMPORT_ROW = {
   id: "imp1",
@@ -115,6 +117,8 @@ beforeEach(() => {
   prisma.historicalImportChunk.create.mockResolvedValue({ id: "chunk1", processedAt: null });
   prisma.historicalImportChunk.update.mockResolvedValue({});
   prisma.historicalImportChunk.count.mockResolvedValue(0);
+  // Default: all three Meta phases in and at 100.
+  prisma.historicalImportChunk.groupBy.mockResolvedValue([0, 1, 2].map((phase) => ({ phase, _max: { progress: 100, receivedAt: new Date() } })));
   prisma.historicalImportEvent.create.mockResolvedValue({});
   prisma.historicalCustomer.upsert.mockResolvedValue({});
   prisma.conversation.findFirst.mockResolvedValue(null);
@@ -333,5 +337,59 @@ describe("an inactive tenant is skipped entirely", () => {
     await processHistoricalChunk(job());
     expect(prisma.historicalImportChunk.create).not.toHaveBeenCalled();
     expect(prisma.message.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("the transfer is over only when every phase is (prod GOTCHA 2026-11-10)", () => {
+  const SYNCING = { id: "imp1", tenantId: "t1", sourceProgress: 100, status: "SOURCE_SYNCING" };
+  const ph = (phase: number, progress: number, agoMs = 0) => ({ phase, _max: { progress, receivedAt: new Date(Date.now() - agoMs) } });
+
+  it("★ phase 0 at 100 while phase 1 is at 53: not over, nothing enqueued", async () => {
+    prisma.historicalImport.findUnique.mockResolvedValue(SYNCING);
+    prisma.historicalImportChunk.groupBy.mockResolvedValue([ph(0, 100), ph(1, 53)]);
+    await processHistoricalChunk(job({ chunk: { progress: 100 } }));
+    expect(historicalIntelligenceQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("★ phase 0 alone at 100, just arrived: waits for later phases", async () => {
+    prisma.historicalImport.findUnique.mockResolvedValue(SYNCING);
+    prisma.historicalImportChunk.groupBy.mockResolvedValue([ph(0, 100)]);
+    await processHistoricalChunk(job({ chunk: { progress: 100 } }));
+    expect(historicalIntelligenceQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("★ the final phase at 100 with every phase seen at 100: over at once", async () => {
+    prisma.historicalImport.findUnique.mockResolvedValue(SYNCING);
+    prisma.historicalImportChunk.groupBy.mockResolvedValue([ph(0, 100), ph(1, 100), ph(2, 100)]);
+    await processHistoricalChunk(job({ chunk: { phase: 2, progress: 100 } }));
+    expect(historicalIntelligenceQueue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it("★ quiet window: phases 0-1 done and nothing for 10 minutes, the sweep hands over once", async () => {
+    prisma.historicalImport.findMany.mockResolvedValue([{ id: "imp1" }]);
+    prisma.historicalImport.findUnique.mockResolvedValue(SYNCING);
+    prisma.historicalImportChunk.groupBy.mockResolvedValue([ph(0, 100, SOURCE_QUIET_MS + 1000), ph(1, 100, SOURCE_QUIET_MS + 1000)]);
+    expect(await sweepQuietSourceTransfers()).toBe(1);
+    expect(historicalIntelligenceQueue.add).toHaveBeenCalledTimes(1);
+    const where = prisma.historicalImport.findMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({ status: "SOURCE_SYNCING", sourceProgress: 100 });
+    expect(where.sourceDeadlineAt.gt).toBeInstanceOf(Date);
+  });
+
+  it("inside the quiet window the sweep does nothing", async () => {
+    prisma.historicalImport.findUnique.mockResolvedValue(SYNCING);
+    prisma.historicalImportChunk.groupBy.mockResolvedValue([ph(0, 100, 60_000), ph(1, 100, 60_000)]);
+    await maybeCompleteSourceSync("imp1");
+    expect(historicalIntelligenceQueue.add).not.toHaveBeenCalled();
+  });
+
+  it("the rule itself", () => {
+    const now = Date.now();
+    const at = (ago: number) => new Date(now - ago);
+    expect(sourceTransferReady({ phases: [], now }).ready).toBe(false);
+    expect(sourceTransferReady({ phases: [{ phase: 2, progress: 100, lastAt: at(0) }, { phase: 1, progress: 99, lastAt: at(0) }], now }).ready).toBe(false);
+    expect(sourceTransferReady({ phases: [{ phase: 0, progress: 100, lastAt: at(SOURCE_QUIET_MS - 1) }], now }).ready).toBe(false);
+    expect(sourceTransferReady({ phases: [{ phase: 0, progress: 100, lastAt: at(SOURCE_QUIET_MS) }], now })).toMatchObject({ ready: true, why: "quiet window" });
+    expect(sourceTransferReady({ phases: [{ phase: 2, progress: 100, lastAt: at(0) }, { phase: 0, progress: 100, lastAt: at(0) }], now })).toMatchObject({ ready: true, why: "final phase complete", phases: [0, 2] });
   });
 });

@@ -9,6 +9,7 @@ initSentry("incoming-worker");
 import { startIncomingWorker } from "./workers/incoming.worker";
 import { startChannelHealthWorker } from "./workers/channel-health.worker";
 import { startIdleConversationWorker } from "./workers/idle-conversation.worker";
+import { startHistoricalSourceSweep } from "./services/historical-import.service";
 import { startFlowResumeWorker } from "./workers/flow-resume.worker";
 import { startAutomationScheduler } from "./services/automation-runner.service";
 
@@ -35,6 +36,9 @@ console.log("[flow-resume] Worker started");
 // Schedule-triggered automations (Studio > Automations).
 startAutomationScheduler();
 console.log("[automations] Scheduler started");
+// History imports whose transfer ends before Meta's final phase: hand them over
+// once the quiet window passes (historical-import.service sourceTransferReady).
+startHistoricalSourceSweep();
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
