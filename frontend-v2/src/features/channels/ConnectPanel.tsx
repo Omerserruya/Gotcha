@@ -37,15 +37,19 @@ import { channelName } from '@/api/contracts/inbox';
  * component whose every branch is a different feature.
  */
 
-type ConnectShape = 'provisioned' | 'credentials' | 'oauth' | 'whatsapp' | 'twilio' | 'unavailable';
+type ConnectShape = 'provisioned' | 'credentials' | 'oauth' | 'twilio' | 'unavailable';
 
-function shapeOf(channel: ChannelType): ConnectShape {
+/**
+ * Every channel but WhatsApp, whose row links straight to its own sheet (13c)
+ * and never opens this panel.
+ */
+export type PanelChannel = Exclude<ChannelType, 'WHATSAPP'>;
+
+function shapeOf(channel: PanelChannel): ConnectShape {
   if (channel === 'WEBCHAT') return 'provisioned';
   if (channel === 'EMAIL') return 'credentials';
   // Phone calls with the merchant's own Twilio: fields, then its numbers.
   if (channel === 'VOICE') return 'twilio';
-  // 13c: WhatsApp has its own sheet - the question, then Meta.
-  if (channel === 'WHATSAPP') return 'whatsapp';
   // Live (backend ecd64c4d): the provider's page, and back to this list.
   if (channel in OAUTH_PLATFORMS) return 'oauth';
   return 'unavailable';
@@ -55,7 +59,7 @@ export function ConnectPanel({
   channel,
   onClose,
 }: {
-  readonly channel: ChannelType;
+  readonly channel: PanelChannel;
   readonly onClose: () => void;
 }) {
   const t = useTranslations('channels');
@@ -81,15 +85,6 @@ export function ConnectPanel({
       {shape === 'credentials' ? <EmailStep onClose={onClose} /> : null}
       {shape === 'oauth' ? <OAuthStep channel={channel} name={name} /> : null}
       {shape === 'twilio' ? <TwilioStep onClose={onClose} /> : null}
-      {shape === 'whatsapp' ? (
-        <Link
-          href="/settings/channels?panel=whatsapp&view=connect"
-          className={styles.connectOpen}
-          data-testid="connect-whatsapp-sheet"
-        >
-          {t('connect.connect')}
-        </Link>
-      ) : null}
       {shape === 'unavailable' ? (
         /*
          * Stated, not hidden and not faked.

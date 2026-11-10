@@ -68,13 +68,11 @@ describe('★★ 13 - an OAuth channel connects at its provider (backend ecd64c4
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it('WhatsApp: to 13c’s sheet, not straight to Meta', () => {
-    show('WHATSAPP');
-    expect(screen.getByTestId('connect-whatsapp-sheet')).toHaveAttribute(
-      'href',
-      '/settings/channels?panel=whatsapp&view=connect',
-    );
-    expect(screen.queryByTestId('connect-oauth-WHATSAPP')).toBeNull();
+  it('WhatsApp never comes here: its row links to 13c’s sheet (ConnectableRow)', () => {
+    // A compile-time fact: the panel does not take WhatsApp at all.
+    // @ts-expect-error - WHATSAPP is not a PanelChannel
+    const whatsapp: Parameters<typeof ConnectPanel>[0]['channel'] = 'WHATSAPP';
+    expect(whatsapp).toBe('WHATSAPP');
   });
 });
 

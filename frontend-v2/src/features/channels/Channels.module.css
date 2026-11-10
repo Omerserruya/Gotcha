@@ -235,6 +235,9 @@
   /* "Connect": 02's primary - dark and filled. */
   .connectOpen {
     flex: none;
+    /* A <Link> for WhatsApp, a <button> for the rest: the same pill either way. */
+    text-decoration: none;
+    text-align: center;
     font-size: var(--font-size-caption);
     color: var(--action-text);
     background-color: var(--action-base);

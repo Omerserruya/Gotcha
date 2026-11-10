@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 import type { ChannelType } from '@/api/contracts/channels';
+import { Link } from '@/i18n/navigation';
 import rowLink from '@/design-system/styles/row-link.module.css';
 
 import styles from './Channels.module.css';
@@ -56,6 +57,20 @@ export function ConnectableRow({
         >
           {t('connect.notSetUp')}
         </span>
+      ) : channel === 'WHATSAPP' ? (
+        /*
+         * ★ WhatsApp has its own sheet (13c), so its Connect IS the way there.
+         * Omer, prod 2026-11-10: an inline panel whose only content was a
+         * second "Connect" read as two buttons for one step, and that one
+         * looked broken.
+         */
+        <Link
+          href="/settings/channels?panel=whatsapp&view=connect"
+          className={`${styles.connectOpen} ${rowLink.link}`}
+          data-testid={`connect-open-${channel}`}
+        >
+          {t('connect.open')}
+        </Link>
       ) : open ? null : (
         <button
           type="button"
@@ -67,7 +82,9 @@ export function ConnectableRow({
         </button>
       )}
 
-      {open ? <ConnectPanel channel={channel} onClose={() => setOpen(false)} /> : null}
+      {open && channel !== 'WHATSAPP' ? (
+        <ConnectPanel channel={channel} onClose={() => setOpen(false)} />
+      ) : null}
     </li>
   );
 }
