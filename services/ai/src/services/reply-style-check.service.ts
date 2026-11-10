@@ -358,6 +358,27 @@ export function isStepList(text: string | null | undefined): boolean {
   return steps.every((l, i) => Number(STEP_LINE.exec(l)![1]) === i + 1);
 }
 
+/**
+ * Steps the model wrote inline ("השלבים: 1. לנתק מתח. 2. להסיר את המתג.") go
+ * one per line. Only a run numbered 1, 2, 3... in order, each marker after a
+ * space or a line start and before a letter, so "₪1.5" or "גרסה 2." stay.
+ */
+export function stepsOnLines(text: string): string {
+  const t = String(text ?? "");
+  const marks = [...t.matchAll(/(^|[\s:])(\d{1,2})\.\s+(?=[\p{L}])/gu)];
+  const run: number[] = [];
+  for (const m of marks) if (Number(m[2]) === run.length + 1) run.push(m.index! + m[1].length);
+  if (run.length < 2) return t;
+  let out = t;
+  for (const at of [...run].reverse()) {
+    const before = out.slice(0, at).replace(/[ \t]+$/, "");
+    if (!before || before.endsWith("\n")) continue;
+    out = `${before}\n${out.slice(at)}`;
+  }
+  // A closing line after the last step goes on its own line too.
+  return out.replace(/^(\d{1,2}\.[^\n]*?[.!])\s+([^\n\d][^\n]*[?؟])\s*$/m, "$1\n$2");
+}
+
 function sentences(text: string): number {
   return text.split(/(?<=[.!?…])\s+|\n+/).map((s) => s.trim()).filter((s) => s.length > 1).length;
 }

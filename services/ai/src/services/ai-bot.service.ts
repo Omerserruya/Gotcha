@@ -124,7 +124,7 @@ import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
 import { capped } from "./judgement-cap";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards, unbackedOffer, shownOptionsOf, fixHebrewForms } from "./reply-style-check.service";
+import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, stepsAsked, stepsOnLines, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards, unbackedOffer, shownOptionsOf, fixHebrewForms } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -3060,6 +3060,17 @@ async function generateAIBotReplyInner(
   // discovery turn: no forced store search and no carousel (Demo 2026-11-10).
   const supportAsk = supportTurn(opts.incomingMessage);
   if (supportAsk && wooTurn) console.log(`[ai-bot][support-turn] no product pre-search or forced search conv=${opts.conversationId}`);
+  // Steps asked for (how to install, set up, connect): a short numbered list,
+  // one step per line (Omer 2026-11-10: the knowledge and the employee rule
+  // both ask for it; the reply came out as one paragraph).
+  if (stepsAsked(opts.incomingMessage)) {
+    chatMessages.push({
+      role: "system",
+      content: replyLocale.startsWith("he")
+        ? "הלקוח ביקש שלבים. ענו ברשימה ממוספרת קצרה: \"1.\" עד לכל היותר \"6.\", כל שלב בשורה משלו, עד כ-15 מילים לשלב. מותרת שורת פתיחה קצרה אחת ושאלה קצרה אחת בסוף. בלי פסקה מסביב."
+        : "The customer asked for steps. Answer as a short numbered list: \"1.\" to at most \"6.\", one step per line, about 15 words each. One short lead-in line and one short closing question at most. No surrounding paragraph.",
+    });
+  }
   if (!supportAsk) try {
     const disc = await runProductDiscoveryTurn({
       tenantId: opts.tenantId,
@@ -5547,6 +5558,8 @@ async function generateAIBotReplyInner(
           ...priorOutbound.map((m: any) => String(m.body ?? "")),
         ].join("\n"),
       };
+      // How-to steps the model wrote inline go one per line (Omer 2026-11-10).
+      if (stepsAsked(opts.incomingMessage)) replyText = stepsOnLines(replyText);
       const violations = checkReplyStyle(replyText, styleCtx);
       // Fixed in code when that clears everything, no regeneration: a trailing
       // offer to check (rewriting over it lost the price, eval e8 U1), our own

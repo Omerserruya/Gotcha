@@ -53,3 +53,21 @@ describe("everything else keeps the rule", () => {
     expect(isStepList("פסקה אחת בלי שלבים בכלל.")).toBe(false);
   });
 });
+
+describe("steps the model wrote inline go one per line (Demo dev 2026-11-10: \"השלבים הכלליים: 1. לנתק... 2. להסיר...\")", () => {
+  it("split at 1., 2., 3. in order; a closing question on its own line", async () => {
+    const { stepsOnLines } = await import("../services/reply-style-check.service");
+    const out = stepsOnLines("השלבים להתקנה: 1. לנתק את המתח בלוח. 2. להסיר את המתג הישן. 3. לחבר את החוטים לפי הסימון. צריכים עזרה?");
+    expect(out.split("\n")).toEqual(["השלבים להתקנה:", "1. לנתק את המתח בלוח.", "2. להסיר את המתג הישן.", "3. לחבר את החוטים לפי הסימון.", "צריכים עזרה?"]);
+    expect(isStepList(out)).toBe(true);
+  });
+  it("a price, a version, a single number: untouched", async () => {
+    const { stepsOnLines } = await import("../services/reply-style-check.service");
+    for (const t of ["המתג עולה ₪205.5 במבצע.", "גרסה 2. זמינה עכשיו.", "יש 1. מתג אחד במלאי."]) expect(stepsOnLines(t)).toBe(t);
+  });
+  it("ai-bot splits before the style check and asks for the list on a steps turn", () => {
+    const src = require("node:fs").readFileSync(require("node:path").join(__dirname, "../services/ai-bot.service.ts"), "utf8");
+    expect(src).toContain("if (stepsAsked(opts.incomingMessage)) replyText = stepsOnLines(replyText);\n      const violations = checkReplyStyle(replyText, styleCtx);");
+    expect(src).toContain("הלקוח ביקש שלבים. ענו ברשימה ממוספרת קצרה");
+  });
+});
