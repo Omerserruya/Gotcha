@@ -1,0 +1,104 @@
+/**
+ * The model-capability layer (2026-11-11): the request shape per model, and
+ * the one adaptation retry on a 400 for an unsupported tunable param.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { shapeChatRequest, withModelAdaptation, unsupportedParam, resetModelCaps, isLegacyModel } from "../model-caps";
+
+/** An OpenAI SDK BadRequestError, as it arrives. */
+const unsupported = (param: string, kind: "parameter" | "value" = "parameter") =>
+  Object.assign(new Error(`400 Unsupported ${kind}: '${param}' is not supported with this model.`), {
+    status: 400, code: `unsupported_${kind}`, param,
+  });
+
+beforeEach(() => { resetModelCaps(); vi.restoreAllMocks(); });
+
+describe("the request shape", () => {
+  it("a legacy model: max_tokens and temperature, no reasoning effort", () => {
+    const r = shapeChatRequest({ model: "gpt-4o-mini" }, "gpt-4o-mini", { temperature: 0.2, maxTokens: 320 });
+    expect(r).toEqual({ model: "gpt-4o-mini", max_tokens: 320, temperature: 0.2 });
+    expect(isLegacyModel("gpt-3.5-turbo")).toBe(true);
+  });
+
+  it("a model never heard of: the modern shape, never max_tokens, never temperature", () => {
+    const r = shapeChatRequest({ model: "gpt-6-luna" }, "gpt-6-luna", { temperature: 0.2, maxTokens: 320, reasoningHeadroom: 2048 });
+    expect(r).toEqual({ model: "gpt-6-luna", max_completion_tokens: 2368, reasoning_effort: "low" });
+    expect("max_tokens" in r).toBe(false);
+    expect("temperature" in r).toBe(false);
+  });
+
+  it("gpt-5 keeps today's shape; effort 'none' omits it; a stale param on the request is cleared", () => {
+    const r = shapeChatRequest({ model: "gpt-5-mini", max_tokens: 9, temperature: 1 }, "gpt-5-mini", { maxTokens: 100, reasoningHeadroom: 0, reasoningEffort: "minimal" });
+    expect(r).toEqual({ model: "gpt-5-mini", max_completion_tokens: 100, reasoning_effort: "minimal" });
+    expect(shapeChatRequest({}, "gpt-5-mini", { defaultEffort: "none" })).toEqual({ max_completion_tokens: 3072 });
+  });
+});
+
+describe("which errors are a refused param", () => {
+  it("only a 400 naming a tunable param", () => {
+    expect(unsupportedParam(unsupported("reasoning_effort"))).toBe("reasoning_effort");
+    expect(unsupportedParam(unsupported("temperature", "value"))).toBe("temperature");
+    // The message alone, as some gateways pass it on.
+    expect(unsupportedParam({ status: 400, message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead." })).toBe("max_tokens");
+    expect(unsupportedParam(unsupported("response_format"))).toBeNull();
+    expect(unsupportedParam(unsupported("messages"))).toBeNull();
+    expect(unsupportedParam({ status: 400, message: "Invalid value for 'messages[0].content'" })).toBeNull();
+    expect(unsupportedParam({ ...unsupported("temperature"), status: 500 })).toBeNull();
+  });
+});
+
+describe("the adaptation", () => {
+  it("a refused param: dropped, retried exactly once, and remembered for the next call", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sent: any[] = [];
+    const send = vi.fn(async (req: any) => {
+      sent.push({ ...req });
+      if ("reasoning_effort" in req) throw unsupported("reasoning_effort");
+      return "ok";
+    });
+    const req = shapeChatRequest({ model: "gpt-6-luna" }, "gpt-6-luna", { maxTokens: 100, reasoningHeadroom: 0 });
+    expect(await withModelAdaptation("gpt-6-luna", req, send)).toBe("ok");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect("reasoning_effort" in sent[1]).toBe(false);
+    // The next request is shaped without it: one call, no 400.
+    const next = shapeChatRequest({ model: "gpt-6-luna" }, "gpt-6-luna", { maxTokens: 100, reasoningHeadroom: 0 });
+    expect(next).toEqual({ model: "gpt-6-luna", max_completion_tokens: 100 });
+    expect(await withModelAdaptation("gpt-6-luna", next, send)).toBe("ok");
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(warn.mock.calls.filter((c) => String(c[0]).startsWith("[model-caps] gpt-6-luna: reasoning_effort unsupported, adapted"))).toHaveLength(1);
+  });
+
+  it("a refused token cap is renamed, not dropped", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const send = vi.fn(async (req: any) => { if ("max_tokens" in req) throw unsupported("max_tokens"); return req; });
+    const out: any = await withModelAdaptation("gpt-4o-mini", shapeChatRequest({}, "gpt-4o-mini", { maxTokens: 50 }), send);
+    expect(out.max_completion_tokens).toBe(50);
+    expect(shapeChatRequest({}, "gpt-4o-mini", { maxTokens: 50 })).toMatchObject({ max_completion_tokens: 50 });
+  });
+
+  it("only one retry: a second refusal is thrown", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const send = vi.fn(async (req: any) => {
+      if ("reasoning_effort" in req) throw unsupported("reasoning_effort");
+      throw unsupported("max_completion_tokens");
+    });
+    await expect(withModelAdaptation("m-x", shapeChatRequest({}, "m-x", {}), send)).rejects.toMatchObject({ param: "max_completion_tokens" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("any other 400 is never retried", async () => {
+    const bad = Object.assign(new Error("400 Invalid schema for function 'x'"), { status: 400, code: "invalid_function_parameters", param: "tools[0]" });
+    const send = vi.fn(async () => { throw bad; });
+    await expect(withModelAdaptation("gpt-6-luna", shapeChatRequest({}, "gpt-6-luna", {}), send)).rejects.toBe(bad);
+    expect(send).toHaveBeenCalledTimes(1);
+    const fmt = vi.fn(async () => { throw unsupported("response_format"); });
+    await expect(withModelAdaptation("gpt-6-luna", { response_format: { type: "json_object" } }, fmt)).rejects.toMatchObject({ param: "response_format" });
+    expect(fmt).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refused param the request does not carry is not 'adapted' (thrown, no loop)", async () => {
+    const send = vi.fn(async () => { throw unsupported("top_p"); });
+    await expect(withModelAdaptation("gpt-6-luna", { max_completion_tokens: 10 }, send)).rejects.toMatchObject({ param: "top_p" });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+});

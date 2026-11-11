@@ -12,6 +12,8 @@ import { getInternalServiceKey } from "@chatcenter/shared";
 import OpenAI from "openai";
 import { AsyncLocalStorage } from "async_hooks";
 import { trackAIUsage, assertAiAllowed, meterAiUnits, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
+// Deep import: the pure layer, so a test that mocks the barrel still gets it.
+import { shapeChatRequest, withModelAdaptation } from "@chatcenter/shared/src/lib/model-caps";
 import { logAudit } from "./audit.service";
 import { stablePrefixOf } from "./prompt-builder.service";
 
@@ -270,16 +272,9 @@ function sanitizeMessagesForOpenAI(messages: any[]): any[] {
   return changed ? out : messages;
 }
 
-// gpt-5 family + o-series reasoning models changed the chat-completions
-// contract: `max_tokens` is rejected (use `max_completion_tokens`), and only the
-// default temperature (1) is accepted. Detect by model id so a single
-// OPENAI_DEFAULT_MODEL swap doesn't 400 every call.
-function modelRequiresCompletionTokens(model: string): boolean {
-  return /^(gpt-5|o[1-9])/i.test(model);
-}
-
-// Set the token cap + temperature on a chat-completions request in the shape the
-// target model accepts. Mutates `req`.
+// The request shape for a chat model: ONE capability layer for the whole
+// platform (packages/shared lib/model-caps). A model this code has never heard
+// of gets the modern shape, and a param it refuses is adapted after one 400.
 function applyTokenAndTemperatureParams(
   req: Record<string, any>,
   model: string,
@@ -287,29 +282,13 @@ function applyTokenAndTemperatureParams(
   maxTokens: number | undefined,
   reasoningEffort?: string,
 ): void {
-  const tokens = maxTokens ?? 1024;
-  if (modelRequiresCompletionTokens(model)) {
-    // Reasoning models (gpt-5 / o-series) spend HIDDEN reasoning tokens BEFORE
-    // any visible output, and `max_completion_tokens` caps the COMBINED total.
-    // Capping at just the intended output size starves the reply: the whole
-    // budget goes to reasoning and content comes back '' with
-    // finish_reason='length' (the bot then "doesn't respond"). So add reasoning
-    // headroom ON TOP of the requested output budget. This is only a ceiling -
-    // you pay for tokens actually generated, so a generous cap is safe.
-    const headroom = Number(process.env.OPENAI_REASONING_HEADROOM_TOKENS) || 2048;
-    req.max_completion_tokens = tokens + headroom;
-    // Keep reasoning light so the bot stays responsive (default 'medium' on
-    // gpt-5 makes chat turns slow and reasoning-token heavy). Override via env;
-    // "none" omits the param entirely.
-    const effort = reasoningEffort || process.env.OPENAI_REASONING_EFFORT || "low";
-    if (effort && effort !== "none") req.reasoning_effort = effort;
-    // Only the default temperature (1) is supported - send it only when it is
-    // exactly the default, otherwise omit so the model uses its required value.
-    if (temperature === 1) req.temperature = temperature;
-  } else {
-    req.max_tokens = tokens;
-    req.temperature = temperature ?? 0.7;
-  }
+  shapeChatRequest(req, model, {
+    temperature,
+    maxTokens,
+    reasoningEffort,
+    reasoningHeadroom: Number(process.env.OPENAI_REASONING_HEADROOM_TOKENS) || 2048,
+    defaultEffort: process.env.OPENAI_REASONING_EFFORT || "low",
+  });
 }
 
 const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
@@ -449,10 +428,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
 
   const llmStartedAt = Date.now();
   const response = await callWithRetry(
-    () => client.chat.completions.create(
-      requestParams,
+    () => withModelAdaptation(model, requestParams as any, (req) => client.chat.completions.create(
+      req as OpenAI.ChatCompletionCreateParamsNonStreaming,
       params.signal ? { signal: params.signal } : undefined,
-    ),
+    )),
     params.signal,
   );
   const llmDurationMs = Date.now() - llmStartedAt;
@@ -630,7 +609,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     stream: true,
     stream_options: { include_usage: true },
   };
-  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens, params.reasoningEffort);
   if (params.sessionId) {
     (requestParams as any).user = params.sessionId;
   }
@@ -642,7 +621,9 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
-  const stream = await client.chat.completions.create(requestParams, params.signal ? { signal: params.signal } : undefined);
+  // A stream's unsupported-param 400 arrives on create, before any chunk.
+  const stream = await withModelAdaptation(model, requestParams as any, (req) =>
+    client.chat.completions.create(req as OpenAI.ChatCompletionCreateParamsStreaming, params.signal ? { signal: params.signal } : undefined));
 
   let accumulatedContent = "";
   // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble

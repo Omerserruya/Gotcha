@@ -30,6 +30,8 @@ import { readLearned, editLearned, LearnedEditRefused, learnFromFile, LearnedUpl
 import { integrationSuggestions, aiInternal } from "../services/onboarding-discover/learn";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
+// The platform's model-capability layer (the pure file, so a test mocking the barrel still has it).
+import { shapeChatRequest, withModelAdaptation } from "@chatcenter/shared/src/lib/model-caps";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
@@ -329,13 +331,12 @@ ${deptDetails}`;
 
   try {
     const model = process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini";
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0.7,
-      max_tokens: 512,
-      response_format: { type: "json_object" },
-      messages,
+    // The request shape comes from the platform's model-capability layer: a
+    // new ONBOARDING_CHAT_MODEL never 400s on a param it does not take.
+    const req = shapeChatRequest({ model, response_format: { type: "json_object" }, messages } as Record<string, any>, model, {
+      temperature: 0.7, maxTokens: 512, defaultEffort: process.env.OPENAI_REASONING_EFFORT || "low",
     });
+    const response = await withModelAdaptation(model, req, (r) => client.chat.completions.create(r as any));
 
     // Track usage via shared helper (fire-and-forget, never block onboarding)
     if (response.usage) {
@@ -1663,10 +1664,8 @@ router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchem
       name: string; industry: string; country: string; language: string; description: string; packSlug: string;
     } | null = null;
     try {
-      const response = await client.chat.completions.create({
+      const req = shapeChatRequest({
         model,
-        temperature: 0.2,
-        max_tokens: 320,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -1687,7 +1686,8 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
             content: `Homepage URL: ${origin}\n\nHomepage text (truncated):\n${pageText}`,
           },
         ],
-      });
+      } as Record<string, any>, model, { temperature: 0.2, maxTokens: 320, defaultEffort: process.env.OPENAI_REASONING_EFFORT || "low" });
+      const response = await withModelAdaptation(model, req, (r) => client.chat.completions.create(r as any));
 
       if (response.usage) {
         trackAIUsage({
