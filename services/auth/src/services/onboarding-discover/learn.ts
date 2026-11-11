@@ -15,6 +15,7 @@
 import { prisma, getInternalServiceKey, normalizeDiscoveryTechnology } from "@chatcenter/shared";
 import type { LearnContext, ReadPage } from "./pipeline";
 import type { ProductsSummary } from "./harvest";
+import { extractBrandCandidates, prefillWidgetFromScan } from "../widget-brand-extract";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 
@@ -277,6 +278,10 @@ export function learnStages(deps: LearnDeps = {}) {
     let kbId: string | null = null;
     let documents = 0;
 
+    // The widget's brand candidates, read from the home page while the
+    // extraction runs (manifest and stylesheets, SSRF-guarded). Never fails the run.
+    const homeHtml = pages.find((p) => p.url === ctx.origin)?.html;
+    const brandCandidates = homeHtml ? extractBrandCandidates(ctx.origin, homeHtml).catch(() => null) : Promise.resolve(null);
     const kb = async () => (kbId ??= await ensureWebsiteKb(tenantId));
     const write = async (doc: KnowledgeDoc) => {
       if (!doc.content.trim()) return;
@@ -390,6 +395,24 @@ export function learnStages(deps: LearnDeps = {}) {
       scanPhase: "done",
       scannedAt: new Date(),
     }));
+
+    // ── the website widget, designed from the site (2026-11-11) ──
+    // Before the run is done, so the chat is ready by the Channels step. It
+    // creates the web chat if missing and fills only fields at their defaults;
+    // any failure leaves the defaults and never fails the run.
+    await prefillWidgetFromScan(
+      {
+        authorization: "",
+        origin: ctx.origin,
+        candidates: await brandCandidates,
+        report: { business: { name: prof?.profile?.name ?? null, summary: prof?.profile?.summary ?? null }, brand: brand?.brand ?? null },
+      },
+      async (_auth, body) => {
+        const r = await ai(tenantId, "POST", "/api/ai-assist/widget-prefill", body);
+        if (!r.ok) console.warn(`[widget-prefill] ${tenantId}: ai answered ${r.status}`);
+        return r.ok ? r.body?.data ?? null : null;
+      },
+    ).then((r) => console.log(`[widget-prefill] ${tenantId}: ${r?.status ?? "no answer"}${r?.filled ? ` (${Object.keys(r.filled).join(", ")})` : ""}`));
 
     if (learned === 0 && pages.length > 0) {
       throw Object.assign(new Error("nothing could be learned from the pages read"), { code: "nothing_learned" });
