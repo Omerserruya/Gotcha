@@ -315,3 +315,43 @@ describe("the colour from the logo, when no site colour fits (2026-11-11)", () =
     expect(n.sources).toEqual({});
   });
 });
+
+describe("a logo already set: shown to the model for the colour call only", () => {
+  const withLogo = () => H.accounts.push({
+    id: "ca_x", tenantId: "T", channel: "WEBCHAT", createdAt: new Date(),
+    credentials: { v: 2, nameSource: "employee", appearance: { logoUrl: "https://dev.gotcha.co.il/api/uploads/widget/11111111-2222-3333-4444-555555555555.png" } },
+  });
+
+  it("the stored logo reaches the model as S0, its colour can be used, the logo itself is untouched", async () => {
+    withLogo();
+    const seen: string[] = [];
+    await prefillWidget(input({ colors: [{ hex: "#ffe901", source: "button" }] }), deps({ ...ANSWER, logo: null, color: null, logoColor: "#1e2a78" }, {
+      fetchStoredLogo: async (url) => { seen.push(url); return png(137, 48); },
+    }));
+    expect(seen).toEqual(["https://dev.gotcha.co.il/api/uploads/widget/11111111-2222-3333-4444-555555555555.png"]);
+    const text = JSON.stringify(modelCalls[0].messages);
+    expect(text).toContain("Image S0");
+    expect(text).toContain("judge the colour against it".replace("judge", "Judge"));
+    const c = webchat();
+    expect(c.appearance.primaryColor).toBe("#1e2a78");
+    expect(c.appearance.logoUrl).toBe("https://dev.gotcha.co.il/api/uploads/widget/11111111-2222-3333-4444-555555555555.png");
+    // The new logo candidates were never offered: the field is set.
+    expect(uploads.filter((u) => u.slot === "logo")).toHaveLength(0);
+  });
+
+  it("no stored logo shown when the colour is already set, or when the stored logo cannot be read", async () => {
+    H.accounts.push({
+      id: "ca_x", tenantId: "T", channel: "WEBCHAT", createdAt: new Date(),
+      credentials: { v: 2, appearance: { primaryColor: "#ff0055", logoUrl: "https://dev.gotcha.co.il/api/uploads/widget/11111111-2222-3333-4444-555555555555.png" } },
+    });
+    const seen: string[] = [];
+    await prefillWidget(input(), deps(ANSWER, { fetchStoredLogo: async (url) => { seen.push(url); return png(137, 48); } }));
+    expect(seen).toEqual([]);
+    H.accounts = []; modelCalls = [];
+    withLogo();
+    await prefillWidget(input({ colors: [] }), deps({ ...ANSWER, logo: null, color: null, logoColor: "#1e2a78" }, { fetchStoredLogo: async () => null }));
+    expect(JSON.stringify(modelCalls[0].messages)).not.toContain("Image S0");
+    // No logo seen this time: its colour is not taken.
+    expect(webchat().appearance.primaryColor).toBe("#7c3aed");
+  });
+});

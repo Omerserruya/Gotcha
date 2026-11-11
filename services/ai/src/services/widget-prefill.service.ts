@@ -47,6 +47,11 @@ export interface PrefillInput {
   logos: Array<{ url: string; source?: string }>;
   colors: Array<{ hex: string; source?: string }>;
   heroes: Array<{ url: string; source?: string }>;
+  /**
+   * The logo the widget already has, when its colour is still open: shown to
+   * the model for the colour call only, never re-filled. Set by the fill.
+   */
+  storedLogoUrl?: string | null;
   context: {
     businessName?: string | null;
     summary?: string | null;
@@ -75,6 +80,8 @@ export interface PrefillResult {
 
 /** The deps a test replaces. */
 export interface PrefillDeps {
+  /** The widget's stored logo, read for the colour call (our own uploads, or a guarded fetch). */
+  fetchStoredLogo?: (url: string) => Promise<Buffer | null>;
   /** The bytes, null when unreachable, "too_large" past the cap. */
   fetchImage?: (url: string, maxBytes: number) => Promise<Buffer | null | "too_large">;
   upload?: (input: { authorization: string; tenantId: string; slot: WidgetImageSlot; bytes: Buffer; type: string }) => Promise<string | null>;
@@ -204,6 +211,28 @@ const defaultUpload: NonNullable<PrefillDeps["upload"]> = async ({ tenantId, slo
   return typeof body?.data?.url === "string" ? body.data.url : null;
 };
 
+const OWN_UPLOAD = /^\/api\/uploads\/widget\/[0-9a-f-]{36}\.(png|jpg|gif|webp)$/;
+
+/**
+ * The stored logo's bytes. Our own upload (the widget editor's or the fill's)
+ * is read from conversation inside the network; any other link only through
+ * the SSRF guard. Capped at the logo slot's bytes either way.
+ */
+const defaultFetchStoredLogo: NonNullable<PrefillDeps["fetchStoredLogo"]> = async (url) => {
+  const max = WIDGET_IMAGE_LIMITS.logo.maxBytes;
+  let u: URL;
+  try { u = new URL(url); } catch { return null; }
+  if (OWN_UPLOAD.test(u.pathname)) {
+    const base = (process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002").replace(/\/$/, "");
+    const res = await fetch(`${base}${u.pathname}`, { signal: AbortSignal.timeout(8_000) }).catch(() => null);
+    if (!res?.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length <= max ? buf : null;
+  }
+  const r = await safeFetchBuffer(url, { maxBytes: max, timeoutMs: 8_000, maxRedirects: 3 });
+  return r.ok && r.buffer && !r.tooLarge ? r.buffer : null;
+};
+
 const defaultModel: NonNullable<PrefillDeps["model"]> = async ({ tenantId, messages }) => {
   const r = await generateResponse({
     tenantId,
@@ -217,7 +246,7 @@ const defaultModel: NonNullable<PrefillDeps["model"]> = async ({ tenantId, messa
   return r.content;
 };
 
-function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes: string[], colors: string[]) {
+function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes: string[], colors: string[], storedLogo = false) {
   const language = lang === "he" ? "Hebrew" : "English";
   const c = input.context;
   return [
@@ -227,7 +256,7 @@ function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes:
     "Rules:",
     "- logo: the label of the image that is clearly this business's logo or brand mark, readable when shown small. A product photo, a banner, a person or a generic icon is not a logo. Unsure: null.",
     "- color: one of the candidate colours ONLY if it plausibly is the brand's colour given the logo and the site (the widget writes cream or dark text on it, whichever reads). Unsure: null.",
-    '- logoColor: ONLY when "color" is null and you chose a logo: the logo\'s dominant colour that is not white, black or grey, as "#rrggbb", read from the logo image itself. No clear brand colour in the logo: null.',
+    '- logoColor: ONLY when "color" is null and there is a logo (the one you chose, or image S0): that logo\'s dominant colour that is not white, black or grey, as "#rrggbb", read from the logo image itself. No clear brand colour in the logo: null.',
     "- hero: the label of a wide image that works as a calm background behind a header, with no text baked in and nothing important at the edges. Unsure: null.",
     `- The texts are in ${language}, in the business's own voice, short and plain. No em dash, no en dash. Never invent facts, prices or offers.`,
     "- title: the chat's welcome headline, at most 40 characters.",
@@ -245,6 +274,7 @@ function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes:
     `Logo candidates: ${logos.length ? logos.join(", ") : "none"}`,
     `Hero candidates: ${heroes.length ? heroes.join(", ") : "none"}`,
     `Colour candidates: ${colors.length ? colors.join(", ") : "none"}`,
+    storedLogo ? "The business already has a logo (image S0). Judge the colour against it; logoColor may come from it." : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -277,8 +307,9 @@ const emptyPlan = (status: PrefillPlan["status"], reason: string, rejected: Reje
  * The decision, shared by the fill and the preview: vet the candidates, ask
  * the model once, keep only answers that pass. No writes of any kind.
  */
-export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, deps: Pick<PrefillDeps, "fetchImage" | "model"> = {}): Promise<PrefillPlan> {
+export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, deps: Pick<PrefillDeps, "fetchImage" | "model" | "fetchStoredLogo"> = {}): Promise<PrefillPlan> {
   const fetchImage = deps.fetchImage ?? defaultFetchImage;
+  const fetchStoredLogo = deps.fetchStoredLogo ?? defaultFetchStoredLogo;
   const model = deps.model ?? defaultModel;
   const rejected: Rejection[] = [];
   const lang: "he" | "en" = input.language ?? "en";
@@ -310,6 +341,16 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
     else colors.push(hex);
   }
 
+  // The logo is already set but the colour is open: the model sees the stored
+  // logo for the colour call (dev 2026-11-11: without it, a button yellow was
+  // accepted for a navy and green brand).
+  let stored: VettedImage | null = null;
+  if (input.storedLogoUrl && !open.has("appearance.logoUrl") && open.has("appearance.primaryColor")) {
+    const bytes = await fetchStoredLogo(input.storedLogoUrl).catch(() => null);
+    const checked = bytes ? checkWidgetImage(bytes, "logo") : null;
+    if (bytes && checked?.ok) stored = { url: input.storedLogoUrl, bytes, type: checked.facts.type, width: checked.facts.width, height: checked.facts.height };
+  }
+
   const hasBrand = logos.length + heroes.length + colors.length > 0;
   const hasContext = !!(input.context.businessName || input.context.summary);
   // No brand and nothing learned about the business: the defaults stay.
@@ -317,7 +358,11 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
 
   const logoLabels = logos.map((_, i) => `L${i}`);
   const heroLabels = heroes.map((_, i) => `H${i}`);
-  const content: any[] = [{ type: "text", text: prompt(input, lang, logoLabels, heroLabels, colors) }];
+  const content: any[] = [{ type: "text", text: prompt(input, lang, logoLabels, heroLabels, colors, !!stored) }];
+  if (stored) {
+    content.push({ type: "text", text: "Image S0 (the business's logo, already set; for the colour only, never a logo answer):" });
+    content.push({ type: "image_url", image_url: { url: `data:image/${stored.type};base64,${stored.bytes.toString("base64")}`, detail: "low" } });
+  }
   logos.forEach((l, i) => {
     content.push({ type: "text", text: `Image L${i}:` });
     content.push({ type: "image_url", image_url: { url: `data:image/${l.type};base64,${l.bytes.toString("base64")}`, detail: "low" } });
@@ -348,7 +393,7 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
   // colour was its button yellow, its logo navy and green).
   let fromLogo: string | null = null;
   const logoColor = typeof answer?.logoColor === "string" ? answer.logoColor.trim().toLowerCase() : null;
-  if (!color && logo && logoColor && open.has("appearance.primaryColor")) {
+  if (!color && (logo || stored) && logoColor && open.has("appearance.primaryColor")) {
     const reason: RejectionReason | null = !HEX.test(logoColor) ? "not_a_color"
       : isNeutral(logoColor) ? "neutral"
       : inkContrast(logoColor) < MIN_CONTRAST ? "low_contrast" : null;
@@ -416,7 +461,7 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
   const open = openFields(current);
   if (!open.size) return { status: "none", filled: {}, reason: "nothing_at_default" };
   // The site's language when it said; else the widget's own.
-  const plan = await planPrefill({ ...input, language: input.language }, open, deps);
+  const plan = await planPrefill({ ...input, storedLogoUrl: current.appearance.logoUrl }, open, deps);
   if (plan.rejected.length) {
     console.log(`[widget-prefill] ${input.tenantId} left out: ${plan.rejected.map((r) => `${r.kind}:${r.reason}`).join(", ")}`);
   }
