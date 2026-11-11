@@ -3,8 +3,11 @@
  * 2026-11-09). Prints counts only, never a secret. DRY by default:
  *   tsx src/scripts/mfa-required-backfill.ts          -> what would be set
  *   tsx src/scripts/mfa-required-backfill.ts --apply  -> set it
- * Rollback: run the bootstrap with the required stage unbound (the marker on
- * its own changes nothing at login).
+ * Rollback: `node scripts/authentik/required-mfa.mjs rollback` returns the
+ * login flow to stock (skip for everyone). The marker stays on users and is
+ * inert once no policy reads it; the auth service keeps writing it until auth
+ * itself is rolled back. Note that scripts/authentik/bootstrap.mjs also runs
+ * the apply, so running the bootstrap re-applies Option B.
  */
 import { prisma, findIdentityBySubject, setMfaRequiredAttribute, withCrossTenantAccess } from "@chatcenter/shared";
 import { mfaRequiredForIdentity } from "../services/mfa-required-flag.service";
