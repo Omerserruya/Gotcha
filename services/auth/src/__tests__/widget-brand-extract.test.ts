@@ -10,8 +10,8 @@ import {
   extractBrandCandidates,
   guardedTextFetch,
   normalizeColor,
-  withWhiteContrast,
-  contrastWithWhite,
+  readableBrand,
+  inkContrast,
   isNearWhiteOrBlack,
   buttonColor,
   widgetLanguage,
@@ -103,14 +103,22 @@ describe("colour", () => {
     ]);
   });
 
-  it("a colour white text cannot sit on is darkened, same hue, until it reads", () => {
-    for (const c of ["#ffcc00", "#38bdf8", "#f472b6"]) {
-      const d = withWhiteContrast(c);
-      expect(contrastWithWhite(c)).toBeLessThan(MIN_CONTRAST);
-      expect(contrastWithWhite(d)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+  it("a brand the widget's own text reads on is kept as it is: yellow stays yellow (dark text)", () => {
+    // drcomfort's button yellow: white fails, the widget's ink reads.
+    expect(readableBrand("#ffe901")).toBe("#ffe901");
+    expect(inkContrast("#ffe901")).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    for (const c of ["#38bdf8", "#f472b6", "#1d4ed8", "#0f766e"]) expect(readableBrand(c)).toBe(c);
+  });
+
+  it("only a mid tone neither cream nor ink reads on is darkened, same hue, until cream does", () => {
+    for (const c of ["#777777", "#c0392b80".slice(0, 7), "#8a6a4f"]) {
+      if (inkContrast(c) >= MIN_CONTRAST) continue;
+      const d = readableBrand(c);
+      expect(d).not.toBe(c);
+      expect(inkContrast(d)).toBeGreaterThanOrEqual(MIN_CONTRAST);
       expect(d).not.toBe("#000000");
     }
-    expect(withWhiteContrast("#1d4ed8")).toBe("#1d4ed8");
+    expect(inkContrast("#777777")).toBeLessThan(MIN_CONTRAST);
   });
 
   it("parses the colour forms a stylesheet uses; see-through is not a colour", () => {

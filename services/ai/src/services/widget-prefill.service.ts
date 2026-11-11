@@ -26,6 +26,7 @@ import {
   normalizeWebchatConfig,
   webchatSeedConfig,
   writeDurableSetting,
+  getInternalServiceKey,
   type WebchatConfig,
 } from "@chatcenter/shared";
 import { safeFetchBuffer } from "@chatcenter/shared/src/lib/safe-fetch";
@@ -85,12 +86,22 @@ export interface PrefillDeps {
 const HEX = /^#[0-9a-f]{6}$/;
 const MIN_CONTRAST = 4.5;
 
-function contrastWithWhite(hex: string): number {
+function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => {
     const s = parseInt(hex.slice(i, i + 2), 16) / 255;
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   });
-  return 1.05 / (0.2126 * r! + 0.7152 * g! + 0.0722 * b! + 0.05);
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+/**
+ * How well the widget's own text reads on this colour: it writes cream
+ * #FBF8F3 or ink #2B2622, whichever contrasts more (inkOn() in the widget
+ * bundles), so a pale brand gets dark text, not a darkened brand.
+ */
+function inkContrast(hex: string): number {
+  const l = luminance(hex);
+  return Math.max((luminance("#fbf8f3") + 0.05) / (l + 0.05), (l + 0.05) / (luminance("#2b2622") + 0.05));
 }
 
 const get = (o: any, path: string) => path.split(".").reduce((v, k) => (v == null ? v : v[k]), o);
@@ -153,19 +164,28 @@ const defaultFetchImage: NonNullable<PrefillDeps["fetchImage"]> = async (url, ma
   return r.ok && r.buffer ? r.buffer : null;
 };
 
-/** The same upload the widget editor uses (conversation POST /api/uploads/widget-image). */
-const defaultUpload: NonNullable<PrefillDeps["upload"]> = async ({ authorization, tenantId, slot, bytes, type }) => {
+/**
+ * The copy into our media store: conversation's internal twin of the widget
+ * editor's upload (same check, same storage). The merchant route needs the
+ * paid product, and a tenant in onboarding is not ACTIVE yet (dev walk,
+ * 2026-11-11: every onboarding copy was refused there).
+ */
+const defaultUpload: NonNullable<PrefillDeps["upload"]> = async ({ tenantId, slot, bytes, type }) => {
   const base = (process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002").replace(/\/$/, "");
   const form = new FormData();
   form.append("slot", slot);
   form.append("file", new Blob([new Uint8Array(bytes)], { type: `image/${type}` }), `${slot}.${type === "jpeg" ? "jpg" : type}`);
-  const res = await fetch(`${base}/api/uploads/widget-image`, {
+  const res = await fetch(`${base}/api/uploads/widget-image/internal`, {
     method: "POST",
-    headers: { Authorization: authorization, "x-tenant-id": tenantId },
+    headers: { "X-Internal-Key": getInternalServiceKey(), "x-tenant-id": tenantId },
     body: form,
     signal: AbortSignal.timeout(20_000),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const why: any = await res.json().catch(() => null);
+    console.warn(`[widget-prefill] ${tenantId} ${slot} copy refused: ${res.status} ${why?.code ?? ""}`.trim());
+    return null;
+  }
   const body: any = await res.json().catch(() => null);
   return typeof body?.data?.url === "string" ? body.data.url : null;
 };
@@ -192,7 +212,7 @@ function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes:
     '{ "logo": label or null, "color": hex or null, "hero": label or null, "title": string or null, "assistantName": string or null, "suggestedQuestions": [3 strings] or null, "proactiveMessage": string or null }',
     "Rules:",
     "- logo: the label of the image that is clearly this business's logo or brand mark, readable when shown small. A product photo, a banner, a person or a generic icon is not a logo. Unsure: null.",
-    "- color: one of the candidate colours ONLY if it plausibly is the brand's colour given the logo and the site (white text sits on it). Unsure: null.",
+    "- color: one of the candidate colours ONLY if it plausibly is the brand's colour given the logo and the site (the widget writes cream or dark text on it, whichever reads). Unsure: null.",
     "- hero: the label of a wide image that works as a calm background behind a header, with no text baked in and nothing important at the edges. Unsure: null.",
     `- The texts are in ${language}, in the business's own voice, short and plain. No em dash, no en dash. Never invent facts, prices or offers.`,
     "- title: the chat's welcome headline, at most 40 characters.",
@@ -266,7 +286,7 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
     const hex = String(c.hex).toLowerCase();
     const reason: RejectionReason | null = !open.has("appearance.primaryColor") ? "field_already_set"
       : !HEX.test(hex) ? "not_a_color"
-      : contrastWithWhite(hex) < MIN_CONTRAST ? "low_contrast"
+      : inkContrast(hex) < MIN_CONTRAST ? "low_contrast"
       : colors.includes(hex) ? "duplicate"
       : colors.length >= 4 ? "over_cap" : null;
     if (reason) rejected.push({ kind: "color", value: hex, source: c.source, reason });
@@ -347,6 +367,13 @@ function patchOf(plan: PrefillPlan, images: { logo: string | null; hero: string 
 }
 
 export async function prefillWidget(input: PrefillInput, deps: PrefillDeps = {}): Promise<PrefillResult> {
+  const started = Date.now();
+  const result = await prefillWidgetOnce(input, deps);
+  console.log(`[widget-prefill] ${input.tenantId} ${result.status}${result.reason ? ` (${result.reason})` : ""} in ${Date.now() - started}ms`);
+  return result;
+}
+
+async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promise<PrefillResult> {
   const upload = deps.upload ?? defaultUpload;
   const ensure = deps.ensure ?? ensureWebchat;
   const put = deps.put ?? putWidget;
@@ -362,7 +389,10 @@ export async function prefillWidget(input: PrefillInput, deps: PrefillDeps = {})
   if (plan.status !== "planned") return { status: plan.status, filled: {}, reason: plan.reason };
 
   const copy = async (img: VettedImage | null, slot: WidgetImageSlot) =>
-    img ? upload({ authorization: input.authorization, tenantId: input.tenantId, slot, bytes: img.bytes, type: img.type }).catch(() => null) : null;
+    img ? upload({ authorization: input.authorization, tenantId: input.tenantId, slot, bytes: img.bytes, type: img.type }).catch((err: any) => {
+      console.warn(`[widget-prefill] ${input.tenantId} ${slot} copy failed: ${err?.message ?? err}`);
+      return null;
+    }) : null;
   // An upload that fails leaves that image unset: never the hotlink.
   const { patch, filled } = patchOf(plan, { logo: await copy(plan.logo, "logo"), hero: await copy(plan.hero, "cover") });
   if (!Object.keys(filled).length) return { status: "none", filled: {}, reason: "model_unsure" };

@@ -21,7 +21,7 @@ import { Router, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { authenticate, resolveTenant, requireActiveTenant, requirePermission } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireActiveTenant, requirePermission, requireInternalKey } from "@chatcenter/shared";
 // Deep imports: the pure rules, because this service's tests mock the barrel.
 import {
   WIDGET_IMAGE_LIMITS,
@@ -119,19 +119,52 @@ export function widgetImagesRouter(uploadsDir: string) {
           return;
         }
 
-        const name = `${crypto.randomUUID()}${WIDGET_IMAGE_EXTENSION[checked.facts.type]}`;
-        fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, name), bytes);
-        const url = `${publicBase()}/api/uploads/${WIDGET_IMAGE_DIR}/${name}`;
-        console.log(`[widget-image] tenant ${req.tenantId} ${slot} ${source} ${checked.facts.type} ${checked.facts.width}x${checked.facts.height} ${bytes.length}B -> ${name}`);
-        res.status(201).json({ data: { url, slot, type: checked.facts.type, width: checked.facts.width, height: checked.facts.height, bytes: bytes.length } });
+        res.status(201).json({ data: store(dir, req.tenantId!, slot, source, bytes, checked.facts) });
       } catch (err) {
         console.error("[widget-image] failed:", (err as Error)?.message);
         res.status(500).json({ error: "Could not store the image" });
       }
     },
   );
+  /**
+   * POST /widget-image/internal - the same check and the same storage, for a
+   * server-side copy: the onboarding scan's widget fill (2026-11-11). The
+   * merchant route above keeps its paid-product gate; a tenant still in
+   * onboarding has its widget designed by the scan, which copies the chosen
+   * images through here. Internal key only, never routed for the public: the
+   * gateway sends /api/uploads to this service, so the key is the gate.
+   * The tenant is named explicitly (x-tenant-id) and logged with the file.
+   */
+  router.post("/widget-image/internal", requireInternalKey, async (req: Request, res: Response) => {
+    try {
+      const tenantId = String(req.headers["x-tenant-id"] || "");
+      if (!/^[a-z0-9]{10,40}$/i.test(tenantId)) { res.status(400).json({ error: "x-tenant-id is required", code: "TENANT_REQUIRED" }); return; }
+      if (!String(req.headers["content-type"] || "").includes("multipart/form-data")) { res.status(400).json({ error: "multipart/form-data is required", code: "MULTIPART_REQUIRED" }); return; }
+      const read = await readMultipart(req, WIDGET_IMAGE_MAX_BYTES);
+      const slot = read.slot;
+      if (!isWidgetImageSlot(slot)) { res.status(400).json({ error: "slot must be logo or cover", code: "SLOT_INVALID" }); return; }
+      if (read.truncated) { tooLarge(res, slot); return; }
+      const bytes = read.file;
+      if (!bytes || !bytes.length) { res.status(400).json({ error: "No file uploaded", code: "NO_FILE" }); return; }
+      const checked = checkWidgetImage(bytes, slot);
+      if (!checked.ok) { const { ok: _ok, ...why } = checked; res.status(422).json({ error: "The image was refused", ...why, slot }); return; }
+      res.status(201).json({ data: store(dir, tenantId, slot, "internal", bytes, checked.facts) });
+    } catch (err) {
+      console.error("[widget-image] internal failed:", (err as Error)?.message);
+      res.status(500).json({ error: "Could not store the image" });
+    }
+  });
   return router;
+}
+
+/** One checked image, stored under a random name; the same for every way in. */
+function store(dir: string, tenantId: string, slot: WidgetImageSlot, source: string, bytes: Buffer, facts: { type: keyof typeof WIDGET_IMAGE_EXTENSION; width: number; height: number }) {
+  const name = `${crypto.randomUUID()}${WIDGET_IMAGE_EXTENSION[facts.type]}`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), bytes);
+  const url = `${publicBase()}/api/uploads/${WIDGET_IMAGE_DIR}/${name}`;
+  console.log(`[widget-image] tenant ${tenantId} ${slot} ${source} ${facts.type} ${facts.width}x${facts.height} ${bytes.length}B -> ${name}`);
+  return { url, slot, type: facts.type, width: facts.width, height: facts.height, bytes: bytes.length };
 }
 
 function tooLarge(res: Response, slot: WidgetImageSlot) {

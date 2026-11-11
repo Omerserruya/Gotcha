@@ -16,13 +16,15 @@ import path from "path";
 
 const H = vi.hoisted(() => {
   const os = require("os"); const p = require("path"); const f = require("fs");
-  return { dir: f.mkdtempSync(p.join(os.tmpdir(), "wimg-")), perms: ["channels:manage:update"] as string[], fetched: [] as any[], fetchResult: null as any };
+  return { dir: f.mkdtempSync(p.join(os.tmpdir(), "wimg-")), perms: ["channels:manage:update"] as string[], fetched: [] as any[], fetchResult: null as any, active: true };
 });
 
 vi.mock("@chatcenter/shared", () => ({
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1" }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
-  requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),
+  // The merchant route's paid-product gate: a tenant in onboarding is refused.
+  requireActiveTenant: () => (_q: any, res: any, n: any) => (H.active ? n() : res.status(403).json({ code: "TENANT_NOT_ACTIVE" })),
+  requireInternalKey: (req: any, res: any, n: any) => (req.headers["x-internal-key"] === "the-key" ? n() : res.status(403).json({ error: "Forbidden" })),
   requirePermission: (p: string) => (_q: any, res: any, n: any) => (H.perms.includes(p) ? n() : res.status(403).json({ error: "forbidden" })),
 }));
 vi.mock("@chatcenter/shared/src/lib/safe-fetch", () => ({
@@ -48,7 +50,7 @@ const stored = () => (fs.existsSync(path.join(H.dir, "widget")) ? fs.readdirSync
 
 beforeEach(() => {
   process.env.PUBLIC_URL = "https://dev.gotcha.co.il/";
-  H.perms = ["channels:manage:update"]; H.fetched = []; H.fetchResult = null;
+  H.perms = ["channels:manage:update"]; H.fetched = []; H.fetchResult = null; H.active = true;
   fs.rmSync(path.join(H.dir, "widget"), { recursive: true, force: true });
 });
 afterAll(() => { fs.rmSync(H.dir, { recursive: true, force: true }); });
@@ -130,5 +132,45 @@ describe("★ a link", () => {
       expect((await byLink({ slot: "logo", url })).body.code).toBe("URL_INVALID");
     }
     expect(H.fetched.length).toBe(before);
+  });
+});
+
+describe("the internal copy (the onboarding scan's widget fill, 2026-11-11)", () => {
+  const internal = (headers: Record<string, string>, buf: Buffer = png, slot = "logo") => {
+    let r = request(app).post("/api/uploads/widget-image/internal");
+    for (const [k, v] of Object.entries(headers)) r = r.set(k, v);
+    return r.field("slot", slot).attach("file", buf, { filename: "x.png", contentType: "image/png" });
+  };
+
+  it("no internal key: refused (403, the guard's answer), nothing stored", async () => {
+    expect((await internal({ "x-tenant-id": "cmwbxhjrr0001jy6kwq7tj623" })).status).toBe(403);
+    expect((await internal({ "x-internal-key": "wrong", "x-tenant-id": "cmwbxhjrr0001jy6kwq7tj623" })).status).toBe(403);
+    expect(stored()).toEqual([]);
+  });
+
+  it("the tenant must be named", async () => {
+    const r = await internal({ "x-internal-key": "the-key" });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe("TENANT_REQUIRED");
+    expect(stored()).toEqual([]);
+  });
+
+  it("a tenant in onboarding: the merchant route still refuses, the internal copy stores the same way", async () => {
+    H.active = false;
+    expect((await upload("logo", png)).status).toBe(403);
+    expect(stored()).toEqual([]);
+    const r = await internal({ "x-internal-key": "the-key", "x-tenant-id": "cmwbxhjrr0001jy6kwq7tj623" });
+    expect(r.status).toBe(201);
+    expect(r.body.data).toMatchObject({ slot: "logo", type: "png", width: 320, height: 180 });
+    expect(r.body.data.url).toMatch(/^https:\/\/dev\.gotcha\.co\.il\/api\/uploads\/widget\/[0-9a-f-]{36}\.png$/);
+    expect(stored()).toHaveLength(1);
+  });
+
+  it("the same byte rules: SVG under an image name and an oversized slot are refused", async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const r = await internal({ "x-internal-key": "the-key", "x-tenant-id": "cmwbxhjrr0001jy6kwq7tj623" }, svg);
+    expect(r.status).toBe(422);
+    expect(r.body.code).toBe("NOT_AN_IMAGE");
+    expect(stored()).toEqual([]);
   });
 });

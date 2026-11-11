@@ -157,8 +157,8 @@ describe("unsure means unset", () => {
     expect(uploads).toHaveLength(0);
   });
 
-  it("a non-image candidate is never shown to the model; a colour white text cannot sit on is never offered", async () => {
-    await prefillWidget(input({ logos: [{ url: "https://shop.example/notimage.png" }], heroes: [], colors: [{ hex: "#ffee88" }] }), deps());
+  it("a non-image candidate is never shown to the model; a colour neither cream nor ink reads on is never offered", async () => {
+    await prefillWidget(input({ logos: [{ url: "https://shop.example/notimage.png" }], heroes: [], colors: [{ hex: "#777777" }] }), deps());
     expect(JSON.stringify(modelCalls[0].messages)).not.toContain("image_url");
     expect(modelCalls[0].messages[0].content[0].text).toContain("Colour candidates: none");
     expect(webchat().appearance.logoUrl).toBeNull();
@@ -218,7 +218,7 @@ describe("the console preview: the same decision, nothing written", () => {
 
   it("every field is treated as at default, and the answer carries every rejection with its fixed reason", async () => {
     const p = await previewWidget(
-      input({ logos: [{ url: "https://shop.example/notimage.png", source: "icon" }, { url: "http://x.test/a.png" }, { url: "https://shop.example/logo.png" }], heroes: [{ url: "https://shop.example/logo.png", source: "og:image" }], colors: [{ hex: "#ffee88" }, { hex: "#1d4ed8", source: "theme-color" }] }),
+      input({ logos: [{ url: "https://shop.example/notimage.png", source: "icon" }, { url: "http://x.test/a.png" }, { url: "https://shop.example/logo.png" }], heroes: [{ url: "https://shop.example/logo.png", source: "og:image" }], colors: [{ hex: "#777777" }, { hex: "#1d4ed8", source: "theme-color" }] }),
       { fetchImage: async (url) => (url.includes("logo") ? IMAGES["https://shop.example/logo.png"]! : IMAGES[url] ?? null), model: deps({ ...ANSWER, hero: null }).model },
     );
     const r = previewResponse(
@@ -243,5 +243,13 @@ describe("the console preview: the same decision, nothing written", () => {
       fetchImage: async (url) => (url.endsWith("big.png") ? "too_large" : null), model: deps().model,
     });
     expect(p.rejected.slice(0, 2).map((x) => x.reason)).toEqual(["too_large", "unreachable"]);
+  });
+});
+
+describe("a pale brand keeps its colour (the widget writes dark text on it)", () => {
+  it("drcomfort's yellow is offered to the model and written as it is", async () => {
+    await prefillWidget(input({ colors: [{ hex: "#ffe901", source: "button" }] }), deps({ ...ANSWER, color: "#ffe901" }));
+    expect(modelCalls[0].messages[0].content[0].text).toContain("Colour candidates: #ffe901");
+    expect(webchat().appearance.primaryColor).toBe("#ffe901");
   });
 });

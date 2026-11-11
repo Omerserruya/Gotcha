@@ -158,9 +158,17 @@ export function luminance(hex: string): number {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
-/** WCAG contrast ratio of this colour against white text. */
-export function contrastWithWhite(hex: string): number {
-  return 1.05 / (luminance(hex) + 0.05);
+/**
+ * The text the widget itself writes on the brand colour: cream #FBF8F3 or
+ * ink #2B2622, whichever contrasts more (inkOn() in gotcha-site.js and the
+ * gotcha look of gotcha-shopify-chat.js; the stored contrastColor is not used
+ * there). This is that better ratio.
+ */
+export const CREAM = "#fbf8f3";
+export const INK = "#2b2622";
+export function inkContrast(hex: string): number {
+  const l = luminance(hex);
+  return Math.max((luminance(CREAM) + 0.05) / (l + 0.05), (l + 0.05) / (luminance(INK) + 0.05));
 }
 
 /** Near white or near black: a page background or body text, never a brand colour. */
@@ -201,13 +209,19 @@ function fromHsl(h: number, s: number, l: number): string {
   return "#" + [r, g, b].map((c) => Math.round(c * 255).toString(16).padStart(2, "0")).join("");
 }
 
-/** The colour, darkened (same hue and saturation) until white text on it reads. */
-export function withWhiteContrast(hex: string): string {
-  if (contrastWithWhite(hex) >= MIN_CONTRAST) return hex;
+/**
+ * The brand colour as it is whenever the widget's own text reads on it (cream
+ * or ink, whichever is better). Only a mid tone that neither reads on is
+ * darkened, same hue and saturation, until cream does. A yellow brand stays
+ * yellow with dark text (drcomfort #ffe901, 2026-11-11: darkening it to olive
+ * made a colour that was not theirs).
+ */
+export function readableBrand(hex: string): string {
+  if (inkContrast(hex) >= MIN_CONTRAST) return hex;
   const [h, s, l0] = toHsl(hex);
   for (let l = l0; l >= 0; l -= 0.01) {
     const c = fromHsl(h, s, Math.max(0, l));
-    if (contrastWithWhite(c) >= MIN_CONTRAST) return c;
+    if (inkContrast(c) >= MIN_CONTRAST) return c;
   }
   return "#000000";
 }
@@ -314,7 +328,7 @@ export async function extractBrandCandidates(
     const c = normalizeColor(raw);
     if (!c) return;
     if (isNearWhiteOrBlack(c)) return reject("color", c, source, "near_white_or_black");
-    const hex = withWhiteContrast(c);
+    const hex = readableBrand(c);
     if (colors.some((x) => x.hex === hex)) return reject("color", c, source, "duplicate");
     if (colors.length >= MAX_COLORS) return reject("color", c, source, "over_cap");
     colors.push({ hex, original: c, source });
