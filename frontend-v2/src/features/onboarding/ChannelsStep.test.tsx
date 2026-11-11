@@ -37,6 +37,21 @@ vi.mock('@/features/channels/ConnectPanel', () => ({
     <button type="button" data-testid="email-form" data-note={String(note)} onClick={onClose} />
   ),
 }));
+vi.mock('@/features/capabilities/ShopifyConnect', () => ({
+  ShopifyConnect: (props: { mode: string | null; connectAllowed: boolean | null; flow: string }) => (
+    <span
+      data-testid="shopify-connect"
+      data-mode={String(props.mode)}
+      data-allowed={String(props.connectAllowed)}
+      data-flow={props.flow}
+    />
+  ),
+}));
+vi.mock('@/features/webchat/WooPlugin', () => ({
+  WooPlugin: ({ woo }: { woo: { sites: readonly unknown[] } }) => (
+    <span data-testid="woo-plugin" data-sites={woo.sites.length} />
+  ),
+}));
 vi.mock('@/features/webchat/WebchatSettings', () => ({
   GetTheCode: () => <button type="button" data-testid="get-the-code" />,
   CopyCode: ({ code }: { code: string }) => <span data-testid="copy-code" data-code={code} />,
@@ -437,7 +452,10 @@ describe('★★ a Shopify shop: the theme toggle, above the code', () => {
       'https://admin.shopify.com/store/avivco/themes/current/editor?context=apps',
     );
     expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
-    fireEvent.click(screen.getByTestId('channels-show-code'));
+    expect(screen.getByTestId('channels-other-ways')).toHaveTextContent(
+      'Not on Shopify? Choose another way',
+    );
+    fireEvent.click(screen.getByTestId('channels-other-ways'));
     expect(screen.getByTestId('channels-code-snippet')).toBeInTheDocument();
     expect(screen.getByTestId('channels-next').className).toMatch(/channelSkip/);
   });
@@ -466,6 +484,134 @@ describe('★★ a Shopify shop: the theme toggle, above the code', () => {
   });
 });
 
+describe('★★ the website: the way that fits the site first, the other two one press away', () => {
+  const availability = { mode: 'listing', helpUrl: null, connectAllowed: true };
+  const open = (props: Partial<Props>) => {
+    show(props);
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    return screen.getByTestId('channels-website');
+  };
+  const ways = () =>
+    Array.from(document.querySelectorAll('[data-testid^="channels-way-"]'))
+      .map((el) => el.getAttribute('data-testid'))
+      .filter((id) => id !== 'channels-way-found');
+
+  it('★★ Shopify found: Connect Shopify first, back to step 2 to claim the store; nothing else yet', () => {
+    const panel = open({ detected: 'shopify', shopify: availability as never });
+    expect(panel).toHaveAttribute('data-way', 'shopify');
+    expect(screen.getByTestId('channels-way-found')).toHaveTextContent(
+      'We found Shopify on your site, so this is the quickest way.',
+    );
+    expect(ways()).toEqual(['channels-way-shopify']);
+    const connect = screen.getByTestId('shopify-connect');
+    expect(connect).toHaveAttribute('data-flow', 'onboarding_systems');
+    expect(connect).toHaveAttribute('data-mode', 'listing');
+    expect(connect).toHaveAttribute('data-allowed', 'true');
+    expect(screen.queryByTestId('channels-code-snippet')).toBeNull();
+    expect(screen.getByTestId('channels-other-ways')).toHaveTextContent(
+      'Not on Shopify? Choose another way',
+    );
+  });
+
+  it('★★ the other two, in 13j order, after one press; the press goes away', () => {
+    open({ detected: 'shopify', shopify: availability as never });
+    fireEvent.click(screen.getByTestId('channels-other-ways'));
+    expect(ways()).toEqual([
+      'channels-way-shopify',
+      'channels-way-woocommerce',
+      'channels-way-code',
+    ]);
+    expect(screen.getByTestId('copy-code')).toHaveAttribute('data-code', '<script>chat</script>');
+    expect(screen.queryByTestId('channels-other-ways')).toBeNull();
+  });
+
+  it('★★ WooCommerce found: the plugin first (its sites with it), then Shopify and the code', () => {
+    const panel = open({ detected: 'woocommerce' });
+    expect(panel).toHaveAttribute('data-way', 'woocommerce');
+    expect(screen.getByTestId('channels-way-found')).toHaveTextContent(
+      'We found WooCommerce on your site',
+    );
+    expect(ways()).toEqual(['channels-way-woocommerce']);
+    expect(screen.getByTestId('woo-plugin')).toBeInTheDocument();
+    expect(screen.getByTestId('channels-other-ways')).toHaveTextContent(
+      'Not on WooCommerce? Choose another way',
+    );
+    fireEvent.click(screen.getByTestId('channels-other-ways'));
+    expect(ways()).toEqual([
+      'channels-way-woocommerce',
+      'channels-way-shopify',
+      'channels-way-code',
+    ]);
+    // Shopify's availability unread: the connect is told so, never guessed.
+    expect(screen.getByTestId('shopify-connect')).toHaveAttribute('data-mode', 'null');
+  });
+
+  it.each([null, 'wix', 'squarespace', 'webflow', 'magento'])(
+    '★★ found %s: the code first, no "we found" line, the store ways one press away',
+    (detected) => {
+      const panel = open({ detected });
+      expect(panel).toHaveAttribute('data-way', 'code');
+      expect(screen.queryByTestId('channels-way-found')).toBeNull();
+      expect(ways()).toEqual(['channels-way-code']);
+      expect(screen.getByTestId('channels-code-snippet')).toHaveTextContent(
+        '<script>chat</script>',
+      );
+      expect(screen.getByTestId('channels-way-code')).toHaveTextContent(
+        'before the closing body tag',
+      );
+      expect(screen.getByTestId('channels-other-ways')).toHaveTextContent(
+        'Is your site on Shopify or WooCommerce? Choose another way',
+      );
+    },
+  );
+
+  it('★ the slug is read as the read writes it, any case', () => {
+    open({ detected: ' Shopify ' });
+    expect(screen.getByTestId('channels-website')).toHaveAttribute('data-way', 'shopify');
+  });
+
+  it('★★ where the chat already is outranks the read: a shop first, with no "we found" line', () => {
+    const install = {
+      ...code('not_seen'),
+      shopify: [
+        {
+          channelId: 'sh1',
+          shopDomain: 'avivco.myshopify.com',
+          status: 'not_enabled',
+          embedLive: false,
+          lastHeartbeatAt: null,
+          themeEditorUrl: 'https://admin.shopify.com/x',
+        },
+      ],
+    };
+    open({ install: install as never, detected: 'woocommerce' });
+    expect(screen.getByTestId('channels-website')).toHaveAttribute('data-way', 'shopify');
+    expect(screen.queryByTestId('channels-way-found')).toBeNull();
+    expect(screen.getByTestId('channels-shop-theme-sh1')).toBeInTheDocument();
+    expect(screen.queryByTestId('shopify-connect')).toBeNull();
+  });
+
+  it('★ a plugin site that connected outranks the read too', () => {
+    const install = {
+      ...code('not_seen'),
+      woocommerce: {
+        sites: [{ id: 'w1', siteUrl: 'https://a.co.il', status: 'connected', lastSeenAt: null }],
+      },
+    };
+    open({ install: install as never, detected: 'shopify' });
+    expect(screen.getByTestId('channels-website')).toHaveAttribute('data-way', 'woocommerce');
+    expect(screen.getByTestId('woo-plugin')).toHaveAttribute('data-sites', '1');
+  });
+
+  it('★★ offering a way claims nothing: not live, Continue stays quiet, until the code is SEEN', () => {
+    open({ detected: 'woocommerce' });
+    fireEvent.click(screen.getByTestId('channels-other-ways'));
+    expect(screen.getByTestId('channels-status-WEBCHAT')).toHaveTextContent('Not live yet');
+    expect(screen.queryByTestId('channels-connected-WEBCHAT')).toBeNull();
+    expect(screen.getByTestId('channels-next')).toHaveTextContent('Continue without a channel');
+  });
+});
+
 describe('reads and preview', () => {
   it('channels unread: said, never "none connected"', () => {
     show({ channels: null });
@@ -490,9 +636,15 @@ describe('reads and preview', () => {
           install={code('not_seen') as never}
           config={config() as never}
           landing={back({ connected: 'messenger', count: '2' })}
+          detected="shopify"
         />
       </NextIntlClientProvider>,
     );
+    fireEvent.click(screen.getByTestId('channels-open-WEBCHAT'));
+    expect(screen.getByTestId('channels-way-found')).toHaveTextContent('מצאנו Shopify באתר שלכם');
+    expect(screen.getByTestId('channels-way-shopify')).toHaveTextContent('חנות ה\u2011Shopify');
+    expect(screen.getByTestId('channels-other-ways')).toHaveTextContent('לא ב\u2011Shopify?');
+    fireEvent.click(screen.getByTestId('channels-other-ways'));
     expect(document.body.textContent).not.toMatch(/onboarding\.channels|channels\.\w+\./);
     expect(screen.getByTestId('channels-landing-MESSENGER')).toHaveTextContent('2 חשבונות חוברו');
   });

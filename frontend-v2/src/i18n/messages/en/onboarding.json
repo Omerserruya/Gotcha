@@ -473,7 +473,6 @@
     "shopThemeHow": "In the theme editor: App embeds, switch GOTCHA on, and save.",
     "shopWaiting": "Waiting for the first visit to your shop. The status changes by itself.",
     "shopNotLive": "We haven't seen the chat in your shop yet. Once you turn it on in the theme, it starts answering.",
-    "pasteYourself": "Paste the code yourself",
     "status": {
       "none": "Not connected",
       "waiting": "Not live yet",
@@ -516,6 +515,18 @@
         "picker_failed": "We couldn't keep your Pages to choose from, so nothing was connected. You can try again.",
         "other": "That didn't connect. You can try again."
       }
+    },
+    "way": {
+      "found": {
+        "shopify": "We found Shopify on your site, so this is the quickest way.",
+        "woocommerce": "We found WooCommerce on your site, so this is the quickest way."
+      },
+      "other": {
+        "shopify": "Not on Shopify? Choose another way",
+        "woocommerce": "Not on WooCommerce? Choose another way",
+        "code": "Is your site on Shopify or WooCommerce? Choose another way"
+      },
+      "shopify": "Connect your Shopify shop. Then switch the chat on in its theme, with one toggle."
     }
   },
   "live": {

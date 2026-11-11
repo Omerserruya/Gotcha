@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { loads, pages } = vi.hoisted(() => ({
   loads: {
     loadChannelsStep: vi.fn(async () => ({ channels: [], install: null, config: {} })),
+    loadInstallWays: vi.fn(async () => ({
+      detected: 'woocommerce',
+      shopify: { mode: 'listing', helpUrl: null },
+    })),
   },
   pages: { loadMessengerPages: vi.fn(async () => ({ ok: true, pages: [] })) },
 }));
@@ -27,6 +31,23 @@ const props = async (query: Record<string, string>) => {
 
 beforeEach(() => {
   pages.loadMessengerPages.mockClear();
+  loads.loadInstallWays.mockClear();
+});
+
+describe('★★ the website row: the platform the read found, and Shopify\'s availability', () => {
+  it('★ handed to the step as read', async () => {
+    const got = await props({});
+    expect(loads.loadInstallWays).toHaveBeenCalledTimes(1);
+    expect(got.detected).toBe('woocommerce');
+    expect(got.shopify).toEqual({ mode: 'listing', helpUrl: null });
+  });
+
+  it('★ a preview opens no panel: nothing read for it', async () => {
+    const got = await props({ preview: '1' });
+    expect(loads.loadInstallWays).not.toHaveBeenCalled();
+    expect(got.detected).toBeNull();
+    expect(got.shopify).toBeNull();
+  });
 });
 
 describe('★★ the way back lands on the step, read as 13 reads it', () => {

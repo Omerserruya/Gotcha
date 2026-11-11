@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
+import type { ConnectFlow } from '@/api/endpoints/registry';
 import { Link, usePathname, useRouter } from '@/i18n/navigation';
 
 import {
@@ -29,12 +30,15 @@ export function ShopifyConnect({
   mode,
   helpUrl,
   connectAllowed = null,
+  flow = 'redesign_studio',
 }: {
   /** `null`: availability was not read. */
   readonly mode: string | null;
   readonly helpUrl: string | null;
   /** `false`: the server says GOTCHA Core must be paid first. `null`: not said. */
   readonly connectAllowed?: boolean | null;
+  /** Where Shopify's way back lands: Studio, or onboarding's step 2 (it claims the store). */
+  readonly flow?: ConnectFlow;
 }) {
   const t = useTranslations('capabilities.shopify');
   const tc = useTranslations('billing.connector');
@@ -74,7 +78,7 @@ export function ShopifyConnect({
         onClick={() => {
           setFailed(null);
           startTransition(async () => {
-            const result = await startShopifyInstall();
+            const result = await startShopifyInstall(flow);
             if (result.ok) window.location.assign(result.url);
             else setFailed(result.reason);
           });

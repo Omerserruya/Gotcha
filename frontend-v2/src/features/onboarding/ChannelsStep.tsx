@@ -15,7 +15,10 @@ import type { ChannelLanding } from '@/features/channels/landing';
 import type { ChannelsConfig } from '@/features/channels/load-whatsapp';
 import type { MessengerPagesRead } from '@/features/channels/messenger-actions';
 import { MessengerPicker } from '@/features/channels/MessengerPicker';
+import { ShopifyConnect } from '@/features/capabilities/ShopifyConnect';
+import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { CopyCode, GetTheCode } from '@/features/webchat/WebchatSettings';
+import { WooPlugin } from '@/features/webchat/WooPlugin';
 import { useRouter } from '@/i18n/navigation';
 
 import {
@@ -28,6 +31,7 @@ import {
   type OnboardingChannel,
 } from './channel-reach';
 import styles from './Onboarding.module.css';
+import { foundOn, INSTALL_WAYS, installWay, type InstallWay } from './install-way';
 import { stepHref } from './preview';
 import { StepLink } from './StepLink';
 
@@ -106,11 +110,17 @@ export function ChannelsStep({
   landing = null,
   pick = null,
   preview = false,
+  detected = null,
+  shopify = null,
 }: {
   /** `null`: unread. */
   readonly channels: readonly Channel[] | null;
   readonly install: WidgetInstall | null;
   readonly config: ChannelsConfig;
+  /** The store platform the website read found (its slug); `null`: none, or unread. */
+  readonly detected?: string | null;
+  /** Shopify's listing and GOTCHA Core's word, for the website's Shopify way; `null`: unread. */
+  readonly shopify?: ShopifyAvailability | null;
   /** The way back from a provider, read off the URL (`channelLandingOf`). */
   readonly landing?: ChannelLanding | null;
   /** Messenger came back with Pages to choose (`messengerPickOf` and its read). */
@@ -166,6 +176,7 @@ export function ChannelsStep({
             state={standing(channel)}
             channels={channels}
             install={install}
+            ways={{ detected, shopify }}
             config={config}
             preview={preview}
             isOpen={open === channel}
@@ -203,6 +214,7 @@ function Row({
   state,
   channels,
   install,
+  ways,
   config,
   preview,
   isOpen,
@@ -215,6 +227,7 @@ function Row({
   readonly state: Standing;
   readonly channels: readonly Channel[] | null;
   readonly install: WidgetInstall | null;
+  readonly ways: Ways;
   readonly config: ChannelsConfig;
   readonly preview: boolean;
   readonly isOpen: boolean;
@@ -370,7 +383,7 @@ function Row({
       {isOpen && !preview ? (
         <div className={styles.channelPanel} data-testid={`channels-panel-${channel}`}>
           {channel === 'WEBCHAT' ? (
-            <Website install={install} />
+            <Website install={install} ways={ways} />
           ) : channel === 'WHATSAPP' ? (
             <ConnectWhatsApp
               launches={config.launches}
@@ -487,14 +500,29 @@ function Email({
   );
 }
 
+/** What the website row's ways read beyond the install: the read's platform, Shopify's availability. */
+interface Ways {
+  readonly detected: string | null;
+  readonly shopify: ShopifyAvailability | null;
+}
+
 /**
- * The website widget. A Shopify shop with GOTCHA installed is the easy way:
- * switch the chat on in its theme (Shopify's editor, one toggle), above the
- * code. Otherwise the code, copied here; or the one press that makes it.
+ * The website's panel (Omer, 2026-11-11; 13j's three ways, no design of its
+ * own): the way that fits the site first, then "Not on <platform>? Choose
+ * another way" for the other two, in 13j's order - a wrong read costs one
+ * press, never a dead end.
+ *
+ * ★ Live only when it is: this panel installs, the row says live once the
+ *   code or a shop's embed was SEEN (`reaches`), never because a way was
+ *   offered or pressed.
+ * ★ Shopify's way back lands on step 2 (`onboarding_systems`), which claims
+ *   the store; step 3 then shows the shop's theme toggle here.
+ * ★ WooCommerce: the zip and its steps here; "Connect to GOTCHA" is pressed
+ *   in WordPress, which opens /connect/woocommerce (WooConnectFlow).
  */
-function Website({ install }: { readonly install: WidgetInstall | null }) {
+function Website({ install, ways }: { readonly install: WidgetInstall | null; readonly ways: Ways }) {
   const t = useTranslations('onboarding.channels');
-  const [showCode, setShowCode] = useState(false);
+  const [others, setOthers] = useState(false);
   if (install === null) {
     return (
       <p className={styles.why} data-testid="channels-code-unread">
@@ -502,65 +530,118 @@ function Website({ install }: { readonly install: WidgetInstall | null }) {
       </p>
     );
   }
-  const shops = install.shopify.filter((shop) => shop.status !== 'uninstalled');
+  const first = installWay(install, ways.detected);
+  const found = foundOn(first, ways.detected);
   return (
-    <div className={styles.connectHere} data-testid="channels-website">
-      {shops.map((shop) => (
-        <div
-          key={shop.channelId}
-          className={styles.connectHere}
-          data-testid={`channels-shop-${shop.channelId}`}
-        >
-          <span className={styles.quiet}>
-            {t.rich('shop', {
-              shop: shop.shopDomain,
-              ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>,
-            })}
-          </span>
-          {shopLive(shop) ? (
-            <span className={styles.connected}>{t('shopLive')}</span>
-          ) : shop.themeEditorUrl ? (
-            <>
-              <a
-                href={shop.themeEditorUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.primary}
-                data-testid={`channels-shop-theme-${shop.channelId}`}
-              >
-                {t('shopTheme')}
-              </a>
-              <span className={styles.quiet}>{t('shopThemeHow')}</span>
-            </>
-          ) : (
-            <span className={styles.quiet}>{t('shopWaiting')}</span>
-          )}
-        </div>
-      ))}
-      {/* One clear action: with the theme path offered, the code waits under a quiet toggle. */}
-      {themePath(install) && !showCode ? (
+    <div className={styles.connectHere} data-testid="channels-website" data-way={first}>
+      {found ? (
+        <span className={styles.quiet} data-testid="channels-way-found">
+          {t(`way.found.${found}`)}
+        </span>
+      ) : null}
+      <Way way={first} install={install} shopify={ways.shopify} />
+      {others ? (
+        INSTALL_WAYS.filter((way) => way !== first).map((way) => (
+          <Way key={way} way={way} install={install} shopify={ways.shopify} />
+        ))
+      ) : (
         <button
           type="button"
           className={styles.textButton}
-          onClick={() => setShowCode(true)}
-          data-testid="channels-show-code"
+          onClick={() => setOthers(true)}
+          data-testid="channels-other-ways"
         >
-          {t('pasteYourself')}
+          {t(`way.other.${first}`)}
         </button>
-      ) : install.code ? (
-        <>
-          <span className={styles.quiet}>{t('pasteCode')}</span>
-          {/* The server's snippet, verbatim; it scrolls in its own box and copies whole. */}
-          <pre className={styles.code} dir="ltr" data-testid="channels-code-snippet">
-            {install.code.snippet}
-          </pre>
-          <CopyCode code={install.code.snippet} />
-        </>
-      ) : (
-        <div className={styles.connectHere} data-testid="channels-get-code">
-          <GetTheCode />
-        </div>
       )}
+    </div>
+  );
+}
+
+/** One way onto the site, as 13j offers it. */
+function Way({
+  way,
+  install,
+  shopify,
+}: {
+  readonly way: InstallWay;
+  readonly install: WidgetInstall;
+  readonly shopify: ShopifyAvailability | null;
+}) {
+  const t = useTranslations('onboarding.channels');
+  if (way === 'woocommerce') {
+    return (
+      <div className={styles.connectHere} data-testid="channels-way-woocommerce">
+        <WooPlugin woo={install.woocommerce} />
+      </div>
+    );
+  }
+  if (way === 'shopify') {
+    const shops = install.shopify.filter((shop) => shop.status !== 'uninstalled');
+    if (shops.length === 0) {
+      return (
+        <div className={styles.connectHere} data-testid="channels-way-shopify">
+          <span className={styles.quiet}>{t('way.shopify')}</span>
+          <ShopifyConnect
+            mode={shopify?.mode ?? null}
+            helpUrl={shopify?.helpUrl ?? null}
+            connectAllowed={shopify?.connectAllowed ?? null}
+            flow="onboarding_systems"
+          />
+        </div>
+      );
+    }
+    return (
+      <div className={styles.connectHere} data-testid="channels-way-shopify">
+        {shops.map((shop) => (
+          <div
+            key={shop.channelId}
+            className={styles.connectHere}
+            data-testid={`channels-shop-${shop.channelId}`}
+          >
+            <span className={styles.quiet}>
+              {t.rich('shop', {
+                shop: shop.shopDomain,
+                ltr: (chunks) => <bdi dir="ltr">{chunks}</bdi>,
+              })}
+            </span>
+            {shopLive(shop) ? (
+              <span className={styles.connected}>{t('shopLive')}</span>
+            ) : shop.themeEditorUrl ? (
+              <>
+                <a
+                  href={shop.themeEditorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.primary}
+                  data-testid={`channels-shop-theme-${shop.channelId}`}
+                >
+                  {t('shopTheme')}
+                </a>
+                <span className={styles.quiet}>{t('shopThemeHow')}</span>
+              </>
+            ) : (
+              <span className={styles.quiet}>{t('shopWaiting')}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return install.code ? (
+    <div className={styles.connectHere} data-testid="channels-way-code">
+      <span className={styles.quiet}>{t('pasteCode')}</span>
+      {/* The server's snippet, verbatim; it scrolls in its own box and copies whole. */}
+      <pre className={styles.code} dir="ltr" data-testid="channels-code-snippet">
+        {install.code.snippet}
+      </pre>
+      <CopyCode code={install.code.snippet} />
+    </div>
+  ) : (
+    <div className={styles.connectHere} data-testid="channels-way-code">
+      <div className={styles.connectHere} data-testid="channels-get-code">
+        <GetTheCode />
+      </div>
     </div>
   );
 }

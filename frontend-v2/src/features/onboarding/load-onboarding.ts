@@ -303,6 +303,24 @@ export async function loadChannelsStep(): Promise<ChannelsStepRead> {
   return { channels, install, config };
 }
 
+export interface InstallWaysRead {
+  /**
+   * The store platform the website read found (`technology.platform.slug`,
+   * what `learned.platform` is): `shopify`, `woocommerce`, `wix`, ... `null`:
+   * none found, not read yet, or unread. It picks the website's way offered first.
+   */
+  readonly detected: string | null;
+  /** Shopify's listing and GOTCHA Core's word, for the website's Shopify way; `null`: unread. */
+  readonly shopify: ShopifyAvailability | null;
+}
+
+/** Step 3's website row only: which way to offer first, and whether Shopify can be connected. */
+export async function loadInstallWays(): Promise<InstallWaysRead> {
+  const [discovery, shopify] = await Promise.all([loadDiscovery(), loadShopifyToConnect()]);
+  const detected = discovery?.technology?.platform?.slug?.trim().toLowerCase() || null;
+  return { detected, shopify };
+}
+
 /**
  * The step saved on Continue/Skip (and by go-live), and the employee go-live
  * made; `null` when unread.
