@@ -501,6 +501,9 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       systemPromptHash: prefixAssertion?.hash ?? params.metadata?.systemPromptHash,
       systemPromptHashDrift: prefixAssertion?.drift ?? false,
       cachedPrefixUsed: cachedTokens > 0,
+      // Hidden reasoning, already counted inside completion_tokens: kept apart
+      // so a model swap can be compared on what the reply itself cost.
+      reasoningTokens: (response.usage as any)?.completion_tokens_details?.reasoning_tokens ?? null,
       // Who pays: the audit trail says so on every row.
       billedTo: platformPaid ? "platform" : "tenant",
     },
