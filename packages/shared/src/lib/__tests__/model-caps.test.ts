@@ -3,7 +3,7 @@
  * the one adaptation retry on a 400 for an unsupported tunable param.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { shapeChatRequest, withModelAdaptation, unsupportedParam, resetModelCaps, isLegacyModel } from "../model-caps";
+import { shapeChatRequest, withModelAdaptation, unsupportedParam, resetModelCaps, isLegacyModel, classifyRefusal } from "../model-caps";
 
 /** An OpenAI SDK BadRequestError, as it arrives. */
 const unsupported = (param: string, kind: "parameter" | "value" = "parameter") =>
@@ -76,14 +76,15 @@ describe("the adaptation", () => {
     expect(shapeChatRequest({}, "gpt-4o-mini", { maxTokens: 50 })).toMatchObject({ max_completion_tokens: 50 });
   });
 
-  it("only one retry: a second refusal is thrown", async () => {
+  it("bounded: at most two adapted retries per call, then the refusal is thrown", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const send = vi.fn(async (req: any) => {
       if ("reasoning_effort" in req) throw unsupported("reasoning_effort");
+      if ("top_p" in req) throw unsupported("top_p");
       throw unsupported("max_completion_tokens");
     });
-    await expect(withModelAdaptation("m-x", shapeChatRequest({}, "m-x", {}), send)).rejects.toMatchObject({ param: "max_completion_tokens" });
-    expect(send).toHaveBeenCalledTimes(2);
+    await expect(withModelAdaptation("m-x", { ...shapeChatRequest({}, "m-x", {}), top_p: 1 }, send)).rejects.toMatchObject({ param: "max_completion_tokens" });
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("any other 400 is never retried", async () => {
@@ -100,5 +101,55 @@ describe("the adaptation", () => {
     const send = vi.fn(async () => { throw unsupported("top_p"); });
     await expect(withModelAdaptation("gpt-6-luna", { max_completion_tokens: 10 }, send)).rejects.toMatchObject({ param: "top_p" });
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** gpt-6-luna's refusals, verbatim from the probe of 2026-11-11. */
+const lunaMinimal = () => Object.assign(new Error("400 Unsupported value: 'reasoning_effort' does not support 'minimal' with this model. Supported values are: 'none', 'low', 'medium', 'high', and 'xhigh'."), { status: 400, code: "unsupported_value", param: "reasoning_effort" });
+const lunaTools = () => Object.assign(new Error("400 Function tools with reasoning_effort are not supported for gpt-6-luna in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'."), { status: 400, code: null, param: "reasoning_effort" });
+const TOOLS = [{ type: "function", function: { name: "search", parameters: { type: "object", properties: {} } } }];
+/** A stand-in for gpt-6-luna as probed: no 'minimal'; with tools only 'none' (or the call fails). */
+const luna = vi.fn(async (req: any) => {
+  if (req.reasoning_effort === "minimal") throw lunaMinimal();
+  if (req.tools?.length && req.reasoning_effort !== "none") throw lunaTools();
+  return { sent: { ...req } };
+});
+
+describe("gpt-6-luna's reasoning-effort rules", () => {
+  beforeEach(() => { luna.mockClear(); vi.spyOn(console, "warn").mockImplementation(() => {}); });
+
+  it("an unsupported effort VALUE moves up to the next supported level, never dropped, and is remembered", async () => {
+    const out: any = await withModelAdaptation("gpt-6-luna", shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "minimal" }), luna);
+    expect(out.sent.reasoning_effort).toBe("low");
+    expect(luna).toHaveBeenCalledTimes(2);
+    const next: any = await withModelAdaptation("gpt-6-luna", shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "minimal" }), luna);
+    expect(next.sent.reasoning_effort).toBe("low");
+    expect(luna).toHaveBeenCalledTimes(3);
+  });
+
+  it("tools plus an effort: retried with 'none', remembered for tool calls ONLY", async () => {
+    const withTools = () => ({ ...shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "low" }), tools: TOOLS });
+    const out: any = await withModelAdaptation("gpt-6-luna", withTools(), luna);
+    expect(out.sent.reasoning_effort).toBe("none");
+    expect(luna).toHaveBeenCalledTimes(2);
+    // The next tool call is sent with "none" at once.
+    const again: any = await withModelAdaptation("gpt-6-luna", withTools(), luna);
+    expect(again.sent.reasoning_effort).toBe("none");
+    expect(luna).toHaveBeenCalledTimes(3);
+    // A call without tools keeps its effort.
+    const plain: any = await withModelAdaptation("gpt-6-luna", shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "low" }), luna);
+    expect(plain.sent.reasoning_effort).toBe("low");
+  });
+
+  it("the first call that hits both (minimal AND tools) still answers: two different facts, two retries", async () => {
+    const out: any = await withModelAdaptation("gpt-6-luna", { ...shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "minimal" }), tools: TOOLS }, luna);
+    expect(out.sent.reasoning_effort).toBe("none");
+    expect(luna).toHaveBeenCalledTimes(3);
+  });
+
+  it("the refusals are told apart; the tools one only counts when the request carries tools", () => {
+    expect(classifyRefusal(lunaMinimal(), { reasoning_effort: "minimal" })).toEqual({ kind: "effort_value", refused: "minimal", supported: ["none", "low", "medium", "high", "xhigh"] });
+    expect(classifyRefusal(lunaTools(), { tools: TOOLS, reasoning_effort: "low" })).toEqual({ kind: "tools_effort", effort: "none" });
+    expect(classifyRefusal(lunaTools(), { reasoning_effort: "low" })).toBeNull();
   });
 });
