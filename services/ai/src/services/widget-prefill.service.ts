@@ -26,6 +26,7 @@ import {
   normalizeWebchatConfig,
   webchatSeedConfig,
   writeDurableSetting,
+  readDurableSetting,
   getInternalServiceKey,
   type WebchatConfig,
 } from "@chatcenter/shared";
@@ -377,7 +378,7 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
   const upload = deps.upload ?? defaultUpload;
   const ensure = deps.ensure ?? ensureWebchat;
   const put = deps.put ?? putWidget;
-  const record = deps.record ?? ((tenantId, value) => writeDurableSetting(tenantId, AUTOFILL_SETTING, JSON.stringify(value), "widget-prefill").then(() => undefined));
+  const record = deps.record ?? recordAutofill;
 
   // The chat exists at the end of onboarding whatever happens below.
   const row = await ensure(input.tenantId);
@@ -386,6 +387,9 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
   if (!open.size) return { status: "none", filled: {}, reason: "nothing_at_default" };
   // The site's language when it said; else the widget's own.
   const plan = await planPrefill({ ...input, language: input.language }, open, deps);
+  if (plan.rejected.length) {
+    console.log(`[widget-prefill] ${input.tenantId} left out: ${plan.rejected.map((r) => `${r.kind}:${r.reason}`).join(", ")}`);
+  }
   if (plan.status !== "planned") return { status: plan.status, filled: {}, reason: plan.reason };
 
   const copy = async (img: VettedImage | null, slot: WidgetImageSlot) =>
@@ -401,6 +405,24 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
   await record(input.tenantId, { source: input.domain, at: new Date().toISOString(), fields: filled }).catch(() => {});
   console.log(`[widget-prefill] ${input.tenantId} filled ${Object.keys(filled).join(", ")}`);
   return { status: "done", filled };
+}
+
+/**
+ * The record of what the scan filled, MERGED with what an earlier scan
+ * filled: a second scan fills only fields still at default, and replacing
+ * the record dropped the first scan's fields from it (dev, 2026-11-11).
+ */
+export function mergeAutofill(previous: unknown, next: { source: string; at: string; fields: Record<string, unknown> }) {
+  let prev: any = previous;
+  if (typeof prev === "string") { try { prev = JSON.parse(prev); } catch { prev = null; } }
+  if (typeof prev === "string") { try { prev = JSON.parse(prev); } catch { prev = null; } }
+  const fields = prev && typeof prev.fields === "object" && prev.fields ? { ...prev.fields } : {};
+  return { source: next.source, at: next.at, fields: { ...fields, ...next.fields } };
+}
+
+async function recordAutofill(tenantId: string, value: unknown): Promise<void> {
+  const previous = await readDurableSetting(tenantId, AUTOFILL_SETTING).catch(() => null);
+  await writeDurableSetting(tenantId, AUTOFILL_SETTING, JSON.stringify(mergeAutofill(previous, value as any)), "widget-prefill");
 }
 
 /** Every field the fill may write: the preview shows a widget as if all were still at default. */

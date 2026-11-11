@@ -34,7 +34,7 @@ vi.mock("../services/shopify-live-chat.service", () => ({ listChannels: async ()
 vi.mock("../services/ai.service", () => ({ generateResponse: vi.fn(), getDefaultModel: () => "test-model" }));
 
 import { normalizeWebchatConfig } from "@chatcenter/shared";
-import { prefillWidget, previewWidget, previewResponse, openFields, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
+import { prefillWidget, previewWidget, previewResponse, openFields, mergeAutofill, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
 
 function png(w: number, h: number): Buffer {
   const b = Buffer.alloc(40);
@@ -251,5 +251,16 @@ describe("a pale brand keeps its colour (the widget writes dark text on it)", ()
     await prefillWidget(input({ colors: [{ hex: "#ffe901", source: "button" }] }), deps({ ...ANSWER, color: "#ffe901" }));
     expect(modelCalls[0].messages[0].content[0].text).toContain("Colour candidates: #ffe901");
     expect(webchat().appearance.primaryColor).toBe("#ffe901");
+  });
+});
+
+describe("the autofill record", () => {
+  it("a second scan adds its fields to the first scan's, never drops them", () => {
+    const first = JSON.stringify({ source: "https://a.test", at: "t1", fields: { "ux.welcome.title": "Hi" } });
+    const merged = mergeAutofill(first, { source: "https://a.test", at: "t2", fields: { "appearance.logoUrl": "https://x/l.png" } });
+    expect(merged).toEqual({ source: "https://a.test", at: "t2", fields: { "ux.welcome.title": "Hi", "appearance.logoUrl": "https://x/l.png" } });
+    // Stored as a JSON string inside jsonb: read back double-encoded.
+    expect(mergeAutofill(JSON.stringify(first), { source: "s", at: "t3", fields: {} }).fields).toEqual({ "ux.welcome.title": "Hi" });
+    expect(mergeAutofill(null, { source: "s", at: "t", fields: { a: 1 } }).fields).toEqual({ a: 1 });
   });
 });
