@@ -601,6 +601,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
+      # The micro tier (per-turn helper calls); unset keeps gpt-5-nano. Any model
+      # works: the request shape comes from packages/shared lib/model-caps.
+      OPENAI_MICRO_MODEL: ${OPENAI_MICRO_MODEL:-gpt-5-nano}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-500}
       RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-50}
