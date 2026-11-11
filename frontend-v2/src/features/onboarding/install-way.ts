@@ -25,7 +25,10 @@ export function installWay(install: WidgetInstall | null, detected: string | nul
 }
 
 /** The platform the read found, when it is the reason for the way offered first. */
-export function foundOn(way: InstallWay, detected: string | null): 'shopify' | 'woocommerce' | null {
+export function foundOn(
+  way: InstallWay,
+  detected: string | null,
+): 'shopify' | 'woocommerce' | null {
   if (way === 'code') return null;
   return detected?.trim().toLowerCase() === way ? way : null;
 }

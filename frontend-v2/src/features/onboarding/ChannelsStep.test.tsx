@@ -38,7 +38,11 @@ vi.mock('@/features/channels/ConnectPanel', () => ({
   ),
 }));
 vi.mock('@/features/capabilities/ShopifyConnect', () => ({
-  ShopifyConnect: (props: { mode: string | null; connectAllowed: boolean | null; flow: string }) => (
+  ShopifyConnect: (props: {
+    mode: string | null;
+    connectAllowed: boolean | null;
+    flow: string;
+  }) => (
     <span
       data-testid="shopify-connect"
       data-mode={String(props.mode)}

@@ -217,15 +217,18 @@ describe('★★ split billing - a store is connected only after GOTCHA Core (Om
   it.each([
     [undefined, 'redesign_studio'],
     ['onboarding_systems', 'onboarding_systems'],
-  ] as const)('★ Connect asks for its flow (%s → %s): onboarding comes back to onboarding', async (flow, asked) => {
-    // No intent cookie comes back, so nothing opens: only the flow asked for is read.
-    get.mockImplementation(async () => ({ url: 'https://apps.shopify.com/gotcha' }));
-    intl(<ShopifyConnect mode="listing" helpUrl={null} flow={flow} />);
-    await userEvent.click(screen.getByTestId('shopify-start'));
-    expect((get.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
-      `/api/connectors/shopify/install/start?flow=${asked}`,
-    );
-  });
+  ] as const)(
+    '★ Connect asks for its flow (%s → %s): onboarding comes back to onboarding',
+    async (flow, asked) => {
+      // No intent cookie comes back, so nothing opens: only the flow asked for is read.
+      get.mockImplementation(async () => ({ url: 'https://apps.shopify.com/gotcha' }));
+      intl(<ShopifyConnect mode="listing" helpUrl={null} flow={flow} />);
+      await userEvent.click(screen.getByTestId('shopify-start'));
+      expect((get.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+        `/api/connectors/shopify/install/start?flow=${asked}`,
+      );
+    },
+  );
 
   it('the server refuses with 402 core_plan_required: said as that', async () => {
     get.mockRejectedValue(

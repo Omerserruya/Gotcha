@@ -34,7 +34,7 @@ beforeEach(() => {
   loads.loadInstallWays.mockClear();
 });
 
-describe('★★ the website row: the platform the read found, and Shopify\'s availability', () => {
+describe("★★ the website row: the platform the read found, and Shopify's availability", () => {
   it('★ handed to the step as read', async () => {
     const got = await props({});
     expect(loads.loadInstallWays).toHaveBeenCalledTimes(1);

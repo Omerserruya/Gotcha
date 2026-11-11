@@ -520,7 +520,13 @@ interface Ways {
  * ★ WooCommerce: the zip and its steps here; "Connect to GOTCHA" is pressed
  *   in WordPress, which opens /connect/woocommerce (WooConnectFlow).
  */
-function Website({ install, ways }: { readonly install: WidgetInstall | null; readonly ways: Ways }) {
+function Website({
+  install,
+  ways,
+}: {
+  readonly install: WidgetInstall | null;
+  readonly ways: Ways;
+}) {
   const t = useTranslations('onboarding.channels');
   const [others, setOthers] = useState(false);
   if (install === null) {
