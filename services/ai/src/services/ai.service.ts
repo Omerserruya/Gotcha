@@ -392,6 +392,8 @@ export const PLATFORM_PAID_AI_TYPES: ReadonlySet<string> = new Set([
   "onboarding_extract_faq",
   "onboarding_extract_profile",
   "onboarding_extract_brand",
+  // The widget designed from the site during the scan (Omer, 2026-11-11: "on us").
+  "onboarding_widget_prefill",
 ]);
 
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {

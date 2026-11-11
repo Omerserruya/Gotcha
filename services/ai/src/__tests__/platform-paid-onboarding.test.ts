@@ -7,14 +7,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const H = vi.hoisted(() => ({ gateCalls: 0, metered: 0, logged: [] as any[] }));
+const H = vi.hoisted(() => ({ gateCalls: 0, metered: 0, logged: [] as any[], content: "{}" }));
 
 vi.mock("openai", () => ({
   default: class {
     chat = {
       completions: {
         create: async () => ({
-          choices: [{ message: { role: "assistant", content: "{}" }, finish_reason: "stop" }],
+          choices: [{ message: { role: "assistant", content: H.content }, finish_reason: "stop" }],
           usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
         }),
       },
@@ -38,9 +38,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
 });
 
 import { initAIService, generateResponse, PLATFORM_PAID_AI_TYPES } from "../services/ai.service";
+import { prefillWidget, PREFILL_AI_TYPE } from "../services/widget-prefill.service";
 
 beforeEach(() => {
-  H.gateCalls = 0; H.metered = 0; H.logged = [];
+  H.gateCalls = 0; H.metered = 0; H.logged = []; H.content = "{}";
   initAIService({ apiKey: "test", defaultModel: "gpt-test" });
 });
 
@@ -63,5 +64,26 @@ describe("a tenant with 0 credits", () => {
     await expect(call("chat")).rejects.toThrow("units_exhausted");
     await expect(call("onboarding_something_new")).rejects.toThrow("units_exhausted");
     expect(H.gateCalls).toBe(2);
+  });
+});
+
+describe("the widget designed during the scan (Omer, 2026-11-11: on us)", () => {
+  it("a 0-unit tenant still gets the fill, through the real model path, never gated or debited", async () => {
+    expect(PLATFORM_PAID_AI_TYPES.has(PREFILL_AI_TYPE)).toBe(true);
+    H.content = JSON.stringify({ logo: null, color: null, hero: null, title: "How can we help today?", assistantName: null, suggestedQuestions: null, proactiveMessage: null });
+    const puts: any[] = [];
+    const r = await prefillWidget(
+      { tenantId: "T0", authorization: "Bearer a", domain: "https://shop.example", language: "en", logos: [], heroes: [], colors: [], context: { businessName: "Shop", summary: "Scarves" } },
+      {
+        ensure: (async () => ({ credentials: {} })) as any,
+        put: (async (_t: string, patch: any) => { puts.push(patch); }) as any,
+        record: async () => undefined,
+      },
+    );
+    expect(r.status).toBe("done");
+    expect(puts[0].ux.welcome.title).toBe("How can we help today?");
+    expect(H.gateCalls).toBe(0);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(H.metered).toBe(0);
   });
 });
