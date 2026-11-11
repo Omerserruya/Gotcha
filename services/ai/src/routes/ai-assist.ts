@@ -12,6 +12,7 @@ import {
   requireEntitlement,
   getRedis,
   requireVisibleConversation,
+  requireSystemAdmin,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { runDeduped } from "../services/copilot-dedup.service";
@@ -44,7 +45,7 @@ import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { extractOnboarding, withoutControlChars, type ExtractKind } from "../services/onboarding-extract.service";
-import { prefillWidget } from "../services/widget-prefill.service";
+import { prefillWidget, previewWidget, previewResponse } from "../services/widget-prefill.service";
 import { goLiveEmployee, GoLiveRefused, resyncEmployeePolicies } from "../services/onboarding-employee.service";
 import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
@@ -108,6 +109,43 @@ router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADM
   } catch (err: any) {
     console.error("Onboarding extract error:", err?.message ?? err);
     res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
+  }
+});
+
+// The console's widget preview (Omer, 2026-11-11): any site, platform admin
+// only, NOTHING written. Auth reads the page and its brand candidates (the
+// same extractor as the scan); this runs the same vetting and vision call as
+// the fill (platform-paid) and answers the widget it would produce.
+router.post("/widget-prefill/preview", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const authUrl = (process.env.AUTH_SERVICE_URL || "http://auth:4001").replace(/\/$/, "");
+    const r = await fetch(`${authUrl}/api/system/widget-brand-candidates`, {
+      method: "POST",
+      headers: { Authorization: String(req.headers.authorization || ""), "Content-Type": "application/json" },
+      body: JSON.stringify({ url: (req.body as any)?.url }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const body: any = await r.json().catch(() => null);
+    if (!r.ok || !body?.data) {
+      const code = body?.code ?? "SITE_UNREACHABLE";
+      res.status(r.status === 400 || r.status === 403 || r.status === 401 ? r.status : 422).json({ error: body?.error ?? "The site could not be read", code });
+      return;
+    }
+    const read = body.data;
+    const preview = await previewWidget({
+      tenantId: (req as any).user?.tenantId ?? "platform",
+      authorization: "",
+      domain: read.url,
+      language: read.candidates?.language === "he" || read.candidates?.language === "en" ? read.candidates.language : null,
+      logos: Array.isArray(read.candidates?.logos) ? read.candidates.logos : [],
+      heroes: Array.isArray(read.candidates?.heroes) ? read.candidates.heroes : [],
+      colors: Array.isArray(read.candidates?.colors) ? read.candidates.colors : [],
+      context: read.context ?? {},
+    });
+    res.json({ data: previewResponse(read, preview) });
+  } catch (err: any) {
+    console.error("Widget prefill preview error:", err?.message ?? err);
+    res.status(422).json({ error: "The preview could not be made", code: "PREVIEW_FAILED" });
   }
 });
 

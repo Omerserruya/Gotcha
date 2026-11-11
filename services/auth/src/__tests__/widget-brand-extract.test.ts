@@ -73,7 +73,18 @@ describe("what is never a candidate", () => {
     const html = `<html lang="en"><head><meta name="theme-color" content="#008060"><meta property="og:image" content="/og.png"></head>
       <body><form method="post" action="/password"><input type="password" name="password"></form><style>button{background:#008060}</style></body></html>`;
     const c = await extractBrandCandidates(ORIGIN, html, none);
-    expect(c).toEqual({ logos: [], colors: [], heroes: [], language: "en" });
+    expect(c).toMatchObject({ logos: [], colors: [], heroes: [], language: "en", rejected: [{ reason: "gated_page" }] });
+  });
+});
+
+describe("why a candidate was left out (the console preview shows it)", () => {
+  it("svg, too small, near white, duplicate: each with its fixed reason", async () => {
+    const html = `<head><link rel="icon" href="/a.svg"><link rel="icon" href="/b.png" sizes="16x16"><meta name="theme-color" content="#fefefe">
+      <style>:root{--primary:#1d4ed8;--accent:#1d4ed8}</style></head>`;
+    const c = await extractBrandCandidates(ORIGIN, html, none);
+    expect(c.rejected.map((r) => [r.kind, r.reason])).toEqual([
+      ["logo", "too_small"], ["logo", "svg_unsafe"], ["color", "near_white_or_black"], ["color", "duplicate"],
+    ]);
   });
 });
 
@@ -150,12 +161,24 @@ describe("the hand-over", () => {
   it("sends the candidates and what the scan learned; a failure never throws", async () => {
     const sent: any[] = [];
     await prefillWidgetFromScan(
-      { authorization: "Bearer a", origin: ORIGIN, candidates: { logos: [], colors: [{ hex: "#1d4ed8", original: "#1d4ed8", source: "theme-color" }], heroes: [], language: "he" }, report: { business: { name: "Shop", summary: "Scarves" }, brand: { voice: "warm" } } },
+      { authorization: "Bearer a", origin: ORIGIN, candidates: { logos: [], colors: [{ hex: "#1d4ed8", original: "#1d4ed8", source: "theme-color" }], heroes: [], language: "he", rejected: [] }, report: { business: { name: "Shop", summary: "Scarves" }, brand: { voice: "warm" } } },
       async (auth, body) => { sent.push([auth, body]); return { status: "done" }; },
     );
     expect(sent[0][0]).toBe("Bearer a");
     expect(sent[0][1]).toMatchObject({ domain: ORIGIN, language: "he", colors: [{ hex: "#1d4ed8" }], context: { businessName: "Shop", summary: "Scarves", voice: "warm" } });
     await expect(prefillWidgetFromScan({ authorization: "x", origin: ORIGIN, candidates: null, report: null }, async () => { throw new Error("down"); })).resolves.toBeNull();
     expect(prefillContext(null)).toMatchObject({ businessName: null });
+  });
+});
+
+describe("the preview's inputs", () => {
+  it("a typed site becomes the https origin; junk is refused", async () => {
+    const { previewOrigin, pageContext } = await import("../services/widget-brand-extract");
+    expect(previewOrigin("shop.co.il/about?x=1")).toBe("https://shop.co.il");
+    expect(previewOrigin("http://shop.co.il")).toBe("http://shop.co.il");
+    expect(previewOrigin("localhost")).toBeNull();
+    expect(previewOrigin("javascript:alert(1)")).toBeNull();
+    expect(previewOrigin(42)).toBeNull();
+    expect(pageContext({ html: `<meta name="description" content="Scarves">`, text: "Hand made", siteName: "Shop" })).toMatchObject({ businessName: "Shop", summary: "Scarves | Hand made" });
   });
 });

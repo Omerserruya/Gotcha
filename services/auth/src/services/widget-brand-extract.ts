@@ -27,11 +27,19 @@ import { decodeEntities } from "./site-crawl.service";
 
 export interface ImageCandidate { url: string; source: string; size: number | null }
 export interface ColorCandidate { hex: string; original: string; source: string }
+/**
+ * Why a candidate was left out. A fixed list, shared with the AI service's own
+ * reasons, so the console preview can say each in words.
+ */
+export type RejectReason = "gated_page" | "svg_unsafe" | "too_small" | "not_a_url" | "near_white_or_black" | "duplicate" | "over_cap";
+export interface RejectedCandidate { kind: "logo" | "hero" | "color"; value: string; source: string; reason: RejectReason }
 export interface BrandCandidates {
   logos: ImageCandidate[];
   colors: ColorCandidate[];
   heroes: ImageCandidate[];
   language: "he" | "en" | null;
+  /** What was seen and left out, and why. */
+  rejected: RejectedCandidate[];
 }
 
 /** Fetch a small text resource (manifest, stylesheet), or null. */
@@ -282,18 +290,33 @@ export async function extractBrandCandidates(
   const logos: ImageCandidate[] = [];
   const heroes: ImageCandidate[] = [];
   const colors: ColorCandidate[] = [];
-  if (isGatedPage(html)) return { logos, colors, heroes, language: widgetLanguage(html) };
+  const rejected: RejectedCandidate[] = [];
+  if (isGatedPage(html)) {
+    rejected.push({ kind: "logo", value: origin, source: "page", reason: "gated_page" });
+    return { logos, colors, heroes, language: widgetLanguage(html), rejected };
+  }
+  const reject = (kind: RejectedCandidate["kind"], value: string | null, source: string, reason: RejectReason) => {
+    if (value && rejected.length < 40) rejected.push({ kind, value: value.slice(0, 200), source, reason });
+  };
   const addImage = (list: ImageCandidate[], raw: string | null, source: string, size: number | null, cap: number) => {
+    const kind = list === logos ? "logo" : "hero";
+    if (!raw) return;
     const url = absoluteUrl(raw, origin);
-    if (!url || unusableImage(url) || list.length >= cap || list.some((c) => c.url === url)) return;
-    if (list === logos && size !== null && size < MIN_LOGO_PX) return;
+    if (!url) return reject(kind, raw, source, "not_a_url");
+    if (list.some((c) => c.url === url)) return;
+    if (unusableImage(url)) return reject(kind, url, source, "svg_unsafe");
+    if (list === logos && size !== null && size < MIN_LOGO_PX) return reject(kind, url, source, "too_small");
+    if (list.length >= cap) return reject(kind, url, source, "over_cap");
     list.push({ url, source, size });
   };
   const addColor = (raw: string | null, source: string) => {
+    if (!raw) return;
     const c = normalizeColor(raw);
-    if (!c || isNearWhiteOrBlack(c) || colors.length >= MAX_COLORS) return;
+    if (!c) return;
+    if (isNearWhiteOrBlack(c)) return reject("color", c, source, "near_white_or_black");
     const hex = withWhiteContrast(c);
-    if (colors.some((x) => x.hex === hex)) return;
+    if (colors.some((x) => x.hex === hex)) return reject("color", c, source, "duplicate");
+    if (colors.length >= MAX_COLORS) return reject("color", c, source, "over_cap");
     colors.push({ hex, original: c, source });
   };
 
@@ -356,7 +379,7 @@ export async function extractBrandCandidates(
   for (const c of customPropertyColors(css)) addColor(c, "css-variable");
   addColor(buttonColor(css), "button");
 
-  return { logos, colors, heroes, language: widgetLanguage(html) };
+  return { logos, colors, heroes, language: widgetLanguage(html), rejected };
 }
 
 // ── the hand-over to the AI service ──────────────────────────────────────────
@@ -404,7 +427,7 @@ export async function prefillWidgetFromScan(
   post: PrefillPoster = postWidgetPrefill,
 ): Promise<{ status?: string; filled?: Record<string, unknown> } | null> {
   try {
-    const c = args.candidates ?? { logos: [], colors: [], heroes: [], language: null };
+    const c = args.candidates ?? { logos: [], colors: [], heroes: [], language: null, rejected: [] };
     return await post(args.authorization, {
       domain: args.origin,
       language: c.language,
@@ -417,4 +440,37 @@ export async function prefillWidgetFromScan(
     console.warn(`[widget-prefill] ${args.origin}: ${err?.message ?? err}`);
     return null;
   }
+}
+
+// ── the console preview (platform admin) ─────────────────────────────────────
+
+/** A typed site ("shop.co.il/about") as the https origin the scan reads, or null. */
+export function previewOrigin(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  if (!v || v.length > 300) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`);
+    if (!u.hostname.includes(".")) return null;
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Without a full scan: what the home page says about the business. */
+export function pageContext(page: { html: string; text: string; title?: string | null; siteName?: string | null }): Record<string, string | null> {
+  const meta = (key: string) => {
+    for (const t of page.html.match(/<meta\b[^>]*>/gi) ?? []) {
+      const k = (attr(t, "property") ?? attr(t, "name") ?? "").toLowerCase();
+      if (k === key) return attr(t, "content");
+    }
+    return null;
+  };
+  const description = meta("description") ?? meta("og:description");
+  return {
+    businessName: page.siteName || meta("og:site_name") || page.title || null,
+    summary: [description, page.text.replace(/\s+/g, " ").slice(0, 500)].filter(Boolean).join(" | ") || null,
+    products: null, voice: null, tone: null, greetingExample: null,
+  };
 }

@@ -34,7 +34,7 @@ vi.mock("../services/shopify-live-chat.service", () => ({ listChannels: async ()
 vi.mock("../services/ai.service", () => ({ generateResponse: vi.fn(), getDefaultModel: () => "test-model" }));
 
 import { normalizeWebchatConfig } from "@chatcenter/shared";
-import { prefillWidget, openFields, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
+import { prefillWidget, previewWidget, previewResponse, openFields, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
 
 function png(w: number, h: number): Buffer {
   const b = Buffer.alloc(40);
@@ -197,5 +197,51 @@ describe("failures keep the defaults", () => {
     expect(c.ux.welcome.assistantName).toBe("Store Assistant");
     expect(c.ux.welcome.suggestedQuestions).toHaveLength(3);
     expect(c.ux.welcome.suggestedQuestions[0]).toBe("Which product is right for me?");
+  });
+});
+
+describe("the console preview: the same decision, nothing written", () => {
+  it("no row, no upload, no setting; images as data: thumbnails, the settings at the https source", async () => {
+    const recorded: any[] = [];
+    const p = await previewWidget(input(), { fetchImage: async (url) => IMAGES[url] ?? null, model: deps().model });
+    expect(H.accounts).toHaveLength(0);
+    expect(uploads).toHaveLength(0);
+    expect(recorded).toHaveLength(0);
+    expect(p.status).toBe("planned");
+    expect(p.images.logo?.dataUrl).toMatch(/^data:image\/png;base64,/);
+    expect(p.config.appearance.logoUrl).toBe("https://shop.example/logo.png");
+    expect(p.config.ux.hero).toMatchObject({ mediaType: "image", mediaUrl: "https://shop.example/hero.jpg" });
+    expect(p.config.ux.welcome.title).toBe(ANSWER.title);
+    expect(p.config.ux.proactive.enabled).toBe(false);
+    expect(p.filled).toHaveLength(8);
+  });
+
+  it("every field is treated as at default, and the answer carries every rejection with its fixed reason", async () => {
+    const p = await previewWidget(
+      input({ logos: [{ url: "https://shop.example/notimage.png", source: "icon" }, { url: "http://x.test/a.png" }, { url: "https://shop.example/logo.png" }], heroes: [{ url: "https://shop.example/logo.png", source: "og:image" }], colors: [{ hex: "#ffee88" }, { hex: "#1d4ed8", source: "theme-color" }] }),
+      { fetchImage: async (url) => (url.includes("logo") ? IMAGES["https://shop.example/logo.png"]! : IMAGES[url] ?? null), model: deps({ ...ANSWER, hero: null }).model },
+    );
+    const r = previewResponse(
+      { url: "https://shop.example", candidates: { logos: [{ url: "https://shop.example/logo.png", source: "apple-touch-icon" }], heroes: [], colors: [{ hex: "#1d4ed8", original: "#3b82f6", source: "theme-color" }], rejected: [{ kind: "logo", value: "https://shop.example/a.svg", source: "icon", reason: "svg_unsafe" }] }, context: { businessName: "Shop" } },
+      p,
+    );
+    expect(r.business).toBe("Shop");
+    expect(r.rejected.map((x) => [x.field, x.reason])).toEqual([
+      ["logo", "svg_unsafe"], ["logo", "not_an_image"], ["logo", "not_https"], ["hero", "wrong_ratio"], ["color", "low_contrast"],
+    ]);
+    expect(r.found.find((f) => f.field === "logo")).toMatchObject({ src: "https://shop.example/logo.png", from: "apple-touch-icon" });
+    expect(r.found.find((f) => f.field === "logo")!.dataUrl).toMatch(/^data:image\/png/);
+    expect(r.found.find((f) => f.field === "color")).toMatchObject({ value: "#1d4ed8", from: "theme-color (was #3b82f6, darkened for white text)" });
+    expect(r.found.find((f) => f.field === "questions")!.value.split("\n")).toHaveLength(3);
+    expect(r.settings.appearance.logoUrl).toBe("https://shop.example/logo.png");
+    expect(r.settings.handoff).toEqual({ allowHumanHandoff: false });
+    expect((r.settings as any).displayName).toBeUndefined();
+  });
+
+  it("an image past the cap is said as too_large, an unreachable one as unreachable", async () => {
+    const p = await previewWidget(input({ logos: [{ url: "https://shop.example/big.png" }, { url: "https://shop.example/gone.png" }], heroes: [], colors: [] }), {
+      fetchImage: async (url) => (url.endsWith("big.png") ? "too_large" : null), model: deps().model,
+    });
+    expect(p.rejected.slice(0, 2).map((x) => x.reason)).toEqual(["too_large", "unreachable"]);
   });
 });
