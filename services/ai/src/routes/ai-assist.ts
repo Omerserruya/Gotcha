@@ -44,6 +44,7 @@ import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { discoverBusiness, withoutWideDashes } from "../services/business-discovery.service";
 import { extractOnboarding, withoutControlChars, type ExtractKind } from "../services/onboarding-extract.service";
+import { prefillWidget } from "../services/widget-prefill.service";
 import { goLiveEmployee, GoLiveRefused, resyncEmployeePolicies } from "../services/onboarding-employee.service";
 import { testOnboardingEmployee, EmployeeTestRefused } from "../services/onboarding-employee-test.service";
 import { previewAnswer, previewQuestions, PREVIEW_STATUSES, QUESTION_MAX, type PreviewLocale } from "../services/onboarding-preview.service";
@@ -107,6 +108,43 @@ router.post("/onboarding-extract", authenticate, resolveTenant, requireRole("ADM
   } catch (err: any) {
     console.error("Onboarding extract error:", err?.message ?? err);
     res.status(500).json({ error: "Extraction failed", code: "EXTRACT_FAILED" });
+  }
+});
+
+// Onboarding: the website widget designed from the merchant's own site
+// (2026-11-11). Auth's scan sends the deterministic brand candidates and what
+// it learned; this fills ONLY the fields still at their defaults and copies the
+// chosen images into our media store. Never refused for a weak read: the
+// answer says what was filled ("done"), that nothing was ("none"), or that a
+// step failed ("failed"), and the widget keeps its defaults in both of those.
+router.post("/widget-prefill", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const b = (req.body ?? {}) as any;
+    const urls = (v: unknown) => (Array.isArray(v) ? v : []).filter((c: any) => c && typeof c.url === "string" && c.url.length <= 2048).slice(0, 6);
+    const domain = typeof b.domain === "string" ? b.domain.slice(0, 300) : "";
+    if (!domain) { res.status(400).json({ error: "domain is required", code: "BAD_REQUEST" }); return; }
+    const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.slice(0, max) : null);
+    const result = await prefillWidget({
+      tenantId: req.tenantId!,
+      authorization: String(req.headers.authorization || ""),
+      domain,
+      language: b.language === "he" || b.language === "en" ? b.language : null,
+      logos: urls(b.logos),
+      heroes: urls(b.heroes),
+      colors: (Array.isArray(b.colors) ? b.colors : []).filter((c: any) => c && typeof c.hex === "string").slice(0, 6),
+      context: {
+        businessName: str(b.context?.businessName, 120),
+        summary: str(b.context?.summary, 800),
+        products: str(b.context?.products, 500),
+        voice: str(b.context?.voice, 400),
+        tone: str(b.context?.tone, 300),
+        greetingExample: str(b.context?.greetingExample, 300),
+      },
+    });
+    res.json({ data: result });
+  } catch (err: any) {
+    console.error("Widget prefill error:", err?.message ?? err);
+    res.json({ data: { status: "failed", filled: {}, reason: "error" } });
   }
 });
 

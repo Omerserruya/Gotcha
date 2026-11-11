@@ -320,7 +320,7 @@ export async function getWidget(tenantId: string) {
  * created the chat with the defaults, so the store showed defaults while the
  * preview showed the merchant's design).
  */
-async function ensureWebchat(tenantId: string) {
+export async function ensureWebchat(tenantId: string) {
   const existing = await prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } });
   if (existing) return existing;
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } });

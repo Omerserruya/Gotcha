@@ -24,6 +24,7 @@ import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { ingestTaughtDocument, updateTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { readJob, startJob, reopenJob, isLive, viewOf } from "../services/onboarding-discover/job-store";
+import { extractBrandCandidates, prefillWidgetFromScan } from "../services/widget-brand-extract";
 import { enqueueDiscover } from "../services/onboarding-discover/queue";
 import { readLearned, editLearned, LearnedEditRefused, learnFromFile, LearnedUploadRefused, type LearnedEdit } from "../services/onboarding-discover/learned";
 import { integrationSuggestions, aiInternal } from "../services/onboarding-discover/learn";
@@ -2293,6 +2294,13 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
     }
     const { home, okPages, pages, signals } = crawl;
 
+    // The widget's brand candidates, read while the model writes the report
+    // (manifest and stylesheets, SSRF-guarded). Never fails the scan.
+    const brandCandidates = extractBrandCandidates(origin, home.html).catch((err: any) => {
+      console.warn("[onboarding] widget brand read failed:", err?.message ?? err);
+      return null;
+    });
+
     // What the crawl could SEE, recorded alongside what the model concluded.
     // The review screen reads this row, and without it the screen can only quote
     // pages.length - which on a password-protected store is 17 for a site nobody
@@ -2344,6 +2352,8 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         where: { tenantId: req.tenantId! },
         data: { status: "FAILED", scanPhase: "failed" },
       }).catch(() => {});
+      // The chat is still made ready from what the site itself shows.
+      await prefillWidgetFromScan({ authorization: req.headers.authorization!, origin, candidates: await brandCandidates, report: null });
       res.json({ data: { ok: false, reason: "scan_failed", domain: origin, signals } });
       return;
     }
@@ -2404,6 +2414,12 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
         scannedAt: new Date(),
       },
     });
+
+    // The website widget, designed from the site (2026-11-11): runs beside
+    // the knowledge sync and is awaited before the answer, so the chat is ready
+    // long before the Channels step. Only fields still at their defaults.
+    const widgetPrefill = brandCandidates.then((candidates) =>
+      prefillWidgetFromScan({ authorization: req.headers.authorization!, origin, candidates, report }));
 
     // Persist the discovery's recommendations as a living backlog (nothing is
     // ephemeral; "I'll do it later" loses nothing). Best-effort.
@@ -2486,6 +2502,7 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
     // Re-arm the onboarding nudge: if they go quiet after discovery, the sweep
     // will send "I noticed you stopped after Business Discovery" ~a day later.
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
+    await widgetPrefill;
 
     res.json({
       data: {
