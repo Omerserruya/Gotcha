@@ -153,3 +153,49 @@ describe("gpt-6-luna's reasoning-effort rules", () => {
     expect(classifyRefusal(lunaTools(), { reasoning_effort: "low" })).toBeNull();
   });
 });
+
+describe("the /v1/responses route for tool calls with reasoning (Omer, 2026-11-11)", () => {
+  beforeEach(() => { luna.mockClear(); vi.spyOn(console, "warn").mockImplementation(() => {}); });
+  const viaResponses = vi.fn(async (req: any): Promise<any> => ({ via: "responses", effort: req.reasoning_effort }));
+  const toolCall = (effort = "low") => ({ ...shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: effort }), tools: TOOLS });
+
+  it("the tools refusal, with a responses sender and a real effort: learned, and that call goes to /responses with its effort", async () => {
+    viaResponses.mockClear();
+    const out: any = await withModelAdaptation("gpt-6-luna", toolCall("low"), luna, { responses: viaResponses });
+    expect(out).toEqual({ via: "responses", effort: "low" });
+    expect(luna).toHaveBeenCalledTimes(1);
+    expect(viaResponses).toHaveBeenCalledTimes(1);
+  });
+
+  it("later tool calls go straight to /responses; a call without tools, or with effort none, stays on chat completions", async () => {
+    viaResponses.mockClear();
+    await withModelAdaptation("gpt-6-luna", toolCall("low"), luna, { responses: viaResponses });
+    luna.mockClear(); viaResponses.mockClear();
+    expect(await withModelAdaptation("gpt-6-luna", toolCall("medium"), luna, { responses: viaResponses })).toEqual({ via: "responses", effort: "medium" });
+    expect(luna).not.toHaveBeenCalled();
+    const plain: any = await withModelAdaptation("gpt-6-luna", shapeChatRequest({}, "gpt-6-luna", { reasoningEffort: "low" }), luna, { responses: viaResponses });
+    expect(plain.sent.reasoning_effort).toBe("low");
+    const none: any = await withModelAdaptation("gpt-6-luna", toolCall("none"), luna, { responses: viaResponses });
+    expect(none.sent.reasoning_effort).toBe("none");
+    expect(viaResponses).toHaveBeenCalledTimes(1);
+  });
+
+  it("a caller without a responses sender keeps the 'none' fallback, even after another caller learned the route", async () => {
+    await withModelAdaptation("gpt-6-luna", toolCall("low"), luna, { responses: viaResponses });
+    luna.mockClear();
+    const out: any = await withModelAdaptation("gpt-6-luna", toolCall("low"), luna);
+    expect(out.sent.reasoning_effort).toBe("none");
+  });
+
+  it("a 400 from /responses surfaces as it is: no retry, no fallback to chat", async () => {
+    const bad = Object.assign(new Error("400 Invalid input"), { status: 400, code: "invalid_request_error", param: "input" });
+    const failing = vi.fn(async (): Promise<any> => { throw bad; });
+    await expect(withModelAdaptation("gpt-6-luna", toolCall("low"), luna, { responses: failing })).rejects.toBe(bad);
+    expect(failing).toHaveBeenCalledTimes(1);
+    luna.mockClear(); failing.mockClear();
+    // Once learned, a failing /responses is not retried on chat either.
+    await expect(withModelAdaptation("gpt-6-luna", toolCall("low"), luna, { responses: failing })).rejects.toBe(bad);
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(luna).not.toHaveBeenCalled();
+  });
+});

@@ -14,6 +14,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { trackAIUsage, assertAiAllowed, meterAiUnits, reportOperationalFailure, recordExpectedOutcome, ERROR_CODES } from "@chatcenter/shared";
 // Deep import: the pure layer, so a test that mocks the barrel still gets it.
 import { shapeChatRequest, withModelAdaptation } from "@chatcenter/shared/src/lib/model-caps";
+import { toResponsesRequest, fromResponsesResponse, chatChunksFromResponsesStream } from "./openai-responses";
 import { logAudit } from "./audit.service";
 import { stablePrefixOf } from "./prompt-builder.service";
 
@@ -431,7 +432,13 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     () => withModelAdaptation(model, requestParams as any, (req) => client.chat.completions.create(
       req as OpenAI.ChatCompletionCreateParamsNonStreaming,
       params.signal ? { signal: params.signal } : undefined,
-    )),
+    ), {
+      // Tool calls with a real effort on a model that needs it (gpt-6-luna):
+      // the Responses API, answered in the chat-completion shape.
+      responses: async (req) => fromResponsesResponse(await (client as any).responses.create(
+        toResponsesRequest(req), params.signal ? { signal: params.signal } : undefined,
+      )),
+    }),
     params.signal,
   );
   const llmDurationMs = Date.now() - llmStartedAt;
@@ -504,6 +511,8 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       // Hidden reasoning, already counted inside completion_tokens: kept apart
       // so a model swap can be compared on what the reply itself cost.
       reasoningTokens: (response.usage as any)?.completion_tokens_details?.reasoning_tokens ?? null,
+      // Which OpenAI API served it: "responses" for tool calls routed there, else chat completions.
+      transport: (response as any).transport === "responses" ? "responses" : "chat",
       // Who pays: the audit trail says so on every row.
       billedTo: platformPaid ? "platform" : "tenant",
     },
@@ -625,8 +634,16 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   }
 
   // A stream's unsupported-param 400 arrives on create, before any chunk.
-  const stream = await withModelAdaptation(model, requestParams as any, (req) =>
-    client.chat.completions.create(req as OpenAI.ChatCompletionCreateParamsStreaming, params.signal ? { signal: params.signal } : undefined));
+  let transport: "chat" | "responses" = "chat";
+  const stream: AsyncIterable<any> = await withModelAdaptation(model, requestParams as any, (req) =>
+    client.chat.completions.create(req as OpenAI.ChatCompletionCreateParamsStreaming, params.signal ? { signal: params.signal } : undefined) as any, {
+    responses: async (req) => {
+      transport = "responses";
+      const s = await (client as any).responses.create({ ...toResponsesRequest(req), stream: true }, params.signal ? { signal: params.signal } : undefined);
+      return chatChunksFromResponsesStream(s);
+    },
+  });
+  let reasoningTokens: number | null = null;
 
   let accumulatedContent = "";
   // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble
@@ -659,6 +676,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
         total_tokens: chunk.usage.total_tokens ?? 0,
         cached_tokens: (chunk.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0,
       };
+      reasoningTokens = (chunk.usage as any)?.completion_tokens_details?.reasoning_tokens ?? reasoningTokens;
     }
   }
 
@@ -693,6 +711,8 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
       sessionId: params.sessionId,
       systemPromptHash: params.metadata?.systemPromptHash,
       cachedPrefixUsed: usage.cached_tokens > 0,
+      reasoningTokens,
+      transport,
     },
   }).catch((err) => console.error("[aiService] Usage tracking (stream) failed:", err.message));
 

@@ -21,8 +21,10 @@
  *     up, read from the error ("minimal" -> "low" on gpt-6-luna). Never
  *     dropped: without it the model uses its own default effort;
  *   - "Function tools with reasoning_effort are not supported" (gpt-6-luna on
- *     /v1/chat/completions) sets reasoning_effort "none" for this model's
- *     calls that carry tools, and only those;
+ *     /v1/chat/completions): when the caller can send through /v1/responses
+ *     and asked for a real effort, this model's tool calls go there from now
+ *     on (tools AND reasoning, Omer 2026-11-11); otherwise its tool calls get
+ *     reasoning_effort "none";
  *   - any other refused tunable param is dropped, or the token cap renamed.
  * Learned facts are applied right before every send (when the request already
  * carries its tools), so a later call is shaped right from the start. At most
@@ -51,6 +53,8 @@ interface Learned {
   effortMap: Map<string, string>;
   /** The effort this model needs on a call that carries tools ("none" on gpt-6-luna). */
   toolsEffort?: string;
+  /** Tool calls with a real effort must go through /v1/responses (gpt-6-luna). */
+  toolsNeedResponses?: boolean;
 }
 /** What this process has learned a model refuses. */
 const learned = new Map<string, Learned>();
@@ -102,8 +106,16 @@ export function shapeChatRequest<T extends Record<string, any>>(req: T, model: s
   return req;
 }
 
+const hasTools = (req: Record<string, any>) => Array.isArray(req.tools) && req.tools.length > 0;
+const wantsReasoning = (req: Record<string, any>) => typeof req.reasoning_effort === "string" && req.reasoning_effort !== "none";
+
+/** Whether this request goes through /v1/responses (learned per model; tool calls with a real effort only). */
+export function usesResponses(model: string, req: Record<string, any>): boolean {
+  return !!learned.get(model)?.toolsNeedResponses && hasTools(req) && wantsReasoning(req);
+}
+
 /** Everything learned about this model, applied to a request about to be sent. */
-export function applyLearned(model: string, req: Record<string, any>): void {
+export function applyLearned(model: string, req: Record<string, any>, opts: { canUseResponses?: boolean } = {}): void {
   const known = learned.get(model);
   if (!known) return;
   if (known.tokenParam) {
@@ -111,7 +123,9 @@ export function applyLearned(model: string, req: Record<string, any>): void {
     if (other in req && !(known.tokenParam in req)) { req[known.tokenParam] = req[other]; delete req[other]; }
   }
   if (typeof req.reasoning_effort === "string" && known.effortMap.has(req.reasoning_effort)) req.reasoning_effort = known.effortMap.get(req.reasoning_effort);
-  if (known.toolsEffort && Array.isArray(req.tools) && req.tools.length) req.reasoning_effort = known.toolsEffort;
+  // With a /responses route for this model, a tool call keeps its effort.
+  const routed = opts.canUseResponses && known.toolsNeedResponses && hasTools(req) && wantsReasoning(req);
+  if (known.toolsEffort && hasTools(req) && !routed) req.reasoning_effort = known.toolsEffort;
   for (const p of known.dropped) delete req[p];
 }
 
@@ -196,14 +210,27 @@ function adapt(model: string, refusal: Refusal, req: Record<string, any>): boole
  * this layer understands, adapt and retry, at most MAX_ADAPTATIONS times, each
  * for a different fact. `send` receives the (possibly adapted) request.
  */
-export async function withModelAdaptation<T>(model: string, req: Record<string, any>, send: (req: Record<string, any>) => Promise<T>): Promise<T> {
-  applyLearned(model, req);
+export async function withModelAdaptation<T>(
+  model: string,
+  req: Record<string, any>,
+  send: (req: Record<string, any>) => Promise<T>,
+  opts: { responses?: (req: Record<string, any>) => Promise<T> } = {},
+): Promise<T> {
+  applyLearned(model, req, { canUseResponses: !!opts.responses });
+  // A route already learned: straight to /responses. Its errors surface as
+  // they are, never adapted or retried back here (no fallback loop).
+  if (opts.responses && usesResponses(model, req)) return opts.responses(req);
   const seen = new Set<string>();
   for (let attempt = 0; ; attempt++) {
     try {
       return await send(req);
     } catch (err) {
       const refusal = attempt < MAX_ADAPTATIONS ? classifyRefusal(err, req) : null;
+      if (refusal?.kind === "tools_effort" && opts.responses && wantsReasoning(req)) {
+        entryFor(model).toolsNeedResponses = true;
+        note(model, "tools with reasoning on chat completions (now via /v1/responses)");
+        return opts.responses(req);
+      }
       const fact = refusal ? JSON.stringify(refusal) : "";
       if (!refusal || seen.has(fact) || !adapt(model, refusal, req)) throw err;
       seen.add(fact);
