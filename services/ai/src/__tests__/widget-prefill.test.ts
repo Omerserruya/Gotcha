@@ -34,7 +34,7 @@ vi.mock("../services/shopify-live-chat.service", () => ({ listChannels: async ()
 vi.mock("../services/ai.service", () => ({ generateResponse: vi.fn(), getDefaultModel: () => "test-model" }));
 
 import { normalizeWebchatConfig } from "@chatcenter/shared";
-import { prefillWidget, previewWidget, previewResponse, openFields, mergeAutofill, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
+import { prefillWidget, previewWidget, previewResponse, openFields, mergeAutofill, isNeutral, type PrefillDeps, type PrefillInput } from "../services/widget-prefill.service";
 
 function png(w: number, h: number): Buffer {
   const b = Buffer.alloc(40);
@@ -231,7 +231,7 @@ describe("the console preview: the same decision, nothing written", () => {
     ]);
     expect(r.found.find((f) => f.field === "logo")).toMatchObject({ src: "https://shop.example/logo.png", from: "apple-touch-icon" });
     expect(r.found.find((f) => f.field === "logo")!.dataUrl).toMatch(/^data:image\/png/);
-    expect(r.found.find((f) => f.field === "color")).toMatchObject({ value: "#1d4ed8", from: "theme-color (was #3b82f6, darkened for white text)" });
+    expect(r.found.find((f) => f.field === "color")).toMatchObject({ value: "#1d4ed8", from: "theme-color (was #3b82f6, darkened so text reads)" });
     expect(r.found.find((f) => f.field === "questions")!.value.split("\n")).toHaveLength(3);
     expect(r.settings.appearance.logoUrl).toBe("https://shop.example/logo.png");
     expect(r.settings.handoff).toEqual({ allowHumanHandoff: false });
@@ -258,9 +258,60 @@ describe("the autofill record", () => {
   it("a second scan adds its fields to the first scan's, never drops them", () => {
     const first = JSON.stringify({ source: "https://a.test", at: "t1", fields: { "ux.welcome.title": "Hi" } });
     const merged = mergeAutofill(first, { source: "https://a.test", at: "t2", fields: { "appearance.logoUrl": "https://x/l.png" } });
-    expect(merged).toEqual({ source: "https://a.test", at: "t2", fields: { "ux.welcome.title": "Hi", "appearance.logoUrl": "https://x/l.png" } });
+    expect(merged).toEqual({ source: "https://a.test", at: "t2", fields: { "ux.welcome.title": "Hi", "appearance.logoUrl": "https://x/l.png" }, sources: {} });
     // Stored as a JSON string inside jsonb: read back double-encoded.
     expect(mergeAutofill(JSON.stringify(first), { source: "s", at: "t3", fields: {} }).fields).toEqual({ "ux.welcome.title": "Hi" });
     expect(mergeAutofill(null, { source: "s", at: "t", fields: { a: 1 } }).fields).toEqual({ a: 1 });
+  });
+});
+
+describe("the colour from the logo, when no site colour fits (2026-11-11)", () => {
+  let records: any[] = [];
+  const withRecord = (answer: any) => deps(answer, { record: async (_t, v) => { records.push(v); } });
+  beforeEach(() => { records = []; });
+
+  it("the model declines the site colour and names the logo's navy: written, source logo", async () => {
+    await prefillWidget(input({ colors: [{ hex: "#ffe901", source: "button" }] }), withRecord({ ...ANSWER, color: null, logoColor: "#1E2A78" }));
+    expect(webchat().appearance.primaryColor).toBe("#1e2a78");
+    expect(records[0].sources).toEqual({ "appearance.primaryColor": "logo" });
+  });
+
+  it("a site colour that fits wins; the logo's colour is not used", async () => {
+    await prefillWidget(input(), withRecord({ ...ANSWER, color: "#1d4ed8", logoColor: "#16a34a" }));
+    expect(webchat().appearance.primaryColor).toBe("#1d4ed8");
+    expect(records[0].sources).toEqual({ "appearance.primaryColor": "site" });
+  });
+
+  it("never a grey, white or black, never one the widget's text cannot read on, never without a chosen logo", async () => {
+    for (const bad of ["#808080", "#ffffff", "#0a0a0a", "#9a9aa0"]) expect(isNeutral(bad)).toBe(true);
+    expect(isNeutral("#1e2a78")).toBe(false);
+    expect(isNeutral("#16a34a")).toBe(false);
+    // Greys the widget's text reads on (so only the neutral rule refuses them).
+    for (const grey of ["#cccccc", "#333333", "#777777"]) {
+      H.accounts = [];
+      await prefillWidget(input({ colors: [] }), withRecord({ ...ANSWER, color: null, logoColor: grey }));
+      expect(webchat().appearance.primaryColor).toBe("#7c3aed");
+    }
+    H.accounts = [];
+    // A mid tone the widget's text does not read on, though not grey.
+    await prefillWidget(input({ colors: [] }), withRecord({ ...ANSWER, color: null, logoColor: "#7a8a3a" }));
+    expect(webchat().appearance.primaryColor).toBe("#7c3aed");
+    H.accounts = [];
+    await prefillWidget(input({ colors: [] }), withRecord({ ...ANSWER, logo: null, color: null, logoColor: "#1e2a78" }));
+    expect(webchat().appearance.primaryColor).toBe("#7c3aed");
+  });
+
+  it("the preview says where it came from", async () => {
+    const p = await previewWidget(input({ colors: [] }), { fetchImage: async (url) => IMAGES[url] ?? null, model: deps({ ...ANSWER, color: null, logoColor: "#1e2a78" }).model });
+    expect(p.colorSource).toBe("logo");
+    const r = previewResponse({ url: "https://shop.example", candidates: { logos: [], heroes: [], colors: [] }, context: {} }, p);
+    expect(r.found.find((f) => f.field === "color")).toMatchObject({ value: "#1e2a78", from: "logo (read by the model)" });
+  });
+
+  it("the record keeps each field's source; a field filled again without one drops the old", () => {
+    const m = mergeAutofill({ source: "s", at: "t1", fields: { "appearance.primaryColor": "#1e2a78" }, sources: { "appearance.primaryColor": "logo" } }, { source: "s", at: "t2", fields: { "ux.welcome.title": "Hi" } });
+    expect(m.sources).toEqual({ "appearance.primaryColor": "logo" });
+    const n = mergeAutofill(m, { source: "s", at: "t3", fields: { "appearance.primaryColor": "#000" } });
+    expect(n.sources).toEqual({});
   });
 });

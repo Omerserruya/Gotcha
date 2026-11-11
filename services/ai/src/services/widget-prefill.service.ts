@@ -140,8 +140,21 @@ export interface VettedImage { url: string; bytes: Buffer; type: string; width: 
 /** Why a candidate was left out: a fixed list, shared with auth's extractor. */
 export type RejectionReason =
   | "not_https" | "unreachable" | "too_large" | "dimensions_too_large" | "not_an_image" | "wrong_ratio"
-  | "not_a_color" | "low_contrast" | "duplicate" | "over_cap" | "field_already_set" | "model_unsure" | "model_chose_another";
+  | "not_a_color" | "low_contrast" | "neutral" | "duplicate" | "over_cap" | "field_already_set" | "model_unsure" | "model_chose_another";
 export interface Rejection { kind: "logo" | "hero" | "color"; value: string; source?: string; reason: RejectionReason; detail?: string }
+
+/**
+ * A grey, white or black: never a brand colour taken from a logo. Saturation
+ * under 25% (HSL), or lightness outside 8% to 92%.
+ */
+export function isNeutral(hex: string): boolean {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (l < 0.08 || l > 0.92 || max === min) return true;
+  const s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+  return s < 0.25;
+}
 
 /** One image, fetched with the guard and checked against the widget upload's rules, or why not. */
 const CHECK_REASON: Record<string, RejectionReason> = { IMAGE_TOO_LARGE: "too_large", IMAGE_DIMENSIONS_TOO_LARGE: "dimensions_too_large", NOT_AN_IMAGE: "not_an_image" };
@@ -210,10 +223,11 @@ function prompt(input: PrefillInput, lang: "he" | "en", logos: string[], heroes:
   return [
     "You design a website chat widget for a business, from its own site.",
     "You are shown candidate images, each labelled. Answer ONLY with JSON:",
-    '{ "logo": label or null, "color": hex or null, "hero": label or null, "title": string or null, "assistantName": string or null, "suggestedQuestions": [3 strings] or null, "proactiveMessage": string or null }',
+    '{ "logo": label or null, "color": hex or null, "logoColor": hex or null, "hero": label or null, "title": string or null, "assistantName": string or null, "suggestedQuestions": [3 strings] or null, "proactiveMessage": string or null }',
     "Rules:",
     "- logo: the label of the image that is clearly this business's logo or brand mark, readable when shown small. A product photo, a banner, a person or a generic icon is not a logo. Unsure: null.",
     "- color: one of the candidate colours ONLY if it plausibly is the brand's colour given the logo and the site (the widget writes cream or dark text on it, whichever reads). Unsure: null.",
+    '- logoColor: ONLY when "color" is null and you chose a logo: the logo\'s dominant colour that is not white, black or grey, as "#rrggbb", read from the logo image itself. No clear brand colour in the logo: null.',
     "- hero: the label of a wide image that works as a calm background behind a header, with no text baked in and nothing important at the edges. Unsure: null.",
     `- The texts are in ${language}, in the business's own voice, short and plain. No em dash, no en dash. Never invent facts, prices or offers.`,
     "- title: the chat's welcome headline, at most 40 characters.",
@@ -239,6 +253,8 @@ export interface PrefillPlan {
   status: "planned" | "none" | "failed";
   reason?: string;
   color: string | null;
+  /** Where the colour came from: a value on the site, or (when none fitted) the chosen logo. */
+  colorSource: "site" | "logo" | null;
   logo: VettedImage | null;
   hero: VettedImage | null;
   language: "he" | "en" | null;
@@ -253,7 +269,7 @@ export interface PrefillPlan {
 }
 
 const emptyPlan = (status: PrefillPlan["status"], reason: string, rejected: Rejection[] = [], answer: unknown = null): PrefillPlan => ({
-  status, reason, color: null, logo: null, hero: null, language: null, title: null, assistantName: null,
+  status, reason, color: null, colorSource: null, logo: null, hero: null, language: null, title: null, assistantName: null,
   suggestedQuestions: null, proactiveMessage: null, rejected, answer,
 });
 
@@ -326,6 +342,19 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
   for (const c of colors) if (c !== color) rejected.push({ kind: "color", value: c, reason: pickedColor === null ? "model_unsure" : "model_chose_another" });
   const logo = typeof answer?.logo === "string" ? logos[logoLabels.indexOf(answer.logo)] ?? null : null;
   for (const l of logos) if (l !== logo) rejected.push({ kind: "logo", value: l.url, reason: logo ? "model_chose_another" : "model_unsure" });
+
+  // No site colour fitted: the chosen logo's own colour, if the model names
+  // one and it passes the same rule (Omer, 2026-11-11: drcomfort's only site
+  // colour was its button yellow, its logo navy and green).
+  let fromLogo: string | null = null;
+  const logoColor = typeof answer?.logoColor === "string" ? answer.logoColor.trim().toLowerCase() : null;
+  if (!color && logo && logoColor && open.has("appearance.primaryColor")) {
+    const reason: RejectionReason | null = !HEX.test(logoColor) ? "not_a_color"
+      : isNeutral(logoColor) ? "neutral"
+      : inkContrast(logoColor) < MIN_CONTRAST ? "low_contrast" : null;
+    if (reason) rejected.push({ kind: "color", value: logoColor, source: "logo", reason });
+    else fromLogo = logoColor;
+  }
   const hero = typeof answer?.hero === "string" ? heroes[heroLabels.indexOf(answer.hero)] ?? null : null;
   for (const h of heroes) if (h !== hero) rejected.push({ kind: "hero", value: h.url, reason: hero ? "model_chose_another" : "model_unsure" });
 
@@ -334,7 +363,8 @@ export async function planPrefill(input: PrefillInput, open: Set<PrefillField>, 
     : [];
   return {
     status: "planned",
-    color,
+    color: color ?? fromLogo,
+    colorSource: color ? "site" : fromLogo ? "logo" : null,
     logo,
     hero,
     language: input.language && open.has("appearance.language") ? input.language : null,
@@ -402,8 +432,9 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
   if (!Object.keys(filled).length) return { status: "none", filled: {}, reason: "model_unsure" };
 
   await put(input.tenantId, patch);
-  await record(input.tenantId, { source: input.domain, at: new Date().toISOString(), fields: filled }).catch(() => {});
-  console.log(`[widget-prefill] ${input.tenantId} filled ${Object.keys(filled).join(", ")}`);
+  const sources = plan.colorSource && filled["appearance.primaryColor"] ? { "appearance.primaryColor": plan.colorSource } : {};
+  await record(input.tenantId, { source: input.domain, at: new Date().toISOString(), fields: filled, sources }).catch(() => {});
+  console.log(`[widget-prefill] ${input.tenantId} filled ${Object.keys(filled).map((f) => (f === "appearance.primaryColor" && plan.colorSource ? `${f} (from ${plan.colorSource})` : f)).join(", ")}`);
   return { status: "done", filled };
 }
 
@@ -412,12 +443,15 @@ async function prefillWidgetOnce(input: PrefillInput, deps: PrefillDeps): Promis
  * filled: a second scan fills only fields still at default, and replacing
  * the record dropped the first scan's fields from it (dev, 2026-11-11).
  */
-export function mergeAutofill(previous: unknown, next: { source: string; at: string; fields: Record<string, unknown> }) {
+export function mergeAutofill(previous: unknown, next: { source: string; at: string; fields: Record<string, unknown>; sources?: Record<string, string> }) {
   let prev: any = previous;
   if (typeof prev === "string") { try { prev = JSON.parse(prev); } catch { prev = null; } }
   if (typeof prev === "string") { try { prev = JSON.parse(prev); } catch { prev = null; } }
   const fields = prev && typeof prev.fields === "object" && prev.fields ? { ...prev.fields } : {};
-  return { source: next.source, at: next.at, fields: { ...fields, ...next.fields } };
+  const sources = prev && typeof prev.sources === "object" && prev.sources ? { ...prev.sources } : {};
+  // A field filled again without a stated source no longer has the old one.
+  for (const f of Object.keys(next.fields)) delete sources[f];
+  return { source: next.source, at: next.at, fields: { ...fields, ...next.fields }, sources: { ...sources, ...(next.sources ?? {}) } };
 }
 
 async function recordAutofill(tenantId: string, value: unknown): Promise<void> {
@@ -433,6 +467,7 @@ export const ALL_PREFILL_FIELDS: ReadonlySet<PrefillField> = new Set<PrefillFiel
 
 export interface PrefillPreview {
   status: PrefillPlan["status"];
+  colorSource: PrefillPlan["colorSource"];
   reason?: string;
   /** The full widget config the fill WOULD write on a fresh widget; images at their https source (a real fill stores our copy). */
   config: WebchatConfig;
@@ -474,7 +509,7 @@ export async function previewWidget(input: PrefillInput, deps: Pick<PrefillDeps,
       proactive: { ...base.ux.proactive, ...(patch.ux?.proactive ?? {}) },
     },
   };
-  return { status: plan.status, reason: plan.reason, config, filled: Object.keys(filled) as PrefillField[], images, rejected: plan.rejected, answer: plan.answer };
+  return { status: plan.status, colorSource: plan.colorSource, reason: plan.reason, config, filled: Object.keys(filled) as PrefillField[], images, rejected: plan.rejected, answer: plan.answer };
 }
 
 // ── the console preview's answer (shape agreed with the frontend, 2026-11-11) ──
@@ -511,7 +546,9 @@ export function previewResponse(
   if (p.images.logo) found.push({ field: "logo", value: p.images.logo.sourceUrl, src: p.images.logo.sourceUrl, dataUrl: p.images.logo.dataUrl, from: sourceOf(p.images.logo.sourceUrl, read.candidates.logos) });
   if (p.filled.includes("appearance.primaryColor")) {
     const cand = read.candidates.colors.find((x) => String(x.hex).toLowerCase() === c.appearance.primaryColor);
-    found.push({ field: "color", value: c.appearance.primaryColor, src: null, dataUrl: null, from: cand ? `${cand.source}${cand.original && cand.original !== cand.hex ? ` (was ${cand.original}, darkened for white text)` : ""}` : null });
+    const from = p.colorSource === "logo" ? "logo (read by the model)"
+      : cand ? `${cand.source}${cand.original && cand.original !== cand.hex ? ` (was ${cand.original}, darkened so text reads)` : ""}` : null;
+    found.push({ field: "color", value: c.appearance.primaryColor, src: null, dataUrl: null, from });
   }
   if (p.images.hero) found.push({ field: "hero", value: p.images.hero.sourceUrl, src: p.images.hero.sourceUrl, dataUrl: p.images.hero.dataUrl, from: sourceOf(p.images.hero.sourceUrl, read.candidates.heroes) });
   const text = (field: PreviewField, path: PrefillField, value: string) => { if (p.filled.includes(path)) found.push({ field, value, src: null, dataUrl: null, from: "model" }); };
