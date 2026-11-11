@@ -6,6 +6,7 @@
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams, AgentChatResult, CopilotConfigData } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
+import { resolveAgentModel } from "../lib/agent-model";
 import { isAbortError } from "./turn-cancellation.service";
 import { prisma, dispatchToolCall, publishEvent } from "@chatcenter/shared";
 import type { AgentToolContext } from "@chatcenter/shared";
@@ -345,7 +346,7 @@ export class OpenAIProvider implements AIProvider {
       locale: context.locale,
     };
 
-    const model = config?.model || this.defaultModel;
+    const model = config?.model ? resolveAgentModel(config.model) : this.defaultModel;
 
     let contactId: string | undefined;
     if (context.tenantId && context.conversationMeta?.customerExternalId && context.conversationMeta?.channel) {
@@ -676,7 +677,7 @@ export class OpenAIProvider implements AIProvider {
     const config = context.copilotConfig;
     if (config && !config.isActive) return "Co-Pilot is disabled.";
 
-    const model = config?.model || this.defaultModel;
+    const model = config?.model ? resolveAgentModel(config.model) : this.defaultModel;
     const messagesText = context.messages
       .filter((m) => m.body?.trim())
       .map((m) => `${m.direction === "INBOUND" ? "Customer" : (m.senderName || "Agent")}: ${m.body}`)
@@ -782,7 +783,7 @@ export class OpenAIProvider implements AIProvider {
     if (config && !config.isActive) return { text: "Co-Pilot is disabled.", toolsCalled: [], failed: true };
     const toolsCalled: string[] = [];
 
-    const model = config?.model || this.defaultModel;
+    const model = config?.model ? resolveAgentModel(config.model) : this.defaultModel;
 
     let customerBlock: string | undefined;
     if (params.customerData) {

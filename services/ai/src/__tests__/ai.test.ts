@@ -73,7 +73,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     },
     requireActiveTenant: factory,
     requireRole: () => passthrough,
-    requireSystemAdmin: passthrough,
+    requireSystemAdmin: () => passthrough,
     requireInternalKey: passthrough,
     requireEntitlement: factory,
     // A router.param handler: (req, res, next, id). Visibility is not under

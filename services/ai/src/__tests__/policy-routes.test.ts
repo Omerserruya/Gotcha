@@ -65,6 +65,7 @@ vi.mock("@chatcenter/shared", () => ({
   metaGraphBaseUrl: (legacy?: string) => legacy || "https://graph.facebook.com/v24.0",
   stripeVersionHeader: () => ({ "Stripe-Version": "2026-02-25.clover" }),
   prisma: {},
+  requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
   authenticate: (req: any, _res: any, next: any) => {
     req.user = { id: "u1", role: "ADMIN" };
     next();

@@ -29,7 +29,8 @@ export function aiAgentCreationDefaults() {
     avatarColor: "#7c5cfc",
     tone: "professional",
     languages: { english: true } as Record<string, boolean>,
-    model: getDefaultModel(),
+    // Not a snapshot of today's default: "default" follows OPENAI_DEFAULT_MODEL.
+    model: "default",
     provider: "openai",
     temperature: 0.7,
     maxTokens: 1024,

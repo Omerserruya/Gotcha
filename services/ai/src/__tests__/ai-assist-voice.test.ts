@@ -80,6 +80,7 @@ vi.mock("@chatcenter/shared", () => ({
   getRedis: () => redisMock,
   publishEvent: publishEventMock,
   // Middleware stubs - ai-assist.ts imports these at module load
+  requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
   authenticate: (_req: any, _res: any, next: any) => next(),
   resolveTenant: (_req: any, _res: any, next: any) => next(),
   requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),

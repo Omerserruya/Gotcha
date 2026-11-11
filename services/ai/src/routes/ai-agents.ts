@@ -578,7 +578,9 @@ router.post(
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
         systemPrompt: systemPrompt || "",
-        model: model || getDefaultModel(),
+        // No per-employee model (Omer, 2026-11-11): every employee runs on the
+        // platform model; a "model" in the body is ignored.
+        model: "default",
         provider: provider || "openai",
         temperature: temperature ?? 0.7,
         maxTokens: maxTokens ?? 1024,
@@ -736,7 +738,9 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     const AGENT_EDITABLE_FIELDS = [
       "name", "role", "avatarColor", "status", "tone", "languages", "style",
       "escalationRules", "interactiveMessages", "systemPrompt",
-      "model", "provider", "temperature",
+      // No model field: every employee runs on the platform model (2026-11-11);
+      // a client still sending one is ignored, not refused.
+      "provider", "temperature",
       "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
       "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
       "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",

@@ -359,7 +359,7 @@ router.put(
       const data: any = {};
       if (typeof body.systemPrompt === "string") data.systemPrompt = body.systemPrompt;
       if (Array.isArray(body.rules)) data.escalationRules = body.rules as any;
-      if (typeof body.model === "string") data.model = body.model;
+      // No per-employee model (2026-11-11): a "model" in the body is ignored.
       if (typeof body.provider === "string") data.provider = body.provider;
       if (typeof body.temperature === "number") data.temperature = body.temperature;
       if (typeof body.maxTokens === "number") data.maxTokens = body.maxTokens;

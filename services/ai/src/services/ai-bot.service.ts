@@ -128,6 +128,7 @@ import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_W
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
+import { resolveAgentModel } from "../lib/agent-model";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
 import { runShadowEvaluationInBackground, toShadowContext } from "./reasoner/shadow-runner";
 import { agentLoopMode } from "./agent-loop/flags";
@@ -1478,7 +1479,7 @@ async function generateAIBotReplyInner(
       },
       awaitingApproval: null,
       toolCallLog: [],
-      modelUsed: config.model || getDefaultModel(),
+      modelUsed: resolveAgentModel(config.model),
       totalTokens: 0,
     };
   }
@@ -1528,7 +1529,7 @@ async function generateAIBotReplyInner(
         },
         awaitingApproval: null,
         toolCallLog: [],
-        modelUsed: config.model || getDefaultModel(),
+        modelUsed: resolveAgentModel(config.model),
         totalTokens: 0,
       };
     }
@@ -1553,7 +1554,7 @@ async function generateAIBotReplyInner(
       },
       awaitingApproval: null,
       toolCallLog: [],
-      modelUsed: config.model || getDefaultModel(),
+      modelUsed: resolveAgentModel(config.model),
       totalTokens: 0,
     };
   }
@@ -3338,7 +3339,7 @@ async function generateAIBotReplyInner(
     });
   }
 
-  const model = config.model || getDefaultModel();
+  const model = resolveAgentModel(config.model);
   let pendingEscalation: AIBotReplyResult["escalation"] = null;
   let awaitingApproval: AIBotReplyResult["awaitingApproval"] = null;
   let replyText: string | null = null;
@@ -6170,7 +6171,7 @@ export async function generateAIBotOneshot(opts: {
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   }
   if (config.status === "PAUSED") {
-    return { reply: null, modelUsed: config.model || getDefaultModel(), totalTokens: 0 };
+    return { reply: null, modelUsed: resolveAgentModel(config.model), totalTokens: 0 };
   }
 
   const oneshotState = computeBehaviorState({
@@ -6188,7 +6189,7 @@ export async function generateAIBotOneshot(opts: {
     company: oneshotCompany ?? undefined,
   });
 
-  const model = config.model || getDefaultModel();
+  const model = resolveAgentModel(config.model);
   const maxTokens = opts.maxTokens ?? Math.min(config.maxTokens ?? 1024, 400);
 
   const result = await generateResponse({

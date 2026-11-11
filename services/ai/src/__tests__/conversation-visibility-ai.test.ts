@@ -38,6 +38,7 @@ vi.mock("@chatcenter/shared", async () => {
   const pass = (_q: any, _s: any, n: any) => n();
   return {
     ...real,
+    requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
     authenticate: (req: any, _r: any, n: any) => { if (H.viewer) req.user = { ...H.viewer }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireActiveTenant: () => pass,

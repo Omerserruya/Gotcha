@@ -61,6 +61,7 @@ vi.mock("@chatcenter/shared", () => ({
   viewerOf: (req: any) => ({ userId: req?.user?.userId }),
   requireInternalKey: (_q: any, _s: any, n: any) => n(),
   requireEntitlement: () => (_q: any, _s: any, n: any) => n(),
+  requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "agent1", role: "AGENT" }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
   requireActiveTenant: () => (_q: any, _s: any, n: any) => n(),

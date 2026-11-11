@@ -1,3 +1,4 @@
+import { resolveAgentModel } from "../lib/agent-model";
 import { prisma } from "@chatcenter/shared";
 import { ESCALATION_TOOL, AgentRecord } from "./prompt-builder.service";
 
@@ -186,7 +187,8 @@ export function buildConfigFromAIAgent(agent: {
   return {
     agent: agentRecord,
     tools,
-    model: agent.model,
+    // The model the calls run on: a platform-default snapshot follows the env.
+    model: resolveAgentModel(agent.model),
     provider: agent.provider,
     temperature: agent.temperature,
     maxTokens: agent.maxTokens,

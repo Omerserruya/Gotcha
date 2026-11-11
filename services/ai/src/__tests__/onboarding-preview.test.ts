@@ -31,6 +31,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
+    requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "u1", role: H.role }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireRole: (...roles: string[]) => (req: any, res: any, n: any) => (roles.includes(req.user.role) ? n() : res.status(403).json({ error: "Forbidden" })),

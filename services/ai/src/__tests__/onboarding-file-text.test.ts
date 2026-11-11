@@ -11,6 +11,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
+    requireSystemAdmin: () => (_q: any, _r: any, next: any) => next(),
     authenticate: (req: any, _r: any, n: any) => { req.user = { userId: "system", role: "ADMIN" }; n(); },
     resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },
     requireRole: () => (_q: any, _s: any, n: any) => n(),

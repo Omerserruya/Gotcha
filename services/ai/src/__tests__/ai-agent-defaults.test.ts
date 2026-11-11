@@ -33,7 +33,8 @@ describe("shared AI employee creation defaults", () => {
     expect(d.avatarColor).toBe("#7c5cfc");
     expect(d.tone).toBe("professional");
     expect(d.languages).toEqual({ english: true });
-    expect(d.model).toBe("test-model");
+    // Not a snapshot of today's model: every employee runs on the platform model (2026-11-11).
+    expect(d.model).toBe("default");
     expect(d.provider).toBe("openai");
     expect(d.temperature).toBe(0.7);
     expect(d.maxTokens).toBe(1024);
