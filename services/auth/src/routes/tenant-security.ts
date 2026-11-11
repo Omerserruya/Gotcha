@@ -233,8 +233,6 @@ router.get("/", requirePermissionOrRole("settings:workspace:update", "ADMIN"), a
   });
   if (!tenant) { res.status(404).json({ error: "not_found" }); return; }
   const { compliance, idpAvailable } = await buildCompliance(tenantId);
-  // Who must have MFA at login changed with the policy (Option B): Authentik's marker, in the background.
-  void import("../services/mfa-required-flag.service").then((m) => m.syncMfaRequiredFlagsForTenant(tenantId)).catch(() => {});
   res.json({
     policy: {
       mfaRequiredForAdmins: tenant.mfaRequiredForAdmins,
@@ -277,6 +275,13 @@ router.patch("/", requirePermissionOrRole("settings:workspace:update", "ADMIN"),
     action: AuditAction.MFA_POLICY_CHANGED, targetType: "tenant", targetId: tenantId,
     metadata: { before, after: updated },
   });
+
+  // Who must have MFA at login changed with the policy (Option B): Authentik's
+  // marker, in the background, at once. It sat in the GET handler until
+  // 2026-11-11, so a change reached Authentik only on the next page read.
+  if (before.mfaRequiredForAdmins !== updated.mfaRequiredForAdmins || before.mfaRequiredForAllUsers !== updated.mfaRequiredForAllUsers) {
+    void import("../services/mfa-required-flag.service").then((m) => m.syncMfaRequiredFlagsForTenant(tenantId)).catch(() => {});
+  }
 
   res.json({ policy: updated, systemAdminAlways: true, idpAvailable, compliance });
 });
