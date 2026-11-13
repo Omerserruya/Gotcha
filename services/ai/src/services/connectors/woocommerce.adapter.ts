@@ -704,6 +704,35 @@ export function fitsBase(list: any[], a: number, b: number): any[] | null {
 }
 
 /**
+ * The products whose NAME holds one of these words, read from the store's
+ * cached catalogue rather than its search (Smoovee prod 2026-11-13: the
+ * store's own lang=he search answers nothing for "אלכסה" although product
+ * 1433 is "סמובי אלכסה", so "אליס ואלכסה" found only Alice). A name is a
+ * product's own word for itself, so this holds for any store; a catalogue too
+ * big to cache (over two pages) gives nothing here and the search is as before.
+ */
+async function catalogNamed(
+  auth: string, base: string, params: URLSearchParams, words: string[], visible: (l: any) => any,
+): Promise<any[]> {
+  if (!words.length) return [];
+  const all = await wholeCatalog(auth, base, params.get("lang") || "he").catch(() => null);
+  if (!all) return [];
+  const minP = Number(params.get("min_price") ?? NaN), maxP = Number(params.get("max_price") ?? NaN);
+  const pool = (visible(all) as any[]).filter((p: any) =>
+    (p?.status ?? "publish") === "publish"
+    && (params.get("stock_status") !== "instock" || p?.stock_status !== "outofstock")
+    && (!Number.isFinite(minP) || Number(p?.price) >= minP)
+    && (!Number.isFinite(maxP) || Number(p?.price) <= maxP));
+  // A word most of the catalogue's names hold names nothing in particular
+  // ("משטח" is in 27 of Smoovee's 30 names), the same rule as descriptionSearch.
+  const specific = words.filter((w) => {
+    const n = pool.filter((p) => nameHolds(p, w)).length;
+    return n > 0 && n <= pool.length / 2;
+  });
+  return specific.length ? pool.filter((p) => specific.some((w) => nameHolds(p, w))) : [];
+}
+
+/**
  * A Hebrew product ask, deterministic (see list_products). Logs which route
  * found it: [woo-search] hit=category:<id> | title | variant:<word> | none.
  */
@@ -747,12 +776,15 @@ async function hebrewProductSearch(
   // "בראון דגם SJ3100BK"): a title hit is one whose name holds the word.
   const named_ = (w: string) => (p: any) => nameHolds(p, w);
   const restSearch = async (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return (await get(p)).filter(named_(w)); };
-  const [inCat, whole, ...perWord] = await Promise.all([
+  const [inCat, whole, local, ...perWord] = await Promise.all([
     cat ? get(byCat) : Promise.resolve([] as any[]),
     get(params).then((l) => l.filter((p: any) => words.some((w) => nameHolds(p, w)))),
+    // The same words the store's search is asked for, by name, from the cached
+    // catalogue: the store's index can miss a name it holds.
+    catalogNamed(auth, base, params, words.length > 1 ? rest.slice(0, 2) : rest, visible),
     ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
   ]);
-  const named = [...perWord.flat(), ...(wantsStock && !rest.length ? [] : whole)].filter((p: any) => !wantsStock || p?.stock_status !== "outofstock");
+  const named = [...perWord.flat(), ...local, ...(wantsStock && !rest.length ? [] : whole)].filter((p: any) => !wantsStock || p?.stock_status !== "outofstock");
   if (inCat.length) {
     const catIds = new Set(inCat.map((p: any) => String(p?.id)));
     // A product the words name AND in the category first ("מטפחת אנה"), then the category, then other title hits.

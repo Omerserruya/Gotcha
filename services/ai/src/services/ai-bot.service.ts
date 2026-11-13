@@ -2311,33 +2311,38 @@ async function generateAIBotReplyInner(
         toolName: toolFunctionName,
         args: args as Record<string, any>,
       });
+      // These search fixes are the store's, on every channel. They used to
+      // need the web chat's card turn, so on WhatsApp none of them ran
+      // (Smoovee prod 2026-11-13: "אליס ואלכסה כמה זה" searched as "alice",
+      // "alexa" in the Hebrew catalogue, no retry, "not found").
+      //
       // The conversation's language for a store that reads in one (WPML: the
       // Hebrew catalogue's names and prices, Smoovee 2026-11-08). The adapter
       // ignores it unless the connection names a store language.
-      if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName) && wooTurn) {
+      if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName)) {
         effectiveArgs = { ...effectiveArgs, lang: conversationLang() };
       }
       // The customer's own Hebrew words ride along when the model searched in
       // Latin; the adapter uses them only on a store whose catalogue is Hebrew.
-      if (toolFunctionName === "woocommerce.list_products" && wooTurn && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {
+      if (toolFunctionName === "woocommerce.list_products" && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {
         const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
         if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };
       }
       // A base size the customer gave: the store picks what fits it (Smoovee
       // 2026-11-08: 40 x 20 was offered 31 x 41 while 23 x 40 fits).
-      if (toolFunctionName === "woocommerce.list_products" && wooTurn) {
+      if (toolFunctionName === "woocommerce.list_products") {
         const size = baseSizeAsked(messages as any[], opts.incomingMessage);
         if (size) effectiveArgs = { ...effectiveArgs, fits_cm: size };
       }
       // The person the customer is shopping for goes with every store search
       // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
       // searched for no one). The model's own audience stands.
-      if (toolFunctionName === "woocommerce.list_products" && wooTurn && effectiveArgs?.audience == null) {
+      if (toolFunctionName === "woocommerce.list_products" && effectiveArgs?.audience == null) {
         const audience = conversationAudience(messages as any[], opts.incomingMessage);
         if (audience) effectiveArgs = { ...effectiveArgs, audience };
       }
       // So does the colour a refinement leaves unsaid ("משהו מכותנה" after "חולצה לבנה", urban-e32).
-      if (toolFunctionName === "woocommerce.list_products" && wooTurn && typeof effectiveArgs?.query === "string") {
+      if (toolFunctionName === "woocommerce.list_products" && typeof effectiveArgs?.query === "string") {
         const modelQuery = effectiveArgs.query;
         const colour = carriedColour(messages as any[], opts.incomingMessage, modelQuery);
         if (colour) effectiveArgs = { ...effectiveArgs, query: `${colour} ${modelQuery}` };
@@ -2367,7 +2372,7 @@ async function generateAIBotReplyInner(
       // A result found only in product copy counts as empty here: the model's
       // "plate" matched two other surfaces' spec label "Plate: Perspex".
       const copyOnly = (l: unknown) => Array.isArray(l) && l.length > 0 && l.every((p: any) => p?.matched_in === "description");
-      if (toolFunctionName === "woocommerce.list_products" && wooTurn && result.ok && Array.isArray((result as any).result)
+      if (toolFunctionName === "woocommerce.list_products" && result.ok && Array.isArray((result as any).result)
         && ((result as any).result.length === 0 || copyOnly((result as any).result)) && !effectiveArgs?.include && !effectiveArgs?.category) {
         const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
         if (own) {

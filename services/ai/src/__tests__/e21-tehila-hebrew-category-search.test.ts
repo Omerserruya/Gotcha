@@ -205,7 +205,8 @@ describe("the bot passes the customer's Hebrew words with a Latin search", () =>
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src).toContain(`if (toolFunctionName === "woocommerce.list_products" && wooTurn && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {`);
+    // On every channel since 2026-11-13 (Smoovee on WhatsApp), not only the widget's turn.
+    expect(src).toContain(`if (toolFunctionName === "woocommerce.list_products" && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {`);
     expect(src).toContain("if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };");
   });
 });

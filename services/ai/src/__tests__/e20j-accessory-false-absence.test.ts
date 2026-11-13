@@ -97,7 +97,8 @@ describe("T3 \"אקססורי חמוד\": the store HAS accessories", () => {
   });
   it("wired: the conversation's audience goes with the model's search; the model's own stands", () => {
     const bot = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(bot).toContain("if (toolFunctionName === \"woocommerce.list_products\" && wooTurn && effectiveArgs?.audience == null) {");
+    // On every channel since 2026-11-13 (Smoovee on WhatsApp), not only the widget's turn.
+    expect(bot).toContain("if (toolFunctionName === \"woocommerce.list_products\" && effectiveArgs?.audience == null) {");
     expect(bot).toContain("const audience = conversationAudience(messages as any[], opts.incomingMessage);");
   });
 });
