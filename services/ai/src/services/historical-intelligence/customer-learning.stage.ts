@@ -33,26 +33,51 @@ import {
  * not something a business needs in order to serve somebody well.
  */
 
+export const FACT_CATEGORIES = [
+  "purchase_history",
+  "product_preference",
+  "service_issue",
+  "delivery_preference",
+  "communication_pattern",
+  "other",
+] as const;
+
+/** The most facts one customer's memory keeps. */
+export const MAX_FACTS = 8;
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
 const FactSchema = z.object({
   text: z
     .string()
     .min(3)
     .max(240)
     .describe("One durable observation, phrased in the past tense where it refers to an event"),
-  category: z.enum([
-    "purchase_history",
-    "product_preference",
-    "service_issue",
-    "delivery_preference",
-    "communication_pattern",
-    "other",
-  ]),
+  // A category the list does not have is still a fact worth keeping. Rejecting
+  // it threw away the customer's WHOLE memory (prod Smoovee 2026-11-13:
+  // "fulfillment_preference"), so it is filed under "other" instead.
+  category: z.enum(FACT_CATEGORIES).catch("other"),
   confidence: z.enum(["high", "medium", "low"]),
 });
 
-const CustomerMemorySchema = z.object({
+/**
+ * More than MAX_FACTS is a long relationship, not a bad reply. Rejecting it
+ * threw away the customer's whole memory, so the list is cut to MAX_FACTS,
+ * most confident first (the model's order breaks ties).
+ */
+function capFacts(raw: unknown): unknown {
+  if (!Array.isArray(raw) || raw.length <= MAX_FACTS) return raw;
+  const rank = (f: any) => CONFIDENCE_RANK[f?.confidence] ?? 3;
+  return raw
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i)
+    .slice(0, MAX_FACTS)
+    .map((x) => x.f);
+}
+
+export const CustomerMemorySchema = z.object({
   /** Empty is a legitimate answer. Most short threads teach nothing durable. */
-  facts: z.array(FactSchema).max(8),
+  facts: z.preprocess(capFacts, z.array(FactSchema).max(MAX_FACTS)),
   summary: z.string().max(600).optional(),
 });
 
@@ -85,6 +110,8 @@ medium = stated once, clearly
 low    = implied but reasonably supported. Do not go below this; omit instead.
 
 An empty facts array is a correct and common answer for a short or unremarkable conversation. Never invent facts to fill it.
+
+At most ${MAX_FACTS} facts, the most useful first. Each category is exactly one of: ${FACT_CATEGORIES.join(", ")}.
 
 Reply with ONLY a JSON object:
 {"facts":[{"text":"...","category":"purchase_history","confidence":"high"}],"summary":"..."}
