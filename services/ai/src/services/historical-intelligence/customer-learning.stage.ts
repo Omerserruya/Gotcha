@@ -45,19 +45,38 @@ export const FACT_CATEGORIES = [
 /** The most facts one customer's memory keeps. */
 export const MAX_FACTS = 8;
 
+export const CONFIDENCES = ["high", "medium", "low"] as const;
 const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
+export const MAX_FACT_TEXT = 240;
+export const MAX_SUMMARY = 600;
+
+/**
+ * A string over `max` cut at the last word boundary that fits (a hard cut only
+ * when one word is longer than the whole limit). Anything else is returned as
+ * is, for the schema to judge.
+ */
+export function cutAtWord(v: unknown, max: number): unknown {
+  if (typeof v !== "string") return v;
+  const s = v.trim();
+  if (s.length <= max) return s;
+  const head = s.slice(0, max + 1);
+  const at = head.search(/\s\S*$/);
+  const cut = at > 0 ? head.slice(0, at) : s.slice(0, max);
+  return cut.replace(/[\s,;:.\-]+$/, "");
+}
+
 const FactSchema = z.object({
+  // Too long is still a fact: cut at a word, never dropped.
   text: z
-    .string()
-    .min(3)
-    .max(240)
+    .preprocess((v) => cutAtWord(v, MAX_FACT_TEXT), z.string().min(3).max(MAX_FACT_TEXT))
     .describe("One durable observation, phrased in the past tense where it refers to an event"),
   // A category the list does not have is still a fact worth keeping. Rejecting
   // it threw away the customer's WHOLE memory (prod Smoovee 2026-11-13:
   // "fulfillment_preference"), so it is filed under "other" instead.
   category: z.enum(FACT_CATEGORIES).catch("other"),
-  confidence: z.enum(["high", "medium", "low"]),
+  // An off-list confidence ("certain", "very high") is the scale's middle.
+  confidence: z.enum(CONFIDENCES).catch("medium"),
 });
 
 /**
@@ -78,7 +97,8 @@ function capFacts(raw: unknown): unknown {
 export const CustomerMemorySchema = z.object({
   /** Empty is a legitimate answer. Most short threads teach nothing durable. */
   facts: z.preprocess(capFacts, z.array(FactSchema).max(MAX_FACTS)),
-  summary: z.string().max(600).optional(),
+  // null is "nothing to say", the same as leaving it out.
+  summary: z.preprocess((v) => (v == null ? undefined : cutAtWord(v, MAX_SUMMARY)), z.string().max(MAX_SUMMARY).optional()),
 });
 
 export type CustomerMemory = z.infer<typeof CustomerMemorySchema>;

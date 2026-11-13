@@ -3,8 +3,9 @@
  * with an off-list category ("fulfillment_preference") or more than 8 facts
  * used to fail the schema twice and leave the customer with NO memory at all.
  * Now the category is filed under "other" and the list is cut to 8, most
- * confident first, on the first reply. A fact that is really broken (an
- * off-list confidence) still fails the schema, so the gate is still there.
+ * confident first; an off-list confidence becomes "medium"; a text or summary
+ * over its limit is cut at a word. A reply that is not a memory at all still
+ * fails the schema, so the gate is still there.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -40,6 +41,9 @@ vi.mock("../services/historical-intelligence/stage-utils", async (orig) => ({
 import {
   CustomerMemorySchema,
   MAX_FACTS,
+  MAX_FACT_TEXT,
+  MAX_SUMMARY,
+  cutAtWord,
   runCustomerLearningStage,
 } from "../services/historical-intelligence/customer-learning.stage";
 
@@ -70,10 +74,47 @@ describe("the schema normalises", () => {
     expect(CustomerMemorySchema.parse({ facts }).facts.map((f) => f.text)).toEqual(facts.map((f) => f.text));
   });
 
-  it("a really broken fact still fails: an off-list confidence, a too-long text, facts not an array", () => {
-    expect(CustomerMemorySchema.safeParse({ facts: [fact(1, "certain")] }).success).toBe(false);
-    expect(CustomerMemorySchema.safeParse({ facts: [{ ...fact(1), text: "x".repeat(241) }] }).success).toBe(false);
+  it("an off-list or missing confidence becomes 'medium'", () => {
+    const r = CustomerMemorySchema.parse({ facts: [fact(1, "certain"), { text: "no confidence", category: "other" }, fact(3, "low")] });
+    expect(r.facts.map((f) => f.confidence)).toEqual(["medium", "medium", "low"]);
+  });
+
+  it("a too-long text is cut at a word, not mid-word, and kept", () => {
+    const words = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" "); // well over 240
+    const r = CustomerMemorySchema.parse({ facts: [{ ...fact(1), text: words }] });
+    const t = r.facts[0].text;
+    expect(t.length).toBeLessThanOrEqual(MAX_FACT_TEXT);
+    expect(t.length).toBeGreaterThan(MAX_FACT_TEXT - 8);
+    expect(words.startsWith(t + " ")).toBe(true);
+  });
+
+  it("Hebrew text over the limit is cut at a word too", () => {
+    const he = Array.from({ length: 50 }, () => "לקוחה קבועה").join(" ");
+    const t = CustomerMemorySchema.parse({ facts: [{ ...fact(1), text: he }] }).facts[0].text;
+    expect(t.length).toBeLessThanOrEqual(MAX_FACT_TEXT);
+    expect(he.startsWith(t + " ")).toBe(true);
+  });
+
+  it("one word longer than the limit is cut hard; a text at the limit is untouched", () => {
+    expect(cutAtWord("x".repeat(300), MAX_FACT_TEXT)).toBe("x".repeat(240));
+    expect(cutAtWord("y".repeat(240), MAX_FACT_TEXT)).toBe("y".repeat(240));
+    expect(cutAtWord("ab cd, ef", 7)).toBe("ab cd");
+    // The limit falls exactly at the end of a word: that word is kept whole.
+    expect(cutAtWord("ab cde fg", 6)).toBe("ab cde");
+  });
+
+  it("a too-long summary is cut at a word and kept; a null summary is no summary", () => {
+    const long = Array.from({ length: 150 }, (_, i) => `w${i}`).join(" ");
+    const r = CustomerMemorySchema.parse({ facts: [fact(1)], summary: long });
+    expect(r.summary!.length).toBeLessThanOrEqual(MAX_SUMMARY);
+    expect(long.startsWith(r.summary! + " ")).toBe(true);
+    expect(CustomerMemorySchema.parse({ facts: [fact(1)], summary: null }).summary).toBeUndefined();
+  });
+
+  it("what is not a fact still fails: facts not an array, a text that is not a string or under 3 characters", () => {
     expect(CustomerMemorySchema.safeParse({ facts: "lots" }).success).toBe(false);
+    expect(CustomerMemorySchema.safeParse({ facts: [{ ...fact(1), text: 42 }] }).success).toBe(false);
+    expect(CustomerMemorySchema.safeParse({ facts: [{ ...fact(1), text: "ok" }] }).success).toBe(false);
   });
 });
 
@@ -91,8 +132,19 @@ describe("the stage keeps the customer's memory", () => {
     expect(H.upserts[0].create.summary).toBe("Buys often.");
   });
 
-  it("control: an off-list confidence twice is still FAILED with no memory written", async () => {
-    H.replies = [JSON.stringify({ facts: [fact(1, "certain")] }), JSON.stringify({ facts: [fact(1, "certain")] })];
+  it("off-list confidence, a long text and a long summary in one reply: DONE on the first call, all kept", async () => {
+    H.replies = [JSON.stringify({ facts: [fact(1, "certain"), { ...fact(2), text: "a ".repeat(200) + "end" }], summary: "s ".repeat(400) })];
+    await runCustomerLearningStage({ tenantId: "t1", importId: "imp1" });
+    expect(H.calls).toBe(1);
+    expect(H.rows[0].learningStatus).toBe("DONE");
+    const c = H.upserts[0].create;
+    expect(c.facts.map((f: any) => f.confidence)).toEqual(["medium", "medium"]);
+    expect(c.facts[1].text.length).toBeLessThanOrEqual(MAX_FACT_TEXT);
+    expect(c.summary.length).toBeLessThanOrEqual(MAX_SUMMARY);
+  });
+
+  it("control: a reply that is not a memory, twice, is still FAILED with no memory written", async () => {
+    H.replies = [JSON.stringify({ facts: "lots" }), JSON.stringify({ facts: "lots" })];
     await runCustomerLearningStage({ tenantId: "t1", importId: "imp1" });
     expect(H.calls).toBe(2);
     expect(H.rows[0].learningStatus).toBe("FAILED");
