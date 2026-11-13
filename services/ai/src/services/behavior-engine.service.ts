@@ -21,6 +21,7 @@
  *      and the playbook IDs that match this turn.
  */
 
+import { customerWillReturn } from "./customer-return.service";
 import {
   type StrategyName,
   type ActionCategory,
@@ -79,7 +80,8 @@ export type OutputContract =
 
 export type DecisionIntent = "PROGRESS" | "HOLD" | "ESCALATE";
 
-export type ClosurePosture = "open" | "ready_to_close" | "needs_followup";
+/** customer_will_return: the customer said THEY will write again (customer-return.service). */
+export type ClosurePosture = "open" | "ready_to_close" | "needs_followup" | "customer_will_return";
 
 // ─── Behavioral signals (deterministic, explainable) ────────
 //
@@ -973,6 +975,9 @@ function deriveRequiredActions(opts: {
     out.push("close_conversation");
     return out;
   }
+  // The customer will write again: an acknowledgement, no required move (no
+  // question, no follow-up to schedule).
+  if (opts.closurePosture === "customer_will_return") return out;
   if (opts.closurePosture === "needs_followup") {
     // Only force schedule_followup when the customer actually gave us a time.
     // A vague "get back to me" / "תחזור אלי" with no when MUST trigger a
@@ -1034,6 +1039,7 @@ function requiredActionsProvenance(opts: {
   const parts: string[] = [];
   if (opts.escalationPressure === "escalate_now") parts.push("escalate_now → escalate_to_human");
   if (opts.closurePosture === "ready_to_close") parts.push("ready_to_close → close_conversation");
+  if (opts.closurePosture === "customer_will_return") return "customer_will_return → acknowledge only (no required actions)";
   if (opts.closurePosture === "needs_followup") {
     parts.push(
       opts.hasTimingSignal
@@ -1091,7 +1097,8 @@ export function deriveTriggeredActions(opts: {
 
   if (containsAny(text, REFUND_MARKERS)) out.add("refund");
   if (containsAny(text, BOOKING_MARKERS) || opts.intent === "transactional") out.add("booking");
-  if (opts.closurePosture === "needs_followup" || containsAny(text, FOLLOWUP_MARKERS)) {
+  // Not when the customer will write again: there is nothing of ours to follow up.
+  if (opts.closurePosture !== "customer_will_return" && (opts.closurePosture === "needs_followup" || containsAny(text, FOLLOWUP_MARKERS))) {
     out.add("follow_up");
   }
   if (opts.closurePosture === "ready_to_close") out.add("close_conversation");
@@ -1314,6 +1321,12 @@ function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePos
   if ((flags?.pendingApprovalsCount ?? 0) > 0) return "open";
 
   const text = (req.lastMessage || "").toLowerCase();
+
+  // The customer will come back to US ("נתכתב ביום ראשון", Smoovee
+  // 2026-11-13): nothing to schedule and nothing to ask. Checked before the
+  // follow-up markers, which also hold "אחזור אליך" and would pin an hour
+  // for a message nobody needs.
+  if (customerWillReturn(text)) return "customer_will_return";
 
   // Customer explicitly defers → follow-up.
   if (containsAny(text, CUSTOMER_DEFER_MARKERS)) return "needs_followup";

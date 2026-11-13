@@ -703,12 +703,14 @@ describe("BehaviorEngine - closure posture (Task 4)", () => {
   });
 
   // A deferral with no time asks WHEN (Omer, 2026-10-07); only a stated time
-  // schedules the follow-up.
+  // schedules the follow-up. Since 2026-11-13 (Omer, Smoovee "נתכתב ביום
+  // ראשון") a customer who says THEY will get back is acknowledged instead:
+  // see the customer_will_return tests below.
   it("customer defers ('let me think') → needs_followup, and asks when (no time given)", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
-      request: { lastMessage: "let me think about it and i'll get back to you", messageCount: 5 },
+      request: { lastMessage: "let me think about it", messageCount: 5 },
     });
     expect(s.closurePosture).toBe("needs_followup");
     expect(s.requiredActions).toContain("ask_question");
@@ -726,15 +728,24 @@ describe("BehaviorEngine - closure posture (Task 4)", () => {
     expect(s.requiredActions).toContain("schedule_followup");
   });
 
-  it("Hebrew defer ('אחזור אליך') → needs_followup", () => {
+  it("Hebrew defer that promises to come back ('אחשוב על זה ואחזור אליך') → customer_will_return, nothing required", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
       request: { lastMessage: "אחשוב על זה ואחזור אליך", messageCount: 5 },
     });
+    expect(s.closurePosture).toBe("customer_will_return");
+    expect(s.requiredActions).toEqual([]);
+  });
+
+  it("Hebrew defer with no promise ('אחשוב על זה') → still needs_followup and asks when (2026-10-07)", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "אחשוב על זה", messageCount: 5 },
+    });
     expect(s.closurePosture).toBe("needs_followup");
     expect(s.requiredActions).toContain("ask_question");
-    expect(s.requiredActions).not.toContain("schedule_followup");
   });
 
   it("customer thanks after closing assistant move → ready_to_close + close_conversation", () => {

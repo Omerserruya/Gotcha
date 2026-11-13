@@ -13,6 +13,7 @@
  * Spec rule #3: KB retrieval is gated ONLY by `shouldRetrieveKB(state, ...)`.
  */
 
+import { returnAcknowledgementCorrective, replyAsks, acknowledgementOnly } from "./customer-return.service";
 import { cachedTitlesLanguage, type TitlesLanguage } from "./catalogue-language.service";
 import {
   prisma,
@@ -4798,6 +4799,10 @@ async function generateAIBotReplyInner(
   // can I help?"). Both stall a revenue objective; both trigger the regen gate.
   const replyWasPassiveCloser = isNonAdvancingReply(replyText);
   let passiveCloseRegenerated = false;
+  // The customer said THEY will write again ("נתכתב ביום ראשון", Smoovee
+  // 2026-11-13): a warm acknowledgement is the right reply, so no gate below
+  // may turn it into a question or a forward move.
+  const customerReturns = behaviorState.closurePosture === "customer_will_return";
   // Wizard→Runtime: a disqualified (poor-fit) prospect may close GRACEFULLY -
   // don't force a forward move on a lead we've configured ourselves to drop.
   const decisionDisqualified = wizardFacts.fit === "disqualified";
@@ -4829,6 +4834,7 @@ async function generateAIBotReplyInner(
     replyWasPassiveCloser &&
     !committedActionThisTurn &&
     !customerIsClosing(opts.incomingMessage) &&
+    !customerReturns &&
     !decisionDisqualified &&
     // A shop's employee may answer and stop (P2): the forward-move corrective
     // is a sales rep's. Passive closers there are the reply checker's.
@@ -5164,7 +5170,14 @@ async function generateAIBotReplyInner(
       `[ai-bot] redundant-info blocked: customer already provided ${redundantInfo.items.join("+")}. Regenerating.`,
     );
     chatMessages.push({ role: "assistant", content: replyText });
-    chatMessages.push({ role: "user", content: buildRedundantInfoCorrective(redundantInfo.items) });
+    // "Collect what is still missing" turned "ביום ראשון" into "which hour?"
+    // when the customer was the one coming back (Smoovee 2026-11-13).
+    chatMessages.push({
+      role: "user",
+      content: customerReturns
+        ? returnAcknowledgementCorrective(conversationLang()) + INTERNAL_NUDGE_LANGUAGE_PIN
+        : buildRedundantInfoCorrective(redundantInfo.items),
+    });
     const regen = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: opts.conversationId,
@@ -5185,6 +5198,38 @@ async function generateAIBotReplyInner(
       result: "regenerated_to_avoid_reasking_provided_info",
       decision: "already_provided",
       sideEffect: "redundant_info_regenerated",
+    });
+  }
+
+  // ── The customer will write again: no question ────────────────
+  // One regeneration to an acknowledgement; if it still asks, the asking
+  // sentences go (or the short acknowledgement stands in). A question here
+  // gathers what no tool uses (rule 7c) and talks past someone who said
+  // they would be back.
+  if (replyText && customerReturns && !awaitingApproval && !pendingEscalation && replyAsks(replyText)) {
+    console.warn(`[ai-bot] customer-return: the reply asked a question; regenerating to an acknowledgement conv=${opts.conversationId}`);
+    chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({ role: "user", content: returnAcknowledgementCorrective(conversationLang()) + INTERNAL_NUDGE_LANGUAGE_PIN });
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      metadata: { type: "ai_bot_customer_return_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0; uncachedInputTokens += uncachedInputOf(regen.usage);
+    budget.addUsage(regen.usage.total_tokens || 0);
+    if (regen.content?.trim()) replyText = regen.content.trim();
+    if (replyAsks(replyText)) replyText = acknowledgementOnly(replyText, conversationLang(), opts.incomingMessage ?? "");
+    toolCallLog.push({
+      tool: "__customer_return__",
+      args: {},
+      result: "acknowledged_without_a_question",
+      decision: "customer_will_return",
+      sideEffect: "customer_return_regenerated",
     });
   }
 
@@ -5660,7 +5705,8 @@ async function generateAIBotReplyInner(
   }
   // Nothing in the Knowledge matched and no tool ran: the "I don't have that"
   // reply offers the team rather than dead-ending (dev re-walk 2026-11-04).
-  if (replyText && noKnowledgeMatch && !awaitingApproval && !pendingEscalation && !toolCallLog.some((c) => !String(c.tool).startsWith("__"))) {
+  // Not to a customer who said they will write again: that is an acknowledgement.
+  if (replyText && noKnowledgeMatch && !customerReturns && !awaitingApproval && !pendingEscalation && !toolCallLog.some((c) => !String(c.tool).startsWith("__"))) {
     const offered = withTeamOffer(replyText, replyLocale);
     if (offered !== replyText) console.log(`[ai-bot] no knowledge match: the team offer added conv=${opts.conversationId}`);
     replyText = offered;
@@ -5674,6 +5720,12 @@ async function generateAIBotReplyInner(
       console.log(`[ai-bot] unbacked ${u.kind === "offer" ? "offer replaced" : "option question dropped"} conv=${opts.conversationId}`);
       replyText = u.text;
     }
+  }
+  // The customer will write again: whatever the checks above rewrote, the
+  // reply sent asks nothing (Smoovee 2026-11-13).
+  if (replyText && customerReturns && !awaitingApproval && !pendingEscalation && replyAsks(replyText)) {
+    console.warn(`[ai-bot] customer-return: removed a question from the final reply conv=${opts.conversationId}`);
+    replyText = acknowledgementOnly(replyText, replyLocale === "en" ? "en" : "he", opts.incomingMessage ?? "");
   }
   // Hebrew verb forms the model gets wrong ("שאנחם אתכם", "להתאם"), P6.
   if (replyText) {

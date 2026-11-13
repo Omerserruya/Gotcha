@@ -76,7 +76,8 @@ describe("the do-not-know reply offers the team (dev re-walk 2026-11-04: 0/3 did
   it("the bot adds it only after the no-knowledge block and with no tool run", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     expect(src).toContain("noKnowledgeMatch = kbBlock === NO_KNOWLEDGE_MATCH_BLOCK");
-    expect(src).toMatch(/noKnowledgeMatch && !awaitingApproval && !pendingEscalation && !toolCallLog\.some/);
+    // Never to a customer who said they will write again (2026-11-13, e34).
+    expect(src).toMatch(/noKnowledgeMatch && !customerReturns && !awaitingApproval && !pendingEscalation && !toolCallLog\.some/);
   });
 });
 

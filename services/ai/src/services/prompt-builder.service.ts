@@ -1819,6 +1819,18 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     );
   }
 
+  // The customer will write again ("נתכתב ביום ראשון", Smoovee 2026-11-13).
+  // Not a follow-up: nothing of ours is scheduled, so nothing is asked.
+  if (opts.behaviorState.closurePosture === "customer_will_return") {
+    lines.push("");
+    lines.push("**The customer will get back to you - acknowledge only:**");
+    lines.push(
+      "- The customer said THEY will write or call again (maybe naming a day). Nothing is missing and nothing is yours to schedule.",
+      "- Reply with ONE short, warm acknowledgement in their language, e.g. \"אין בעיה, נשמח לעמוד לרשותך בראשון\" / \"No problem, we'll be here whenever you're ready\".",
+      "- No question at all. Do NOT ask for a time, an hour, a phone number or any detail. Do NOT call schedule_followup, create_task or any other tool. Do NOT offer to pass them to the team.",
+    );
+  }
+
   // Follow-up / callback flow - fired by BEL when the customer defers
   // ("call me back at 3", "אחזור אליך מחר"). The decision tree below is
   // STRICT: it forces the model to (1) pin an explicit time, (2) pick the
