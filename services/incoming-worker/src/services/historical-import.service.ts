@@ -200,11 +200,12 @@ async function ingestHistoricalChunk(job: Job<HistoricalImportChunkJob>): Promis
  * on `channel_account_id` for unfinished imports is the arbiter: the loser of
  * the race gets P2002 and re-reads the winner's row.
  *
- * An import whose 24-hour Meta window has closed is failed rather than reused.
- * Meta grants exactly one sync per onboarding, so a stale in-flight row is not
- * a resumable transfer - it is a transfer that will never finish, and leaving
- * it open would block the customer's legitimate second attempt after they
- * offboard and sign up again.
+ * An import whose 24-hour Meta window has closed is never left syncing. Meta
+ * grants exactly one sync per onboarding, so a stale in-flight row is a
+ * transfer that will never finish, and leaving it open would block the
+ * customer's legitimate second attempt after they offboard and sign up again.
+ * What it holds is handed to the analysis; only one that cannot be handed over
+ * is failed.
  */
 async function resolveActiveImport(args: {
   tenantId: string;
@@ -225,8 +226,15 @@ async function resolveActiveImport(args: {
     const expired =
       existing.sourceDeadlineAt !== null &&
       existing.sourceDeadlineAt.getTime() < Date.now() &&
-      existing.sourceProgress < 100;
+      (existing.status === "SOURCE_SYNCING" || existing.status === "PENDING");
     if (!expired) return existing;
+
+    // Past the deadline, what arrived is handed to the analysis (rule (c) of
+    // sourceTransferReady); the sweep normally gets there first. Only a
+    // transfer that cannot be handed over (a chunk never ingested) is failed.
+    await maybeCompleteSourceSync(existing.id);
+    const after = await prisma.historicalImport.findUnique({ where: { id: existing.id } });
+    if (after && after.status !== "SOURCE_SYNCING" && after.status !== "PENDING") return after;
 
     await prisma.historicalImport.update({
       where: { id: existing.id },
@@ -290,41 +298,69 @@ async function refreshProgress(importId: string, progress: number, phase: number
 
 /** Meta's last history phase (day 90-180). */
 export const FINAL_SOURCE_PHASE = 2;
-/** No chunk for this long, with every phase seen at 100: the transfer is over. */
+/** After the final phase's 100, wait this long for stragglers from earlier phases. */
+export const FINAL_QUIET_MS = 2 * 60_000;
+/** No chunk for this long, with a phase at 100 and none part-way: the transfer is over. */
 export const SOURCE_QUIET_MS = 10 * 60_000;
+
+type PhaseState = { phase: number; progress: number; lastAt: Date | null };
 
 /**
  * Is the source transfer over? Meta sends history in phases (0 = day 0-1,
  * 1 = day 1-90, 2 = day 90-180), out of order, each with its OWN progress.
- * Prod GOTCHA 2026-11-10: phase 0 reached 100 first, the import completed on
- * it, and 31 customers from phases 1 and 2 arrived after identity had run.
  *
- * Over when every phase seen is at 100 and either the final phase is among
- * them, or nothing has arrived for SOURCE_QUIET_MS (a business with no older
- * history may never get a later phase). Never past the 24h source deadline:
- * the watchdog fails a transfer still open then.
+ * Two prod cases decide the rule:
+ * - GOTCHA 2026-11-10: phase 0 reached 100 first, the import completed on it,
+ *   and 31 customers from phases 1 and 2 arrived after identity had run.
+ * - Smoovee 2026-11-13: Meta sent phase 0 as ONE chunk reporting progress 0
+ *   and never raised it, so "every phase at 100" waited forever. Phase 2 came
+ *   as an empty chunk at 100 (the end marker), and a phase 1 chunk still
+ *   landed 6 seconds after it.
+ *
+ * So no phase has to reach 100, and every rule waits for quiet, measured from
+ * the LAST chunk of any phase (a late chunk restarts the wait):
+ *   (a) the final phase at 100 and FINAL_QUIET_MS quiet;
+ *   (b) some phase at 100, no phase part-way (1-99; a phase Meta reports at 0
+ *       does not hold it), and SOURCE_QUIET_MS quiet: a business with no older
+ *       history may never get a later phase;
+ *   (c) the 24h source deadline has passed: hand over what arrived. Meta will
+ *       send nothing after it, and the analysis of a partial history beats a
+ *       row left syncing forever.
  */
-export function sourceTransferReady(input: { phases: Array<{ phase: number; progress: number; lastAt: Date | null }>; now: number }): { ready: boolean; why: string; phases: number[] } {
+export function sourceTransferReady(input: { phases: PhaseState[]; now: number; deadlineAt?: Date | null }): { ready: boolean; why: string; phases: number[] } {
   const phases = [...input.phases].sort((a, b) => a.phase - b.phase);
   const seen = phases.map((p) => p.phase);
   if (phases.length === 0) return { ready: false, why: "no chunks", phases: seen };
-  if (!phases.every((p) => p.progress >= 100)) return { ready: false, why: "a phase is still transferring", phases: seen };
-  if (seen.includes(FINAL_SOURCE_PHASE)) return { ready: true, why: "final phase complete", phases: seen };
   const last = Math.max(...phases.map((p) => (p.lastAt ? new Date(p.lastAt).getTime() : 0)));
-  if (last > 0 && input.now - last >= SOURCE_QUIET_MS) return { ready: true, why: "quiet window", phases: seen };
-  return { ready: false, why: "waiting for later phases", phases: seen };
+  const quiet = last > 0 ? input.now - last : 0;
+
+  const finalDone = phases.some((p) => p.phase === FINAL_SOURCE_PHASE && p.progress >= 100);
+  if (finalDone && quiet >= FINAL_QUIET_MS) return { ready: true, why: "final phase complete", phases: seen };
+
+  const someDone = phases.some((p) => p.progress >= 100);
+  const partWay = phases.some((p) => p.progress > 0 && p.progress < 100);
+  if (someDone && !partWay && quiet >= SOURCE_QUIET_MS) return { ready: true, why: "quiet window", phases: seen };
+
+  if (input.deadlineAt && input.now >= new Date(input.deadlineAt).getTime()) return { ready: true, why: "deadline", phases: seen };
+
+  if (finalDone) return { ready: false, why: "final phase in, waiting for stragglers", phases: seen };
+  return { ready: false, why: partWay ? "a phase is still transferring" : "waiting for later phases", phases: seen };
 }
 
 /**
- * The quiet-window half of the handover. A transfer that ends before the final
- * phase sends no further chunk to trigger maybeCompleteSourceSync, so this
- * looks again at the transfers whose seen phases are done.
+ * The handover is decided here, not on a chunk: every rule needs a quiet
+ * period, and a transfer that has ended sends no further chunk. Looks at every
+ * open transfer that has a phase at 100 or is past its deadline (past the
+ * deadline is exactly when nothing else will ever look at it again).
  */
 const SOURCE_SWEEP_MS = 2 * 60_000;
 let sourceSweep: NodeJS.Timeout | null = null;
 export async function sweepQuietSourceTransfers(now: number = Date.now()): Promise<number> {
   const open = await prisma.historicalImport.findMany({
-    where: { status: "SOURCE_SYNCING", sourceProgress: 100, sourceDeadlineAt: { gt: new Date(now) } },
+    where: {
+      status: "SOURCE_SYNCING",
+      OR: [{ sourceProgress: 100 }, { sourceDeadlineAt: { lte: new Date(now) } }],
+    },
     select: { id: true },
     take: 50,
   });
@@ -354,9 +390,11 @@ export function startHistoricalSourceSweep(): void {
 export async function maybeCompleteSourceSync(importId: string, now: number = Date.now()): Promise<void> {
   const row = await prisma.historicalImport.findUnique({
     where: { id: importId },
-    select: { id: true, tenantId: true, sourceProgress: true, status: true },
+    select: { id: true, tenantId: true, sourceProgress: true, status: true, sourceDeadlineAt: true },
   });
-  if (!row || row.sourceProgress < 100) return;
+  if (!row) return;
+  const pastDeadline = row.sourceDeadlineAt != null && now >= new Date(row.sourceDeadlineAt).getTime();
+  if (row.sourceProgress < 100 && !pastDeadline) return;
   if (row.status !== "SOURCE_SYNCING" && row.status !== "PENDING") return;
 
   const unprocessed = await prisma.historicalImportChunk.count({
@@ -373,6 +411,7 @@ export async function maybeCompleteSourceSync(importId: string, now: number = Da
   const ready = sourceTransferReady({
     phases: byPhase.map((p: any) => ({ phase: p.phase, progress: p._max?.progress ?? 0, lastAt: p._max?.receivedAt ?? null })),
     now,
+    deadlineAt: row.sourceDeadlineAt ?? null,
   });
   if (!ready.ready) return;
 
