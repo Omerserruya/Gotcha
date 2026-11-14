@@ -23,6 +23,10 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- HTTPS only, no encryption of our own: answers App Store export
+	     compliance once, so TestFlight builds do not wait on the question. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
@@ -38,6 +42,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>כדי לצלם תמונה ולשלוח אותה ללקוח בשיחה.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>כדי לבחור תמונה מהגלריה ולשלוח אותה ללקוח בשיחה.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
