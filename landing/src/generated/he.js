@@ -1443,4 +1443,14 @@ export const HE_DICT = {
   'Leave your details and one of us will call you today or tomorrow. If GOTCHA is not right for your store, we will say so on that call.': 'השאירו פרטים ואחד מאיתנו יחזור אליכם היום או מחר. אם GOTCHA לא מתאימה לחנות שלכם, נגיד את זה באותה שיחה.',
   'Claim your place': 'לשמור את המקום שלכם', 'Your name': 'השם שלכם', 'Your store or domain': 'החנות או הדומיין', 'WhatsApp or email': 'וואטסאפ או מייל',
   'Answered by Matan or Omer, not a queue. No card, and nothing charged until you are connected.': 'עונים מתן או עומר, לא תור. בלי כרטיס אשראי, ובלי חיוב עד שאתם מחוברים.',
+  // v8 offer wording on the older pages (tools/build-he.mjs)
+  "First month free, no commitment! For the first 50 businesses.": "חודש ראשון מתנה, ללא התחייבות! ל-50 העסקים הראשונים.",
+  "First month free": "חודש ראשון מתנה",
+  "First month free!": "חודש ראשון מתנה!",
+  "Your first month free!": "החודש הראשון שלכם מתנה!",
+  "Free": "מתנה",
+  "for the first month, no commitment": "לחודש הראשון, ללא התחייבות",
+  "1,000 credits for the month": "1,000 קרדיטים לחודש",
+  "The free month starts once you are connected": "חודש המתנה מתחיל לאחר החיבור",
+  "Offer ends 31 December 2026 or when 50 businesses have joined, whichever comes first. After the first month you continue on the plan and usage you choose, with no commitment. Regular pricing starts at $39 a month, excluding 18% VAT.": "ההטבה מסתיימת ב-31 בדצמבר 2026 או בהצטרפות 50 עסקים, המוקדם מביניהם. לאחר החודש הראשון ממשיכים בתוכנית ובשימוש שתבחרו, ללא התחייבות. המחיר הרגיל מתחיל ב-39$ לחודש, לא כולל מע״מ 18%.",
 };

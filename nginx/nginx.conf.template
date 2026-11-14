@@ -174,6 +174,21 @@ http {
         "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
     }
 
+    # ★ A sign-out that finds no Authentik session goes back to the app (2026-10-23).
+    # The login stage's session lasts until the browser closes unless "remember
+    # me" was ticked, so the app session can outlive it. RP-initiated logout then
+    # has nobody to sign out, and Authentik sends the browser to its own login
+    # page first, with the end-session URL as next= - so the user, who just
+    # signed out, met "Welcome to authentik!". Recognised by next= naming an
+    # end-session endpoint: a real login's next= is /application/o/authorize/,
+    # and id_token_hint cannot tell them apart (Authentik 2026.2 copies every
+    # authorize arg onto the login URL, and a logout without the id-token cookie
+    # sends client_id instead).
+    map "$uri|$arg_next" $signout_lost_go {
+        default 0;
+        "~*^/if/flow/default-authentication-flow/\|%2Fapplication%2Fo%2F[^|]+%2Fend-session%2F" 1;
+    }
+
     # The client's real address (2026-10-22). The only way in is a host
     # cloudflared, so every request reached nginx from the docker bridge
     # (dev: 172.19.0.1 for everyone) and each limit below - plus Express's
@@ -2239,6 +2254,12 @@ http {
         # Password-reset links -> the app's recover screen (see $recover_go).
         if ($recover_go != "") {
             return 302 https://dev.gotcha.co.il$recover_go;
+        }
+
+        # Sign-out with no Authentik session left -> the app's sign-in (see
+        # $signout_lost_go). The app session is already gone by then.
+        if ($signout_lost_go) {
+            return 302 https://dev.gotcha.co.il/sign-in;
         }
 
         # ════════════════════════════════════════════════════════════════════

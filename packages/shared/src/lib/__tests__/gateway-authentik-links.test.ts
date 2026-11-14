@@ -57,3 +57,31 @@ describe.each(TEMPLATES)("%s", (file, appName, authHost) => {
     expect(location(app, `^~ ${p}`).trim()).toBe(`return 302 https://${authHost}$request_uri;`);
   });
 });
+
+/**
+ * The panel's Origin reaches Authentik in the IdP's name (2026-10-25). Prod
+ * password reset failed with "CSRF Failed: Origin checking failed": /auth-api/
+ * sends Host auth.gotcha.co.il, the browser's Origin stays the app's, and Django
+ * checks the two for any session-authenticated POST. Only our own origin is
+ * translated, so a foreign one is still refused.
+ */
+describe("gateway/nginx.prod.conf.template: /auth-api/ Origin", () => {
+  const conf = fs.readFileSync(path.join(ROOT, "gateway/nginx.prod.conf.template"), "utf8");
+  const clean = conf.replace(/^\s*#.*$/gm, "");
+
+  it("★ /auth-api/ forwards the mapped Origin", () => {
+    const b = location(server(conf, "app.gotcha.co.il"), "^~ /auth-api/");
+    expect(b).toContain("proxy_set_header Origin $authentik_api_origin;");
+  });
+
+  it("★ the map translates only the app's own origin and passes any other through", () => {
+    const at = clean.indexOf("map $http_origin $authentik_api_origin {");
+    expect(at).toBeGreaterThan(-1);
+    const rows = block(clean, clean.indexOf("{", at)).trim().split(/;\s*/).filter(Boolean)
+      .map((r) => r.trim().split(/\s+/));
+    expect(rows).toEqual([
+      ["default", "$http_origin"],
+      ['"https://app.gotcha.co.il"', '"https://auth.gotcha.co.il"'],
+    ]);
+  });
+});

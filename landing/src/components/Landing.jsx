@@ -9,6 +9,7 @@ import Chrome from '@/generated/Chrome';
 import { HE_DICT } from '@/generated/he';
 import { getLucide } from '@/lib/lucide';
 import { links } from '@/lib/site';
+import { leadPort } from '@/lib/old-lead';
 import UrlSync from '@/components/UrlSync';
 
 class LandingLogic extends React.Component {
@@ -937,7 +938,7 @@ class LandingLogic extends React.Component {
       }
     };
 
-    const NAV = [['Product', 'product'], ['Solutions', 'solutions'], ['Our Company', 'company'], ['Why us', null, 'why'], ['Pricing', null, 'pricing'], ['$1 offer!', null, 'offer']];
+    const NAV = [['Product', 'product'], ['Solutions', 'solutions'], ['Our Company', 'company'], ['Why us', null, 'why'], ['Pricing', null, 'pricing'], ['First month free!', null, 'offer']];
     const PP = 12;
     const VOL = [
       { t: '10', n: 10, plan: 'Co-Pilot', m: 39, unit: '$0.16', note: 'Co-Pilot at its base volume: 750 credits a month, about 250 conversations, roughly $0.16 each.' },
@@ -3202,20 +3203,20 @@ class LandingLogic extends React.Component {
       },
       offer: {
         badge: 'Launch offer',
-        barText: 'First 3 months for $1 in total! For the first 50 businesses.',
-        tabLabel: '$1 for 3 months',
+        barText: 'First month free, no commitment! For the first 50 businesses.',
+        tabLabel: 'First month free',
         tabDisplay: st.offerOpen ? 'none' : 'flex',   // the drawer carries its own handle when open
-        title: 'Your first 3 months for $1!',
-        price: '$1', priceNote: 'in total, for 3 months, one payment',
+        title: 'Your first month free!',
+        price: 'Free', priceNote: 'for the first month, no commitment',
         items: [
-          '1,000 credits every month',
+          '1,000 credits for the month',
           'Connection, onboarding and personal guidance from us',
           'For the first 50 businesses',
-          'Billing and the three months start once you are connected'
+          'The free month starts once you are connected'
         ],
         bookLabel: 'Book a call', seeMore: 'See more', closeLabel: 'Close',
         termsLabel: 'Offer terms',
-        terms: 'Offer ends 31 October 2026 or when 50 businesses have joined, whichever comes first. After three months you continue on the plan and usage you choose. Regular pricing starts at $39 a month, excluding 18% VAT.',
+        terms: 'Offer ends 31 December 2026 or when 50 businesses have joined, whichever comes first. After the first month you continue on the plan and usage you choose, with no commitment. Regular pricing starts at $39 a month, excluding 18% VAT.',
         hideBar: () => this.setState({ barOffer: false }),
         hideAnn: () => this.setState({ barAnn: false }),
         open: () => this.setState({ offerOpen: true }),
@@ -3876,7 +3877,8 @@ class LandingLogic extends React.Component {
 
   // dc-runtime: vals = { ...userProps, ...logic.renderVals() }
   __vals() {
-    return { ...this.props, ...(this.renderVals() || {}) };
+    // leadPort: the lead cards' bindings (src/lib/old-lead.js), grafted by dc2jsx.
+    return { ...this.props, ...(this.renderVals() || {}), leadPort: leadPort(this) };
   }
 
   // UrlSync gives state.page a real address. The design never touched the URL,

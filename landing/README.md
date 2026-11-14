@@ -104,6 +104,72 @@ previous export's rules, and nothing in the build complains.
 `node_modules`. It is a maintenance script, not part of `npm run build`, and its
 output is committed - so a normal build never needs it.
 
+## The v8 pages
+
+The home, `/contact`, `/why-gotcha`, `/offer`, `/pricing`, `/solutions/ecommerce`
+and `/solutions/lead-handling` (each also under `/he`) are compiled from a later export, "GOTCHA Website.dc.html"
+(design project 8), vendored under `design/home-v8/` with its three data files.
+Every other page is still the older "GOTCHA Landing.dc.html" above. The list is
+`src/lib/v8-pages.ts`; routes, links, the older site's navigation and lead sources read it.
+
+```bash
+npm run home:sync
+```
+
+`tools/build-home.mjs` writes `src/generated/home/`, `src/components/V8Landing.jsx`
+and `src/app/(v8)/v8.css`. It uses the same template emitter as the older
+design (`tools/dc-emit.mjs`). The design picks a page with `?page=`; here each
+route passes `page` (`talk`, `why`, `offer`, `pricing`, `ecommerce`, `leads`).
+
+What differs from the older port:
+
+- **Two root layouts.** `src/app/(v8)` and `src/app/(site)` each render their
+  own `<html>`, because the two designs' global stylesheets both style `*`,
+  `body` and `a`. A link between them is a full page load, so neither sheet ever
+  meets the other. Shared metadata lives in `src/lib/site-metadata.ts`;
+  importing a layout would import its stylesheet too.
+- **Hebrew is the source.** The template is written in Hebrew and the design
+  switches to English by rewriting the DOM (`enPass`). `src/lib/en-tree.ts`
+  applies the same rules to the rendered tree, so `/` is English in the HTML the
+  server sends, not after it paints.
+- **The address is the language.** The design read `?lang=` and localStorage;
+  here `/` is English and `/he` is Hebrew, and its EN / עברית toggle moves
+  between them (still writing `gotcha-home-lang`, as the design does).
+- **Links.** The design links other pages as `?page=<key>`; those keys are the
+  older design's, so each resolves to this site's address for it
+  (`src/lib/home-links.ts`). Footer links the design left as `#top` are mapped
+  by label in `build-home.mjs`, and the build fails if a label moves.
+- **Motion is bundled.** gsap, ScrollTrigger and Lenis, at the design's
+  versions, are lazy chunks from `src/vendor/v8/` (`src/lib/home-vendor.js`),
+  not files under `public/`: production's CSP allows scripts from `'self'` only,
+  and the production landing vhost serves `.js` only under `/_next/` - any other
+  `.js` is 301'd to the application host. Images live under `public/assets/v8/`
+  so they never replace a file of the same name the older pages use; keep them
+  to the extensions that vhost serves (png, jpg, gif, svg, ico, webp, woff, txt,
+  xml, webmanifest).
+- **Decisions layered on the design**, each one in `build-home.mjs` and asserted:
+  - The bottom form sends a lead to `POST /api/waitlist` (source
+    `landing-home-cta`; `src/lib/home-lead.mjs`, tests in `tools/test/`, run
+    with `npm test`). Its sent card and error line are the design's own, copied
+    from the contact-page form. A 409 counts as sent. Any other failure keeps
+    the form filled and shows the error line.
+  - The launch offer reads 31 December 2026 instead of 31 October, in both
+    languages and every place it appears.
+  - On a first visit the offer drawer waits for the cookie card to be answered
+    (`consentDecided()` / `onConsentDecided()` in `src/lib/consent.ts`).
+  - The v8 contact form (talk, why, offer, pricing) sends with the page's source
+    (`landing-contact`, `-why`, `-offer`, `-pricing`).
+  - Pricing keeps the design's layout and copy with billing's numbers:
+    `PRICING_OVERRIDES` (dollars by default, yearly ×12, billing's credits, no
+    stated 3.1 rate).
+  - The older pages' offer bar, drawer and nav item carry the v8 wording
+    (`OLD_OFFER_SWAPS` in build-logic.mjs, Hebrew from the v8 dictionary in
+    build-he.mjs).
+  - The older design's 12 lead cards are wired too (dc2jsx.mjs, `src/lib/old-lead.js`).
+- **`next dev` shows the reduced-motion page.** StrictMode mounts, unmounts and
+  remounts the same instance, the design's unmount sets `this.dead`, and its
+  animation setup then stops. The export (and production) mount once.
+
 ## How the port works
 
 The design is a "design canvas" document: an `x-dc` template with `{{ }}`

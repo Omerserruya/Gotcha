@@ -171,6 +171,17 @@ http {
         "~^https://app\.gotcha\.co\.il$"         $http_origin;
     }
 
+    # ★ The panel's Origin, in Authentik's name (2026-10-25). /auth-api/ hands
+    #   Authentik Host auth.gotcha.co.il, but the browser's Origin stays the
+    #   app's, so Django refused every session-authenticated executor POST:
+    #   "CSRF Failed: Origin checking failed" - password reset broke for anyone
+    #   who already had an Authentik session. Only our own origin is translated;
+    #   any other Origin passes through as is and is still refused.
+    map $http_origin $authentik_api_origin {
+        default                     $http_origin;
+        "https://app.gotcha.co.il"  "https://auth.gotcha.co.il";
+    }
+
     map $http_upgrade $connection_upgrade {
         default upgrade;
         ''      close;
@@ -186,6 +197,21 @@ http {
     map "$uri|$arg_flow_token" $recover_go {
         default "";
         "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
+    }
+
+    # ★ A sign-out that finds no Authentik session goes back to the app (2026-10-23).
+    # The login stage's session lasts until the browser closes unless "remember
+    # me" was ticked, so the app session can outlive it. RP-initiated logout then
+    # has nobody to sign out, and Authentik sends the browser to its own login
+    # page first, with the end-session URL as next= - so the user, who just
+    # signed out, met "Welcome to authentik!". Recognised by next= naming an
+    # end-session endpoint: a real login's next= is /application/o/authorize/,
+    # and id_token_hint cannot tell them apart (Authentik 2026.2 copies every
+    # authorize arg onto the login URL, and a logout without the id-token cookie
+    # sends client_id instead).
+    map "$uri|$arg_next" $signout_lost_go {
+        default 0;
+        "~*^/if/flow/default-authentication-flow/\|%2Fapplication%2Fo%2F[^|]+%2Fend-session%2F" 1;
     }
 
     # The client's real address (2026-10-22). The only way in is a host
@@ -408,6 +434,8 @@ http {
             #   Authentik, and the link 404ed. Anonymous executor POSTs (the panel's
             #   whole path) were measured to answer the same either way.
             proxy_set_header X-Forwarded-Host auth.gotcha.co.il;
+            # Matches Host above; see $authentik_api_origin.
+            proxy_set_header Origin $authentik_api_origin;
             limit_req zone=authentik burst=40 nodelay;
         }
 
@@ -683,6 +711,22 @@ http {
         location /api/channels {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Signed media links for providers (2026-10-10) ──────
+        # Meta and Slack fetch an outbound attachment here with no login: the
+        # HMAC signature in the query is the credential, valid 15 minutes, and
+        # the app answers private, no-store so the edge never keeps a copy.
+        # Prod had no such location until 2026-11-04, so these links fell
+        # through to the frontend and 404ed (hot-patched on the box that day).
+        location ^~ /api/media/s/ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
             proxy_set_header Host $host;
             proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
@@ -2623,6 +2667,12 @@ http {
         # Password-reset links -> the app's recover screen (see $recover_go).
         if ($recover_go != "") {
             return 302 https://app.gotcha.co.il$recover_go;
+        }
+
+        # Sign-out with no Authentik session left -> the app's sign-in (see
+        # $signout_lost_go). The app session is already gone by then.
+        if ($signout_lost_go) {
+            return 302 https://app.gotcha.co.il/sign-in;
         }
 
         # Authentik serves its own static assets and accepts branding/icon

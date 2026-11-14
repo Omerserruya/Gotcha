@@ -242,6 +242,31 @@ describe("welcome polish", () => {
     expect(disc.querySelector(".disc-wm")!.getAttribute("data-fit")).toBe("m");
   });
 
+  it("★ one logo: the disc draws appearance.logoUrl; a legacy welcome.avatarUrl still wins; an empty one is no logo", async () => {
+    const logo = await boot({ messages: [], ux: hero(), appearance: { logoUrl: "https://cdn.example.com/logo.png" } });
+    expect(logo.shadow.querySelector(".disc img")!.getAttribute("src")).toBe("https://cdn.example.com/logo.png");
+    const legacy = await boot({
+      messages: [],
+      ux: { ...hero(), welcome: { avatarUrl: "https://cdn.example.com/legacy.png" } },
+      appearance: { logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    expect(legacy.shadow.querySelector(".disc img")!.getAttribute("src")).toBe("https://cdn.example.com/legacy.png");
+    // "" is not a link to this page: the wordmark, never an <img> of the storefront's own URL.
+    const empty = await boot({ messages: [], ux: hero(), appearance: { logoUrl: "" }, brand: { name: "Urban Supply", initial: "U" } });
+    expect(empty.shadow.querySelector(".disc img")).toBeNull();
+    expect(empty.shadow.querySelector(".disc-wm")!.textContent).toBe("URBAN SUPPLY");
+  });
+
+  it("★ a Hebrew wordmark is never letter-spaced; a Latin one keeps its tracking", async () => {
+    const he = await boot({ messages: [], ux: hero(), brand: { name: "נועה", initial: "נ" } });
+    const mark = he.shadow.querySelector(".disc-wm")!;
+    expect(mark.textContent).toBe("נועה");
+    expect(mark.getAttribute("data-script")).toBe("rtl");
+    expect(css(he.shadow)).toContain(".disc-wm[data-script='rtl']{letter-spacing:0;}");
+    const latin = await boot({ messages: [], ux: hero(), brand: { name: "Urban Supply", initial: "U" } });
+    expect(latin.shadow.querySelector(".disc-wm")!.hasAttribute("data-script")).toBe(false);
+  });
+
   it("★ design 7 opens on the questions: no title, the assistant's name under the disc", async () => {
     const h = await boot({ messages: [] });
     expect(h.shadow.querySelector(".wel-h")).toBeNull();
@@ -605,6 +630,61 @@ describe("welcome state", () => {
     const { shadow } = await boot({ features: { humanHandoff: false } });
     const link = shadow.querySelector(".lnk") as HTMLElement;
     expect(link.hidden).toBe(true);
+  });
+
+  /*
+   * ★★ "Talk to a person" says "connecting you" only when the handover
+   * happened (2026-10-26). The website widget's adapter answered /handoff
+   * locally with an empty success, so the visitor was told and nobody was.
+   */
+  describe("★★ talk to a person: handed over only when the server said so", () => {
+    const press = async (h: Harness) => {
+      (h.shadow.querySelector(".lnk") as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 20));
+      return h.shadow.querySelector(".banner") as HTMLElement;
+    };
+    const answering = (h: Harness, handoff: () => Promise<unknown>) => {
+      const original = h.post.getMockImplementation()!;
+      h.post.mockImplementation((path: string, ...rest: unknown[]) =>
+        path.endsWith("/handoff") ? handoff() : original(path, ...rest),
+      );
+    };
+
+    it("handed over: the banner says the team is being connected", async () => {
+      const h = await boot();
+      answering(h, async () => ({ data: { handedOver: true } }));
+      const banner = await press(h);
+      expect(h.post.mock.calls.some(([p]) => String(p).endsWith("/handoff"))).toBe(true);
+      expect(banner.hidden).toBe(false);
+      expect(banner.getAttribute("data-kind")).toBe("info");
+      expect(banner.textContent).toBe("Connecting you with someone from the team…");
+    });
+
+    it.each([
+      ["403 (the button is off)", 403],
+      ["404 (not this visitor's session)", 404],
+    ])("★★ %s: the widget's error, never \"connecting you\"", async (_name, status) => {
+      const h = await boot();
+      answering(h, async () => {
+        throw Object.assign(new Error("refused"), { status });
+      });
+      const banner = await press(h);
+      expect(banner.hidden).toBe(false);
+      expect(banner.getAttribute("data-kind")).toBe("err");
+      expect(banner.textContent).toBe("Something went wrong. Try again.");
+      expect(banner.textContent).not.toContain("Connecting you");
+    });
+
+    it("pressing again clears the error before it asks", async () => {
+      const h = await boot();
+      answering(h, async () => {
+        throw new Error("refused");
+      });
+      await press(h);
+      answering(h, async () => ({ data: { handedOver: true } }));
+      const banner = await press(h);
+      expect(banner.getAttribute("data-kind")).toBe("info");
+    });
   });
 });
 
@@ -1077,11 +1157,115 @@ describe("carousel", () => {
     const labels = cards.map((c) =>
       Array.from(c.querySelectorAll(".btn")).map((b) => b.textContent),
     );
-    // Card 1 has real sizes to pick, so it links out rather than
-    // pretending it can add something.
-    expect(labels[0]).toEqual(["View product"]);
+    // Card 1 has real sizes to pick: no Add to Cart that would pick one
+    // for the shopper, but a way into the sizes (Omer, 2026-10-25).
+    expect(labels[0]).toEqual(["Choose a size", "View product"]);
     // Cards 2 and 3 are single-variant: Add to Cart is honest there.
     expect(labels[1]).toContain("Add to cart");
+  });
+
+  it("★ \"Choose a size\" opens that card's sizes in place, and Add to Cart waits for one", async () => {
+    const { shadow } = await carouselHarness();
+    const first = shadow.querySelector(".car-tr .card")!;
+    (first.querySelector("[data-act='choose-options']") as HTMLButtonElement).click();
+    expect(first.querySelectorAll(".chip")).toHaveLength(2);
+    expect(first.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
+    expect(first.querySelector(".opt-l")!.textContent).toBe("Pick a size");
+    const add = Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart")!;
+    expect(add.disabled).toBe(true);
+    (first.querySelector(".chip") as HTMLButtonElement).click();
+    expect(first.querySelector(".opts")!.hasAttribute("data-need")).toBe(false);
+    expect((Array.from(first.querySelectorAll("button")).find((b) => b.textContent === "Add to cart") as HTMLButtonElement).disabled).toBe(false);
+    // The other cards are untouched.
+    expect(shadow.querySelectorAll(".car-tr .card")[2].querySelectorAll(".chip")).toHaveLength(0);
+  });
+
+  it("★ in Hebrew, by what the store asks for: size, colour, both, or an option", async () => {
+    const words = async (optionNames: string[]) => {
+      const { shadow } = await boot({
+        appearance: { language: "he" },
+        messages: [
+          {
+            id: "c9",
+            direction: "OUTBOUND",
+            body: "x",
+            createdAt: new Date().toISOString(),
+            commerce: { addToCartEnabled: true, products: [makeProduct({ optionNames }), makeProduct({ productId: "444", optionNames })] },
+          },
+        ],
+      });
+      const card = shadow.querySelector(".car-tr .card")!;
+      const open = card.querySelector("[data-act='choose-options']") as HTMLButtonElement;
+      const label = open.textContent;
+      open.click();
+      return [label, card.querySelector(".opt-l")!.textContent];
+    };
+    expect(await words(["Size"])).toEqual(["בחירת מידה", "בחרו מידה"]);
+    expect(await words(["Size", "Color"])).toEqual(["בחירת מידה", "בחרו מידה וצבע"]);
+    expect(await words(["צבע"])).toEqual(["בחירת צבע", "בחרו צבע"]);
+    expect(await words(["Material"])).toEqual(["בחירת אפשרות", "בחרו אפשרות"]);
+  });
+
+  it("no way in when nothing can be bought, or the store's cart is off", async () => {
+    const soldOut = makeProduct({
+      variants: makeProduct().variants.map((v: any) => ({ ...v, available: false })),
+    });
+    const { shadow } = await boot({
+      messages: [{ id: "c8", direction: "OUTBOUND", body: "x", createdAt: new Date().toISOString(), commerce: { addToCartEnabled: true, products: [soldOut, makeProduct({ productId: "555" })] } }],
+    });
+    const cards = shadow.querySelectorAll(".car-tr .card");
+    expect(cards[0].querySelector("[data-act='choose-options']")).toBeNull();
+    expect(cards[1].querySelector("[data-act='choose-options']")).toBeTruthy();
+    const off = await boot({
+      messages: [{ id: "c7", direction: "OUTBOUND", body: "x", createdAt: new Date().toISOString(), commerce: { addToCartEnabled: false, products: [makeProduct(), makeProduct({ productId: "555" })] } }],
+    });
+    expect(off.shadow.querySelector("[data-act='choose-options']")).toBeNull();
+  });
+
+  it("★ RTL (Omer, 2026-10-25): two whole cards share the strip, and a link button never outgrows its card", async () => {
+    const { shadow } = await carouselHarness();
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".car-tr>*{box-sizing:border-box;flex:0 0 calc((100% - 10px) / 2);max-width:calc((100% - 10px) / 2);");
+    expect(sheet).not.toContain("flex:0 0 186px");
+    // Halves of a full-width strip, not of a shrink-to-fit one.
+    expect(sheet).toContain(".car{position:relative;width:100%;");
+    // An <a> is content-box by default: width:100% plus padding cut its edge.
+    expect(sheet).toMatch(/\.btn\{box-sizing:border-box;/);
+  });
+
+  it("★ the fade and the arrows only while the strip has somewhere to go", async () => {
+    const { shadow } = await carouselHarness();
+    const car = shadow.querySelector(".car") as HTMLElement;
+    const strip = shadow.querySelector(".car-tr") as HTMLElement;
+    const size = (scroll: number, client: number) => {
+      Object.defineProperty(strip, "scrollWidth", { configurable: true, value: scroll });
+      Object.defineProperty(strip, "clientWidth", { configurable: true, value: client });
+    };
+    size(360, 360);
+    strip.dispatchEvent(new Event("scroll"));
+    expect(car.getAttribute("data-scroll")).toBe("0");
+    expect(car.getAttribute("data-more")).toBe("0");
+    size(545, 360);
+    strip.scrollLeft = 0;
+    strip.dispatchEvent(new Event("scroll"));
+    expect([car.getAttribute("data-scroll"), car.getAttribute("data-more")]).toEqual(["1", "1"]);
+    // Scrolled to the end (negative in RTL: the distance is what counts).
+    strip.scrollLeft = -185;
+    strip.dispatchEvent(new Event("scroll"));
+    expect(car.getAttribute("data-more")).toBe("0");
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".car[data-more='1']::after{");
+    expect(sheet).toContain(".car[data-scroll='0'] .car-nav{display:none;}");
+  });
+
+  it("★ in the GOTCHA look a disabled Add to cart is an outline, never the enabled beige", async () => {
+    const { shadow } = await carouselHarness();
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    const enabled = sheet.indexOf(".panel[data-look='gotcha'] .btn-p{");
+    const disabled = sheet.indexOf(".panel[data-look='gotcha'] .btn-p:disabled{background:#fff;");
+    expect(enabled).toBeGreaterThan(-1);
+    // Same specificity plus the pseudo-class, and after it: it wins.
+    expect(disabled).toBeGreaterThan(enabled);
   });
 
   it("keeps Add to Cart on a shortlist entry whose first variant is sold out", async () => {
@@ -1548,6 +1732,25 @@ describe("★★ design 7's panel (live widget L2)", () => {
     expect(h.shadow.querySelector(".hd-st")!.textContent).toBe("Replies right away");
   });
 
+  it("★ one logo (Omer, 2026-10-25): the header draws appearance.logoUrl on white; a dead link falls back to the initial", async () => {
+    const h = await boot({
+      messages: [{ id: "m1", direction: "OUTBOUND", body: "Hello", createdAt: "2026-10-14T08:00:00Z" }],
+      brand: { name: "Urban Supply", initial: "U" },
+      appearance: { logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    const av = h.shadow.querySelector(".hd .hd-av")!;
+    const img = av.querySelector("img")!;
+    expect(img.getAttribute("src")).toBe("https://cdn.example.com/logo.png");
+    expect(av.getAttribute("data-logo")).toBe("1");
+    expect(av.querySelector(".hd-dot")).toBeTruthy();
+    expect(sheetOf(h.shadow)).toContain(".panel[data-look='gotcha'] .hd-av[data-logo]{background:#fff;");
+    img.dispatchEvent(new Event("error"));
+    expect(av.querySelector("img")).toBeNull();
+    expect(av.textContent).toBe("U");
+    expect(av.hasAttribute("data-logo")).toBe(false);
+    expect(av.querySelector(".hd-dot")).toBeTruthy();
+  });
+
   it("while a reply is on its way the status says so", async () => {
     const h = await boot({ messages: [] });
     (h.shadow.querySelector(".sug-b") as HTMLButtonElement).click();
@@ -1723,6 +1926,31 @@ describe("★★ Add to cart on a web chat's store (live widget L6, W9c)", () =>
     expect(shadow.textContent).toContain("Added to cart");
     expect(Array.from(shadow.querySelectorAll("a")).some((a) => a.textContent === "View cart")).toBe(false);
     expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Keep shopping")).toBe(true);
+  });
+
+  it("★ a cart page the host names is offered after the add (a WooCommerce store's /cart/)", async () => {
+    const addToCart = vi.fn(async () => ({ cartPage: "https://shop.example/cart/" }));
+    const { shadow } = await boot({ messages: [card], addToCart });
+    addBtn(shadow).click();
+    await new Promise((r) => setTimeout(r, 20));
+    const view = Array.from(shadow.querySelectorAll("a")).find((a) => a.textContent === "View cart")!;
+    expect(view.getAttribute("href")).toBe("https://shop.example/cart/");
+    expect(view.getAttribute("target")).toBe("_top");
+  });
+
+  it("★ a single card with nothing chosen says what to pick, over chips that read as choices", async () => {
+    const { shadow } = await boot({
+      messages: [{ ...card, commerce: { addToCartEnabled: true, products: [makeProduct({ optionNames: ["Size", "Colour"] })] } }],
+    });
+    expect(shadow.querySelector(".opt-l")!.textContent).toBe("Pick a size and colour");
+    // One line, not a generic label plus a hint repeating it.
+    expect(shadow.querySelectorAll(".opts .opt-l")).toHaveLength(1);
+    expect(shadow.querySelector(".opts")!.getAttribute("data-need")).toBe("1");
+    expect(addBtn(shadow).disabled).toBe(true);
+    const sheet = Array.from(shadow.querySelectorAll("style")).map((n) => n.textContent).join("");
+    expect(sheet).toContain(".opts[data-need='1'] .chip{border-color:");
+    (shadow.querySelector(".chip") as HTMLButtonElement).click();
+    expect(shadow.querySelector(".opts")!.hasAttribute("data-need")).toBe(false);
   });
 
   it("the storefront keeps its cart page", async () => {

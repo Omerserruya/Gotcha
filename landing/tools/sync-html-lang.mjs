@@ -45,6 +45,25 @@ const skipped = [];
 for (const file of files) {
   const html = readFileSync(file, 'utf8');
 
+  // The home is the v8 design, whose root is `<div data-site="main" dir lang>`.
+  // Its own pages set lang (and data-lang="en", which its stylesheet keys on)
+  // on <html> and never dir: the page's direction lives on that root, and an
+  // rtl document would also move the scrollbar.
+  const home = html.match(/<div data-site="main"[^>]*>/);
+  if (home && !html.includes('id="dc-root"')) {
+    const homeLang = home[0].match(/\blang="(he|en)"/);
+    if (!homeLang) throw new Error(`sync-html-lang: data-site="main" in ${file.slice(OUT.length)} has no readable lang`);
+    const open = html.match(/<html[^>]*>/);
+    if (!open) throw new Error(`sync-html-lang: no <html> in ${file.slice(OUT.length)}`);
+    const want = homeLang[1] === 'en' ? '<html lang="en" data-lang="en">' : '<html lang="he">';
+    byLang[homeLang[1]]++;
+    if (open[0] !== want) {
+      writeFileSync(file, html.replace(open[0], want));
+      changed++;
+    }
+    continue;
+  }
+
   const root = html.match(/<div id="dc-root"[^>]*>/);
   if (!root) {
     // 404 and other bare documents have no design chrome; they stay English.

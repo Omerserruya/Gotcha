@@ -498,7 +498,22 @@ window.__gotchaSiteMount = function (opts) {
       });
     }
 
-    // /events, /handoff, /lead and the cart endpoints have no equivalent
+    // "Talk to a person" (2026-10-26): the server records the handover and
+    // tells the team. It answers 403 when the merchant has not turned the
+    // button on and 404 for a session that is not this visitor's; both
+    // reject, and so does any answer that is not a handover, so the
+    // visitor is never told "handed over" unless the server said so.
+    if (path === "/handoff") {
+      return post(API_PATH + "/handoff", {
+        sessionId: store.get("conversation"),
+        sessionToken: store.get("token"),
+      }).then(function (res) {
+        if (!(res && res.data && res.data.handedOver === true)) throw new Error("not_handed_over");
+        return res;
+      });
+    }
+
+    // /events, /lead and the cart endpoints have no equivalent
     // here. Resolving empty keeps the bundle's optional paths working
     // without inventing server behaviour that does not exist.
     return Promise.resolve({ data: {} });
@@ -523,6 +538,8 @@ window.__gotchaSiteMount = function (opts) {
   var launcherButton = null;
   var launcherIcon = "";
   var launcherOpen = false;
+  // The bubble carries the merchant's logo (once it has loaded).
+  var launcherLogo = false;
   var startData = null;
 
   function setLauncherOpen(open) {
@@ -532,6 +549,7 @@ window.__gotchaSiteMount = function (opts) {
     launcherButton.style.display = open && phone ? "none" : "";
     // Open, the bubble minimises the chat (design 7's chevron).
     launcherButton.innerHTML = open ? CHEVRON : launcherIcon;
+    launcherButton.setAttribute("data-logo", launcherLogo && !open ? "1" : "0");
     launcherButton.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) hidePopup();
     decorateLauncher();
@@ -564,6 +582,22 @@ window.__gotchaSiteMount = function (opts) {
     var out = { pageType: product ? "product" : "page", productHandle: handle, path: path };
     if (id) out.productId = id;
     return out;
+  }
+
+  /**
+   * The store's cart page, for "View cart" after a line is added (Omer,
+   * 2026-10-25). The add link is the store's home with `?add-to-cart=`
+   * (Backend's wooCartLine: storeUrl + "/"), so the cart is that path plus
+   * "cart/": WooCommerce's default, a store in a subfolder included.
+   */
+  function wooCartPage(addLink) {
+    try {
+      var base = new URL(addLink.toString());
+      base.search = "";
+      base.hash = "";
+      if (!/\/$/.test(base.pathname)) base.pathname += "/";
+      return new URL("cart/", base).toString();
+    } catch (e) { return null; }
   }
 
   /** The WhatsApp kind: the shared widget, with this channel's start (POST /whatsapp-start). */
@@ -636,7 +670,7 @@ window.__gotchaSiteMount = function (opts) {
             if (!res.ok) throw new Error("unavailable");
             // WooCommerce themes refresh their mini-cart on this event.
             try { if (window.jQuery) window.jQuery(document.body).trigger("wc_fragment_refresh"); } catch (e) {}
-            return { cartPage: null };
+            return { cartPage: wooCartPage(target) };
           });
         }
         try { window.top.location.href = target.toString(); } catch (e) { window.location.href = target.toString(); }
@@ -713,6 +747,31 @@ window.__gotchaSiteMount = function (opts) {
   }
 
   /**
+   * The merchant's one logo (Omer, 2026-10-25): the bubble, the pop-up and
+   * the panel all draw appearance.logoUrl; a per-place image the legacy
+   * editor wrote (ux.launcher.iconUrl, ux.welcome.avatarUrl) still wins
+   * where it is set. Mirrors logoFor() in the chat bundle.
+   */
+  function logoOf(widget, override) {
+    var pick = function (raw) {
+      if (typeof raw !== "string" || !raw.trim()) return null;
+      try {
+        var u = new URL(raw, window.location.href);
+        return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+      } catch (e) { return null; }
+    };
+    return pick(override) || pick(widget.appearance && widget.appearance.logoUrl);
+  }
+
+  /** Calls back once the image has loaded: the initial stays until then, and a dead link never replaces it. */
+  function whenLoaded(url, done) {
+    if (!url) return;
+    var probe = new Image();
+    probe.onload = function () { done(url); };
+    probe.src = url;
+  }
+
+  /**
    * The text colour that reads on the main colour: design 7's cream or its
    * ink, whichever contrasts more. Not the stored contrastColor - Settings
    * never writes it, so it stays #ffffff on a pale colour (dev, 2026-10-14).
@@ -783,6 +842,10 @@ window.__gotchaSiteMount = function (opts) {
       ".ldr svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;}",
       ".ldr .chev{width:22px;height:22px;}",
       ".mark{font:500 24px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;color:inherit;}",
+      // A logo sits on white, as in the chat's disc: a merchant's mark is drawn for a light ground.
+      ".ldr[data-logo='1']{background:#fff;}",
+      ".ldr[data-logo='1'] .on{border-color:#fff;}",
+      ".mark-img{display:block;max-width:34px;max-height:34px;object-fit:contain;}",
       // The online dot: someone is answering right now.
       ".on{position:absolute;top:3px;left:3px;width:11px;height:11px;border-radius:50%;box-sizing:border-box;",
       "  background:#5FA578;border:2px solid " + accent + ";}",
@@ -808,6 +871,8 @@ window.__gotchaSiteMount = function (opts) {
       ".pav{position:relative;width:32px;height:32px;border-radius:50%;flex:none;background:" + accent + ";color:" + inkOn(accent) + ";",
       "  display:flex;align-items:center;justify-content:center;",
       "  font:500 19px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+      ".pav[data-logo='1']{background:#fff;box-shadow:0 0 0 1px #EEE7DC;}",
+      ".pav img{display:block;max-width:22px;max-height:22px;object-fit:contain;}",
       ".pav-on{position:absolute;bottom:-1px;left:-1px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;",
       "  background:#5FA578;border:2px solid #fff;}",
       ".pop-n{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;}",
@@ -871,6 +936,20 @@ window.__gotchaSiteMount = function (opts) {
       }
     }
     launcherIcon = button.innerHTML;
+    if (!wa) {
+      whenLoaded(logoOf(widget, L.iconUrl), function (url) {
+        var img = document.createElement("img");
+        img.className = "mark-img";
+        img.alt = "";
+        img.src = url;
+        launcherIcon = img.outerHTML;
+        launcherLogo = true;
+        if (launcherOpen) return;
+        button.innerHTML = launcherIcon;
+        button.setAttribute("data-logo", "1");
+        decorateLauncher();
+      });
+    }
     button.addEventListener("click", function () {
       if (!app) return;
       if (launcherOpen && typeof app.close === "function") app.close();
@@ -1064,7 +1143,15 @@ window.__gotchaSiteMount = function (opts) {
     var av = document.createElement("span");
     av.className = "pav";
     av.setAttribute("aria-hidden", "true");
-    av.textContent = initialOf(widget);
+    var face = document.createTextNode(initialOf(widget));
+    av.appendChild(face);
+    whenLoaded(logoOf(widget, widget.ux && widget.ux.welcome && widget.ux.welcome.avatarUrl), function (url) {
+      var img = document.createElement("img");
+      img.alt = "";
+      img.src = url;
+      if (face.parentNode) av.replaceChild(img, face);
+      av.setAttribute("data-logo", "1");
+    });
     if (startData && startData.availability !== "offline") {
       var dot = document.createElement("span");
       dot.className = "pav-on";

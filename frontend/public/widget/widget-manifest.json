@@ -1,13 +1,17 @@
 {
-  "chat": "gotcha-shopify-chat.a5def87598f3.js",
-  "chatHash": "a5def87598f3",
-  "site": "gotcha-site.462a873622ee.js",
-  "siteHash": "462a873622ee",
-  "bootstrapHash": "0d87bfbe1398",
+  "chat": "gotcha-shopify-chat.5ab3283cee9f.js",
+  "chatHash": "5ab3283cee9f",
+  "site": "gotcha-site.0e775ace0e03.js",
+  "siteHash": "0e775ace0e03",
+  "bootstrapHash": "7e2bcefcac43",
   "previous": {
     "chat": [
+      "gotcha-shopify-chat.3bac43575abf.js",
+      "gotcha-shopify-chat.a5def87598f3.js",
       "gotcha-shopify-chat.fd5d86cae08b.js"
     ],
-    "site": []
+    "site": [
+      "gotcha-site.462a873622ee.js"
+    ]
   }
 }

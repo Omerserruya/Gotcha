@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { EXTERNAL_PAGE, parsePath, pathFor, type Lang } from '@/lib/pages';
+import { V8_PAGE_BY_KEY } from '@/lib/v8-pages';
 
 /**
  * Gives the design's in-page navigation a real address.
@@ -63,7 +64,21 @@ export default function UrlSync({
     const next: Lang = lang === 'he' ? 'he' : 'en';
     if (page === shown.current && next === shownLang.current) return;
 
-    const external = EXTERNAL_PAGE[page];
+    // Around a hand-written section, a change of LANGUAGE alone is the
+    // section's: it hears it through onLang and moves to its own document's
+    // other address. Navigating here as well sent the reader to the section's
+    // Hebrew home instead of the Hebrew version of the page, and raced the
+    // section's own navigation. Checked first: the chrome's page there is
+    // 'home', which is also a v8 page, and must not count as a page change.
+    if (alwaysNavigate && page === shown.current) {
+      shownLang.current = next;
+      return;
+    }
+
+    // Pages the v8 design draws are other documents (their own root layout),
+    // so moving to one is a page load, in the language being read. Swapping
+    // in place would draw this design's old version of the page instead.
+    const external = EXTERNAL_PAGE[page] ?? (V8_PAGE_BY_KEY[page] ? pathFor(page, next) : undefined);
 
     if (external || alwaysNavigate) {
       // A different document: the language travels with it as a path, not as
@@ -97,6 +112,11 @@ export default function UrlSync({
     const onPop = () => {
       const found = parsePath(window.location.pathname);
       if (!found) return; // Left the landing entirely; the browser handles it.
+      // Back or Forward onto an address the v8 design draws: load that document.
+      if (V8_PAGE_BY_KEY[found.page]) {
+        window.location.reload();
+        return;
+      }
       shown.current = found.page;
       shownLang.current = found.lang;
       onNavigate(found.page);

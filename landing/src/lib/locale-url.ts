@@ -38,3 +38,20 @@ export function localeHref(pathname: string, to: Locale): string {
 
   return `${prefix}${rest}` || '/';
 }
+
+/**
+ * Move a language-pinned page to its other-language address - and do nothing
+ * when it is already there.
+ *
+ * The chrome reports its language to the page on every mount (UrlSync's onLang
+ * effect), not only when the reader flips the toggle. A pinned page that
+ * answered every report with `location.href = localeHref(...)` sent a Hebrew
+ * page to its own address: a reload, which mounted the chrome, which reported
+ * Hebrew again. help.gotcha.co.il/he reloaded about 150 times in four seconds
+ * on production, as did every Hebrew help and legal page.
+ */
+export function goToLocale(to: Locale): void {
+  const href = localeHref(window.location.pathname, to);
+  if (href === window.location.pathname) return;
+  window.location.href = href;
+}

@@ -206,3 +206,22 @@ export function useConsent() {
 
   return { consent, pending, decide, reopen };
 }
+
+/**
+ * The same record, for code outside React: the v8 home's offer drawer, which
+ * waits for this card on a first visit so the two never open on top of each
+ * other. A stored decision means "already answered" - the drawer then behaves
+ * exactly as the design has it.
+ */
+export function consentDecided(): boolean {
+  if (current === undefined) current = readConsent();
+  return current != null;
+}
+
+/** Called after the visitor answers the card, with any choice. */
+export function onConsentDecided(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}

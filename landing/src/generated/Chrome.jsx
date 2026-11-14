@@ -230,9 +230,10 @@ export default function Chrome({ v: $v, children }) {
               </React.Fragment>
             ))}
             {"\n      "}
-            <a href={$A($v?.loginUrl)} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;border:1px solid #D8D2C6;color:#16150F;border-radius:13px;padding:15px;text-decoration:none")}>
+            <a href={$v?.loginUrl} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;border:1px solid #D8D2C6;color:#16150F;border-radius:13px;padding:15px;text-decoration:none")}>
               {"Login"}
             </a>
+            {"\n      "}
             <a href="#cta" onClick={$v?.mnavToggle} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:13px;padding:15px;text-decoration:none")}>
               {"Book a demo"}
             </a>
@@ -284,7 +285,7 @@ export default function Chrome({ v: $v, children }) {
                 {"\n        "}
                 <div style={$st(`margin-left:${$A($v?.navML)};margin-right:${$A($v?.navMR)};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none`)}>
                   {"\n          "}
-                  <a className="m-hide" href={$A($v?.loginUrl)} data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
+                  <a className="m-hide" href={$v?.loginUrl} data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
                     {"Login"}
                   </a>
                   {"\n          "}
@@ -428,7 +429,7 @@ export default function Chrome({ v: $v, children }) {
               {"\n        "}
               <div style={$st("display:flex;gap:10px;flex:none")}>
                 {"\n          "}
-                <a className="scpq" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
+                <a className="scpr" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
                   {"Start free"}
                 </a>
                 {"\n        "}
@@ -461,7 +462,7 @@ export default function Chrome({ v: $v, children }) {
                   {$L($v?.social).map((so, $index) => (
                     <React.Fragment key={$index}>
                       {"\n              "}
-                      <a className="scpr" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
+                      <a className="scps" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
                         <i data-lucide={so?.icon} width="17" height="17" stroke-width="2"></i>
                       </a>
                       {"\n            "}
@@ -500,7 +501,7 @@ export default function Chrome({ v: $v, children }) {
                         {$L(col?.items).map((li, $index) => (
                           <React.Fragment key={$index}>
                             {"\n                  "}
-                            <div className="scps" onClick={li?.click} style={$st("font-size:13px;color:#B9B4AC;line-height:1.35;cursor:pointer;transition:color .2s ease")}>
+                            <div className="scpt" onClick={li?.click} style={$st("font-size:13px;color:#B9B4AC;line-height:1.35;cursor:pointer;transition:color .2s ease")}>
                               {$I(li?.t)}
                             </div>
                             {"\n                "}
@@ -520,7 +521,7 @@ export default function Chrome({ v: $v, children }) {
             {"\n\n      "}
             <div className="m-foot-talk" onClick={$v?.goChat} style={$st("padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap")}>
               {"\n        "}
-              <div className="scpt" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
+              <div className="scpu" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
                 {"\n          "}
                 <span>
                   {"Let's talk"}
@@ -570,19 +571,19 @@ export default function Chrome({ v: $v, children }) {
                 {"Ramat Gan"}
               </span>
               {"\n        "}
-              <a className="scpu" href="/legal" style={$st("font-size:12px;color:#9A958D")}>
+              <a className="scpv" href="/legal" style={$st("font-size:12px;color:#9A958D")}>
                 {"Trust Center"}
               </a>
               {"\n        "}
-              <a className="scpu" href="/legal/privacy-policy" style={$st("font-size:12px;color:#9A958D")}>
+              <a className="scpv" href="/legal/privacy-policy" style={$st("font-size:12px;color:#9A958D")}>
                 {"Privacy"}
               </a>
               {"\n        "}
-              <a className="scpu" href="/legal/terms-of-service" style={$st("font-size:12px;color:#9A958D")}>
+              <a className="scpv" href="/legal/terms-of-service" style={$st("font-size:12px;color:#9A958D")}>
                 {"Terms"}
               </a>
               {"\n        "}
-              <a className="scpu" href="/legal/dpa" style={$st("font-size:12px;color:#9A958D")}>
+              <a className="scpv" href="/legal/dpa" style={$st("font-size:12px;color:#9A958D")}>
                 {"DPA"}
               </a>
               {"\n        "}

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex">
+<link rel="canonical" href="/">
+<meta http-equiv="refresh" content="0;url=/">
+<title>GOTCHA</title>
+<!-- /early-access was the old landing's sign-up page and is still linked from
+     ads. It now lands on the home in the same language, keeping the query
+     string (utm_*, fbclid) so the visit is still attributed. Served as a file
+     because the gateway config stays as it is. -->
+<script>location.replace('/' + location.search + location.hash);</script>
+</head>
+<body><a href="/">GOTCHA</a></body>
+</html>

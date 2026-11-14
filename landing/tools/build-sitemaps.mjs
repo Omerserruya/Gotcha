@@ -64,8 +64,13 @@ function pages(dir = OUT, prefix = '') {
  * `404` is excluded: it is a real file in the export and naming it in a sitemap
  * asks a crawler to index the error page.
  */
+/** Old addresses kept alive as redirects to the home; never in a sitemap. */
+const REDIRECT_PAGES = new Set(['early-access', 'he/early-access']);
+
 function classify(p) {
   if (p === '404' || p.endsWith('/404')) return null;
+  // Static redirects (public/early-access.html and its Hebrew twin) are not pages.
+  if (REDIRECT_PAGES.has(p)) return null;
   const root = p === 'index' ? '' : p;
 
   const m = (section) => {

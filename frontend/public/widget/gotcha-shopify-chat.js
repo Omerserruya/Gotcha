@@ -228,6 +228,9 @@ window.__gotchaShopifyChatApp = function (boot) {
       unavailable: "Unavailable",
       notPublished: "Not published",
       chooseOption: "Choose an option",
+      // A carousel card's way into the options; the line under a single card's chips.
+      openSize: "Choose a size", openColour: "Choose a colour", openOption: "Choose an option",
+      pickSizeColour: "Pick a size and colour", pickSize: "Pick a size", pickColour: "Pick a colour", pickOption: "Pick an option",
       quantity: "Quantity",
       poweredBy: "Powered by GOTCHA",
       name: "Name",
@@ -263,7 +266,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       showMore: "עוד {n}",
       connecting: "מתחברים…",
       reconnecting: "מתחברים מחדש…",
-      waitingAi: "מקלידים…",
+      waitingAi: "מקליד/ה…",
       waitingAgent: "מחברים אתכם לנציג…",
       agentJoined: "נציג הצטרף לשיחה.",
       talkToHuman: "לדבר עם נציג",
@@ -289,6 +292,8 @@ window.__gotchaShopifyChatApp = function (boot) {
       unavailable: "לא זמין",
       notPublished: "לא מפורסם",
       chooseOption: "בחרו אפשרות",
+      openSize: "בחירת מידה", openColour: "בחירת צבע", openOption: "בחירת אפשרות",
+      pickSizeColour: "בחרו מידה וצבע", pickSize: "בחרו מידה", pickColour: "בחרו צבע", pickOption: "בחרו אפשרות",
       quantity: "כמות",
       poweredBy: "מופעל על ידי GOTCHA",
       name: "שם",
@@ -526,6 +531,17 @@ window.__gotchaShopifyChatApp = function (boot) {
       return false;
     });
     return logo.replace(/[\s\-|·:,;\u2013\u2014]+$/, "");
+  }
+
+  /**
+   * The merchant's one logo (Omer, 2026-10-25): the welcome disc, the
+   * header and the site's bubble all draw appearance.logoUrl. A per-place
+   * image the legacy editor wrote (ux.welcome.avatarUrl) still wins where
+   * it is set. An empty string is no logo, never the page's own address.
+   */
+  function logoFor(override) {
+    var pick = function (raw) { return typeof raw === "string" && raw.trim() ? safeUrl(raw) : null; };
+    return pick(override) || pick(appearance.logoUrl);
   }
 
   // ── Styles ──────────────────────────────────────────────────────
@@ -806,9 +822,12 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".tag-dr{background:#fef3c7;color:#92400e;}",
     ".why{font-size:12.5px;color:#475569;padding:0 12px 10px;text-align:start;}",
     ".opts{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px;}",
-    ".opt-l{font-size:11.5px;color:#64748b;}",
+    ".opt-l{font-size:12px;font-weight:600;color:#334155;}",
+    // Chips that read as choices: a firmer edge, and firmer still while one is needed.
+    ".opts[data-need='1'] .chip{border-color:#94a3b8;}",
+    ".opts[data-need='1'] .opt-l{color:#0f172a;}",
     ".chips{display:flex;flex-wrap:wrap;gap:6px;}",
-    ".chip{border:1px solid #e2e8f0;background:#fff;border-radius:999px;padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
+    ".chip{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer;color:#0f172a;}",
     ".chip[aria-pressed='true']{border-color:" + brand + ";background:" + brand + ";color:" + onBrand + ";}",
     ".chip:disabled{opacity:.4;cursor:not-allowed;text-decoration:line-through;}",
     ".chip:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
@@ -817,7 +836,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".qty-b:disabled{opacity:.4;cursor:not-allowed;}",
     ".qty-v{min-width:22px;text-align:center;font-size:14px;font-variant-numeric:tabular-nums;}",
     ".acts{display:flex;gap:8px;padding:0 12px 12px;}",
-    ".btn{flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
+    // border-box: an <a> is content-box by default, so "View product" at
+    // width:100% overflowed its card by its padding and lost its edge.
+    ".btn{box-sizing:border-box;flex:1 1 0;min-width:0;border-radius:11px;padding:9px 10px;font:inherit;font-size:13.5px;font-weight:600;",
     "  cursor:pointer;text-align:center;text-decoration:none;border:1px solid transparent;white-space:nowrap;",
     "  overflow:hidden;text-overflow:ellipsis;}",
     ".btn-p{background:" + brand + ";color:" + onBrand + ";}",
@@ -832,10 +853,15 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".cart-err{font-size:12.5px;color:#b91c1c;padding:0 12px 12px;}",
 
     // Carousel
-    ".car{position:relative;max-width:100%;}",
+    // Full width: cards sized as halves of a shrink-to-fit strip collapse to their minimum.
+    ".car{position:relative;width:100%;max-width:100%;}",
     ".car-tr{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;",
     "  scrollbar-width:thin;-webkit-overflow-scrolling:touch;}",
-    ".car-tr>*{flex:0 0 186px;scroll-snap-align:start;max-width:186px;}",
+    // Two whole cards share the strip (Omer, 2026-10-25): a 186px card
+    // peeking past the end edge cut a Latin title's START in Hebrew
+    // ("…tton Trench") and read as broken. A third is a scroll away, said
+    // by the arrows and the fade.
+    ".car-tr>*{box-sizing:border-box;flex:0 0 calc((100% - 10px) / 2);max-width:calc((100% - 10px) / 2);min-width:150px;scroll-snap-align:start;}",
     ".car-tr .card{max-width:100%;}",
     ".car-tr .card-top{flex-direction:column;gap:9px;padding:10px;}",
     ".car-tr .card-im{width:100%;height:112px;}",
@@ -853,11 +879,13 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".car-tr .btn{font-size:12.5px;padding:8px 8px;flex:0 0 auto;width:100%;}",
     // Right-edge fade: without it a scrollable strip looks like a clipped
     // one, and shoppers do not swipe what they cannot tell is swipeable.
-    ".car::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
+    // Only while there is more to scroll to: over a whole last card it is a smudge.
+    ".car[data-more='1']::after{content:'';position:absolute;top:0;bottom:14px;" + (dir === "rtl" ? "left" : "right") + ":0;",
     "  width:26px;pointer-events:none;background:linear-gradient(to " + (dir === "rtl" ? "left" : "right") + ",rgba(255,255,255,0),#fff);}",
     ".car-nav{display:flex;gap:6px;justify-content:flex-end;padding:0 2px;}",
     ".car-n{width:28px;height:28px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#475569;}",
     ".car-n:focus-visible{outline:2px solid " + brand + ";outline-offset:2px;}",
+    ".car[data-scroll='0'] .car-nav{display:none;}",
 
     // Composer
     // A one-line composer by default. It was 115px of a 640px panel -
@@ -980,6 +1008,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .hd-av{position:relative;width:38px;height:38px;border-radius:50%;background:" + brand + ";color:" + inkOn(brand) + ";",
     "  display:flex;align-items:center;justify-content:center;overflow:visible;",
     "  font:500 22px/1 'Cormorant Garamond',Georgia,'Times New Roman',serif;}",
+    // A logo sits on white, as on the disc: a merchant's mark is drawn for a light ground.
+    ".panel[data-look='gotcha'] .hd-av[data-logo]{background:#fff;box-shadow:0 0 0 1px #EEE7DC;}",
+    ".panel[data-look='gotcha'] .hd-av img{max-width:26px;max-height:26px;object-fit:contain;}",
     ".panel[data-look='gotcha'] .hd-dot{position:absolute;bottom:0;left:0;width:11px;height:11px;box-sizing:border-box;border-radius:50%;",
     "  background:#5FA578;border:2px solid #FBF8F3;}",
     ".panel[data-look='gotcha'] .hd-nm{font-size:15.5px;font-weight:600;line-height:1.2;letter-spacing:-.005em;color:#2B2622;}",
@@ -1016,6 +1047,8 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".panel[data-look='gotcha'] .disc-wm[data-fit='m']{font-size:13px;}",
     ".panel[data-look='gotcha'] .disc-wm[data-fit='s']{font-size:11px;letter-spacing:.12em;}",
     ".panel[data-look='gotcha'] .disc-wm[data-fit='initials']{font-size:30px;letter-spacing:.04em;}",
+    // Tracking is for Latin capitals: a Hebrew or Arabic wordmark is never letter-spaced.
+    ".panel[data-look='gotcha'] .disc-wm[data-script='rtl']{letter-spacing:0;}",
     ".panel[data-look='gotcha'] .disc-on{position:absolute;bottom:4px;left:4px;width:20px;height:20px;box-sizing:border-box;border-radius:50%;",
     "  background:#4FB06A;border:3px solid #fff;box-shadow:0 0 0 1px rgba(79,176,106,.35);}",
     ".panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{content:'';position:absolute;inset:-3px;border-radius:50%;",
@@ -1077,8 +1110,14 @@ window.__gotchaShopifyChatApp = function (boot) {
     // Product cards (design 7): warm rules, the main colour's ink on its buttons.
     ".panel[data-look='gotcha'] .card{border-color:#ECE4D8;border-radius:14px;}",
     ".panel[data-look='gotcha'] .btn-p{background:" + brand + ";color:" + inkOn(brand) + ";border-radius:9px;}",
+    // The rule above outranks .btn-p:disabled: a disabled Add to cart was
+    // the same beige as an enabled one. "Not yet" is an outline here too.
+    ".panel[data-look='gotcha'] .btn-p:disabled{background:#fff;color:#A99C8E;border-color:#E3DACE;}",
     ".panel[data-look='gotcha'] .btn-s{border-color:#E3DACE;color:#2B2622;border-radius:9px;}",
-    ".panel[data-look='gotcha'] .chip{border-color:#E3DACE;}",
+    ".panel[data-look='gotcha'] .chip{border-color:#CFC4B6;}",
+    ".panel[data-look='gotcha'] .opts[data-need='1'] .chip{border-color:#A99C8E;}",
+    ".panel[data-look='gotcha'] .opt-l{color:#5C5047;}",
+    ".panel[data-look='gotcha'] .opts[data-need='1'] .opt-l{color:#2B2622;}",
     ".panel[data-look='gotcha'] .chip[aria-pressed='true']{color:" + inkOn(brand) + ";}",
     "@media (prefers-reduced-motion: reduce){.panel[data-look='gotcha'] .hd-dot::after,.panel[data-look='gotcha'] .disc-on::after{animation:none;opacity:0}.panel[data-look='gotcha'] .q,.panel[data-look='gotcha'] .tl{transition:none}}",
   ].join("\n"); }
@@ -1111,8 +1150,23 @@ window.__gotchaShopifyChatApp = function (boot) {
   var headerAvatar;
   if (LOOK === "gotcha") {
     // Design 7: the brand's initial on the main colour, and the dot while someone answers.
-    headerAvatar = el("div", "hd-av", brandInitial());
+    // The logo when there is one; a dead link falls back to the initial.
+    headerAvatar = el("div", "hd-av");
     attr(headerAvatar, { "aria-hidden": "true" });
+    var headLogo = logoFor(widget.ux && widget.ux.welcome && widget.ux.welcome.avatarUrl);
+    if (headLogo) {
+      var headImg = document.createElement("img");
+      headImg.alt = "";
+      headImg.src = headLogo;
+      headImg.onerror = function () {
+        headerAvatar.removeAttribute("data-logo");
+        if (headImg.parentNode) headerAvatar.replaceChild(document.createTextNode(brandInitial()), headImg);
+      };
+      attr(headerAvatar, { "data-logo": "1" });
+      headerAvatar.appendChild(headImg);
+    } else {
+      headerAvatar.appendChild(document.createTextNode(brandInitial()));
+    }
     if (boot.availability !== "offline") headerAvatar.appendChild(el("span", "hd-dot"));
   } else if (logo) {
     headerAvatar = document.createElement("img");
@@ -1832,9 +1886,10 @@ window.__gotchaShopifyChatApp = function (boot) {
       var text = fit === "initials" ? brandInitial() : mark;
       var span = el("span", "disc-wm", text);
       attr(span, { dir: "auto", "data-fit": fit });
+      if (/[\u0590-\u05FF\u0600-\u06FF]/.test(text)) attr(span, { "data-script": "rtl" });
       return span;
     };
-    var logoUrl = safeUrl(appearance.logoUrl);
+    var logoUrl = logoFor(W && W.avatarUrl);
     if (logoUrl) {
       var img = document.createElement("img");
       img.alt = "";
@@ -2092,6 +2147,21 @@ window.__gotchaShopifyChatApp = function (boot) {
   // ── Product card ────────────────────────────────────────────────
 
   /**
+   * What the shopper has to choose, in words: size, colour, both, or an
+   * option, from the store's own option names (WooCommerce attributes,
+   * Shopify options), in any of the languages a store names them in.
+   */
+  function optionWords(product) {
+    var names = product.optionNames || [];
+    var size = names.some(function (n) { return /size|מידה|גודל|taille|talla|größe|grösse/i.test(String(n)); });
+    var colour = names.some(function (n) { return /colou?r|צבע|couleur|farbe/i.test(String(n)); });
+    return {
+      open: size ? T.openSize : colour ? T.openColour : T.openOption,
+      pick: size && colour ? T.pickSizeColour : size ? T.pickSize : colour ? T.pickColour : T.pickOption,
+    };
+  }
+
+  /**
    * @param compact  Rendered inside a carousel. A shortlist entry is a
    *   choice between products, not a configurator: the variant picker
    *   and quantity stepper are dropped, and Add to Cart only appears
@@ -2106,6 +2176,9 @@ window.__gotchaShopifyChatApp = function (boot) {
     // to the other side mid-conversation. Only the text inside it -
     // title, reason - resolves per string.
     attr(card, { dir: dir });
+    // ★ A carousel card that needs a choice opens its own options in place
+    // (Omer, 2026-10-25: a variable product showed no way to buy at all).
+    var expanded = false;
     var vState = {
       variantId: initialVariant(product),
       quantity: 1,
@@ -2116,6 +2189,7 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     function paint() {
       clear(card);
+      var compactNow = compact && !expanded;
       var variant = findVariant(product, vState.variantId);
 
       var top = el("div", "card-top");
@@ -2182,11 +2256,17 @@ window.__gotchaShopifyChatApp = function (boot) {
       // that could ever enable it. The variant titles are always present,
       // so there is always something to label the chips with.
       var needsChoice = product.variants.length > 1;
-      if (needsChoice && !compact) {
+      // Nothing chosen yet on a card that sells: the chips are the way in, and say so.
+      var mustPick = needsChoice && !variant && addToCartAllowed && features.addToCart;
+      if (needsChoice && !compactNow) {
         var opts = el("div", "opts");
-        opts.appendChild(el("div", "opt-l", T.chooseOption));
+        if (mustPick) attr(opts, { "data-need": "1" });
+        // One line over the chips that says what to pick ("בחרו מידה וצבע"),
+        // never a generic label plus a second hint saying the same.
+        var pickWords = optionWords(product).pick;
+        opts.appendChild(el("div", "opt-l", pickWords));
         var chips = el("div", "chips");
-        attr(chips, { role: "group", "aria-label": T.chooseOption });
+        attr(chips, { role: "group", "aria-label": pickWords });
         product.variants.forEach(function (v) {
           var chip = el("button", "chip", v.title);
           attr(chip, {
@@ -2218,7 +2298,7 @@ window.__gotchaShopifyChatApp = function (boot) {
         !variant.requiresSellingPlan &&
         product.published !== false;
 
-      if (canAdd && !compact) {
+      if (canAdd && !compactNow) {
         var qtyRow = el("div", "qty");
         var minus = el("button", "qty-b", "−");
         attr(minus, { type: "button", "aria-label": T.quantity + " −" });
@@ -2244,8 +2324,17 @@ window.__gotchaShopifyChatApp = function (boot) {
       // variable product whose card had no variants and available:false
       // showed Add to Cart, and it failed): it is offered when this variant
       // can be bought now, or when the picker above holds one that can.
-      var choosable = needsChoice && product.variants.some(function (v) { return v.available && !v.requiresSellingPlan; });
-      var offerAdd = addToCartAllowed && features.addToCart && (canAdd || (!compact && choosable));
+      var anyBuyable = (product.variants || []).some(function (v) { return v.available && !v.requiresSellingPlan; });
+      var offerAdd = addToCartAllowed && features.addToCart && (canAdd || (!compactNow && needsChoice && anyBuyable));
+      if (!offerAdd && compactNow && needsChoice && addToCartAllowed && features.addToCart && anyBuyable && product.published !== false) {
+        var choose = el("button", "btn btn-p", optionWords(product).open);
+        attr(choose, { type: "button", "data-act": "choose-options" });
+        on(choose, "click", function () {
+          expanded = true;
+          paint();
+        });
+        acts.appendChild(choose);
+      }
       if (offerAdd) {
         var add = el("button", "btn btn-p", vState.busy ? T.adding : T.addToCart);
         attr(add, { type: "button" });
@@ -2267,8 +2356,8 @@ window.__gotchaShopifyChatApp = function (boot) {
         ok.appendChild(el("span", null, "✓ " + T.added));
         card.appendChild(ok);
         var after = el("div", "acts");
-        // Only where the cart page is known (the storefront's; a web chat
-        // store's is not, so it offers none rather than a guess).
+        // Only where the cart page is known: the storefront's, or the one a
+        // web chat host names (gotcha-site.js: a WooCommerce store's /cart/).
         if (vState.cartPage) {
           var cart = el("a", "btn btn-s", T.viewCart);
           attr(cart, { href: vState.cartPage, target: "_top" });
@@ -2388,6 +2477,19 @@ window.__gotchaShopifyChatApp = function (boot) {
 
     wrap.appendChild(strip);
     wrap.appendChild(nav);
+    // Whether the strip scrolls at all, and whether more lies past the end
+    // edge (scrollLeft is negative in RTL: its size is the distance).
+    function measure() {
+      var max = strip.scrollWidth - strip.clientWidth;
+      attr(wrap, {
+        "data-scroll": max > 4 ? "1" : "0",
+        "data-more": max - Math.abs(strip.scrollLeft) > 4 ? "1" : "0",
+      });
+    }
+    on(strip, "scroll", measure);
+    // Measured once it is on the page; a strip not laid out yet scrolls nowhere.
+    attr(wrap, { "data-scroll": "1", "data-more": "1" });
+    setTimeout(measure, 0);
     return wrap;
   }
 
@@ -2816,13 +2918,21 @@ window.__gotchaShopifyChatApp = function (boot) {
     submit(textarea.value);
   });
   on(humanBtn, "click", function () {
+    S.error = null;
+    renderBanner();
     ensureConversation()
       .then(function () { return api("/handoff", {}); })
       .then(function () {
         S.handedOver = true;
         render();
       })
-      .catch(function () {});
+      // Refused (the button is off, a session that is not theirs) or failed:
+      // the widget's error, never "connecting you" for a handover that did
+      // not happen.
+      .catch(function () {
+        S.error = T.failed;
+        renderBanner();
+      });
   });
 
   function scrollToEnd() {

@@ -231,9 +231,10 @@ export default function Template({ v: $v }) {
             </React.Fragment>
           ))}
           {"\n      "}
-          <a href={$A($v?.loginUrl)} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;border:1px solid #D8D2C6;color:#16150F;border-radius:13px;padding:15px;text-decoration:none")}>
+          <a href={$v?.loginUrl} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;border:1px solid #D8D2C6;color:#16150F;border-radius:13px;padding:15px;text-decoration:none")}>
             {"Login"}
           </a>
+          {"\n      "}
           <a href="#cta" onClick={$v?.mnavToggle} style={$st("margin-top:18px;text-align:center;font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:13px;padding:15px;text-decoration:none")}>
             {"Book a demo"}
           </a>
@@ -285,7 +286,7 @@ export default function Template({ v: $v }) {
               {"\n        "}
               <div style={$st(`margin-left:${$A($v?.navML)};margin-right:${$A($v?.navMR)};padding-inline-start:12px;display:flex;align-items:center;gap:10px;flex:none`)}>
                 {"\n          "}
-                <a className="m-hide" href={$A($v?.loginUrl)} data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
+                <a className="m-hide" href={$v?.loginUrl} data-nav-secondary="" style={$st("font-size:13.5px;border-bottom:1px solid #C8C2B6;padding-bottom:1px;white-space:nowrap")}>
                   {"Login"}
                 </a>
                 {"\n          "}
@@ -737,32 +738,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="0" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c0?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c0?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c0?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c0?.submit} onKeyDown={$v?.leadPort?.c0?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c0?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c0?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c0?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c0?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -817,11 +857,11 @@ export default function Template({ v: $v }) {
               {"\n          "}
               <div style={$st(`display:flex;align-items:center;gap:12px;margin-top:28px;justify-content:${$A($v?.feat?.heroJustify)}`)}>
                 {"\n            "}
-                <a className="scpa" href="#cta" style={$st(`font-size:15px;font-weight:500;background:${$A($v?.feat?.ctaBg)};color:${$A($v?.feat?.ctaFg)};border:1px solid ${$A($v?.feat?.ctaBg)};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)`)}>
+                <a className="scpb" href="#cta" style={$st(`font-size:15px;font-weight:500;background:${$A($v?.feat?.ctaBg)};color:${$A($v?.feat?.ctaFg)};border:1px solid ${$A($v?.feat?.ctaBg)};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)`)}>
                   {"Start free"}
                 </a>
                 {"\n            "}
-                <a className="scpa" href="#cta" style={$st(`font-size:15px;font-weight:500;color:${$A($v?.feat?.heroFg)};border:1px solid ${$A($v?.feat?.cta2Bd)};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)`)}>
+                <a className="scpb" href="#cta" style={$st(`font-size:15px;font-weight:500;color:${$A($v?.feat?.heroFg)};border:1px solid ${$A($v?.feat?.cta2Bd)};border-radius:12px;padding:14px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)`)}>
                   {"Book a demo"}
                 </a>
                 {"\n          "}
@@ -1154,7 +1194,7 @@ export default function Template({ v: $v }) {
                       {$L($v?.feat?.tw?.qs).map((q, $index) => (
                         <React.Fragment key={$index}>
                           {"\n                    "}
-                          <div className="scpb" onClick={q?.pick} style={$st(`cursor:pointer;font-size:12.5px;line-height:1.4;background:${$A(q?.bg)};border:1px solid ${$A(q?.bd)};color:${$A(q?.fg)};border-radius:10px;padding:9px 11px;transition:border-color .2s ease,background .2s ease`)}>
+                          <div className="scpc" onClick={q?.pick} style={$st(`cursor:pointer;font-size:12.5px;line-height:1.4;background:${$A(q?.bg)};border:1px solid ${$A(q?.bd)};color:${$A(q?.fg)};border-radius:10px;padding:9px 11px;transition:border-color .2s ease,background .2s ease`)}>
                             {$I(q?.t)}
                           </div>
                           {"\n                  "}
@@ -2038,7 +2078,7 @@ export default function Template({ v: $v }) {
                   {"\n\n              "}
                   <div style={$st("margin-top:auto;padding:0 15px 14px")}>
                     {"\n                "}
-                    <span className="scpc" onClick={$v?.feat?.tr?.replay} style={$st("display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease")}>
+                    <span className="scpd" onClick={$v?.feat?.tr?.replay} style={$st("display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-size:12px;font-weight:500;color:#D8D3CA;border:1px solid #2F2D28;border-radius:10px;padding:10px 0;transition:border-color .2s ease,color .2s ease")}>
                       <i data-lucide="rotate-ccw" width="13" height="13" stroke-width="2"></i>
                       {$I($v?.feat?.tr?.replayLabel)}
                     </span>
@@ -2866,7 +2906,7 @@ export default function Template({ v: $v }) {
                     {$L($v?.feat?.dir?.apps).map((ap, $index) => (
                       <React.Fragment key={$index}>
                         {"\n                  "}
-                        <div className="scpd" style={$st("position:relative;overflow:hidden;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.75,.2,1),background .3s ease")}>
+                        <div className="scpe" style={$st("position:relative;overflow:hidden;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.75,.2,1),background .3s ease")}>
                           {"\n                    "}
                           <div style={$st("display:flex;align-items:center;gap:12px")}>
                             {"\n                      "}
@@ -2964,7 +3004,7 @@ export default function Template({ v: $v }) {
               {$L($v?.feat?.others).map((o, $index) => (
                 <React.Fragment key={$index}>
                   {"\n            "}
-                  <div className="scpe" onClick={o?.go} style={$st("border-bottom:1px solid #E8E3D9;padding:15px 2px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:padding .22s cubic-bezier(.2,.75,.2,1)")}>
+                  <div className="scpf" onClick={o?.go} style={$st("border-bottom:1px solid #E8E3D9;padding:15px 2px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:padding .22s cubic-bezier(.2,.75,.2,1)")}>
                     {"\n              "}
                     <span style={$st(`color:${$A(o?.ic)};display:flex;flex:none`)}>
                       <i data-lucide={o?.icon} width="17" height="17" stroke-width="1.9"></i>
@@ -2974,7 +3014,7 @@ export default function Template({ v: $v }) {
                       {$I(o?.t)}
                     </span>
                     {"\n              "}
-                    <span className="scpf" style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};color:#B5AFA4;display:flex;flex:none;transition:transform .22s cubic-bezier(.2,.75,.2,1),color .22s ease`)}>
+                    <span className="scpg" style={$st(`margin-left:${$A($v?.mlAuto)};margin-right:${$A($v?.mrAuto)};color:#B5AFA4;display:flex;flex:none;transition:transform .22s cubic-bezier(.2,.75,.2,1),color .22s ease`)}>
                       <i data-lucide="arrow-up-right" width="16" height="16" stroke-width="2"></i>
                     </span>
                     {"\n            "}
@@ -3005,32 +3045,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="1" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c1?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c1?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c1?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c1?.submit} onKeyDown={$v?.leadPort?.c1?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c1?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c1?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c1?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c1?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -3070,11 +3149,11 @@ export default function Template({ v: $v }) {
                 {"\n            "}
                 <div style={$st("display:flex;align-items:center;justify-content:center;gap:12px;margin-top:30px")}>
                   {"\n              "}
-                  <a className="scpa" href="#cta" style={$st("font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:12px;padding:15px 26px;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
+                  <a className="scpb" href="#cta" style={$st("font-size:15px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:12px;padding:15px 26px;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
                     {"Replay my last month"}
                   </a>
                   {"\n              "}
-                  <a className="scpa" href="#compare" style={$st("font-size:15px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:12px;padding:15px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
+                  <a className="scpb" href="#compare" style={$st("font-size:15px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:12px;padding:15px 22px;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
                     {"See the comparison"}
                   </a>
                   {"\n            "}
@@ -3757,32 +3836,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="2" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c2?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c2?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c2?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c2?.submit} onKeyDown={$v?.leadPort?.c2?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c2?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c2?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c2?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c2?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -3930,7 +4048,7 @@ export default function Template({ v: $v }) {
                 {$L($v?.help?.pop).map((p, $index) => (
                   <React.Fragment key={$index}>
                     {"\n              "}
-                    <div className="scpg" style={$st("padding:15px 26px;border-bottom:1px solid #F7F5F1;display:flex;align-items:center;gap:16px;cursor:pointer")}>
+                    <div className="scph" style={$st("padding:15px 26px;border-bottom:1px solid #F7F5F1;display:flex;align-items:center;gap:16px;cursor:pointer")}>
                       {"\n                "}
                       <span style={$st("font-size:14px;flex:1;line-height:1.4")}>
                         {$I(p?.t)}
@@ -4144,7 +4262,7 @@ export default function Template({ v: $v }) {
                 {"\n            \n          "}
               </div>
               {"\n\n          "}
-              <div className="scph" onClick={$v?.blog?.featured?.open} style={$st("margin-top:44px;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:22px;overflow:hidden;display:flex;cursor:pointer;transition:border-color .2s ease,box-shadow .2s ease")}>
+              <div className="scpi" onClick={$v?.blog?.featured?.open} style={$st("margin-top:44px;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:22px;overflow:hidden;display:flex;cursor:pointer;transition:border-color .2s ease,box-shadow .2s ease")}>
                 {"\n            "}
                 <div style={$st("width:44%;flex:none;position:relative;background:#16150F;min-height:340px;overflow:hidden")}>
                   {"\n              "}
@@ -4205,7 +4323,7 @@ export default function Template({ v: $v }) {
                 {$L($v?.blog?.rest).map((p, $index) => (
                   <React.Fragment key={$index}>
                     {"\n              "}
-                    <div className="scpi" onClick={p?.open} style={$st("background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:transform .2s cubic-bezier(.2,.75,.2,1),border-color .2s ease,box-shadow .2s ease")}>
+                    <div className="scpj" onClick={p?.open} style={$st("background:#FFFFFF;border:1px solid #E8E3D9;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:transform .2s cubic-bezier(.2,.75,.2,1),border-color .2s ease,box-shadow .2s ease")}>
                       {"\n                "}
                       <div style={$st("font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#A29B8E")}>
                         {$I(p?.tag)}
@@ -4534,32 +4652,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="3" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c3?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c3?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c3?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c3?.submit} onKeyDown={$v?.leadPort?.c3?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c3?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c3?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c3?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c3?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -4672,7 +4829,7 @@ export default function Template({ v: $v }) {
                 {"\n            "}
                 <div style={$st("display:flex;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap")}>
                   {"\n              "}
-                  <div className="scpj" style={$st("font-size:14px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:11px;padding:13px 22px;cursor:pointer;transition:background .2s ease,transform .2s cubic-bezier(.2,.7,.2,1)")}>
+                  <div className="scpk" style={$st("font-size:14px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:11px;padding:13px 22px;cursor:pointer;transition:background .2s ease,transform .2s cubic-bezier(.2,.7,.2,1)")}>
                     {"Send it over"}
                   </div>
                   {"\n              "}
@@ -4734,32 +4891,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Send it to careers@gotcha.co.il"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {"A founder reads every one, and you get an answer either way."}
-                </div>
-                {"\n          "}
+              <div data-lead-card="4" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c4?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Send it to careers@gotcha.co.il"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c4?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c4?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c4?.submit} onKeyDown={$v?.leadPort?.c4?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {"A founder reads every one, and you get an answer either way."}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c4?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c4?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c4?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c4?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -5065,32 +5261,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
                 <div style={$st("flex:1 1 auto;max-width:940px;background:#FFFFFF;color:#16150F;border-radius:22px;overflow:hidden;box-shadow:0 26px 64px rgba(22,21,15,.26);display:flex;flex-wrap:wrap")}>
                   {"\n            "}
-                  <div style={$st("flex:1 1 380px;min-width:0;padding:34px 36px 36px;display:flex;flex-direction:column;gap:13px")}>
-                    {"\n              "}
-                    <div style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em")}>
-                      {$I($v?.op?.formTitle)}
-                    </div>
-                    {"\n              "}
-                    <div style={$st("font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px")}>
-                      {$I($v?.op?.formLead)}
-                    </div>
-                    {"\n              "}
-                    <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                    {"\n              "}
-                    <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                    {"\n              "}
-                    <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                    {"\n              "}
-                    <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                    {"\n              "}
-                    <div className="scpk" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")}>
-                      {$I($v?.op?.submit)}
-                    </div>
-                    {"\n              "}
-                    <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                      {$I($v?.op?.formFoot)}
-                    </div>
-                    {"\n            "}
+                  <div data-lead-card="5" style={$st("flex:1 1 380px;min-width:0;padding:34px 36px 36px;display:flex;flex-direction:column;gap:13px")}>
+                    {$v?.leadPort?.c5?.notSent ? (
+                      <>
+                      {"\n              "}
+                      <div style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em")}>
+                        {$I($v?.op?.formTitle)}
+                      </div>
+                      {"\n              "}
+                      <div style={$st("font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px")}>
+                        {$I($v?.op?.formLead)}
+                      </div>
+                      {"\n              "}
+                      <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                      {"\n              "}
+                      <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                      {"\n              "}
+                      <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                      {"\n              "}
+                      <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                      {"\n              "}
+                      {$v?.leadPort?.c5?.err ? (
+                        <>
+                        <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                          {$I($v?.leadPort?.c5?.errText)}
+                        </div>
+                        </>
+                      ) : null}
+                      <div className="scpl" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c5?.submit} onKeyDown={$v?.leadPort?.c5?.key}>
+                        {$I($v?.op?.submit)}
+                      </div>
+                      {"\n              "}
+                      <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                        {$I($v?.op?.formFoot)}
+                      </div>
+                      {"\n            "}
+                      </>
+                    ) : null}
+                    {$v?.leadPort?.c5?.sent ? (
+                      <>
+                      {"\n            "}
+                      <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                        {"\n              "}
+                        <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                          <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                        </span>
+                        {"\n              "}
+                        <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                          {$I($v?.leadPort?.c5?.okTitle)}
+                        </div>
+                        {"\n              "}
+                        <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                          {$I($v?.leadPort?.c5?.okBody)}
+                        </div>
+                        {"\n              "}
+                        <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                          {$I($v?.leadPort?.c5?.pick)}
+                          <span>
+                            {"←"}
+                          </span>
+                        </a>
+                        {"\n            "}
+                      </div>
+                      {"\n          "}
+                      </>
+                    ) : null}
                   </div>
                   {"\n            "}
                   <div style={$st("flex:1 1 320px;min-width:0;background:#16150F;color:#F7F5F1;padding:36px 38px;display:flex;flex-direction:column;gap:16px")}>
@@ -5323,32 +5558,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("flex:0 0 380px;max-width:100%;background:#FFFFFF;color:#16150F;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:15px;font-weight:600;letter-spacing:-0.014em")}>
-                  {$I($v?.op?.formTitle)}
-                </div>
-                {"\n            "}
-                {$L($v?.op?.fields).map((fd, $index) => (
-                  <React.Fragment key={$index}>
+              <div data-lead-card="6" style={$st("flex:0 0 380px;max-width:100%;background:#FFFFFF;color:#16150F;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c6?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:15px;font-weight:600;letter-spacing:-0.014em")}>
+                    {$I($v?.op?.formTitle)}
+                  </div>
+                  {"\n            "}
+                  {$L($v?.op?.fields).map((fd, $index) => (
+                    <React.Fragment key={$index}>
+                      {"\n              "}
+                      <input type="text" placeholder={fd} style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                      {"\n            "}
+                    </React.Fragment>
+                  ))}
+                  {"\n            "}
+                  {$v?.leadPort?.c6?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c6?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scpl" style={$st("text-align:center;font-size:14.5px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c6?.submit} onKeyDown={$v?.leadPort?.c6?.key}>
+                    {$I($v?.op?.submit)}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.op?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c6?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
                     {"\n              "}
-                    <input type="text" placeholder={fd} style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c6?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c6?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c6?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
                     {"\n            "}
-                  </React.Fragment>
-                ))}
-                {"\n            "}
-                <div className="scpk" style={$st("text-align:center;font-size:14.5px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")}>
-                  {$I($v?.op?.submit)}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.op?.formFoot)}
-                </div>
-                {"\n          "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -5411,36 +5685,75 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:400px;flex:none;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:28px 30px 30px;display:flex;flex-direction:column;gap:12px;box-shadow:0 22px 50px rgba(22,21,15,.09)")}>
-                {"\n            "}
-                <div style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em")}>
-                  {$I($v?.chat?.formTitle)}
-                </div>
-                {"\n            "}
-                <div style={$st("font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px")}>
-                  {$I($v?.chat?.formNote)}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scpk" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")}>
-                  {$I($v?.chat?.submit)}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="7" style={$st("width:400px;flex:none;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:28px 30px 30px;display:flex;flex-direction:column;gap:12px;box-shadow:0 22px 50px rgba(22,21,15,.09)")}>
+                {$v?.leadPort?.c7?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:17px;font-weight:600;letter-spacing:-0.018em")}>
+                    {$I($v?.chat?.formTitle)}
+                  </div>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;line-height:1.55;color:#5B564D;margin-bottom:2px")}>
+                    {$I($v?.chat?.formNote)}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c7?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c7?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scpl" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c7?.submit} onKeyDown={$v?.leadPort?.c7?.key}>
+                    {$I($v?.chat?.submit)}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c7?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c7?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c7?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c7?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -5497,40 +5810,79 @@ export default function Template({ v: $v }) {
             {"\n        "}
             <div style={$st("display:flex;gap:12px;align-items:stretch")}>
               {"\n          "}
-              <div style={$st("flex:1.2;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:26px 30px;display:flex;flex-direction:column;gap:14px")}>
-                {"\n            "}
-                <div>
-                  {"\n              "}
-                  <div style={$st("font-size:20px;font-weight:600;letter-spacing:-0.02em")}>
-                    {$I($v?.chat?.formTitle)}
-                  </div>
-                  {"\n              "}
-                  <div style={$st("font-size:13px;color:#8E887C;margin-top:5px")}>
-                    {$I($v?.chat?.formNote)}
+              <div data-lead-card="8" style={$st("flex:1.2;background:#FFFFFF;border:1px solid #E8E3D9;border-radius:20px;padding:26px 30px;display:flex;flex-direction:column;gap:14px")}>
+                {$v?.leadPort?.c8?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div>
+                    {"\n              "}
+                    <div style={$st("font-size:20px;font-weight:600;letter-spacing:-0.02em")}>
+                      {$I($v?.chat?.formTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:13px;color:#8E887C;margin-top:5px")}>
+                      {$I($v?.chat?.formNote)}
+                    </div>
+                    {"\n            "}
                   </div>
                   {"\n            "}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scpk" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")}>
-                  {$I($v?.chat?.submit)}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c8?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c8?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scpl" style={$st("text-align:center;font-size:15px;font-weight:600;background:#C4552F;color:#FFFFFF;border-radius:11px;padding:14px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c8?.submit} onKeyDown={$v?.leadPort?.c8?.key}>
+                    {$I($v?.chat?.submit)}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c8?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c8?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c8?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c8?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n          "}
               <div style={$st("flex:1;background:#16150F;color:#F7F5F1;border-radius:20px;overflow:hidden")}>
@@ -5625,32 +5977,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="9" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c9?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c9?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c9?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c9?.submit} onKeyDown={$v?.leadPort?.c9?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c9?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c9?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c9?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c9?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -6044,7 +6435,7 @@ export default function Template({ v: $v }) {
                   {"If your volumes, channels, limits or contract terms do not fit these plans, we will configure one that does. A custom plan sets its own capabilities, numeric limits, credit allocation and chat and voice volumes, on commercial terms agreed with you."}
                 </div>
                 {"\n            "}
-                <div className="scpa" onClick={$v?.goChat} style={$st("margin-top:26px;font-size:14.5px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:14px 24px;width:max-content;cursor:pointer;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
+                <div className="scpb" onClick={$v?.goChat} style={$st("margin-top:26px;font-size:14.5px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:14px 24px;width:max-content;cursor:pointer;transition:transform .2s cubic-bezier(.2,.7,.2,1)")}>
                   {"Contact sales"}
                 </div>
                 {"\n          "}
@@ -6144,32 +6535,71 @@ export default function Template({ v: $v }) {
                 {"\n          "}
               </div>
               {"\n          "}
-              <div style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-                {"\n            "}
-                <div style={$st("font-size:13px;font-weight:600")}>
-                  {"Get a demo on your own business"}
-                </div>
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <input className="scp7" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-                {"\n            "}
-                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                  {"Leave your details"}
-                </div>
-                {"\n            "}
-                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                  {"Or book a demo call"}
-                </a>
-                {"\n            "}
-                <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
-                  {$I($v?.chat?.formFoot)}
-                </div>
-                {"\n          "}
+              <div data-lead-card="10" style={$st("width:380px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+                {$v?.leadPort?.c10?.notSent ? (
+                  <>
+                  {"\n            "}
+                  <div style={$st("font-size:13px;font-weight:600")}>
+                    {"Get a demo on your own business"}
+                  </div>
+                  {"\n            "}
+                  <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  <input className="scp7" name="mail" type="text" placeholder="Email (optional)" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                  {"\n            "}
+                  {$v?.leadPort?.c10?.err ? (
+                    <>
+                    <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                      {$I($v?.leadPort?.c10?.errText)}
+                    </div>
+                    </>
+                  ) : null}
+                  <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c10?.submit} onKeyDown={$v?.leadPort?.c10?.key}>
+                    {"Leave your details"}
+                  </div>
+                  {"\n            "}
+                  <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                    {"Or book a demo call"}
+                  </a>
+                  {"\n            "}
+                  <div style={$st("font-size:11.5px;color:#8E887C;line-height:1.55")}>
+                    {$I($v?.chat?.formFoot)}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
+                {$v?.leadPort?.c10?.sent ? (
+                  <>
+                  {"\n            "}
+                  <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                    {"\n              "}
+                    <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                      <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                    </span>
+                    {"\n              "}
+                    <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                      {$I($v?.leadPort?.c10?.okTitle)}
+                    </div>
+                    {"\n              "}
+                    <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                      {$I($v?.leadPort?.c10?.okBody)}
+                    </div>
+                    {"\n              "}
+                    <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                      {$I($v?.leadPort?.c10?.pick)}
+                      <span>
+                        {"←"}
+                      </span>
+                    </a>
+                    {"\n            "}
+                  </div>
+                  {"\n          "}
+                  </>
+                ) : null}
               </div>
               {"\n        "}
             </div>
@@ -6221,11 +6651,11 @@ export default function Template({ v: $v }) {
                 {"\n          "}
                 <div style={$st("display:flex;align-items:center;gap:12px;margin-top:30px;pointer-events:auto")}>
                   {"\n            "}
-                  <a className="scpl" href="#cta" style={$st("font-size:15px;font-weight:500;background:#FFFFFF;color:#16150F;border-radius:12px;padding:15px 26px;white-space:nowrap;transition:transform .2s cubic-bezier(.2,.7,.2,1),background .2s ease,box-shadow .2s ease")}>
+                  <a className="scpm" href="#cta" style={$st("font-size:15px;font-weight:500;background:#FFFFFF;color:#16150F;border-radius:12px;padding:15px 26px;white-space:nowrap;transition:transform .2s cubic-bezier(.2,.7,.2,1),background .2s ease,box-shadow .2s ease")}>
                     {"Start free"}
                   </a>
                   {"\n            "}
-                  <a className="scpm" href="#screens" style={$st("font-size:15px;font-weight:500;color:#FFFFFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:15px 24px;white-space:nowrap;transition:transform .2s cubic-bezier(.2,.7,.2,1),background .2s ease")}>
+                  <a className="scpn" href="#screens" style={$st("font-size:15px;font-weight:500;color:#FFFFFF;border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:15px 24px;white-space:nowrap;transition:transform .2s cubic-bezier(.2,.7,.2,1),background .2s ease")}>
                     {"See the product"}
                   </a>
                   {"\n            \n          "}
@@ -6535,7 +6965,7 @@ export default function Template({ v: $v }) {
               {$L($v?.bizCards).map((bc, $index) => (
                 <React.Fragment key={$index}>
                   {"\n          "}
-                  <div className="scpb" onClick={bc?.pick} role="button" tabIndex="0" style={$st(`position:relative;cursor:pointer;background:${$A(bc?.bg)};border:1px solid ${$A(bc?.bd)};border-radius:16px;padding:22px 24px;display:flex;gap:16px;align-items:flex-start;box-shadow:${$A(bc?.shadow)};transition:background .25s ease,border-color .2s ease,box-shadow .25s ease`)}>
+                  <div className="scpc" onClick={bc?.pick} role="button" tabIndex="0" style={$st(`position:relative;cursor:pointer;background:${$A(bc?.bg)};border:1px solid ${$A(bc?.bd)};border-radius:16px;padding:22px 24px;display:flex;gap:16px;align-items:flex-start;box-shadow:${$A(bc?.shadow)};transition:background .25s ease,border-color .2s ease,box-shadow .25s ease`)}>
                     {"\n            "}
                     <span style={$st(`width:18px;height:18px;border-radius:50%;border:1.5px solid ${$A(bc?.radioBd)};background:${$A(bc?.radioBg)};display:flex;align-items:center;justify-content:center;flex:none;margin-top:3px;transition:background .2s ease,border-color .2s ease`)}>
                       {"\n              "}
@@ -7187,7 +7617,7 @@ export default function Template({ v: $v }) {
                 {$L($v?.ucTabs).map((tb, $index) => (
                   <React.Fragment key={$index}>
                     {"\n            "}
-                    <div className="scpn" onClick={tb?.pick} style={$st(`font-size:13.5px;font-weight:500;border-radius:11px;padding:10px 18px;cursor:pointer;white-space:nowrap;background:${$A(tb?.bg)};color:${$A(tb?.fg)};box-shadow:${$A(tb?.shadow)};transition:background .25s ease,color .25s ease,box-shadow .25s ease`)}>
+                    <div className="scpo" onClick={tb?.pick} style={$st(`font-size:13.5px;font-weight:500;border-radius:11px;padding:10px 18px;cursor:pointer;white-space:nowrap;background:${$A(tb?.bg)};color:${$A(tb?.fg)};box-shadow:${$A(tb?.shadow)};transition:background .25s ease,color .25s ease,box-shadow .25s ease`)}>
                       {$I(tb?.t)}
                     </div>
                     {"\n          "}
@@ -7287,7 +7717,7 @@ export default function Template({ v: $v }) {
                   {"\n          "}
                 </div>
                 {"\n          "}
-                <a className="scpo" href="#cta" style={$st("margin-top:auto;align-self:flex-start;background:#FFFFFF;color:#16150F;border-radius:13px;padding:15px 24px;font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:9px;margin-top:30px;transition:transform .2s cubic-bezier(.2,.7,.2,1),box-shadow .2s ease")}>
+                <a className="scpp" href="#cta" style={$st("margin-top:auto;align-self:flex-start;background:#FFFFFF;color:#16150F;border-radius:13px;padding:15px 24px;font-size:14.5px;font-weight:500;display:flex;align-items:center;gap:9px;margin-top:30px;transition:transform .2s cubic-bezier(.2,.7,.2,1),box-shadow .2s ease")}>
                   {"Read the full story "}
                   <span dir="ltr" style={$st("display:inline-block")}>
                     {$I($v?.arrowFwd)}
@@ -7561,7 +7991,7 @@ export default function Template({ v: $v }) {
               {"\n        "}
               <div data-step="" style={$st("display:flex;align-items:center;gap:16px;margin-top:28px;flex-wrap:wrap")}>
                 {"\n          "}
-                <div className="scpp" onClick={$v?.goIntegrations} style={$st("font-size:14.5px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:12px;padding:14px 22px;display:flex;align-items:center;gap:9px;cursor:pointer;white-space:nowrap;transition:background .2s ease,transform .2s cubic-bezier(.2,.7,.2,1)")}>
+                <div className="scpq" onClick={$v?.goIntegrations} style={$st("font-size:14.5px;font-weight:500;background:#16150F;color:#FAF8F4;border-radius:12px;padding:14px 22px;display:flex;align-items:center;gap:9px;cursor:pointer;white-space:nowrap;transition:background .2s ease,transform .2s cubic-bezier(.2,.7,.2,1)")}>
                   {"Explore all integrations "}
                   <span dir="ltr" style={$st("display:inline-block")}>
                     {$I($v?.arrowFwd)}
@@ -7664,44 +8094,83 @@ export default function Template({ v: $v }) {
               {"\n      "}
             </div>
             {"\n      "}
-            <div style={$st("width:400px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
-              {"\n        "}
-              <div style={$st("font-size:13px;font-weight:600")}>
-                {"Get a demo on your own business"}
-              </div>
-              {"\n        "}
-              <input className="scp7" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-              {"\n        "}
-              <input className="scp7" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-              {"\n        "}
-              <input className="scp7" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-              {"\n        "}
-              <input className="scp7" type="text" placeholder="Email" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
-              {"\n        "}
-              <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")}>
-                {"Leave your details"}
-              </div>
-              {"\n        "}
-              <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
-                {"Or book a demo call"}
-              </a>
-              {"\n        \n        "}
-              <div style={$st("display:flex;gap:16px;padding-top:6px;border-top:1px solid #F0EDE7;margin-top:4px")}>
-                {"\n          "}
-                <span style={$st("font-size:11.5px;color:#8E887C")}>
-                  {"No card"}
-                </span>
-                {"\n          "}
-                <span style={$st("font-size:11.5px;color:#8E887C")}>
-                  {"Keeps your number"}
-                </span>
-                {"\n          "}
-                <span style={$st("font-size:11.5px;color:#8E887C")}>
-                  {"Cancel anytime"}
-                </span>
+            <div data-lead-card="11" style={$st("width:400px;flex:none;background:#FFFFFF;color:#16150F;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:11px")}>
+              {$v?.leadPort?.c11?.notSent ? (
+                <>
                 {"\n        "}
-              </div>
-              {"\n      "}
+                <div style={$st("font-size:13px;font-weight:600")}>
+                  {"Get a demo on your own business"}
+                </div>
+                {"\n        "}
+                <input className="scp7" name="name" type="text" placeholder="Your name *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                {"\n        "}
+                <input className="scp7" name="phone" type="text" placeholder="Phone *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                {"\n        "}
+                <input className="scp7" name="site" type="text" placeholder="Website address *" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                {"\n        "}
+                <input className="scp7" name="mail" type="text" placeholder="Email" style={$st("background:#FAF8F4;border:1px solid #E8E3D9;border-radius:11px;padding:12px 14px;font-size:14px;font-family:Archivo,sans-serif;color:#16150F;outline:none;width:100%;box-sizing:border-box")} />
+                {"\n        "}
+                {$v?.leadPort?.c11?.err ? (
+                  <>
+                  <div role="alert" style={$st("font-size:13.5px;font-weight:600;color:#A8441F")}>
+                    {$I($v?.leadPort?.c11?.errText)}
+                  </div>
+                  </>
+                ) : null}
+                <div className="scp8" style={$st("text-align:center;font-size:14px;font-weight:500;background:#16150F;color:#F7F5F1;border-radius:11px;padding:13px;cursor:pointer;transition:background .2s ease")} role="button" tabIndex="0" onClick={$v?.leadPort?.c11?.submit} onKeyDown={$v?.leadPort?.c11?.key}>
+                  {"Leave your details"}
+                </div>
+                {"\n        "}
+                <a className="scp9" href="https://calendar.app.google/Fv9DCtUycjqSV3a77" target="_blank" rel="noopener" style={$st("text-align:center;font-size:13.5px;font-weight:500;color:#16150F;border:1px solid #D8D2C6;border-radius:11px;padding:12px;transition:border-color .2s ease")}>
+                  {"Or book a demo call"}
+                </a>
+                {"\n        \n        "}
+                <div style={$st("display:flex;gap:16px;padding-top:6px;border-top:1px solid #F0EDE7;margin-top:4px")}>
+                  {"\n          "}
+                  <span style={$st("font-size:11.5px;color:#8E887C")}>
+                    {"No card"}
+                  </span>
+                  {"\n          "}
+                  <span style={$st("font-size:11.5px;color:#8E887C")}>
+                    {"Keeps your number"}
+                  </span>
+                  {"\n          "}
+                  <span style={$st("font-size:11.5px;color:#8E887C")}>
+                    {"Cancel anytime"}
+                  </span>
+                  {"\n        "}
+                </div>
+                {"\n      "}
+                </>
+              ) : null}
+              {$v?.leadPort?.c11?.sent ? (
+                <>
+                {"\n            "}
+                <div data-tk-ok="" role="status" style={$st("display:flex;flex-direction:column;align-items:flex-start;gap:14px;padding:10px 0")}>
+                  {"\n              "}
+                  <span data-tk-check="" style={$st("width:64px;height:64px;border-radius:50%;background:#E7F0D4;color:#3F6323;display:flex;align-items:center;justify-content:center")}>
+                    <i data-lucide="check" style={$st("width:30px;height:30px")}></i>
+                  </span>
+                  {"\n              "}
+                  <div style={$st("font-size:clamp(26px,2.4vw,38px);font-weight:700;letter-spacing:-0.035em;line-height:1.1")}>
+                    {$I($v?.leadPort?.c11?.okTitle)}
+                  </div>
+                  {"\n              "}
+                  <div style={$st("font-size:16px;line-height:1.6;color:#4A4741")}>
+                    {$I($v?.leadPort?.c11?.okBody)}
+                  </div>
+                  {"\n              "}
+                  <a className="scpa" href="https://calendar.app.google/pwKViwkRwQTeibnX9" target="_blank" rel="noopener" style={$st("margin-top:6px;display:flex;align-items:center;gap:10px;min-height:56px;padding:0 26px;border-radius:16px;background:#16150F;color:#FAF8F4;font-size:16px;font-weight:600")}>
+                    {$I($v?.leadPort?.c11?.pick)}
+                    <span>
+                      {"←"}
+                    </span>
+                  </a>
+                  {"\n            "}
+                </div>
+                {"\n          "}
+                </>
+              ) : null}
             </div>
             {"\n    "}
           </div>
@@ -7730,7 +8199,7 @@ export default function Template({ v: $v }) {
             {"\n        "}
             <div style={$st("display:flex;gap:10px;flex:none")}>
               {"\n          "}
-              <a className="scpq" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
+              <a className="scpr" href="#cta" style={$st("font-size:14px;font-weight:500;background:#F7F5F1;color:#16150F;border-radius:12px;padding:13px 22px;white-space:nowrap")}>
                 {"Start free"}
               </a>
               {"\n        "}
@@ -7763,7 +8232,7 @@ export default function Template({ v: $v }) {
                 {$L($v?.social).map((so, $index) => (
                   <React.Fragment key={$index}>
                     {"\n              "}
-                    <a className="scpr" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
+                    <a className="scps" href={so?.href} target="_blank" rel="noopener" title={so?.t} style={$st("width:36px;height:36px;border:1px solid #262521;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#B9B4AC;transition:background .2s ease,color .2s ease,border-color .2s ease")}>
                       <i data-lucide={so?.icon} width="17" height="17" stroke-width="2"></i>
                     </a>
                     {"\n            "}
@@ -7802,7 +8271,7 @@ export default function Template({ v: $v }) {
                       {$L(col?.items).map((li, $index) => (
                         <React.Fragment key={$index}>
                           {"\n                  "}
-                          <div className="scps" onClick={li?.click} style={$st("font-size:13px;color:#B9B4AC;line-height:1.35;cursor:pointer;transition:color .2s ease")}>
+                          <div className="scpt" onClick={li?.click} style={$st("font-size:13px;color:#B9B4AC;line-height:1.35;cursor:pointer;transition:color .2s ease")}>
                             {$I(li?.t)}
                           </div>
                           {"\n                "}
@@ -7822,7 +8291,7 @@ export default function Template({ v: $v }) {
           {"\n\n      "}
           <div className="m-foot-talk" onClick={$v?.goChat} style={$st("padding:0 0 34px;display:flex;align-items:center;justify-content:flex-end;gap:18px;cursor:pointer;flex-wrap:wrap")}>
             {"\n        "}
-            <div className="scpt" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
+            <div className="scpu" style={$st("display:flex;align-items:center;justify-content:center;gap:14px;background:#F7F5F1;color:#16150F;border-radius:16px;padding:20px 36px;font-size:26px;font-weight:600;letter-spacing:-0.028em;transition:background .2s ease,color .2s ease,transform .2s cubic-bezier(.2,.75,.2,1)")}>
               {"\n          "}
               <span>
                 {"Let's talk"}
@@ -7872,19 +8341,19 @@ export default function Template({ v: $v }) {
               {"Ramat Gan"}
             </span>
             {"\n        "}
-            <a className="scpu" href="/legal" style={$st("font-size:12px;color:#9A958D")}>
+            <a className="scpv" href="/legal" style={$st("font-size:12px;color:#9A958D")}>
               {"Trust Center"}
             </a>
             {"\n        "}
-            <a className="scpu" href="/legal/privacy-policy" style={$st("font-size:12px;color:#9A958D")}>
+            <a className="scpv" href="/legal/privacy-policy" style={$st("font-size:12px;color:#9A958D")}>
               {"Privacy"}
             </a>
             {"\n        "}
-            <a className="scpu" href="/legal/terms-of-service" style={$st("font-size:12px;color:#9A958D")}>
+            <a className="scpv" href="/legal/terms-of-service" style={$st("font-size:12px;color:#9A958D")}>
               {"Terms"}
             </a>
             {"\n        "}
-            <a className="scpu" href="/legal/dpa" style={$st("font-size:12px;color:#9A958D")}>
+            <a className="scpv" href="/legal/dpa" style={$st("font-size:12px;color:#9A958D")}>
               {"DPA"}
             </a>
             {"\n        "}

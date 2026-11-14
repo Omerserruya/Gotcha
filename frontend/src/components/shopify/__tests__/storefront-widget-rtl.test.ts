@@ -542,3 +542,17 @@ describe("mobile layout in RTL", () => {
     expect(bubbles(h.shadow)[0].getAttribute("dir")).toBe("rtl");
   });
 });
+
+describe("while a reply is on its way, in Hebrew", () => {
+  // Omer, 2026-10-27: one employee is typing, not a plural "מקלידים".
+  // The status line sits right under the employee's name, so it does not
+  // repeat it.
+  it("the status and the dots say מקליד/ה…, under the name", async () => {
+    const h = await boot({ messages: [] });
+    (h.shadow.querySelector(".sug-b") as HTMLButtonElement).click();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(h.shadow.querySelector(".hd-nm")!.textContent).toBe("עוזר החנות");
+    expect(h.shadow.querySelector(".hd-st")!.textContent).toBe("מקליד/ה…");
+    expect(h.shadow.querySelector(".typ")!.getAttribute("aria-label")).toBe("מקליד/ה…");
+  });
+});

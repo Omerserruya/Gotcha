@@ -35,228 +35,10 @@ const inner = src.slice(src.indexOf('<x-dc>') + 6, src.indexOf('</x-dc>'));
 const helmet = inner.slice(inner.indexOf('<helmet>') + 8, inner.indexOf('</helmet>'));
 const template = inner.slice(inner.indexOf('</helmet>') + 9);
 
-/* ─────────── pseudo-class sheet (support.js: createPseudoSheet) ─────────── */
+import { createEmitter } from './dc-emit.mjs';
+import { cloneRebind, el, findAll, talkStates } from './lead-graft.mjs';
 
-const pseudoRules = [];
-const pseudoCache = new Map();
-
-function stripComments(css) {
-  return css.replace(/\/\*[\s\S]*?\*\//g, '');
-}
-
-/** support.js: importantify - quote and paren aware declaration split. */
-function importantify(css) {
-  css = stripComments(css);
-  const decls = [];
-  let start = 0, depth = 0, quote = '';
-  for (let i = 0; i < css.length; i++) {
-    const c = css[i];
-    if (quote) {
-      if (c === '\\') i++;
-      else if (c === quote) quote = '';
-    } else if (c === "'" || c === '"') quote = c;
-    else if (c === '(') depth++;
-    else if (c === ')') depth = Math.max(0, depth - 1);
-    else if (c === ';' && depth === 0) { decls.push(css.slice(start, i)); start = i + 1; }
-  }
-  decls.push(css.slice(start));
-  return decls.map((d) => d.trim()).filter(Boolean)
-    .map((d) => (/!\s*important$/i.test(d) ? d : d + ' !important')).join(';');
-}
-
-function pseudoClass(pseudo, css) {
-  const k = pseudo + '|' + css;
-  const hit = pseudoCache.get(k);
-  if (hit) return hit;
-  const cls = 'scp' + pseudoCache.size.toString(36);
-  const isElement = pseudo === 'before' || pseudo === 'after';
-  const sel = isElement ? `.${cls}::${pseudo}` : `.${cls}:${pseudo}`;
-  pseudoRules.push(`${sel}{${isElement ? css : importantify(css)}}`);
-  pseudoCache.set(k, cls);
-  return cls;
-}
-
-/* ─────────── attribute naming ─────────── */
-
-const EVENT_MAP = {
-  onclick: 'onClick', onchange: 'onChange', oninput: 'onInput', onsubmit: 'onSubmit',
-  onkeydown: 'onKeyDown', onkeyup: 'onKeyUp', onkeypress: 'onKeyPress',
-  onmousedown: 'onMouseDown', onmouseup: 'onMouseUp', onmouseenter: 'onMouseEnter',
-  onmouseleave: 'onMouseLeave', onfocus: 'onFocus', onblur: 'onBlur', onerror: 'onError',
-  ondoubleclick: 'onDoubleClick', oncontextmenu: 'onContextMenu', onmousemove: 'onMouseMove',
-  onmouseover: 'onMouseOver', onmouseout: 'onMouseOut', onload: 'onLoad',
-};
-
-/** Lowercased by the HTML parser; React wants these spellings. Same DOM either way. */
-const REACT_ATTR = {
-  class: 'className', for: 'htmlFor', tabindex: 'tabIndex', crossorigin: 'crossOrigin',
-  viewbox: 'viewBox', srcset: 'srcSet', maxlength: 'maxLength', autocomplete: 'autoComplete',
-  readonly: 'readOnly', colspan: 'colSpan', rowspan: 'rowSpan', usemap: 'useMap',
-  contenteditable: 'contentEditable', spellcheck: 'spellCheck', novalidate: 'noValidate',
-};
-
-/** Authoring-only attributes the runtime strips before rendering. */
-const DROP = new Set(['hint-placeholder-count', 'hint-placeholder-val', 'hint-size', 'sc-name', 'data-dc-tpl']);
-
-const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-  'link', 'meta', 'param', 'source', 'track', 'wbr', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'stop', 'use']);
-
-/* ─────────── expression scoping ─────────── */
-
-const SIMPLE_PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
-const LITERAL = /^(true|false|null|undefined|-?\d+(\.\d+)?|'[^']*'|"[^"]*")$/;
-
-/**
- * A path rooted in a loop variable stays bare; anything else reads from `v`.
- *
- * Every hop is optional. support.js's resolvePath walks with
- * `cur == null ? undefined : cur[key]`, and the design leans on it: on a
- * feature page `sol` is null and the template still asks for `sol.kicker`,
- * expecting undefined rather than a throw.
- */
-function expr(raw, scope) {
-  const e = raw.trim();
-  if (LITERAL.test(e)) return e;
-  if (!SIMPLE_PATH.test(e)) throw new Error(`unsupported expression: {{ ${e} }}`);
-  const parts = e.split('.');
-  if (scope.has(parts[0]) || parts[0] === '$index') return parts.join('?.');
-  return '$v?.' + parts.join('?.');
-}
-
-const jsStr = (s) => JSON.stringify(s);
-
-/* ─────────── emit ─────────── */
-
-const INTERP = /\{\{([\s\S]+?)\}\}/;
-const INTERP_G = /\{\{([\s\S]+?)\}\}/g;
-
-/**
- * The design lives at a single URL, so it references assets relatively. Served
- * under real routes, `assets/x.png` on /product/copilot resolves to
- * /product/assets/x.png. Root them instead.
- */
-function rootAssets(raw) {
-  return raw.replace(/(^|[\s(,'"])assets\//g, '$1/assets/');
-}
-
-/** support.js: compileAttr */
-function attrValue(raw, scope) {
-  raw = rootAssets(raw);
-  const whole = raw.match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
-  if (whole) return `{${expr(whole[1], scope)}}`;
-  if (!raw.includes('{{')) return jsStr(raw);
-  const parts = raw.split(INTERP_G);
-  const body = parts.map((p, i) => (i & 1 ? '${$A(' + expr(p, scope) + ')}' : p.replace(/[\\`$]/g, '\\$&'))).join('');
-  return '{`' + body + '`}';
-}
-
-/** A style attribute always goes through st(); only its argument differs. */
-function styleValue(raw, scope) {
-  if (!raw.includes('{{')) return `{$st(${jsStr(raw)})}`;
-  const parts = raw.split(INTERP_G);
-  const body = parts.map((p, i) => (i & 1 ? '${$A(' + expr(p, scope) + ')}' : p.replace(/[\\`$]/g, '\\$&'))).join('');
-  return '{$st(`' + body + '`)}';
-}
-
-let warnings = [];
-
-function emitText(text, scope) {
-  // support.js: walkText - whitespace-only text with no space character is dropped,
-  // everything else is preserved verbatim.
-  if (!INTERP.test(text)) {
-    if (!text.trim() && !text.includes(' ')) return '';
-    return `{${jsStr(text)}}`;
-  }
-  const parts = text.split(INTERP_G);
-  return parts.map((p, i) => {
-    if (!(i & 1)) return p === '' ? '' : `{${jsStr(p)}}`;
-    return `{$I(${expr(p, scope)})}`;
-  }).join('');
-}
-
-function emitChildren(node, scope, indent) {
-  return (node.childNodes || []).map((c) => emitNode(c, scope, indent)).filter(Boolean).join('\n');
-}
-
-function emitNode(node, scope, indent) {
-  const pad = '  '.repeat(indent);
-
-  if (node.nodeName === '#text') {
-    const out = emitText(node.value, scope);
-    return out ? pad + out : '';
-  }
-  if (node.nodeName === '#comment') return '';
-
-  const tag = node.tagName;
-  const attrs = Object.fromEntries((node.attrs || []).map((a) => [a.name, a.value]));
-
-  /* sc-for -> .map() */
-  if (tag === 'sc-for') {
-    const as = attrs.as || 'item';
-    const listRaw = (attrs.list || '').match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
-    if (!listRaw) throw new Error(`sc-for without an interpolated list: ${attrs.list}`);
-    const inner = new Set([...scope, as]);
-    const kids = emitChildren(node, inner, indent + 2);
-    return `${pad}{$L(${expr(listRaw[1], scope)}).map((${as}, $index) => (\n` +
-           `${pad}  <React.Fragment key={$index}>\n${kids}\n${pad}  </React.Fragment>\n` +
-           `${pad}))}`;
-  }
-
-  /* sc-if -> ternary */
-  if (tag === 'sc-if') {
-    const valRaw = (attrs.value || '').match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
-    if (!valRaw) throw new Error(`sc-if without an interpolated value: ${attrs.value}`);
-    const kids = emitChildren(node, scope, indent + 1);
-    return `${pad}{${expr(valRaw[1], scope)} ? (\n${pad}  <>\n${kids}\n${pad}  </>\n${pad}) : null}`;
-  }
-
-  /* image-slot -> the resolved photo, cropped the way the slot was framed */
-  if (tag === 'image-slot') {
-    const id = attrs.id || '';
-    const style = attrs.style || '';
-    return `${pad}<ImageSlot id=${jsStr(id)} style=${styleValue(style, scope)} />`;
-  }
-
-  /* ordinary element */
-  const props = [];
-  const classes = [];
-  for (const [name, value] of Object.entries(attrs)) {
-    if (DROP.has(name)) continue;
-
-    if (name === 'style') { props.push(`style=${styleValue(value, scope)}`); continue; }
-
-    if (name.startsWith('style-')) {
-      const pseudo = name.slice(6);
-      if (value.includes('{{')) { warnings.push(`dynamic ${name} not supported: ${value}`); continue; }
-      classes.push(pseudoClass(pseudo, value));
-      continue;
-    }
-
-    if (name === 'class') { classes.unshift(value); continue; }
-
-    let key = name;
-    if (name.startsWith('on')) key = EVENT_MAP[name] || 'on' + name[2].toUpperCase() + name.slice(3);
-    else if (REACT_ATTR[name]) key = REACT_ATTR[name];
-
-    props.push(`${key}=${attrValue(value, scope)}`);
-  }
-
-  if (classes.length) {
-    const lit = classes.filter((c) => !c.includes('{'));
-    props.unshift(`className=${jsStr(lit.join(' '))}`);
-  }
-
-  const head = `<${tag}${props.length ? ' ' + props.join(' ') : ''}`;
-  const kids = emitChildren(node, scope, indent + 1);
-
-  if (VOID.has(tag) || !kids.trim()) {
-    // An <i data-lucide> stays a real empty element: paintIcons() injects the svg
-    // into it and React must keep believing it owns no children there.
-    if (VOID.has(tag)) return `${pad}${head} />`;
-    return `${pad}${head}></${tag}>`;
-  }
-  return `${pad}${head}>\n${kids}\n${pad}</${tag}>`;
-}
+const { emitNode, pseudoRules, warnings } = createEmitter();
 
 /* ─────────── run ─────────── */
 
@@ -358,6 +140,85 @@ function freezeDesktop(root) {
   return hits.size + heroes;
 }
 
+/* ─────────── lead cards ─────────── */
+
+/**
+ * Omer's decision (2026-10-30): every lead form on the site sends.
+ *
+ * The design's lead card ("Get a demo on your own business" - name, phone,
+ * website, email, "Leave your details") appears 11 times written out and once drawn from data (the offer page's closing
+ * card, from op.fields): 12 cards, reaching 60 pages.
+ * It is not a form: the inputs are loose and the button is a styled <div>
+ * with no handler, and the design has no sent state and no error line.
+ *
+ * So each card is changed in exactly four ways, all asserted:
+ *   - the card is marked data-lead-card="<n>" and its inputs get names;
+ *   - the <div> button becomes a control: role=button, tabindex=0, click and
+ *     Enter/Space submit. Its look does not change;
+ *   - the v8 design's own alert line goes above the button;
+ *   - the v8 design's own sent card replaces the fields, inside the same box.
+ * Both states come from tools/lead-graft.mjs, the same source the v8 home uses.
+ * The bindings are `leadPort.c<n>.*`, filled by build-logic.mjs.
+ */
+// The fourth label is "Email (optional)" on every card but the design's own
+// home card, which says "Email" (that card renders on no route here: / is the v8 home).
+const LEAD_FIELDS = [[['Your name *'], 'name'], [['Phone *'], 'phone'], [['Website address *'], 'site'], [['Email (optional)', 'Email'], 'mail']];
+const LEAD_CARDS = 12;
+/** The offer page's closing card draws its fields from data (op.fields) instead of writing them out. */
+const LEAD_FIELDS_DATA = "fields: ['Your name *', 'Phone *', 'Website address *', 'Email (optional)'],";
+const textOf = (n) => (n.childNodes || []).map((c) => (c.nodeName === '#text' ? c.value : textOf(c))).join('');
+const nodeAttr = (n, name) => (n.attrs || []).find((a) => a.name === name)?.value;
+
+function graftLeadCards(root) {
+  const states = talkStates(parse5, path.join(ROOT, 'design/home-v8/GOTCHA Website.dc.html'));
+  const literal = (n) => {
+    const inputs = (n.childNodes || []).filter((c) => c.tagName === 'input');
+    return inputs.length === 4 && inputs.every((c, i) => LEAD_FIELDS[i][0].includes(nodeAttr(c, 'placeholder')));
+  };
+  const fromData = (n) => (n.childNodes || []).some((c) => c.tagName === 'sc-for' && /\{\{\s*op\.fields\s*\}\}/.test(nodeAttr(c, 'list') || ''));
+  const cards = findAll(root, (n) => n.tagName === 'div' && (literal(n) || fromData(n)));
+  // Its fields come from the logic's data, so their order is asserted there:
+  // the handler reads an unnamed card's inputs by position.
+  if (src.split(LEAD_FIELDS_DATA).length - 1 !== 1) throw new Error('lead cards: op.fields is no longer name, phone, website, email');
+  if (cards.length !== LEAD_CARDS) throw new Error(`lead cards: expected ${LEAD_CARDS}, found ${cards.length}`);
+
+  cards.forEach((card, n) => {
+    const key = `leadPort.c${n}`;
+    const kids = card.childNodes;
+    kids.filter((c) => c.tagName === 'input').forEach((c, i) => c.attrs.unshift({ name: 'name', value: LEAD_FIELDS[i][1] }));
+    // The button is the element right after the last field: a <div> drawn as a
+    // button. Its label is "Leave your details" or a binding for it
+    // ({{ chat.submit }}, {{ op.submit }}).
+    const lastInput = kids.filter((c) => c.tagName === 'input' || c.tagName === 'sc-for').pop();
+    const btn = kids.slice(kids.indexOf(lastInput) + 1).find((c) => c.tagName);
+    if (!btn || btn.tagName !== 'div' || !/cursor:\s*pointer/.test(nodeAttr(btn, 'style') || '')) {
+      throw new Error(`lead card ${n}: the element after the fields is not the design's div button`);
+    }
+    const label = textOf(btn).trim();
+    if (label !== 'Leave your details' && !/^\{\{\s*(chat|op)\.submit\s*\}\}$/.test(label)) {
+      throw new Error(`lead card ${n}: unexpected button label ${JSON.stringify(label)}`);
+    }
+    btn.attrs.push(
+      { name: 'role', value: 'button' },
+      { name: 'tabindex', value: '0' },
+      { name: 'onclick', value: `{{ ${key}.submit }}` },
+      { name: 'onkeydown', value: `{{ ${key}.key }}` },
+    );
+    kids.splice(kids.indexOf(btn), 0, cloneRebind(states.err, card, key));
+
+    const formIf = el('sc-if', [{ name: 'value', value: `{{ ${key}.notSent }}` }], card);
+    formIf.childNodes = kids.map((c) => ({ ...c, parentNode: formIf }));
+    formIf.childNodes.forEach((c) => (c.childNodes || []).forEach((k) => { k.parentNode = c; }));
+    const sentIf = el('sc-if', [{ name: 'value', value: `{{ ${key}.sent }}` }], card);
+    sentIf.childNodes = states.sent.childNodes.map((k) => cloneRebind(k, sentIf, key));
+    card.attrs.unshift({ name: 'data-lead-card', value: String(n) });
+    card.childNodes = [formIf, sentIf];
+  });
+  return cards.length;
+}
+
+const leadCards = graftLeadCards(frag);
+
 const frozen = freezeDesktop(frag);
 
 /**
@@ -414,11 +275,14 @@ function linkLegal(jsx, { required }) {
  * there is no way into the Trust Center from the bottom of the page. Add the
  * link ahead of them, matching the row's own markup exactly.
  */
-  const privacyAnchor = /( *)(<a className="scpu" href="\/legal\/privacy-policy"([^>]*)>)/;
+  // The pseudo-class name is generated in walk order (scp0, scp1, ...), so it
+  // moves whenever markup ahead of the footer gains a style-<pseudo>. Match
+  // any generated class and give the new link the same one.
+  const privacyAnchor = /( *)(<a className="(scp[0-9a-z]+)" href="\/legal\/privacy-policy"([^>]*)>)/;
   if (privacyAnchor.test(out)) {
     out = out.replace(
       privacyAnchor,
-      `$1<a className="scpu" href="/legal"$3>\n$1  {"Trust Center"}\n$1</a>\n$1{"\\n        "}\n$1$2`,
+      `$1<a className="$3" href="/legal"$4>\n$1  {"Trust Center"}\n$1</a>\n$1{"\\n        "}\n$1$2`,
     );
   } else if (required) {
     throw new Error('privacy link not found - cannot place the Trust Center link beside it');
@@ -529,6 +393,7 @@ console.log('Template.jsx :', tsx.split('\n').length, 'lines');
 console.log('Chrome.jsx   :', chromeSrc.split('\n').length, 'lines (chrome + a hole for the page)');
 console.log('globals.css  :', pseudoRules.length, 'pseudo rules +', designCss.split(String.fromCharCode(10)).length, 'lines of design CSS');
 console.log('mobile       :', expanded, 'design selectors expanded to match server-rendered styles');
+console.log('lead cards   :', leadCards, 'wired to /api/waitlist (leadPort.c0..c' + (leadCards - 1) + ')');
 console.log('desktop     :', frozen, 'design additions admitted on phones only, so the desktop does not move');
 if (warnings.length) {
   console.log('\nwarnings:');
