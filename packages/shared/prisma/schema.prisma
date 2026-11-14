@@ -8233,3 +8233,44 @@ model SupportSession {
   @@index([tenantId, startedAt])
   @@map("support_sessions")
 }
+
+/// A person's request to delete their GOTCHA account (Google Play / App Store
+/// requirement, 2026-11-14). Public (email + verification link) or in-app
+/// (signed in). Nothing is deleted automatically: an operator completes it
+/// through the GDPR erasure (auth gdpr.service eraseUser / eraseTenant).
+/// No foreign keys on purpose: the request is the record that the erasure was
+/// asked for and done, and it outlives the user it erases.
+model AccountDeletionRequest {
+  id             String    @id @default(cuid())
+  /// Normalised: trimmed, lower case.
+  email          String
+  /// As typed on the public form. Free text, never trusted for matching.
+  workspaceName  String?   @map("workspace_name")
+  /// "public" | "in_app"
+  source         String
+  /// Resolved server-side; null when the address has no account.
+  identityId     String?   @map("identity_id")
+  userId         String?   @map("user_id")
+  tenantId       String?   @map("tenant_id")
+  reason         String?
+  /// PENDING_VERIFICATION | VERIFIED | COMPLETED | REJECTED | CANCELLED | EXPIRED
+  status         String    @default("PENDING_VERIFICATION")
+  /// sha256 of the emailed token. The token itself is never stored.
+  tokenHash      String?   @unique @map("token_hash")
+  tokenExpiresAt DateTime? @map("token_expires_at")
+  verifiedAt     DateTime? @map("verified_at")
+  completedAt    DateTime? @map("completed_at")
+  completedBy    String?   @map("completed_by")
+  rejectedReason String?   @map("rejected_reason")
+  /// Per-tenant outcome of the erasure.
+  result         Json?
+  /// sha256(ip + secret), for abuse limits only.
+  ipHash         String?   @map("ip_hash")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([status])
+  @@index([identityId])
+  @@map("account_deletion_requests")
+}

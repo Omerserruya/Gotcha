@@ -1164,3 +1164,61 @@ export async function sendPaymentSucceededEmail(a: {
     throw err;
   }
 }
+
+// ─── Account deletion request ───────────────────────────────
+
+/**
+ * The link that confirms an account deletion request (account-deletion.service).
+ * It opens a page with a button; opening the link alone confirms nothing.
+ */
+export async function sendAccountDeletionConfirmEmail(
+  email: string,
+  name: string,
+  confirmUrl: string,
+  locale: "he" | "en",
+): Promise<void> {
+  const he = locale === "he";
+  const subject = he ? "אישור בקשה למחיקת החשבון - GOTCHA" : "Confirm your account deletion request - GOTCHA";
+  const hi = name ? (he ? `${name}, ` : `${name}, `) : "";
+  const text = he
+    ? `${hi}קיבלנו בקשה למחיקת חשבון ה-GOTCHA שלך.\nכדי לאשר אותה, פתח/י את הקישור ולחץ/י על "אישור המחיקה":\n${confirmUrl}\n\nהקישור תקף ל-24 שעות. אם לא ביקשת זאת, אפשר להתעלם מהמייל הזה והחשבון יישאר כמו שהוא.`
+    : `${hi}we received a request to delete your GOTCHA account.\nTo confirm it, open the link and press "Confirm deletion":\n${confirmUrl}\n\nThe link is valid for 24 hours. If you didn't ask for this, ignore this email and your account stays as it is.`;
+  const html = renderBrandEmail({
+    locale,
+    title: subject,
+    preheader: he ? "אישור הבקשה למחיקת החשבון" : "Confirm the request to delete your account",
+    eyebrow: he ? "מחיקת חשבון" : "Account deletion",
+    icon: "&#128465;",
+    headline: he ? "לאשר את מחיקת החשבון?" : "Confirm your account deletion",
+    subhead: he
+      ? `${escapeHtml(hi)}קיבלנו בקשה למחיקת חשבון ה-GOTCHA שלך. שום דבר לא נמחק עד שתאשר/י.`
+      : `${escapeHtml(hi)}we received a request to delete your GOTCHA account. Nothing is deleted until you confirm.`,
+    cta: { label: he ? "לאישור המחיקה" : "Confirm deletion", url: confirmUrl },
+    fallbackUrl: confirmUrl,
+    expiryNote: he
+      ? `הקישור תקף ל-<strong style="color:${EC.strong};">24 שעות</strong>`
+      : `This link is valid for <strong style="color:${EC.strong};">24 hours</strong>`,
+    footerNote: he
+      ? "קיבלת את המייל כי מישהו ביקש למחוק את החשבון שמשויך לכתובת הזו ב-gotcha.co.il. אם זה לא את/ה, אפשר להתעלם."
+      : "You're receiving this because someone asked to delete the account for this address on gotcha.co.il. If that wasn't you, ignore this email.",
+  } as any);
+  await sendHtmlEmail(email, subject, html, text, locale);
+}
+
+/** A signed-in person asked from the app: a notice, not a question (the session was the proof). */
+export async function sendAccountDeletionNoticeEmail(email: string, name: string): Promise<void> {
+  const subject = "Your account deletion request - GOTCHA";
+  const text =
+    `Hi ${name || "there"},\n\nWe received your request to delete your GOTCHA account. It will be completed within 30 days.\n` +
+    `Changed your mind? Cancel it from the app, or write to privacy@gotcha.co.il.`;
+  const html = renderBrandEmail({
+    title: subject,
+    preheader: "We received your request to delete your account.",
+    eyebrow: "Account deletion",
+    icon: "&#128465;",
+    headline: "We received your request",
+    subhead: `${escapeHtml(name || "Hi")}, your GOTCHA account will be deleted within 30 days. You can cancel it from the app until then, or write to privacy@gotcha.co.il.`,
+    footerNote: "You're receiving this because a deletion was requested from your signed-in GOTCHA account.",
+  } as any);
+  await sendHtmlEmail(email, subject, html, text);
+}

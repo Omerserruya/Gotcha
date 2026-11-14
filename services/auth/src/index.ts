@@ -18,6 +18,7 @@ import permissionsRoutes from "./routes/permissions";
 import accountRoutes from "./routes/account";
 import tenantSecurityRoutes from "./routes/tenant-security";
 import gdprRoutes from "./routes/gdpr";
+import accountDeletionRoutes, { operatorRouter as accountDeletionOperatorRoutes } from "./routes/account-deletion";
 import internalRoutes from "./routes/internal";
 import setupLinkRoutes from "./routes/setup-link";
 import realtimeRoutes from "./routes/realtime";
@@ -61,6 +62,9 @@ app.use("/api/auth", sessionAuthRoutes);
 // routes: the caller is someone who does not have a credential yet, which is
 // the whole reason they are here. The token in the URL is the identification.
 app.use("/api/auth/setup", setupLinkRoutes);
+// Account deletion requests (Google Play / App Store). The public pair needs
+// no session; /me is signed in. Before authRoutes, for the same reason as setup.
+app.use("/api/auth/account-deletion", accountDeletionRoutes);
 app.use("/api/auth", authRoutes);
 // BEFORE agentRoutes: that router owns "/:id", and mounting presence after it
 // would make /api/agents/presence a lookup for an agent whose id is "presence".
@@ -82,6 +86,7 @@ app.use("/api/system", systemManualEditRoutes);
 // Support mode: start / current / end (2026-11-01).
 app.use("/api/system", supportSessionRoutes);
 app.use("/api/system", widgetBrandRoutes);
+app.use("/api/system", accountDeletionOperatorRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/account", accountRoutes);

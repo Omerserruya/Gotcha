@@ -2,7 +2,7 @@
 
 Internal document
 
-This procedure describes how GOTCHA by Omer Serruya, the operator of gotcha.co.il, handles data subject rights requests (access, rectification, erasure, restriction, portability, objection, consent withdrawal). It reflects the capabilities actually built into the platform. There is no self-service data-subject portal: rights are fulfilled through the tenant administrator's built-in tools or by the operator acting on an email request. Identity verification is performed manually by the operator.
+This procedure describes how GOTCHA by Omer Serruya, the operator of gotcha.co.il, handles data subject rights requests (access, rectification, erasure, restriction, portability, objection, consent withdrawal). It reflects the capabilities actually built into the platform. Platform account holders can request deletion of their own account themselves (section 2, item 3); every other right is fulfilled through the tenant administrator's built-in tools or by the operator acting on an email request. Deletion itself is always completed by the operator, never automatically.
 
 ## 1. Roles
 
@@ -13,12 +13,13 @@ This procedure describes how GOTCHA by Omer Serruya, the operator of gotcha.co.i
 
 1. Tenant administrator tools: tenant admins can execute export, erasure, and consent operations directly through the platform's built-in GDPR endpoints (admin-gated, tenant-scoped).
 2. Email: privacy@gotcha.co.il. Any request arriving through support@gotcha.co.il or any other channel is forwarded to privacy@gotcha.co.il and handled under this procedure.
+3. Account deletion request (platform account holders): the public page /account-deletion on the product origin, or the signed-in app. The public request sends a confirmation link, valid for 24 hours and single use, only to an address that has an account; the answer is the same for every address, so the page reveals nothing about who has an account. A signed-in request is confirmed by the session itself. A confirmed request waits for the operator, who completes it through the built-in erasure (user erasure; tenant erasure for a workspace the person is the only member of) within one month of confirmation (section 5). Until then the person can cancel it in the app or by writing to privacy@gotcha.co.il.
 
 All requests received by email are logged internally with: date received, requester identity as claimed, right invoked, affected tenant, and resolution date.
 
 ## 3. Identity verification (manual)
 
-The platform performs no automated data-subject identity verification; all built-in operations are admin-initiated. Before acting on an emailed request, the operator verifies identity manually:
+The only automated verification is the account deletion request's emailed confirmation link (section 2, item 3), which proves control of the account's address; all built-in erasure and export operations remain admin-initiated. Before acting on an emailed request, the operator verifies identity manually:
 
 - For platform account holders: the request must come from, or be confirmed through, the email address on the account. If in doubt, the operator asks the requester to confirm from that address or to reference account details only the holder would know.
 - For end-customers: verification is performed through the controller. The operator asks the tenant to confirm that the requester is the data subject (for example by matching the phone number or email on the contact record).
