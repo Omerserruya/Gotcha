@@ -1,0 +1,91 @@
+# Runs on the mobile-android branch, which carries only mobile/ on top of the
+# integration branch's mobile/ and workflows.
+# Builds the GOTCHA Android app for production (app.gotcha.co.il) as a release
+# AAB signed with the upload key, for Google Play (Play App Signing re-signs it).
+#
+# Triggered by pushing a tag "android-*" (or by hand), never by an ordinary
+# push. The AAB is a workflow artifact; it is uploaded to Play by hand until a
+# Play API service account exists (Omer approved the keystore, 2026-11-14).
+#
+# Secrets (the originals are in /home/ocs/secrets/android-upload on the dev box):
+#   ANDROID_UPLOAD_KEYSTORE_BASE64   upload.p12 (PKCS12, alias "upload", valid to 2054)
+#   ANDROID_UPLOAD_STORE_PASSWORD    its password (the key's password is the same)
+#   GOOGLE_SERVICES_JSON             Firebase config, for push
+# The version code is this workflow's run number plus 100 (debug APKs never
+# reach Play, so there is nothing below it to collide with).
+name: Android release AAB
+
+on:
+  push:
+    tags: ['android-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install Capacitor
+        run: npm ci --no-audit --no-fund
+
+      - name: Firebase config
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then echo "::error::GOOGLE_SERVICES_JSON is not set"; exit 1; fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Sync (prod)
+        run: GOTCHA_ENV=prod npx cap sync android
+
+      - name: Build the signed AAB
+        working-directory: mobile/android
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/upload.p12"
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.p12" \
+            -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias=upload \
+            -Pandroid.injected.signing.key.password="$STORE_PASSWORD" \
+            -Pandroid.injected.version.code=$(( ${{ github.run_number }} + 100 ))
+          rm "$RUNNER_TEMP/upload.p12"
+
+      - name: Check the signature
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify -certs "$AAB" | grep -E "jar verified|CN=GOTCHA Upload" | head -2
+          ls -l "$AAB"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gotcha-android-release-${{ github.run_number }}
+          path: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+          if-no-files-found: error
