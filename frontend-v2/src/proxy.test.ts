@@ -187,6 +187,8 @@ describe('★★ a link from an email opens signed out', () => {
     '/checkout/failed',
     '/checkout/cancelled',
     '/checkout/expired',
+    '/account-deletion',
+    '/account-deletion/confirm',
   ];
 
   it('★★ each renders - no redirect - with and without a locale', () => {
@@ -212,6 +214,9 @@ describe('★★ a link from an email opens signed out', () => {
       '/en/setup-link',
       '/en/setup-link/expiredx',
       '/en/settings/billing',
+      '/en/account-deletionx',
+      '/he/account-deletion/other',
+      '/en/account-deletion/confirm/more',
     ]) {
       const { status, location } = signedOut(path);
       expect(status, path).toBe(307);
@@ -234,6 +239,13 @@ describe('★★ a link from an email opens signed out', () => {
     // would carry an invitation off the product origin.
     expect(directive(cspFor('/en/join'), 'img-src')).toContain('https:');
     expect(directive(cspFor('/en/checkout/failed'), 'img-src')).toContain('https:');
+    // Google Play's deletion page: the product's policy, never the credential one.
+    expect(directive(cspFor('/he/account-deletion'), 'img-src')).toContain('https:');
+    expect(directive(cspFor('/en/account-deletion/confirm'), 'img-src')).toContain('https:');
+    const deletion = signedOut('/he/account-deletion', {
+      SIGN_IN_URL: 'https://auth-dev.gotcha.co.il/sign-in',
+    });
+    expect(deletion).toEqual({ status: 200, location: '' });
     const moved = signedOut('/he/join?token=abc', {
       SIGN_IN_URL: 'https://auth-dev.gotcha.co.il/sign-in',
     });
