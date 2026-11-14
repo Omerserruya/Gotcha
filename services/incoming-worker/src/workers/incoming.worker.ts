@@ -505,9 +505,18 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 
   if (!conversation) {
+    // The owner wrote to this customer from the phone in the last 24 hours:
+    // the new conversation is theirs, not the bot's (services/owner-recent).
+    // Read only when a conversation is about to be created, so it costs one
+    // query per new conversation and nothing per message.
+    const { ownerWroteRecently } = await import("../services/owner-recent.service");
+    const ownerOwns = await ownerWroteRecently({ tenantId, channel, customerExternalId: senderId }).catch((err) => {
+      console.warn("[incoming-worker] owner-recent check failed, the conversation starts as usual:", err?.message);
+      return false;
+    });
     // Race-safe: a concurrent message from the same customer may have created
     // it since the read above; then that one is used (services/inbound-dedupe.ts).
-    ({ conversation } = await findOrCreateOpenConversation<NonNullable<typeof conversation>>({
+    const opened = await findOrCreateOpenConversation<NonNullable<typeof conversation>>({
       tenantId,
       channel,
       customerExternalId: senderId,
@@ -519,9 +528,33 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         customerName: displayName,
         customerAvatarUrl: avatarUrl || undefined,
         status: "OPEN",
+        // The same latch a phone echo sets (outbound-echo.service): every AI
+        // entry point reads it. It stays until someone hands the conversation back.
+        ...(ownerOwns ? { isHandedOver: true, handledBy: "human" } : {}),
         ...referralFields(referral),
       },
-    }));
+    });
+    conversation = opened.conversation;
+    // Inside this branch TypeScript has narrowed `conversation` to null, so
+    // NonNullable<typeof conversation> is never: the id is read through the row shape.
+    const openedId = (opened.conversation as { id: string }).id;
+    if (opened.created && ownerOwns) {
+      console.log(`[incoming-worker] owner wrote from the phone within 24h: conv=${openedId} starts human-owned`);
+      // The timeline says why the AI is not answering (the phone-takeover divider).
+      await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId: openedId,
+          channel,
+          direction: "INBOUND",
+          body: "",
+          messageType: "system",
+          senderName: "System",
+          status: "DELIVERED",
+          metadata: { systemEvent: "whatsapp_app_takeover", reason: "owner_wrote_recently" },
+        },
+      }).catch((err: any) => console.warn("[incoming-worker] takeover divider failed:", err?.message));
+    }
   } else {
     const updates: any = {};
     if (displayName && !conversation.customerName) updates.customerName = displayName;
