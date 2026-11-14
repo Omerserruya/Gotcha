@@ -13,6 +13,26 @@ import { requireVisibleConversation } from "../lib/require-visible-conversation"
 import { replyWindowRefusal } from "../lib/reply-window-gate";
 import { mediaNotFound, serveStoredUpload } from "../lib/media-serving";
 import { STORED_UPLOAD_NAME, signMediaUrl, signedMediaPath, storedUploadName } from "@chatcenter/shared/src/lib/media-url";
+import { singleActiveChannelAccountId, attachConversationAccount } from "@chatcenter/shared/src/lib/channel-account-reattach";
+
+/**
+ * A conversation whose channel account was deleted (SET NULL) is sent
+ * through the tenant's one active account on that channel, and re-pointed to
+ * it, instead of refusing every reply (prod GOTCHA 2026-11-14). With no
+ * active account, or more than one, it stays detached and the send keeps its
+ * 400: which number to answer from is not ours to guess.
+ */
+async function ensureChannelAccount<C extends { id: string; tenantId: string; channel: string | null; channelAccountId: string | null; channelAccount: any }>(conversation: C): Promise<C> {
+  if (conversation.channelAccount) return conversation;
+  const channel = conversation.channel || "WHATSAPP";
+  const accountId = await singleActiveChannelAccountId(prisma as any, conversation.tenantId, channel);
+  if (!accountId) return conversation;
+  const account = await prisma.channelAccount.findUnique({ where: { id: accountId } });
+  if (!account) return conversation;
+  await attachConversationAccount(prisma as any, { tenantId: conversation.tenantId, conversationId: conversation.id, channelAccountId: accountId });
+  console.log(`[conversation] detached conv=${conversation.id} re-pointed to the tenant's one ${channel} account ${accountId}`);
+  return { ...conversation, channelAccountId: accountId, channelAccount: account };
+}
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -83,11 +103,12 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
         ? req.body.replyToMessageId
         : undefined;
 
-    const conversation = await prisma.conversation.findFirst({
+    const found = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId: req.tenantId! },
       include: { channelAccount: true },
     });
-    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if (!found) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const conversation = await ensureChannelAccount(found);
 
     const channel = conversation.channel || "WHATSAPP";
     const recipientId = conversation.customerExternalId;
@@ -289,11 +310,12 @@ router.post("/:conversationId/messages/template", validate(sendTemplateSchema), 
   try {
     const conversationId = req.params.conversationId as string;
     const { templateId, variables } = req.body as { templateId: string; variables?: Record<string, string | number> };
-    const conversation = await prisma.conversation.findFirst({
+    const found = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId: req.tenantId! },
       include: { channelAccount: true },
     });
-    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if (!found) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const conversation = await ensureChannelAccount(found);
     if ((conversation.channel || "WHATSAPP") !== "WHATSAPP") {
       res.status(400).json({ error: "Templates are sent on WhatsApp only", code: "TEMPLATES_WHATSAPP_ONLY" }); return;
     }
@@ -344,11 +366,12 @@ router.post("/:conversationId/messages/media", async (req: Request, res: Respons
   try {
     const conversationId = req.params.conversationId as string;
 
-    const conversation = await prisma.conversation.findFirst({
+    const found = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId: req.tenantId! },
       include: { channelAccount: true },
     });
-    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+    if (!found) { res.status(404).json({ error: "Conversation not found" }); return; }
+    const conversation = await ensureChannelAccount(found);
     if (!conversation.channelAccount) { res.status(400).json({ error: "Channel not configured" }); return; }
 
     const rawCreds = conversation.channelAccount.credentials;

@@ -49,6 +49,13 @@ export {
   isInboundExcluded,
 } from "./lib/inbound-exclusions";
 export type { ExclusionLookup } from "./lib/inbound-exclusions";
+// A conversation whose channel account was deleted is re-pointed to the
+// tenant's one active account on that channel (prod 2026-11-14).
+export {
+  singleActiveChannelAccountId,
+  adoptDetachedConversations,
+  attachConversationAccount,
+} from "./lib/channel-account-reattach";
 
 // Attachment storage. The probe exists because an unwritable uploads volume
 // failed silently in production and was reported as a download failure.

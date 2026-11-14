@@ -36,6 +36,7 @@ import {
   type InspectedNumber,
   type MetaInspection,
 } from "@chatcenter/shared";
+import { adoptDetachedConversations } from "@chatcenter/shared/src/lib/channel-account-reattach";
 import type {
   WhatsAppNumberState,
   WhatsAppOnboardingFlow,
@@ -566,7 +567,7 @@ export function signupMeta(
   };
 }
 
-async function upsertNumberRecord(args: {
+export async function upsertNumberRecord(args: {
   tenantId: string;
   userId?: string;
   accessToken: string;
@@ -663,6 +664,19 @@ async function upsertNumberRecord(args: {
       disconnectedAt: null,
     },
   });
+
+  // Re-onboarding a removed number creates a new channel row, and the old
+  // one's conversations were detached (SET NULL), not deleted. Without this
+  // every pre-reconnect conversation could not be answered from the inbox
+  // (prod GOTCHA 2026-11-14: 237 of 247 open). Only when this is the tenant's
+  // one WhatsApp account; a failure here never fails the onboarding.
+  const adopted = await adoptDetachedConversations(prisma as any, {
+    tenantId, channel: "WHATSAPP", channelAccountId: channelAccount.id,
+  }).catch((err: any) => {
+    console.warn("[whatsapp] adopting detached conversations failed:", err?.message);
+    return 0;
+  });
+  if (adopted > 0) console.log(`[whatsapp] account=${channelAccount.id} adopted ${adopted} detached conversation(s)`);
 
   return { channelAccount, number };
 }

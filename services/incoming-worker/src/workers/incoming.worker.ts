@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
 import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, suggestBySameName, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
+import { attachConversationAccount } from "@chatcenter/shared/src/lib/channel-account-reattach";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 // A subpath, not the package root: this worker's tests mock "@chatcenter/shared" whole.
@@ -565,6 +566,22 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     if (referral) Object.assign(updates, referralFields(referral));
     if (Object.keys(updates).length > 0) {
       await prisma.conversation.update({ where: { id: conversation.id }, data: updates });
+    }
+    // A conversation whose account was deleted (SET NULL on a number's
+    // removal) takes the account this message arrived on: it is the number
+    // the customer is writing to now, so the inbox can answer from it
+    // (prod GOTCHA 2026-11-14). Guarded on NULL; never moves an attached one.
+    if (!conversation.channelAccountId && channelAccountId) {
+      const attached = await attachConversationAccount(prisma as any, {
+        tenantId, conversationId: conversation.id, channelAccountId,
+      }).catch((err: any) => {
+        console.warn("[incoming-worker] re-attaching a detached conversation failed:", err?.message);
+        return false;
+      });
+      if (attached) {
+        (conversation as any).channelAccountId = channelAccountId;
+        console.log(`[incoming-worker] detached conv=${conversation.id} re-attached to account=${channelAccountId}`);
+      }
     }
   }
 
