@@ -53,7 +53,15 @@ export async function knowledgeScript(tenantId: string, now = Date.now()): Promi
 /** For tests. */
 export function clearKnowledgeScriptCache(): void { knowledgeScriptCache.clear(); }
 
-export const TRANSLATION_TIMEOUT_MS = 2500;
+/**
+ * It runs beside the embedding on the bot's turn, so it is short. 2500 was set
+ * for gpt-5-nano, whose prod max was already 2439 ms (14 days to 2026-11-14).
+ * gpt-5-mini answers the same short calls about twice as slowly (prod p50:
+ * summary 5.5 s on mini, 2.8 s on nano), so with the micro tier on gpt-5-mini
+ * 2500 would drop about half the translations and leave a Hebrew question
+ * searching English Knowledge untranslated.
+ */
+export const TRANSLATION_TIMEOUT_MS = 5000;
 
 /**
  * The question in the Knowledge's language, or null: no mismatch, nothing to
