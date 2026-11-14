@@ -56,7 +56,14 @@ export function DeletionRequestPanel({
   }
 
   return (
-    <form className={styles.form} onSubmit={send} data-testid="deletion-form" noValidate>
+    // `method="post"`: a press before the scripts run never puts the address in the URL.
+    <form
+      className={styles.form}
+      method="post"
+      onSubmit={send}
+      data-testid="deletion-form"
+      noValidate
+    >
       <Text role="title" as="h1">
         {t('title')}
       </Text>

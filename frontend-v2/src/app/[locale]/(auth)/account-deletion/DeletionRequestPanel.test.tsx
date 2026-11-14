@@ -46,6 +46,11 @@ describe('★★ /account-deletion: ask, signed out', () => {
     expect(screen.getByTestId('deletion-submit')).toBeDisabled();
   });
 
+  it('★★ a press before the scripts run posts: the address never goes into a URL', () => {
+    show();
+    expect(screen.getByTestId('deletion-form')).toHaveAttribute('method', 'post');
+  });
+
   it('★★ sends what was typed, with the page language', async () => {
     action.requestAccountDeletion.mockResolvedValue({ ok: true });
     show();
