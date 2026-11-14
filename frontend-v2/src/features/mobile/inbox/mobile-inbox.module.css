@@ -1,0 +1,700 @@
+@layer features {
+  /*
+   * The inbox on the phone, as `GOTCHA Mobile App.dc.html` draws it. What
+   * every list shares (the screen, search, chips, a row, a tag) is in
+   * `../mobile-ui.module.css`; this is the inbox's own.
+   */
+
+  /* ── The bar's icons ───────────────────────────────────────────────── */
+  .barIcon {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--size-control);
+    block-size: var(--size-control);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--mobile-ink);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .barIcon:active {
+    background-color: var(--mobile-press);
+  }
+
+  .barIcon:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+  }
+
+  /* A filter in force. */
+  .barDot {
+    position: absolute;
+    inset-block-start: 10px;
+    inset-inline-end: 9px;
+    inline-size: 9px;
+    block-size: 9px;
+    box-sizing: border-box;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-accent);
+    border: 2px solid var(--mobile-ground);
+  }
+
+  /* ── The list ──────────────────────────────────────────────────────── */
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .row {
+    align-items: center;
+  }
+
+  .avatarStack {
+    position: relative;
+    flex: none;
+    inline-size: 52px;
+    block-size: 52px;
+  }
+
+  .avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 52px;
+    block-size: 52px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-avatar);
+    color: var(--text-secondary);
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .avatar[data-settled] {
+    background-color: var(--avatar-surface-settled);
+    color: var(--text-subtle);
+  }
+
+  /* The channel, on a white disc at the avatar's foot (the inline end: left in Hebrew). */
+  .channelBadge {
+    position: absolute;
+    inset-inline-end: -2px;
+    inset-block-end: -2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 22px;
+    block-size: 22px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-surface);
+    box-shadow: 0 0 0 2px var(--mobile-ground);
+  }
+
+  .body {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-block: var(--space-2);
+  }
+
+  .top,
+  .bottom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .top {
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .who {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16.5px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--mobile-ink);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  .time {
+    flex: none;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .row[data-unread] .time {
+    color: var(--mobile-accent);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .tick {
+    flex: none;
+    color: var(--mobile-read-tick);
+  }
+
+  .preview {
+    flex: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-body);
+    color: var(--text-muted);
+  }
+
+  .preview[data-kind] {
+    font-style: italic;
+  }
+
+  .badge {
+    flex: none;
+    min-inline-size: 22px;
+    block-size: 22px;
+    box-sizing: border-box;
+    padding-inline: var(--space-6);
+    border-radius: 11px;
+    background-color: var(--mobile-accent);
+    color: var(--mobile-surface);
+    font-family: var(--font-archivo), var(--font-sans);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: 22px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dot {
+    flex: none;
+    inline-size: var(--space-10);
+    block-size: var(--space-10);
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-accent);
+  }
+
+  .body .tags {
+    margin-block-start: var(--space-3);
+  }
+
+  /* ── The channel filter sheet ──────────────────────────────────────── */
+  .filterList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* A row is a tick (a checkbox button), not a link: nothing moves until "הצג". */
+  .filterRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    inline-size: 100%;
+    padding-block: 11px;
+    padding-inline: var(--space-2);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .filterRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--space-2));
+  }
+
+  .filterMark {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 42px;
+    block-size: 42px;
+    border-radius: var(--radius-round);
+    background-color: var(--panel-footer);
+  }
+
+  .filterName {
+    flex: 1;
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .filterBox {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 24px;
+    block-size: 24px;
+    box-sizing: border-box;
+    border: 2px solid var(--border-heavy);
+    border-radius: 7px;
+    color: var(--mobile-surface);
+  }
+
+  .filterRow[aria-checked='true'] .filterBox {
+    border: 0;
+    background-color: var(--mobile-ink);
+  }
+
+  /* "נקה" and "הצג" under the rows: clear the ticks, then apply them. */
+  .filterActions {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--space-10);
+    padding-block-start: var(--space-14);
+  }
+
+  /* ── One conversation ──────────────────────────────────────────────── */
+  .thread {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mobile-thread-ground);
+  }
+
+  .threadBar {
+    background-color: var(--mobile-ground);
+  }
+
+  .barAvatar {
+    position: relative;
+    flex: none;
+    inline-size: 40px;
+    block-size: 40px;
+  }
+
+  .barAvatarFace {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-avatar);
+    color: var(--text-secondary);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .barBadge {
+    position: absolute;
+    inset-inline-end: -2px;
+    inset-block-end: -2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 18px;
+    block-size: 18px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-surface);
+    box-shadow: 0 0 0 2px var(--mobile-ground);
+  }
+
+  .barTitle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    line-height: 1.25;
+  }
+
+  .barName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16.5px;
+    font-weight: var(--font-weight-semibold);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  .barMeta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-muted);
+  }
+
+  /* The AI's switch: lavender while it answers, quiet while it is paused. */
+  .aiSwitch {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    block-size: 30px;
+    padding-inline: var(--space-10);
+    border: 0;
+    border-radius: 15px;
+    background-color: var(--mobile-tag-ai);
+    color: var(--mobile-tag-ai-text);
+    font: inherit;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+  }
+
+  .aiSwitch[data-paused] {
+    background-color: var(--mobile-chip);
+    color: var(--text-muted);
+  }
+
+  .aiSwitch:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .aiSwitch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  /* A verb the platform refused: said over the thread, above the composer. */
+  .verbProblem {
+    position: fixed;
+    inset-inline: var(--space-12);
+    inset-block-end: calc(90px + env(safe-area-inset-bottom));
+    z-index: var(--z-overlay);
+    margin: 0;
+    padding: 13px var(--space-16);
+    border-radius: var(--radius-card);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    box-shadow: var(--mobile-shadow-float);
+    font-size: var(--font-size-control);
+    line-height: 1.35;
+  }
+
+  /*
+   * The stream scrolls; the composer stays. The composer is last in the
+   * column, so the keyboard pushes it up with the viewport (`100dvh` on the
+   * frame) rather than covering it.
+   */
+  .stream {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding-inline: var(--space-12);
+  }
+
+  .composer {
+    flex: none;
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+
+  .note {
+    margin: 0;
+    padding-block: var(--space-40);
+    padding-inline: var(--space-24);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--font-size-body);
+  }
+
+  /* ── Copilot's ready reply ─────────────────────────────────────────── */
+  .copilot {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-9);
+    margin-block: 0 var(--space-8);
+    margin-inline: var(--space-10);
+    padding-block: 13px var(--space-12);
+    padding-inline: var(--space-14);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-copilot);
+    color: var(--mobile-copilot-text);
+    box-shadow: var(--mobile-shadow-card);
+  }
+
+  .copilotHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .copilotTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-7);
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--mobile-copilot-accent);
+  }
+
+  .copilotDot {
+    inline-size: var(--space-7);
+    block-size: var(--space-7);
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-copilot-accent);
+  }
+
+  .copilotMore {
+    /* With the close button after it, the two sit together at the far end. */
+    margin-inline-start: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--mobile-copilot-muted);
+    font: inherit;
+    font-size: var(--font-size-label);
+    cursor: pointer;
+  }
+
+  /* The way to close the card: the far end of its head. */
+  .copilotClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-block: calc(-1 * var(--space-6));
+    margin-inline-end: calc(-1 * var(--space-6));
+    inline-size: 32px;
+    block-size: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--mobile-copilot-muted);
+    cursor: pointer;
+  }
+
+  .copilotClose:focus-visible {
+    outline: var(--border-width-thick) solid var(--mobile-copilot-accent);
+    outline-offset: var(--space-2);
+  }
+
+  .copilotText {
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    text-wrap: pretty;
+    white-space: pre-wrap;
+  }
+
+  .copilotActions {
+    display: flex;
+    gap: var(--space-8);
+  }
+
+  .copilotUse,
+  .copilotEdit {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-6);
+    block-size: 36px;
+    padding-inline: var(--space-18);
+    border-radius: var(--space-18);
+    font: inherit;
+    font-size: var(--font-size-control);
+    cursor: pointer;
+  }
+
+  .copilotUse {
+    border: 0;
+    background-color: var(--mobile-copilot-accent);
+    color: var(--mobile-copilot);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .copilotEdit {
+    padding-inline: var(--space-16);
+    border: var(--border-width-thin) solid var(--mobile-copilot-edge);
+    background: transparent;
+    color: var(--mobile-copilot-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .copilotUse:focus-visible,
+  .copilotEdit:focus-visible {
+    outline: var(--border-width-thick) solid var(--mobile-copilot-accent);
+    outline-offset: var(--space-2);
+  }
+
+  /* ── Sheets ────────────────────────────────────────────────────────── */
+  .sheetText {
+    margin: 0;
+    font-size: var(--font-size-body);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .sheetAction {
+    inline-size: 100%;
+    block-size: 50px;
+    border-radius: 25px;
+  }
+
+  .sheetList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sheetRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-14);
+    inline-size: 100%;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-2);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .sheetAvatar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 42px;
+    block-size: 42px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-avatar);
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .sheetRowName {
+    flex: 1;
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* ── The customer, read only (`/m/inbox/<id>/customer`) ─────────────── */
+  .info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-18);
+    padding-block: var(--space-8) var(--space-24);
+  }
+
+  .infoHead {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding-inline: var(--space-18);
+  }
+
+  .infoWho {
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .infoName {
+    font-size: 19px;
+    font-weight: var(--font-weight-bold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  .infoSection {
+    display: flex;
+    flex-direction: column;
+    padding-inline: var(--space-12);
+  }
+
+  .infoSection > h2 {
+    margin: 0;
+    padding-inline: var(--space-6);
+  }
+
+  .infoList,
+  .infoRows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .infoItem {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .infoItem + .infoItem {
+    border-block-start: var(--border-width-thin) solid var(--mobile-row-rule);
+  }
+
+  .infoLabel,
+  .infoByline {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .infoRowTitle {
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .infoOrder {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+  }
+
+  .infoMoney {
+    flex: none;
+    font-size: var(--font-size-body);
+  }
+
+  .infoChevron {
+    flex: none;
+    color: var(--text-subtle);
+  }
+
+  .infoQuiet {
+    margin: 0;
+    padding-block: var(--space-16);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-muted);
+  }
+}

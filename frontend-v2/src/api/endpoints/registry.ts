@@ -280,6 +280,22 @@ export const billingEndpoints = {
    */
   changePlanPreview: () => endpoint('/api/billing/subscription/change-plan/preview'),
   /**
+   * The Shopify Connector - a separate subscription, billed and managed ONLY
+   * by Shopify (review 132211). Never part of GOTCHA Core.
+   *
+   * `shopifyState` answers the access snapshot in `{ data }`: the server's own
+   * `connector.status`, `grantsAccess`, `connector.manageUrl` and
+   * `core.allowsShopifyConnect` (see contracts/shopify-connector.ts). Readable
+   * by any member.
+   *
+   * `shopifyPlanSelection` answers `{ data: { url, state } }`: Shopify's plan
+   * page for THIS workspace's store, built server-side - the app never builds
+   * a Shopify URL. Gated on `settings:billing:manage`; 409
+   * `shopify_not_connected`, 503 `shopify_plan_selection_unavailable`.
+   */
+  shopifyState: () => endpoint('/api/billing/shopify/state'),
+  shopifyPlanSelection: () => endpoint('/api/billing/shopify/plan-selection'),
+  /**
    * Invoices - and this route was here the whole time.
    *
    * The registry used to point at `/api/billing/summary`, annotated
@@ -344,16 +360,11 @@ export const billingEndpoints = {
   pricingPackages: () => endpoint('/api/billing/pricing/packages'),
   /** Prices a selection from KEYS. Never accepts a price from the client. */
   pricingQuote: () => endpoint('/api/billing/pricing/quote'),
-  /**
-   * Apply a change. Owner-gated on `settings:billing:manage`.
-   *
-   * `/api/billing/subscription/change-plan` above is the SAME service behind a
-   * second path - identical body, permission and result, differing only in the
-   * error string. Not a dead route this time; a duplicate. This screen uses
-   * one of them and the registry records that they are the same thing, so
-   * nobody later concludes they are two features.
+  /*
+   * `POST /api/billing/pricing/change` is retired (410 `endpoint_retired`,
+   * fix/split-billing-be): GOTCHA Core changes go through `changePlan` above,
+   * the one path that says it is Core (`scope: "gotcha_core"`).
    */
-  pricingChange: () => endpoint('/api/billing/pricing/change'),
   /**
    * Screen 17d - buy a credit pack. REAL MONEY.
    *
@@ -399,6 +410,12 @@ export const notificationEndpoints = {
   markRead: (id: string) => endpoint('/api/notifications/{id}/mark-read', { id }),
   markAllRead: () => endpoint('/api/notifications/mark-all-read'),
   /**
+   * The phones that receive this person's push notifications (the mobile app).
+   * POST `{ token, platform }` registers one; DELETE by token forgets it.
+   */
+  devices: () => endpoint('/api/notifications/devices'),
+  device: (token: string) => endpoint('/api/notifications/devices/{token}', { token }),
+  /**
    * The signed-in person's own notification preferences - screen 15.
    *
    * Four booleans and a quiet-hours window. NOT the design's 8×3 matrix: the
@@ -406,6 +423,10 @@ export const notificationEndpoints = {
    * department and carries recipients, which is a different question.
    */
   preferences: () => endpoint('/api/notification-preferences/me'),
+  /** Sends a code to `{phone}` - 202 `{expiresInSeconds}` (Backend 73f76d2c). */
+  whatsappVerify: () => endpoint('/api/notification-preferences/me/whatsapp/verify'),
+  /** `{phone, code}` - 200 the preferences, the number kept and WhatsApp on. */
+  whatsappConfirm: () => endpoint('/api/notification-preferences/me/whatsapp/confirm'),
   /**
    * The TENANT's notification rules - event type × channels × recipients,
    * scoped to a department. ADMIN only.
@@ -583,11 +604,17 @@ export const channelEndpoints = {
    * The callable variant (backend ecd64c4d): asked server side with our
    * session, answers `200 { url }` - the provider's page - or `409
    * { error: 'not_configured' }`, or 403 for a non-admin. The way back lands
-   * on `/v2/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
+   * on `/settings/channels?connected=<p>&count=N` or `?platform=<p>&error=<code>`.
+   * `onboarding_channels` (backend 2c1653b0) lands the same query on
+   * `/onboarding/channels` instead.
    */
-  oauthInitUrl: (platform: string) =>
-    endpoint('/api/channels/oauth/init-url?platform={platform}&flow=redesign_studio', {
+  oauthInitUrl: (
+    platform: string,
+    flow: 'redesign_studio' | 'onboarding_channels' = 'redesign_studio',
+  ) =>
+    endpoint('/api/channels/oauth/init-url?platform={platform}&flow={flow}', {
       platform,
+      flow,
     }),
   /** Creates the widget as PENDING - a draft, not a connected channel. */
   createWebChat: () => endpoint('/api/channels/webchat/create'),
@@ -705,6 +732,12 @@ export const channelEndpoints = {
    * when it was the last number on it. Never pressed by a test or a capture.
    */
   whatsappNumber: (id: string) => endpoint('/api/channels/whatsapp/numbers/{id}', { id }),
+  /**
+   * PATCH the workspace's primary WhatsApp number - what sends anything no
+   * number was chosen for. `{ channelAccountId }`; null goes back to the
+   * default, the first connected.
+   */
+  whatsappPrimary: () => endpoint('/api/channels/whatsapp/primary'),
 } as const;
 
 /**
@@ -751,6 +784,39 @@ export const onboardingEndpoints = {
   discovery: () => endpoint('/api/onboarding/discovery'),
   discover: () => endpoint('/api/onboarding/discover'),
   teach: () => endpoint('/api/onboarding/teach'),
+  /**
+   * Onboarding v2 (Backend, feat/onboarding-v2). POST `{ domain, locale,
+   * legalAccepted }` → 202 `{ data: { jobId, status, resumed } }` (the same
+   * domain resumes the live job: no 409); GET `?since=<seq>` → the job, 404
+   * NO_JOB before any scan. The old POST /discover stays on the server.
+   */
+  discoverJob: () => endpoint('/api/onboarding/discover/job'),
+  /**
+   * GET → `{ data: { step | null } }`; PATCH `{ step }` - the onboarding step
+   * reached, saved on Continue/Skip (Backend CP3a 4cc88e81). Steps: website,
+   * reading, systems, channels, live, done.
+   */
+  step: () => endpoint('/api/onboarding/step'),
+  /** POST - resumes a FAILED or STALLED job; 409 JOB_COMPLETE. */
+  discoverRetry: () => endpoint('/api/onboarding/discover/retry'),
+  /** GET → what was learned; PATCH `{ section, id?, value? | remove }` → the same, updated. 404 NOT_LEARNED. */
+  learned: () => endpoint('/api/onboarding/learned'),
+  /**
+   * POST multipart, one field "file" (PDF, DOCX, TXT, MD; 5MB): what the
+   * file says, into what was learned and the knowledge base (Backend
+   * e2e8623f). Sent from the browser, through the BFF, like a knowledge file.
+   */
+  learnedUpload: () => endpoint('/api/onboarding/learned/upload'),
+  /** GET → the platform's main integration and detected tools in the catalogue. */
+  integrationSuggestions: () => endpoint('/api/onboarding/integration-suggestions'),
+  /** POST `{ employeeName?, confirm: true }` - the first employee, live on the connected channels. Idempotent. */
+  goLive: () => endpoint('/api/onboarding/go-live'),
+  /**
+   * POST `{ question }` - the LIVE employee asked in a sandbox, read-only
+   * tools, nothing sent (Backend's ai-assist.ts). 409 NOT_LIVE, 422
+   * QUESTION_REQUIRED / QUESTION_TOO_LONG, 429 PREVIEW_RATE_LIMITED.
+   */
+  employeeTest: () => endpoint('/api/ai-assist/onboarding-employee-test'),
 } as const;
 
 /**
@@ -824,6 +890,14 @@ export const voiceChannelEndpoints = {
 /** Providers whose redesign flow starts at `/api/integrations/oauth/{slug}/init`. */
 const LEGACY_OAUTH_ROUTE = new Set(['zoho_crm', 'google_calendar', 'calendly']);
 
+/**
+ * Where a connect started, so the provider's way back lands there (the
+ * backend signs it into the state): Studio · Capabilities, or onboarding's
+ * step 2 (`/onboarding/systems?system=<slug>&connected=1|error=<code>`).
+ */
+export const CONNECT_FLOWS = ['redesign_studio', 'onboarding_systems'] as const;
+export type ConnectFlow = (typeof CONNECT_FLOWS)[number];
+
 export const integrationEndpoints = {
   list: () => endpoint('/api/integrations'),
   detail: (slug: string) => endpoint('/api/integrations/{slug}', { slug }),
@@ -845,21 +919,22 @@ export const integrationEndpoints = {
   disconnect: (slug: string) => endpoint('/api/connectors/{slug}/disconnect', { slug }),
   /**
    * OAuth at the provider, returning to THIS app (backend 381a5d1b): the
-   * `redesign_studio` flow lands on `/v2/studio/capabilities?system=<slug>`
+   * `redesign_studio` flow lands on `/studio/capabilities?system=<slug>`
    * with `connected=1` or `error=<code>`. Answers `{ url }` (not enveloped).
    * Salesforce takes the login host; Shopify re-authorises the store already
    * connected and refuses 409 without one.
    */
-  oauthInit: (slug: string, loginHost?: string) =>
+  oauthInit: (slug: string, loginHost?: string, flow: ConnectFlow = 'redesign_studio') =>
     loginHost
-      ? endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio&loginHost={loginHost}', {
+      ? endpoint('/api/connectors/{slug}/oauth/init?flow={flow}&loginHost={loginHost}', {
           slug,
+          flow,
           loginHost,
         })
       : LEGACY_OAUTH_ROUTE.has(slug)
         ? // Zoho, Google Calendar and Calendly start from the older routes (backend e7523379).
-          endpoint('/api/integrations/oauth/{slug}/init?flow=redesign_studio', { slug })
-        : endpoint('/api/connectors/{slug}/oauth/init?flow=redesign_studio', { slug }),
+          endpoint('/api/integrations/oauth/{slug}/init?flow={flow}', { slug, flow })
+        : endpoint('/api/connectors/{slug}/oauth/init?flow={flow}', { slug, flow }),
   /**
    * B: WooCommerce through the store's own approval - the store address only,
    * answered `{ url }` (`format=json`); 400 `invalid_store_url`. Lands on
@@ -873,7 +948,8 @@ export const integrationEndpoints = {
    * pending install from the browser's `gotcha_shopify_pending` cookie.
    */
   shopifyAvailability: () => endpoint('/api/connectors/shopify/install/availability'),
-  shopifyStart: () => endpoint('/api/connectors/shopify/install/start?flow=redesign_studio'),
+  shopifyStart: (flow: ConnectFlow = 'redesign_studio') =>
+    endpoint('/api/connectors/shopify/install/start?flow={flow}', { flow }),
   shopifyPending: () => endpoint('/api/connectors/shopify/install/pending'),
   shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
   /**
@@ -884,10 +960,21 @@ export const integrationEndpoints = {
    * changed). Answers the access snapshot.
    */
   shopifyBillingComplete: () => endpoint('/api/billing/shopify/complete'),
-  wooOAuthInit: (storeUrl: string) =>
+  /**
+   * Disconnect Shopify for real: asks Shopify to uninstall the app, then
+   * WAITS - `{ data: { state: "awaiting_webhook", shopDomain } }`. Only
+   * Shopify's signed `app/uninstalled` webhook finishes it (the snapshot's
+   * `connector.status` goes `uninstall_pending` -> `uninstalled`). 404
+   * `not_connected`, 409 `no_token` / `no_shop_domain`, 502 `shopify_refused`.
+   */
+  shopifyUninstall: () => endpoint('/api/integrations/shopify/uninstall'),
+  wooOAuthInit: (storeUrl: string, flow: ConnectFlow = 'redesign_studio') =>
     endpoint(
-      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow=redesign_studio&format=json',
-      { storeUrl },
+      '/api/integrations/woocommerce/oauth/init?storeUrl={storeUrl}&flow={flow}&format=json',
+      {
+        storeUrl,
+        flow,
+      },
     ),
   /** The same key flow from the plugin's connect page: it comes back to /connect/woocommerce. */
   wooOAuthInitPlugin: (storeUrl: string) =>
@@ -948,6 +1035,13 @@ export const securityEndpoints = {
    * different settings and the design is right to separate them.
    */
   me: () => endpoint('/api/account'),
+  /** Required and not enrolled (authenticator + recovery codes): the MFA gate. */
+  mfaGate: () => endpoint('/api/account/mfa-gate'),
+  /** The caller's own factors: `{ available, totp, passkeys, recoveryCodes }`. */
+  accountSecurity: () => endpoint('/api/account/security'),
+  /** Removes one of the caller's own factors (`totp` | `webauthn` | `static`). */
+  removeMfaDevice: (type: string, id: string) =>
+    endpoint('/api/account/security/device/{type}/{id}', { type, id }),
   sessions: () => endpoint('/api/account/sessions'),
   revokeSession: (id: string) => endpoint('/api/account/sessions/{id}', { id }),
   /** Revokes every OTHER session, keeping the caller's. */
@@ -1490,7 +1584,7 @@ export const knowledgeEndpoints = {
   createBase: () => endpoint('/api/knowledge-bases'),
   /**
    * Drive or Confluence at the provider, returning HERE (backend df9ee4cd):
-   * `/v2/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
+   * `/studio/knowledge?add=1&way=drive|confluence&connected=1|error=<code>`.
    * Answers `{ url }` (not enveloped). ADMIN only; `kbId` required.
    */
   /** 08b after connecting: the base's Drive / Confluence connections. `{ data: [...] }`. */
@@ -1752,6 +1846,15 @@ export const inboxEndpoints = {
     endpoint('/api/ai-assist/{conversationId}/customer-memory', { conversationId }),
   suggestionsRefresh: (conversationId: string) =>
     endpoint('/api/ai-assist/{conversationId}/suggestions/refresh', { conversationId }),
+  /**
+   * The Copilot side chat (Backend c49f3830), one agent's private thread about
+   * this conversation: GET reads it, POST `{ message, locale? }` adds one
+   * exchange (3 to 15s; 409 COPILOT_CHAT_BUSY while a round runs, 502
+   * COPILOT_CHAT_FAILED stores nothing), DELETE starts over. Gated on
+   * `ai.copilot`. Nothing in it reaches the customer. See `contracts/copilot-chat.ts`.
+   */
+  copilotChat: (conversationId: string) =>
+    endpoint('/api/ai-assist/{conversationId}/chat', { conversationId }),
 
   /**
    * Drafts or refines ONE outbound message from a plain-language instruction.
@@ -1808,6 +1911,18 @@ export const inboxEndpoints = {
    */
   sendMedia: (conversationId: string) =>
     endpoint('/api/conversations/{conversationId}/messages/media', { conversationId }),
+
+  /**
+   * A five-minute signed link to one message's stored file (Backend
+   * 79dd2609): `{ data: { url: "/api/media/s/:m?exp=&sig=", expiresAt } }`.
+   * For the phone app, which opens a document outside the WebView, where
+   * there is no login. 404 for a file not stored here.
+   */
+  mediaLink: (conversationId: string, messageId: string) =>
+    endpoint('/api/conversations/{conversationId}/messages/{messageId}/media-link', {
+      conversationId,
+      messageId,
+    }),
 
   /**
    * The approved templates of this conversation's WhatsApp number (Backend
@@ -2034,6 +2149,31 @@ export const consoleEndpoints = {
   resendOnboarding: (tenantId: string) =>
     endpoint('/api/system/tenants/{tenantId}/resend-onboarding', { tenantId }),
   /**
+   * PATCH `{ status, reason }` → `{ data: { before, after, planAccess, warnings } }`
+   * (Backend's manual-edit contract, 2026-10-23). Sets the status by hand,
+   * without payment or onboarding; the same status is a 200 with no write.
+   */
+  tenantStatus: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/status', { tenantId }),
+  /**
+   * PATCH `{ userId, newEmail, reason }` - a member's login email, Authentik
+   * first (system-manual-edits.ts:148). Any member but a SYSTEM_ADMIN.
+   */
+  memberEmail: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/admin-email', { tenantId }),
+  /**
+   * POST `{ action, reason, ... }` - plan, end date, POC or credits, by hand
+   * (system-manual-edits.ts:294 → billing manual-edit.service.ts). Never a
+   * charge: `charges: "none"`, and every plan or date edit turns renewal off.
+   */
+  manualBilling: (tenantId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/billing/manual', { tenantId }),
+  /** POST `{ email, name, role, reason? }` → 201 `{ data: user, setupLink }` (system.ts:1449). */
+  members: (tenantId: string) => endpoint('/api/system/tenants/{tenantId}/users', { tenantId }),
+  /** DELETE `{ reason? }` - revokes the login, then removes the member (system.ts:1560). */
+  member: (tenantId: string, userId: string) =>
+    endpoint('/api/system/tenants/{tenantId}/users/{userId}', { tenantId, userId }),
+  /**
    * GET `{ data }` - ACTIVE, PUBLIC plans (billing admin-pricing.ts:1085),
    * served by billing through the gateway's `/api/admin/pricing`.
    */
@@ -2042,6 +2182,17 @@ export const consoleEndpoints = {
   quote: () => endpoint('/api/admin/pricing/provisioning/quote'),
   /** GET `{ data: string[] }` - the license domains a POC is scoped to (system.ts:1028). */
   pocDomains: () => endpoint('/api/system/poc-feature-domains'),
+  /**
+   * Support mode (auth `routes/support-sessions.ts`). POST `{ tenantId, reason }`
+   * → 201 `{ data: session }`; 403 `not_system_admin` / `mfa_required`, 404
+   * `tenant_not_found`, 409 `support_system_tenant` / `support_session_active`.
+   */
+  supportSessions: () => endpoint('/api/system/support-sessions'),
+  /** GET `{ data: session | null }` - this login's live session. */
+  currentSupportSession: () => endpoint('/api/system/support-sessions/current'),
+  /** POST - idempotent; 404 `support_session_not_found` for another admin's. */
+  endSupportSession: (sessionId: string) =>
+    endpoint('/api/system/support-sessions/{sessionId}/end', { sessionId }),
 } as const;
 
 /**

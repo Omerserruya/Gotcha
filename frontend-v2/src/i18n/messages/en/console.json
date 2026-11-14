@@ -7,7 +7,9 @@
     "tenants": "Tenants",
     "tenantsLine": "Every organization on the platform: the plan it holds and what it owes.",
     "coupons": "Coupons",
-    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off."
+    "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off.",
+    "security": "Security",
+    "securityLine": "Your two-step sign-in: set up, replace, recovery codes."
   },
   "tenants": {
     "title": "Tenants",
@@ -56,7 +58,8 @@
   },
   "confirm": {
     "cancel": "Cancel",
-    "working": "Working…"
+    "working": "Working…",
+    "unconfirmed": "The console couldn't confirm whether this went through. Reload the page and check before trying again."
   },
   "refusal": {
     "held": "Billing writes are off in this environment, because its billing is the live payment account. Nothing was sent.",
@@ -349,6 +352,255 @@
       "invalid_billing": "That plan or volume can no longer be chosen. Choose again.",
       "forbidden": "The platform refused: this needs a platform administrator.",
       "failed": "The console couldn't confirm whether the tenant was created. Search the list before trying again."
+    },
+    "language": "Workspace language",
+    "languageHint": "Its emails and its setup are in this language.",
+    "languages": {
+      "he": "עברית",
+      "en": "English"
     }
+  },
+  "edit": {
+    "reason": "Reason (saved with the change)",
+    "status": {
+      "label": "Status",
+      "choose": "Choose a status",
+      "change": "Change status",
+      "options": {
+        "ACTIVE": "Active",
+        "PENDING_ONBOARDING": "Onboarding",
+        "PENDING_PAYMENT": "Awaiting payment",
+        "SUSPENDED": "Suspended"
+      },
+      "what": {
+        "ACTIVE": "The tenant is set to active now, without waiting for payment or onboarding.",
+        "PENDING_ONBOARDING": "The tenant is set to onboarding. Its people see setup, not the product, until onboarding finishes.",
+        "PENDING_PAYMENT": "The tenant is set to awaiting payment. Its people see the payment page, not the product.",
+        "SUSPENDED": "The tenant is set to suspended. Nothing is deleted."
+      },
+      "noPlan": "This tenant has no active plan, so it still can't use the product until it gets one.",
+      "nothingCharged": "Nothing is charged.",
+      "yes": "Set the status",
+      "done": "The status is now: {status}."
+    },
+    "warnings": {
+      "no_access_source": "The status changed, but the tenant has no plan, so it still can't use the product. Give it a plan.",
+      "open_checkout": "A payment is still open for this tenant. If the customer pays, the payment sets the status again.",
+      "billing_may_resuspend": "This tenant is behind on payment. Billing may suspend it again.",
+      "renewal_will_unsuspend": "The next renewal sets this tenant back to active.",
+      "no_idp_identity": "The email changed here, but this person has no sign-in identity to update.",
+      "unknown": "The platform added a note this screen can't read. Reload the page to see the tenant as it is now."
+    },
+    "refusal": {
+      "not_found": "This tenant no longer exists.",
+      "reason_invalid": "Give a reason of up to {max} characters.",
+      "invalid": "The platform refused the change. Reload the page and try again.",
+      "forbidden": "The platform refused: this needs a platform administrator.",
+      "failed": "The console couldn't confirm what happened. The page now shows the tenant as the platform has it.",
+      "member_not_found": "This member is no longer in the tenant. The page now shows who is.",
+      "system_admin": "A platform administrator is never edited or removed from a tenant.",
+      "self": "You can't remove yourself.",
+      "same_email": "That is already this member's email.",
+      "email_taken": "Another member or login already uses that email.",
+      "identity_shared": "This person also belongs to other organizations, so their login can't move from here. Add the new email as a user instead, then remove this member.",
+      "idp_failed": "The sign-in service didn't accept the change. Nothing was changed.",
+      "idp_unknown": "Could not confirm the change with the sign-in service, and nothing was changed. Try again.",
+      "last_admin": "This is the tenant's only owner. Add another owner first.",
+      "already_member": "This person is already a member of this tenant.",
+      "slug_mismatch": "The slug typed doesn't match this organization.",
+      "system_tenant": "The System organization can't be deleted.",
+      "own_tenant": "You can't delete the organization you are signed in to.",
+      "paid_subscription": "This organization has a paid plan that can still charge. Cancel or end the plan first.",
+      "open_checkout": "This organization has a payment the customer could still complete. Wait for it to expire, or cancel it first.",
+      "shopify_billed": "Shopify bills this organization. The merchant must uninstall the app in Shopify first.",
+      "in_dunning": "This tenant is in dunning: a payment is being collected. Wait for it to settle first.",
+      "grandfathered": "This tenant is on a grandfathered plan, which isn't edited by hand.",
+      "state_not_editable": "The plan can't be edited in its current state.",
+      "end_date_required": "This tenant has no current period to keep. Choose an end date.",
+      "end_date_in_past": "The date has to be in the future: a past date would end access at once.",
+      "no_subscription": "This tenant has no plan, so there is no end date to set. Change the plan instead.",
+      "plan_unavailable": "That plan can't be chosen for this tenant. Choose another.",
+      "volume_invalid": "That volume isn't offered for this plan.",
+      "unknown_domain": "A feature area is no longer offered. Reload the page.",
+      "billing_unreachable": "Billing didn't answer, and nothing was changed. Try again."
+    },
+    "members": {
+      "title": "Owners and users",
+      "unread": "The members couldn't be read. Reload the page to try again.",
+      "empty": "This tenant has no members yet.",
+      "roles": {
+        "ADMIN": "Owner",
+        "AGENT": "Agent",
+        "SYSTEM_ADMIN": "Platform administrator"
+      },
+      "inactive": "Inactive",
+      "email": {
+        "open": "Change email",
+        "label": "New email",
+        "cancel": "Cancel",
+        "save": "Save email",
+        "what": "{name} signs in with {email} from now on. Their password and open sessions stay as they are.",
+        "yes": "Change the email",
+        "done": "The email is now {email}."
+      },
+      "remove": {
+        "label": "Remove",
+        "what": "{name} is removed from this tenant and can no longer sign in to it. Their conversations stay, unassigned.",
+        "yes": "Remove",
+        "done": "{name} was removed."
+      },
+      "add": {
+        "title": "Add a user",
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "label": "Add user",
+        "what": "{email} is added as {role} and emailed a link to set up their account.",
+        "yes": "Add and send the email",
+        "done": "{email} was added and emailed a setup link."
+      }
+    },
+    "delete": {
+      "title": "Delete the organization",
+      "intro": "The organization is deleted for good, right away. This can't be undone.",
+      "systemTenant": "The System organization can't be deleted.",
+      "label": "Delete the organization",
+      "what": "{name} and everything in it is deleted for good: its users, conversations, customers, channels, knowledge, files and settings. This can't be undone.",
+      "provider": "Nothing is charged or refunded, and nothing is disconnected on WhatsApp, Meta or Shopify. What is still connected there is listed after.",
+      "match": "Type {slug} to confirm",
+      "yes": "Delete for good",
+      "done": "{name} was deleted.",
+      "leftovers": "Still connected on the provider side:",
+      "uploadsLeft": "Some of its files couldn't be removed from storage. The organization itself is deleted.",
+      "dismiss": "Got it",
+      "removed": "What was removed:",
+      "counts": {
+        "users": "Users",
+        "conversations": "Conversations",
+        "messages": "Messages",
+        "channelAccounts": "Channels",
+        "contacts": "Customers",
+        "identitiesDeleted": "Sign-in accounts",
+        "uploadFiles": "Files"
+      }
+    },
+    "plan": {
+      "title": "Plan and credits",
+      "intro": "Changes here never charge and never create a payment.",
+      "refusedUpfront": "Refused, and why: a tenant Shopify bills (Shopify owns its billing), a tenant in dunning (a payment is being collected), and an end date that has passed (it would end access at once).",
+      "actionLabel": "What to change",
+      "actions": {
+        "change_plan": "Change plan",
+        "set_end_date": "Set end date",
+        "switch_to_poc": "Switch to POC",
+        "add_credits": "Add credits"
+      },
+      "plan": "Plan",
+      "choosePlan": "Choose a plan",
+      "chatVolume": "Chat volume",
+      "voiceVolume": "Voice volume",
+      "endsAt": "Access ends on",
+      "endsAtOptional": "Access ends on (leave empty to keep the current period's end)",
+      "endsPast": "The date has to be in the future.",
+      "credits": "Credits",
+      "creditsInvalid": "A whole number from 1 to {max}.",
+      "areas": "Feature areas",
+      "areasUnread": "The feature areas couldn't be read. Reload the page to try again.",
+      "plansUnread": "The plans couldn't be read. Reload the page to try again.",
+      "what": {
+        "change_plan": "The tenant moves to {plan}, with no charge.",
+        "set_end_date": "The tenant's access ends on {date}, with no charge.",
+        "switch_to_poc": "The tenant becomes a POC: {credits, plural, one {# credit} other {# credits}} given, until {date}, with no charge.",
+        "add_credits": "{credits, plural, one {# credit is} other {# credits are}} added to the tenant's balance, with no charge."
+      },
+      "renewalOff": "Automatic renewal is turned off: the tenant won't be charged or renewed automatically.",
+      "renewalOffKeep": "Automatic renewal is turned off: the tenant won't be charged or renewed automatically, and access ends when the current period ends.",
+      "renewalUnchanged": "Renewal stays as it is.",
+      "yes": "Apply, no charge",
+      "done": {
+        "change_plan": "The plan was changed.",
+        "set_end_date": "The end date was set.",
+        "switch_to_poc": "The tenant is now a POC.",
+        "add_credits": "The credits were added. Renewal stays as it is."
+      },
+      "doneRenewalOff": "Renewal is off: not charged or renewed automatically.",
+      "doneEnds": "Access ends on {date}."
+    }
+  },
+  "support": {
+    "banner": {
+      "label": "Support mode",
+      "in": "You are working in <b>{tenant}</b> as its admin. Everything you do here is recorded as GOTCHA Support.",
+      "inUnnamed": "You are working in a customer's workspace as its admin. Everything you do here is recorded as GOTCHA Support.",
+      "reason": "Reason: <r>{reason}</r>",
+      "endsAt": "Ends at {time}",
+      "exit": "Exit support mode",
+      "exiting": "Exiting…",
+      "exitFailed": "Support mode could not be ended. Try again."
+    },
+    "enter": {
+      "title": "Support mode",
+      "what": "Work inside this workspace as its admin. Billing, ownership, secrets, deleting and disconnecting are refused, and the session ends on its own.",
+      "reason": "Why are you entering?",
+      "reasonHint": "Recorded in the workspace's history and in System's.",
+      "enter": "Enter as admin",
+      "entering": "Entering…",
+      "ended": "Support mode ended. You are back in the console.",
+      "active": "You are already in support mode in <b>{name}</b>.",
+      "activeUnnamed": "You are already in support mode in another workspace.",
+      "resume": "Return to it",
+      "endOther": "End that session",
+      "endedOther": "That session has ended. You can enter this workspace now.",
+      "refusal": {
+        "reason_invalid": "Write a short reason for entering.",
+        "forbidden": "Only a GOTCHA admin can enter support mode.",
+        "mfa_required": "Turn on two-step verification for your login first.",
+        "not_found": "This workspace no longer exists.",
+        "system_tenant": "Support mode is for a customer's workspace, not System or your own.",
+        "active": "You are already in support mode in another workspace.",
+        "no_session": "Support mode could not be started. Nothing was changed.",
+        "not_kept": "Support mode started, but this browser could not keep it. Try again.",
+        "none": "There is no support session to return to.",
+        "failed": "Support mode could not be started. Try again."
+      }
+    },
+    "refused": "Not allowed in support mode."
+  },
+  "security": {
+    "title": "Security",
+    "description": "Your two-step sign-in: an authenticator app and recovery codes. Platform admins need both.",
+    "unread": "We couldn't read your two-step sign-in settings, so they aren't shown. This doesn't mean it's off.",
+    "unavailable": "The sign-in server didn't answer, so what's set up can't be known right now. This doesn't mean two-step sign-in is off.",
+    "status": {
+      "on": "Two-step sign-in is on: an authenticator app and recovery codes.",
+      "off": "Two-step sign-in isn't complete: it needs both an authenticator app and recovery codes."
+    },
+    "authenticator": {
+      "title": "Authenticator app",
+      "none": "No authenticator app is set up.",
+      "some": "{count, plural, =1 {One app is set up.} other {# apps are set up.}}",
+      "replace": "To replace an app, add the new one, then remove the old one.",
+      "setUp": "Set up an authenticator app",
+      "add": "Add an app",
+      "unnamed": "Authenticator app",
+      "added": "added {date}"
+    },
+    "recovery": {
+      "title": "Recovery codes",
+      "made": "Recovery codes have been made.",
+      "none": "No recovery codes have been made.",
+      "make": "Make codes",
+      "again": "Make new codes"
+    },
+    "remove": {
+      "action": "Remove",
+      "sentence": "Remove this app? Its codes will no longer be accepted.",
+      "lastSentence": "This is the only app. Without an authenticator app, you'll be asked to set one up again before you can continue.",
+      "yes": "Remove",
+      "no": "Cancel",
+      "gone": "This app no longer exists. Refresh the page.",
+      "failed": "That didn't remove. Try again."
+    },
+    "close": "Close"
   }
 }

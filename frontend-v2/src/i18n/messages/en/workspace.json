@@ -205,7 +205,7 @@
     "on": "Reply within {minutes} min · warn at {warning}%",
     "onNoWarning": "Reply within {minutes} min",
     "off": "Off",
-    "ownerOnly": "Only an Owner can see or change this.",
+    "ownerOnly": "Only an admin can see or change this.",
     "unavailable": "We couldn't read this just now."
   },
   "slaDrawer": {
@@ -213,12 +213,13 @@
     "line": "How long a customer may wait for a person's reply. The inbox marks conversations close to it, and those past it.",
     "enabled": "Mark late conversations in the inbox",
     "minutes": "Reply within (minutes)",
+    "minutesHint": "A customer waiting longer than this alerts the person handling the conversation, or its department or the admins when no one is assigned.",
     "warning": "Warn early at (% of the target)",
     "warningHint": "Empty: only conversations past the target are marked.",
     "invalidMinutes": "A whole number from 1 to 1440.",
     "invalidWarning": "A whole number from 0 to 100.",
     "departments": "Departments",
-    "departmentsLine": "A department with its own target uses it instead of the workspace's.",
+    "departmentsLine": "A department with its own target uses it instead of the workspace's, for marking and for the alert.",
     "departmentsNone": "No departments yet.",
     "departmentsUnavailable": "We couldn't read the departments just now. The workspace's target can still be changed.",
     "own": "{name}: its own target",

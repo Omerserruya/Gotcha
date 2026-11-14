@@ -3,11 +3,15 @@
    * 00d-00h · Onboarding (design 6): the dark frame, a 520px column on it -
    * mark, five steps, the serif headline, a status at the foot - and the warm
    * work surface beside it, inset 12px, its content centred in it.
+   *
+   * The frame is the window's height and never scrolls: the column stays put
+   * and only the work surface scrolls (Omer, 2026-10-24: step 4 scrolled the
+   * whole page, the column with it).
    */
   .frame {
     display: grid;
-    grid-template-columns: 520px 1fr;
-    min-block-size: 100dvh;
+    grid-template-columns: 520px minmax(0, 1fr);
+    block-size: 100dvh;
     background-color: var(--copilot-surface);
     color: var(--frame-text);
     line-height: normal;
@@ -16,7 +20,10 @@
   .column {
     display: flex;
     flex-direction: column;
+    min-block-size: 0;
     padding: 44px 34px 40px 46px;
+    /* A window too short for the column scrolls the column, never the page. */
+    overflow-y: auto;
   }
 
   .brand {
@@ -81,12 +88,22 @@
     flex: 1;
   }
 
-  .important {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ai-avatar-surface);
+  /* The column on a phone: one line instead of the list (shown below 700px). */
+  .compactStep {
+    display: none;
+    margin: 16px 0 0;
+    font-size: 13px;
+    color: var(--frame-text-body);
+  }
+
+  /* Letter-spacing is for Latin: Hebrew is set at 0 everywhere (supervisor, 2026-10-23). */
+  :root:lang(he) :is(.eyebrow, .wordmark, .title, .title[data-long], .headline, .trackCount) {
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
+  :root:lang(he) .eyebrow {
+    font-family: var(--font-sans);
   }
 
   .pitch {
@@ -133,6 +150,7 @@
 
   .surface {
     display: flex;
+    min-block-size: 0;
     margin: 12px 12px 12px 0;
     border-radius: 18px;
     background-color: var(--panel-base);
@@ -140,13 +158,52 @@
     overflow-y: auto;
   }
 
-  /* Left-aligned, 56px in from the panel's edge (design: x=576 on a panel at 520). */
+  /*
+   * The step is centred in the panel, both ways (Omer, 2026-10-24: pinned to
+   * one edge it left half the panel empty). `safe`: a step taller than the
+   * panel starts at its top and scrolls, never cut off above it.
+   */
   .work {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: safe center;
     inline-size: 100%;
+    block-size: fit-content;
+    min-block-size: 100%;
     padding: 48px 56px;
+  }
+
+  /* Each step at its own width, in the middle; one without a width is its content's. */
+  .work > * {
+    margin-inline: auto;
+  }
+
+  .work:not([data-step='website']) > * {
+    inline-size: 100%;
+  }
+
+  /* The way back: above the step, at its width, quiet. The arrow points back in either direction. */
+  .stepBackRow {
+    max-inline-size: var(--step-width);
+    margin-block: 0 18px;
+  }
+
+  .stepBack {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .stepBack:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  .stepBack:dir(rtl) svg {
+    transform: scaleX(-1);
   }
 
   .title {
@@ -197,6 +254,8 @@
     font: inherit;
     font-size: 13px;
     white-space: nowrap;
+    /* A link drawn as a button is never underlined, wherever it sits. */
+    text-decoration: none;
     cursor: pointer;
   }
 
@@ -230,7 +289,7 @@
     text-decoration: underline;
   }
 
-  /* 00d and 00e are the design's narrower column; 00f's facts and voice use the width. */
+  /* Each at its step's width (00e's stream and its findings fill theirs, Omer 2026-10-24). */
   .website,
   .reading {
     max-inline-size: var(--step-width);
@@ -471,15 +530,46 @@
     background-color: var(--ai-avatar-text);
   }
 
+  /*
+   * 00e's stream (Omer, 2026-10-24: "think Claude thinking mode"). The step
+   * uses its width: the heading on top, the stream across it, and what was
+   * found below. The stream is a fixed window on the light surface; the
+   * line happening now sits in its middle, and the window's top and bottom
+   * edges fade the lines out (a mask, so the fade is the surface's own).
+   */
+  .readingHead {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .readingHead > .quiet {
+    margin: 6px 0 0;
+  }
+
+  .readingBody {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-block-start: 26px;
+  }
+
+  .readingAside {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-inline-size: 0;
+  }
+
+  /* Across the step's width, so the stream has a place of its own on the panel. */
   .feed {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-block-start: 14px;
-    padding: 18px 20px;
+    gap: 6px;
+    min-inline-size: 0;
+    padding: 16px 22px 6px;
+    border: var(--border-width-thin) solid var(--border-default);
     border-radius: 14px;
-    background-color: var(--copilot-surface);
-    color: var(--frame-text);
+    background-color: var(--panel-field);
   }
 
   .feedHead {
@@ -487,40 +577,140 @@
     gap: 8px;
     align-items: center;
     font-size: 12px;
-    color: var(--ai-avatar-surface);
+    color: var(--text-subtle);
   }
 
-  .feedDot {
-    inline-size: 5px;
-    block-size: 5px;
-    border-radius: 50%;
-    background-color: var(--ai-avatar-surface);
-  }
+  .feedView {
+    --feed-height: 320px;
+    --feed-line: 24px;
 
-  .feedQuiet {
-    margin: 0;
-    font-size: 12.5px;
-    color: var(--frame-text-muted);
+    position: relative;
+    block-size: var(--feed-height);
+    overflow-y: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to bottom, transparent, black 38%, black 62%, transparent);
   }
 
   .feedRows {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 12px;
     margin: 0;
-    padding: 0;
+    /* The first line and the last can both reach the middle. */
+    padding: calc((var(--feed-height) - var(--feed-line)) / 2) 0;
     list-style: none;
   }
 
   .feedRow {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    font-size: 13px;
+    min-block-size: var(--feed-line);
+    font-size: 15px;
+    color: var(--text-secondary);
+    opacity: 0.62;
+    transition: opacity var(--duration-panel) var(--easing-standard);
+    animation: scan-in var(--duration-panel) ease-out both;
   }
 
-  .feedRow[data-gap] {
-    color: var(--frame-text-muted);
+  /* The line happening now: in focus. */
+  .feedRow[data-state='now'] {
+    font-weight: 500;
+    color: var(--text-primary);
+    opacity: 1;
+  }
+
+  .feedRow[data-kind='warn'],
+  .feedRow[data-kind='error'] {
+    color: var(--text-subtle);
+  }
+
+  /* Every feed line's mark in one box, so a dot and an icon line up. */
+  .feedMark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    inline-size: 14px;
+  }
+
+  .feedDot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: var(--ai-avatar-text);
+  }
+
+  /* Only the line in progress breathes. */
+  .feedRow[data-going] .feedDot {
+    animation: feed-breathe 1.4s ease-in-out infinite;
+  }
+
+  .feedQuiet {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-subtle);
+  }
+
+  /* What was found so far: 00d's detected-fact chips, growing as they come. */
+  .found {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background-color: var(--panel-inset);
+  }
+
+  .found .chips {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .found .chip {
+    background-color: var(--panel-field);
+    font-size: 12px;
+    animation: scan-in var(--duration-panel) ease-out both;
+  }
+
+  @keyframes scan-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes feed-breathe {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .feedRow,
+    .feedRow[data-going] .feedDot,
+    .found .chip {
+      animation: none;
+    }
+
+    .feedRow {
+      transition: none;
+    }
+  }
+
+  @media (width <= 1000px) {
+    .readingBody {
+      margin-block-start: 20px;
+    }
+
+    .feedView {
+      --feed-height: 280px;
+    }
+
+    .feed {
+      padding-inline: 16px;
+    }
   }
 
   .feedText {
@@ -536,17 +726,16 @@
     color: var(--signal-done);
   }
 
-  .feedGap {
+  /* A step that is over: done, quieter than a fact found. */
+  .feedPassed {
     flex: none;
-    color: var(--frame-text-faint);
-    stroke-dasharray: 3 3;
+    color: var(--text-faint);
   }
 
-  .feedPath {
+  .feedGap {
     flex: none;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--frame-text-faint);
+    color: var(--text-faint);
+    stroke-dasharray: 3 3;
   }
 
   .actions > a {
@@ -746,10 +935,380 @@
   }
 
   /* 00g */
-  .truth {
+  .systemsStep {
     display: flex;
     flex-direction: column;
     max-inline-size: var(--step-width);
+  }
+
+  /* Step 4: checking what was learned - one card per section, items inside. */
+  .review {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-inline-size: var(--step-width);
+  }
+
+  .reviewList {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .reviewItem {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-block-end: 12px;
+    border-block-end: 1px solid var(--border-default);
+  }
+
+  .reviewItem:last-child {
+    padding-block-end: 0;
+    border-block-end: none;
+  }
+
+  /* A policy edited whole: its words across the card, its terms in an even grid below. */
+  .policyEdit {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .termGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px 16px;
+    align-items: end;
+  }
+
+  /* The employee's test answer: its own words, set apart from ours. */
+  .answer {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background-color: var(--panel-sunken);
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: pre-line;
+  }
+
+  /* The add-from-what-you-have form, at the end of the policies card. */
+  .addMissing {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-block-start: 12px;
+    border-block-start: 1px solid var(--border-default);
+  }
+
+  .itemTitle {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* An item's Edit / Remove, at its start edge, next to what they act on. */
+  .itemActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-self: flex-start;
+  }
+
+  .terms {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding-inline-start: 18px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    inline-size: 100%;
+  }
+
+  .fieldLabel {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .select {
+    inline-size: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .textarea {
+    inline-size: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    background-color: var(--panel-base);
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+    resize: block;
+  }
+
+  /* Step 3: the website widget's code, as the widget page shows it. */
+  .code {
+    /* The card's width, never the snippet's: it scrolls inside, it never pushes the page. */
+    align-self: stretch;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 12px 14px;
+    max-inline-size: 100%;
+    overflow-x: auto;
+    border-radius: 10px;
+    background-color: var(--panel-inset);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
+  /*
+   * Step 3: one list, one row per channel (Omer, 2026-10-24: not four cards
+   * far apart). Rows share one card and a hairline; a connected row reads as
+   * done (a green status, its identifier, no action).
+   */
+  .channelList {
+    display: flex;
+    flex-direction: column;
+    margin: 24px 0 0;
+    padding: 0;
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: 14px;
+    background-color: var(--panel-field);
+    list-style: none;
+    overflow: clip;
+  }
+
+  .channelRow {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 18px;
+  }
+
+  .channelRow + .channelRow {
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  .channelRow[data-open] {
+    background-color: var(--panel-base);
+  }
+
+  .channelLine {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .channelText {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .channelName {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .channelWhy {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .channelEnd {
+    display: flex;
+    flex-shrink: 0;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .channelStatus {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text-subtle);
+  }
+
+  .channelStatus::before {
+    content: '';
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background-color: var(--border-muted);
+  }
+
+  .channelStatus[data-state='connected'] {
+    color: var(--signal-done-text);
+  }
+
+  .channelStatus[data-state='connected']::before {
+    background-color: var(--signal-done);
+  }
+
+  .channelStatus[data-state='attention'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .channelStatus[data-state='attention']::before {
+    background-color: var(--intent-blocked-edge);
+  }
+
+  .channelStatus[data-state='waiting']::before {
+    background-color: var(--signal-waiting);
+  }
+
+  .channelIdentity {
+    max-inline-size: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-muted);
+  }
+
+  .channelAction {
+    padding: 6px 14px;
+    border: var(--border-width-thin) solid var(--border-muted);
+    border-radius: 8px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12.5px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .channelAction:hover:not(:disabled) {
+    border-color: var(--text-subtle);
+  }
+
+  .channelAction[aria-pressed='true'] {
+    border-color: var(--text-primary);
+  }
+
+  .channelAction:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* What a row says under its line: aligned with its name, past the mark. */
+  .channelSays {
+    margin: 0;
+    padding-inline-start: 48px;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+
+  .channelSays[data-outcome='ok'] {
+    color: var(--signal-done-text);
+  }
+
+  .channelSays[data-outcome='problem'] {
+    color: var(--intent-blocked-text);
+  }
+
+  .channelPanel,
+  .channelPick {
+    margin-inline-start: 48px;
+  }
+
+  .channelPick:empty {
+    display: none;
+  }
+
+  .channelChoices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .channelServer {
+    align-self: stretch;
+  }
+
+  .channelsFoot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    margin-block-start: 18px;
+  }
+
+  .channelsFoot > .quiet {
+    margin: 0;
+  }
+
+  /* No channel yet: going on is allowed, and said quietly (a link, not a button). */
+  .channelSkip {
+    padding: 0;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    text-decoration: underline;
+    white-space: nowrap;
+  }
+
+  @media (width <= 640px) {
+    .channelRow {
+      padding: 14px;
+    }
+
+    .channelLine {
+      flex-wrap: wrap;
+      gap: 10px 12px;
+    }
+
+    .channelText {
+      flex-basis: calc(100% - 46px);
+    }
+
+    /* Under the name on a phone: status at the start, the action at the end. */
+    .channelEnd {
+      flex-basis: 100%;
+      justify-content: space-between;
+      padding-inline-start: 46px;
+    }
+
+    .channelSays {
+      padding-inline-start: 46px;
+    }
+
+    .channelPanel,
+    .channelPick {
+      margin-inline-start: 0;
+    }
+  }
+
+  /* Step 2: 00g's card, once per suggestion. */
+  .suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
   .system {
@@ -785,15 +1344,6 @@
     font-weight: 600;
   }
 
-  .foundOn {
-    padding: 2px 7px;
-    border-radius: 5px;
-    background-color: var(--ai-avatar-surface);
-    font-size: 10.5px;
-    font-weight: 400;
-    color: var(--ai-avatar-text);
-  }
-
   .connected {
     padding: 3px 8px;
     border-radius: 6px;
@@ -811,33 +1361,6 @@
     color: var(--intent-blocked-text);
   }
 
-  .tileName {
-    min-inline-size: 0;
-    line-height: 1.2;
-  }
-
-  .tileMark {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-  }
-
-  .tileMark[data-standing]::after {
-    content: '';
-    position: absolute;
-    inset-block-start: -2px;
-    inset-inline-end: -2px;
-    inline-size: 8px;
-    block-size: 8px;
-    border: 2px solid var(--panel-field);
-    border-radius: 50%;
-    background-color: var(--signal-done-text);
-  }
-
-  .tileMark[data-standing='failing']::after {
-    background-color: var(--intent-blocked-edge);
-  }
-
   .srOnly {
     position: absolute;
     inline-size: 1px;
@@ -850,68 +1373,9 @@
   .connectHere {
     display: flex;
     flex-direction: column;
+    /* A control is sized to its label at the card's start edge, never a full-width bar (00g). */
+    align-items: flex-start;
     gap: 8px;
-  }
-
-  .systems {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-block-start: 10px;
-  }
-
-  .systemTile {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    min-inline-size: 0;
-    padding: 12px 10px;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: 12px;
-    background-color: var(--panel-field);
-    font-size: 12.5px;
-    color: var(--text-primary);
-    text-decoration: none;
-  }
-
-  .systemTile:hover {
-    border-color: var(--border-emphasis);
-  }
-
-  .may {
-    display: flex;
-    flex-direction: column;
-    margin-block-start: 14px;
-    border: var(--border-width-thin) solid var(--border-default);
-    border-radius: 14px;
-    background-color: var(--panel-field);
-  }
-
-  .mayTitle {
-    margin: 0;
-    padding: 14px 18px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  .mayRow {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 18px;
-    border-block-start: var(--border-width-thin) solid var(--border-subtle);
-    font-size: 12.5px;
-  }
-
-  .always {
-    display: inline-flex;
-    gap: 5px;
-    align-items: center;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background-color: var(--panel-inset);
-    font-size: 11px;
-    color: var(--text-muted);
   }
 
   .stances {
@@ -933,14 +1397,6 @@
     cursor: default;
   }
 
-  .mayWhy {
-    margin: 0;
-    padding: 10px 18px 14px;
-    border-block-start: var(--border-width-thin) solid var(--border-subtle);
-    font-size: 11.5px;
-    color: var(--intent-blocked-text);
-  }
-
   /* ?preview=1 */
   /*
    * Each step's width, once: the step and the preview frame both read it, so
@@ -949,15 +1405,23 @@
    * The website step sets none: its width is its content's.
    */
   .work[data-step='reading'] {
-    --step-width: 620px;
+    --step-width: 960px;
   }
 
   .work[data-step='learned'] {
     --step-width: 800px;
   }
 
-  .work[data-step='truth'] {
-    --step-width: 680px;
+  .work[data-step='systems'] {
+    --step-width: 760px;
+  }
+
+  .work[data-step='channels'] {
+    --step-width: 760px;
+  }
+
+  .work[data-step='live'] {
+    --step-width: 760px;
   }
 
   .work[data-step='try'] {
@@ -1145,12 +1609,28 @@
   }
 
   @media (width <= 1000px) {
+    /* A phone scrolls the page: the column is one line above the step. */
     .frame {
-      grid-template-columns: 1fr;
+      block-size: auto;
+      min-block-size: 100dvh;
+      /* minmax: the work's widest line (the chat code) never widens the page past the phone. */
+      grid-template-columns: minmax(0, 1fr);
+      /* The column hugs its line; the spare height goes to the work, not split between them. */
+      grid-template-rows: auto 1fr;
+    }
+
+    .steps,
+    .foot {
+      display: none;
+    }
+
+    .compactStep {
+      display: block;
     }
 
     .column {
       padding: 24px 20px;
+      overflow-y: visible;
     }
 
     .pitch {
@@ -1159,9 +1639,12 @@
 
     .surface {
       margin: 0 8px 8px;
+      overflow-y: visible;
     }
 
     .work {
+      /* On a phone the step starts at the top: its first lines are the point. */
+      justify-content: flex-start;
       padding: 28px 20px;
     }
 
@@ -1175,10 +1658,6 @@
 
     .learned {
       grid-template-columns: 1fr;
-    }
-
-    .systems {
-      grid-template-columns: repeat(2, 1fr);
     }
   }
 }

@@ -1,10 +1,11 @@
 'use client';
 
 import { Check, Eye, EyeOff, X } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { useEffect, useRef, useState } from 'react';
 
 import { startFlow, submitStage } from '@/api/client/flow-executor';
+import { acceptSetupTerms } from '@/api/client/setup-consent';
 import {
   consentBody,
   isNewPasswordPrompt,
@@ -15,6 +16,7 @@ import {
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { legalUrls } from '@/lib/legal';
 
 import {
   PASSWORD_MIN_LENGTH,
@@ -28,11 +30,21 @@ import styles from './Recover.module.css';
 /** Which link this is: a reset someone asked for, or an invited user's first password. */
 export type ResetPurpose = 'reset' | 'setup';
 
+/**
+ * What the link carried: the provider's flow token, or (a setup link since
+ * 2026-10-26) our own setup token, which is exchanged for one only once the
+ * terms are accepted.
+ */
+export type ResetLink =
+  | { readonly kind: 'flow'; readonly token: string }
+  | { readonly kind: 'setup'; readonly token: string };
+
 type Phase =
   | { readonly name: 'ready'; readonly unreachable: boolean }
   | { readonly name: 'opening' }
   | { readonly name: 'form'; readonly email: string | null }
   | { readonly name: 'done'; readonly signedIn: boolean }
+  | { readonly name: 'hasPassword' }
   | { readonly name: 'expired' }
   | { readonly name: 'unexpected' };
 
@@ -59,17 +71,28 @@ type Phase =
  *
  * ★ The token is taken out of the address bar as soon as the page has it, so
  *   it is not left in history, in a screenshot or in a copied link.
+ *
+ * ── A FIRST PASSWORD ACCEPTS THE TERMS FIRST (Omer, 2026-10-26) ──
+ * On a setup link the ready screen carries a required checkbox: the Terms of
+ * Service and the Privacy Policy, each a link to the trust site in the page's
+ * language. Continue stays disabled until it is
+ * ticked, and Continue sends the acceptance before anything else: the server
+ * records it and only then mints the flow token, so a password cannot be set
+ * without it (services/auth setup-link.ts). The label is sent as it was shown,
+ * read from the page, as the record's evidence. Everyone who sets a first
+ * password accepts - an invitee too: the Terms bind each user (Backend).
+ * A box nothing records is never shown: see the initial phase.
  */
 export function ResetPanel({
   flow,
-  token,
+  link,
   purpose,
   loginHref,
   signInHref,
   recoverHref,
 }: {
   readonly flow: string;
-  readonly token: string;
+  readonly link: ResetLink;
   readonly purpose: ResetPurpose;
   /** The app's own sign-in hand-over: the reset leaves a provider session, so it completes. */
   readonly loginHref: string;
@@ -84,7 +107,17 @@ export function ResetPanel({
   const t = useTranslations('auth.recover.reset');
   const ts = useTranslations('auth.signIn');
   const tr = useTranslations('auth.recover');
-  const [phase, setPhase] = useState<Phase>({ name: 'ready', unreachable: false });
+  const locale = useLocale() === 'he' ? 'he' : 'en';
+  /*
+   * A setup link that arrives with the provider's token was minted before the
+   * acceptance existed: nothing would record a tick, so it reads expired and
+   * the emailed link, opened again, takes the new path (Backend).
+   */
+  const [phase, setPhase] = useState<Phase>(
+    purpose === 'setup' && link.kind === 'flow'
+      ? { name: 'expired' }
+      : { name: 'ready', unreachable: false },
+  );
   const [password, setPassword] = useState('');
   const [repeat, setRepeat] = useState('');
   const [shown, setShown] = useState({ password: false, repeat: false });
@@ -93,13 +126,23 @@ export function ResetPanel({
   const [busy, setBusy] = useState(false);
   /** The password the server found in a breach: its row reads failed while the field holds it. */
   const [breached, setBreached] = useState<string | null>(null);
-
-  const query = new URLSearchParams({ flow_token: token }).toString();
+  /** The terms, on a setup link: required before Continue. */
+  const [accepted, setAccepted] = useState(false);
+  const termsLabel = useRef<HTMLSpanElement>(null);
+  const needsTerms = purpose === 'setup';
+  /** The flow and its query: from the link, or from the acceptance on a setup link. */
+  const [started, setStarted] = useState<{ flow: string; query: string } | null>(
+    link.kind === 'flow'
+      ? { flow, query: new URLSearchParams({ flow_token: link.token }).toString() }
+      : null,
+  );
+  const active = started ?? { flow, query: '' };
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has('flow_token')) return;
+    if (!url.searchParams.has('flow_token') && !url.searchParams.has('setup')) return;
     url.searchParams.delete('flow_token');
+    url.searchParams.delete('setup');
     window.history.replaceState(window.history.state, '', url);
   }, []);
 
@@ -118,8 +161,29 @@ export function ResetPanel({
   }
 
   async function open() {
+    if (needsTerms && !accepted) return;
     setPhase({ name: 'opening' });
-    let step = await startFlow(flow, query);
+    let target = started;
+    if (link.kind === 'setup' && target === null) {
+      const outcome = await acceptSetupTerms(link.token, {
+        terms: true,
+        privacy: true,
+        locale,
+        capturedText: termsLabel.current?.textContent?.trim() ?? '',
+      });
+      if (outcome.kind === 'unreachable') return setPhase({ name: 'ready', unreachable: true });
+      if (outcome.kind === 'expired') return setPhase({ name: 'expired' });
+      if (outcome.kind === 'hasPassword') return setPhase({ name: 'hasPassword' });
+      if (outcome.kind === 'refused') return setPhase({ name: 'unexpected' });
+      target = {
+        flow: outcome.flow,
+        query: new URLSearchParams({ flow_token: outcome.flowToken }).toString(),
+      };
+      setStarted(target);
+    }
+    if (target === null) return setPhase({ name: 'unexpected' });
+    const { flow: flowSlug, query } = target;
+    let step = await startFlow(flowSlug, query);
     if (!step) return setPhase({ name: 'ready', unreachable: true });
     /*
      * A live link opens on consent (a reset) or straight on the prompt (an
@@ -130,7 +194,7 @@ export function ResetPanel({
     let email: string | null = null;
     if (step.kind === 'consent') {
       email = step.challenge.pending_user.trim() || null;
-      const consented = await submitStage(consentBody(step.challenge), flow, query);
+      const consented = await submitStage(consentBody(step.challenge), flowSlug, query);
       if (!consented.ok) return setPhase({ name: 'ready', unreachable: true });
       step = consented.step;
     }
@@ -154,7 +218,8 @@ export function ResetPanel({
     if (early.length > 0) return;
 
     setBusy(true);
-    const outcome = await submitStage(newPasswordBody(password, repeat), flow, query);
+    const { flow: flowSlug, query } = active;
+    const outcome = await submitStage(newPasswordBody(password, repeat), flowSlug, query);
     if (!outcome.ok) {
       setBusy(false);
       setTransport(true);
@@ -185,7 +250,7 @@ export function ResetPanel({
     }
     if (step.kind === 'staySignedIn') {
       // The password is saved. Not "stay signed in for 30 days" on someone's behalf.
-      const login = await submitStage(staySignedInBody(false), flow, query);
+      const login = await submitStage(staySignedInBody(false), flowSlug, query);
       setBusy(false);
       setPhase({ name: 'done', signedIn: login.ok && login.step.kind === 'done' });
       return;
@@ -208,6 +273,24 @@ export function ResetPanel({
         <Button asChild variant="primary" size="lg" fullWidth>
           <a href={phase.signedIn ? loginHref : signInHref} data-testid="reset-continue">
             {phase.signedIn ? t('continueSignedIn') : t('signIn')}
+          </a>
+        </Button>
+      </div>
+    );
+  }
+
+  if (phase.name === 'hasPassword') {
+    return (
+      <div className={styles.done} data-testid="reset-has-password">
+        <Text role="title" as="h1">
+          {t('hasPassword.title')}
+        </Text>
+        <Text role="body" tone="muted" as="p">
+          {t('hasPassword.body')}
+        </Text>
+        <Button asChild variant="primary" size="lg" fullWidth>
+          <a href={signInHref} data-testid="reset-continue">
+            {t('signIn')}
           </a>
         </Button>
       </div>
@@ -252,11 +335,48 @@ export function ResetPanel({
             {t('problem.unreachable')}
           </p>
         ) : null}
+        {needsTerms ? (
+          <label className={styles.terms} data-testid="reset-terms">
+            <input
+              type="checkbox"
+              className={styles.termsBox}
+              checked={accepted}
+              required
+              disabled={phase.name === 'opening'}
+              onChange={(event) => setAccepted(event.target.checked)}
+              data-testid="reset-terms-box"
+            />
+            <span ref={termsLabel}>
+              {t.rich('terms', {
+                terms: (chunks) => (
+                  <a
+                    href={legalUrls(locale).terms}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="reset-terms-link"
+                  >
+                    {chunks}
+                  </a>
+                ),
+                privacy: (chunks) => (
+                  <a
+                    href={legalUrls(locale).privacy}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="reset-privacy-link"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
+            </span>
+          </label>
+        ) : null}
         <Button
           variant="primary"
           size="lg"
           fullWidth
-          disabled={phase.name === 'opening'}
+          disabled={phase.name === 'opening' || (needsTerms && !accepted)}
           onClick={() => void open()}
           data-testid="reset-open"
         >

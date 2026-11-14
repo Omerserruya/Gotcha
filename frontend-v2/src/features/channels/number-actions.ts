@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
+import { primarySchema, type Primary } from '@/api/contracts/whatsapp-numbers';
 import { channelEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -166,6 +167,36 @@ export async function disconnectNumber(id: string): Promise<WriteResult> {
     logger.warn('whatsapp.disconnect_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
+    return { ok: false, reason: reasonOf(cause) };
+  }
+}
+
+export type SetPrimaryResult =
+  | { readonly ok: true; readonly primary: Primary }
+  | {
+      readonly ok: false;
+      /** 409 WHATSAPP_NUMBER_NOT_ACTIVE: a number that can't send can't be the primary. */
+      readonly reason: 'not_found' | 'forbidden' | 'not_active' | 'failed';
+    };
+
+/**
+ * Make this number the workspace's primary (PATCH …/whatsapp/primary): it
+ * sends what no number was chosen for. Nothing is sent by the change itself.
+ */
+export async function setPrimaryNumber(channelAccountId: string): Promise<SetPrimaryResult> {
+  try {
+    const primary = await serverApi().patch({
+      endpoint: channelEndpoints.whatsappPrimary(),
+      payload: primarySchema,
+      body: { channelAccountId },
+    });
+    done();
+    return { ok: true, primary };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    const status = isApiError(cause) ? cause.status : undefined;
+    logger.warn('whatsapp.primary_failed', { status });
+    if (status === 409) return { ok: false, reason: 'not_active' };
     return { ok: false, reason: reasonOf(cause) };
   }
 }

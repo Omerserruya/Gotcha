@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { createTranslator, NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,14 @@ vi.mock('@/shell/require-console', () => ({
 }));
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));
 vi.mock('@/features/console/load-tenant', () => ({ loadTenant }));
+vi.mock('@/features/console/load-tenants', () => ({
+  loadCreateOptions: async () => ({ plans: [], domains: ['ai'] }),
+}));
+vi.mock('@/features/console/TenantPlanEdit', () => ({
+  TenantPlanEdit: ({ plans, domains }: { plans?: unknown[]; domains?: string[] }) => (
+    <div data-testid="plan-edit">{`${plans === undefined ? 'unread' : plans.length}|${domains?.join(',')}`}</div>
+  ),
+}));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: 'console.detail') =>
     createTranslator({ locale: 'en', messages: { console: consoleEn }, namespace }),
@@ -52,7 +60,24 @@ vi.mock('@/features/console/TenantCoupons', () => ({
   TenantCoupons: () => <div data-testid="coupons" />,
 }));
 vi.mock('@/features/console/TenantControls', () => ({
-  TenantControls: () => <div data-testid="controls" />,
+  TenantControls: ({ planActive }: { planActive: boolean }) => (
+    <div data-testid="controls" data-plan-active={String(planActive)} />
+  ),
+}));
+vi.mock('@/features/console/TenantDelete', () => ({
+  TenantDelete: ({ slug }: { slug: string }) => <div data-testid="delete">{slug}</div>,
+}));
+vi.mock('@/features/support/SupportEnter', () => ({
+  SupportEnter: ({ tenantId, ended }: { tenantId: string; ended: boolean }) => (
+    <div data-testid="support-enter" data-tenant={tenantId} data-ended={String(ended)} />
+  ),
+}));
+vi.mock('@/features/console/TenantMembers', () => ({
+  TenantMembers: ({ members }: { members?: readonly { email: string }[] }) => (
+    <div data-testid="members">
+      {members === undefined ? 'unread' : members.map((m) => m.email).join(',')}
+    </div>
+  ),
 }));
 
 const { default: Page } = await import('./page');
@@ -65,11 +90,12 @@ const tenant = tenantDetailSchema.parse({
   isActive: true,
   createdAt: '2026-10-01T09:00:00.000Z',
   planAccess: { state: 'ACTIVE_PAID', label: 'Paid plan', active: true },
+  users: [{ id: 'u1', name: 'Dana', email: 'dana@acme.co', role: 'ADMIN', isActive: true }],
 });
-const open = async () =>
+const open = async (query: { support?: string } = {}) =>
   render(
     <NextIntlClientProvider locale="en" messages={{ console: consoleEn }}>
-      {await Page({ params: Promise.resolve({ id: 't1' }) })}
+      {await Page({ params: Promise.resolve({ id: 't1' }), searchParams: Promise.resolve(query) })}
     </NextIntlClientProvider>,
   );
 
@@ -89,7 +115,9 @@ beforeEach(() => {
 describe('★★ /system/tenants/[id]', () => {
   it('★★ not a system admin: not found, and nothing is read', async () => {
     door.open = false;
-    await expect(Page({ params: Promise.resolve({ id: 't1' }) })).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(
+      Page({ params: Promise.resolve({ id: 't1' }), searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
     expect(loadTenant).not.toHaveBeenCalled();
   });
 
@@ -102,9 +130,27 @@ describe('★★ /system/tenants/[id]', () => {
       'href',
       '/system/tenants',
     );
-    for (const id of ['facts', 'billing-t1', 'coupons', 'controls']) {
-      expect(screen.getByTestId(id)).toBeInTheDocument();
-    }
+    const ids = ['facts', 'billing-t1', 'coupons', 'controls', 'plan-edit', 'members', 'delete'];
+    for (const id of ids) expect(screen.getByTestId(id)).toBeInTheDocument();
+    // The delete is the LAST card on the page.
+    const cards = [...document.querySelectorAll('[data-testid]')].map((el) =>
+      el.getAttribute('data-testid'),
+    );
+    expect(cards.at(-1)).toBe('delete');
+    expect(screen.getByTestId('delete')).toHaveTextContent('acme');
+    // The plan card gets the provisionable plans and POC areas as read.
+    expect(screen.getByTestId('plan-edit')).toHaveTextContent('0|ai');
+  });
+
+  it('★ the members are the detail’s own list; the plan says whether a status is enough', async () => {
+    await open();
+    expect(screen.getByTestId('members')).toHaveTextContent('dana@acme.co');
+    expect(screen.getByTestId('controls')).toHaveAttribute('data-plan-active', 'true');
+  });
+
+  it('★ a members list the detail could not read stays unread, never "none"', () => {
+    expect(tenantDetailSchema.parse({ ...tenant, users: 'garbage' }).users).toBeUndefined();
+    expect(tenantDetailSchema.parse({ ...tenant, users: undefined }).users).toBeUndefined();
   });
 
   it('★★ billing writes off here: said before anyone presses anything', async () => {
@@ -116,6 +162,15 @@ describe('★★ /system/tenants/[id]', () => {
     writes.on = true;
     await open();
     expect(screen.queryByTestId('billing-held')).toBeNull();
+  });
+
+  it('★★ support mode can be entered from here; back from an ended session, it says so', async () => {
+    await open();
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-tenant', 't1');
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-ended', 'false');
+    cleanup();
+    await open({ support: 'ended' });
+    expect(screen.getByTestId('support-enter')).toHaveAttribute('data-ended', 'true');
   });
 
   it('★ a tenant that does not exist and one that could not be read: two sentences', async () => {

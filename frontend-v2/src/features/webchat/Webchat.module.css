@@ -149,7 +149,7 @@
     color: var(--text-subtle);
   }
 
-  .saving[data-saving='failed'] {
+  .saving[data-failed] {
     color: var(--intent-urgent-text);
   }
 
@@ -227,6 +227,13 @@
   .rowHint {
     font-size: 11px;
     color: var(--text-subtle);
+  }
+
+  /* A link in a hint: the text's own ink with a thin underline, as on Home - never the browser's blue. */
+  .rowHint a {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-block-end: var(--border-width-thin) solid var(--border-emphasis);
   }
 
   .rowBody {
@@ -974,6 +981,12 @@
     inline-size: 340px;
   }
 
+  .previewLanguage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   .previewHead {
     display: flex;
     justify-content: space-between;
@@ -1010,6 +1023,39 @@
 
   .stage[data-side='left']:dir(rtl) .pin {
     inset-inline: auto 14px;
+  }
+
+  /*
+   * The real widget (WidgetFrame): its own panel, drawn by the chat bundle in
+   * a window of a visitor's size, above the launcher. The window is
+   * transparent; the panel inside it is the widget's own.
+   */
+  .frame {
+    inset-block: 0 76px;
+    inline-size: min(400px, 100%);
+  }
+
+  /* With a pop-up on the stage, the widget stops above it: nothing drawn over the composer. */
+  .stage[data-teaser] .frame {
+    inset-block-end: 176px;
+  }
+
+  .frameWindow {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+    background: transparent;
+  }
+
+  .frameNote {
+    position: absolute;
+    inset-block-start: 40%;
+    inset-inline: 16px;
+    margin: 0;
+    font-size: 12.5px;
+    text-align: center;
+    color: var(--text-subtle);
   }
 
   /* The chat widget: 270 × 520, radius 18. */
@@ -1270,6 +1316,23 @@
     font-size: 20px;
     font-weight: 500;
     line-height: 1;
+  }
+
+  /* The merchant's logo on the bubble and the pop-up, on white (the live widget's .mark-img). */
+  .launcher[data-logo],
+  .popAvatar[data-logo] {
+    background-color: var(--widget-look-logo-ground);
+  }
+
+  .popAvatar[data-logo] {
+    box-shadow: 0 0 0 1px var(--widget-look-rule);
+  }
+
+  .logoMark {
+    display: block;
+    max-inline-size: 62%;
+    max-block-size: 62%;
+    object-fit: contain;
   }
 
   .launcherDot {
@@ -1576,5 +1639,12 @@
     .pair {
       grid-template-columns: 1fr;
     }
+  }
+
+  /* The header name's source: the employee's, or one typed (Backend 330b0461). */
+  .nameSource {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
   }
 }

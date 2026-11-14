@@ -223,6 +223,43 @@ describe('★★ B - the store address, and the start at the wire', () => {
   });
 });
 
+describe('★★ onboarding step 2: the way back lands on /onboarding/systems (flow=onboarding_systems)', () => {
+  it.each([
+    ['hubspot', '/api/connectors/hubspot/oauth/init?flow=onboarding_systems'],
+    ['zoho_crm', '/api/integrations/oauth/zoho_crm/init?flow=onboarding_systems'],
+    ['google_calendar', '/api/integrations/oauth/google_calendar/init?flow=onboarding_systems'],
+    ['calendly', '/api/integrations/oauth/calendly/init?flow=onboarding_systems'],
+  ])('%s: %s', async (slug, path) => {
+    get.mockResolvedValue({ url: 'https://provider.example/authorize' });
+    expect(await startOAuth(slug, undefined, 'onboarding_systems')).toEqual({
+      ok: true,
+      url: 'https://provider.example/authorize',
+    });
+    expect((get.mock.calls.at(-1)![0] as { endpoint: { path: string } }).endpoint.path).toBe(path);
+  });
+
+  it('WooCommerce: the store address, the onboarding flow, as JSON', async () => {
+    get.mockResolvedValue({ url: 'https://shop.example.com/wc-auth/v1/authorize?a=1' });
+    await startWooOAuth('shop.example.com', 'onboarding_systems');
+    expect((get.mock.calls.at(-1)![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/integrations/woocommerce/oauth/init?storeUrl=https%3A%2F%2Fshop.example.com&flow=onboarding_systems&format=json',
+    );
+  });
+
+  it('a flow the backend does not sign is never sent (the browser chooses the argument)', async () => {
+    get.mockClear();
+    expect(await startOAuth('hubspot', undefined, 'evil' as never)).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
+    expect(await startWooOAuth('shop.example.com', 'evil' as never)).toEqual({
+      ok: false,
+      reason: 'failed',
+    });
+    expect(get).not.toHaveBeenCalled();
+  });
+});
+
 describe('★★ 1aaaefe4 - 422 from a key form', () => {
   it('carries the backend’s merchant sentence', async () => {
     get.mockResolvedValue([

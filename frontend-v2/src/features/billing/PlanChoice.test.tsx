@@ -104,6 +104,22 @@ describe('★ 17b - the plans on offer, side by side', () => {
     );
   });
 
+  it('★★ a Core card never draws a catalogue feature that names Shopify (review 132211)', async () => {
+    const withShopify = catalogPlans([
+      {
+        ...plan('foundation', 'Foundation', '39.00', 750, 94),
+        features: [
+          { key: 's', nameEn: 'Shopify integration', included: true },
+          { key: 'a', nameEn: 'One AI employee', included: true },
+        ],
+      },
+    ]);
+    render(await PlanCards({ catalog: withShopify, currentKey: null, selectedKey: null }));
+    const card = screen.getByTestId('plan-card-foundation');
+    expect(card).toHaveTextContent('One AI employee');
+    expect(card).not.toHaveTextContent(/shopify/i);
+  });
+
   it('a card is price / month, credits and conversations, and only included features', async () => {
     render(await PlanCards({ catalog: CATALOG, currentKey: 'ai_voice', selectedKey: null }));
     const card = screen.getByTestId('plan-card-foundation');
@@ -151,7 +167,9 @@ describe('★ 17b - the switch is drawn, and not live', () => {
     );
     expect(screen.getByTestId('switch-button')).toHaveTextContent('Switch to Foundation');
     expect(screen.getByTestId('switch-keep')).toHaveTextContent('Keep AI Voice');
-    expect(screen.getByTestId('switch-fine')).toHaveTextContent('Charged to Visa · 4417.');
+    expect(screen.getByTestId('switch-fine')).toHaveTextContent(
+      'Charged to Visa · 4417 for GOTCHA Core.',
+    );
     one.unmount();
     render(await SwitchActions({ target: null, current: voice!, methods: [] }));
     expect(screen.getByTestId('switch-button')).toHaveAttribute('aria-disabled', 'true');
@@ -193,21 +211,37 @@ describe('★★ 17b Switch - opens its confirm, says what changePlan would do, 
       subscription: SUB,
     });
     expect(box).toHaveTextContent(
-      'This moves you to AI Voice today and charges your Visa ending 4417 now: the difference between the two monthly prices, before VAT.',
+      'This moves you to AI Voice today and charges your Visa ending 4417 now for GOTCHA Core: the difference between the two monthly prices, before VAT.',
     );
     expect(box).toHaveTextContent('From then on, $1,499 a month, before VAT.');
     // Only the server can state the charged amount: no "$1,460" worked out here.
     expect(box).not.toHaveTextContent('1,460');
   });
 
-  it('UP with no card: said that it would be declined', async () => {
+  it('UP with no card: GOTCHA Core has no card - said as that, never "declined"', async () => {
     const box = await confirm({
       target: voice!,
       current: foundation!,
       methods: [],
       subscription: SUB,
     });
-    expect(box).toHaveTextContent("there's no card on file to charge - it would be declined");
+    expect(box).toHaveTextContent(
+      'A move to a bigger GOTCHA Core plan is charged now, and GOTCHA Core has no card on file. Add a card for GOTCHA Core first.',
+    );
+    expect(box).not.toHaveTextContent(/declined|payment_method|upgrade_payment/i);
+  });
+
+  it('★★ the confirm says it changes GOTCHA Core only, before anything else (132211)', async () => {
+    const box = await confirm({
+      target: voice!,
+      current: foundation!,
+      methods: [],
+      subscription: SUB,
+    });
+    const first = box.querySelector('p');
+    expect(first).toHaveTextContent(
+      'This changes GOTCHA Core only. It does not include the Shopify Connector.',
+    );
   });
 
   it('UP on a trial: nothing now', async () => {

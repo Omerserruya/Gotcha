@@ -145,6 +145,18 @@
       "emailNeedsAddress": "That email only goes to owners who have an email address on their account.",
       "readyBody": "GOTCHA has finished reading. Nothing it learned is in use until you approve it.",
       "failedWithStage": "It stopped while {stage}. Nothing from this import is in use.",
+      "failureCode": {
+        "units_exhausted": {
+          "row": "Out of AI units",
+          "body": "The analysis stopped because the workspace ran out of AI units. The imported conversations are kept. Top up, then run the analysis again.",
+          "action": "Top up AI units"
+        },
+        "ai_access_denied": {
+          "row": "AI analysis isn't available",
+          "body": "AI analysis isn't available right now, so the analysis stopped. The imported conversations are kept. Check the plan and billing, then run it again.",
+          "action": "Plan and billing"
+        }
+      },
       "failedBare": "It stopped before finishing. Nothing from this import is in use.",
       "unavailableBody": "This number has no history GOTCHA can read - usually because it is new, or because the source declined to share it."
     },
@@ -180,6 +192,24 @@
     },
     "close": "Close",
     "panelLine": "WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
+    "panelLineAccount": "<account>{name}</account> WhatsApp Business account · {count, plural, =0 {no numbers yet} one {one number} other {# numbers}}",
+    "panelLineAccounts": "{accounts} WhatsApp Business accounts · {count, plural, one {one number} other {# numbers}}",
+    "account": "<account>{name}</account> account",
+    "primary": {
+      "chip": "Primary",
+      "rowLabel": "Sends what isn't tied to a number",
+      "thisNumber": "This number",
+      "set": "Set as primary",
+      "setting": "Setting…",
+      "done": "<ltr>{number}</ltr> is now the primary number.",
+      "note": "Anything that isn't sent from a particular number goes from the primary one.",
+      "failed": {
+        "failed": "{hasOld, select, yes {Not changed - <ltr>{old}</ltr> is still the primary number. Try again.} other {Not changed. Try again.}}",
+        "not_active": "{hasOld, select, yes {Not changed - this number isn't active, so it can't send. <ltr>{old}</ltr> is still the primary number.} other {Not changed - this number isn't active, so it can't send.}}",
+        "not_found": "Not changed - that number isn't connected here any more. Reload the page.",
+        "forbidden": "Not changed - your role can't change the primary number."
+      }
+    },
     "tab": {
       "numbers": "Numbers",
       "templates": "Templates",
@@ -251,6 +281,7 @@
     },
     "addNumber": "+ Add another number",
     "learn": {
+      "rowInProgress": "Learning in progress",
       "rowImporting": "Learning in progress · importing {percent}%",
       "rowLearning": "Learning in progress · {percent}%",
       "rowReady": "Report ready · {count, plural, one {# answer} other {# answers}}",
@@ -531,6 +562,13 @@
         "rejected": "Rejected",
         "unknown": "Unknown state"
       },
+      "language": {
+        "label": "Template language",
+        "he": "Hebrew",
+        "en": "English",
+        "unread": "The templates in this language couldn't be read. Try again.",
+        "unavailable": "Choosing the language isn't available here yet."
+      },
       "bodyLabel": "Text",
       "variable": "{token} is replaced with the customer's name.",
       "button": "Button:",
@@ -657,10 +695,13 @@
       "saving": "Saving…",
       "saved": "Saved",
       "failed": "Not saved. Change it again to retry",
-      "nowhere": "Not saved: the widget isn't installed anywhere yet. Get the code under Install first",
+      "nowhere": "Not saved: the widget couldn't be created yet. Get the code under Install, then change it again",
+      "nowhereLimit": "Not saved: the widget needs a channel, and your plan has no room for another one",
+      "nowhereForbidden": "Not saved: the widget isn't created yet, and you don't have permission to add a channel. Ask a workspace admin",
       "number": "Not saved: that WhatsApp number isn't one of this workspace's. Choose another",
-      "kindNumber": "Not saved: a WhatsApp widget needs a connected WhatsApp number. Choose one.",
-      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it."
+      "kindNumber": "Not saved: a WhatsApp widget needs a number. Choose a connected one or type one.",
+      "couponPersonal": "Not saved: a customer's personal coupon can't be a deal. Uncheck it.",
+      "phone": "Not saved: that isn't a phone number WhatsApp can open. Check it and type it again"
     },
     "unread": "Couldn't read the widget's settings. Try again in a moment.",
     "appearance": {
@@ -671,7 +712,7 @@
       "codeHint": "Paste any hex code",
       "codeBad": "A hex code looks like #C96A4B",
       "logo": "Logo",
-      "logoHint": "Shown at the top of the chat",
+      "logoHint": "Shown at the top of the chat, on the chat button and on the pop-up",
       "cover": "Cover image",
       "coverHint": "Shown at the top of the widget",
       "position": "Position",
@@ -735,6 +776,7 @@
       },
       "employeeNone": "The playbook doesn't send website conversations to one employee",
       "employeeWhere": "Who answers is set in <automations>Studio · Automations</automations> and the playbook, not here",
+      "answersViaRoute": "<user>{name}</user> answers website conversations: the route set up at onboarding sends every channel to this employee. There is nothing more to set up.",
       "assign": {
         "adminsOnly": "Only an admin can change who answers the widget.",
         "noPlace": "Who answers can be chosen once the widget has a place - create its code on the Install tab.",
@@ -770,7 +812,15 @@
       },
       "greeting": "Greeting",
       "greetingHint": "The first message in the WhatsApp panel",
-      "teaser": "Line above the button"
+      "teaser": "Line above the button",
+      "nameSource": {
+        "employee": "The AI employee's name",
+        "custom": "A name you choose"
+      },
+      "nameFromEmployee": "The header shows the name of the web chat's AI employee: <user>{name}</user>.",
+      "nameNoEmployee": "No AI employee is set for the web chat yet.",
+      "setByAutomation": "Set by the automation <link>{name}</link>.",
+      "setByAutomationEvery": "Set by the automation <link>{name}</link>, which covers every channel."
     },
     "behaviour": {
       "popup": "Pop-up message",
@@ -778,6 +828,8 @@
       "when": "When to show",
       "rightAway": "Right away",
       "seconds": "{s}s",
+      "human": "Let shoppers ask for a person",
+      "humanHint": "Shows a \"Talk to a person\" link in the widget",
       "whatsapp": "Continue on WhatsApp",
       "whatsappHint": "A button that continues the same conversation on your WhatsApp",
       "whatsappWhy": "Not available yet: it comes with the next widget update",
@@ -829,7 +881,12 @@
         "number_unknown": "We don't know this number's phone yet; reconnect it in <channels>Settings · Channels</channels>"
       },
       "whatsappHidden": "The button won't show on your site until a number that can take it is chosen.",
-      "cartNeedsProducts": "Turn on Recommend products first: Add to cart is on a product card"
+      "cartNeedsProducts": "Turn on Recommend products first: Add to cart is on a product card",
+      "complementary": {
+        "label": "Suggest complementary products",
+        "hint": "Once a product is chosen, matching add-ons show too: the cross-sells you set in the store, or in-stock items from the same category."
+      },
+      "complementaryNeedsProducts": "Turn on Recommend products first: add-ons show as product cards"
     },
     "install": {
       "shopify": "Shopify",
@@ -923,7 +980,16 @@
       "waContinue": "Continue on WhatsApp",
       "waType": "Type a message",
       "now": "now",
-      "replies": "replies right away"
+      "replies": "replies right away",
+      "frameTitle": "Widget preview",
+      "frameLoading": "Loading the widget…",
+      "frameFailed": "We couldn't load the widget. The preview shows the real widget, so there is no drawn stand-in.",
+      "languageLabel": "Preview in",
+      "languages": {
+        "he": "עברית",
+        "en": "English"
+      },
+      "languageHint": "On your site, the chat follows the language of the page the customer is on. For Hebrew on every page, choose \"Always Hebrew\" under Language."
     },
     "notYet": "Not available yet",
     "comingSoon": "Coming soon",
@@ -941,7 +1007,7 @@
       "number": "On WhatsApp with {name} {phone}.",
       "changeNumber": "Change number",
       "pickNumber": "Which WhatsApp number it continues on",
-      "noNumber": "A WhatsApp widget needs a connected WhatsApp number. Connect one in <channels>Settings · Channels</channels>.",
+      "noNumber": "No WhatsApp number is connected. Type the number customers should write to, or connect one in <channels>Settings · Channels</channels>.",
       "numberWhy": {
         "not_connected": "Not connected",
         "number_unknown": "Its phone number isn't known yet"
@@ -951,7 +1017,12 @@
         "chat": "Switch the widget on your site to a chat widget with an AI employee? Visitors will see it right away.",
         "yes": "Switch",
         "no": "Cancel"
-      }
+      },
+      "typedOption": "Another number",
+      "typedLabel": "The WhatsApp number customers write to",
+      "typedUse": "Use this number",
+      "typedBad": "That isn't a phone number. Type it with its area code, like 054-123 4567.",
+      "typedNumber": "On WhatsApp with"
     }
   },
   "widgetRow": {

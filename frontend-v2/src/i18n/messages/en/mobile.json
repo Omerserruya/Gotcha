@@ -1,0 +1,239 @@
+{
+  "tabs": {
+    "home": "Home",
+    "inbox": "Inbox",
+    "approvals": "Approvals",
+    "outreach": "Outbound",
+    "customers": "Customers"
+  },
+  "home": {
+    "today": "Today",
+    "handled": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation today} other {GOTCHA handled # conversations today}}",
+    "handledWaiting": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation} other {GOTCHA handled # conversations}}{waiting, plural, =0 {, and none are waiting for you} one {, and one is waiting for you} other {, and # are waiting for you}}",
+    "tiles": {
+      "conversations": "Conversations today",
+      "byYourTeam": "By your team",
+      "approvals": "Approvals waiting"
+    },
+    "needsYou": "Needs you",
+    "open": "Open chat",
+    "more": "{count, plural, one {# more waiting} other {# more waiting}}",
+    "updates": "Updates",
+    "ask": "Ask GOTCHA…",
+    "updatesEmpty": "No updates yet. When GOTCHA takes an action, like a refund or a booking, or asks for an approval, it shows here.",
+    "updatesUnavailable": "Updates could not be read right now.",
+    "askScreen": {
+      "title": "Ask GOTCHA",
+      "back": "Back to Home",
+      "hint": "About your conversations, customers, orders and approvals. GOTCHA answers from what is in the system.",
+      "placeholder": "What would you like to know?",
+      "proposal": "A plan waiting for your approval"
+    }
+  },
+  "inbox": {
+    "title": "Chats",
+    "views": "Views",
+    "empty": "No conversations here right now",
+    "unavailable": "We couldn't load the conversations",
+    "more": "Earlier conversations",
+    "back": "Back to chats",
+    "openFailed": "We couldn't open this conversation",
+    "notAvailable": "This conversation isn't available to you",
+    "onWebsite": "Open on the website",
+    "all": "All",
+    "search": "Search by name or phone",
+    "noMatch": "No conversations match this search or filter",
+    "grounded": "GOTCHA answers only from your business's own information",
+    "owner": {
+      "mine": "With you",
+      "waiting": "Waiting in queue",
+      "gotcha": "GOTCHA",
+      "flow": "Flow",
+      "resolved": "Resolved"
+    },
+    "filter": {
+      "open": "Filter by channel",
+      "title": "Filter by channel",
+      "all": "All channels",
+      "apply": "Show",
+      "clear": "Clear"
+    }
+  },
+  "account": {
+    "menu": "Account",
+    "website": "Go to the full website",
+    "signOut": "Sign out"
+  },
+  "approvals": {
+    "title": "Approvals",
+    "conversation": "Open the chat",
+    "cancel": "Cancel",
+    "website": "Earlier decisions and editing on the website",
+    "lead": "{count, plural, one {One thing is waiting for your decision} other {# things are waiting for your decision}}. GOTCHA has already done the work",
+    "leadNone": "Nothing is waiting for you. GOTCHA carries on by itself",
+    "views": "View",
+    "pending": "Waiting",
+    "decided": "Decided today",
+    "details": "Details",
+    "emptyTitle": "Nothing to approve right now",
+    "emptyBody": "GOTCHA will tell you when something needs you",
+    "decidedNone": "Nothing has been decided yet today",
+    "decidedUnavailable": "Today's decisions could not be read right now",
+    "outcome": {
+      "ran": "Done",
+      "didntRun": "Didn't run",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "back": "Back to approvals",
+    "gone": "This request is no longer waiting for a decision. Someone may have decided it, or its time ran out.",
+    "editOnWebsite": "Edit on the website",
+    "rejectTitle": "Why reject it?",
+    "rejectSub": "The reason is kept with the decision"
+  },
+  "outreach": {
+    "title": "Outbound",
+    "back": "Back to campaigns",
+    "website": "Create and edit on the website",
+    "websiteOne": "This campaign on the website",
+    "chipsLabel": "Filter campaigns",
+    "chips": {
+      "all": "All",
+      "live": "Active",
+      "sched": "Scheduled",
+      "done": "Finished"
+    },
+    "going": "In progress",
+    "earlier": "Earlier",
+    "noneHere": "No campaigns here right now",
+    "replies": "Replies",
+    "new": "New outreach",
+    "newTitle": "New outbound",
+    "choice": {
+      "message": {
+        "title": "Message",
+        "sub": "To one person, in their conversation"
+      },
+      "call": {
+        "title": "Phone call",
+        "sub": "From the business line, to one person"
+      }
+    },
+    "campaignsOnWebsite": "Campaigns, emails and templates are made on the website.",
+    "toWebsite": "Website",
+    "pickTitle": {
+      "message": "Who to write to?",
+      "call": "Who to call?"
+    },
+    "pickSearch": {
+      "message": "Name, phone or email",
+      "call": "Name, or a number in international format"
+    },
+    "pickHint": {
+      "message": "Find the customer, and their latest conversation opens.",
+      "call": "Find a customer with a phone, or type a number like +972 50 123 4567."
+    },
+    "noConversation": "There is no conversation with {name} yet. A first message is sent from the website for now.",
+    "openFailed": "We could not find the conversation right now. Try again.",
+    "typedNumber": "The number you typed",
+    "opening": "Opening the conversation…",
+    "noPhone": "No phone number",
+    "searchFailed": "We could not search right now.",
+    "searching": "Searching…",
+    "noMatch": "No matches.",
+    "sheetBack": "Back",
+    "confirmNumber": "Call this number?",
+    "confirmTitle": "Call {name}?",
+    "confirmBody": "The call goes out from the business line to",
+    "callNow": "Call",
+    "close": "Close"
+  },
+  "customers": {
+    "title": "Customers",
+    "back": "Back to customers",
+    "website": "Edit on the website",
+    "searchPlaceholder": "Search by name, phone or order",
+    "chipsLabel": "Filter customers",
+    "chips": {
+      "everyone": "All",
+      "quiet": "At risk"
+    },
+    "count": "{count, plural, one {1 customer} other {# customers}} · Recent activity",
+    "noneQuiet": "Nobody has gone quiet",
+    "channelsLabel": "{count, plural, one {Writes on 1 channel} other {Writes on # channels}}",
+    "actionsLabel": "Actions",
+    "call": "Call",
+    "spent": "Total spent",
+    "history": "History across every channel",
+    "ordersMore": "All orders on the website"
+  },
+  "thread": {
+    "menu": "Conversation actions",
+    "website": "Open on the full website",
+    "cancel": "Cancel",
+    "customer": "Customer info",
+    "ai": {
+      "return": "Back to AI",
+      "pause": "Pause the AI"
+    }
+  },
+  "customerInfo": {
+    "title": "Customer info",
+    "back": "Back to the conversation",
+    "loading": "Loading the customer's info",
+    "failed": "We couldn't load this part",
+    "failedAll": "We couldn't load the customer's info",
+    "noContact": "This customer isn't identified yet, so nothing has been saved about them.",
+    "memory": {
+      "title": "What GOTCHA remembers",
+      "empty": "GOTCHA hasn't learned anything about this customer yet"
+    },
+    "history": {
+      "title": "Previous conversations",
+      "empty": "No previous conversations",
+      "noSummary": "No summary yet",
+      "resolved": "Resolved",
+      "messages": "{count, plural, one {# message} other {# messages}}"
+    },
+    "orders": {
+      "title": "Orders",
+      "empty": "No orders to show",
+      "number": "Order #{number}",
+      "unnumbered": "Order",
+      "cancelled": "Cancelled"
+    },
+    "notes": {
+      "title": "Team notes",
+      "empty": "No notes about this customer"
+    },
+    "crm": {
+      "title": "In the CRM",
+      "empty": "Nothing in the CRM",
+      "kind": {
+        "note": "Note",
+        "task": "Task",
+        "call": "Call",
+        "email": "Email",
+        "meeting": "Meeting"
+      }
+    }
+  },
+  "copilot": {
+    "label": "Copilot",
+    "ready": "Copilot · Reply ready",
+    "more": "{count, plural, =1 {1 more option} other {# more options}}",
+    "dismiss": "Close the suggestion"
+  },
+  "loading": {
+    "home": "Loading Home",
+    "inbox": "Loading conversations",
+    "thread": "Loading the conversation",
+    "approvals": "Loading approvals",
+    "approval": "Loading the request",
+    "customers": "Loading customers",
+    "customer": "Loading the customer",
+    "outreach": "Loading campaigns",
+    "campaign": "Loading the campaign",
+    "ask": "Opening the conversation with GOTCHA"
+  }
+}

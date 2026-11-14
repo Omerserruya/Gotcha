@@ -98,11 +98,13 @@
     "via_not_connected": "a message's channel isn't connected",
     "via_mismatch": "one run's messages go on different channels",
     "unreachable_same_channel": "“If they can't be reached” tries the same channel again",
-    "unreachable_only_on_first_send": "“If they can't be reached” is only on the first message"
+    "unreachable_only_on_first_send": "“If they can't be reached” is only on the first message",
+    "branch_unconnected": "a step has a branch with no next step: a customer who takes it gets no answer"
   },
   "nodes": {
     "trigger": {
       "message_received": "Message received",
+      "conversation_started": "New conversation",
       "call_missed": "Call missed",
       "call_answered": "Call answered",
       "new_customer": "New customer",
@@ -167,6 +169,7 @@
   "lines": {
     "trigger": {
       "message_received": "Any channel, or a keyword",
+      "conversation_started": "Before anyone answers it, on any channel",
       "call_missed": "On any of your lines",
       "call_answered": "When it ends, with the recording",
       "new_customer": "First message ever",
@@ -183,7 +186,7 @@
       "comment_received": "Instagram or Facebook, any post or chosen ones"
     },
     "condition_group": "If, else if, else",
-    "opening_hours": "Open, closed, holiday",
+    "opening_hours": "Open or closed",
     "wait": "Minutes, hours, until a time",
     "wait_for_reply": "With a timeout branch",
     "split_channel": "One path per channel",
@@ -265,6 +268,8 @@
     "sat": "Sat"
   },
   "builder": {
+    "unanswered": "A customer who lands here gets no answer",
+    "unansweredShort": "No answer",
     "addBetween": "Add a step between {from} and {to}",
     "insertRefused": {
       "reply_pair": "Nothing can go between a message with buttons and the wait that reads its reply.",
@@ -312,6 +317,7 @@
       "wait": "{duration}",
       "upTo": "Up to {duration}",
       "split": "{a}% / {b}%",
+      "anyTeam": "General queue, no team",
       "toFill": "To fill in"
     },
     "more": "More",
@@ -386,6 +392,8 @@
     "comment_postPermalink": "Post link"
   },
   "inspector": {
+    "notListed": "A choice no longer in the list",
+    "notListedNote": "The step still keeps it and runs with it. To replace it, choose from the list.",
     "type": "Step type",
     "typeRefused": {
       "reply_pair": "A wait for the reply reads this step's buttons. Remove the wait first.",
@@ -569,12 +577,14 @@
     "deleting": "Deleting…",
     "cancel": "Cancel",
     "failed": "It wasn't deleted. Try again in a moment.",
+    "setupRoute": "It wasn't deleted: this automation answers every new conversation, on every channel. You can pause it instead.",
     "done": "Automation deleted.",
     "titleMany": "Delete {count, plural, one {# automation} other {# automations}}?",
     "whatMany": "They stop running and are deleted, together with their run history. A conversation waiting on one carries on as usual."
   },
   "when": {
     "message_received": "a message comes in",
+    "conversation_started": "a new conversation starts",
     "new_customer": "a new customer writes for the first time",
     "tag_added": "one of its tags is added",
     "schedule": "its time comes round",
@@ -622,5 +632,17 @@
   "via": {
     "whatsapp": "WhatsApp",
     "email": "Email"
+  },
+  "origin": {
+    "setup": "Created at setup",
+    "webchatName": "Who answers the website chat",
+    "shopifyChatName": "Who answers the Shopify store chat",
+    "setupName": "Who answers new conversations"
+  },
+  "pauseSetup": {
+    "title": "Pause “{name}”?",
+    "what": "New conversations will get no automatic answer until it's on again.",
+    "yes": "Pause",
+    "cancel": "Cancel"
   }
 }

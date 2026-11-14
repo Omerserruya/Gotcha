@@ -7,7 +7,7 @@ import { isApiError } from '@/api/client/api-error';
 import { isNotConfigured } from '@/api/client/not-configured';
 import { serverApi } from '@/api/client/server-api';
 import { integrationsSchema } from '@/api/contracts/integrations';
-import { integrationEndpoints } from '@/api/endpoints/registry';
+import { CONNECT_FLOWS, integrationEndpoints, type ConnectFlow } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 import { credentialsFor } from './connect-form';
@@ -123,14 +123,21 @@ export type OAuthStart =
  * is connected until the person approves there; the way back lands on this
  * system's screen with `connected=1` or `error=<code>`.
  */
-export async function startOAuth(slug: string, loginHost?: string): Promise<OAuthStart> {
+export async function startOAuth(
+  slug: string,
+  loginHost?: string,
+  /** Where the way back lands: Studio (default) or onboarding's step 2. */
+  flow: ConnectFlow = 'redesign_studio',
+): Promise<OAuthStart> {
   if (!OAUTH_HERE[slug]) return { ok: false, reason: 'not_here' };
+  // A server action's arguments are the browser's to send: only a flow we name.
+  if (!isConnectFlow(flow)) return { ok: false, reason: 'failed' };
   if (loginHost !== undefined && (slug !== 'salesforce' || !SALESFORCE_HOSTS.includes(loginHost))) {
     return { ok: false, reason: 'failed' };
   }
   try {
     const { url } = await serverApi().get({
-      endpoint: integrationEndpoints.oauthInit(slug, loginHost),
+      endpoint: integrationEndpoints.oauthInit(slug, loginHost, flow),
       payload: z.object({ url: z.string().url() }),
       raw: true,
     });
@@ -194,12 +201,16 @@ export type WooStart =
   | { readonly ok: false; readonly reason: 'invalid_store' | 'forbidden' | 'failed' };
 
 /** B: WooCommerce through the store's own approval page. Nothing is connected before it. */
-export async function startWooOAuth(raw: string): Promise<WooStart> {
+export async function startWooOAuth(
+  raw: string,
+  flow: ConnectFlow = 'redesign_studio',
+): Promise<WooStart> {
+  if (!isConnectFlow(flow)) return { ok: false, reason: 'failed' };
   const storeUrl = storeAddressOf(raw, process.env.NODE_ENV === 'production');
   if (!storeUrl) return { ok: false, reason: 'invalid_store' };
   try {
     const { url } = await serverApi().get({
-      endpoint: integrationEndpoints.wooOAuthInit(storeUrl),
+      endpoint: integrationEndpoints.wooOAuthInit(storeUrl, flow),
       payload: z.object({ url: z.string().url() }),
       raw: true,
     });
@@ -218,4 +229,8 @@ export async function startWooOAuth(raw: string): Promise<WooStart> {
     }
     return { ok: false, reason: 'failed' };
   }
+}
+
+function isConnectFlow(flow: unknown): flow is ConnectFlow {
+  return (CONNECT_FLOWS as readonly unknown[]).includes(flow);
 }

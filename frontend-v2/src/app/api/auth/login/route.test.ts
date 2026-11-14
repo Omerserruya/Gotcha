@@ -154,13 +154,31 @@ describe('⚠⚠ arriving at the OIDC start without going through the panel', ()
     expect(response.headers.get('location')).toContain('/application/o/authorize/');
   });
 
-  it('★★ and with no sign-in origin configured, nothing changes', async () => {
+  it('⚠⚠ with no sign-in origin configured (prod), our own screen on this host - never the provider', async () => {
     /*
-     * The whole product today. This route is the OIDC start and must stay so
-     * when sign-in is served from the same host.
+     * Prod, 2026-10-25: the WooCommerce plugin's "Connect to GOTCHA" reached
+     * `/connect` signed out, `signInHere()` sent it here, and with no
+     * `SIGN_IN_URL` the guard above was skipped: Authentik's purple page.
      */
-    const response = await get();
+    const returnTo = '/he/connect/woocommerce?site=https%3A%2F%2Fshop.example&return=x&nonce=n';
+    const response = await get(`?returnTo=${encodeURIComponent(returnTo)}&error=ended`);
+    expect(response.status).toBe(307);
+    const target = new URL(response.headers.get('location') ?? '');
+    expect(target.origin).toBe('https://dev.gotcha.co.il');
+    expect(target.pathname).toBe('/he/sign-in');
+    expect(target.searchParams.get('returnTo')).toBe(returnTo);
+    expect(target.searchParams.get('error')).toBe('ended');
+    expect(response.headers.get('location')).not.toContain('/application/o/authorize/');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    // Nothing for the callback yet: OIDC has not started.
+    expect(response.cookies.get(LOGIN_STATE_COOKIE)).toBeUndefined();
+  });
+
+  it('★★ and on the same host our panel handing over still starts OIDC - no loop', async () => {
+    const response = await get(`?${HANDOVER_PARAM}=1&finish=1&returnTo=%2Fhe%2Fhome`);
+    expect(response.status).toBe(307);
     expect(response.headers.get('location')).toContain('/application/o/authorize/');
+    expect(response.cookies.get(LOGIN_STATE_COOKIE)?.value).toBeDefined();
   });
 
   it('★ the redirect to the panel is not storable', async () => {

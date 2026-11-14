@@ -36,7 +36,8 @@
     },
     "conversation": {
       "escalated": "A conversation is escalated",
-      "assigned": "A conversation is handed to someone"
+      "assigned": "A conversation is handed to someone",
+      "waiting": "A customer is waiting for a reply"
     },
     "integration": {
       "check_failed": "A business system's credentials were rejected"
@@ -81,7 +82,8 @@
       "check_failed": "Fires when someone runs a connection test and the credentials are rejected - not continuous monitoring, and not \"the provider is down\"."
     },
     "conversation": {
-      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves."
+      "assigned": "Only when a conversation is handed to someone else. Never when they pick one up themselves.",
+      "waiting": "Only while the response target is on, once a customer has waited past it."
     },
     "broadcast": {
       "completed": "When every recipient has reached a final state - including the ones that failed."
@@ -129,7 +131,8 @@
       "employeeDown": "An AI employee stops working",
       "complaints": "Complaints spike unusually",
       "campaign": "A campaign finishes",
-      "assigned": "A conversation is assigned to me"
+      "assigned": "A conversation is assigned to me",
+      "waiting": "A customer is waiting for a reply"
     },
     "nothingSends": "Nothing sends this yet",
     "on": "on",
@@ -158,7 +161,31 @@
     "whatsapp": {
       "title": "Where WhatsApp alerts go",
       "none": "No number set",
-      "note": "Your own number, once WhatsApp alerts are available - they aren't yet."
+      "note": "Your own number. We send a code to it first, and WhatsApp alerts start once you confirm it.",
+      "numberLabel": "Your WhatsApp number",
+      "send": "Send code",
+      "sending": "Sending…",
+      "cancel": "Cancel",
+      "sent": "We sent a code on WhatsApp, valid for {minutes} minutes, to",
+      "codeLabel": "The code",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "resend": "Send again",
+      "change": "Change number",
+      "add": "Add number",
+      "remove": "Remove number",
+      "removeAsk": "Remove your number? WhatsApp alerts stop until you add one again.",
+      "removeYes": "Remove",
+      "problem": {
+        "invalid": "That isn't a phone number. Type it with its area code, like 054-123 4567.",
+        "unavailable": "WhatsApp alerts aren't available in this workspace right now.",
+        "rateLimited": "Too many codes in a row. Wait a few minutes, then send again.",
+        "sendFailed": "The code couldn't be sent to that number. Check it, or try again in a moment.",
+        "codeInvalid": "That code isn't right. Check it and type it again.",
+        "codeExpired": "That code has expired. Send a new one.",
+        "forbidden": "This account has no preferences of its own.",
+        "failed": "Not saved. Try again."
+      }
     },
     "volume": {
       "about": "You get about {n} a day",
@@ -178,15 +205,17 @@
     "saveProblem": {
       "forbidden": "This account has no preferences of its own.",
       "failed": "Not saved. Try again.",
-      "unknown": "This notification isn't available any more."
-    },
-    "whatsappUnavailable": {
-      "tag": "Not available yet",
-      "why": "WhatsApp alerts to you aren't available yet - there is no number for GOTCHA to send them from."
+      "unknown": "This notification isn't available any more.",
+      "phone": "Add your WhatsApp number and confirm its code first."
     },
     "notByEmail": "Not sent by email in this workspace",
     "notInApp": "Doesn't reach you in the app in this workspace",
-    "rowSwitch": "{channel} - {event}"
+    "notByWhatsApp": "Not sent by WhatsApp - this one has no WhatsApp message",
+    "rowSwitch": "{channel} - {event}",
+    "whatsappNoNumber": {
+      "tag": "Add your number",
+      "why": "WhatsApp alerts go to your own number. Add it below and confirm the code we send to it."
+    }
   },
   "rulesPage": {
     "title": "The workspace's rules",

@@ -1762,8 +1762,8 @@ describe('★★ I2 - the chips the page hands over are the row', () => {
   });
 });
 
-describe('★★ I4 - a row’s time by its age (Omer, 2026-10-13)', () => {
-  it('the time today, the weekday this week, the date before', async () => {
+describe('★★ I4 - a row’s time by its age (Omer, 2026-10-13; F1, 2026-11-09)', () => {
+  it('the time today, days ago this week, the date before', async () => {
     // NOW is Friday 25 September 2026, 15:00 in Jerusalem.
     render(
       await ConversationList({
@@ -1779,8 +1779,29 @@ describe('★★ I4 - a row’s time by its age (Omer, 2026-10-13)', () => {
       }),
     );
     expect(screen.getByTestId('time-today')).toHaveTextContent(/^13:46$/);
-    expect(screen.getByTestId('time-week')).toHaveTextContent(/^Tue$/);
+    expect(screen.getByTestId('time-week')).toHaveTextContent(/^3 days ago$/);
     expect(screen.getByTestId('time-old')).toHaveTextContent(/^01\.09$/);
     expect(screen.getByTestId('time-lastYear')).toHaveTextContent(/^30\.12\.25$/);
+  });
+
+  it('★ in Hebrew: אתמול, then לפני N ימים', async () => {
+    intl.locale = 'he';
+    try {
+      render(
+        await ConversationList({
+          rows: [
+            row({ id: 'yesterday', lastMessageAt: '2026-09-24T10:46:00.000Z' }),
+            row({ id: 'week', lastMessageAt: '2026-09-22T10:46:00.000Z' }),
+          ],
+          cap: 10,
+          now: NOW,
+          hasMore: false,
+        }),
+      );
+      expect(screen.getByTestId('time-yesterday')).toHaveTextContent(/^אתמול$/);
+      expect(screen.getByTestId('time-week')).toHaveTextContent(/^לפני 3 ימים$/);
+    } finally {
+      intl.locale = 'en';
+    }
   });
 });

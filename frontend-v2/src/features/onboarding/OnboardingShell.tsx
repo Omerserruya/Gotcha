@@ -1,20 +1,44 @@
-import { Check } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 
-import { ONBOARDING_STEPS, type OnboardingStep } from '@/api/contracts/onboarding';
+import { SHELL_STEPS, type ShellStep } from '@/api/contracts/onboarding-v2';
 import { Logo } from '@/design-system/brand/Logo';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Onboarding.module.css';
 import { stepHref } from './preview';
 
+/** Where each step starts, as a preview link; `null` while that step has no screen yet. */
+const STEP_HREF: Readonly<Record<ShellStep, (() => ReturnType<typeof stepHref>) | null>> = {
+  learn: () => stepHref('/onboarding/website', true),
+  systems: () => stepHref('/onboarding/systems', true),
+  channels: () => stepHref('/onboarding/channels', true),
+  live: () => stepHref('/onboarding/live', true),
+};
+
 /**
- * 00d-00h's frame (design 6): a dark column - the mark, five steps (done ✓,
- * this one, the rest), the step's serif headline and its line, a status at
- * the foot - beside the light surface the step works on.
+ * The way back from each step: to the screen the step before ends on. Plain
+ * links - going back saves nothing, so a reload still resumes at the
+ * furthest step. Step 1 has none.
+ */
+const BACK: Readonly<
+  Partial<Record<ShellStep, (preview: boolean) => ReturnType<typeof stepHref>>>
+> = {
+  systems: (preview) => stepHref('/onboarding/reading', preview),
+  channels: (preview) => stepHref('/onboarding/systems', preview),
+  live: (preview) => stepHref('/onboarding/channels', preview),
+};
+
+/**
+ * 00d-00h's frame (design 6): a dark column - the mark, the four steps of
+ * onboarding v2 (done ✓, this one, the rest), the step's serif headline and
+ * its line, a status at the foot - beside the light surface the step works on.
  *
- * Source of truth carries "Most important" on every step, as the design does.
+ * ★ No "Most important" tag any more: connecting systems can be skipped,
+ *   and a tag on a skippable step says the opposite of its button.
+ * ★ On a phone the column is one line ("step 1 of 4: ...") so the step's
+ *   own work - the live feed above all - is on the first screen.
  *
  * ★ In preview (`?preview=1`) the steps are links - each step's own way on
  *   is a write, drawn as a status there - and a line above the work says
@@ -22,16 +46,28 @@ import { stepHref } from './preview';
  */
 export function OnboardingShell({
   step,
+  screen,
   preview = false,
   children,
 }: {
-  readonly step: OnboardingStep;
+  readonly step: ShellStep;
+  /** The screen within the step (website, reading, systems...): it sets the work area's width. */
+  readonly screen: string;
   /** A live workspace's admin, walking it read-only. */
   readonly preview?: boolean;
   readonly children: ReactNode;
 }) {
   const t = useTranslations('onboarding');
-  const here = ONBOARDING_STEPS.indexOf(step);
+  const here = SHELL_STEPS.indexOf(step);
+  const backTo = BACK[step];
+  const back = backTo ? (
+    <p className={styles.stepBackRow}>
+      <Link href={backTo(preview)} className={styles.stepBack} data-testid="onboarding-back">
+        <ArrowLeft size={14} aria-hidden="true" />
+        {t('back')}
+      </Link>
+    </p>
+  ) : null;
   return (
     <div className={styles.frame}>
       <aside className={styles.column}>
@@ -39,8 +75,11 @@ export function OnboardingShell({
           <Logo variant="framed" size={26} />
           GOTCHA
         </span>
+        <p className={styles.compactStep} data-testid="onboarding-step-compact">
+          {t('stepOf', { n: here + 1, total: SHELL_STEPS.length, name: t(`steps.${step}`) })}
+        </p>
         <ol className={styles.steps} aria-label={t('stepsLabel')}>
-          {ONBOARDING_STEPS.map((name, i) => (
+          {SHELL_STEPS.map((name, i) => (
             <li
               key={name}
               className={styles.step}
@@ -51,9 +90,9 @@ export function OnboardingShell({
               <span className={styles.stepMark} aria-hidden="true">
                 {i < here ? <Check size={11} strokeWidth={2.5} /> : i + 1}
               </span>
-              {preview && i !== here ? (
+              {preview && i !== here && STEP_HREF[name] ? (
                 <Link
-                  href={stepHref(`/onboarding/${name}`, true)}
+                  href={STEP_HREF[name]()}
                   className={styles.stepName}
                   data-testid={`onboarding-step-link-${name}`}
                 >
@@ -62,9 +101,6 @@ export function OnboardingShell({
               ) : (
                 <span className={styles.stepName}>{t(`steps.${name}`)}</span>
               )}
-              {name === 'truth' ? (
-                <span className={styles.important}>{t('mostImportant')}</span>
-              ) : null}
             </li>
           ))}
         </ol>
@@ -78,7 +114,7 @@ export function OnboardingShell({
         </p>
       </aside>
       <main className={styles.surface}>
-        <div className={styles.work} data-step={step}>
+        <div className={styles.work} data-step={screen}>
           {preview ? (
             // The step's own width (--step-width), so the banner is the column's.
             <div className={styles.previewFrame}>
@@ -92,10 +128,14 @@ export function OnboardingShell({
                   {t('preview.home')}
                 </Link>
               </p>
+              {back}
               {children}
             </div>
           ) : (
-            children
+            <>
+              {back}
+              {children}
+            </>
           )}
         </div>
       </main>

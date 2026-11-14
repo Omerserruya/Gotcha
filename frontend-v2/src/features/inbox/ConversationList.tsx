@@ -346,12 +346,15 @@ export async function ConversationList({
               {conversation.lastMessageAt === null ? null : (
                 <span className={styles.rowTime} data-testid={`time-${conversation.id}`}>
                   {/*
-                    ★ BY AGE (Omer, 2026-10-13, I4): the time within 24 hours
-                      (24-hour, as before), the weekday within a week, the
-                      date after - `listTime`. A bare "09:12" on a row from
-                      last month read as today.
+                    ★ BY AGE (Omer, 2026-10-13, I4; 2026-11-09, F1): the
+                      time within 24 hours (24-hour, as before), then days
+                      ago ("אתמול", "לפני 3 ימים") up to 6, the date after -
+                      `listTime`. A bare "09:12" on a row from last month
+                      read as today.
                   */}
-                  {listTime(conversation.lastMessageAt, now, format)}
+                  {listTime(conversation.lastMessageAt, now, format, (days) =>
+                    t('queue.daysAgo', { days }),
+                  )}
                 </span>
               )}
             </span>

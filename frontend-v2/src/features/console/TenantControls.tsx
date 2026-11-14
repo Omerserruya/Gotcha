@@ -11,22 +11,25 @@ import { renameTenant, resendOnboarding, setTenantActive } from './actions';
 import { ConfirmedAction } from './ConfirmedAction';
 import styles from './Console.module.css';
 import { useRefusal } from './TenantBilling';
+import { TenantStatusEdit } from './TenantStatusEdit';
 
 /**
- * The tenant's own controls (legacy detail page header): rename, enable or
- * disable, and resend the onboarding email. Users, features, entitlements,
- * bot settings and deleting the tenant are not here (not in this port).
+ * The tenant's own controls (legacy detail page header): rename, its status
+ * set by hand, enable or disable, and resend the onboarding email.
  */
 export function TenantControls({
   tenantId,
   name,
   status,
   isActive,
+  planActive,
 }: {
   readonly tenantId: string;
   readonly name: string;
   readonly status: string;
   readonly isActive: boolean;
+  /** The plan opens the product, whatever the status. */
+  readonly planActive: boolean;
 }) {
   const t = useTranslations('console.controls');
   const refusal = useRefusal();
@@ -37,6 +40,7 @@ export function TenantControls({
         {t('title')}
       </h2>
       <Rename tenantId={tenantId} name={name} />
+      <TenantStatusEdit tenantId={tenantId} status={status} planActive={planActive} />
       <div className={styles.controlRow}>
         <ConfirmedAction
           label={isActive ? t('disable.label') : t('enable.label')}

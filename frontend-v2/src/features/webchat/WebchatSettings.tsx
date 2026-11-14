@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ArrowLeft,
   Globe,
   ImageIcon,
   MessageCircle,
@@ -10,7 +9,7 @@ import {
   SendHorizontal,
   ShoppingBag,
 } from 'lucide-react';
-import { useFormatter, useTranslations } from 'next-intl';
+import { useFormatter, useLocale, useTranslations } from 'next-intl';
 import {
   useEffect,
   useSyncExternalStore,
@@ -54,7 +53,7 @@ import type { ShopifyAvailability } from '@/features/capabilities/load-capabilit
 import { Link, useRouter } from '@/i18n/navigation';
 
 import { appPath } from '@/lib/base-path';
-import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-mark';
+import { brandInitial, initials, inkOn } from '@/lib/brand-mark';
 
 import { hexToHsv, hsvToHex } from './colour';
 import {
@@ -72,13 +71,17 @@ import {
 } from './website-widget-actions';
 import styles from './Webchat.module.css';
 import { WidgetAssignmentCard } from './WidgetAssignment';
+import { WidgetFrame } from './WidgetFrame';
 import { WooPlugin } from './WooPlugin';
 
 /** How long the editor waits after the last change before saving it. */
 export const SAVE_AFTER_MS = 700;
 
 type Saving =
-  'idle' | 'saving' | 'saved' | 'failed' | 'nowhere' | 'number' | 'kindNumber' | 'couponPersonal';
+  | 'idle'
+  | 'saving'
+  | 'saved'
+  | Extract<Awaited<ReturnType<typeof saveWebsiteWidget>>, { ok: false }>['reason'];
 
 interface Setters {
   readonly colour: (hex: string) => void;
@@ -96,6 +99,10 @@ interface Setters {
   readonly whatsapp: (patch: Partial<WebchatConfig['ux']['whatsapp']>) => void;
   /** W9: products, cart and the chosen coupons. */
   readonly commerce: (patch: Partial<WebchatConfig['commerce']>) => void;
+  /** The header's name: the answering employee's, or the one typed (kept while unused). */
+  readonly nameSource: (source: WebchatConfig['nameSource']) => void;
+  /** "Talk to a person" in the widget: off unless switched on. */
+  readonly human: (allowHumanHandoff: boolean) => void;
 }
 
 /**
@@ -128,6 +135,7 @@ export function WebchatSettings({
   tab,
   handoffNumbers = null,
   assignment = null,
+  answering = null,
 }: {
   readonly initial: WebchatConfig;
   /**
@@ -142,6 +150,8 @@ export function WebchatSettings({
   readonly handoffNumbers?: readonly HandoffNumber[] | null;
   /** Who answers the website per the playbook - read-only here. */
   readonly assigned: WebsiteWidget['assignedEmployee'];
+  /** Who answers, automation-first (Backend 330b0461); `null` from an older service. */
+  readonly answering?: WebsiteWidget['answering'];
   /** `null`: the installs could not be read. */
   readonly install: WidgetInstall | null;
   readonly shopifyData: ShopifyData | null;
@@ -227,6 +237,8 @@ export function WebchatSettings({
     greeting: (title) => ux({ welcome: { ...config.ux.welcome, title } }),
     whatsapp: (patch) => ux({ whatsapp: { ...config.ux.whatsapp, ...patch } }),
     commerce: (patch) => change({ ...config, commerce: { ...config.commerce, ...patch } }),
+    nameSource: (nameSource) => change({ ...config, nameSource }),
+    human: (allowHumanHandoff) => change({ ...config, handoff: { allowHumanHandoff } }),
   };
   /* The number "Continue on WhatsApp" would use - the button shows only when it can take it. */
   const handoff =
@@ -292,6 +304,10 @@ export function WebchatSettings({
             className={styles.saving}
             role="status"
             data-saving={saving}
+            // Every refusal in the urgent tone - never grey like "Saved".
+            data-failed={
+              saving === 'idle' || saving === 'saving' || saving === 'saved' ? undefined : ''
+            }
             data-testid="webchat-saving"
           >
             {saving === 'idle' ? '' : t(`saving.${saving}`)}
@@ -304,7 +320,13 @@ export function WebchatSettings({
           {tab === 'appearance' ? (
             <Appearance config={config} set={set} />
           ) : tab === 'conversation' ? (
-            <Conversation config={config} set={set} assigned={assigned} assignment={assignment} />
+            <Conversation
+              config={config}
+              set={set}
+              assigned={assigned}
+              assignment={assignment}
+              answering={answering}
+            />
           ) : tab === 'behaviour' ? (
             <Behaviour
               config={config}
@@ -321,7 +343,13 @@ export function WebchatSettings({
             />
           )}
         </div>
-        <Preview config={config} site={site} business={business} handoff={handoff !== null} />
+        <Preview
+          config={config}
+          site={site}
+          business={business}
+          handoff={handoff !== null}
+          employeeName={answering?.employee?.name ?? assigned?.name ?? null}
+        />
       </div>
     </div>
   );
@@ -797,13 +825,17 @@ function Conversation({
   set,
   assigned,
   assignment,
+  answering,
 }: {
   readonly config: WebchatConfig;
   readonly set: Setters;
   readonly assigned: WebsiteWidget['assignedEmployee'];
   readonly assignment: WidgetAssignment | 'forbidden' | null;
+  readonly answering: WebsiteWidget['answering'];
 }) {
   const t = useTranslations('channels.webchat.conversation');
+  // The employee the header would name: the automation-first read, else the playbook's.
+  const employeeName = answering?.employee?.name ?? assigned?.name ?? null;
   const questions = [0, 1, 2].map((i) => config.ux.welcome.suggestedQuestions[i] ?? '');
   return (
     <>
@@ -821,13 +853,39 @@ function Conversation({
           </Row>
         ) : (
           <Row label={t('name')} testid="webchat-name">
-            <TextField
-              label={t('name')}
-              value={config.ux.welcome.assistantName}
-              onChange={set.assistantName}
-              max={40}
-              testid="webchat-name-input"
-            />
+            {/* Backend 330b0461: the answering employee's name, or one typed here (kept while unused). */}
+            <span className={styles.nameSource} role="radiogroup" aria-label={t('name')}>
+              {(['employee', 'custom'] as const).map((source) => (
+                <label key={source} className={styles.radio}>
+                  <input
+                    type="radio"
+                    name="webchat-name-source"
+                    checked={config.nameSource === source}
+                    onChange={() => set.nameSource(source)}
+                    data-testid={`webchat-name-${source}`}
+                  />
+                  {t(`nameSource.${source}`)}
+                </label>
+              ))}
+            </span>
+            {config.nameSource === 'employee' ? (
+              <span className={styles.rowHint} data-testid="webchat-name-from-employee">
+                {employeeName
+                  ? t.rich('nameFromEmployee', {
+                      name: employeeName,
+                      user: (chunks) => <bdi dir="auto">{chunks}</bdi>,
+                    })
+                  : t('nameNoEmployee')}
+              </span>
+            ) : (
+              <TextField
+                label={t('name')}
+                value={config.ux.welcome.assistantName}
+                onChange={set.assistantName}
+                max={40}
+                testid="webchat-name-input"
+              />
+            )}
           </Row>
         )}
         <Row
@@ -875,7 +933,11 @@ function Conversation({
             Who answers is decided in one place, the playbook - and since Omer's
             2026-10-08 decision, an admin can set it from here, written to it.
           */}
-            <WidgetAssignmentCard read={assignment} assigned={assigned} />
+            <WidgetAssignmentCard
+              read={assignment}
+              assigned={assigned}
+              automation={answering ? answering.automation : undefined}
+            />
           </section>
           <section
             className={styles.card}
@@ -986,6 +1048,19 @@ function Behaviour({
           </span>
         </Row>
       ) : null}
+      {/*
+        "Talk to a person" (Omer, 2026-10-26): opt-in, legacy's words. A
+        WhatsApp widget has no chat on the site to hand over from.
+      */}
+      {config.ux.kind === 'whatsapp' ? null : (
+        <Toggle
+          label={t('human')}
+          hint={t('humanHint')}
+          on={config.handoff.allowHumanHandoff === true}
+          onChange={set.human}
+          testid="webchat-human"
+        />
+      )}
       {/* W1: the WhatsApp widget IS the hand-off: its number is chosen with its kind. */}
       {config.ux.kind === 'whatsapp' ? null : handoffNumbers === null ? (
         // A stage A service: not there yet, and nothing is sent for it.
@@ -1105,7 +1180,11 @@ function Behaviour({
               set.commerce(
                 on
                   ? { productMessagingEnabled: true }
-                  : { productMessagingEnabled: false, addToCartEnabled: false },
+                  : {
+                      productMessagingEnabled: false,
+                      addToCartEnabled: false,
+                      suggestComplementary: false,
+                    },
               )
             }
             testid="webchat-products"
@@ -1125,6 +1204,24 @@ function Behaviour({
               on={false}
               why={t('cartNeedsProducts')}
               testid="webchat-cart"
+            />
+          )}
+          {/* Backend f7c36959: add-ons are product cards, so they wait on "Recommend products". */}
+          {config.commerce.productMessagingEnabled ? (
+            <Toggle
+              label={t('complementary.label')}
+              hint={t('complementary.hint')}
+              on={config.commerce.suggestComplementary}
+              onChange={(on) => set.commerce({ suggestComplementary: on })}
+              testid="webchat-complementary"
+            />
+          ) : (
+            <Toggle
+              label={t('complementary.label')}
+              hint={t('complementary.hint')}
+              on={false}
+              why={t('complementaryNeedsProducts')}
+              testid="webchat-complementary"
             />
           )}
         </>
@@ -1381,7 +1478,7 @@ function ShopRow({
   );
 }
 
-function CopyCode({ code }: { readonly code: string }) {
+export function CopyCode({ code }: { readonly code: string }) {
   const t = useTranslations('channels.webchat.install');
   const [copied, setCopied] = useState<boolean | null>(null);
   return (
@@ -1557,7 +1654,7 @@ function dealWords(
  * No code yet: it is created by the web chat's own create (idempotent, and it
  * owns the plan's channel limit) - never by a settings save.
  */
-function GetTheCode() {
+export function GetTheCode() {
   const t = useTranslations('channels.webchat.install');
   const router = useRouter();
   const [problem, setProblem] = useState<'limit' | 'forbidden' | 'failed' | null>(null);
@@ -1599,23 +1696,37 @@ function Preview({
   site,
   business,
   handoff,
+  employeeName,
 }: {
   readonly config: WebchatConfig;
   readonly site: string | null;
   readonly business: string | null;
   /** "Continue on WhatsApp" is on and its number can take it: the button shows. */
   readonly handoff: boolean;
+  /** The answering employee's name, for a header that takes it (`nameSource: employee`). */
+  readonly employeeName: string | null;
 }) {
   const t = useTranslations('channels.webchat.preview');
+  const locale = useLocale();
+  /*
+    ★ "In the customer's language": the live widget follows the language of
+    the store page it is on (its <html lang>), which this screen cannot know.
+    So the merchant picks which of the two to look at - starting from this
+    screen's - and is told what decides it on the site (Omer, 2026-10-25:
+    a Hebrew preview, an English en-US store).
+  */
+  const auto = config.appearance.language === 'auto';
+  const [shown, setShown] = useState<'he' | 'en'>(locale === 'he' ? 'he' : 'en');
+  const language = config.appearance.language === 'auto' ? shown : config.appearance.language;
   const colour = isHex(config.appearance.primaryColor) ? config.appearance.primaryColor : '#121212';
-  const name = config.ux.welcome.assistantName.trim() || t('assistant');
-  const mark = brandMark(business ?? name);
+  const name =
+    (config.nameSource === 'employee' ? employeeName : config.ux.welcome.assistantName)?.trim() ||
+    t('assistant');
   // The bubble's and the pop-up's mark: the brand's initial, as the live widget draws it.
   const initial = brandInitial(business ?? name);
   const ink = inkOn(colour);
-  // Sized by its longest word, never broken inside one; initials when none fits.
-  const fit = logoFit(mark.logo);
-  const questions = config.ux.welcome.suggestedQuestions.filter((q) => q.trim()).slice(0, 3);
+  // ★ One logo (Omer, 2026-10-25): the bubble and the pop-up draw it as the live widget does.
+  const logo = config.appearance.logoUrl;
   const whatsapp = config.ux.kind === 'whatsapp' || config.ux.look === 'whatsapp';
   const teaser = config.ux.proactive.enabled ? config.ux.proactive.message.trim() : '';
   const greeting = config.ux.welcome.title.trim();
@@ -1629,11 +1740,36 @@ function Preview({
           </span>
         ) : null}
       </span>
+      {auto ? (
+        <div className={styles.previewLanguage} data-testid="webchat-preview-language">
+          <span className={styles.segments} role="radiogroup" aria-label={t('languageLabel')}>
+            {(['he', 'en'] as const).map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                role="radio"
+                aria-checked={shown === lang}
+                className={styles.segment}
+                onClick={() => setShown(lang)}
+                lang={lang}
+                data-testid={`webchat-preview-language-${lang}`}
+              >
+                {t(`languages.${lang}`)}
+              </button>
+            ))}
+          </span>
+          <span className={styles.rowHint}>{t('languageHint')}</span>
+        </div>
+      ) : null}
       {/*
         ★★ W2 (design 7): a store page with the widget on it - the widget at
         the top, its pop-up and button at the bottom, on its side.
       */}
-      <div className={styles.stage} data-side={config.ux.launcher.position}>
+      <div
+        className={styles.stage}
+        data-side={config.ux.launcher.position}
+        data-teaser={teaser ? '' : undefined}
+      >
         {whatsapp ? (
           /*
             The WhatsApp widget: WhatsApp's panel - its greeting, a composer
@@ -1671,70 +1807,14 @@ function Preview({
             </span>
           </div>
         ) : (
-          <div className={`${styles.pin} ${styles.widget}`} data-testid="webchat-preview-widget">
-            <div className={styles.hero} data-testid="webchat-preview-cover">
-              {config.ux.hero.mediaUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.ux.hero.mediaUrl} alt="" className={styles.heroImage} />
-              ) : (
-                <ImageIcon size={16} aria-hidden="true" />
-              )}
-              {handoff ? (
-                // Design 7: the WhatsApp action on the cover, when the button will show.
-                <span
-                  className={styles.heroWa}
-                  title={t('waContinue')}
-                  data-testid="webchat-preview-wa-button"
-                >
-                  <MessageCircle size={13} aria-hidden="true" />
-                </span>
-              ) : null}
-            </div>
-            <span className={styles.logoRow}>
-              <span
-                className={styles.logo}
-                data-fit={config.appearance.logoUrl ? undefined : fit}
-                data-testid="webchat-preview-logo"
-              >
-                {config.appearance.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={config.appearance.logoUrl} alt="" />
-                ) : fit === 'initials' ? (
-                  initials(business ?? name)
-                ) : (
-                  mark.logo
-                )}
-              </span>
-            </span>
-            <span className={styles.assistant} data-testid="webchat-preview-name">
-              <bdi dir="auto">{name}</bdi>
-            </span>
-            <ul className={styles.questions} data-testid="webchat-preview-questions">
-              {questions.map((q, i) => (
-                <li key={i}>
-                  <bdi dir="auto">{q}</bdi>
-                  {/* The live widget's rows carry an arrow (supervisor, dev). */}
-                  <ArrowLeft size={12} aria-hidden="true" />
-                </li>
-              ))}
-            </ul>
-            <div className={styles.composerArea}>
-              <span className={styles.composer}>
-                <span>{t('type')}</span>
-                <span
-                  className={styles.send}
-                  style={{ backgroundColor: colour, color: ink }}
-                  aria-hidden="true"
-                  data-testid="webchat-preview-send"
-                >
-                  <ArrowLeft size={14} />
-                </span>
-              </span>
-              <span className={styles.powered} data-testid="webchat-preview-powered">
-                <PoweredBy />
-              </span>
-            </div>
-          </div>
+          /* The real widget: the chat bundle the site loads, booted on this draft. */
+          <WidgetFrame
+            config={config}
+            employeeName={employeeName}
+            handoff={handoff}
+            language={language}
+            business={business}
+          />
         )}
         {teaser ? (
           whatsapp ? (
@@ -1754,10 +1834,17 @@ function Preview({
               <span className={styles.popHead}>
                 <span
                   className={styles.popAvatar}
-                  style={{ backgroundColor: colour, color: ink }}
+                  style={logo ? undefined : { backgroundColor: colour, color: ink }}
+                  data-logo={logo ? '' : undefined}
                   aria-hidden="true"
                 >
-                  {initial}
+                  {logo ? (
+                    // The merchant's own logo, re-hosted by the platform.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className={styles.logoMark} src={logo} alt="" />
+                  ) : (
+                    initial
+                  )}
                   <span className={styles.popDot} />
                 </span>
                 <span className={styles.popNames}>
@@ -1787,10 +1874,17 @@ function Preview({
         ) : (
           <span
             className={`${styles.pin} ${styles.launcher}`}
-            style={{ backgroundColor: colour, color: ink }}
+            style={logo ? undefined : { backgroundColor: colour, color: ink }}
+            data-logo={logo ? '' : undefined}
             data-testid="webchat-preview-launcher"
           >
-            {initial}
+            {logo ? (
+              // The merchant's own logo, re-hosted by the platform.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={styles.logoMark} src={logo} alt="" />
+            ) : (
+              initial
+            )}
             {/* Someone answers: design 7's green dot. */}
             <span className={styles.launcherDot} aria-hidden="true" />
           </span>
@@ -1825,7 +1919,14 @@ function PoweredBy() {
  * A WhatsApp widget needs a number that can take it (else 422
  * WHATSAPP_KIND_NEEDS_NUMBER): it is chosen here, in place - one that can be
  * used is offered, one that cannot says why - and the kind is saved only with
- * one. No usable number at all: said, with where to connect one.
+ * one.
+ *
+ * ★ OR TYPED (Omer, 2026-11-02): a workspace with no WhatsApp channel can
+ *   still have the widget - it opens wa.me/<number>. A connected number is
+ *   offered first, as before, with "Another number" beside them; with none
+ *   that can be used, the field itself. The route normalises what is typed
+ *   (an Israeli 05… becomes +9725…) and refuses what is not a number
+ *   (WHATSAPP_PHONE_INVALID), said in words; here only "has digits enough".
  */
 function KindChoice({
   config,
@@ -1854,25 +1955,84 @@ function KindChoice({
     WhatsApp widget): the hand-off is off - never a number nobody chose.
   */
   const [before, setBefore] = useState<WebchatConfig['ux']['whatsapp'] | null>(null);
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [typedBad, setTypedBad] = useState(false);
   const usable = numbers.filter((n) => n.available);
   const current = numbers.find((n) => n.channelId === config.ux.whatsapp.channelAccountId) ?? null;
-  const ready = config.ux.whatsapp.enabled && current?.available === true;
+  // A connected number wins; the typed one is what is used without one (Backend).
+  const typedNumber = current?.available ? null : config.ux.whatsapp.phone;
+  const ready = config.ux.whatsapp.enabled && (current?.available === true || typedNumber !== null);
   const toWhatsApp = (channelAccountId: string) => {
     setPicking(false);
-    setAsking({ kind: 'whatsapp', whatsapp: { enabled: true, channelAccountId } });
+    setTyping(false);
+    setAsking({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId, phone: config.ux.whatsapp.phone },
+    });
+  };
+  const toTyped = () => {
+    if (!looksLikePhone(typed)) {
+      setTypedBad(true);
+      return;
+    }
+    setPicking(false);
+    setTyping(false);
+    setAsking({
+      kind: 'whatsapp',
+      whatsapp: { enabled: true, channelAccountId: null, phone: typed.trim() },
+    });
   };
   const choose = (kind: WidgetKind) => {
     if (kind === 'chat') {
       setPicking(false);
       if (config.ux.kind === 'chat') return;
-      setAsking({ kind: 'chat', whatsapp: before ?? { enabled: false, channelAccountId: null } });
+      setAsking({
+        kind: 'chat',
+        whatsapp: before ?? { enabled: false, channelAccountId: null, phone: null },
+      });
       return;
     }
     if (config.ux.kind === 'whatsapp' && ready) return;
-    if (ready) toWhatsApp(config.ux.whatsapp.channelAccountId!);
+    if (ready) setAsking({ kind: 'whatsapp', whatsapp: config.ux.whatsapp });
     else if (usable.length === 1) toWhatsApp(usable[0]!.channelId);
     else setPicking(true);
   };
+  const typedField = (
+    <span className={styles.kindNumbers} data-testid="webchat-kind-typed">
+      <label className={styles.rowHint} htmlFor="webchat-kind-phone">
+        {t('typedLabel')}
+      </label>
+      <span className={styles.textField}>
+        <input
+          id="webchat-kind-phone"
+          value={typed}
+          inputMode="tel"
+          dir="ltr"
+          placeholder="054-123 4567"
+          aria-invalid={typedBad}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            setTypedBad(false);
+          }}
+          data-testid="webchat-kind-phone"
+        />
+      </span>
+      {typedBad ? (
+        <span className={styles.rowHint} role="alert" data-testid="webchat-kind-phone-bad">
+          {t('typedBad')}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className={styles.linkButton}
+        onClick={toTyped}
+        data-testid="webchat-kind-phone-use"
+      >
+        {t('typedUse')}
+      </button>
+    </span>
+  );
   const confirm = () => {
     if (!asking) return;
     if (asking.kind === 'whatsapp' && config.ux.kind === 'chat') setBefore(config.ux.whatsapp);
@@ -1923,9 +2083,15 @@ function KindChoice({
           </span>
         </div>
       ) : null}
-      {config.ux.kind === 'whatsapp' && current && !picking && !asking ? (
+      {config.ux.kind === 'whatsapp' && (current || typedNumber) && !picking && !asking ? (
         <p className={styles.rowHint} data-testid="webchat-kind-number">
-          {t('number', { name: current.name, phone: current.phone ?? '' })}{' '}
+          {current?.available || !typedNumber ? (
+            t('number', { name: current!.name, phone: current!.phone ?? '' })
+          ) : (
+            <>
+              {t('typedNumber')} <span dir="ltr">{typedNumber}</span>
+            </>
+          )}{' '}
           <button
             type="button"
             className={styles.linkButton}
@@ -1938,11 +2104,14 @@ function KindChoice({
       ) : null}
       {picking ? (
         usable.length === 0 ? (
-          <p className={styles.rowHint} role="status" data-testid="webchat-kind-no-number">
-            {t.rich('noNumber', {
-              channels: (chunks) => <Link href="/settings/channels">{chunks}</Link>,
-            })}
-          </p>
+          <>
+            <p className={styles.rowHint} role="status" data-testid="webchat-kind-no-number">
+              {t.rich('noNumber', {
+                channels: (chunks) => <Link href="/settings/channels">{chunks}</Link>,
+              })}
+            </p>
+            {typedField}
+          </>
         ) : (
           <span
             className={styles.kindNumbers}
@@ -1970,11 +2139,34 @@ function KindChoice({
                 )}
               </label>
             ))}
+            <label className={styles.radio}>
+              <input
+                type="radio"
+                name="webchat-kind-number"
+                checked={typing}
+                onChange={() => setTyping(true)}
+                data-testid="webchat-kind-number-typed"
+              />
+              {t('typedOption')}
+            </label>
+            {typing ? typedField : null}
           </span>
         )
       ) : null}
     </section>
   );
+}
+
+/**
+ * Enough of a phone number to send: digits, with the separators people type
+ * (`+`, spaces, dashes, brackets, dots), 8 to 15 digits as the route keeps.
+ * The route normalises and is the judge (WHATSAPP_PHONE_INVALID).
+ */
+function looksLikePhone(raw: string): boolean {
+  const text = raw.trim();
+  if (!/^\+?[\d\s\-().]+$/.test(text)) return false;
+  const digits = text.replace(/\D/g, '').length;
+  return digits >= 8 && digits <= 15;
 }
 
 /** For a value that never changes while the page is open (a browser's abilities). */

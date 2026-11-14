@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { ArrowUp, Image as ImageIcon, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Camera, Image as ImageIcon, Paperclip, Plus, X } from 'lucide-react';
 
 import { replyWindowOf, type ConversationRow, type ReplyMode } from '@/api/contracts/inbox';
 
@@ -54,10 +54,11 @@ import { UserText } from '@/design-system/primitives/text/UserText';
  * action - not "Save", not "OK". A control that sends a stranger a message
  * should read like one.
  *
- * ── NO ENTER-TO-SEND, AND THE REASON IS THE SAME AS ON APPROVALS ──
- * The approvals screen refuses a one-keypress irreversible action because there
- * is no undo. The same argument applies here and more so: Enter is the key a
- * person presses to start a new line. Enter makes a newline; the button sends.
+ * ── ENTER SENDS, SHIFT+ENTER IS A NEW LINE (Omer, 2026-10-26) ──
+ * As legacy's ChatPanel did. Enter submits the form, so it goes through the
+ * button's own path and its own refusals: nothing Enter sends is something the
+ * button would not. While an IME is composing, Enter confirms the candidate
+ * and sends nothing.
  *
  * ── AND NO OPTIMISTIC ECHO ──
  * The reply does not appear in the stream until the server has it and the page
@@ -70,6 +71,7 @@ export function Composer({
   replyWindow = null,
   customerName = null,
   resolved = false,
+  variant,
 }: {
   readonly conversationId: string;
   /** Already-named channel, for the sentence about where this goes. */
@@ -80,6 +82,8 @@ export function Composer({
   readonly customerName?: string | null;
   /** Already closed: no "close the conversation" action. */
   readonly resolved?: boolean;
+  /** The phone app's look (`/m`): a pill and a round send, no rewrite chips. */
+  readonly variant?: 'phone';
 }) {
   const t = useTranslations('inbox.composer');
   const router = useRouter();
@@ -180,6 +184,9 @@ export function Composer({
   const [isComposing, setComposing] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  /** The phone's "+" sheet: photos, camera, files. */
+  const [attaching, setAttaching] = useState(false);
   const body = useRef<HTMLTextAreaElement>(null);
   /*
    * ★ THE MESSAGE BEING ANSWERED - 02's Reply. Set by a message's button in
@@ -232,7 +239,16 @@ export function Composer({
   const add = (chosen: FileList | readonly File[] | null | undefined) => {
     setResult(null);
     if (!chosen) return;
-    setFiles((now) => [...now, ...Array.from(chosen)].slice(0, MAX_FILES));
+    /*
+     * ⚠⚠ COPIED NOW, NOT IN THE UPDATER. A FileList is live: the inputs clear
+     *    their value right after this call (so the same file can be picked
+     *    again), which empties it - and React runs the updater later. Read
+     *    there, every pick arrived empty and nothing could be sent
+     *    (Omer, 2026-11-04).
+     */
+    const picked = Array.from(chosen);
+    if (picked.length === 0) return;
+    setFiles((now) => [...now, ...picked].slice(0, MAX_FILES));
   };
   const remove = (index: number) => {
     setResult(null);
@@ -258,6 +274,7 @@ export function Composer({
   return (
     <form
       className={styles.composer}
+      data-variant={variant}
       data-dragging={dragging ? 'yes' : undefined}
       onDragOver={(event) => {
         if (!event.dataTransfer.types.includes('Files') || busy) return;
@@ -316,8 +333,14 @@ export function Composer({
               /*
                * A text reply revalidates on the server; a file goes through the
                * BFF, so the page is re-read from here.
+               *
+               * ★ And after any send into a RESOLVED conversation: the send
+               *   reopens it and gives it to the sender (Backend, 2026-11-03),
+               *   so the status, the owner and the AI's verbs all change. The
+               *   server's revalidation names the website's inbox only, and
+               *   the phone's thread is a different route.
                */
-              if (file !== null) router.refresh();
+              if (file !== null || resolved) router.refresh();
             }
           } catch {
             setResult({ ok: false, reason: 'failed' });
@@ -430,6 +453,40 @@ export function Composer({
         />
       ) : null}
 
+      {/*
+        ★ THE PHONE'S "+" SHEET. One button beside the pill instead of two
+          icons inside it, so the field gets the width (Omer, 2026-11-03).
+          Photos open the gallery, Camera takes one, Files opens the files.
+      */}
+      {variant === 'phone' && attaching ? (
+        <div className={styles.composerAttachSheet} data-testid="composer-attach-sheet">
+          {(
+            [
+              ['image', imageInput, ImageIcon, t('attachPhotos')],
+              ['camera', cameraInput, Camera, t('attachCamera')],
+              ['file', fileInput, Paperclip, t('attachFiles')],
+            ] as const
+          ).map(([key, input, Icon, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={styles.composerAttachOption}
+              data-testid={`composer-attach-${key}`}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => {
+                setAttaching(false);
+                input.current?.click();
+              }}
+            >
+              <span className={styles.composerAttachBadge} data-kind={key} aria-hidden="true">
+                <Icon size={20} />
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <textarea
         ref={body}
         id="composer-body"
@@ -438,8 +495,21 @@ export function Composer({
         value={text}
         rows={1}
         disabled={busy || locked}
-        placeholder={t('placeholder')}
+        placeholder={variant === 'phone' ? t('placeholderPhone') : t('placeholder')}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          /*
+           * ★ On the phone Enter is a new line, as in WhatsApp: the send button
+           *   sends (Omer, 2026-11-03). A phone keyboard has no Shift+Enter.
+           */
+          if (variant === 'phone') return;
+          if (event.key !== 'Enter' || event.shiftKey) return;
+          // An IME's Enter confirms a candidate (229 where isComposing is missing).
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+          event.preventDefault();
+          // The form's submit, so the same refusals as the button apply.
+          event.currentTarget.form?.requestSubmit();
+        }}
       />
 
       {/* The held files - a picture as itself - each with the way to take it back out. */}
@@ -509,28 +579,56 @@ export function Composer({
             event.target.value = '';
           }}
         />
-        <button
-          type="button"
-          className={styles.composerIcon}
-          data-testid="composer-attach-image"
-          aria-label={t('attachImage')}
-          title={t('attachImage')}
-          disabled={busy || locked || files.length >= MAX_FILES}
-          onClick={() => imageInput.current?.click()}
-        >
-          <ImageIcon size={15} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.composerIcon}
-          data-testid="composer-attach-file"
-          aria-label={t('attachFile')}
-          title={t('attachFile')}
-          disabled={busy || locked || files.length >= MAX_FILES}
-          onClick={() => fileInput.current?.click()}
-        >
-          <Paperclip size={15} aria-hidden="true" />
-        </button>
+        <input
+          ref={cameraInput}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          data-testid="composer-camera-input"
+          onChange={(event) => {
+            add(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        {variant === 'phone' ? (
+          <button
+            type="button"
+            className={styles.composerPlus}
+            data-testid="composer-attach"
+            aria-label={t('attach')}
+            aria-expanded={attaching}
+            disabled={busy || locked}
+            onClick={() => setAttaching((open) => !open)}
+          >
+            {attaching ? <X size={20} aria-hidden="true" /> : <Plus size={22} aria-hidden="true" />}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={styles.composerIcon}
+              data-testid="composer-attach-image"
+              aria-label={t('attachImage')}
+              title={t('attachImage')}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => imageInput.current?.click()}
+            >
+              <ImageIcon size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.composerIcon}
+              data-testid="composer-attach-file"
+              aria-label={t('attachFile')}
+              title={t('attachFile')}
+              disabled={busy || locked || files.length >= MAX_FILES}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Paperclip size={15} aria-hidden="true" />
+            </button>
+          </>
+        )}
 
         <span className={styles.composerDivider} aria-hidden="true" />
 
@@ -650,7 +748,8 @@ export function Composer({
             "sent" would be a claim about a phone we have heard nothing from, and
             the operator who believes it stops watching the one message that failed.
           */}
-          {result?.ok ? (
+          {/* The phone says it in the bubble itself: the tick inside it. */}
+          {result?.ok && variant !== 'phone' ? (
             <p className={styles.composerNote} data-testid="composer-queued">
               {t('queued')}
             </p>

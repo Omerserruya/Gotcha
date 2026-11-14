@@ -23,6 +23,7 @@ const paid: NewTenant = {
   slug: 'acme',
   adminEmail: 'owner@acme.co',
   adminName: 'Dana',
+  locale: 'he',
   billing: {
     mode: 'PAID_PLAN',
     planVersionId: 'pv1',

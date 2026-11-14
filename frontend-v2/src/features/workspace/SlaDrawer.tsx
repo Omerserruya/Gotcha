@@ -143,7 +143,11 @@ export function SlaDrawer({
             <span className={styles.rowNote} data-testid="sla-minutes-problem">
               {t('slaDrawer.invalidMinutes')}
             </span>
-          ) : null}
+          ) : (
+            <span className={drawer.hint} data-testid="sla-minutes-hint">
+              {t('slaDrawer.minutesHint')}
+            </span>
+          )}
         </label>
         <label className={drawer.field}>
           <span className={drawer.fieldLabel}>{t('slaDrawer.warning')}</span>

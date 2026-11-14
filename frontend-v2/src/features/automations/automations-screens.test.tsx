@@ -592,7 +592,7 @@ describe('★ measured on dev (e6785c4)', () => {
   });
 
   it('09d: Delete, confirmed, saying the run history goes too; then back to 09c', async () => {
-    actions.deleteAutomation.mockResolvedValue(true);
+    actions.deleteAutomation.mockResolvedValue('deleted');
     showBuilder(live());
     fireEvent.keyDown(screen.getByTestId('builder-more'), { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('builder-delete'));
@@ -608,7 +608,7 @@ describe('★ measured on dev (e6785c4)', () => {
   });
 
   it('09c: Delete from the row; the row goes; refused, it stays and says so', async () => {
-    actions.deleteAutomation.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    actions.deleteAutomation.mockResolvedValueOnce('failed').mockResolvedValueOnce('deleted');
     wrap(<AutomationsList automations={[automation()]} />);
     fireEvent.keyDown(screen.getByTestId('automation-more-a1'), { key: 'Enter' });
     fireEvent.click(await screen.findByTestId('automation-delete-a1'));
@@ -1272,5 +1272,508 @@ describe('★★ a duration in the largest unit it fills whole (dev: "1,440 minu
     card(type, data);
     expect(screen.getByTestId('node-n')).toHaveTextContent(words);
     expect(screen.getByTestId('node-n')).not.toHaveTextContent(/1,440|minutes.*minutes/);
+  });
+});
+
+describe('★★ F2: a card names who its step hands to (Omer, 2026-11-09)', () => {
+  const choices = {
+    employees: [{ id: 'e1', name: 'שרי' }],
+    teams: [{ id: 'd1', name: 'Support' }],
+    members: [{ id: 'u1', name: 'Noa' }],
+    skills: [{ id: 's1', name: 'Order status' }],
+  };
+  const card = (type: string, data: Record<string, unknown>, given: typeof choices | null) =>
+    wrap(
+      <NodeCard
+        node={{ id: 'n', type, position: { x: 0, y: 0 }, data }}
+        trigger={{ type: 'conversation_started', config: {} } as never}
+        selected={false}
+        marked={false}
+        choices={given}
+        onSelect={vi.fn()}
+      />,
+    );
+
+  it.each([
+    ['hand_to_ai', { aiAgentId: 'e1' }, 'שרי'],
+    ['hand_to_ai', { aiAgentId: '' }, 'Not set up yet'],
+    ['hand_to_ai', { aiAgentId: 'gone' }, 'A choice no longer in the list'],
+    ['run_skill', { skillId: 's1', aiAgentId: 'e1' }, 'Order status'],
+    ['assign', { to: 'person', userId: 'u1' }, 'Noa'],
+    ['assign', { to: 'team', departmentId: 'd1' }, 'Support'],
+    ['assign', { to: 'team' }, 'General queue, no team'],
+  ])('%s %o reads "%s"', (type, data, words) => {
+    card(type, data, choices);
+    expect(screen.getByTestId('node-n')).toHaveTextContent(words);
+    expect(screen.getByTestId('node-n')).not.toHaveTextContent('Continues in the same chat');
+  });
+
+  it('without the names (not passed): the type’s own line, as before', () => {
+    card('hand_to_ai', { aiAgentId: 'e1' }, null);
+    expect(screen.getByTestId('node-n')).toHaveTextContent('Continues in the same chat');
+  });
+
+  it('★ on the list row: the step chip names its target, as the route sends it', () => {
+    const row = (target: unknown) =>
+      automation({
+        id: 'r1',
+        name: 'Routing',
+        trigger: { type: 'conversation_started', config: {} },
+        path: [
+          { nodeId: 'trigger', type: 'automation_trigger', label: 'New conversation' },
+          { nodeId: 'h', type: 'hand_to_ai', label: 'Hand to AI employee', target },
+        ],
+      });
+    const chip = () => screen.getByTestId('automation-target-r1-h');
+    const cases: [unknown, string][] = [
+      [{ kind: 'ai', id: 'e1', name: 'שרי' }, ' · שרי'],
+      [{ kind: 'ai', id: 'gone', name: null }, ' · A choice no longer in the list'],
+      [{ kind: 'ai', id: null, name: null }, ' · Not set up yet'],
+      [{ kind: 'team', id: null, name: null }, ' · General queue, no team'],
+      [{ kind: 'person', id: 'u1', name: 'Noa' }, ' · Noa'],
+    ];
+    for (const [target, words] of cases) {
+      const { unmount } = wrap(<AutomationsList automations={[row(target)]} />);
+      expect(chip().textContent).toBe(words);
+      unmount();
+    }
+  });
+
+  it('a step without a target, or one this screen cannot read, is a chip without one', () => {
+    const steps = automationSchema.parse({
+      ...automation({}),
+      path: [
+        { nodeId: 'a', type: 'wait', label: 'Wait' },
+        { nodeId: 'b', type: 'hand_to_ai', label: 'Hand', target: { kind: 'robot', id: 1 } },
+      ],
+    }).path;
+    expect(steps.map((p) => p.target)).toEqual([undefined, undefined]);
+  });
+
+  it.each([
+    ['conversation_started', true],
+    ['message_received', false],
+  ])('★★ a free branch on %s: marked "No answer" = %s', (type, marked) => {
+    wrap(
+      <Builder
+        automation={automation({
+          id: 'r1',
+          name: 'Routing',
+          status: 'draft',
+          trigger: { type, config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'oh', type: 'opening_hours', data: {} },
+            { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [
+            { id: 'e1', source: 'trigger', target: 'oh' },
+            { id: 'e2', source: 'oh', target: 'ai', sourceHandle: 'open' },
+          ],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    const free = screen.getByTestId('add-oh-closed');
+    if (marked) {
+      expect(free).toHaveAttribute('data-unanswered');
+      expect(free).toHaveTextContent('No answer');
+      expect(free).toHaveAccessibleName(/A customer who lands here gets no answer/);
+    } else {
+      expect(free).not.toHaveAttribute('data-unanswered');
+      expect(free).not.toHaveTextContent('No answer');
+    }
+  });
+
+  it('★★ dev 6c4b5459: a wait above opening hours above the AI - every step drawn, every branch its own line and label', () => {
+    const { container } = wrap(
+      <Builder
+        automation={automation({
+          id: 'r2',
+          name: 'Routing',
+          status: 'draft',
+          trigger: { type: 'conversation_started', config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'w', type: 'wait_for_reply', data: {} },
+            { id: 'oh', type: 'opening_hours', data: {} },
+            { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          // The supervisor's draft, as the two inserts wrote it.
+          edges: [
+            { id: 'e1', source: 'trigger', target: 'w' },
+            { id: 'e2', source: 'w', target: 'oh', sourceHandle: 'reply' },
+            { id: 'e3', source: 'w', target: 'oh', sourceHandle: 'timeout' },
+            { id: 'e4', source: 'oh', target: 'ai', sourceHandle: 'open' },
+            { id: 'e5', source: 'oh', target: 'ai', sourceHandle: 'closed' },
+          ],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    // BUG 2: the AI step was placed nowhere, and so not drawn.
+    expect(container.querySelector('[data-node-id="ai"]')).not.toBeNull();
+    // BUG 1: two branches into one step drew one line, one "+", two labels on one spot.
+    const left = (id: string) => screen.getByTestId(id).style.insetInlineStart;
+    for (const [a, b] of [
+      ['label-oh-open', 'label-oh-closed'],
+      ['label-w-reply', 'label-w-timeout'],
+    ] as const) {
+      expect(screen.getByTestId(a)).toBeVisible();
+      expect(left(a)).not.toBe(left(b));
+    }
+    const lines = ['line-oh-open', 'line-oh-closed'].map((id) =>
+      screen.getByTestId(id).getAttribute('d'),
+    );
+    expect(lines[0]).not.toBe(lines[1]);
+    const plus = screen
+      .getAllByTestId('between-oh-ai')
+      .map((b) => `${b.style.insetInlineStart},${b.style.insetBlockStart}`);
+    expect(new Set(plus).size).toBe(2);
+  });
+
+  it('★★ in Hebrew: the website chat’s route reads in Hebrew, and publishing keeps its stored name', async () => {
+    const web = automation({
+      id: 'w1',
+      name: 'Who answers the website chat',
+      status: 'draft',
+      trigger: { type: 'conversation_started', config: { channels: ['WEBCHAT'] } },
+      nodes: [
+        { id: 'trigger', type: 'automation_trigger', data: {} },
+        { id: 'ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+      ],
+      edges: [{ id: 'e', source: 'trigger', target: 'ai' }],
+    });
+    actions.publishAutomation.mockResolvedValue({
+      ok: true,
+      live: true,
+      warnings: [],
+      blocked: [],
+      automation: web,
+    });
+    render(
+      <NextIntlClientProvider
+        locale="he"
+        timeZone="Asia/Jerusalem"
+        now={NOW}
+        messages={{ automations: heAutomationsMessages, common: heCommonMessages }}
+      >
+        <Builder
+          automation={web}
+          catalog={catalog(false)}
+          stats={{}}
+          webhook={null}
+          choices={choices}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByDisplayValue('מי עונה לצ׳אט באתר')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('builder-publish'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('builder-turn-on-yes'));
+    });
+    expect(actions.publishAutomation).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({ name: 'Who answers the website chat' }),
+    );
+  });
+
+  it('★ the setup route on the canvas: its card says Sheri', () => {
+    wrap(
+      <Builder
+        automation={automation({
+          id: 's1',
+          name: 'Who answers new conversations',
+          origin: 'setup',
+          status: 'live',
+          trigger: { type: 'conversation_started', config: {} },
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={choices}
+      />,
+    );
+    expect(screen.getByTestId('node-hand_to_ai')).toHaveTextContent('שרי');
+  });
+});
+
+describe('★★ the route onboarding wrote: a normal automation, said as made at setup', () => {
+  const setup = (over: Record<string, unknown> = {}) =>
+    automation({
+      id: 's1',
+      name: 'New conversation',
+      origin: 'setup',
+      trigger: { type: 'conversation_started', config: {} },
+      path: [
+        { nodeId: 'trigger', type: 'automation_trigger', label: 'New conversation' },
+        { nodeId: 'hand_to_ai', type: 'hand_to_ai', label: 'Hand to AI employee' },
+      ],
+      ...over,
+    });
+  const wrapHe = (node: ReactNode) =>
+    render(
+      <NextIntlClientProvider
+        locale="he"
+        timeZone="Asia/Jerusalem"
+        now={NOW}
+        messages={{ automations: heAutomationsMessages, common: heCommonMessages }}
+      >
+        {node}
+      </NextIntlClientProvider>,
+    );
+
+  it('the trigger is read, not dropped: its own mark, the step in our words', () => {
+    const parsed = setup();
+    expect(parsed.trigger.type).toBe('conversation_started');
+    wrapHe(<AutomationsList automations={[parsed]} />);
+    const row = screen.getByTestId('automation-s1');
+    expect(row.querySelector('[data-trigger="conversation_started"]')).not.toBeNull();
+    expect(screen.getByTestId('automation-path-s1')).toHaveTextContent('שיחה חדשה');
+    expect(screen.getByTestId('automation-path-s1')).not.toHaveTextContent('New conversation');
+  });
+
+  it('one channel: the row wears it, like a message trigger', () => {
+    wrap(
+      <AutomationsList
+        automations={[
+          setup({ trigger: { type: 'conversation_started', config: { channels: ['WEBCHAT'] } } }),
+        ]}
+      />,
+    );
+    expect(
+      screen.getByTestId('automation-s1').querySelector('[data-channel-plate]'),
+    ).not.toBeNull();
+  });
+
+  it('made at setup: a line under the name, in both languages; anything else, none', () => {
+    const { unmount } = wrap(
+      <AutomationsList automations={[setup(), automation({ id: 'a2', origin: null })]} />,
+    );
+    expect(screen.getByTestId('automation-origin-s1')).toHaveTextContent('Created at setup');
+    expect(screen.queryByTestId('automation-origin-a2')).toBeNull();
+    unmount();
+    wrapHe(<AutomationsList automations={[setup()]} />);
+    expect(screen.getByTestId('automation-origin-s1')).toHaveTextContent('נוצרה בהגדרה הראשונית');
+  });
+
+  it('an origin this screen does not know is no origin', () => {
+    expect(setup({ origin: 'import' }).origin).toBeNull();
+    expect(automation({}).origin).toBeNull();
+  });
+
+  it('the builder opens it: the note in the bar, every channel the route lets it pick', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    expect(screen.getByTestId('builder-origin')).toHaveTextContent('Created at setup');
+    for (const ch of ['WHATSAPP', 'GMAIL', 'SHOPIFY_LIVE_CHAT', 'SLACK']) {
+      expect(screen.getByTestId(`inspector-channel-${ch}`)).not.toBeChecked();
+    }
+    expect(screen.getByText('None chosen: any channel')).toBeInTheDocument();
+  });
+
+  it('★★ F2: the setup route’s employee reads as chosen - its name when listed', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'e1' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('node-hand_to_ai'));
+    const pick = screen.getByTestId('inspector-employee') as HTMLSelectElement;
+    expect(pick).toHaveValue('e1');
+    expect(pick.selectedOptions[0]).toHaveTextContent(/^Yaara$/);
+    expect(screen.queryByTestId('inspector-employee-not-listed')).toBeNull();
+  });
+
+  it('★★ F2: a saved employee no option carries is kept and said - never "Choose…"', () => {
+    wrap(
+      <Builder
+        automation={setup({
+          status: 'draft',
+          nodes: [
+            { id: 'trigger', type: 'automation_trigger', data: {} },
+            { id: 'hand_to_ai', type: 'hand_to_ai', data: { aiAgentId: 'gone' } },
+          ],
+          edges: [{ id: 'e', source: 'trigger', target: 'hand_to_ai' }],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [{ id: 'e1', name: 'Yaara' }], teams: [], members: [], skills: [] }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('node-hand_to_ai'));
+    const pick = screen.getByTestId('inspector-employee') as HTMLSelectElement;
+    expect(pick).toHaveValue('gone');
+    expect(pick.selectedOptions[0]).toHaveTextContent(/^A choice no longer in the list$/);
+    expect(within(pick).queryByText('Choose…')).toBeNull();
+    expect(screen.getByTestId('inspector-employee-not-listed')).toHaveTextContent(
+      'The step still keeps it and runs with it.',
+    );
+    // Picking a listed one replaces it, and the note goes.
+    fireEvent.change(pick, { target: { value: 'e1' } });
+    expect(screen.getByTestId('inspector-employee')).toHaveValue('e1');
+    expect(screen.queryByTestId('inspector-employee-not-listed')).toBeNull();
+  });
+
+  it('★ Delete is refused for it: said why, the way to turn it off, and no retry', async () => {
+    actions.deleteAutomation.mockResolvedValue('setup_route');
+    wrap(<AutomationsList automations={[setup()]} />);
+    fireEvent.keyDown(screen.getByTestId('automation-more-s1'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('automation-delete-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.getByTestId('delete-automation-setup')).toHaveTextContent(
+      'answers every new conversation',
+    );
+    expect(screen.getByTestId('delete-automation-setup')).toHaveTextContent('pause it instead');
+    expect(screen.queryByTestId('delete-automation-failed')).toBeNull();
+    expect(screen.getByTestId('delete-automation-yes')).toBeDisabled();
+    expect(screen.getByTestId('automation-s1')).toBeInTheDocument();
+    expect(actions.deleteAutomation).toHaveBeenCalledTimes(1);
+  });
+
+  it('★ deleting it with others: the others go; it stays, said as refused', async () => {
+    actions.deleteAutomation.mockImplementation(async (id: string) =>
+      id === 's1' ? 'setup_route' : 'deleted',
+    );
+    wrap(<AutomationsList automations={[setup(), automation({ id: 'a2' })]} />);
+    fireEvent.keyDown(screen.getByTestId('automation-more-s1'), { key: 'Enter' });
+    fireEvent.click(await screen.findByTestId('automation-delete-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('delete-automation-yes'));
+    });
+    expect(screen.getByTestId('automation-s1')).toBeInTheDocument();
+    expect(screen.getByTestId('delete-automation-setup')).toBeInTheDocument();
+  });
+
+  it('★ pausing it asks first, saying new conversations go unanswered; Cancel pauses nothing', async () => {
+    actions.setLive.mockResolvedValue({
+      ok: true,
+      warnings: [],
+      automation: setup({ status: 'paused', pausedAt: '2026-10-06T10:00:00Z' }),
+    });
+    wrap(<AutomationsList automations={[setup()]} />);
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    expect(screen.getByTestId('pause-setup')).toHaveTextContent(
+      "New conversations will get no automatic answer until it's on again.",
+    );
+    expect(actions.setLive).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('pause-setup')).toBeNull();
+    expect(actions.setLive).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pause-setup-yes'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('s1', false);
+  });
+
+  it('turning it on, or pausing any other, asks nothing', async () => {
+    actions.setLive.mockResolvedValue({ ok: true, warnings: [], automation: setup() });
+    wrap(<AutomationsList automations={[setup({ status: 'paused' }), automation({ id: 'a2' })]} />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('s1', true);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('automation-switch-a2'));
+    });
+    expect(actions.setLive).toHaveBeenCalledWith('a2', false);
+    expect(screen.queryByTestId('pause-setup')).toBeNull();
+  });
+
+  it('in Hebrew, the pause and the refusal in Hebrew', async () => {
+    actions.deleteAutomation.mockResolvedValue('setup_route');
+    wrapHe(<AutomationsList automations={[setup()]} />);
+    fireEvent.click(screen.getByTestId('automation-switch-s1'));
+    expect(screen.getByTestId('pause-setup')).toHaveTextContent('לא יקבלו מענה אוטומטי');
+  });
+
+  it("★ its name as onboarding stored it is said in the screen's words; renamed, as written", () => {
+    const { unmount } = wrapHe(
+      <AutomationsList
+        automations={[
+          setup({ name: 'Who answers new conversations' }),
+          automation({ id: 'a2', name: 'Who answers new conversations', origin: null }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('automation-open-s1')).toHaveTextContent('מי עונה לשיחות חדשות');
+    // Only the setup route's: another automation with those words is its author's.
+    expect(screen.getByTestId('automation-open-a2')).toHaveTextContent(
+      'Who answers new conversations',
+    );
+    unmount();
+    wrapHe(<AutomationsList automations={[setup({ name: 'Yaara answers' })]} />);
+    expect(screen.getByTestId('automation-open-s1')).toHaveTextContent('Yaara answers');
+  });
+
+  it('★ the builder opens it in Hebrew with the Hebrew name - and that is not an unsaved change', () => {
+    wrapHe(
+      <Builder
+        automation={setup({
+          name: 'Who answers new conversations',
+          nodes: [{ id: 'trigger', type: 'automation_trigger', data: {} }],
+          edges: [],
+        })}
+        catalog={catalog(false)}
+        stats={{}}
+        webhook={null}
+        choices={{ employees: [], teams: [], members: [], skills: [] }}
+      />,
+    );
+    expect(screen.getByTestId('builder-name')).toHaveValue('מי עונה לשיחות חדשות');
+    expect(screen.getByTestId('builder-publish')).toBeDisabled();
+  });
+
+  it('New automation: "New conversation" picked goes on, named', () => {
+    const withIt = catalogSchema.parse({
+      data: {
+        context: { channel: null, firstStep: true, hasCustomer: true, afterNodeType: null },
+        groups: [{ key: 'trigger', items: [item('trigger:conversation_started')] }],
+        variables: [],
+      },
+    }).data;
+    wrap(<NewAutomation catalog={withIt} />);
+    fireEvent.click(screen.getByTestId('step-trigger:conversation_started'));
+    expect(screen.getByTestId('new-automation-name')).toHaveValue('New conversation');
   });
 });

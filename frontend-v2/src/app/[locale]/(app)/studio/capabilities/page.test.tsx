@@ -11,10 +11,17 @@ import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import { SystemHead } from '@/features/capabilities/SystemHead';
 
 const loadCapabilities = vi.hoisted(() => vi.fn());
-vi.mock('@/features/capabilities/load-capabilities', () => ({ loadCapabilities }));
+vi.mock('@/features/capabilities/load-capabilities', () => ({
+  loadCapabilities,
+  loadShopifyAvailability: async () => ({ mode: 'listing', helpUrl: null }),
+  loadShopifyPending: async () => 'gone',
+}));
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a', useRouter: () => ({}) }));
+/* The Shopify Connector's snapshot - the Billing page's read - per test. */
+const loadShopifyConnector = vi.hoisted(() => vi.fn());
+vi.mock('@/features/billing/load-connector', () => ({ loadShopifyConnector }));
 
 /** The detail and the rail are props of the split, not children: visit both. */
 const find = <T,>(tree: ReactNode, type: unknown): T | null => {
@@ -48,6 +55,8 @@ const shopify = integrationSchema.parse({
 const woo = integrationSchema.parse({ id: 'i2', slug: 'woocommerce', name: 'WooCommerce' });
 
 beforeEach(() => {
+  loadShopifyConnector.mockReset();
+  loadShopifyConnector.mockResolvedValue(null);
   loadCapabilities.mockReset();
   loadCapabilities.mockResolvedValue({
     capabilities: [
@@ -203,5 +212,84 @@ describe('★★ Disconnect is in view on arrival - in the head, or on the Recon
     expect(find(tree, ReconnectSystem)).not.toBeNull();
     expect(find<{ disconnect?: boolean }>(tree, SystemHead)?.disconnect).toBe(false);
     expect(find(tree, DisconnectSystem)).toBeNull();
+  });
+});
+
+describe("★★ split billing (132211) - Shopify reads its Connector, the Billing page's verdict", () => {
+  const connected = integrationSchema.parse({
+    id: 'i1',
+    slug: 'shopify',
+    name: 'Shopify',
+    tenantConnection: { id: 'c1', status: 'CONNECTED' },
+  });
+  const withShopify = (entry = connected) =>
+    loadCapabilities.mockResolvedValue({
+      capabilities: [
+        capabilitySchema.parse({ toolName: 'shopify.cancel_order', integration: 'shopify' }),
+      ],
+      usage: null,
+      integrations: [entry, woo],
+    });
+
+  it('the head and the rail get the verdict of the same snapshot the Billing page reads', async () => {
+    const { CONNECTOR_FIXTURES } = await import('@/features/billing/connector-fixtures');
+    const { IntegrationRail } = await import('@/features/capabilities/IntegrationRail');
+    withShopify();
+    loadShopifyConnector.mockResolvedValue(CONNECTOR_FIXTURES.plan_selection_required);
+    const tree = await page({ system: 'shopify' });
+    expect(loadShopifyConnector).toHaveBeenCalledOnce();
+    const head = find<{ connector: { kind: string; grantsAccess: boolean } }>(tree, SystemHead);
+    expect(head?.connector).toMatchObject({ kind: 'authorized', grantsAccess: false });
+    const rail = find<{ shopify: { kind: string } }>(tree, IntegrationRail);
+    expect(rail?.shopify).toBe(head?.connector);
+  });
+
+  it("another system open: the rail still reads Shopify's Connector, the head does not get it", async () => {
+    const { IntegrationRail } = await import('@/features/capabilities/IntegrationRail');
+    withShopify();
+    loadCapabilities.mockResolvedValue({
+      capabilities: [],
+      usage: null,
+      integrations: [
+        connected,
+        integrationSchema.parse({
+          id: 'i3',
+          slug: 'hubspot',
+          name: 'HubSpot',
+          tenantConnection: { id: 'c3', status: 'CONNECTED' },
+        }),
+      ],
+    });
+    const tree = await page({ system: 'hubspot' });
+    expect(find<{ shopify: { kind: string } }>(tree, IntegrationRail)?.shopify?.kind).toBe(
+      'unread',
+    );
+  });
+
+  it('no Shopify in the rail: nothing is read', async () => {
+    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [woo] });
+    await page({ system: 'woocommerce' });
+    expect(loadShopifyConnector).not.toHaveBeenCalled();
+  });
+
+  it('Core not paid: the Connect card is told the server said no', async () => {
+    const { CONNECTOR_FIXTURES } = await import('@/features/billing/connector-fixtures');
+    const loose = integrationSchema.parse({ id: 'i1', slug: 'shopify', name: 'Shopify' });
+    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [loose] });
+    loadShopifyConnector.mockResolvedValue(CONNECTOR_FIXTURES.core_unpaid);
+    const tree = await page({ system: 'shopify' });
+    expect(
+      find<{ shopify: { connectAllowed: boolean | null } }>(tree, AvailableSystem)?.shopify,
+    ).toEqual({ mode: 'listing', helpUrl: null, connectAllowed: false });
+  });
+
+  it('a reload during the uninstall wait opens Disconnect on the wait', async () => {
+    const { CONNECTOR_FIXTURES } = await import('@/features/billing/connector-fixtures');
+    withShopify();
+    loadShopifyConnector.mockResolvedValue(CONNECTOR_FIXTURES.uninstall_pending);
+    const tree = await page({ system: 'shopify' });
+    expect(find<{ connector: { kind: string } }>(tree, SystemHead)?.connector.kind).toBe(
+      'uninstall_pending',
+    );
   });
 });

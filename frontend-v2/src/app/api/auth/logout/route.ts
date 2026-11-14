@@ -13,6 +13,8 @@ import { assertSameOrigin } from '@/api/client/csrf';
 import { logger } from '@/observability/logger';
 import { appUrl } from '@/lib/base-path';
 import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
+import { endSupportOnLogout } from '@/features/support/end-on-logout';
+import { SUPPORT_COOKIE } from '@/support/support-cookie';
 
 /**
  * Ends the session.
@@ -74,6 +76,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    *   screen at least ended the session.
    */
   const idToken = await readHint(request);
+
+  // ★ Support mode ends with the sign-out, while the session can still say so.
+  if (session) await endSupportOnLogout();
 
   let redirectTo = appUrl('/sign-in', env.APP_ORIGIN);
   let reachedProvider = false;
@@ -151,5 +156,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    *   while every test asserting "we called delete" still passes.
    */
   response.cookies.delete({ name: ID_TOKEN_COOKIE, path: ID_TOKEN_COOKIE_PATH });
+  // The support cookie is bound to this login; it has nothing left to name.
+  response.cookies.delete({ name: SUPPORT_COOKIE, path: '/' });
   return response;
 }

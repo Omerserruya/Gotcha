@@ -1,0 +1,223 @@
+@layer features {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * THE PHONE'S PLACEHOLDERS - each `/m` screen's shape while it loads
+   * ════════════════════════════════════════════════════════════════════════
+   * The design system's `Skeleton` (the website's pulse, never a gradient)
+   * laid out in each screen's own geometry: the search pill, the chips, a
+   * 50px face and two lines, a card, the thread's bubbles on its ground. The
+   * sizes are the screens' own, so nothing jumps when the data lands.
+   */
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+
+  /* The search pill: 44px on the chip colour, as `ui.search`. */
+  .search {
+    margin-block: var(--space-2) var(--space-10);
+    margin-inline: var(--space-14);
+    block-size: 44px;
+    border-radius: 22px;
+    background-color: var(--mobile-chip);
+  }
+
+  .chips {
+    display: flex;
+    gap: var(--space-8);
+    overflow: hidden;
+    padding-block: 0 var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .chip {
+    flex: none;
+    block-size: 34px;
+    border-radius: 17px;
+    background-color: var(--mobile-chip);
+  }
+
+  .lead {
+    padding-block: var(--space-4) var(--space-14);
+    padding-inline: var(--space-18);
+  }
+
+  /* A list row: the face and two lines, as `ui.row`. */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-16);
+  }
+
+  .lines {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .section {
+    padding-block: var(--space-8);
+    padding-inline: var(--space-18);
+  }
+
+  /* ── Cards: the approvals' queue, Home's blocks ─────────────────────── */
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding-inline: var(--space-14);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-16);
+    background-color: var(--mobile-surface);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--radius-panel);
+  }
+
+  .buttons {
+    display: flex;
+    gap: var(--space-8);
+    padding-block-start: var(--space-6);
+  }
+
+  .button {
+    flex: 1;
+    block-size: 42px;
+    border-radius: 21px;
+    background-color: var(--mobile-chip);
+  }
+
+  /* ── Home: the greeting, the dark card, the blocks ──────────────────── */
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-22);
+    padding-block: var(--space-6) var(--space-24);
+    padding-inline: var(--space-16);
+  }
+
+  .greeting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  /* The day's card keeps its dark ground; only its tiles stand in. */
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding-block: var(--space-20) var(--space-18);
+    padding-inline: var(--space-20);
+    border-radius: var(--space-22);
+    background-color: var(--mobile-ink);
+  }
+
+  .summaryLine {
+    block-size: 21px;
+    inline-size: 70%;
+    border-radius: var(--radius-badge);
+    background-color: var(--mobile-ink-raised);
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-8);
+  }
+
+  .tile {
+    block-size: 64px;
+    border-radius: var(--space-14);
+    background-color: var(--mobile-ink-raised);
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .update {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-2);
+  }
+
+  /* ── A conversation: the bubbles on the thread's ground, the composer ── */
+  .thread {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mobile-thread-ground);
+  }
+
+  .stream {
+    flex: 1;
+    min-block-size: 0;
+    overflow: hidden;
+    padding-block: var(--space-14);
+    padding-inline: var(--space-10);
+  }
+
+  .bubble {
+    display: flex;
+    justify-content: flex-start;
+    margin-block-end: var(--space-10);
+  }
+
+  .bubble[data-side='out'] {
+    justify-content: flex-end;
+  }
+
+  .composer {
+    margin: var(--space-8);
+    block-size: 48px;
+    border-radius: 24px;
+    background-color: var(--mobile-surface);
+  }
+
+  /* ── One thing, full screen: a customer's face, a request, a campaign ── */
+  .profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-10);
+    padding-block: var(--space-8) var(--space-18);
+    padding-inline: var(--space-16);
+  }
+
+  .profileTiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-10);
+    align-self: stretch;
+    padding-block-start: var(--space-8);
+  }
+
+  .profileTile {
+    block-size: 72px;
+    border-radius: var(--space-16);
+    background-color: var(--mobile-tile);
+  }
+
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding-block: var(--space-8) var(--space-24);
+    padding-inline: var(--space-16);
+  }
+}

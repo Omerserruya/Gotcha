@@ -3,13 +3,14 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import type { PaymentMethod } from '@/api/contracts/billing-profile';
 import type { Subscription } from '@/api/contracts/billing';
-import { creditsGrantedOnUpgrade, type CatalogPlan } from '@/api/contracts/pricing';
+import { creditsGrantedOnUpgrade, namesShopify, type CatalogPlan } from '@/api/contracts/pricing';
 import { Link } from '@/i18n/navigation';
 
 import styles from './Billing.module.css';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { HeldConfirm } from './HeldConfirm';
 import { PlanSwitch } from './PlanSwitch';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 const FEATURES_SHOWN = 3;
 
@@ -67,7 +68,14 @@ export async function PlanCards({
           plan.estimate?.chat?.basis === 'CREDIT_RATIO'
             ? (plan.estimate.chat.monthly ?? null)
             : null;
-        const features = plan.features.filter((f) => f.included).slice(0, FEATURES_SHOWN);
+        /*
+          GOTCHA Core never includes Shopify (review 132211): a catalogue
+          feature that names it is not drawn on a Core card, whatever the
+          admin-edited catalogue says - the Shopify Connector is Shopify's.
+        */
+        const features = plan.features
+          .filter((f) => f.included && !namesShopify(f))
+          .slice(0, FEATURES_SHOWN);
         const body = (
           <>
             {current ? (
@@ -259,6 +267,7 @@ export async function SwitchActions({
 }) {
   const t = await getTranslations('billing.choice');
   const th = await getTranslations('billing.held');
+  const core = await getTranslations('billing.core');
   // On: the live switch (preview, then the exact charge). Off (dev): held, with why.
   const live = billingWritesEnabled();
   const locale = await getLocale();
@@ -306,17 +315,20 @@ export async function SwitchActions({
     <div className={styles.switchActions} data-testid="switch-actions">
       {target && live ? (
         // Live (BILLING_WRITES=on): the server's preview, then the exact charge.
-        <PlanSwitch
-          planKey={target.key}
-          planName={nameOf(target)}
-          label={t('switchTo', { plan: nameOf(target) })}
-          className={styles.switchButton}
-        />
+        <SupportRefused kind="billing">
+          <PlanSwitch
+            planKey={target.key}
+            planName={nameOf(target)}
+            label={t('switchTo', { plan: nameOf(target) })}
+            className={styles.switchButton}
+          />
+        </SupportRefused>
       ) : target ? (
         <HeldConfirm
           label={t('switchTo', { plan: nameOf(target) })}
           className={styles.switchButton}
-          sentences={sentences(target)}
+          // Before the yes: this is GOTCHA Core, and only Core.
+          sentences={[core('onlyCore'), ...sentences(target)]}
           yes={t('confirm.yes', { plan: nameOf(target) })}
           heldTag={th('tag')}
           heldWhy={th('why')}

@@ -10,6 +10,7 @@ import { initials } from '../initials';
 import type { ConversationDetail } from '../load-inbox';
 import { loadWallPerson, type WallMemory, type WallPerson } from './load-wall';
 import { ActivityStrip, WorkingState } from './Activity';
+import { CollapseCopilot } from './CopilotPanel';
 import { OrdersCarousel } from './OrdersCarousel';
 import { SuggestionCarousel } from './SuggestionCarousel';
 import { WallBody } from './WallBody';
@@ -49,6 +50,7 @@ export async function WallHeader({
       <span className={styles.dot} aria-hidden="true" />
       <span className={styles.headerName}>{t('name')}</span>
       <WorkingState conversationId={conversationId} aiDriving={aiDriving} />
+      <CollapseCopilot />
     </div>
   );
 }

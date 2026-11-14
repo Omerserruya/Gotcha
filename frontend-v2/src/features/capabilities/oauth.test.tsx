@@ -4,6 +4,10 @@ import { NextIntlClientProvider } from 'next-intl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import messages from '@/i18n/messages/en/capabilities.json';
+import enCapabilities from '@/i18n/messages/en/capabilities.json';
+import heCapabilities from '@/i18n/messages/he/capabilities.json';
+import enOnboarding from '@/i18n/messages/en/onboarding.json';
+import heOnboarding from '@/i18n/messages/he/onboarding.json';
 
 const replace = vi.hoisted(() => vi.fn());
 vi.mock('@/i18n/navigation', () => ({
@@ -141,6 +145,20 @@ describe('★ Shopify’s refused install - a closed set, said on either screen'
   it('every install code is also a way-back code, so /studio/capabilities says it too', () => {
     for (const code of SHOPIFY_INSTALL_ERRORS) expect(oauthFailure(code)).toBe(code);
   });
+
+  it.each(['shop_connected_elsewhere', 'billing_link_failed'])(
+    '★ %s (Backend 0d35aed8) is named, and said in words in both languages on every landing',
+    (code) => {
+      expect(shopifyInstallError(code)).toBe(code);
+      expect(oauthFailure(code)).toBe(code);
+      for (const catalogue of [enCapabilities, heCapabilities]) {
+        expect(catalogue.landing.error[code as 'billing_link_failed']).toMatch(/\S/);
+      }
+      for (const catalogue of [enOnboarding, heOnboarding]) {
+        expect(catalogue.systems.return.error[code as 'billing_link_failed']).toMatch(/\S/);
+      }
+    },
+  );
 
   it('an unknown code is "other"; none is nothing', () => {
     expect(shopifyInstallError('shop_connected_elsewhere')).toBe('shop_connected_elsewhere');

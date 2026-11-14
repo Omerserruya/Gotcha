@@ -8,6 +8,7 @@ import he from '@/i18n/messages/he/workspace.json';
 
 import type { SlaSetup } from './load-sla-setup';
 import { SlaRow } from './SlaRow';
+import styles from './Workspace.module.css';
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
@@ -60,8 +61,16 @@ describe('★★ W2 - the response target’s row', () => {
   it('★★ anyone but an Owner: whose it is, and no Edit that could not save', () => {
     show({ kind: 'forbidden' });
     expect(screen.getByTestId('fact-value-sla')).toHaveTextContent(
-      'Only an Owner can see or change this.',
+      'Only an admin can see or change this.',
     );
+    expect(screen.queryByTestId('fact-edit-sla')).toBeNull();
+  });
+
+  it('★★ read only: the value, and no Edit', () => {
+    show({ kind: 'readOnly', settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 } });
+    expect(screen.getByTestId('fact-value-sla')).toHaveTextContent('Reply within 30 min');
+    // On is on, for whoever reads it: not drawn as unset.
+    expect(screen.getByTestId('fact-value-sla')).not.toHaveClass(styles.unset!);
     expect(screen.queryByTestId('fact-edit-sla')).toBeNull();
   });
 

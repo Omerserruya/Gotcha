@@ -9,8 +9,9 @@ import { EVENT_FAMILIES, NOTIFIABLE_EVENTS, UNFIRING_EVENTS, eventsInFamily } fr
  * reintroduces a dead type fails here rather than on someone's screen.
  */
 describe('notifiable events', () => {
-  it('offers exactly the 22 that are both templated and emitted', () => {
-    expect(NOTIFIABLE_EVENTS).toHaveLength(22);
+  it('offers exactly the 23 that are both templated and emitted', () => {
+    // 23 since conversation.waiting (Backend 2ac65631).
+    expect(NOTIFIABLE_EVENTS).toHaveLength(23);
   });
 
   it('never offers an event nothing emits', () => {
@@ -39,13 +40,15 @@ describe('notifiable events', () => {
     }
   });
 
-  it('keeps the three events whose meaning the source qualifies', () => {
+  it('keeps the four events whose meaning the source qualifies', () => {
     // Their emitters carry comments explaining what they do NOT mean, and
     // those comments are the copy - the design's wording for at least one of
     // them promises monitoring that does not exist.
     const caveated = NOTIFIABLE_EVENTS.filter((e) => e.hasSourceCaveat).map((e) => e.type);
     expect(caveated).toEqual([
       'conversation.assigned',
+      // Only while the response target is on (Backend 2ac65631's catalogue caveat).
+      'conversation.waiting',
       'integration.check_failed',
       'broadcast.completed',
     ]);

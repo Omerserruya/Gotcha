@@ -103,6 +103,22 @@ export type ApprovalWriteResult =
   | { readonly ok: false; readonly reason: 'failed' }
   | { readonly ok: false; readonly reason: EditRefusal };
 
+/**
+ * Every screen that lists the queue, after a decision: the website's, and the
+ * phone's list and request (`/m/approvals`, `/m/approvals/<id>`). Revalidating
+ * only the website left the phone's queue showing a decided request until a
+ * reload when the decision was made on the other one.
+ */
+const APPROVAL_PATHS = [
+  '/[locale]/(app)/approvals',
+  '/[locale]/(mobile)/m/approvals',
+  '/[locale]/(mobile)/m/approvals/[id]',
+] as const;
+
+function revalidateApprovals(): void {
+  for (const path of APPROVAL_PATHS) revalidatePath(path, 'page');
+}
+
 function classify(cause: unknown, event: string): ApprovalWriteResult {
   if (isApiError(cause)) {
     if (cause.status === 409) return { ok: false, reason: 'stale' };
@@ -144,7 +160,7 @@ export async function approveRequest(
         : {},
       raw: true,
     });
-    revalidatePath('/[locale]/(app)/approvals', 'page');
+    revalidateApprovals();
     // A 200 means the DECISION was recorded. It says nothing on its own about
     // whether the action ran - that is what `dispatch` is for, and conflating
     // the two is the exact mistake the model was reshaped to prevent.
@@ -184,7 +200,7 @@ export async function rejectRequest(
       body: { decisionReason: reason },
       raw: true,
     });
-    revalidatePath('/[locale]/(app)/approvals', 'page');
+    revalidateApprovals();
     return { ok: true };
   } catch (cause) {
     await signInIfSignedOut(cause);
@@ -210,7 +226,7 @@ export async function retryExecution(id: string): Promise<ApprovalWriteResult> {
       payload: retryResultSchema,
       body: {},
     });
-    revalidatePath('/[locale]/(app)/approvals', 'page');
+    revalidateApprovals();
     // A 200 is "we tried again", not "it worked". Same distinction as approve.
     return { ok: true, dispatched: result.executed, dispatchError: result.error };
   } catch (cause) {

@@ -164,6 +164,18 @@
     color: var(--intent-urgent-text);
   }
 
+  .named {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .origin {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
   .name {
     overflow: hidden;
     font-size: 13.5px;

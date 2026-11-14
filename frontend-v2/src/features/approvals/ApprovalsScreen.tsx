@@ -74,10 +74,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /** Omer, 2026-10-04: the reasons on offer, and "Other" to type one. */
-const REJECT_REASONS = ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'] as const;
+export const REJECT_REASONS = ['policy', 'myself', 'wrongOrder', 'tooGenerous', 'other'] as const;
 /** A plan the assistant proposed has no order and no amount: Omer's three. */
-const PLAN_REJECT_REASONS = ['wrong', 'myself', 'other'] as const;
-type RejectReason = (typeof REJECT_REASONS)[number] | (typeof PLAN_REJECT_REASONS)[number];
+export const PLAN_REJECT_REASONS = ['wrong', 'myself', 'other'] as const;
+export type RejectReason = (typeof REJECT_REASONS)[number] | (typeof PLAN_REJECT_REASONS)[number];
 
 export function ApprovalsScreen({
   pending,

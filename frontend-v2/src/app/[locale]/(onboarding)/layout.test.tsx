@@ -36,8 +36,28 @@ vi.mock('@/shell/load-workspace-gate', () => ({
   readWorkspaceGate: gate,
   paymentPath: async () => '/checkout',
 }));
+/* Support mode: none unless a test opens one; the banner is a marker here. */
+const support = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('@/support/load-support', () => ({ loadSupport: async () => support.value }));
+vi.mock('@/features/support/SupportBanner', async () => {
+  const { useSupport } = await import('@/support/support-context');
+  return {
+    WithSupportBanner: ({ children }: { children: React.ReactNode }) => (
+      <>
+        {useSupport().session ? <p data-testid="support-banner" /> : null}
+        {children}
+      </>
+    ),
+  };
+});
 vi.mock('@/shell/WorkspaceGate', () => ({
   WorkspaceGate: ({ route }: { route: string }) => <p data-testid="gate">{route}</p>,
+}));
+
+/* Two-step sign-in: not owed unless a test says so. */
+const owed = vi.hoisted(() => ({ value: false }));
+vi.mock('@/shell/mfa/mfa-gate-screen', () => ({
+  mfaGateScreen: async () => (owed.value ? <p data-testid="mfa-gate" /> : null),
 }));
 
 const { default: OnboardingLayout } = await import('./layout');
@@ -49,6 +69,8 @@ const open = () =>
   });
 
 beforeEach(() => {
+  owed.value = false;
+  support.value = null;
   gate.mockReset();
   sent.home.mockReset();
   sent.signIn.mockReset();
@@ -84,11 +106,29 @@ describe('★★ a live workspace and onboarding', () => {
     expect(screen.getByTestId('onboarding')).toBeInTheDocument();
   });
 
+  it('★★ support mode opens a workspace being set up here: onboarding, under the banner', async () => {
+    gate.mockResolvedValue({ route: 'onboarding', setupAdmin: null, mayPreview: false });
+    support.value = { tenantName: 'Aviv & Co.', reason: null, endsAt: null };
+    render(await open());
+    expect(screen.getByTestId('onboarding')).toBeInTheDocument();
+    expect(screen.getByTestId('support-banner')).toBeInTheDocument();
+  });
+
   it('waiting is still the gate screen, preview asked or not', async () => {
     gate.mockResolvedValue({ route: 'waiting', setupAdmin: 'Dana', mayPreview: false });
     returnTo.value = '/en/onboarding/try?preview=1';
     render(await open());
     expect(screen.getByTestId('gate')).toHaveTextContent('waiting');
+    expect(screen.queryByTestId('onboarding')).toBeNull();
+  });
+});
+
+describe('★★ two-step sign-in owed: the enrolment step, not onboarding (supervisor, 2026-11-09)', () => {
+  it('a workspace being set up, its admin owing MFA: the gate, and no onboarding', async () => {
+    gate.mockResolvedValue({ route: 'onboarding', setupAdmin: null, mayPreview: false });
+    owed.value = true;
+    render(await open());
+    expect(screen.getByTestId('mfa-gate')).toBeInTheDocument();
     expect(screen.queryByTestId('onboarding')).toBeNull();
   });
 });

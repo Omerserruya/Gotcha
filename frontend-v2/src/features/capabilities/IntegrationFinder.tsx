@@ -51,6 +51,7 @@ export function IntegrationFinder({
   available,
   actionCounts,
   builtInCount,
+  notes = {},
   selected,
 }: {
   readonly connected: readonly Integration[];
@@ -59,6 +60,11 @@ export function IntegrationFinder({
   readonly actionCounts: Readonly<Record<string, number>>;
   /** Actions that belong to no provider. 0 hides the row. */
   readonly builtInCount: number;
+  /**
+   * A connected system's own word in place of its count: Shopify's Connector
+   * verdict while the server grants no access ("Authorized", never "68 actions").
+   */
+  readonly notes?: Readonly<Record<string, { readonly text: string; readonly state: string }>>;
   /** `builtin`, a slug, or null. */
   readonly selected: string | null;
 }) {
@@ -178,7 +184,15 @@ export function IntegrationFinder({
                     its NAME, never the enum. Plain connected says what it
                     brings instead: how many actions.
                   */}
-                  {state && state !== 'CONNECTED' ? (
+                  {state === 'CONNECTED' && notes[entry.slug] ? (
+                    <span
+                      className={styles.railState}
+                      data-state={notes[entry.slug]!.state}
+                      data-testid={`connected-state-${entry.slug}`}
+                    >
+                      {notes[entry.slug]!.text}
+                    </span>
+                  ) : state && state !== 'CONNECTED' ? (
                     <span
                       className={styles.railState}
                       data-state={state}

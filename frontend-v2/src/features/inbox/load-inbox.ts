@@ -28,6 +28,8 @@ import {
 import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
+
+import { readNewestMessages } from './newest-messages';
 import { z } from 'zod';
 
 /**
@@ -119,10 +121,6 @@ const queuePageSchema = z.object({
  */
 export const queuePageSchemaForTests = queuePageSchema;
 
-const streamPageSchema = z.object({
-  data: z.array(messageSchema),
-});
-
 /**
  * Everything about the OPEN conversation - the second round.
  *
@@ -188,8 +186,12 @@ export async function loadInbox(
   conversationId?: string,
   cursor?: string,
   view: InboxView = DEFAULT_INBOX_VIEW,
-  /** `null` is "All". Sent as the route's own `channel` filter. */
-  channel: QueueChannelFilter | null = null,
+  /**
+   * `null` is "All". Sent as the route's own `channel` filter. The website
+   * sends one; the phone may send several (`a,b`), which the route reads as
+   * any of them. An empty list is "All" too.
+   */
+  channel: QueueChannelFilter | readonly QueueChannelFilter[] | null = null,
   /** The period, as the route's own `from` / `to` (workspace days, `to` inclusive). */
   period: InboxPeriod | null = null,
   /**
@@ -197,8 +199,21 @@ export async function loadInbox(
    * viewer is read as "Active" (`shownView`); a named one is read as named.
    */
   explicit = true,
+  /**
+   * The phone's search field: the route's own `search`, which matches the
+   * customer's name or handle. `null` (and the website, which has no field)
+   * sends none.
+   */
+  search: string | null = null,
+  /**
+   * Each view's query. The website's is `viewQuery`; the phone passes
+   * `phoneViewQuery`, whose "mine" leaves out what was resolved.
+   */
+  queryOf: (view: InboxView, meId: string | null) => Record<string, string> | null = viewQuery,
 ): Promise<InboxData> {
   const api = serverApi();
+  const channelParam =
+    channel === null ? '' : typeof channel === 'string' ? channel : channel.join(',');
 
   /*
    * ═════════════════════════════════════════════════════════════════════════
@@ -272,7 +287,8 @@ export async function loadInbox(
              */
             query: {
               ...query,
-              ...(channel === null ? {} : { channel }),
+              ...(channelParam === '' ? {} : { channel: channelParam }),
+              ...(search === null || search === '' ? {} : { search }),
               ...(period?.from ? { from: period.from } : {}),
               ...(period?.to ? { to: period.to } : {}),
               limit: QUEUE_CAP,
@@ -293,8 +309,8 @@ export async function loadInbox(
 
   const queueRead =
     view === 'mine'
-      ? meRead.then((id) => fetchQueue(viewQuery(shownView(view, explicit, id !== null), id)))
-      : fetchQueue(viewQuery(view, null));
+      ? meRead.then((id) => fetchQueue(queryOf(shownView(view, explicit, id !== null), id)))
+      : fetchQueue(queryOf(view, null));
 
   const [queue, viewerMe, colleagues, greeting] = await Promise.all([
     queueRead,
@@ -421,13 +437,10 @@ export async function loadConversation(conversationId: string): Promise<Conversa
   const api = serverApi();
   const open = { id: conversationId };
   const [messages, timeline, orders] = await Promise.all([
-    api
-      .get({ endpoint: inboxEndpoints.messages(open.id), payload: streamPageSchema, raw: true })
-      .then((page) => page.data)
-      .catch((cause: unknown) => {
-        logger.warn('inbox.stream_failed', { cause });
-        return null;
-      }),
+    readNewestMessages(api, open.id, messageSchema).catch((cause: unknown) => {
+      logger.warn('inbox.stream_failed', { cause });
+      return null;
+    }),
     /*
      * ★★ NOT READ, AND NOT BECAUSE IT FAILED.
      *

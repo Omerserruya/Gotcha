@@ -9,6 +9,7 @@ import {
   previewAnswerSchema,
   previewQuestionsSchema,
 } from '@/api/contracts/onboarding';
+import { discoverJobSchema } from '@/api/contracts/onboarding-v2';
 import { workspaceVoiceSchema } from '@/api/contracts/workspace';
 import capabilitiesMessages from '@/i18n/messages/en/capabilities.json';
 import onboardingMessages from '@/i18n/messages/en/onboarding.json';
@@ -21,6 +22,8 @@ const hrefOf = (href: unknown) => {
   const q = new URLSearchParams(query ?? {}).toString();
   return q ? `${pathname}?${q}` : pathname;
 };
+const stepSave = vi.hoisted(() => ({ saveStep: vi.fn(async () => true) }));
+vi.mock('./step-actions', () => stepSave);
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
     <a href={hrefOf(href)} {...rest}>
@@ -30,13 +33,17 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 const actions = vi.hoisted(() => ({
-  startReading: vi.fn(),
-  readReading: vi.fn(),
   teachAnswer: vi.fn(),
   finishOnboarding: vi.fn(),
   askPreview: vi.fn(),
 }));
 vi.mock('./onboarding-actions', () => actions);
+const scanActions = vi.hoisted(() => ({
+  startScan: vi.fn(),
+  readScan: vi.fn(),
+  retryScan: vi.fn(),
+}));
+vi.mock('./scan-actions', () => scanActions);
 const voiceActions = vi.hoisted(() => ({
   saveWorkspaceVoice: vi.fn(),
   previewVoiceSample: vi.fn(),
@@ -56,7 +63,7 @@ vi.mock('@/features/capabilities/shopify-actions', () => ({
 const { LearnedStep } = await import('./LearnedStep');
 const { OnboardingShell } = await import('./OnboardingShell');
 const { ReadingStep } = await import('./ReadingStep');
-const { TruthStep } = await import('./TruthStep');
+const { SystemsStep } = await import('./SystemsStep');
 const { TryStep } = await import('./TryStep');
 const { WebsiteStep } = await import('./WebsiteStep');
 const { isPreview, stepHref } = await import('./preview');
@@ -112,7 +119,7 @@ describe('stepHref', () => {
 describe('★★ the shell in preview: says what it is, Home one click away, the steps are links', () => {
   it('previewing', () => {
     const { container } = wrap(
-      <OnboardingShell step="learned" preview>
+      <OnboardingShell step="live" screen="learned" preview>
         <p>work</p>
       </OnboardingShell>,
     );
@@ -122,20 +129,24 @@ describe('★★ the shell in preview: says what it is, Home one click away, the
     expect(screen.getByTestId('onboarding-preview').parentElement).toBe(
       screen.getByText('work').parentElement,
     );
-    // Every other step a link that stays a preview; this one is where you are.
+    // Every other step with a screen is a link that stays a preview; this one is where you are.
+    // The way back (to channels) stays a preview too.
     expect(stepLinks(container).sort()).toEqual(
-      ['website', 'reading', 'truth', 'try'].map((s) => `/onboarding/${s}?preview=1`).sort(),
+      ['website', 'systems', 'channels', 'channels']
+        .map((s) => `/onboarding/${s}?preview=1`)
+        .sort(),
     );
   });
 
   it('not previewing: none of it', () => {
     const { container } = wrap(
-      <OnboardingShell step="learned">
+      <OnboardingShell step="live" screen="learned">
         <p>work</p>
       </OnboardingShell>,
     );
     expect(screen.queryByTestId('onboarding-preview')).toBeNull();
-    expect(stepLinks(container)).toEqual([]);
+    // The steps are not links; only the way back is.
+    expect(stepLinks(container)).toEqual(['/onboarding/channels']);
   });
 });
 
@@ -158,19 +169,17 @@ describe('★★ each step in preview: every write a status, every step link sti
       target: { value: 'other.co.il' },
     });
     fireEvent.submit(screen.getByTestId('website-address').closest('form')!);
-    expect(actions.startReading).not.toHaveBeenCalled();
+    expect(scanActions.startScan).not.toHaveBeenCalled();
   });
 
-  it('00e: its links stay previews', () => {
-    const done = discoverySchema.parse({
-      websiteDomain: 'https://avivco.il',
+  it('00e: its links stay previews, and a finished read does not move on by itself', () => {
+    const done = discoverJobSchema.parse({
+      jobId: 'j1',
+      domain: 'https://avivco.il',
       status: 'COMPLETE',
-      updatedAt: '2026-10-06T10:00:05.000Z',
     });
-    const { container } = wrap(
-      <ReadingStep initial={{ discovery: done, facts: [] }} since={null} preview />,
-    );
-    expect(stepLinks(container)).toEqual(['/onboarding/learned?preview=1']);
+    const { container } = wrap(<ReadingStep initial={done} preview />);
+    expect(stepLinks(container)).toEqual(['/onboarding/systems?preview=1']);
   });
 
   it('00f: saving the voice is a status; the sample (a read) still asks; its links stay previews', async () => {
@@ -200,7 +209,7 @@ describe('★★ each step in preview: every write a status, every step link sti
     expect(voiceActions.previewVoiceSample).toHaveBeenCalled();
   });
 
-  it('00g: no connect of any kind - a status; tiles and the way on stay previews', () => {
+  it('step 2: no connect of any kind - a status; the way on stays a preview', () => {
     const shopify = integrationSchema.parse({
       id: 'i-shopify',
       slug: 'shopify',
@@ -210,21 +219,27 @@ describe('★★ each step in preview: every write a status, every step link sti
       tenantConnection: null,
     });
     const { container } = wrap(
-      <TruthStep
+      <SystemsStep
+        suggestions={[
+          {
+            slug: 'shopify',
+            name: 'Shopify',
+            reason: 'platform',
+            evidenceUrl: null,
+            connected: false,
+          },
+        ]}
         integrations={[shopify]}
         shopify={{ mode: 'listing', helpUrl: null }}
-        detected={{ slug: 'shopify', host: 'avivco.il' }}
-        system={null}
-        coreSystem={null}
         preview
       />,
     );
-    const card = screen.getByTestId('truth-preview');
-    isStatus(card.firstElementChild as HTMLElement);
+    const card = screen.getByTestId('systems-shopify');
+    isStatus(screen.getByTestId('systems-preview-shopify').firstElementChild as HTMLElement);
     expect(within(card).queryByRole('button')).toBeNull();
     expect(screen.queryByTestId('shopify-start')).toBeNull();
     const hrefs = stepLinks(container);
-    expect(hrefs.length).toBeGreaterThan(1);
+    expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) expect(href).toContain('preview=1');
   });
 
@@ -305,21 +320,22 @@ describe("★★ the banner is exactly the step column's width - and the column 
   });
 
   it.each([
-    ['reading', '620px'],
-    ['learned', '800px'],
-    ['truth', '680px'],
-    ['try', '660px'],
-  ])('%s: its width is set once, and the step reads it', async (step, width) => {
+    ['reading', 'reading', '960px'],
+    ['learned', 'learned', '800px'],
+    ['systems', 'systemsStep', '760px'],
+    ['channels', 'systemsStep', '760px'],
+    ['try', 'try', '660px'],
+  ])('%s: its width is set once, and the step reads it', async (step, root, width) => {
     const all = await css();
     expect(block(all, `.work[data-step='${step}']`)).toMatch(
       new RegExp(`--step-width:\\s*${width}`),
     );
-    expect(block(all, `.${step}`)).toMatch(/max-inline-size:\s*var\(--step-width\)/);
+    expect(block(all, `.${root}`)).toMatch(/max-inline-size:\s*var\(--step-width\)/);
   });
 
   it('the shell names the step on the work area', () => {
     const { container } = wrap(
-      <OnboardingShell step="try" preview>
+      <OnboardingShell step="live" screen="try" preview>
         <p>work</p>
       </OnboardingShell>,
     );

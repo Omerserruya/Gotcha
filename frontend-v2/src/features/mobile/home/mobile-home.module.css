@@ -1,0 +1,379 @@
+@layer features {
+  /*
+   * The phone's Home - `GOTCHA Mobile App.dc.html`, `isHome`. The shared
+   * parts (the screen, the white card, a row's hairline, a figure) are
+   * `mobile-ui.module.css`; what is here is Home's own.
+   */
+
+  /* ── The bar: the mark and the wordmark, the account at the end ────── */
+  .bar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-block-size: 58px;
+    padding-inline: var(--space-18) var(--space-8);
+    background-color: var(--mobile-ground);
+    color: var(--mobile-ink);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+  }
+
+  .wordmark {
+    font-family: var(--font-archivo), var(--font-sans);
+    font-size: var(--font-size-heading);
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+    letter-spacing: var(--letter-spacing-eyebrow);
+  }
+
+  .fill {
+    flex: 1;
+  }
+
+  /* The scroll: 16px gutters, 22px between the blocks. */
+  .scroll {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-22);
+    /* The foot clears the ask bar that floats over it (52px and its 12px). */
+    padding-block: var(--space-6) 84px;
+    padding-inline: var(--space-16);
+  }
+
+  /* ── The greeting ──────────────────────────────────────────────────── */
+  .greeting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    padding-inline: var(--space-2);
+  }
+
+  .date {
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .hello {
+    margin: 0;
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+    line-height: 1.1;
+    letter-spacing: var(--letter-spacing-hero);
+    color: var(--mobile-ink);
+  }
+
+  /* ── The day, on the dark card ─────────────────────────────────────── */
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    padding-block: var(--space-20) var(--space-18);
+    padding-inline: var(--space-20);
+    border-radius: var(--space-22);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  .summaryHead {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .eyebrow {
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--mobile-accent-lite);
+  }
+
+  .headline {
+    margin: 0;
+    font-size: 21px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.3;
+    letter-spacing: var(--letter-spacing-heading);
+    text-wrap: pretty;
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-8);
+  }
+
+  .tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-12);
+    border-radius: var(--space-14);
+    background-color: var(--mobile-ink-raised);
+  }
+
+  .tileValue {
+    font-size: 20px;
+  }
+
+  .tileLabel {
+    font-size: var(--font-size-label);
+    color: var(--mobile-ink-muted);
+  }
+
+  /* ── A block: its title, then its rows ─────────────────────────────── */
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+
+  .blockHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: var(--space-2);
+  }
+
+  .blockTitle {
+    margin: 0;
+    padding-inline: var(--space-2);
+    font-size: 17px;
+    font-weight: var(--font-weight-bold);
+    color: var(--mobile-ink);
+  }
+
+  .blockHead .blockTitle {
+    padding-inline: 0;
+  }
+
+  .blockCount {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-subtle);
+  }
+
+  .note {
+    margin: 0;
+    padding: var(--space-16);
+    font-size: var(--font-size-item);
+    color: var(--text-muted);
+  }
+
+  /* ── Needs you: a dot, who, how long, what was said, the way in ───── */
+  .need {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-12);
+    padding-block: 15px;
+    padding-inline: var(--space-16);
+  }
+
+  .needDot {
+    flex: none;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    margin-block-start: 7px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-dot-mute);
+  }
+
+  .needDot[data-tone='urgent'] {
+    background-color: var(--mobile-accent);
+  }
+
+  .needDot[data-tone='opportunity'] {
+    background-color: var(--mobile-dot-ok);
+  }
+
+  .needDot[data-tone='blocked'] {
+    background-color: var(--mobile-dot-warn);
+  }
+
+  .needBody {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .needTop {
+    align-self: stretch;
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .needTitle {
+    min-inline-size: 0;
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    unicode-bidi: plaintext;
+  }
+
+  .needTime {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  .needSub {
+    align-self: stretch;
+    font-size: var(--font-size-item);
+    line-height: 1.45;
+    color: var(--text-muted);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    block-size: 34px;
+    margin-block-start: var(--space-6);
+    padding-inline: var(--space-16);
+    border-radius: 17px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cta:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  /* ── Updates: what GOTCHA did, on an icon tile ─────────────────────── */
+  .updates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .update {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-2);
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  a.update:active {
+    background-color: var(--mobile-press);
+  }
+
+  .updateIcon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border-radius: var(--space-14);
+    background-color: var(--mobile-chip);
+    color: var(--text-secondary);
+  }
+
+  .updateIcon[data-outcome='failed'] {
+    background-color: var(--mobile-tag-bad);
+    color: var(--mobile-tag-bad-text);
+  }
+
+  .updateIcon[data-outcome='awaiting_approval'] {
+    background-color: var(--mobile-tag-ai);
+    color: var(--mobile-tag-ai-text);
+  }
+
+  .updateText {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.4;
+    text-wrap: pretty;
+  }
+
+  .updateTime {
+    flex: none;
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+
+  /* ── Ask GOTCHA: the design's bar, floating over the foot ─────────── */
+  .ask {
+    position: absolute;
+    inset-block-end: var(--space-12);
+    inset-inline: var(--space-12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-10);
+    block-size: 52px;
+    box-sizing: border-box;
+    padding-inline: var(--space-18) var(--space-8);
+    border-radius: 26px;
+    background-color: var(--mobile-surface);
+    border: var(--border-width-thin) solid var(--mobile-float-edge);
+    box-shadow: var(--mobile-shadow-soft);
+    color: var(--mobile-ink);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ask:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  .askMark {
+    flex: none;
+    color: var(--mobile-dot-ai);
+  }
+
+  .askText {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: 15px;
+    color: var(--text-subtle);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .askGo {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 38px;
+    block-size: 38px;
+    border-radius: 19px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+}

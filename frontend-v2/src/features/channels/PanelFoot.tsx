@@ -16,6 +16,7 @@ import {
   type WriteResult,
 } from './number-actions';
 import styles from './Channels.module.css';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 type Refresh = 'idle' | 'done' | Exclude<UnprofiledRefreshResult, { ok: true }>['reason'];
 
@@ -118,17 +119,19 @@ export function PanelFoot({
         {t('foot.activity')}
       </Link>
       {one ? (
-        <button
-          type="button"
-          className={styles.panelFootDanger}
-          onClick={() => {
-            setFailed(null);
-            setConfirming(true);
-          }}
-          data-testid="whatsapp-foot-disconnect"
-        >
-          {t('foot.disconnect')}
-        </button>
+        <SupportRefused kind="delete">
+          <button
+            type="button"
+            className={styles.panelFootDanger}
+            onClick={() => {
+              setFailed(null);
+              setConfirming(true);
+            }}
+            data-testid="whatsapp-foot-disconnect"
+          >
+            {t('foot.disconnect')}
+          </button>
+        </SupportRefused>
       ) : (
         <UnavailableAction
           label={t('foot.disconnect')}

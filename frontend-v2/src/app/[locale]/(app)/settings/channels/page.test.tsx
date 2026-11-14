@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { isValidElement } from 'react';
+import { render } from '@testing-library/react';
 import { createTranslator } from 'next-intl';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -125,8 +126,11 @@ describe('★★ 13b - the head counts what the card shows', () => {
   it('dev’s one unprofiled number: "one number", and the card gets that same list', async () => {
     const { default: Page } = await import('./page');
     const tree = await Page({ searchParams: Promise.resolve({ panel: 'whatsapp' }) });
-    const panel = find<{ line: string }>(tree, WhatsAppPanel);
-    expect(panel?.line).toBe('WhatsApp Business account · one number');
+    const panel = find<{ line: ReactNode }>(tree, WhatsAppPanel);
+    // The line is a node now (it can name the business account in its own bdi).
+    expect(render(<>{panel?.line}</>).container.textContent).toBe(
+      'WhatsApp Business account · one number',
+    );
     expect(find<{ numbers: unknown }>(tree, WhatsAppNumbers)?.numbers).toBe(DEV_NUMBERS);
   });
 });

@@ -13,7 +13,8 @@ import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
 
 /**
- * Settings · Plan & pricing - screen 17b.
+ * Settings · Change GOTCHA Core plan - screen 17b. Core only: the Shopify
+ * Connector is chosen and paid in Shopify, never here (review 132211).
  *
  * Separate from Usage & billing because it answers a different question.
  * That screen says how long you are good for; this one says what you are on
@@ -30,6 +31,7 @@ export default async function Page({
   readonly searchParams?: Promise<{ readonly plan?: string }>;
 }) {
   const t = await getTranslations('billing.pricing');
+  const core = await getTranslations('billing.core');
   const nav = await getTranslations('navigation');
   const picked = (await searchParams)?.plan ?? null;
   const { subscription, currency, tax, disclaimer, paymentMethods, catalog } = await loadPricing();
@@ -61,6 +63,10 @@ export default async function Page({
       // 17b: a sub-page of Usage & billing, "← Usage & billing" above the title.
       back={{ href: '/settings/billing', label: nav('settings.billing') }}
     >
+      {/* Said on the screen and again in the confirm: Core only (review 132211). */}
+      <p className={styles.coreOnly} data-testid="core-only">
+        {core('onlyCore')}
+      </p>
       <PlanCards catalog={catalog} currentKey={currentKey} selectedKey={target?.key ?? null} />
 
       <div className={styles.switchRow}>

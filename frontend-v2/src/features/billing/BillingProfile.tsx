@@ -12,6 +12,7 @@ import styles from './Billing.module.css';
 import { billingWritesEnabled } from '@/api/client/billing-writes';
 import { CardSession } from './CardSession';
 import { ProfileForm } from './ProfileForm';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Screen 17e - who the bill is made out to, and what it charges.
@@ -88,18 +89,20 @@ export async function BillingProfileSection({
               </span>
             ) : null}
           </span>
-          <CardSession
-            live={live}
-            label={t('profile.replace')}
-            className={styles.detailsAction}
-            sentence={t('held.replaceCard', {
-              brand: card.brand ?? t('profile.unknownBrand'),
-              last4: card.last4 ?? '????',
-            })}
-            heldTag={t('held.tag')}
-            heldWhy={t('held.why')}
-            testid="replace-card"
-          />
+          <SupportRefused kind="billing">
+            <CardSession
+              live={live}
+              label={t('profile.replace')}
+              className={styles.detailsAction}
+              sentence={t('held.replaceCard', {
+                brand: card.brand ?? t('profile.unknownBrand'),
+                last4: card.last4 ?? '????',
+              })}
+              heldTag={t('held.tag')}
+              heldWhy={t('held.why')}
+              testid="replace-card"
+            />
+          </SupportRefused>
         </div>
       ) : (
         /*
@@ -115,15 +118,17 @@ export async function BillingProfileSection({
           <span className={styles.detailsCardText}>
             {methods === null ? '-' : t('profile.noCardRow')}
           </span>
-          <CardSession
-            live={live}
-            label={t('profile.addCard')}
-            className={styles.detailsAction}
-            sentence={t('held.addCard')}
-            heldTag={t('held.tag')}
-            heldWhy={t('held.why')}
-            testid="add-card"
-          />
+          <SupportRefused kind="billing">
+            <CardSession
+              live={live}
+              label={t('profile.addCard')}
+              className={styles.detailsAction}
+              sentence={t('held.addCard')}
+              heldTag={t('held.tag')}
+              heldWhy={t('held.why')}
+              testid="add-card"
+            />
+          </SupportRefused>
         </div>
       )}
 
@@ -199,7 +204,9 @@ export async function BillingProfileSection({
         route has nothing to save into until a card is added.
       */}
       {profile?.state === 'present' ? (
-        <ProfileForm profile={profile} />
+        <SupportRefused kind="billing">
+          <ProfileForm profile={profile} />
+        </SupportRefused>
       ) : (
         <>
           {/*

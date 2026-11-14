@@ -163,17 +163,28 @@ export type ChannelConnectStart =
   | { readonly ok: true; readonly url: string }
   | { readonly ok: false; readonly reason: 'not_configured' | 'forbidden' | 'failed' };
 
+/** Where the provider sends the browser back: 13's list, or onboarding's channels step. */
+export type ChannelConnectFlow = 'redesign_studio' | 'onboarding_channels';
+
 /**
  * 13's Connect for an OAuth channel: the provider's page, asked for server
  * side, then the browser goes there. Nothing is connected until the person
- * approves at the provider and comes back.
+ * approves at the provider and comes back - to 13, or with
+ * `onboarding_channels` to onboarding's step 3 (backend 2c1653b0).
  */
-export async function startChannelConnect(channel: ChannelType): Promise<ChannelConnectStart> {
+export async function startChannelConnect(
+  channel: ChannelType,
+  flow?: ChannelConnectFlow,
+): Promise<ChannelConnectStart> {
   const platform = (OAUTH_PLATFORMS as Partial<Record<ChannelType, string>>)[channel];
   if (!platform) return { ok: false, reason: 'failed' };
   try {
     const { url } = await serverApi().get({
-      endpoint: channelEndpoints.oauthInitUrl(platform),
+      // A server action takes anything: only the one other flow is passed on.
+      endpoint: channelEndpoints.oauthInitUrl(
+        platform,
+        flow === 'onboarding_channels' ? flow : 'redesign_studio',
+      ),
       payload: z.object({ url: z.string().url() }),
       raw: true,
     });

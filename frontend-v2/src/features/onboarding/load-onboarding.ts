@@ -1,10 +1,23 @@
 import 'server-only';
 
 import { isApiError } from '@/api/client/api-error';
+import type { Channel } from '@/api/contracts/channels';
+import type { WidgetInstall } from '@/api/contracts/website-widget';
+import { loadChannels } from '@/features/channels/load-channels';
+import { loadChannelsConfig, type ChannelsConfig } from '@/features/channels/load-whatsapp';
+import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
 import { serverApi } from '@/api/client/server-api';
 import { currentUserSchema } from '@/api/contracts/identity';
 import { integrationsSchema, type Integration } from '@/api/contracts/integrations';
 import { knowledgeListSchema } from '@/api/contracts/knowledge';
+import {
+  integrationSuggestionsSchema,
+  stepReadSchema,
+  type IntegrationSuggestion,
+  type StepRead,
+} from '@/api/contracts/onboarding-v2';
+import type { ResumeFacts } from './resume-v2';
+import { readScan } from './scan-actions';
 import { workspaceVoiceSchema, type WorkspaceVoice } from '@/api/contracts/workspace';
 import {
   discoveryReadSchema,
@@ -29,6 +42,8 @@ import {
   type ShopifyAvailability,
 } from '@/features/capabilities/load-capabilities';
 import { logger } from '@/observability/logger';
+import { connectorVerdict } from '@/api/contracts/shopify-connector';
+import { loadShopifyConnector } from '@/features/billing/load-connector';
 
 /** Where 00d's guess came from - its line under the title says so. */
 export type GuessSource = 'scan' | 'profile' | 'email';
@@ -110,22 +125,6 @@ export async function loadDiscovery(): Promise<Discovery | null> {
   }
 }
 
-export interface ReadingRead {
-  readonly discovery: Discovery | null;
-  /** `null`: Knowledge could not be read - not "nothing found". */
-  readonly facts: readonly ScannedFact[] | null;
-}
-
-/**
- * 00e: the read's row, and the pages it has turned into Knowledge so far.
- * Throws when the row is unread: on 00e that is "couldn't look", never "it
- * has not started".
- */
-export async function loadReading(): Promise<ReadingRead> {
-  const [discovery, facts] = await Promise.all([readDiscovery(), loadScannedFacts()]);
-  return { discovery, facts };
-}
-
 export async function loadScannedFacts(): Promise<readonly ScannedFact[] | null> {
   try {
     const sources = await serverApi().get({
@@ -178,6 +177,22 @@ export interface TruthRead {
   readonly coreSystem: string | null;
 }
 
+/**
+ * Shopify's listing, and whether GOTCHA Core lets a store be connected yet
+ * (split billing, Omer 2026-10-28): a new merchant or a reviewer must never
+ * meet a 402 as the first thing Connect does. `connectAllowed` is the
+ * server's word (`core.allowsShopifyConnect`); a failed read leaves it unsaid.
+ */
+async function loadShopifyToConnect(): Promise<ShopifyAvailability | null> {
+  const [availability, connector] = await Promise.all([
+    loadShopifyAvailability(),
+    loadShopifyConnector(),
+  ]);
+  return availability
+    ? { ...availability, connectAllowed: connectorVerdict(connector).connectAllowed }
+    : null;
+}
+
 /** 00g: what can be connected, what is, and what the read found on the site. */
 export async function loadTruth(): Promise<TruthRead> {
   const [integrations, shopify, discovery, status] = await Promise.all([
@@ -189,7 +204,7 @@ export async function loadTruth(): Promise<TruthRead> {
         });
         return null;
       }),
-    loadShopifyAvailability(),
+    loadShopifyToConnect(),
     loadDiscovery(),
     serverApi()
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
@@ -231,21 +246,128 @@ export async function loadTry(locale: string): Promise<PreviewQuestions | null> 
   }
 }
 
+export interface SystemsRead {
+  /** `null`: the suggestions could not be read - never "nothing to suggest". */
+  readonly suggestions: readonly IntegrationSuggestion[] | null;
+  /** The catalogue, for how each one connects; `null`: unread. */
+  readonly integrations: readonly Integration[] | null;
+  readonly shopify: Awaited<ReturnType<typeof loadShopifyAvailability>>;
+}
+
 /**
- * Where an admin coming back resumes: by what exists on the server - the
- * website read's row and whether a core system is connected. Nothing stores
- * "the step reached", so this is read, not remembered.
+ * Step 2: what the site job suggests connecting (the platform it runs on,
+ * tools it saw), and the catalogue rows that say how each one connects.
  */
-export async function loadResumeState(): Promise<{
-  readonly discovery: { readonly status: string } | null;
-  readonly coreConnected: boolean;
-}> {
-  const [discovery, status] = await Promise.all([
-    loadDiscovery(),
+export async function loadSystems(): Promise<SystemsRead> {
+  const [suggestions, integrations, shopify] = await Promise.all([
     serverApi()
+      .get({
+        endpoint: onboardingEndpoints.integrationSuggestions(),
+        payload: integrationSuggestionsSchema,
+      })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.suggestions_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+    serverApi()
+      .get({ endpoint: integrationEndpoints.list(), payload: integrationsSchema })
+      .catch((cause: unknown) => {
+        logger.warn('onboarding.integrations_failed', {
+          status: isApiError(cause) ? cause.status : undefined,
+        });
+        return null;
+      }),
+    loadShopifyToConnect(),
+  ]);
+  return { suggestions, integrations, shopify };
+}
+
+export interface ChannelsStepRead {
+  /** The tenant's channels; `null`: unread - never "none connected". */
+  readonly channels: readonly Channel[] | null;
+  /** The website widget's install code and whether it is live; `null`: unread. */
+  readonly install: WidgetInstall | null;
+  /** WhatsApp's signup launches, and which OAuth providers are set up (`null`: unread). */
+  readonly config: ChannelsConfig;
+}
+
+/** Step 3: what is connected, the widget's code, and how each channel connects. */
+export async function loadChannelsStep(): Promise<ChannelsStepRead> {
+  const [channels, install, config] = await Promise.all([
+    loadChannels().then((read) => read.channels),
+    loadWidgetInstall(),
+    loadChannelsConfig(),
+  ]);
+  return { channels, install, config };
+}
+
+export interface InstallWaysRead {
+  /**
+   * The store platform the website read found (`technology.platform.slug`,
+   * what `learned.platform` is): `shopify`, `woocommerce`, `wix`, ... `null`:
+   * none found, not read yet, or unread. It picks the website's way offered first.
+   */
+  readonly detected: string | null;
+  /** Shopify's listing and GOTCHA Core's word, for the website's Shopify way; `null`: unread. */
+  readonly shopify: ShopifyAvailability | null;
+}
+
+/** Step 3's website row only: which way to offer first, and whether Shopify can be connected. */
+export async function loadInstallWays(): Promise<InstallWaysRead> {
+  const [discovery, shopify] = await Promise.all([loadDiscovery(), loadShopifyToConnect()]);
+  const detected = discovery?.technology?.platform?.slug?.trim().toLowerCase() || null;
+  return { detected, shopify };
+}
+
+/**
+ * The step saved on Continue/Skip (and by go-live), and the employee go-live
+ * made; `null` when unread.
+ */
+export async function loadSavedStep(): Promise<StepRead | null> {
+  return serverApi()
+    .get({ endpoint: onboardingEndpoints.step(), payload: stepReadSchema })
+    .catch(() => null);
+}
+
+/**
+ * What onboarding resumes from: the step saved on Continue/Skip, and what
+ * the server can prove (the site job, a connected platform, anything to
+ * suggest, a channel a customer can reach). `job: 'unread'`: the job could
+ * not be read - neither proven nor disproven.
+ */
+export async function loadResumeFacts(): Promise<
+  Omit<ResumeFacts, 'job'> & { readonly job: ResumeFacts['job'] | 'unread' }
+> {
+  const api = serverApi();
+  const [saved, job, status, suggestions, channels, install] = await Promise.all([
+    loadSavedStep().then((read) => read?.step ?? null),
+    readScan(0),
+    api
       .get({ endpoint: onboardingEndpoints.status(), payload: onboardingStatusSchema, raw: true })
       .then((r) => r.data)
       .catch(() => null),
+    api
+      .get({
+        endpoint: onboardingEndpoints.integrationSuggestions(),
+        payload: integrationSuggestionsSchema,
+      })
+      .catch(() => null),
+    loadChannels()
+      .then((read) => read.channels)
+      .catch(() => null),
+    loadWidgetInstall(),
   ]);
-  return { discovery, coreConnected: Boolean(status?.coreSystemConnected) };
+  return {
+    // "done" is past the last screen: the last screen is where it resumes.
+    saved: saved === 'done' ? 'live' : saved,
+    job: job.ok ? { status: job.job.status } : job.reason === 'none' ? null : 'unread',
+    platformConnected: Boolean(status?.coreSystemConnected),
+    noSuggestions: suggestions !== null && suggestions.length === 0,
+    channelConnected:
+      (channels ?? []).some((each) => each.connectionStatus === 'CONNECTED') ||
+      install?.code?.status === 'live' ||
+      (install?.shopify ?? []).some((shop) => shop.status === 'active' && shop.embedLive),
+  };
 }

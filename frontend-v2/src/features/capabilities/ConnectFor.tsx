@@ -27,28 +27,48 @@ export function ConnectFor({
   shopify = null,
   reconnect = false,
   drawn,
+  formLabel,
+  whyInWords = false,
 }: {
   readonly integration: Integration;
   /** A connected system whose connection broke - the way back, not a first connect. */
   readonly reconnect?: boolean;
-  readonly shopify?: { readonly mode: string; readonly helpUrl: string | null } | null;
+  readonly shopify?: {
+    readonly mode: string;
+    readonly helpUrl: string | null;
+    /** The server's `core.allowsShopifyConnect`: `false` waits for GOTCHA Core. */
+    readonly connectAllowed?: boolean | null;
+  } | null;
   /** The drawn button's words - the caller's catalogue (synchronous, so it renders nested). */
   readonly drawn: {
     readonly connect: string;
     readonly oauthNotHere: string;
     readonly noForm: string;
   };
+  /** The key form's button words, when the caller names the system (onboarding). */
+  readonly formLabel?: string;
+  /** A control that can't connect from here says why beside it, not only on hover. */
+  readonly whyInWords?: boolean;
 }) {
   const { oauth, fields } = integration.authSchema;
   return (
     <>
       {integration.slug === 'shopify' && !reconnect ? (
-        <ShopifyConnect mode={shopify?.mode ?? null} helpUrl={shopify?.helpUrl ?? null} />
+        <ShopifyConnect
+          mode={shopify?.mode ?? null}
+          helpUrl={shopify?.helpUrl ?? null}
+          connectAllowed={shopify?.connectAllowed ?? null}
+        />
       ) : integration.slug === 'woocommerce' ? (
         // B: the store's own approval replaces the key form.
         <WooConnect name={integration.name} />
       ) : !oauth && fields.length > 0 ? (
-        <ConnectForm slug={integration.slug} name={integration.name} fields={fields} />
+        <ConnectForm
+          slug={integration.slug}
+          name={integration.name}
+          fields={fields}
+          {...(formLabel ? { label: formLabel } : {})}
+        />
       ) : (oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect) ? (
         <OAuthButton
           slug={integration.slug}
@@ -65,6 +85,20 @@ export function ConnectFor({
           {drawn.connect}
         </span>
       )}
+      {whyInWords && !isLaunchable(integration, reconnect) ? (
+        <span className={styles.connectNote} data-testid="connect-drawn-why">
+          {oauth ? drawn.oauthNotHere : drawn.noForm}
+        </span>
+      ) : null}
     </>
   );
+}
+
+/** Does `ConnectFor` draw a working control for this system (not the drawn, disabled one)? */
+export function isLaunchable(integration: Integration, reconnect: boolean): boolean {
+  const { oauth, fields } = integration.authSchema;
+  if (integration.slug === 'shopify' && !reconnect) return true;
+  if (integration.slug === 'woocommerce') return true;
+  if (!oauth && fields.length > 0) return true;
+  return (oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect);
 }

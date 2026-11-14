@@ -43,11 +43,18 @@ export const MAX_PROMOTION_COUPONS = 5;
 const NO_COMMERCE = {
   productMessagingEnabled: false,
   addToCartEnabled: false,
+  suggestComplementary: false,
   promotions: { couponIds: [] as string[] },
 };
 
 export const webchatConfigSchema = z.object({
   displayName: z.string().catch(''),
+  /**
+   * Backend 330b0461: where the widget's header name comes from - the AI
+   * employee that answers the web chat, or `ux.welcome.assistantName`. Absent
+   * or unknown reads as `custom`: an existing widget keeps its typed name.
+   */
+  nameSource: z.enum(['employee', 'custom']).catch('custom').default('custom'),
   appearance: z.object({
     primaryColor: z.string().catch('#121212'),
     logoUrl: url,
@@ -76,14 +83,21 @@ export const webchatConfigSchema = z.object({
     look: z.enum(WIDGET_LOOKS).catch('gotcha').default('gotcha'),
     /** W1: chat (the default, and anything unknown) or WhatsApp. */
     kind: z.enum(WIDGET_KINDS).catch('chat').default('chat'),
-    /** Stage B: "Continue on WhatsApp" - on, and the workspace's number it continues on. */
+    /**
+     * Stage B: "Continue on WhatsApp" - on, and the number it continues on: a
+     * connected one (`channelAccountId`), else one typed in (`phone`, Omer
+     * 2026-11-02 - a workspace with no WhatsApp channel can still use the
+     * WhatsApp widget). Both may be stored: a connected one wins, the typed
+     * one is the fallback (Backend). `phone` as the route keeps it, "+<digits>".
+     */
     whatsapp: z
       .object({
         enabled: z.boolean().catch(false),
         channelAccountId: z.string().nullable().catch(null),
+        phone: z.string().nullable().catch(null).default(null),
       })
-      .catch({ enabled: false, channelAccountId: null })
-      .default({ enabled: false, channelAccountId: null }),
+      .catch({ enabled: false, channelAccountId: null, phone: null })
+      .default({ enabled: false, channelAccountId: null, phone: null }),
   }),
   /**
    * ★ W9 (Backend 7eb3810a, 2db313bb): products from the connected WooCommerce
@@ -94,6 +108,13 @@ export const webchatConfigSchema = z.object({
     .object({
       productMessagingEnabled: z.boolean().catch(false),
       addToCartEnabled: z.boolean().catch(false),
+      /**
+       * Backend f7c36959: after the customer chose a product, the AI may show
+       * add-ons as ordinary product cards (the store's cross-sells and upsells,
+       * else in-stock items of the same category). Needs product cards: the
+       * server keeps it off while they are off. Absent: off.
+       */
+      suggestComplementary: z.boolean().catch(false).default(false),
       promotions: z
         .object({ couponIds: z.array(z.string()).catch([]) })
         .catch({ couponIds: [] })
@@ -101,6 +122,16 @@ export const webchatConfigSchema = z.object({
     })
     .catch(NO_COMMERCE)
     .default(NO_COMMERCE),
+  /**
+   * The widget's "Talk to a person" link (Omer, 2026-10-26): opt-in. Kept
+   * as read - absent or unreadable is `undefined`, never filled in - and
+   * shown on only when `=== true` (legacy's `!== false` showed it on and
+   * saved true on the first save).
+   */
+  handoff: z
+    .object({ allowHumanHandoff: z.boolean().optional().catch(undefined) })
+    .catch({})
+    .default({}),
 });
 export type WebchatConfig = z.infer<typeof webchatConfigSchema>;
 

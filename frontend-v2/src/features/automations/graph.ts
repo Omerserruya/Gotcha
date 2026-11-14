@@ -350,7 +350,14 @@ export function layout(graph: Graph): {
     const id = queue.shift()!;
     const node = byId.get(id);
     if (!node) continue;
-    const kids = order(node).filter((k) => byId.has(k) && !placed.has(k));
+    /*
+     * ★★ Each step once, however many lines reach it (F2: every branch of an
+     * inserted step runs to the old next one). Listed twice, the step was
+     * visited twice: the second visit found its own children already placed
+     * and replaced them with none, so they were never drawn (dev, 6c4b5459:
+     * a menu inserted above opening hours hid the AI step under it).
+     */
+    const kids = [...new Set(order(node))].filter((k) => byId.has(k) && !placed.has(k));
     kids.forEach((k) => placed.add(k));
     children.set(id, kids);
     queue.push(...kids);
@@ -380,6 +387,65 @@ export function layout(graph: Graph): {
   const columns = Math.max(slot, loose.length, 1);
   const rows = deepest + 1 + (loose.length > 0 ? 1 : 0);
   return { at, width: columns * (NODE_W + GAP) - GAP, height: rows * ROW_H };
+}
+
+/** How far apart, sideways, the lines of one step's branches to the same next step bow. */
+export const FAN = 150;
+
+/**
+ * ★★ Branches that run to the same next step are drawn as separate lines.
+ *
+ * F2 connects every branch of an inserted step to the old next step, so
+ * "open" and "closed" share both ends: drawn alike they were one line with
+ * the labels stacked, and the owner could not see that each branch answers
+ * (dev, 6c4b5459). Each line of such a group bows sideways by its own
+ * offset, in the step's own branch order; a line alone keeps 0.
+ */
+export function fanOf(graph: Graph): ReadonlyMap<AutomationEdge, number> {
+  const groups = new Map<string, AutomationEdge[]>();
+  for (const edge of graph.edges) {
+    const key = `${edge.source}\u0000${edge.target}`;
+    groups.set(key, [...(groups.get(key) ?? []), edge]);
+  }
+  const offsets = new Map<AutomationEdge, number>();
+  for (const group of groups.values()) {
+    const node = graph.nodes.find((n) => n.id === group[0]!.source);
+    const handles = node ? outputsOf(node, graph) : [];
+    const rank = (e: AutomationEdge) => {
+      const i = handles.indexOf(e.sourceHandle ?? 'next');
+      return i === -1 ? handles.length : i;
+    };
+    const sorted = [...group].sort((a, b) => rank(a) - rank(b));
+    sorted.forEach((edge, i) => offsets.set(edge, (i - (sorted.length - 1) / 2) * FAN));
+  }
+  return offsets;
+}
+
+/** A line's path: down from the source, bowed sideways by `bow`, into the target's top. */
+export function linePath(x1: number, y1: number, x2: number, y2: number, bow: number): string {
+  const mid = (y1 + y2) / 2;
+  return `M ${x1} ${y1} C ${x1 + bow} ${mid}, ${x2 + bow} ${mid}, ${x2} ${y2}`;
+}
+
+/** The point at `t` (0 at the source, 1 at the target) on that path. */
+export function linePoint(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  bow: number,
+  t: number,
+): { readonly x: number; readonly y: number } {
+  const mid = (y1 + y2) / 2;
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return {
+    x: a * x1 + b * (x1 + bow) + c * (x2 + bow) + d * x2,
+    y: a * y1 + (b + c) * mid + d * y2,
+  };
 }
 
 /**
@@ -481,10 +547,20 @@ export type InsertRefusal = 'reply_pair' | 'terminal' | 'branching' | 'comment_u
  * Refused, with why (Backend's rules):
  *   reply_pair      between buttons or a list and the wait that reads them
  *   terminal        a final step - nothing could follow it, and something does
- *   branching       a step with branches - which would lead on? Add it from
- *                   the "+" under a step instead
+ *   branching       a step with no way on at all
  *   comment_unsafe  in a comment automation, before its first wait for
  *                   reply, only what the catalogue calls comment-safe
+ *
+ * ★★ A STEP WITH BRANCHES GOES ON A LINE TOO (F2, Omer, 2026-11-09): EVERY
+ *   branch it offers leads to what the line led to - after buttons, each
+ *   button, a typed reply and the timeout. Before, a menu or a condition
+ *   could never go before the setup route's "Hand to AI employee": its only
+ *   line was taken, and a branching step was refused on a line.
+ *
+ *   ⚠ NOT "the first branch, the rest empty" (the first version): an
+ *     unconnected branch on a live route halts the run ("no_branch") and
+ *     nobody answers the customer (Backend, 2026-11-09). Every branch keeps
+ *     reaching who answered before; the owner re-points the ones they want.
  */
 export function insertRefusal(
   graph: Graph,
@@ -497,14 +573,7 @@ export function insertRefusal(
   if (!source || !target) return 'branching';
   if (ASKS.has(source.type) && target.type === 'wait_for_reply') return 'reply_pair';
   if (TERMINAL.has(type)) return 'terminal';
-  const probe: AutomationNode = {
-    id: '\u0000',
-    type,
-    position: { x: 0, y: 0 },
-    data: defaultData(type, () => 'x'),
-  };
-  const outs = outputsOf(probe, { ...graph, nodes: [...graph.nodes, probe], edges: graph.edges });
-  if (outs.length !== 1 || outs[0] !== 'next') return 'branching';
+  if (insertedOutputs(graph, edge, type).length === 0) return 'branching';
   if (
     comments.automation &&
     source.type !== 'wait_for_reply' &&
@@ -514,6 +583,28 @@ export function insertRefusal(
     return 'comment_unsafe';
   }
   return null;
+}
+
+/**
+ * The outputs a step of `type` would offer once on `edge`: probed WITH its
+ * incoming line, because a wait for reply reads its branches from the step
+ * before it - after buttons, "btn:<id>" first.
+ */
+function insertedOutputs(graph: Graph, edge: AutomationEdge, type: string): readonly string[] {
+  const probe: AutomationNode = {
+    id: '\u0000',
+    type,
+    position: { x: 0, y: 0 },
+    data: defaultData(type, () => 'x'),
+  };
+  return outputsOf(probe, {
+    ...graph,
+    nodes: [...graph.nodes, probe],
+    edges: [
+      ...graph.edges,
+      { id: '\u0000e', source: edge.source, target: probe.id, sourceHandle: null },
+    ],
+  });
 }
 
 /** The graph with a new step on `edge`, or `null` when it may not go there (`insertRefusal`). */
@@ -532,14 +623,25 @@ export function insertBetween(
     position: { x: 0, y: 0 },
     data: defaultData(type, newId),
   };
+  const lines = graph.edges.map((e) => (e === edge ? { ...e, target: id } : e));
+  // Every branch the step offers in place (`btn:<id>`, reply, timeout after
+  // buttons). A plain step keeps its one line: its `next` - never the cart's
+  // extra "unreachable" exit, which stays the author's to place.
+  const offered = outputsOf(node, { ...graph, nodes: [...graph.nodes, node], edges: lines });
+  const outs = offered.includes('next') ? ['next'] : offered;
   return {
     id,
     graph: {
       ...graph,
       nodes: [...graph.nodes, node],
       edges: [
-        ...graph.edges.map((e) => (e === edge ? { ...e, target: id } : e)),
-        { id: newId(), source: id, target: edge.target, sourceHandle: null },
+        ...lines,
+        ...outs.map((handle) => ({
+          id: newId(),
+          source: id,
+          target: edge.target,
+          sourceHandle: handle === 'next' ? null : handle,
+        })),
       ],
     },
   };

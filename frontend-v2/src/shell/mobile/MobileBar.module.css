@@ -1,0 +1,97 @@
+@layer shell {
+  /*
+   * A screen's bar: 58px on the paper, no rule under it - the design lets a
+   * list run straight up to its title. A conversation's bar is the one with
+   * an edge, because the stream scrolls on a different ground beneath it.
+   */
+  .bar {
+    flex: none;
+    background-color: var(--mobile-ground);
+  }
+
+  .bar[data-edge] {
+    border-block-end: var(--border-width-thin) solid var(--border-default);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-block-size: 58px;
+    padding-inline: var(--space-18) var(--space-8);
+  }
+
+  .bar[data-back] .row {
+    padding-inline: var(--space-4) var(--space-6);
+  }
+
+  .title {
+    flex: 1;
+    min-inline-size: 0;
+    font-size: 24px;
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--mobile-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar[data-back] .title {
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-normal);
+    padding-inline-start: var(--space-6);
+  }
+
+  /* The wordmark: Archivo, spaced, as the inbox's bar writes it. */
+  .brand {
+    font-family: var(--font-archivo), var(--font-sans);
+    font-size: 21px;
+    font-weight: var(--font-weight-bold);
+    line-height: 1;
+    letter-spacing: var(--letter-spacing-eyebrow-rail);
+    color: var(--mobile-ink);
+  }
+
+  .fill {
+    flex: 1;
+  }
+
+  /* Back, the account, a screen's own action: 44px, the touch minimum. */
+  .iconButton {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--size-control);
+    block-size: var(--size-control);
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--mobile-ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .iconButton:active {
+    background-color: var(--mobile-press);
+  }
+
+  .iconButton:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+  }
+
+  /* A filter in force: the accent dot on the icon. */
+  .iconDot {
+    position: absolute;
+    inset-block-start: 10px;
+    inset-inline-end: 9px;
+    inline-size: 9px;
+    block-size: 9px;
+    box-sizing: border-box;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-accent);
+    border: 2px solid var(--mobile-ground);
+  }
+}

@@ -58,3 +58,21 @@ export function initials(name: string | null | undefined): string {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
 }
+
+/** How a row is marked: angry, valuable, blocked - or not at all. */
+export type QueueTone = 'urgent' | 'opportunity' | 'blocked';
+
+/**
+ * How an intent reads on the row - on Home and on the phone's Home, from one map.
+ *
+ * The design marks a row only when it is angry, valuable or blocked;
+ * everything else is neutral. `COMPLAINT` joins `FRUSTRATED` because the
+ * ranker weighs them identically, and an unrecognised intent is neutral rather
+ * than guessed at - a wrongly coloured row is worse than an uncoloured one.
+ */
+export const TONE_BY_INTENT: Readonly<Record<string, QueueTone>> = {
+  FRUSTRATED: 'urgent',
+  COMPLAINT: 'urgent',
+  HIGH_INTENT: 'opportunity',
+  WAITING_EXTERNAL: 'blocked',
+};

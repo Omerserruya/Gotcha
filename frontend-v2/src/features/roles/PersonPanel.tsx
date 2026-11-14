@@ -12,6 +12,7 @@ import { areaName, permissionName } from './permission-words';
 import { RemovePermission } from './RemovePermission';
 import { legacyBuiltinKey, roleDescriptionOf, roleNameOf, type BuiltinWords } from './role-words';
 import styles from './Roles.module.css';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * 12d, measured: one person in a drawer over People - the head, Details,
@@ -165,17 +166,19 @@ export async function PersonPanel({
               {t('person.change')}
             </span>
           ) : (
-            <ChangeRole
-              userId={person.id}
-              personName={who}
-              current={currentId && roleName ? { id: currentId, name: roleName } : null}
-              scope={person.roles.length === 1 ? person.roles[0]!.scope : null}
-              held={person.roles.length}
-              // Admin is part of Owner: never offered (assigning it is 409 ROLE_MERGED).
-              choices={roles
-                .filter((r) => !isMergedAdmin(r))
-                .map((r) => ({ id: r.id, name: roleNameOf(r, words) }))}
-            />
+            <SupportRefused kind="ownership">
+              <ChangeRole
+                userId={person.id}
+                personName={who}
+                current={currentId && roleName ? { id: currentId, name: roleName } : null}
+                scope={person.roles.length === 1 ? person.roles[0]!.scope : null}
+                held={person.roles.length}
+                // Admin is part of Owner: never offered (assigning it is 409 ROLE_MERGED).
+                choices={roles
+                  .filter((r) => !isMergedAdmin(r))
+                  .map((r) => ({ id: r.id, name: roleNameOf(r, words) }))}
+              />
+            </SupportRefused>
           )}
         </div>
 
@@ -267,12 +270,14 @@ export async function PersonPanel({
                       ⚠ A WRITE against a real person. No test and no capture
                       presses it. Only on an ADDED grant.
                     */}
-                      <RemovePermission
-                        userId={person.id}
-                        personName={who}
-                        feature={grant.feature}
-                        featureName={nameOf(grant.feature) ?? grant.feature}
-                      />
+                      <SupportRefused kind="ownership">
+                        <RemovePermission
+                          userId={person.id}
+                          personName={who}
+                          feature={grant.feature}
+                          featureName={nameOf(grant.feature) ?? grant.feature}
+                        />
+                      </SupportRefused>
                     </li>
                   ))}
                 </ul>

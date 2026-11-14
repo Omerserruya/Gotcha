@@ -110,7 +110,10 @@
     "used": "Used {n} {count, plural, one {time} other {times}} in the last 30 days",
     "actions": "{count, plural, one {# action} other {# actions}}",
     "narrow": "Narrow it for one employee",
-    "narrowNotYet": "Every AI employee shares these settings; one cannot be narrowed yet."
+    "narrowNotYet": "Every AI employee shares these settings; one cannot be narrowed yet.",
+    "noneUsable": "None usable until the Shopify Connector is active",
+    "usable": "{count, plural, one {# action usable} other {# actions usable}}",
+    "access": "Shopify access: {state}"
   },
   "suggestNone": "Nothing to suggest changing yet.",
   "ran": {
@@ -170,6 +173,7 @@
       "callback_error": "Something went wrong on the way back from {name}. Nothing was connected - try again.",
       "validation_failed": "{name} connected, but the first check against it failed.",
       "shop_connected_elsewhere": "That store is already connected to another workspace.",
+      "billing_link_failed": "We couldn't finish connecting the store. Nothing was changed - connect it again in a moment.",
       "link_failed": "{name} answered, but the store couldn't be linked to this workspace.",
       "other": "{name} didn't connect. Try again.",
       "not_configured": "This connection isn't set up in this environment yet. Nothing was connected.",
@@ -206,7 +210,8 @@
     "unread": "We couldn't check how Shopify can be connected right now - try again in a moment.",
     "error": {
       "forbidden": "You don't have permission to connect systems.",
-      "failed": "Shopify couldn't be opened - try again."
+      "failed": "Shopify couldn't be opened - try again.",
+      "core_plan_required": "Connecting Shopify needs an active GOTCHA Core plan first. Nothing was connected."
     },
     "pending": {
       "replaceLead": "You approved {shop} in Shopify. Another store is connected here now - replacing it disconnects that one.",
@@ -220,7 +225,8 @@
         "shop_connected_to_another_workspace": "{shop} is already connected to a different GOTCHA workspace.",
         "gone": "That approval has expired or was already used - connect again from Shopify.",
         "forbidden": "You don't have permission to connect systems.",
-        "failed": "{shop} wasn't connected - try again."
+        "failed": "{shop} wasn't connected - try again.",
+        "core_plan_required": "Connecting {shop} needs an active GOTCHA Core plan first. Nothing was connected."
       },
       "conflict": "Another store is connected here. Replace it?",
       "conflictNamed": "Another store is connected here ({current}). Replace it?",
@@ -275,7 +281,7 @@
   "disconnect": {
     "button": "Disconnect {name}",
     "confirm": "GOTCHA will stop using {name}: its actions stop working and the sign-in details saved for it are deleted. Its action settings are not deleted.",
-    "confirmShopify": "GOTCHA will stop using {name}: the chat in your store stops now, and its actions stop working. The GOTCHA app stays installed in Shopify, and Shopify keeps billing for it until you remove the app in your Shopify admin. Connecting again later links the store afresh.",
+    "confirmShopify": "GOTCHA will ask Shopify to uninstall the GOTCHA app from your store. Once Shopify confirms, the chat in your store and every Shopify action stop, and Shopify ends the Shopify Connector subscription and its billing. Connecting again later starts afresh.",
     "confirmCalendar": "GOTCHA will stop using {name}: its actions stop working, the sign-in details saved for it are deleted, and every AI employee's calendar is disconnected, so none of them books through it. Its action settings are not deleted.",
     "yes": "Disconnect",
     "working": "Disconnecting…",
@@ -284,6 +290,29 @@
       "forbidden": "You don't have permission to disconnect systems.",
       "inactive": "Disconnecting needs an active workspace.",
       "failed": "{name} wasn't disconnected. Try again."
+    },
+    "shopify": {
+      "awaiting": "Waiting for Shopify to confirm. GOTCHA asked Shopify to uninstall the app, and this changes once Shopify confirms it.",
+      "stillWaiting": "Shopify hasn't confirmed yet. You can leave this page: it changes when Shopify confirms.",
+      "checkAgain": "Check again",
+      "done": "Shopify confirmed: the GOTCHA app is uninstalled from the store.",
+      "problem": {
+        "not_connected": "There's no Shopify store connected to disconnect.",
+        "no_token": "GOTCHA can't reach this store to ask Shopify. Remove the GOTCHA app in your Shopify admin, under Apps.",
+        "no_shop_domain": "GOTCHA can't reach this store to ask Shopify. Remove the GOTCHA app in your Shopify admin, under Apps.",
+        "shopify_refused": "Shopify didn't accept the request, so nothing changed. Try again, or remove the GOTCHA app in your Shopify admin.",
+        "forbidden": "You don't have permission to disconnect systems.",
+        "failed": "Shopify wasn't asked to uninstall the app. Try again."
+      }
     }
+  },
+  "fieldLabels": {
+    "api_key": "API key",
+    "api_secret": "API secret",
+    "access_token": "Access token",
+    "store_url": "Store URL",
+    "username": "Username",
+    "password": "Password",
+    "account_id": "Account ID"
   }
 }

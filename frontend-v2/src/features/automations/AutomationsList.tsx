@@ -6,6 +6,7 @@ import {
   FileText,
   Megaphone,
   MessageSquare,
+  MessageSquarePlus,
   MessagesSquare,
   MousePointerClick,
   MoreHorizontal,
@@ -43,11 +44,14 @@ import { Link, useRouter } from '@/i18n/navigation';
 
 import { setLive } from './automation-actions';
 import { DeleteAutomation } from './DeleteAutomation';
+import { PauseSetupRoute } from './PauseSetupRoute';
+import { routeNames, shownName } from './shown-name';
 import { modLabel, shortcutsAllowed, withMod } from './shortcuts';
 import styles from './Automations.module.css';
 
 const TRIGGER_ICON: Readonly<Record<TriggerType, LucideIcon>> = {
   message_received: MessageSquare,
+  conversation_started: MessageSquarePlus,
   new_customer: UserPlus,
   message_from_ad: Megaphone,
   button_tapped: MousePointerClick,
@@ -81,6 +85,8 @@ export function AutomationsList({ automations }: { readonly automations: readonl
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<readonly Automation[] | null>(null);
+  /** Pausing the setup route waits here for its confirmation. */
+  const [pausing, setPausing] = useState<readonly Automation[] | null>(null);
   const router = useRouter();
 
   const ids = items.map((a) => a.id);
@@ -109,6 +115,13 @@ export function AutomationsList({ automations }: { readonly automations: readonl
 
   /** Turn on or pause each - one route call apiece, each refusal said on its own row. */
   const setEach = async (targets: readonly Automation[], on: boolean) => {
+    if (!on && targets.some((a) => a.status === 'live' && a.origin === 'setup')) {
+      setPausing(targets);
+      return;
+    }
+    await setEachNow(targets, on);
+  };
+  const setEachNow = async (targets: readonly Automation[], on: boolean) => {
     const todo = targets.filter((a) => (a.status === 'live') !== on);
     setBusy(new Set(todo.map((a) => a.id)));
     for (const target of todo) {
@@ -242,9 +255,23 @@ export function AutomationsList({ automations }: { readonly automations: readonl
         {selected.size > 0 ? `${t('listSelect.selected', { count: selected.size })} · ` : ''}
         {t('listSelect.hint', { mod: modLabel() })}
       </p>
+      {pausing ? (
+        <PauseSetupRoute
+          name={shownName(
+            pausing.find((a) => a.origin === 'setup')!,
+            routeNames(t),
+          )}
+          onClose={() => setPausing(null)}
+          onPause={() => {
+            const targets = pausing;
+            setPausing(null);
+            void setEachNow(targets, false);
+          }}
+        />
+      ) : null}
       {deleting ? (
         <DeleteAutomation
-          targets={deleting.map((a) => ({ id: a.id, name: a.name }))}
+          targets={deleting.map((a) => ({ id: a.id, name: shownName(a, routeNames(t)) }))}
           onClose={() => setDeleting(null)}
           onDeleted={(gone) => {
             setItems((now) => now.filter((a) => !gone.includes(a.id)));
@@ -345,6 +372,7 @@ function Row({
         ? t(`issues.${issue.code}` as 'issues.no_steps')
         : issue.message || t('cantGoLiveUnknown');
 
+  const name = shownName(automation, routeNames(t));
   const lastRun = automation.stats.lastRunAt;
 
   return (
@@ -360,9 +388,20 @@ function Row({
     >
       <span className={styles.when} role="cell">
         <Mark trigger={trigger} channel={channels.length === 1 ? channels[0]! : null} />
-        <Link href={href} className={styles.name} data-testid={`automation-open-${automation.id}`}>
-          <bdi dir="auto">{automation.name}</bdi>
-        </Link>
+        <span className={styles.named}>
+          <Link
+            href={href}
+            className={styles.name}
+            data-testid={`automation-open-${automation.id}`}
+          >
+            <bdi dir="auto">{name}</bdi>
+          </Link>
+          {automation.origin === 'setup' ? (
+            <span className={styles.origin} data-testid={`automation-origin-${automation.id}`}>
+              {t('origin.setup')}
+            </span>
+          ) : null}
+        </span>
       </span>
       <span className={styles.flow} role="cell" data-testid={`automation-path-${automation.id}`}>
         {automation.path.map((step, i) => {
@@ -380,6 +419,24 @@ function Row({
                 ) : (
                   <bdi dir="auto">{step.label}</bdi>
                 )}
+                {/*
+                  ★★ WHO IT HANDS TO, ON THE ROW (F2, Omer, 2026-11-09): the
+                    setup route read "Hand to AI employee" and named nobody.
+                */}
+                {step.target ? (
+                  <span data-testid={`automation-target-${automation.id}-${step.nodeId}`}>
+                    {' · '}
+                    {step.target.name !== null ? (
+                      <bdi dir="auto">{step.target.name}</bdi>
+                    ) : step.target.kind === 'team' && step.target.id === null ? (
+                      t('builder.card.anyTeam')
+                    ) : step.target.id === null ? (
+                      t('builder.card.empty')
+                    ) : (
+                      t('inspector.notListed')
+                    )}
+                  </span>
+                ) : null}
               </span>
             </span>
           );
@@ -417,9 +474,7 @@ function Row({
           className={styles.switch}
           checked={live}
           disabled={pending}
-          aria-label={
-            live ? t('pause', { name: automation.name }) : t('activate', { name: automation.name })
-          }
+          aria-label={live ? t('pause', { name }) : t('activate', { name })}
           onChange={(e) => onToggle(e.target.checked)}
           data-testid={`automation-switch-${automation.id}`}
         />
@@ -428,7 +483,7 @@ function Row({
             <button
               type="button"
               className={styles.more}
-              aria-label={t('rowMore', { name: automation.name })}
+              aria-label={t('rowMore', { name })}
               data-testid={`automation-more-${automation.id}`}
             >
               <MoreHorizontal size={14} aria-hidden="true" />
@@ -473,7 +528,12 @@ function Mark({
   readonly trigger: TriggerType | null;
   readonly channel: string | null;
 }) {
-  if (channel && (trigger === 'message_received' || trigger === 'new_customer')) {
+  if (
+    channel &&
+    (trigger === 'message_received' ||
+      trigger === 'conversation_started' ||
+      trigger === 'new_customer')
+  ) {
     /*
      * The shared plate (28) in the trigger tile's 30px slot, so a channel
      * row's name lines up with a trigger row's. Decorative, as the tile was:

@@ -6,7 +6,12 @@ import { currentUserSchema } from '@/api/contracts/identity';
 import { authEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
-import { mayPreviewOnboarding, workspaceRoute, type WorkspaceRoute } from './workspace-gate';
+import {
+  consoleOnly,
+  mayPreviewOnboarding,
+  workspaceRoute,
+  type WorkspaceRoute,
+} from './workspace-gate';
 
 export { paymentPath } from '@/api/client/payment-path';
 
@@ -32,6 +37,8 @@ export async function readWorkspaceGate(): Promise<{
    * (2026-10-11). `/api/auth/me` names the tenant the token acts in.
    */
   readonly tenantId: string | null;
+  /** A system admin of a tenant not live: the console, and nothing else. */
+  readonly consoleOnly: boolean;
 }> {
   try {
     const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
@@ -41,12 +48,25 @@ export async function readWorkspaceGate(): Promise<{
       setupAdmin: me.setupAdmin?.name?.trim() || null,
       mayPreview: mayPreviewOnboarding(who),
       tenantId: me.user.tenantId || null,
+      consoleOnly: consoleOnly(who),
     };
   } catch (cause) {
     if (isApiError(cause) && cause.status === 401) {
-      return { route: 'signed_out', setupAdmin: null, mayPreview: false, tenantId: null };
+      return {
+        route: 'signed_out',
+        setupAdmin: null,
+        mayPreview: false,
+        tenantId: null,
+        consoleOnly: false,
+      };
     }
     logger.warn('gate.me_failed', { status: isApiError(cause) ? cause.status : undefined });
-    return { route: 'unavailable', setupAdmin: null, mayPreview: false, tenantId: null };
+    return {
+      route: 'unavailable',
+      setupAdmin: null,
+      mayPreview: false,
+      tenantId: null,
+      consoleOnly: false,
+    };
   }
 }

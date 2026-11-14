@@ -106,6 +106,56 @@ describe('★★ it never says "sent"', () => {
     expect(screen.queryByText(/\bsent\b/i)).toBeNull();
   });
 
+  // The phone says it with the tick inside the bubble; the note stayed under its composer (dev walk, 2026-11-03).
+  it('the phone keeps no "queued" line under its composer', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    await user.type(screen.getByTestId('composer-body'), 'On its way today');
+    await user.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(sent).toHaveBeenCalled());
+    expect(screen.queryByTestId('composer-queued')).toBeNull();
+  });
+
+  // Omer, 2026-11-03: on the phone Enter goes down a line; the button sends.
+  it('★ on the phone Enter is a new line, not a send', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    const box = screen.getByTestId('composer-body');
+    await user.type(box, 'one{Enter}two');
+    expect(box).toHaveValue('one\ntwo');
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  // One "+" beside the pill, opening photos, camera and files.
+  it('the phone has one "+" that opens photos, camera and files', async () => {
+    const user = userEvent.setup();
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByTestId('composer-attach-file')).toBeNull();
+    expect(screen.queryByTestId('composer-attach-sheet')).toBeNull();
+    await user.click(screen.getByTestId('composer-attach'));
+    expect(screen.getByTestId('composer-attach-image')).toHaveTextContent('Photos');
+    expect(screen.getByTestId('composer-attach-camera')).toHaveTextContent('Camera');
+    expect(screen.getByTestId('composer-attach-file')).toHaveTextContent('Files');
+    expect(screen.getByTestId('composer-camera-input')).toHaveAttribute('capture', 'environment');
+    const picked = vi.fn();
+    screen.getByTestId('composer-camera-input').addEventListener('click', picked);
+    await user.click(screen.getByTestId('composer-attach-camera'));
+    expect(picked).toHaveBeenCalled();
+    expect(screen.queryByTestId('composer-attach-sheet')).toBeNull();
+  });
+
   it('★★ the button names the outward action, not a save', async () => {
     show();
     expect(screen.getByTestId('composer-send')).toHaveTextContent(/send to the customer/i);
@@ -124,20 +174,95 @@ describe('★★ it never says "sent"', () => {
   });
 });
 
-describe('★★ what it refuses to do', () => {
-  it('★★ Enter makes a new line and does NOT send', async () => {
-    /*
-     * The approvals screen refuses a one-keypress irreversible action because
-     * this platform has no undo. The same argument applies here and more so:
-     * Enter is the key a person presses to start a new line.
-     */
+describe('★★ Enter sends, Shift+Enter is a new line (Omer, 2026-10-26)', () => {
+  it('★★ Enter sends what is in the box, as the button would', async () => {
     const user = userEvent.setup();
     show();
-    await user.type(screen.getByTestId('composer-body'), 'First line{Enter}second line');
+    await user.type(screen.getByTestId('composer-body'), 'On its way{Enter}');
+    await waitFor(() => expect(sent).toHaveBeenCalledWith('c1', 'On its way', undefined));
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('composer-queued')).toBeInTheDocument();
+  });
+
+  it('★★ Shift+Enter makes a new line and does NOT send', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.type(
+      screen.getByTestId('composer-body'),
+      'First line{Shift>}{Enter}{/Shift}second line',
+    );
     expect(sent).not.toHaveBeenCalled();
     expect(screen.getByTestId('composer-body')).toHaveValue('First line\nsecond line');
   });
 
+  it('★★ an Enter that confirms an IME candidate sends nothing (isComposing, and keyCode 229)', () => {
+    show();
+    const box = screen.getByTestId('composer-body');
+    fireEvent.change(box, { target: { value: 'שלום' } });
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 });
+    expect(sent).not.toHaveBeenCalled();
+    expect(box).toHaveValue('שלום');
+  });
+
+  it('★★ Enter on an empty or whitespace box sends nothing', async () => {
+    const user = userEvent.setup();
+    show();
+    const box = screen.getByTestId('composer-body');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await user.type(box, '   {Enter}');
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('★★ Enter while a send is in flight does not send again', async () => {
+    const user = userEvent.setup();
+    sent.mockImplementation(() => new Promise(() => {}));
+    show();
+    const box = screen.getByTestId('composer-body');
+    await user.type(box, 'Hi{Enter}');
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(sent).toHaveBeenCalledTimes(1);
+  });
+
+  it('★★ Enter past the reply window sends nothing, though the draft is there', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer
+          conversationId="c1"
+          channelName="WhatsApp"
+          replyWindow={{ channel: 'WHATSAPP', open: false, closesAt: null, mode: 'template_only' }}
+        />
+      </NextIntlClientProvider>,
+    );
+    const box = screen.getByTestId('composer-body');
+    expect(box).toBeDisabled();
+    // The key reaches the box anyway: the form's own guard is what refuses it.
+    fireEvent.change(box, { target: { value: 'kept draft' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(sent).not.toHaveBeenCalled();
+  });
+
+  it('★★ Enter with a file and a quoted reply sends nothing, as the button would not', async () => {
+    const user = userEvent.setup();
+    show();
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('gotcha:reply-to', { detail: { id: 'm1', who: 'Dana', preview: 'Hi' } }),
+      );
+    });
+    await user.upload(
+      screen.getByTestId('composer-file-input'),
+      new File(['x'], 'a.pdf', { type: 'application/pdf' }),
+    );
+    expect(screen.getByTestId('composer-send')).toBeDisabled();
+    fireEvent.keyDown(screen.getByTestId('composer-body'), { key: 'Enter' });
+    expect(sent).not.toHaveBeenCalled();
+    expect(media).not.toHaveBeenCalled();
+  });
+});
+
+describe('★★ what it refuses to do', () => {
   it('★★ an empty box cannot be sent, and neither can whitespace', async () => {
     const user = userEvent.setup();
     show();
@@ -345,6 +470,45 @@ describe('★★ 02’s bar - the four controls that have a backend', () => {
     expect(screen.getByTestId('composer-file-0')).toHaveTextContent('receipt.png');
     expect(media).not.toHaveBeenCalled();
     // A file alone is something to send.
+    expect(screen.getByTestId('composer-send')).toBeEnabled();
+  });
+
+  // Omer, 2026-11-04: nothing chosen on the phone could be sent. A real
+  // browser's FileList is LIVE: clearing the input's value empties it.
+  it('⚠⚠ a pick is held even though the input clears itself right after', () => {
+    show();
+    const input = screen.getByTestId('composer-image-input') as HTMLInputElement;
+    const live: File[] = [];
+    const list = {
+      get length() {
+        return live.length;
+      },
+      item: (i: number) => live[i] ?? null,
+      [Symbol.iterator]: () => live[Symbol.iterator](),
+    };
+    Object.defineProperty(input, 'files', { configurable: true, get: () => list });
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: () => (live.length ? 'picked' : ''),
+      set: () => {
+        live.length = 0;
+      },
+    });
+    const pick = (name: string) => {
+      live.push(new File(['x'], name, { type: 'image/png' }));
+      fireEvent.change(input);
+    };
+    /*
+     * Two picks before React renders: the second one's update cannot be
+     * computed eagerly, so an updater that reads the list reads it emptied -
+     * what a phone with other work pending does on every pick.
+     */
+    act(() => {
+      pick('one.png');
+      pick('two.png');
+    });
+    expect(screen.getByTestId('composer-file-0')).toHaveTextContent('one.png');
+    expect(screen.getByTestId('composer-file-1')).toHaveTextContent('two.png');
     expect(screen.getByTestId('composer-send')).toBeEnabled();
   });
 

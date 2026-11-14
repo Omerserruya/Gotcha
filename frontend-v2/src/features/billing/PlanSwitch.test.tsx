@@ -54,7 +54,7 @@ describe('★★ 17b live - the server’s exact figure, and only that figure is
     await open();
     expect(previewPlanChange).toHaveBeenCalledWith('ai_voice');
     const box = screen.getByTestId('switch-button-confirm');
-    expect(box).toHaveTextContent('charges ₪130.24 now, including VAT (₪19.87)');
+    expect(box).toHaveTextContent('charges ₪130.24 now for GOTCHA Core, including VAT (₪19.87)');
     expect(box).toHaveTextContent('Then $1,499.00 a month.');
     expect(screen.getByTestId('switch-button-yes')).toHaveTextContent('Yes, charge ₪130.24');
     expect(changePlanTo).not.toHaveBeenCalled();
@@ -109,16 +109,36 @@ describe('★★ 17b live - the server’s exact figure, and only that figure is
     expect(screen.getByTestId('switch-retry')).toBeInTheDocument();
   });
 
-  it('no card on file: said, and no Yes', async () => {
+  it("no card on file: GOTCHA Core's missing card, said, and no Yes", async () => {
     previewPlanChange.mockResolvedValue({
       ok: true,
       preview: preview({ hasPaymentMethod: false }),
     });
     await open();
     expect(screen.getByTestId('switch-button-confirm')).toHaveTextContent(
-      "there's no card on file",
+      'This would charge GOTCHA Core now, and GOTCHA Core has no card on file. Add a card for GOTCHA Core first.',
     );
     expect(screen.queryByTestId('switch-button-yes')).toBeNull();
+  });
+
+  it('paymentMethodRequired (split billing preview) is the same Core-only no-card, and no Yes', async () => {
+    previewPlanChange.mockResolvedValue({
+      ok: true,
+      preview: preview({ hasPaymentMethod: null, paymentMethodRequired: true }),
+    });
+    await open();
+    expect(screen.getByTestId('switch-button-confirm')).toHaveTextContent(
+      'GOTCHA Core has no card on file',
+    );
+    expect(screen.queryByTestId('switch-button-yes')).toBeNull();
+  });
+
+  it('★★ the confirm says it changes GOTCHA Core only (132211)', async () => {
+    previewPlanChange.mockResolvedValue({ ok: true, preview: preview({}) });
+    await open();
+    expect(screen.getByTestId('switch-core-only')).toHaveTextContent(
+      'This changes GOTCHA Core only. It does not include the Shopify Connector.',
+    );
   });
 
   it('refused by tax (no billing country): said, and no Yes', async () => {

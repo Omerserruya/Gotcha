@@ -223,27 +223,6 @@ function pathOf(url: string | null): string | null {
 }
 
 /**
- * How far a read is, from its phase alone - the route reports no finer
- * progress. `null` before it has started.
- */
-export function readProgress(discovery: Discovery | null): number | null {
-  if (!discovery || discovery.status === 'PENDING') return null;
-  if (discovery.status === 'COMPLETE') return 1;
-  switch (discovery.scanPhase) {
-    case 'homepage':
-      return 0.15;
-    case 'pages':
-      return 0.45;
-    case 'synthesis':
-      return 0.8;
-    case 'done':
-      return 1;
-    default:
-      return discovery.status === 'SCANNING' ? 0.1 : null;
-  }
-}
-
-/**
  * Languages as 00d's chip says them: "Hebrew and English", never "he". A
  * code goes through `Intl.DisplayNames`; a name stays as written.
  */

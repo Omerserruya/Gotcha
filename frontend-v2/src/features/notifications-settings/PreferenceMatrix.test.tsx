@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { notificationPreferencesSchema } from '@/api/contracts/notifications';
+import consoleMessages from '@/i18n/messages/en/console.json';
 import messages from '@/i18n/messages/en/notifications-settings.json';
 
 vi.mock('next-intl/server', () => ({
@@ -29,11 +30,17 @@ vi.mock('@/i18n/navigation', () => ({
 const save = vi.hoisted(() => vi.fn());
 const saveQuiet = vi.hoisted(() => vi.fn());
 const saveEvent = vi.hoisted(() => vi.fn());
+const whatsapp = vi.hoisted(() => ({ send: vi.fn(), confirm: vi.fn(), remove: vi.fn() }));
 vi.mock('./preference-actions', () => ({
   savePreferenceSwitch: save,
   saveQuietHours: saveQuiet,
   saveEventChannel: saveEvent,
+  sendWhatsAppCode: whatsapp.send,
+  confirmWhatsAppCode: whatsapp.confirm,
+  removeWhatsAppNumber: whatsapp.remove,
 }));
+
+import { SupportProvider } from '@/support/support-context';
 
 import { PreferenceMatrix } from './PreferenceMatrix';
 
@@ -60,7 +67,6 @@ describe('★ 15 - "Tell me when" × the channels', () => {
       await PreferenceMatrix({
         preferences: prefs({ approvals: false }),
         volume: null,
-        whatsappDestination: null,
       }),
     );
     expect(screen.getByTestId('pref-campaign-inApp')).toHaveAttribute('data-on', 'yes');
@@ -70,17 +76,16 @@ describe('★ 15 - "Tell me when" × the channels', () => {
   });
 
   it('★★ a row no event sends is "-", never an "off" switch', async () => {
-    render(
-      await PreferenceMatrix({ preferences: prefs(), volume: null, whatsappDestination: null }),
-    );
+    render(await PreferenceMatrix({ preferences: prefs(), volume: null }));
     const row = screen.getByTestId('pref-row-employeeDown');
     expect(row).toHaveTextContent('Nothing sends this yet');
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(0);
-    expect(row.textContent?.match(/-/g)).toHaveLength(3);
+    // In app and email: WhatsApp's column is drawn only where it is available.
+    expect(row.textContent?.match(/-/g)).toHaveLength(2);
   });
 
   it('⚠ a failed preferences read is "-" everywhere, not every switch off', async () => {
-    render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
+    render(await PreferenceMatrix({ preferences: null, volume: null }));
     expect(screen.queryByTestId('pref-campaign-inApp')).toBeNull();
     expect(screen.getByTestId('pref-quiet')).toHaveTextContent('-');
   });
@@ -88,13 +93,16 @@ describe('★ 15 - "Tell me when" × the channels', () => {
   it('the cards: the window, where WhatsApp goes, and how many - "at least" when it is', async () => {
     render(
       await PreferenceMatrix({
-        preferences: prefs({ quietHours: { from: '21:00', to: '08:00' } }),
+        preferences: prefs({
+          quietHours: { from: '21:00', to: '08:00' },
+          whatsappAvailable: true,
+          whatsappPhone: '+972542208814',
+        }),
         volume: { count: 42, days: 7, atLeast: true, perDay: 6 },
-        whatsappDestination: '+972 54 220 8814',
       }),
     );
     expect(screen.getByTestId('pref-quiet')).toHaveTextContent('21:00 - 08:00');
-    expect(screen.getByTestId('pref-whatsapp')).toHaveTextContent('+972 54 220 8814');
+    expect(screen.getByTestId('pref-whatsapp')).toHaveTextContent('+972542208814');
     expect(screen.getByTestId('pref-volume')).toHaveTextContent('You get at least 6 a day');
   });
 });
@@ -112,7 +120,6 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
       await PreferenceMatrix({
         preferences: prefs(),
         volume: volume(0),
-        whatsappDestination: null,
       }),
     );
     const card = screen.getByTestId('pref-volume');
@@ -125,16 +132,13 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
       await PreferenceMatrix({
         preferences: prefs(),
         volume: volume(42),
-        whatsappDestination: null,
       }),
     );
     expect(screen.getByTestId('pref-volume')).toHaveTextContent('You get about 6 a day');
   });
 
   it('02’s line under a live event; a dead one keeps "Nothing sends this yet"', async () => {
-    render(
-      await PreferenceMatrix({ preferences: prefs(), volume: null, whatsappDestination: null }),
-    );
+    render(await PreferenceMatrix({ preferences: prefs(), volume: null }));
     expect(screen.getByTestId('pref-about-systemDown')).toHaveTextContent('Shopify, CRM, returns');
     // No count behind approvals, so no "3 so far today".
     expect(screen.getByTestId('pref-row-approval')).not.toHaveTextContent(/today/);
@@ -147,9 +151,7 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
   });
 
   it('the foot leads to the workspace’s rules', async () => {
-    render(
-      await PreferenceMatrix({ preferences: prefs(), volume: null, whatsappDestination: null }),
-    );
+    render(await PreferenceMatrix({ preferences: prefs(), volume: null }));
     expect(screen.getByTestId('pref-rules-link')).toHaveAttribute(
       'href',
       '/settings/notifications/rules',
@@ -158,15 +160,11 @@ describe('★ 15 corrections (measurement of 204d715)', () => {
 });
 
 describe('★★ 15 - the switches the platform has: a channel for everything, and approvals', () => {
-  const show = async (
-    over: Record<string, unknown> = {},
-    number: string | null = '+972 54 220 8814',
-  ) =>
+  const show = async (over: Record<string, unknown> = {}) =>
     render(
       await PreferenceMatrix({
         preferences: prefs(over),
         volume: null,
-        whatsappDestination: number,
       }),
     );
 
@@ -214,25 +212,58 @@ describe('★★ 15 - the switches the platform has: a channel for everything, a
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('★ WhatsApp alerts to a person do not exist: a status, with or without a number - its cells "-"', async () => {
-    for (const [stored, number] of [
-      [true, '+972 54 220 8814'],
-      [false, null],
-    ] as const) {
-      const { unmount } = await show({ whatsapp: stored }, number);
+  it('★★ WhatsApp where the deployment has no number to send from: no column, no card - never a switch that sends nothing', async () => {
+    for (const over of [{}, { whatsappAvailable: false, whatsappPhone: '+972542208814' }]) {
+      const { unmount } = await show(over);
+      expect(screen.queryByText('WhatsApp')).toBeNull();
       expect(screen.queryByTestId('pref-switch-whatsapp')).toBeNull();
-      const status = screen.getByTestId('pref-switch-whatsapp-unavailable');
-      expect(status).toHaveAttribute('aria-disabled', 'true');
-      expect(status).toHaveTextContent('Not available yet');
-      // Never a mark saying WhatsApp reaches you.
-      expect(screen.queryByTestId('pref-campaign-whatsapp')).toBeNull();
-      expect(screen.getByTestId('pref-row-campaign')).toHaveTextContent('-');
+      expect(screen.queryByTestId('pref-whatsapp')).toBeNull();
       unmount();
     }
   });
 
+  it('★★ available, no number of yours yet: its head says to add one - no switch to press', async () => {
+    await show({ whatsappAvailable: true, whatsapp: false });
+    expect(screen.queryByTestId('pref-switch-whatsapp')).toBeNull();
+    expect(screen.getByTestId('pref-switch-whatsapp-no-number')).toHaveTextContent(
+      'Add your number',
+    );
+    expect(screen.getByTestId('pref-whatsapp-value')).toHaveTextContent('No number set');
+  });
+
+  it('★★ a confirmed number: the head switch, and each event with a template its own switch', async () => {
+    saveEvent.mockResolvedValue({ ok: true });
+    await show({
+      whatsappAvailable: true,
+      whatsapp: true,
+      whatsappPhone: '+972542208814',
+      eventTypes: [
+        {
+          type: 'broadcast.completed',
+          label: 'x',
+          group: 'x',
+          channels: ['in_app', 'whatsapp'],
+        },
+        { type: 'conversation.assigned', label: 'x', group: 'x', channels: ['in_app'] },
+      ],
+      events: { 'broadcast.completed': { whatsapp: true } },
+    });
+    expect(screen.getByTestId('pref-switch-whatsapp')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('pref-campaign-whatsapp-switch')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // No WhatsApp message for this one: a quiet "-", saying why.
+    expect(screen.getByTestId('pref-assigned-whatsapp-none')).toHaveAttribute(
+      'title',
+      'Not sent by WhatsApp - this one has no WhatsApp message',
+    );
+    await act(async () => fireEvent.click(screen.getByTestId('pref-campaign-whatsapp-switch')));
+    expect(saveEvent).toHaveBeenCalledWith('broadcast.completed', 'whatsapp', false);
+  });
+
   it('preferences not read: no switches at all - never a guess to save over', async () => {
-    render(await PreferenceMatrix({ preferences: null, volume: null, whatsappDestination: null }));
+    render(await PreferenceMatrix({ preferences: null, volume: null }));
     /*
      * None of the person's switches. This device's two (sound, desktop) stay:
      * they are kept in the browser and save nothing to the platform, so an
@@ -254,7 +285,6 @@ describe('★★ quiet hours, edited where they are read (notifications 9164a058
       await PreferenceMatrix({
         preferences: prefs({ quietHours }),
         volume: null,
-        whatsappDestination: null,
       }),
     );
 
@@ -339,7 +369,7 @@ describe('★★ per event, per channel - the platform keeps it now (notificatio
       ...over,
     });
   const show = async (p: ReturnType<typeof prefs>) =>
-    render(await PreferenceMatrix({ preferences: p, volume: null, whatsappDestination: null }));
+    render(await PreferenceMatrix({ preferences: p, volume: null }));
 
   it('★★ a channel that reaches the person is that row’s own switch, in its stored state', async () => {
     await show(matrix());
@@ -367,6 +397,28 @@ describe('★★ per event, per channel - the platform keeps it now (notificatio
       'title',
       "Doesn't reach you in the app in this workspace",
     );
+  });
+
+  it('★ a customer waiting (Backend 2ac65631): its own row, its own switch where it reaches you', async () => {
+    saveEvent.mockResolvedValue({ ok: true });
+    await show(
+      matrix({
+        eventTypes: [
+          {
+            type: 'conversation.waiting',
+            label: 'A customer is waiting for a reply',
+            group: 'operations',
+            channels: ['in_app', 'email'],
+          },
+        ],
+        events: {},
+      }),
+    );
+    expect(screen.getByTestId('pref-row-waiting')).toHaveTextContent(
+      'A customer is waiting for a reply',
+    );
+    await act(async () => fireEvent.click(screen.getByTestId('pref-waiting-inApp-switch')));
+    expect(saveEvent).toHaveBeenCalledWith('conversation.waiting', 'inApp', false);
   });
 
   it('★ pressing it writes that event on that channel, and the page reads again', async () => {
@@ -400,5 +452,28 @@ describe('★★ per event, per channel - the platform keeps it now (notificatio
     await show(prefs({ email: true }));
     expect(screen.getByTestId('pref-campaign-email')).toHaveAttribute('data-on', 'yes');
     expect(screen.queryByTestId('pref-campaign-email-switch')).toBeNull();
+  });
+});
+
+describe("★★ support mode: these are the support actor's own, so nothing here is offered", () => {
+  it('the matrix, quiet hours and the WhatsApp number drawn refused - still read', async () => {
+    const ui = await PreferenceMatrix({
+      preferences: prefs({ whatsappAvailable: true, whatsappPhone: '+972541234567' }),
+      volume: null,
+    });
+    rtlRender(
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ 'notifications-settings': messages, console: consoleMessages }}
+      >
+        <SupportProvider session={{ tenantName: 'A', reason: null, endsAt: null }}>
+          {ui}
+        </SupportProvider>
+      </NextIntlClientProvider>,
+    );
+    for (const id of ['pref-switch-email', 'pref-quiet-edit', 'pref-whatsapp-remove']) {
+      expect(screen.getByTestId(id).closest('[inert]'), id).not.toBeNull();
+    }
+    expect(screen.getByTestId('pref-whatsapp-value')).toHaveTextContent('+972541234567');
   });
 });

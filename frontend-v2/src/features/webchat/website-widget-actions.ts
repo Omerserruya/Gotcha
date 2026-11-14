@@ -15,16 +15,24 @@ import {
   type WidgetSettings,
 } from '@/api/contracts/website-widget';
 import { channelEndpoints } from '@/api/endpoints/registry';
+import { connectWebChat } from '@/features/channels/actions';
 import { logger } from '@/observability/logger';
 
 export type WidgetSave =
   | { readonly ok: true; readonly settings: WidgetSettings }
-  /** `nowhere`: no place exists yet (409 WIDGET_NOT_CREATED) - the code is created first. */
-  | { readonly ok: false; readonly reason: 'nowhere' | 'failed' }
+  /**
+   * No place existed (409 WIDGET_NOT_CREATED) and the web chat could not be
+   * created for it: `nowhereLimit` the plan has no room, `nowhereForbidden`
+   * no permission to add a channel, `nowhere` anything else.
+   */
+  | { readonly ok: false; readonly reason: 'nowhere' | 'nowhereLimit' | 'nowhereForbidden' }
+  | { readonly ok: false; readonly reason: 'failed' }
   /** 422 WHATSAPP_NUMBER_NOT_FOUND: the number is not one of this workspace's (stage B). */
   | { readonly ok: false; readonly reason: 'number' }
   /** 422 WHATSAPP_KIND_NEEDS_NUMBER: a WhatsApp widget needs a number that can take it (W1). */
   | { readonly ok: false; readonly reason: 'kindNumber' }
+  /** 422 WHATSAPP_PHONE_INVALID (`ux.whatsapp.phone`): the typed number is not a phone number. */
+  | { readonly ok: false; readonly reason: 'phone' }
   /** 400 COUPON_PERSONAL: a customer's own coupon cannot be a widget deal (Backend bd1fe183). */
   | { readonly ok: false; readonly reason: 'couponPersonal' };
 
@@ -33,20 +41,47 @@ export type WidgetSave =
  * is what the route kept - it normalises (a colour that is not hex, an
  * address that is not https) - so the screen shows the stored value.
  *
- * PUT never creates a place (Backend, 2026-10-07): with none it answers 409
- * `WIDGET_NOT_CREATED`, which is "nothing to save to yet", not a failure.
+ * PUT never created a place (Backend, 2026-10-07): with none it answers 409
+ * `WIDGET_NOT_CREATED`. ★ The first save creates it (Omer, 2026-11-01: 21
+ * saves refused in a row while the preview showed every one): the web chat's
+ * own create - idempotent, and it owns the plan's channel limit, as "Get the
+ * code" uses it - and then the same save once more. A create that is refused
+ * says why; nothing is ever kept only in the preview without saying so.
  */
 export async function saveWebsiteWidget(
   settings: WidgetSettings,
   stageB = false,
 ): Promise<WidgetSave> {
-  try {
-    const answer = await serverApi().put({
+  const write = () =>
+    serverApi().put({
       endpoint: channelEndpoints.websiteWidget(),
       body: bodyOfWidget(settings, { stageB }),
       payload: websiteWidgetSchema,
       raw: true,
     });
+  try {
+    let answer;
+    try {
+      answer = await write();
+    } catch (cause) {
+      await signInIfSignedOut(cause);
+      if (!(isApiError(cause) && cause.status === 409 && cause.code === 'WIDGET_NOT_CREATED')) {
+        throw cause;
+      }
+      const made = await connectWebChat('');
+      if (!made.ok && made.reason !== 'duplicate') {
+        return {
+          ok: false,
+          reason:
+            made.reason === 'limit'
+              ? 'nowhereLimit'
+              : made.reason === 'forbidden'
+                ? 'nowhereForbidden'
+                : 'nowhere',
+        };
+      }
+      answer = await write();
+    }
     revalidatePath('/[locale]/settings/channels', 'layout');
     return { ok: true, settings: answer.data.settings };
   } catch (cause) {
@@ -62,6 +97,9 @@ export async function saveWebsiteWidget(
     }
     if (isApiError(cause) && cause.code === 'WHATSAPP_NUMBER_NOT_FOUND') {
       return { ok: false, reason: 'number' };
+    }
+    if (isApiError(cause) && cause.code === 'WHATSAPP_PHONE_INVALID') {
+      return { ok: false, reason: 'phone' };
     }
     logger.warn('website_widget.save_failed', {
       status: isApiError(cause) ? cause.status : undefined,

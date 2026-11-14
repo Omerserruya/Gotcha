@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push Notifications capability. Xcode switches this to "production" in an
+	     App Store / TestFlight archive when the provisioning profile says so. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Universal links. Live only once /.well-known/apple-app-site-association is
+	     served on each host (template: mobile/docs/apple-app-site-association). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:app.gotcha.co.il</string>
+		<string>applinks:dev.gotcha.co.il</string>
+	</array>
+</dict>
+</plist>

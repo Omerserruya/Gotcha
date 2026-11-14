@@ -21,6 +21,8 @@ import { plainDashes } from '@/lib/plain-dashes';
 /** Every trigger the route knows (`TRIGGER_TYPES`). */
 export const TRIGGER_TYPES = [
   'message_received',
+  /** Once, before anyone answers (Backend d574d1de): who answers a new conversation. */
+  'conversation_started',
   'new_customer',
   'message_from_ad',
   'button_tapped',
@@ -93,6 +95,21 @@ export const pathStepSchema = z.looseObject({
   type: z.string(),
   /** The author's `data.label`, else the route's ENGLISH catalogue name. */
   label: z.string().catch(''),
+  /**
+   * Who the step hands to (Backend 36cd836b, F2): on `hand_to_ai` and
+   * `run_skill` the AI employee, on `assign` the person or team; ABSENT on
+   * every other step. `name` is null when the id is unset or no longer in the
+   * tenant; a team `id` of null is the general queue. Tolerant: a target this
+   * screen cannot read is no target, never a list that fails to parse.
+   */
+  target: z
+    .object({
+      kind: z.enum(['ai', 'person', 'team']),
+      id: z.string().nullable().catch(null),
+      name: z.string().nullable().catch(null),
+    })
+    .optional()
+    .catch(undefined),
 });
 export type PathStep = z.infer<typeof pathStepSchema>;
 
@@ -136,6 +153,11 @@ export const automationSchema = z.looseObject({
       lastRunStatus: z.enum(RUN_STATUSES).nullable().catch(null).default(null),
     })
     .catch({ runsThisWeek: 0, lastRunAt: null, lastRunStatus: null }),
+  /**
+   * `setup`: onboarding wrote it - the route that answers every channel.
+   * Kept by the route across saves; any other value is not ours to name.
+   */
+  origin: z.enum(['setup']).nullable().catch(null).default(null),
   /** Sent back as `expectedUpdatedAt`: a stale save is a 409. */
   updatedAt: z.string(),
   createdAt: text,
@@ -176,6 +198,8 @@ export const ISSUE_CODES = [
   'via_mismatch',
   'unreachable_same_channel',
   'unreachable_only_on_first_send',
+  // B3 (Backend): a warning, never a refusal - a branch no line leaves.
+  'branch_unconnected',
 ] as const;
 
 export const issueSchema = z.looseObject({
@@ -313,6 +337,7 @@ export type Catalog = z.infer<typeof catalogSchema>['data'];
  */
 export const CATALOG_NAMES: Readonly<Record<string, string>> = {
   'trigger:message_received': 'Message received',
+  'trigger:conversation_started': 'New conversation',
   'trigger:message_from_ad': 'Message from an ad',
   'trigger:button_tapped': 'Button tapped',
   'trigger:comment_received': 'Comment on a post',

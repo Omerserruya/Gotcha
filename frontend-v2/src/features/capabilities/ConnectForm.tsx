@@ -20,12 +20,28 @@ export function ConnectForm({
   slug,
   name,
   fields,
+  label,
 }: {
   readonly slug: string;
   readonly name: string;
   readonly fields: readonly CredentialField[];
+  /** The button's words, when the caller names the system in them (onboarding). */
+  readonly label?: string;
 }) {
   const t = useTranslations('capabilities.available');
+  const tf = useTranslations('capabilities.fieldLabels');
+  /*
+   * The catalogue's labels are its own English ("API key"). The common ones
+   * are said in the screen's language; any other is shown as the catalogue
+   * wrote it, never guessed.
+   */
+  const labelOf = (label: string) => {
+    const known = label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z]+/g, '_');
+    return tf.has(known) ? tf(known) : label;
+  };
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -64,7 +80,7 @@ export function ConnectForm({
     >
       {fields.map((field) => (
         <label key={field.key} className={styles.connectField}>
-          <span className={styles.connectLabel}>{field.label}</span>
+          <span className={styles.connectLabel}>{labelOf(field.label)}</span>
           {field.type === 'select' ? (
             <select
               className={styles.connectBox}
@@ -101,7 +117,7 @@ export function ConnectForm({
           disabled={!ready || isPending}
           data-testid="connect-submit"
         >
-          {isPending ? t('connecting') : t('connect')}
+          {isPending ? t('connecting') : (label ?? t('connect'))}
         </button>
         {problem ? (
           <span className={styles.connectProblem} role="alert" data-testid="connect-problem">

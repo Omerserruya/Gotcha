@@ -17,6 +17,11 @@ import { Link } from '@/i18n/navigation';
 import styles from './Billing.module.css';
 
 /**
+ * GOTCHA Core - 17's plan, up front and dark, billed by GOTCHA. It never
+ * includes Shopify: the Shopify Connector is its own section, billed and
+ * managed by Shopify (`ConnectorSection`). So the band says who bills it and
+ * what it does not include, beside the plan itself.
+ *
  * 17's plan, up front and dark: what you are on, what it costs, what comes
  * with it, and the two ways out of it - Change plan (17b) and Buy credits
  * (17d).
@@ -35,6 +40,7 @@ export async function PlanHero({
   readonly credits: CreditSummary | null;
 }) {
   const t = await getTranslations('billing.overview');
+  const core = await getTranslations('billing.core');
   const locale = await getLocale();
   const now = new Date();
 
@@ -62,7 +68,12 @@ export async function PlanHero({
     <section className={styles.hero} data-testid="plan-hero">
       <div className={styles.heroMain}>
         <p className={styles.heroTagRow}>
-          <span className={styles.heroTag}>{t('yourPlan')}</span>
+          <span className={styles.heroTag} data-testid="core-tag">
+            {t('yourPlan')}
+          </span>
+          <span className={styles.heroBilled} data-testid="core-billed-by">
+            {core('billedBy')}
+          </span>
           {subscription?.createdAt ? (
             <span className={styles.heroSince} data-testid="plan-since">
               {t('since', {
@@ -123,6 +134,17 @@ export async function PlanHero({
             -
           </p>
         )}
+        {/* Said whatever the plan read: Core never includes Shopify (review 132211). */}
+        {/*
+          Two lines, not one: in Hebrew "Shopify. GOTCHA Core" is one Latin run
+          across the sentence break, and the full stop lands between them.
+        */}
+        <p className={styles.heroScope} data-testid="core-scope">
+          <span className={styles.heroScopeLine}>{core('scope')}</span>
+          <span className={styles.heroScopeLine} data-testid="core-no-shopify">
+            {core('noShopify')}
+          </span>
+        </p>
       </div>
 
       <div className={styles.heroActions}>

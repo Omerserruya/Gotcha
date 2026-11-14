@@ -1,0 +1,190 @@
+@layer shell {
+  /* The workspace gate's closed door (WorkspaceGate.module.css), wider for the flow. */
+  /*
+   * ★ Exactly one screen, never more (dev walk, iPhone 13 at 390x664: the
+   * footer sat 24px below the fold). The card shrinks to what is left and the
+   * frame takes the rest, so the footer is always on screen.
+   */
+  .gate {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+    justify-content: center;
+    block-size: 100dvh;
+    padding: 16px;
+    background-color: var(--copilot-surface);
+    color: var(--frame-text);
+    line-height: normal;
+  }
+
+  .brand {
+    flex: none;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: var(--letter-spacing-brand);
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 820px;
+    min-block-size: 0;
+    inline-size: min(520px, 100%);
+    overflow: clip;
+    border-radius: 16px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .head {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 24px 16px;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  .lead {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .steps li {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .steps li[data-state='todo'] {
+    color: var(--text-muted);
+  }
+
+  .dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border-radius: 50%;
+    background-color: var(--border-subtle);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .steps li[data-state='current'] .dot {
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+  }
+
+  .steps li[data-state='done'] .dot {
+    background-color: var(--intent-calm-text);
+    color: var(--frame-text);
+  }
+
+  /*
+   * ★ The frame gets the card's remaining height (dev walk, desktop: a fixed
+   * 540px opened Authentik's page scrolled, its title cut at the top).
+   */
+  .flow {
+    position: relative;
+    flex: 1 1 auto;
+    min-block-size: 0;
+  }
+
+  .frame {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+  }
+
+  .mask {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--panel-base);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .foot {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    border-block-start: 1px solid var(--border-subtle);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .quiet,
+  .primary {
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .quiet {
+    background: none;
+    color: var(--text-muted);
+  }
+
+  .primary {
+    background-color: var(--text-primary);
+    color: var(--frame-text);
+    font-weight: 600;
+  }
+
+  .primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .srOnly {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

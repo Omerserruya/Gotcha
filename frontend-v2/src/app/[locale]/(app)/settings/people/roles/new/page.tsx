@@ -5,6 +5,7 @@ import { loadRoles } from '@/features/roles/load-roles';
 import { RoleForm } from '@/features/roles/RoleForm';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · People & teams · New role - screen 12c, a page of its own, as
@@ -27,7 +28,9 @@ export default async function Page() {
       {roles === null || catalog === null ? (
         <p data-testid="role-form-unavailable">{t('unavailable')}</p>
       ) : (
-        <RoleForm permissions={catalog.permissions} roles={roles} />
+        <SupportRefused kind="ownership">
+          <RoleForm permissions={catalog.permissions} roles={roles} />
+        </SupportRefused>
       )}
     </SettingsSection>
   );

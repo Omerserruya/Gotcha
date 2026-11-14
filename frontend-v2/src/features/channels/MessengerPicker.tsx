@@ -12,7 +12,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { Button } from '@/design-system/primitives/button/Button';
 import { useRouter } from '@/i18n/navigation';
 
-import { startChannelConnect } from './actions';
+import { startChannelConnect, type ChannelConnectFlow } from './actions';
 import {
   selectMessengerPages,
   type MessengerPagesRead,
@@ -39,8 +39,14 @@ import styles from './Channels.module.css';
  */
 export function MessengerPicker({
   pick,
+  here = '/settings/channels',
+  flow,
 }: {
   readonly pick: { readonly session: string; readonly read: MessengerPagesRead } | null;
+  /** The page it is on, tidied to: 13's list, or onboarding's channels step. */
+  readonly here?: string;
+  /** Where a "connect again" comes back to: 13 when absent. */
+  readonly flow?: ChannelConnectFlow;
 }) {
   const t = useTranslations('channels.pick');
   const tc = useTranslations('channels');
@@ -49,8 +55,8 @@ export function MessengerPicker({
 
   useEffect(() => {
     if (pick === null) return;
-    router.replace('/settings/channels', { scroll: false });
-  }, [pick, router]);
+    router.replace(here, { scroll: false });
+  }, [pick, here, router]);
 
   if (!held) return null;
   const close = () => setHeld(null);
@@ -69,14 +75,14 @@ export function MessengerPicker({
         </button>
       </div>
       {held.read.ok ? (
-        <Choose session={held.session} pages={held.read.pages} onClose={close} />
+        <Choose session={held.session} pages={held.read.pages} onClose={close} flow={flow} />
       ) : (
         <>
           <p className={styles.connectProblem} role="alert" data-testid="messenger-pick-problem">
             {t(`read.${held.read.reason}`)}
           </p>
           {/* No permission is not fixed by signing in to Meta again. */}
-          {held.read.reason === 'forbidden' ? null : <ConnectAgain />}
+          {held.read.reason === 'forbidden' ? null : <ConnectAgain flow={flow} />}
         </>
       )}
     </section>
@@ -87,10 +93,12 @@ function Choose({
   session,
   pages,
   onClose,
+  flow,
 }: {
   readonly session: string;
   readonly pages: readonly MessengerCandidate[];
   readonly onClose: () => void;
+  readonly flow: ChannelConnectFlow | undefined;
 }) {
   const t = useTranslations('channels.pick');
   const router = useRouter();
@@ -102,7 +110,7 @@ function Choose({
 
   const refused = outcome && !outcome.ok ? outcome : null;
   // The session is gone: there is nothing left to choose from.
-  if (refused?.reason === 'expired') return <Refused reason="expired" results={[]} />;
+  if (refused?.reason === 'expired') return <Refused reason="expired" results={[]} flow={flow} />;
 
   const selectable = pages.some((p) => !p.takenElsewhere);
   const toggle = (id: string) =>
@@ -174,7 +182,7 @@ function Choose({
           {t('noneAvailable')}
         </p>
       )}
-      {refused ? <Refused reason={refused.reason} results={refused.results} /> : null}
+      {refused ? <Refused reason={refused.reason} results={refused.results} flow={flow} /> : null}
     </>
   );
 }
@@ -204,9 +212,11 @@ function PageText({
 function Refused({
   reason,
   results,
+  flow,
 }: {
   readonly reason: MessengerSelectRefusal;
   readonly results: readonly MessengerPageResult[];
+  readonly flow: ChannelConnectFlow | undefined;
 }) {
   const t = useTranslations('channels.pick');
   return (
@@ -215,7 +225,7 @@ function Refused({
         {t(`refused.${reason}`)}
       </p>
       {results.length > 0 ? <ResultList results={results} /> : null}
-      {reason === 'expired' || reason === 'unknown_page' ? <ConnectAgain /> : null}
+      {reason === 'expired' || reason === 'unknown_page' ? <ConnectAgain flow={flow} /> : null}
     </>
   );
 }
@@ -270,7 +280,7 @@ function ResultList({ results }: { readonly results: readonly MessengerPageResul
 }
 
 /** A session that is gone is started again where every Messenger connect starts. */
-function ConnectAgain() {
+function ConnectAgain({ flow }: { readonly flow: ChannelConnectFlow | undefined }) {
   const t = useTranslations('channels.pick');
   const tc = useTranslations('channels');
   const [problem, setProblem] = useState<string | null>(null);
@@ -287,7 +297,9 @@ function ConnectAgain() {
           onClick={() =>
             startTransition(async () => {
               setProblem(null);
-              const start = await startChannelConnect('MESSENGER');
+              const start = await (flow
+                ? startChannelConnect('MESSENGER', flow)
+                : startChannelConnect('MESSENGER'));
               if (start.ok) {
                 window.location.assign(start.url);
                 return;

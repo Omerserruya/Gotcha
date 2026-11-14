@@ -12,6 +12,9 @@ import { BuyCredits } from '@/features/billing/BuyCredits';
 import { CreditsSection } from '@/features/billing/Credits';
 import { BillingOverlay } from '@/features/billing/BillingOverlay';
 import { loadBilling } from '@/features/billing/load-billing';
+import { ConnectorSection } from '@/features/billing/ConnectorSection';
+import { loadShopifyConnector } from '@/features/billing/load-connector';
+import { connectorVerdict } from '@/api/contracts/shopify-connector';
 import { CreditPackagesSection } from '@/features/billing/Pricing';
 import {
   BillingCard,
@@ -23,6 +26,7 @@ import {
 import { Link } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · Usage & billing - screen 17.
@@ -43,6 +47,12 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * The conversations allowance ("Conversations this period") is not on 02's
  * screen and is gone from it: on this tenant it said only that the plan does
  * not cap conversations.
+ *
+ * ★★ TWO SUBSCRIPTIONS (Shopify review 132211, Omer 2026-10-28). Everything
+ * above the Connector is GOTCHA Core, billed by GOTCHA. The Shopify Connector
+ * is its own section, billed and managed by Shopify: its state is the
+ * server's snapshot, its button leads to Shopify's page at the server's
+ * address, and it shows no price and no GOTCHA card.
  */
 export default async function Page({
   searchParams,
@@ -51,16 +61,10 @@ export default async function Page({
 }) {
   const t = await getTranslations('billing');
   const panel = (await searchParams)?.panel;
-  const {
-    subscription,
-    plans,
-    invoices,
-    autoPurchase,
-    profile,
-    paymentMethods,
-    credits,
-    packages,
-  } = await loadBilling();
+  const [
+    { subscription, plans, invoices, autoPurchase, profile, paymentMethods, credits, packages },
+    connector,
+  ] = await Promise.all([loadBilling(), loadShopifyConnector()]);
 
   return (
     <SettingsSection title={t('title')} description={t('description')} fill>
@@ -80,27 +84,35 @@ export default async function Page({
         </div>
       </div>
 
+      {/*
+        The second subscription, in its own section: billed and managed by
+        Shopify, never one of Core's cards (Shopify review 132211).
+      */}
+      <ConnectorSection verdict={connectorVerdict(connector)} />
+
       {panel === 'buy' ? (
         <BillingOverlay kind="dialog" title={t('overview.overlay.buy')} line={t('buy.subline')}>
-          <BuyCredits
-            packages={packages}
-            /*
-              `buyCredits()` checks `no_billable_entity` FIRST, so these are
-              the server's own two gates read back in the same order - two
-              booleans, because "nobody to invoice" and "nothing to charge"
-              have different repairs.
-            */
-            billable={profileReading(profile) !== 'no_account'}
-            hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
-            card={paymentMethods?.[0] ?? null}
-            receiptTo={profile?.billingEmail ?? null}
-            /*
-              The purchase is handed to the dialog only where billing may move
-              money (BILLING_WRITES=on, fail closed). Dev's billing is the live
-              payment account: there the pay button is the held status.
-            */
-            charge={billingWritesEnabled() ? buyCreditPack : null}
-          />
+          <SupportRefused kind="billing">
+            <BuyCredits
+              packages={packages}
+              /*
+                `buyCredits()` checks `no_billable_entity` FIRST, so these are
+                the server's own two gates read back in the same order - two
+                booleans, because "nobody to invoice" and "nothing to charge"
+                have different repairs.
+              */
+              billable={profileReading(profile) !== 'no_account'}
+              hasPaymentMethod={paymentMethods !== null && hasSomethingToCharge(paymentMethods)}
+              card={paymentMethods?.[0] ?? null}
+              receiptTo={profile?.billingEmail ?? null}
+              /*
+                The purchase is handed to the dialog only where billing may move
+                money (BILLING_WRITES=on, fail closed). Dev's billing is the live
+                payment account: there the pay button is the held status.
+              */
+              charge={billingWritesEnabled() ? buyCreditPack : null}
+            />
+          </SupportRefused>
           {/*
             Nothing to buy says why - the plan cannot, the shelf is empty, or
             we could not find out - rather than leaving the dialog blank.

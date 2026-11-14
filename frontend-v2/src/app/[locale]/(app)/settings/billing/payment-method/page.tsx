@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { CardReturn } from '@/features/billing/CardReturn';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · Usage & billing · Card - where the payment provider's hosted
@@ -22,7 +23,9 @@ export default async function Page({
       title={t('title')}
       back={{ href: '/settings/billing', label: nav('settings.billing') }}
     >
-      <CardReturn cancelled={cancelled} />
+      <SupportRefused kind="billing">
+        <CardReturn cancelled={cancelled} />
+      </SupportRefused>
     </SettingsSection>
   );
 }

@@ -43,15 +43,19 @@ describe('★ a rejection reason in the reader’s language - when it was one of
 });
 
 describe('★ Hebrew catalogues: a prefix letter never glued to a placeholder', () => {
-  it('ל ב מ ש כ before {…} take a maqaf - "ל־{name}", never "ל{name}"', async () => {
+  // A plural or select may open with a Hebrew word ("לחודש אחד"): each of its branches
+  // carries its own join, so `ל{months, plural, ...}` is not glued (Omer, 2026-10-24).
+  it('ל ב מ ש כ before {…} take a joiner - "ל‑{name}", never "ל{name}"', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
     const dir = 'src/i18n/messages/he';
     const glued = readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
       .flatMap((f) =>
-        (readFileSync(`${dir}/${f}`, 'utf8').match(/(^|[ "(])[לבמשכ]\{[a-zA-Z]+/g) ?? []).map(
-          (hit) => `${f}: ${hit.trim()}`,
-        ),
+        (
+          readFileSync(`${dir}/${f}`, 'utf8').match(
+            /(^|[ "(])[לבמשכ]\{[a-zA-Z]+(?!\w*, (?:plural|select))/g,
+          ) ?? []
+        ).map((hit) => `${f}: ${hit.trim()}`),
       );
     expect(glued).toEqual([]);
   });

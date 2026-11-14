@@ -52,6 +52,8 @@ export function CreateTenant({
   const [slug, setSlug] = useState('');
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  // The workspace's language: its emails and its onboarding (system.ts, 02bd198f). Hebrew first.
+  const [locale, setLocale] = useState<NewTenant['locale']>('he');
   const [mode, setMode] = useState<'PAID_PLAN' | 'POC'>('PAID_PLAN');
   const [planId, setPlanId] = useState('');
   const [chatKey, setChatKey] = useState<string | null>(null);
@@ -83,9 +85,13 @@ export function CreateTenant({
       planVersionId: planId,
       chatVolumeOptionKey: chatKey,
       voiceVolumeOptionKey: voiceKey,
-    }).then((result) => {
-      if (!cancelled) setAnswer({ key: selectionKey, result });
-    });
+    })
+      // A rejected action (network, a deploy in between) is a failed quote,
+      // never a "quoting" that waits forever with Create greyed out.
+      .catch(() => ({ ok: false, reason: 'failed' }) as const)
+      .then((result) => {
+        if (!cancelled) setAnswer({ key: selectionKey, result });
+      });
     return () => {
       cancelled = true;
     };
@@ -127,6 +133,7 @@ export function CreateTenant({
     slug,
     adminEmail: adminEmail.trim(),
     adminName: adminName.trim(),
+    locale,
     billing:
       mode === 'PAID_PLAN'
         ? {
@@ -185,6 +192,30 @@ export function CreateTenant({
           value={adminEmail}
           onChange={(event) => setAdminEmail(event.target.value)}
         />
+      </div>
+
+      <div className={styles.field}>
+        <span className={styles.fieldLabel} id="create-language">
+          {t('language')}
+        </span>
+        <div className={styles.assign} role="radiogroup" aria-labelledby="create-language">
+          {(['he', 'en'] as const).map((each) => (
+            <Button
+              key={each}
+              size="sm"
+              role="radio"
+              aria-checked={locale === each}
+              variant={locale === each ? 'primary' : 'secondary'}
+              onClick={() => setLocale(each)}
+              lang={each}
+              dir={each === 'he' ? 'rtl' : 'ltr'}
+              data-testid={`locale-${each}`}
+            >
+              {t(`languages.${each}`)}
+            </Button>
+          ))}
+        </div>
+        <span className={styles.quiet}>{t('languageHint')}</span>
       </div>
 
       <div className={styles.assign} role="radiogroup" aria-label={t('billingType')}>
@@ -380,7 +411,8 @@ export function CreateTenant({
   );
 }
 
-function VolumeSelect({
+/** A plan's volume picker, by KEY (the route prices it). */
+export function VolumeSelect({
   label,
   options,
   value,

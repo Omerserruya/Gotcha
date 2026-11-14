@@ -13,7 +13,7 @@ export default async function Page({
   const preview = isPreview(await searchParams);
   const read = await loadWebsiteStep();
   return (
-    <OnboardingShell step="website" preview={preview}>
+    <OnboardingShell step="learn" screen="website" preview={preview}>
       <WebsiteStep
         guess={read.guess}
         email={read.email}

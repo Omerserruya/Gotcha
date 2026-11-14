@@ -42,7 +42,7 @@ vi.mock('@/features/notifications-settings/RuleTable', () => ({
   RuleTable: () => <div data-testid="rules" />,
 }));
 vi.mock('@/features/notifications-settings/load-preferences', () => ({
-  loadPreferences: async () => ({ preferences: null, volume: null, whatsappDestination: null }),
+  loadPreferences: async () => ({ preferences: null, volume: null }),
 }));
 vi.mock('@/features/notifications-settings/load-rules', () => ({
   loadRules: async () => ({ rules: [], departments: [], members: [] }),

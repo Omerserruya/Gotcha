@@ -36,6 +36,7 @@ import {
 import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
 import rowLink from '@/design-system/styles/row-link.module.css';
 import { Link } from '@/i18n/navigation';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * *"Each channel shows its identity and its real volume, so the list doubles
@@ -263,11 +264,13 @@ export async function ChannelList({
                     />
                   ) : null}
                   {canDisconnect(row) ? (
-                    <DisconnectChannel
-                      id={row.id}
-                      name={channelName(row.channel, t) ?? t('name.other')}
-                      identity={row.identity}
-                    />
+                    <SupportRefused kind="delete">
+                      <DisconnectChannel
+                        id={row.id}
+                        name={channelName(row.channel, t) ?? t('name.other')}
+                        identity={row.identity}
+                      />
+                    </SupportRefused>
                   ) : null}
                 </span>
               ) : (

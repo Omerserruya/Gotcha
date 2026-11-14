@@ -2,7 +2,6 @@ import { MessageCircle } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { WIDGET_PATH } from '@/api/contracts/website-widget';
-import { numberCount } from '@/api/contracts/whatsapp-numbers';
 
 import { ChannelList } from '@/features/channels/ChannelList';
 import channelStyles from '@/features/channels/Channels.module.css';
@@ -38,7 +37,7 @@ import { channelLandingOf, messengerPickOf } from '@/features/channels/landing';
 import { loadMessengerPages } from '@/features/channels/messenger-actions';
 import { loadRequiredTemplates } from '@/features/channels/required-templates-actions';
 import { MessengerPicker } from '@/features/channels/MessengerPicker';
-import { WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
+import { WhatsAppLine, WhatsAppNumbers } from '@/features/channels/WhatsAppNumbers';
 import { WhatsAppPanel } from '@/features/channels/WhatsAppPanel';
 import { loadWidgetInstall } from '@/features/webchat/load-website-widget';
 import { redirect } from '@/i18n/navigation';
@@ -291,9 +290,7 @@ export default async function Page({
 
       {whatsapp && view === null ? (
         <WhatsAppPanel
-          line={
-            whatsapp[0] ? tw('panelLine', { count: numberCount(whatsapp[0]) }) : tw('description')
-          }
+          line={whatsapp[0] ? <WhatsAppLine numbers={whatsapp[0]} t={tw} /> : tw('description')}
           tab={panelTab}
           numbers={(whatsapp[0]?.data ?? []).map((n) => ({ id: n.id, phoneNumber: n.phoneNumber }))}
           unprofiled={(whatsapp[0]?.unprofiled ?? []).map((u) => u.channelAccountId)}

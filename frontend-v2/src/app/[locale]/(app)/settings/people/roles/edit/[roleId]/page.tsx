@@ -8,6 +8,7 @@ import { roleNameOf } from '@/features/roles/role-words';
 import { Link } from '@/i18n/navigation';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · People & teams · Edit role - 12b's Edit (Omer, 2026-10-08):
@@ -54,12 +55,14 @@ export default async function Page({
           </Link>
         </p>
       ) : (
-        <RoleForm
-          key={`${role.id}:${role.customized}:${role.features.join(',')}`}
-          permissions={catalog.permissions}
-          roles={roles}
-          editing={role}
-        />
+        <SupportRefused kind="ownership">
+          <RoleForm
+            key={`${role.id}:${role.customized}:${role.features.join(',')}`}
+            permissions={catalog.permissions}
+            roles={roles}
+            editing={role}
+          />
+        </SupportRefused>
       )}
     </SettingsSection>
   );

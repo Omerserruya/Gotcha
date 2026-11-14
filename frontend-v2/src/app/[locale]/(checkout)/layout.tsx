@@ -1,9 +1,14 @@
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactNode } from 'react';
 
+import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
+import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
 import { CHECKOUT_NAMESPACES } from '@/i18n/namespaces';
+import { WithSupportBanner } from '@/features/support/SupportBanner';
+import { loadSupport } from '@/support/load-support';
+import { SupportProvider } from '@/support/support-context';
 
 /**
  * The customer checkout: where billing's emails and the provider's return
@@ -25,9 +30,28 @@ export default async function CheckoutLayout({
 }) {
   const { locale } = await params;
   const resolved = isLocale(locale) ? locale : DEFAULT_LOCALE;
+  /*
+    ★★ Two-step sign-in owed: the enrolment step instead of checkout
+    (supervisor, 2026-11-09). Checkout opens signed out too: asked only
+    behind a session, since there is nothing to enrol without one.
+  */
+  if (await activeSession()) {
+    const mfa = await mfaGateScreen(resolved);
+    if (mfa) return mfa;
+  }
+  /*
+   * ★ SUPPORT MODE IS SAID HERE TOO, and pays nothing: the banner, and every
+   *   payment control refused (the platform refuses `/api/checkout` writes,
+   *   `support_denied:billing`). Signed out there is no support session, and
+   *   the checkout's copy alone, as before.
+   */
+  const support = await loadSupport();
+  const namespaces = support ? [...CHECKOUT_NAMESPACES, 'console' as const] : CHECKOUT_NAMESPACES;
   return (
-    <NextIntlClientProvider messages={await loadMessages(resolved, CHECKOUT_NAMESPACES)}>
-      {children}
+    <NextIntlClientProvider messages={await loadMessages(resolved, namespaces)}>
+      <SupportProvider session={support}>
+        <WithSupportBanner>{children}</WithSupportBanner>
+      </SupportProvider>
     </NextIntlClientProvider>
   );
 }

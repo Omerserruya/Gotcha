@@ -93,7 +93,12 @@ ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
 # all 68 static pages, because nothing prerendered calls `serverEnv()`. So the
 # platform credentials stay out of the image and arrive from compose.
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# The build's heap, when the box is short (2026-11-02: Next's type check took
+# about 2.7G of host memory and tripped every memory floor on dev). The dev
+# scripts pass `--max-old-space-size=1536`. Unset is today's build exactly.
+# A heap too small fails this step inside the builder, never the host.
+ARG NODE_BUILD_OPTIONS=
+RUN NODE_OPTIONS="${NODE_BUILD_OPTIONS}" npm run build
 
 # ── run ──────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS run
@@ -128,7 +133,10 @@ ENV NEXT_PUBLIC_REALTIME_URL=$NEXT_PUBLIC_REALTIME_URL
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY --from=build /app/.next ./.next
+# ★ OWNED BY `node`: Next writes its prerender cache under .next/server at
+# runtime. Copied as root, prod logged `Failed to update prerender cache for
+# /api EACCES mkdir /app/.next/server/app/api.segments` (2026-10-23).
+COPY --chown=node:node --from=build /app/.next ./.next
 # ★ `public/` IS EMPTY, AND IT IS TRACKED ONLY BY A `.gitkeep`.
 #
 # Git cannot store an empty directory. This COPY therefore depended on a
@@ -146,8 +154,8 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/next.config.ts ./next.config.ts
 
-# `node` exists in the base image as an unprivileged user. Nothing here writes
-# to the filesystem at runtime, so it owns nothing it does not need.
+# `node` exists in the base image as an unprivileged user. It owns .next (the
+# prerender cache is written at runtime) and nothing else it does not need.
 USER node
 
 EXPOSE 3000

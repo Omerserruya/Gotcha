@@ -1,0 +1,81 @@
+@layer features {
+  /*
+   * Support mode's banner (Omer, 2026-11-01): on every page, never
+   * dismissible, in the URGENT tone - not the lavender "Setup mode" pill,
+   * which says the workspace is being set up. This says the person acting is
+   * GOTCHA, inside a customer's workspace.
+   *
+   * A full-width strip above the frame, not inside a panel: it belongs to no
+   * one screen, and nothing a page draws can cover it.
+   */
+  .banner {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-16);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-16);
+    background-color: var(--intent-urgent-surface);
+    border-block-end: var(--border-width-thick) solid var(--intent-urgent-edge);
+    color: var(--intent-urgent-text);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-meta);
+    line-height: normal;
+  }
+
+  .label {
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .body {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-12);
+    margin: 0;
+  }
+
+  .failed {
+    margin: 0;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /*
+   * With the banner the page is a column: the strip, then the frame filling
+   * what is left. `1 1 0` + `min-block-size: 0` on the frame, the banner
+   * `none` - the frame shrinks, the banner never does.
+   */
+  .withBanner {
+    display: flex;
+    flex-direction: column;
+    block-size: 100dvh;
+  }
+
+  .withBanner > :not(.banner) {
+    flex: 1 1 0;
+    min-block-size: 0;
+  }
+
+  /* A control refused in support mode (SupportRefused): drawn, inert, and said. */
+  .refusedWrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .refusedControl {
+    opacity: 0.55;
+  }
+
+  .refusedNote {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--intent-urgent-text);
+    line-height: normal;
+  }
+}

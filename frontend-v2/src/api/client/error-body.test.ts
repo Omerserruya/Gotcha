@@ -360,3 +360,20 @@ describe('a `detail` sent as a sentence', () => {
     expect(api.failureDetail?.max).toBe(10);
   });
 });
+
+describe('★★ db73826b - NOTHING_FOUND names the kinds a file had that were already learned', () => {
+  it('`{ error, code, skipped }` → code and skipped, through the real client; a bad one costs only itself', async () => {
+    respond(422, {
+      error: 'That file could not be used',
+      code: 'NOTHING_FOUND',
+      skipped: { policies: ['returns', 'shipping'] },
+    });
+    const caught = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(caught.code).toBe('NOTHING_FOUND');
+    expect(caught.skipped).toEqual({ policies: ['returns', 'shipping'] });
+    respond(422, { error: 'x', code: 'NOTHING_FOUND', skipped: 'returns' });
+    const bad = (await buy().catch((e: unknown) => e)) as ApiError;
+    expect(bad.code).toBe('NOTHING_FOUND');
+    expect(bad.skipped).toBeUndefined();
+  });
+});

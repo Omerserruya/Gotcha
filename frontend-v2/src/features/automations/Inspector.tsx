@@ -36,6 +36,18 @@ const TRIGGER_CHANNELS = ['WHATSAPP', 'INSTAGRAM', 'MESSENGER', 'EMAIL', 'WEBCHA
 /** Each trigger's channels, as the route accepts them (`normalizeTrigger`). */
 const CHANNELS_OF: Readonly<Record<string, readonly string[]>> = {
   message_received: TRIGGER_CHANNELS,
+  // Every conversation channel the route's catalogue names for it.
+  conversation_started: [
+    'WHATSAPP',
+    'INSTAGRAM',
+    'MESSENGER',
+    'EMAIL',
+    'GMAIL',
+    'OUTLOOK',
+    'WEBCHAT',
+    'SHOPIFY_LIVE_CHAT',
+    'SLACK',
+  ],
   new_customer: TRIGGER_CHANNELS,
   message_from_ad: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
   button_tapped: ['WHATSAPP', 'MESSENGER', 'INSTAGRAM'],
@@ -365,19 +377,38 @@ function Pick({
   readonly testid: string;
 }) {
   const t = useTranslations('automations');
+  /*
+   * ★★ A SAVED ID THAT NO OPTION CARRIES (F2, Omer, 2026-11-09). A <select>
+   *   whose value matches no <option> shows the first one, "Choose…": the
+   *   setup route's employee read as "nothing selected" while the step kept
+   *   the id and the runner handed every conversation to it. Say that a
+   *   choice is kept, and keep it selected, until someone picks another.
+   */
+  const notListed = options !== null && value !== '' && !options.some((o) => o.id === value);
   return (
     <Field label={label}>
       {options === null ? (
         <span className={styles.quiet}>{t('inspector.unread')}</span>
       ) : (
-        <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}>
-          <option value="">{t('inspector.choose')}</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
+        <>
+          <select value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}>
+            {notListed ? (
+              <option value={value}>{t('inspector.notListed')}</option>
+            ) : (
+              <option value="">{t('inspector.choose')}</option>
+            )}
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+          {notListed ? (
+            <span className={styles.quiet} data-testid={`${testid}-not-listed`}>
+              {t('inspector.notListedNote')}
+            </span>
+          ) : null}
+        </>
       )}
     </Field>
   );
@@ -1003,6 +1034,7 @@ function TriggerFields({
           {matchField}
         </>
       );
+    case 'conversation_started':
     case 'new_customer':
       return channelPicker;
     case 'message_from_ad':

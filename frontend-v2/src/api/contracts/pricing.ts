@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Plan, price and changing it - screen 17b.
  *
  * `GET /api/billing/pricing`, `/pricing/current`, `/pricing/packages`,
- * `POST /pricing/quote`, `POST /pricing/change`.
+ * `POST /pricing/quote` (`POST /pricing/change` is retired: 410).
  *
  * ════════════════════════════════════════════════════════════════════════════
  * A CHANGE IS TWO DIFFERENT PROMISES, AND ONLY ONE HAPPENS NOW
@@ -493,4 +493,13 @@ export function catalogPlans(raw: unknown): CatalogPlan[] {
     const parsed = catalogPlanSchema.safeParse(p);
     return parsed.success ? [parsed.data] : [];
   });
+}
+
+/**
+ * A plan feature that speaks of Shopify, in either language. GOTCHA Core never
+ * includes Shopify (review 132211), so a Core plan card does not draw one,
+ * whatever the admin-edited catalogue says.
+ */
+export function namesShopify(feature: { readonly nameEn: string; readonly nameHe: string | null }) {
+  return /shopify|שופיפיי/i.test(`${feature.nameEn} ${feature.nameHe ?? ''}`);
 }

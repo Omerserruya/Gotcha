@@ -235,6 +235,9 @@
   /* "Connect": 02's primary - dark and filled. */
   .connectOpen {
     flex: none;
+    /* A <Link> for WhatsApp, a <button> for the rest: the same pill either way. */
+    text-decoration: none;
+    text-align: center;
     font-size: var(--font-size-caption);
     color: var(--action-text);
     background-color: var(--action-base);
@@ -394,6 +397,33 @@
 
   .numberName {
     font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* Which business account a number is on, under the number - with two or more. */
+  .numberAccount {
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* "This number", or Set as primary, and what the press did. */
+  .primaryValue {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .primaryDone {
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  /* What "primary" means: said once, under the list. */
+  .primaryNote {
+    margin: 0;
+    font-size: 12px;
     color: var(--text-subtle);
   }
 
@@ -815,6 +845,17 @@
     border-radius: var(--radius-step);
     font-size: var(--font-size-meta);
     color: var(--text-subtle);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* A live link reads as one on hover; only the unconfigured one is blocked. */
+  a.addNumber:hover {
+    border-color: var(--text-subtle);
+    color: var(--text-secondary);
+  }
+
+  .addNumber[aria-disabled='true'] {
     cursor: not-allowed;
   }
 }
@@ -1374,6 +1415,18 @@
     font-size: 15px;
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
+  }
+
+  /*
+   * ★ A step wrapped in its own element (step 4) keeps the drawer body's
+   * column and gap, which .connectLead's -10px assumes. Without it the lead
+   * rose 10px into the heading (Omer, prod 2026-11-10).
+   */
+  .connectStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
+    min-inline-size: 0;
   }
 
   .connectLead {
@@ -2195,6 +2248,45 @@
     gap: var(--space-12);
     margin-block-end: var(--space-16);
     line-height: normal;
+  }
+
+  /* The template language: a label and 02's segmented pair (as the employee's tone). */
+  .reqLangs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .reqLangGroup {
+    display: inline-flex;
+    flex: none;
+    white-space: nowrap;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-chip);
+    background-color: var(--panel-footer);
+  }
+
+  .reqLang {
+    padding-block: var(--space-4);
+    padding-inline: var(--space-10);
+    border: none;
+    border-radius: var(--radius-badge);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .reqLang[aria-checked='true'] {
+    background-color: var(--action-base);
+    color: var(--action-text);
+  }
+
+  .reqLang:disabled {
+    cursor: not-allowed;
   }
 
   .reqItem {

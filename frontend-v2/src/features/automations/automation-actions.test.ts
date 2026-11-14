@@ -57,7 +57,16 @@ describe('★★ AU2 - the new automation’s builder is opened by the action, w
 
   it('delete revalidates nothing either - the builder’s push back to the list is not raced', async () => {
     del.mockResolvedValue({});
-    expect(await deleteAutomation('a1')).toBe(true);
+    expect(await deleteAutomation('a1')).toBe('deleted');
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('★ the setup route is refused by its code, not failed; any other 422 is a failure', async () => {
+    del.mockRejectedValueOnce(
+      new ApiError({ kind: 'validation', status: 422, code: 'setup_route_required' }),
+    );
+    expect(await deleteAutomation('s1')).toBe('setup_route');
+    del.mockRejectedValueOnce(new ApiError({ kind: 'validation', status: 422, code: 'other' }));
+    expect(await deleteAutomation('s1')).toBe('failed');
   });
 });

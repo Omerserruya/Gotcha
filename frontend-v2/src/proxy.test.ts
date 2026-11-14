@@ -615,25 +615,29 @@ describe('★★ the narrower policy reaches the page that has a password on it'
   });
 });
 
-describe('★★ 13c - which paths get Meta’s frames', () => {
-  it.each([
-    ['/en/settings/channels', true],
-    ['/he/settings/channels/whatsapp', true],
-    ['/en/settings/channelsx', false],
-    ['/en/sign-in', false],
-    ['/en/settings/workspace', false],
-  ])('%s → %s', async (path, framed) => {
-    const { META_SIGNUP_PATH } = await import('./proxy');
-    expect(META_SIGNUP_PATH.test(path)).toBe(framed);
-  });
+describe('★★ 13c - Meta’s signup reaches facebook.com from every product page', () => {
+  /*
+   * Prod, 2026-11-10: the allowance was scoped to /settings/channels. A
+   * document keeps the policy of its FIRST load, so someone who opened /home
+   * and clicked into channels (or onboarding's channels step, which was never
+   * on the list) had no facebook.com in frame-src or connect-src. Every
+   * product page carries it; the sign-in screen never does.
+   */
+  it.each(['/en/home', '/he/onboarding/channels', '/en/settings/channels', '/he/m', '/en/inbox'])(
+    '%s → facebook.com in frame-src and connect-src',
+    (path) => {
+      const csp = cspFor(path);
+      for (const name of ['frame-src', 'connect-src']) {
+        expect(directive(csp, name)).toEqual(
+          expect.arrayContaining(['https://www.facebook.com', 'https://web.facebook.com']),
+        );
+      }
+    },
+  );
 
-  it('the response for a channels page carries them; sign-in does not', async () => {
-    const csp = async (path: string) =>
-      (await proxy(new NextRequest(`https://dev.gotcha.co.il${path}`))).headers.get(
-        'content-security-policy',
-      ) ?? '';
-    expect(await csp('/en/settings/channels')).toContain('https://www.facebook.com');
-    expect(await csp('/en/sign-in')).not.toContain('facebook.com');
+  it('the sign-in screen names facebook.com nowhere', () => {
+    expect(cspFor('/en/sign-in')).not.toContain('facebook.com');
+    expect(cspFor('/he/sign-in')).not.toContain('facebook.com');
   });
 });
 

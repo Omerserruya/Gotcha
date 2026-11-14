@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 
 import type { Capability } from '@/api/contracts/capabilities';
 import { splitCatalogue, type Integration } from '@/api/contracts/integrations';
+import { usableShopifyActions, type ConnectorVerdict } from '@/api/contracts/shopify-connector';
 
 import { IntegrationFinder } from './IntegrationFinder';
 import { actionCounts } from './select-system';
@@ -41,6 +42,7 @@ export async function IntegrationRail({
   integrations,
   capabilities = [],
   selected = null,
+  shopify = null,
 }: {
   /** `null` when the read failed. Never an empty catalogue. */
   readonly integrations: readonly Integration[] | null;
@@ -48,8 +50,15 @@ export async function IntegrationRail({
   readonly capabilities?: readonly Capability[] | null;
   /** `builtin`, a slug, or null. */
   readonly selected?: string | null;
+  /**
+   * The Shopify Connector's verdict (`connectorVerdict`), the one the Billing
+   * page draws. Shopify's row says it - "Authorized", never a count - until
+   * the server grants access, and then counts only the usable actions.
+   */
+  readonly shopify?: ConnectorVerdict | null;
 }) {
   const t = await getTranslations('capabilities');
+  const tc = await getTranslations('billing.connector');
 
   if (integrations === null) {
     return (
@@ -60,13 +69,24 @@ export async function IntegrationRail({
   }
 
   const { connected, available } = splitCatalogue(integrations);
+  const counts = actionCounts(capabilities ?? []);
+  const notes: Record<string, { readonly text: string; readonly state: string }> = {};
+  if (shopify) {
+    const actions = (capabilities ?? []).filter((c) => c.integration === 'shopify');
+    const catalog = integrations.find((i) => i.slug === 'shopify')?.catalogTools ?? [];
+    counts.shopify = usableShopifyActions(shopify, actions, catalog);
+    if (shopify.grantsAccess !== true) {
+      notes.shopify = { text: tc(`kind.${shopify.kind}`), state: shopify.kind };
+    }
+  }
 
   return (
     <aside className={styles.rail} data-testid="integration-rail">
       <IntegrationFinder
         connected={connected}
         available={available}
-        actionCounts={actionCounts(capabilities ?? [])}
+        actionCounts={counts}
+        notes={notes}
         builtInCount={(capabilities ?? []).filter((c) => !c.integration).length}
         selected={selected}
       />

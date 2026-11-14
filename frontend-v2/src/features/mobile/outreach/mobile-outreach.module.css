@@ -1,0 +1,236 @@
+@layer features {
+  /*
+   * Outreach on the phone - `GOTCHA Mobile App.dc.html`, the `isOut` tab and
+   * the campaign sheet. The screen, chips, tags and section labels are the
+   * shared parts (`mobile-ui.module.css`); what is here is outreach's own.
+   */
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* ── One campaign in the list ────────────────────────────────────── */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .row:active {
+    background-color: var(--mobile-press);
+  }
+
+  .row:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--space-2));
+  }
+
+  /* The channel's mark on a white tile, 50px - the design's leading square. */
+  .tile {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 50px;
+    block-size: 50px;
+    box-sizing: border-box;
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--space-16);
+    background-color: var(--mobile-surface);
+  }
+
+  .body {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .name {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-body-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--mobile-ink);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  .line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-item);
+    color: var(--text-muted);
+  }
+
+  .progress {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-block-start: var(--space-3);
+  }
+
+  .bar {
+    display: block;
+    block-size: 5px;
+    border-radius: var(--space-3);
+    background-color: var(--mobile-card-edge);
+    overflow: hidden;
+  }
+
+  .barFill {
+    display: block;
+    block-size: 100%;
+    border-radius: var(--space-3);
+    background-color: var(--mobile-ink);
+  }
+
+  .caption {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── One campaign's screen: the design's campaign sheet, as a page ── */
+  .sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    margin-inline: var(--space-14);
+    padding-block: var(--space-18);
+    padding-inline: var(--space-18);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: 26px;
+    background-color: var(--mobile-surface);
+  }
+
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+  }
+
+  .summaryHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+  }
+
+  .summaryTile {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 46px;
+    block-size: 46px;
+    border-radius: var(--space-15);
+    background-color: var(--mobile-tile);
+  }
+
+  .summaryTitle {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .summaryName {
+    margin: 0;
+    font-size: 17px;
+    font-weight: var(--font-weight-bold);
+    line-height: 1.25;
+    color: var(--mobile-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .error {
+    margin: 0;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-12);
+    border-radius: var(--radius-card);
+    background-color: var(--mobile-tag-bad);
+    color: var(--mobile-tag-bad-text);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .fields {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-block: var(--space-11);
+    border-block-start: var(--border-width-thin) solid var(--mobile-row-rule);
+  }
+
+  .field dt {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .field dd {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    color: var(--mobile-ink);
+  }
+
+  .counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4) var(--space-14);
+  }
+
+  .absent {
+    color: var(--text-muted);
+    font-size: var(--font-size-body-sm);
+  }
+
+  /* The sheet's call to action: the campaign on the website. */
+  .cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    block-size: 50px;
+    border-radius: 25px;
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    font-size: var(--font-size-body-lg);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cta:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+}

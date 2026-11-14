@@ -54,3 +54,23 @@ describe('★★ the platform’s exact answer is a ticket (2026-10-11)', () => 
     expect(await response.json()).toEqual({ error: 'ticket_unavailable' });
   });
 });
+
+describe('★★ support mode ended, found by the socket’s next ticket', () => {
+  it.each(['support_expired', 'support_session_invalid'])(
+    '401 %s: passed on with its code, and the support cookie cleared',
+    async (code) => {
+      answer(401, { error: 'x', code });
+      const response = await ask();
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: 'support_ended', code });
+      expect(response.headers.getSetCookie().some((c) => c.startsWith('sup=;'))).toBe(true);
+    },
+  );
+
+  it('any other 401 is still "unavailable" here, and clears nothing', async () => {
+    answer(401, { error: 'x', code: 'token_expired' });
+    const response = await ask();
+    expect(response.status).toBe(502);
+    expect(response.headers.getSetCookie()).toEqual([]);
+  });
+});

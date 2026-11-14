@@ -56,6 +56,11 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
    * screen's purpose better than the design does.
    */
   { type: 'conversation.assigned', family: 'work', hasSourceCaveat: true },
+  /*
+   * Backend 2ac65631: a customer waits past the response target. Only while
+   * that target is on - its catalogue entry says so, and so does the row.
+   */
+  { type: 'conversation.waiting', family: 'work', hasSourceCaveat: true },
 
   // ── Systems ───────────────────────────────────────────────────────
   /*

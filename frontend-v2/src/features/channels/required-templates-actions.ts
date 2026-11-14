@@ -21,8 +21,10 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import {
+  isTemplateLanguage,
   requiredTemplatesSchema,
   type RequiredRole,
+  type TemplateLanguage,
   type RequiredTemplates,
 } from '@/api/contracts/required-templates';
 import { templateEndpoints } from '@/api/endpoints/registry';
@@ -35,12 +37,20 @@ export type RequiredRead =
   /** ADMIN (Owner) only: said in words, never as an empty list. */
   | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
 
-/** One number's required templates, each with its state. */
-export async function loadRequiredTemplates(channelAccountId: string): Promise<RequiredRead> {
+/**
+ * One number's required templates, each with its state - in `language` when
+ * one is chosen, otherwise the workspace's own. A server action takes what
+ * the browser sends, so anything but exactly "he" or "en" is left out, never
+ * forwarded into a 400.
+ */
+export async function loadRequiredTemplates(
+  channelAccountId: string,
+  language?: TemplateLanguage,
+): Promise<RequiredRead> {
   try {
     const data = await serverApi().get({
       endpoint: templateEndpoints.required(),
-      query: { channelAccountId },
+      query: { channelAccountId, language: isTemplateLanguage(language) ? language : undefined },
       payload: requiredTemplatesSchema,
     });
     return { ok: true, data };

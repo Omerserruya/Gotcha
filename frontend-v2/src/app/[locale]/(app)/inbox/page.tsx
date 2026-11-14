@@ -13,6 +13,7 @@ import { ConversationList } from '@/features/inbox/ConversationList';
 import { ConversationVerbs } from '@/features/inbox/ConversationVerbs';
 import { ActivityProvider } from '@/features/inbox/wall/Activity';
 import { AskCopilot } from '@/features/inbox/wall/AskCopilot';
+import { CopilotPanel } from '@/features/inbox/wall/CopilotPanel';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
 import {
@@ -421,7 +422,11 @@ export default async function Page({
               Copilot proposal, not this panel.
             */}
             {data.open === null ? null : (
-              <aside className={styles.contextColumn} aria-label={t('context.label')}>
+              <CopilotPanel
+                userId={data.meId}
+                className={styles.contextColumn}
+                label={t('context.label')}
+              >
                 {/*
                   02's wall: a fixed 45px header, the scrolling body, and the
                   pinned "Ask Copilot anything…". Only the body waits for the
@@ -474,7 +479,7 @@ export default async function Page({
                   {/* Keyed: a question half-typed about one person is not asked about the next. */}
                   <AskCopilot key={data.open.id} conversationId={data.open.id} />
                 </ActivityProvider>
-              </aside>
+              </CopilotPanel>
             )}
           </div>
 

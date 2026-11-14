@@ -2,17 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '@/api/client/api-error';
 
-const post = vi.hoisted(() => vi.fn());
+const { post, patch } = vi.hoisted(() => ({ post: vi.fn(), patch: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post }) }));
+vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ post, patch }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: async () => {} }));
 
-import { addPrivateContact, refreshUnprofiled } from './number-actions';
+import { addPrivateContact, refreshUnprofiled, setPrimaryNumber } from './number-actions';
 
 beforeEach(() => {
   post.mockReset();
   post.mockResolvedValue({});
+  patch.mockReset();
 });
 
 const refused = (status: number, error: string) =>
@@ -61,5 +62,30 @@ describe('★ "Refresh from Meta" for a number with no record here (Backend 7131
   ])('★ %i is said as %s', async (status, reason) => {
     post.mockRejectedValueOnce(refused(status, 'x'));
     expect(await refreshUnprofiled('ca1')).toEqual({ ok: false, reason });
+  });
+});
+
+describe('★★ Set as primary (PATCH /whatsapp/primary) - mapped by status, never by a code', () => {
+  it('sends the channel account, and returns the primary the server answers with', async () => {
+    patch.mockResolvedValueOnce({ channelAccountId: 'ca1', source: 'chosen' });
+    expect(await setPrimaryNumber('ca1')).toEqual({
+      ok: true,
+      primary: { channelAccountId: 'ca1', source: 'chosen' },
+    });
+    const call = patch.mock.calls[0]![0] as { endpoint: { path: string }; body: unknown };
+    expect(call.endpoint.path).toBe('/api/channels/whatsapp/primary');
+    expect(call.body).toStrictEqual({ channelAccountId: 'ca1' });
+  });
+
+  it.each([
+    // The malformed-body 400 carries no code: `{ error: "Validation failed", details }`.
+    [400, 'Validation failed', 'failed'],
+    [404, 'WHATSAPP_NUMBER_NOT_FOUND', 'not_found'],
+    [409, 'WHATSAPP_NUMBER_NOT_ACTIVE', 'not_active'],
+    [403, 'forbidden', 'forbidden'],
+    [500, 'boom', 'failed'],
+  ])('%i %s -> %s', async (status, error, reason) => {
+    patch.mockRejectedValueOnce(refused(status, error));
+    expect(await setPrimaryNumber('ca1')).toEqual({ ok: false, reason });
   });
 });

@@ -135,8 +135,16 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
      * one list too many, and the one that drifts would be this one.
      */
     credentialSurface: PUBLIC_PATH_PATTERN.test(pathname),
-    // 13c: Meta's Embedded Signup frames facebook.com - on the channels pages only.
-    metaSignupSurface: META_SIGNUP_PATH.test(pathname),
+    /*
+     * 13c: Meta's Embedded Signup (settings/channels AND onboarding/channels)
+     * frames and calls facebook.com. On EVERY product page, not a path list:
+     * a document keeps the CSP of its first load, so a client navigation from
+     * /home into channels never got a path-scoped policy (prod, 2026-11-10).
+     * Sign-in stays without it.
+     */
+    metaSignupSurface: !PUBLIC_PATH_PATTERN.test(pathname),
+    // The MFA gate frames the identity provider's enrolment flows.
+    authFrameOrigin: originOf(process.env.OIDC_ISSUER),
   });
 
   /*
@@ -442,7 +450,15 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
 }
 
 /** Where 13c's Meta launcher runs: Settings · Channels, in any locale. */
-export const META_SIGNUP_PATH = /^\/[a-z]{2}\/settings\/channels(\/|$)/;
+/** A URL's origin, or nothing: a missing or unparsable issuer frames nothing. */
+function originOf(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
 
 /** next-intl's request header for the resolved locale. */
 const INTL_LOCALE_HEADER = 'x-next-intl-locale';

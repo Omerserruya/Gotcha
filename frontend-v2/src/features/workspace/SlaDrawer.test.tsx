@@ -38,6 +38,14 @@ beforeEach(() => {
 });
 
 describe('★★ W2 - the drawer saves exactly what it shows', () => {
+  it('★ the minutes say what reaching them sets off, and for whom; a department uses its own', () => {
+    show();
+    expect(screen.getByTestId('sla-minutes-hint')).toHaveTextContent(
+      'alerts the person handling the conversation, or its department or the admins when no one is assigned',
+    );
+    expect(screen.getByTestId('sla-drawer')).toHaveTextContent('for marking and for the alert');
+  });
+
   it('★★ the whole target, and only the departments that changed', async () => {
     show();
     fireEvent.change(screen.getByTestId('sla-minutes'), { target: { value: '45' } });

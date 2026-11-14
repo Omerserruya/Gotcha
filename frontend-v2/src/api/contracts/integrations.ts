@@ -83,6 +83,12 @@ export const capabilitySchema = z
     slug: z.string().min(1),
     name: z.string().min(1),
     riskLevel: z.string().nullable().optional(),
+    /**
+     * Shopify's catalog only (fix/split-billing-be): `false` when the Shopify
+     * Connector capability this tool needs is not granted, so it cannot run.
+     * Absent everywhere else. A locked tool is never counted as usable.
+     */
+    usable: z.boolean().optional().catch(undefined),
     /** Present only once the tenant has activated this tool. */
     tenantTool: z
       .object({ id: z.string().min(1), isEnabled: z.boolean().default(true) })
@@ -94,6 +100,7 @@ export const capabilitySchema = z
     slug: raw.slug,
     name: raw.name,
     riskLevel: raw.riskLevel ?? null,
+    usable: raw.usable,
     /**
      * A tool the tenant has never activated is `never` - it cannot run.
      *

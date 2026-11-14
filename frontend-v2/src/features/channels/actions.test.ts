@@ -25,6 +25,19 @@ describe('★★ init-url at the wire', () => {
     );
   });
 
+  it('★ onboarding_channels comes back to onboarding’s step 3; any other flow is the redesign’s', async () => {
+    get.mockResolvedValue({ url: 'https://accounts.google.com/o' });
+    await startChannelConnect('GMAIL', 'onboarding_channels');
+    expect((get.mock.calls[0]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/channels/oauth/init-url?platform=gmail&flow=onboarding_channels',
+    );
+    // A server action takes anything from the browser: an unknown flow is never passed on.
+    await startChannelConnect('GMAIL', '../../x' as never);
+    expect((get.mock.calls[1]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/channels/oauth/init-url?platform=gmail&flow=redesign_studio',
+    );
+  });
+
   it('a channel with no OAuth: nothing asked', async () => {
     expect(await startChannelConnect('WEBCHAT')).toEqual({ ok: false, reason: 'failed' });
     expect(get).not.toHaveBeenCalled();

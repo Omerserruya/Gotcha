@@ -104,9 +104,10 @@ type Format = Awaited<ReturnType<typeof getFormatter>>;
  * Turns `kind` + `values` into a line.
  *
  * `eventMessage` decides the key and the blanks; this only formats the money
- * with the viewer's locale and hands both to the translator.
+ * with the viewer's locale and hands both to the translator. The phone's Home
+ * reads its updates through this too, so a line says the same thing on both.
  */
-function describe(event: ActivityEvent, t: Translate, format: Format): string {
+export function describe(event: ActivityEvent, t: Translate, format: Format): string {
   const { key, values } = eventMessage(event);
   return t(key, { ...values, amount: money(event.values, format) });
 }
@@ -124,7 +125,7 @@ function money(values: Record<string, unknown>, format: Format): string {
   }
 }
 
-function clockTime(at: string, format: Format): string {
+export function clockTime(at: string, format: Format): string {
   const when = new Date(at);
   // 24-hour, as 02 writes it ("08:12").
   return Number.isNaN(when.getTime())

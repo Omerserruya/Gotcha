@@ -36,6 +36,7 @@ export function PlanSwitch({
   readonly className?: string;
 }) {
   const t = useTranslations('billing.choice.live');
+  const core = useTranslations('billing.core');
   const format = useFormatter();
   const router = useRouter();
   const [state, setState] = useState<State>({ kind: 'closed' });
@@ -65,6 +66,7 @@ export function PlanSwitch({
         can: false,
       };
     }
+    if (p.paymentMethodRequired === true) return { said: [t('noCard')], can: false };
     if (p.chargeNow) {
       if (p.hasPaymentMethod === false) return { said: [t('noCard')], can: false };
       const c = p.chargeNow;
@@ -187,6 +189,10 @@ export function PlanSwitch({
           {t('moved')}
         </p>
       ) : null}
+      {/* Before the yes: this is GOTCHA Core, and only Core. */}
+      <p className={styles.heldSentence} data-testid="switch-core-only">
+        {core('onlyCore')}
+      </p>
       {said.map((sentence, i) => (
         <p key={i} className={styles.heldSentence}>
           {sentence}

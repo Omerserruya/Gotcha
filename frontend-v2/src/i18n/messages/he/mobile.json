@@ -1,0 +1,239 @@
+{
+  "tabs": {
+    "home": "בית",
+    "inbox": "אינבוקס",
+    "approvals": "אישורים",
+    "outreach": "יוצא",
+    "customers": "לקוחות"
+  },
+  "home": {
+    "today": "היום",
+    "handled": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת היום} other {GOTCHA טיפלה ב־# שיחות היום}}",
+    "handledWaiting": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת} other {GOTCHA טיפלה ב־# שיחות}}{waiting, plural, =0 {, ואף שיחה לא מחכה לך} one {, ושיחה אחת מחכה לך} other {, ו־# מחכות לך}}",
+    "tiles": {
+      "conversations": "שיחות היום",
+      "byYourTeam": "על ידי הצוות",
+      "approvals": "אישורים מחכים"
+    },
+    "needsYou": "צריך אותך",
+    "open": "לשיחה",
+    "more": "{count, plural, one {עוד שיחה אחת ממתינה} other {עוד # שיחות ממתינות}}",
+    "updates": "עדכונים",
+    "ask": "שאלו את GOTCHA…",
+    "updatesEmpty": "עדיין אין עדכונים. כש־GOTCHA תבצע פעולה, כמו החזר או קביעת פגישה, או תבקש אישור, זה יופיע כאן.",
+    "updatesUnavailable": "את העדכונים לא הצלחנו לקרוא כרגע.",
+    "askScreen": {
+      "title": "שאלו את GOTCHA",
+      "back": "חזרה לבית",
+      "hint": "על השיחות, הלקוחות, ההזמנות והאישורים שלכם. GOTCHA עונה מתוך מה שיש במערכת.",
+      "placeholder": "מה תרצו לדעת?",
+      "proposal": "הצעה שמחכה לאישור שלכם"
+    }
+  },
+  "inbox": {
+    "title": "שיחות",
+    "views": "תצוגות",
+    "empty": "אין כאן שיחות כרגע",
+    "unavailable": "לא הצלחנו לטעון את השיחות",
+    "more": "שיחות קודמות",
+    "back": "חזרה לשיחות",
+    "openFailed": "לא הצלחנו לפתוח את השיחה",
+    "notAvailable": "השיחה הזו לא זמינה לך",
+    "onWebsite": "פתיחה באתר",
+    "all": "הכל",
+    "search": "חיפוש לפי שם או טלפון",
+    "noMatch": "אין שיחות שמתאימות לחיפוש או לסינון",
+    "grounded": "GOTCHA עונה רק מתוך המידע של העסק שלכם",
+    "owner": {
+      "mine": "אצלכם",
+      "waiting": "ממתין בתור",
+      "gotcha": "GOTCHA",
+      "flow": "תהליך",
+      "resolved": "טופל"
+    },
+    "filter": {
+      "open": "סינון לפי ערוץ",
+      "title": "סינון לפי ערוץ",
+      "all": "כל הערוצים",
+      "apply": "הצג",
+      "clear": "נקה"
+    }
+  },
+  "account": {
+    "menu": "חשבון",
+    "website": "מעבר לאתר המלא",
+    "signOut": "התנתקות"
+  },
+  "approvals": {
+    "title": "אישורים",
+    "conversation": "לשיחה",
+    "cancel": "ביטול",
+    "website": "החלטות קודמות ועריכה באתר",
+    "lead": "{count, plural, one {דבר אחד מחכה להחלטה שלך} other {# דברים מחכים להחלטה שלך}}. GOTCHA כבר עשתה את העבודה",
+    "leadNone": "שום דבר לא מחכה לך. GOTCHA ממשיכה לבד",
+    "views": "תצוגה",
+    "pending": "ממתינים",
+    "decided": "הוחלטו היום",
+    "details": "פרטים",
+    "emptyTitle": "אין מה לאשר כרגע",
+    "emptyBody": "GOTCHA תעדכן כשמשהו יצטרך אותך",
+    "decidedNone": "היום עוד לא הוחלט כלום",
+    "decidedUnavailable": "את ההחלטות של היום לא הצלחנו לקרוא כרגע",
+    "outcome": {
+      "ran": "בוצע",
+      "didntRun": "לא רץ",
+      "approved": "אושר",
+      "rejected": "נדחה"
+    },
+    "back": "חזרה לאישורים",
+    "gone": "הבקשה הזו כבר לא מחכה להחלטה. ייתכן שמישהו החליט עליה, או שהמועד שלה חלף.",
+    "editOnWebsite": "עריכה באתר",
+    "rejectTitle": "למה לדחות?",
+    "rejectSub": "הסיבה נשמרת עם ההחלטה"
+  },
+  "outreach": {
+    "title": "יוצא",
+    "back": "חזרה לקמפיינים",
+    "website": "יצירה ועריכה באתר",
+    "websiteOne": "הקמפיין הזה באתר",
+    "chipsLabel": "סינון קמפיינים",
+    "chips": {
+      "all": "הכל",
+      "live": "פעילים",
+      "sched": "מתוזמנים",
+      "done": "הסתיימו"
+    },
+    "going": "בתהליך",
+    "earlier": "קודם",
+    "noneHere": "אין כאן קמפיינים כרגע",
+    "replies": "תשובות",
+    "new": "פנייה חדשה",
+    "newTitle": "פנייה יוצאת חדשה",
+    "choice": {
+      "message": {
+        "title": "הודעה",
+        "sub": "לאדם אחד, בשיחה שלו"
+      },
+      "call": {
+        "title": "שיחת טלפון",
+        "sub": "מהקו של העסק, לאדם אחד"
+      }
+    },
+    "campaignsOnWebsite": "קמפיינים, מיילים ותבניות נוצרים באתר.",
+    "toWebsite": "לאתר",
+    "pickTitle": {
+      "message": "למי לכתוב?",
+      "call": "למי להתקשר?"
+    },
+    "pickSearch": {
+      "message": "שם, טלפון או מייל",
+      "call": "שם, או מספר בפורמט בינלאומי"
+    },
+    "pickHint": {
+      "message": "חפשו את הלקוח, והשיחה האחרונה שלו תיפתח.",
+      "call": "חפשו לקוח עם טלפון, או הקלידו מספר כמו ‎+972 50 123 4567."
+    },
+    "noConversation": "עם {name} עדיין אין שיחה. הודעה ראשונה שולחים כרגע מהאתר.",
+    "openFailed": "לא הצלחנו למצוא את השיחה כרגע. אפשר לנסות שוב.",
+    "typedNumber": "המספר שהקלדתם",
+    "opening": "פותחים את השיחה…",
+    "noPhone": "אין מספר טלפון",
+    "searchFailed": "לא הצלחנו לחפש כרגע.",
+    "searching": "מחפשים…",
+    "noMatch": "אין התאמות.",
+    "sheetBack": "חזרה",
+    "confirmNumber": "להתקשר למספר הזה?",
+    "confirmTitle": "להתקשר ל־{name}?",
+    "confirmBody": "השיחה יוצאת מהקו של העסק אל",
+    "callNow": "להתקשר",
+    "close": "סגירה"
+  },
+  "customers": {
+    "title": "לקוחות",
+    "back": "חזרה ללקוחות",
+    "website": "עריכה באתר",
+    "searchPlaceholder": "חיפוש לפי שם, טלפון או הזמנה",
+    "chipsLabel": "סינון לקוחות",
+    "chips": {
+      "everyone": "הכל",
+      "quiet": "בסיכון"
+    },
+    "count": "{count, plural, one {לקוח אחד} other {# לקוחות}} · פעילות אחרונה",
+    "noneQuiet": "אף אחד לא השתתק",
+    "channelsLabel": "{count, plural, one {כותב בערוץ אחד} other {כותב ב־# ערוצים}}",
+    "actionsLabel": "פעולות",
+    "call": "שיחה",
+    "spent": "סך קניות",
+    "history": "היסטוריה בכל הערוצים",
+    "ordersMore": "כל ההזמנות באתר"
+  },
+  "thread": {
+    "menu": "פעולות בשיחה",
+    "website": "פתיחה באתר המלא",
+    "cancel": "ביטול",
+    "customer": "מידע על הלקוח",
+    "ai": {
+      "return": "החזר ל‑AI",
+      "pause": "השהה את ה‑AI"
+    }
+  },
+  "customerInfo": {
+    "title": "מידע על הלקוח",
+    "back": "חזרה לשיחה",
+    "loading": "טוען את המידע על הלקוח",
+    "failed": "לא הצלחנו לטעון את החלק הזה",
+    "failedAll": "לא הצלחנו לטעון את המידע על הלקוח",
+    "noContact": "הלקוח עוד לא זוהה, אז אין עדיין מידע שנשמר עליו.",
+    "memory": {
+      "title": "מה GOTCHA זוכרת",
+      "empty": "GOTCHA עוד לא למדה פרטים על הלקוח"
+    },
+    "history": {
+      "title": "שיחות קודמות",
+      "empty": "אין שיחות קודמות",
+      "noSummary": "אין עדיין סיכום",
+      "resolved": "טופלה",
+      "messages": "{count, plural, one {הודעה אחת} other {# הודעות}}"
+    },
+    "orders": {
+      "title": "הזמנות",
+      "empty": "אין הזמנות להצגה",
+      "number": "הזמנה #{number}",
+      "unnumbered": "הזמנה",
+      "cancelled": "בוטלה"
+    },
+    "notes": {
+      "title": "הערות הצוות",
+      "empty": "אין הערות על הלקוח"
+    },
+    "crm": {
+      "title": "מה רשום ב‑CRM",
+      "empty": "אין רישומים ב‑CRM",
+      "kind": {
+        "note": "הערה",
+        "task": "משימה",
+        "call": "שיחה",
+        "email": "אימייל",
+        "meeting": "פגישה"
+      }
+    }
+  },
+  "copilot": {
+    "label": "Copilot",
+    "ready": "Copilot · תשובה מוכנה",
+    "more": "{count, plural, =1 {עוד אפשרות אחת} other {עוד # אפשרויות}}",
+    "dismiss": "סגירת ההצעה"
+  },
+  "loading": {
+    "home": "טוענים את הבית",
+    "inbox": "טוענים שיחות",
+    "thread": "טוענים את השיחה",
+    "approvals": "טוענים אישורים",
+    "approval": "טוענים את הבקשה",
+    "customers": "טוענים לקוחות",
+    "customer": "טוענים את הלקוח",
+    "outreach": "טוענים קמפיינים",
+    "campaign": "טוענים את הקמפיין",
+    "ask": "פותחים את השיחה עם GOTCHA"
+  }
+}

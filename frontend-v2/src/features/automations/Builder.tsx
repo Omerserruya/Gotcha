@@ -47,15 +47,20 @@ import {
   duplicateStep,
   appendTarget,
   freeHandles,
+  UNREACHABLE_HANDLE,
   insertAfter,
   insertBetween,
   insertRefusal,
   removeSteps,
   isLabelled,
   layout,
+  fanOf,
+  linePath,
+  linePoint,
   type Graph,
 } from './graph';
 import { DeleteAutomation } from './DeleteAutomation';
+import { routeNames, savedName, shownName } from './shown-name';
 import { Inspector, type Choices } from './Inspector';
 import { nodeIcon } from './node-icons';
 import { NodeCard } from './NodeCard';
@@ -110,7 +115,7 @@ export function Builder({
     nodes: initial.nodes ?? [],
     edges: initial.edges ?? [],
   });
-  const [name, setName] = useState(initial.name);
+  const [name, setName] = useState(() => shownName(initial, routeNames(t)));
   const [trigger, setTrigger] = useState<Trigger>(initial.trigger);
   /* AU4: a cart reminder's first send step has its "unreachable" exit - read from the trigger, never stored. */
   const cart = trigger.type === 'cart_abandoned';
@@ -153,12 +158,14 @@ export function Builder({
   const [, startRead] = useTransition();
 
   const dirty =
-    name.trim() !== automation.name ||
+    name.trim() !== shownName(automation, routeNames(t)) ||
     JSON.stringify(trigger) !== JSON.stringify(automation.trigger) ||
     // The steps and lines only: `cart` is read from the trigger, never saved.
     JSON.stringify({ nodes: graph.nodes, edges: graph.edges }) !==
       JSON.stringify({ nodes: automation.nodes ?? [], edges: automation.edges ?? [] });
   const { at, width, height } = layout(graph);
+  // Branches to the same next step: one line each, bowed apart (F2).
+  const fan = fanOf(graph);
 
   /*
     ★★ AU5 (dev, 2026-10-14): a line started at a fixed 112px under its card,
@@ -376,7 +383,7 @@ export function Builder({
     startPublish(async () => {
       setOutcome(null);
       const result = await publishAutomation(automation.id, {
-        name: name.trim(),
+        name: savedName(name, automation, routeNames(t)),
         trigger: { type: trigger.type ?? '', config: trigger.config },
         nodes: graph.nodes,
         edges: graph.edges,
@@ -394,7 +401,7 @@ export function Builder({
       setGraph({ nodes: result.automation.nodes ?? [], edges: result.automation.edges ?? [] });
       // Published: there is nothing before it to undo to.
       setHistory([]);
-      setName(result.automation.name);
+      setName(shownName(result.automation, routeNames(t)));
       setTrigger(result.automation.trigger);
       setOutcome(
         result.live
@@ -511,6 +518,11 @@ export function Builder({
             ) : null}
             {t(`builder.status.${automation.status}`)}
           </span>
+          {automation.origin === 'setup' ? (
+            <span className={styles.quiet} data-testid="builder-origin">
+              {t('origin.setup')}
+            </span>
+          ) : null}
           <span className={styles.quiet}>
             {automation.stats.lastRunAt === null ? t('noRuns') : t('builder.week', { count: runs })}
           </span>
@@ -762,11 +774,11 @@ export function Builder({
                         const y1 = from.y + 20 + bottomOf(edge.source);
                         const x2 = to.x + NODE_W / 2 + NODE_W / 2;
                         const y2 = to.y + 20;
-                        const mid = (y1 + y2) / 2;
                         return (
                           <path
                             key={edge.id ?? `${edge.source}-${edge.target}-${i}`}
-                            d={`M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`}
+                            d={linePath(x1, y1, x2, y2, fan.get(edge) ?? 0)}
+                            data-testid={`line-${edge.source}-${edge.sourceHandle ?? 'next'}`}
                           />
                         );
                       })}
@@ -778,15 +790,22 @@ export function Builder({
                       if (!from || !to) return null;
                       const y1 = from.y + 20 + bottomOf(edge.source);
                       const y2 = to.y + 20;
+                      const bow = fan.get(edge) ?? 0;
+                      // A line alone: its middle. One of a fan: higher, clear of its label.
+                      const plus = linePoint(
+                        from.x + NODE_W,
+                        y1,
+                        to.x + NODE_W,
+                        y2,
+                        bow,
+                        bow === 0 ? 0.5 : 0.3,
+                      );
                       return (
                         <button
                           key={`between-${edge.id ?? i}`}
                           type="button"
                           className={styles.between}
-                          style={{
-                            insetInlineStart: (from.x + to.x) / 2 + NODE_W,
-                            insetBlockStart: (y1 + y2) / 2,
-                          }}
+                          style={{ insetInlineStart: plus.x, insetBlockStart: plus.y }}
                           aria-label={t('builder.addBetween', {
                             from: stepName(graph.nodes.find((n) => n.id === edge.source)!),
                             to: stepName(graph.nodes.find((n) => n.id === edge.target)!),
@@ -804,12 +823,30 @@ export function Builder({
                       const to = at.get(edge.target);
                       if (!from || !to || !isLabelled(edge.sourceHandle)) return null;
                       const source = graph.nodes.find((n) => n.id === edge.source);
+                      const bow = fan.get(edge) ?? 0;
+                      /*
+                       * A line alone: just above the step it leads to. One of a fan
+                       * (lines that meet at that step): on its own line, where the
+                       * lines are furthest apart, so each label reads.
+                       */
+                      const spot =
+                        bow === 0
+                          ? { x: to.x + NODE_W, y: to.y + 2 }
+                          : linePoint(
+                              from.x + NODE_W,
+                              from.y + 20 + bottomOf(edge.source),
+                              to.x + NODE_W,
+                              to.y + 20,
+                              bow,
+                              0.55,
+                            );
                       return (
                         <span
                           key={`label-${edge.id ?? i}`}
                           className={styles.branch}
-                          // Just above the step it leads to.
-                          style={{ insetInlineStart: to.x + NODE_W, insetBlockStart: to.y + 2 }}
+                          data-fan={bow === 0 ? undefined : ''}
+                          data-testid={`label-${edge.source}-${edge.sourceHandle}`}
+                          style={{ insetInlineStart: spot.x, insetBlockStart: spot.y }}
                         >
                           {source
                             ? branchName(source, edge.sourceHandle!, graph, t, locale)
@@ -835,6 +872,7 @@ export function Builder({
                           <NodeCard
                             node={node}
                             trigger={trigger}
+                            choices={choices}
                             selected={node.id === selected || picked.has(node.id)}
                             marked={marked.has(node.id) || checked.has(node.id)}
                             issue={checked.has(node.id) ? issueText(checked.get(node.id)!) : null}
@@ -846,29 +884,51 @@ export function Builder({
                           />
                           {free.length > 0 ? (
                             <span className={styles.adds}>
-                              {free.map((handle) => (
-                                <button
-                                  key={handle}
-                                  type="button"
-                                  className={styles.add}
-                                  onClick={() => openSheet(node.id, handle)}
-                                  {...dropOn((item) => add(node.id, handle, item))}
-                                  aria-label={
-                                    isLabelled(handle)
-                                      ? t('builder.addOn', {
-                                          step: stepName(node),
-                                          branch: branchName(node, handle, graph, t, locale),
-                                        })
-                                      : t('builder.addAfter', { step: stepName(node) })
-                                  }
-                                  data-testid={`add-${node.id}-${handle}`}
-                                >
-                                  <Plus size={12} aria-hidden="true" />
-                                  {isLabelled(handle) ? (
-                                    <span>{branchName(node, handle, graph, t, locale)}</span>
-                                  ) : null}
-                                </button>
-                              ))}
+                              {free.map((handle) => {
+                                /*
+                                 * ★★ A BRANCH THAT ANSWERS NOBODY (F2, 2026-11-09): a
+                                 *   customer who lands on it gets no answer - the run
+                                 *   halts. Said on the "+" itself, before any save.
+                                 *   Not a cart's "unreachable" exit: nothing was sent.
+                                 *   Only on a route that answers NEW conversations: the
+                                 *   halted run hands back to the previous owner, which
+                                 *   there is nobody. Elsewhere a free branch just ends.
+                                 */
+                                const unanswered =
+                                  trigger.type === 'conversation_started' &&
+                                  isLabelled(handle) &&
+                                  handle !== UNREACHABLE_HANDLE;
+                                const label = isLabelled(handle)
+                                  ? t('builder.addOn', {
+                                      step: stepName(node),
+                                      branch: branchName(node, handle, graph, t, locale),
+                                    })
+                                  : t('builder.addAfter', { step: stepName(node) });
+                                return (
+                                  <button
+                                    key={handle}
+                                    type="button"
+                                    className={styles.add}
+                                    onClick={() => openSheet(node.id, handle)}
+                                    {...dropOn((item) => add(node.id, handle, item))}
+                                    aria-label={
+                                      unanswered ? `${label}. ${t('builder.unanswered')}` : label
+                                    }
+                                    data-unanswered={unanswered ? '' : undefined}
+                                    data-testid={`add-${node.id}-${handle}`}
+                                  >
+                                    <Plus size={12} aria-hidden="true" />
+                                    {isLabelled(handle) ? (
+                                      <span>{branchName(node, handle, graph, t, locale)}</span>
+                                    ) : null}
+                                    {unanswered ? (
+                                      <span className={styles.unanswered}>
+                                        {t('builder.unansweredShort')}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
                             </span>
                           ) : null}
                         </div>
@@ -1006,7 +1066,7 @@ export function Builder({
 
       {deleting ? (
         <DeleteAutomation
-          targets={[{ id: automation.id, name: automation.name }]}
+          targets={[{ id: automation.id, name: shownName(automation, routeNames(t)) }]}
           onClose={() => setDeleting(false)}
           onDeleted={() => router.push('/studio/automations?deleted=1')}
         />

@@ -71,6 +71,8 @@
     "replyTo": "Reply to this message",
     "mediaUnavailable": "This attachment couldn't be fetched - WhatsApp keeps media only a few days.",
     "openPhoto": "Open the photo",
+    "closePhoto": "Close the photo",
+    "bannerClose": "Dismiss",
     "file": "Download the file",
     "fileSize": {
       "kb": "{size, number} KB",
@@ -89,9 +91,14 @@
     "product": {
       "view": "View product",
       "soldOut": "Out of stock"
+    },
+    "day": {
+      "today": "Today",
+      "yesterday": "Yesterday"
     }
   },
   "queue": {
+    "daysAgo": "{days, plural, =1 {Yesterday} other {# days ago}}",
     "cap": "Showing the {count} most recent.",
     "empty": "Nothing is waiting.",
     "unavailable": "We couldn't read the queue just now.",
@@ -239,12 +246,14 @@
     "providerFailed": "GOTCHA couldn’t draft a reply just now. Nothing is wrong with the conversation, and this is our side rather than yours.",
     "noProvider": "GOTCHA has no AI provider set up, so it cannot draft replies yet. Someone with an admin role can connect one.",
     "switchedOff": "Suggested replies are switched off for this workspace. Someone with an admin role can turn them on.",
-    "noEmployee": "There is no AI employee to draft with. One can be created under Studio · Employees."
+    "noEmployee": "There is no AI employee to draft with. One can be created under Studio · Employees.",
+    "aiOrClosed": "The AI or an automated flow has this conversation, or it's closed, so there are no new suggestions now."
   },
   "composer": {
     "label": "Your reply",
     "labelOn": "Your reply, on {channel}",
     "placeholder": "Write the reply. Enter makes a new line.",
+    "placeholderPhone": "Write a message",
     "send": "Send to the customer",
     "sending": "Sending…",
     "queued": "Queued. It will show above as it goes out, and say so if it fails.",
@@ -258,6 +267,10 @@
     },
     "attachImage": "Attach a photo",
     "attachFile": "Attach a file",
+    "attach": "Attach",
+    "attachPhotos": "Photos",
+    "attachCamera": "Camera",
+    "attachFiles": "Files",
     "removeFile": "Remove {name}",
     "attached": "Will be sent with your reply",
     "compose": {
@@ -335,6 +348,8 @@
   },
   "wall": {
     "name": "Copilot",
+    "hide": "Hide Copilot",
+    "show": "Show Copilot",
     "previous": "Previous",
     "next": "Next",
     "carousel": "carousel",
@@ -479,16 +494,28 @@
     "ask": {
       "placeholder": "Ask Copilot anything…",
       "label": "Ask Copilot",
-      "title": "GOTCHA answers by writing a reply into the box below. Nothing is sent to the customer.",
+      "title": "A private chat with Copilot about this conversation. Nothing is sent to the customer.",
       "nothingOpen": "Open a conversation to ask about it.",
       "send": "Ask",
-      "asking": "Asking…",
+      "asking": "Sending…",
       "failed": {
         "empty": "Write a question first.",
         "blank": "GOTCHA had nothing to write for that.",
         "units_exhausted": "The workspace has used its AI units. Someone with an admin role can top up.",
-        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent."
-      }
+        "failed": "Couldn’t reach GOTCHA just now. Nothing was sent.",
+        "busy": "The last answer is still on its way. Your message is kept here; try again in a moment.",
+        "too_long": "That message is too long. Up to {max, number} characters.",
+        "no_ai_employee": "There's no AI employee yet. Set one up in Studio, and Copilot can help.",
+        "not_on_plan": "Copilot isn't on this workspace's plan.",
+        "read_failed": "We couldn't load the earlier chat. You can still ask.",
+        "clear_failed": "We couldn't start over. The chat is as it was."
+      },
+      "private": "Only you see this chat. Nothing in it reaches the customer.",
+      "startOver": "Start over",
+      "thinking": "Looking into it…",
+      "draftLabel": "A reply for the customer",
+      "useAsReply": "Use as reply",
+      "retry": "Try again"
     }
   }
 }

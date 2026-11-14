@@ -18,6 +18,10 @@ import {
   insertBetween,
   insertRefusal,
   layout,
+  FAN,
+  fanOf,
+  linePath,
+  linePoint,
   onlyThrough,
   outputsOf,
   removeStep,
@@ -236,11 +240,146 @@ describe('★★ AU9 - a step on a line, between two steps', () => {
     expect(insertBetween(graph, graph.edges[1]!, 'add_tag', () => 'x', plain)).toBeNull();
   });
 
-  it('a final step, or one with branches, never on a line', () => {
+  it('a final step never on a line; one with branches now may (F2)', () => {
     const graph = g([node('t', 'automation_trigger'), node('a', 'add_tag')], [edge('t', 'a')]);
     expect(insertRefusal(graph, graph.edges[0]!, 'close_conversation', plain)).toBe('terminal');
-    expect(insertRefusal(graph, graph.edges[0]!, 'opening_hours', plain)).toBe('branching');
+    expect(insertRefusal(graph, graph.edges[0]!, 'opening_hours', plain)).toBeNull();
     expect(insertRefusal(graph, graph.edges[0]!, 'send_message_text', plain)).toBeNull();
+  });
+
+  describe('★★ F2 (Omer, 2026-11-09): a flow before the AI - every branch keeps answering', () => {
+    // The setup route: trigger → Hand to AI employee.
+    const route = () =>
+      g(
+        [node('t', 'automation_trigger'), node('ai', 'hand_to_ai', { aiAgentId: 'sheri' })],
+        [edge('t', 'ai')],
+      );
+    const into = (made: { graph: Graph; id: string }, target: string) =>
+      made.graph.edges
+        .filter((e) => e.source === made.id && e.target === target)
+        .map((e) => e.sourceHandle);
+
+    it.each([
+      ['opening_hours', ['open', 'closed']],
+      ['condition_group', ['true', 'false']],
+      ['segment', ['new', 'returning', 'vip']],
+    ])('%s before the AI: every branch (%o) leads to it, none free', (type, handles) => {
+      const r = route();
+      let n = 0;
+      const made = insertBetween(r, r.edges[0]!, type, () => `n${++n}`, plain)!;
+      expect(made.graph.edges).toContainEqual(
+        expect.objectContaining({ source: 't', target: made.id }),
+      );
+      expect(into(made, 'ai')).toEqual(handles);
+      const step = made.graph.nodes.find((x) => x.id === made.id)!;
+      expect(freeHandles(step, made.graph)).toEqual([]);
+    });
+
+    it('★ the menu: buttons, then the wait - each button, a typed reply and the timeout reach the AI', () => {
+      const r = route();
+      let n = 0;
+      const id = () => `n${++n}`;
+      const withButtons = insertBetween(r, r.edges[0]!, 'send_buttons', id, plain)!;
+      const buttons = withButtons.graph.nodes.find((x) => x.id === withButtons.id)!;
+      const b1 = (buttons.data.buttons as { id: string }[])[0]!.id;
+      // Buttons are a plain step: one line on, as before.
+      expect(into(withButtons, 'ai')).toEqual([null]);
+      const line = withButtons.graph.edges.find((e) => e.source === withButtons.id)!;
+      expect(insertRefusal(withButtons.graph, line, 'wait_for_reply', plain)).toBeNull();
+      const made = insertBetween(withButtons.graph, line, 'wait_for_reply', id, plain)!;
+      expect(into(made, 'ai')).toEqual([`btn:${b1}`, 'reply', 'timeout']);
+      const wait = made.graph.nodes.find((x) => x.id === made.id)!;
+      expect(freeHandles(wait, made.graph)).toEqual([]);
+    });
+
+    it('a plain step keeps its one line; a cart’s "unreachable" exit stays free', () => {
+      const cart: Graph = {
+        cart: true,
+        ...g([node('t', 'automation_trigger'), node('a', 'add_tag')], [edge('t', 'a')]),
+      };
+      const made = insertBetween(cart, cart.edges[0]!, 'send_message_text', () => 'm', plain)!;
+      expect(into(made, 'a')).toEqual([null]);
+      const send = made.graph.nodes.find((x) => x.id === 'm')!;
+      expect(freeHandles(send, made.graph)).toEqual(['unreachable']);
+    });
+
+    it('★ the canvas draws one step reached by several lines once, under its first parent', () => {
+      const r = route();
+      let n = 0;
+      const made = insertBetween(r, r.edges[0]!, 'opening_hours', () => `n${++n}`, plain)!;
+      const { at } = layout(made.graph);
+      expect([...at.keys()].sort()).toEqual(['ai', made.id, 't'].sort());
+      expect(at.get('ai')!.y).toBeGreaterThan(at.get(made.id)!.y);
+      expect(at.get(made.id)!.y).toBeGreaterThan(at.get('t')!.y);
+    });
+
+    it('★★ two inserts deep: every step is still drawn (dev 6c4b5459: the AI step vanished)', () => {
+      // The supervisor's walk: hours on trigger→AI, then a wait on trigger→hours.
+      const r = route();
+      let n = 0;
+      const hours = insertBetween(r, r.edges[0]!, 'opening_hours', () => `n${++n}`, plain)!;
+      const above = hours.graph.edges.find((e) => e.source === 't')!;
+      const wait = insertBetween(hours.graph, above, 'wait_for_reply', () => `n${++n}`, plain)!;
+      // The data was always right: both of the wait's branches to hours, both of hours' to the AI.
+      expect(into(wait, hours.id)).toEqual(['reply', 'timeout']);
+      expect(
+        wait.graph.edges.filter((e) => e.source === hours.id && e.target === 'ai').length,
+      ).toBe(2);
+      const { at } = layout(wait.graph);
+      expect([...at.keys()].sort()).toEqual(['ai', hours.id, wait.id, 't'].sort());
+      expect(at.get('ai')!.y).toBe(3 * ROW_H);
+      expect(at.get(hours.id)!.y).toBe(2 * ROW_H);
+    });
+  });
+
+  describe('★★ F2: branches to the same next step are drawn apart', () => {
+    const fanned = (): Graph => ({
+      nodes: [
+        node('t', 'automation_trigger'),
+        node('h', 'opening_hours'),
+        node('ai', 'hand_to_ai'),
+      ],
+      // Out of branch order on purpose: the fan follows the step's own order.
+      edges: [
+        edge('t', 'h'),
+        { ...edge('h', 'ai', 'closed'), id: 'c' },
+        { ...edge('h', 'ai', 'open'), id: 'o' },
+      ],
+    });
+
+    it('two branches, one target: two different bows, in the step’s order; a line alone: none', () => {
+      const graph = fanned();
+      const fan = fanOf(graph);
+      const [trig, closed, open] = graph.edges;
+      expect(fan.get(trig!)).toBe(0);
+      expect(fan.get(open!)).toBe(-FAN / 2);
+      expect(fan.get(closed!)).toBe(FAN / 2);
+    });
+
+    it('three branches: one each side and one straight', () => {
+      const graph: Graph = {
+        nodes: [
+          node('t', 'automation_trigger'),
+          node('w', 'wait_for_reply'),
+          node('ai', 'hand_to_ai'),
+        ],
+        edges: [
+          edge('t', 'w'),
+          { ...edge('w', 'ai', 'timeout'), id: 'x' },
+          { ...edge('w', 'ai', 'reply'), id: 'y' },
+        ],
+      };
+      const fan = fanOf(graph);
+      expect(new Set([fan.get(graph.edges[1]!), fan.get(graph.edges[2]!)]).size).toBe(2);
+    });
+
+    it('a bowed line passes to the side at its middle and still meets both cards', () => {
+      expect(linePoint(0, 0, 0, 100, 0, 0.5)).toEqual({ x: 0, y: 50 });
+      expect(linePoint(0, 0, 0, 100, 80, 0.5)).toEqual({ x: 60, y: 50 });
+      expect(linePoint(0, 0, 0, 100, 80, 0)).toEqual({ x: 0, y: 0 });
+      expect(linePoint(0, 0, 0, 100, 80, 1)).toEqual({ x: 0, y: 100 });
+      expect(linePath(0, 0, 0, 100, 80)).toBe('M 0 0 C 80 50, 80 50, 0 100');
+    });
   });
 
   it('★★ a comment automation, before its first wait: only comment-safe; after it, anything', () => {

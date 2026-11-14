@@ -14,23 +14,45 @@ beforeEach(() => {
   warn.mockReset();
 });
 
-describe('★★ W2 - who may see the target', () => {
-  it('an Owner: the settings', async () => {
-    get.mockResolvedValueOnce({ enabled: true, slaMinutes: 30, warningThreshold: 70 });
-    expect(await loadSlaSetup()).toEqual({
-      kind: 'owner',
-      settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 },
+describe('★★ W2 - who may see the target, and who may change it', () => {
+  const SETTINGS = { enabled: true, slaMinutes: 30, warningThreshold: 70 };
+  /** The target's read, and `/me` with this role (`undefined`: unread). */
+  const route = (sla: () => unknown, role: string | null | undefined) =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      if (endpoint.path === '/api/auth/me') {
+        if (role === undefined) throw new Error('down');
+        return { user: { id: 'u1', email: 'a@b.c', role }, tenantStatus: 'ACTIVE' };
+      }
+      return sla();
     });
+
+  it('the admin role: the settings, to edit', async () => {
+    route(() => SETTINGS, 'ADMIN');
+    expect(await loadSlaSetup()).toEqual({ kind: 'owner', settings: SETTINGS });
+  });
+
+  it('★★ anyone else the read answers: the value, read only - their save would be refused', async () => {
+    route(() => SETTINGS, 'AGENT');
+    expect(await loadSlaSetup()).toEqual({ kind: 'readOnly', settings: SETTINGS });
+  });
+
+  it('★ a role unread is not admin', async () => {
+    route(() => SETTINGS, undefined);
+    expect(await loadSlaSetup()).toEqual({ kind: 'readOnly', settings: SETTINGS });
   });
 
   it('★★ a 403 is "not yours", not a fault', async () => {
-    get.mockRejectedValueOnce(new ApiError({ status: 403, kind: 'authorization' }));
+    route(() => {
+      throw new ApiError({ status: 403, kind: 'authorization' });
+    }, 'AGENT');
     expect(await loadSlaSetup()).toEqual({ kind: 'forbidden' });
     expect(warn).not.toHaveBeenCalled();
   });
 
   it('anything else is a failed read', async () => {
-    get.mockRejectedValueOnce(new Error('down'));
+    route(() => {
+      throw new Error('down');
+    }, 'ADMIN');
     expect(await loadSlaSetup()).toEqual({ kind: 'failed' });
   });
 });

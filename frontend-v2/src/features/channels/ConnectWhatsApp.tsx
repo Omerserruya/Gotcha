@@ -43,6 +43,8 @@ const STEPS = ['where', 'meta', 'number', 'templates', 'learn'] as const;
 export function ConnectWhatsApp({
   launches,
   closeHref,
+  onCancel,
+  onDone,
 }: {
   /** The server's launch per choice (backend 294adc0c). */
   readonly launches: {
@@ -50,6 +52,10 @@ export function ConnectWhatsApp({
     readonly newNumber: EmbeddedSignupLaunch | null;
   };
   readonly closeHref: string;
+  /** Inline (onboarding): Cancel closes in place rather than navigating to `closeHref`. */
+  readonly onCancel?: () => void;
+  /** Inline (onboarding): the last Continue stays on the page rather than opening 13e. */
+  readonly onDone?: () => void;
 }) {
   const t = useTranslations('channels.whatsapp.wizard');
   const router = useRouter();
@@ -107,6 +113,10 @@ export function ConnectWhatsApp({
 
   /** 5 · Learn: 13e shows the import once Meta sends the history. */
   function toLearn() {
+    if (onDone) {
+      onDone();
+      return;
+    }
     router.push(`/settings/channels?panel=whatsapp&view=progress`);
     router.refresh();
   }
@@ -280,9 +290,20 @@ export function ConnectWhatsApp({
               {t('where.continue')}
               <ExternalLink size={13} aria-hidden="true" />
             </button>
-            <Link href={closeHref} className={styles.connectCancel} data-testid="connect-cancel">
-              {t('cancel')}
-            </Link>
+            {onCancel ? (
+              <button
+                type="button"
+                className={styles.connectCancel}
+                data-testid="connect-cancel"
+                onClick={onCancel}
+              >
+                {t('cancel')}
+              </button>
+            ) : (
+              <Link href={closeHref} className={styles.connectCancel} data-testid="connect-cancel">
+                {t('cancel')}
+              </Link>
+            )}
           </>
         )}
       </footer>
@@ -298,7 +319,7 @@ function TemplatesStep({
 }) {
   const t = useTranslations('channels.whatsapp.required');
   return (
-    <div data-testid="connect-templates">
+    <div className={styles.connectStep} data-testid="connect-templates">
       <h3 className={styles.connectQuestion}>{t('title')}</h3>
       <p className={styles.connectLead}>{t('lead')}</p>
       {required === null ? (

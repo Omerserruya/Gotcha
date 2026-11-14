@@ -26,8 +26,8 @@ export async function WhatsAppPanel({
   unprofiled = [],
   children,
 }: {
-  /** The account in one line: how many numbers. */
-  readonly line: string;
+  /** The account in one line: which business account(s), and how many numbers. */
+  readonly line: ReactNode;
   /** The open tab (`?tab=`); its content is `children`. */
   readonly tab?: WhatsAppTab;
   /** Numbers GOTCHA keeps a record of - what the foot's Refresh and Disconnect act on. */

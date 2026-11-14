@@ -34,11 +34,15 @@ export type LiveResult =
   | { readonly ok: false; readonly reason: 'invalid'; readonly errors: readonly Issue[] }
   | { readonly ok: false; readonly reason: 'forbidden' | 'failed' };
 
-/** The issues a 422 carried (`ApiError.issues`); `null` when it was not a refusal. */
+/**
+ * The issues a 422 carried (`ApiError.issues`); `null` when it was not a
+ * refusal. Its warnings come after its errors: a branch no line leaves
+ * (branch_unconnected) is said even when something else stopped it.
+ */
 function refusalOf(cause: unknown): readonly Issue[] | null {
   if (!isApiError(cause) || cause.status !== 422) return null;
   const parsed = refusalSchema.safeParse({ error: 'validation_failed', ...cause.issues });
-  return parsed.success ? parsed.data.errors : [];
+  return parsed.success ? [...parsed.data.errors, ...parsed.data.warnings] : [];
 }
 
 /**
@@ -187,14 +191,17 @@ export async function publishAutomation(
   },
 ): Promise<SaveResult> {
   let saved: Automation;
+  // A PUT answers `{ data, warnings }`: a live route's save says what it warned about.
+  let warned: readonly Issue[];
   try {
     const answer = await serverApi().put({
       endpoint: automationEndpoints.one(id),
       body,
-      payload: automationOneSchema,
+      payload: activatedSchema,
       raw: true,
     });
     saved = answer.data;
+    warned = answer.warnings;
   } catch (cause) {
     await signInIfSignedOut(cause);
     const errors = refusalOf(cause);
@@ -208,7 +215,7 @@ export async function publishAutomation(
   }
   revalidatePath('/[locale]/studio/automations', 'layout');
   if (saved.status === 'live')
-    return { ok: true, automation: saved, live: true, warnings: [], blocked: [] };
+    return { ok: true, automation: saved, live: true, warnings: warned, blocked: [] };
   const live = await setLive(id, true);
   if (live.ok)
     return {
@@ -291,7 +298,14 @@ export async function provisionWebhook(automationId: string): Promise<WebhookTri
  * by cascade, its runs; a conversation parked on one of its runs is released.
  * `false`: it was not deleted.
  */
-export async function deleteAutomation(id: string): Promise<boolean> {
+/**
+ * `setup_route`: the route refuses to delete the automation onboarding wrote
+ * (422 `setup_route_required`, Omer 2026-11-02) - it answers every new
+ * conversation. Pausing it stays allowed.
+ */
+export type DeleteResult = 'deleted' | 'setup_route' | 'failed';
+
+export async function deleteAutomation(id: string): Promise<DeleteResult> {
   try {
     await serverApi().delete({
       endpoint: automationEndpoints.one(id),
@@ -303,13 +317,14 @@ export async function deleteAutomation(id: string): Promise<boolean> {
       router's state under the builder's push back to the list. The list
       drops deleted rows itself, and reads fresh when it is opened.
     */
-    return true;
+    return 'deleted';
   } catch (cause) {
     await signInIfSignedOut(cause);
+    if (isApiError(cause) && cause.code === 'setup_route_required') return 'setup_route';
     logger.warn('automations.delete_failed', {
       status: isApiError(cause) ? cause.status : undefined,
     });
-    return false;
+    return 'failed';
   }
 }
 

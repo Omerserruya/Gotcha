@@ -11,6 +11,7 @@ import {
   messageLocation,
   safeMediaUrl,
 } from './media';
+import { PhotoLink } from './PhotoLink';
 import { VoicePlayer } from './VoicePlayer';
 import styles from './Inbox.module.css';
 
@@ -25,6 +26,7 @@ type T = (
   key:
     | 'mediaUnavailable'
     | 'openPhoto'
+    | 'closePhoto'
     | 'file'
     | 'contact'
     | 'call'
@@ -151,17 +153,14 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
 
   if (kind === 'image' || kind === 'sticker') {
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      <PhotoLink
+        url={url}
+        alt={message.fileName ?? ''}
         className={kind === 'sticker' ? styles.sticker : styles.photo}
-        aria-label={t('openPhoto')}
-        data-testid={`photo-${message.id}`}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element -- a customer's file, from our host or theirs */}
-        <img src={url} alt={message.fileName ?? ''} loading="lazy" />
-      </a>
+        openLabel={t('openPhoto')}
+        closeLabel={t('closePhoto')}
+        testId={`photo-${message.id}`}
+      />
     );
   }
   if (kind === 'video') {
@@ -194,6 +193,8 @@ export function MessageMedia({ message, t }: { readonly message: InboxMessage; r
       download={name ?? undefined}
       className={styles.file}
       data-testid={`file-${message.id}`}
+      // The native app opens it with a signed link (shell `NativeBridge`).
+      data-signed-file=""
     >
       <FileText size={16} aria-hidden="true" />
       <span className={styles.fileName}>

@@ -1,4 +1,6 @@
+import { Check, CheckCheck, Clock } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
+import type { ReactNode } from 'react';
 
 import {
   quotedState,
@@ -44,18 +46,21 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 export async function MessageStream({
   messages,
   channel,
+  variant,
 }: {
   /** `null` when the read failed. Never an empty conversation. */
   readonly messages: readonly InboxMessage[] | null;
   /** Drives nothing here yet; carried so the caller cannot forget it exists. */
   readonly channel: string | null;
+  /** The phone app's look (`/m`); the same messages, drawn its way. */
+  readonly variant?: 'phone';
 }) {
   const t = await getTranslations('inbox');
   const format = await getFormatter();
 
   if (messages === null) {
     return (
-      <div className={styles.stream} data-testid="stream-unavailable">
+      <div className={styles.stream} data-variant={variant} data-testid="stream-unavailable">
         <p className={styles.note}>{t('stream.unavailable')}</p>
       </div>
     );
@@ -63,21 +68,57 @@ export async function MessageStream({
 
   if (messages.length === 0) {
     return (
-      <div className={styles.stream} data-testid="stream-empty">
+      <div className={styles.stream} data-variant={variant} data-testid="stream-empty">
         <p className={styles.note}>{t('stream.empty')}</p>
       </div>
     );
   }
 
+  /*
+   * The phone's day chips ("Today", "Yesterday", a date) where the day turns,
+   * as a chat draws them. The website's stream reads the time on each message.
+   */
+  const dayStarts = new Map<string, string>();
+  if (variant === 'phone') {
+    const dayOf = (at: Date) =>
+      format.dateTime(at, { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const now = new Date();
+    const today = dayOf(now);
+    const yesterday = dayOf(new Date(now.getTime() - 86_400_000));
+    let last: string | null = null;
+    for (const message of messages) {
+      const at = new Date(message.createdAt);
+      if (Number.isNaN(at.getTime())) continue;
+      const day = dayOf(at);
+      if (day === last) continue;
+      last = day;
+      dayStarts.set(
+        message.id,
+        day === today
+          ? t('stream.day.today')
+          : day === yesterday
+            ? t('stream.day.yesterday')
+            : format.dateTime(at, { day: 'numeric', month: 'long' }),
+      );
+    }
+  }
+
   return (
     <ol
       className={styles.stream}
+      data-variant={variant}
       data-testid="message-stream"
       data-channel={channel ?? 'unknown'}
       /* What `StreamPin` scrolls to the latest message. */
       {...{ [STREAM_SCROLLER]: '' }}
     >
-      {messages.map((message) => {
+      {messages.map((message) => [
+        variant === 'phone' && dayStarts.has(message.id) ? (
+          <li key={`day-${message.id}`} className={styles.dayChip} data-testid={`day-${message.id}`}>
+            {dayStarts.get(message.id)}
+          </li>
+        ) : null,
+        ((): ReactNode => {
         /*
          * ════════════════════════════════════════════════════════════════
          * ★★ A COLLEAGUE'S ACTION IS NOT A MESSAGE, AND NOT THE CUSTOMER'S
@@ -189,6 +230,15 @@ export async function MessageStream({
               carried a footer 02 does not have.
             */}
             <div className={styles.bubble}>
+              {/* The phone names who answered at the top of the bubble, as the design does. */}
+              {variant === 'phone' && senderLabel(message) !== null ? (
+                <span
+                  className={styles.bubbleBy}
+                  data-gotcha={senderLabel(message) === 'GOTCHA' ? '' : undefined}
+                >
+                  {senderLabel(message)}
+                </span>
+              ) : null}
               {/*
               ★★ THE QUOTE ITSELF, FROM THE REPLY. 02 draws who said it and a
               line of what they said, inside the bubble above the reply.
@@ -292,8 +342,10 @@ export async function MessageStream({
                   {t('stream.unknownType')}
                 </p>
               ) : null}
+              {variant === 'phone' ? <PhoneStamp message={message} format={format} t={t} /> : null}
             </div>
 
+            {variant === 'phone' && deliveryOf(message) !== 'failed' ? null : (
             <p className={styles.meta}>
               <time dateTime={message.createdAt}>
                 {format.dateTime(new Date(message.createdAt), {
@@ -366,6 +418,7 @@ export async function MessageStream({
                 );
               })()}
             </p>
+            )}
 
             {/*
               ★ 02's hover bar, with Reply - the one of its four actions with
@@ -394,7 +447,8 @@ export async function MessageStream({
             />
           </li>
         );
-      })}
+        })(),
+      ])}
     </ol>
   );
 }
@@ -433,4 +487,54 @@ function systemDivider(
     from: message.metadata?.fromAgentName ?? '',
     to: message.metadata?.toAgentName ?? '',
   });
+}
+
+/**
+ * The phone's time and delivery, inside the bubble at its end: `09:41` and a
+ * tick - one for sent, two for delivered, two in colour once the customer read
+ * it, a clock while it is on its way. A failure is not a tick: it is said in
+ * words under the bubble, where the website says it.
+ */
+function PhoneStamp({
+  message,
+  format,
+  t,
+}: {
+  readonly message: InboxMessage;
+  readonly format: Awaited<ReturnType<typeof getFormatter>>;
+  readonly t: Awaited<ReturnType<typeof getTranslations<'inbox'>>>;
+}) {
+  const delivery = message.direction === 'OUTBOUND' ? deliveryOf(message) : null;
+  return (
+    <span className={styles.bubbleStamp}>
+      <time dateTime={message.createdAt}>
+        {format.dateTime(new Date(message.createdAt), {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })}
+      </time>
+      {delivery === 'read' ? (
+        <span className={styles.bubbleTick} data-read="">
+          <CheckCheck aria-hidden size={14} strokeWidth={2} />
+          <span className="srOnly">{t('stream.customerRead')}</span>
+        </span>
+      ) : delivery === 'delivered' ? (
+        <span className={styles.bubbleTick}>
+          <CheckCheck aria-hidden size={14} strokeWidth={2} />
+          <span className="srOnly">{t('stream.delivered')}</span>
+        </span>
+      ) : delivery === 'sent' ? (
+        <span className={styles.bubbleTick}>
+          <Check aria-hidden size={14} strokeWidth={2} />
+          <span className="srOnly">{t('stream.sent')}</span>
+        </span>
+      ) : delivery === 'pending' ? (
+        <span className={styles.bubbleTick}>
+          <Clock aria-hidden size={12} strokeWidth={2} />
+          <span className="srOnly">{t('stream.pending')}</span>
+        </span>
+      ) : null}
+    </span>
+  );
 }

@@ -7,6 +7,7 @@ import { AuditSection, LoginHistory } from '@/features/security/SecuritySections
 import { SessionList } from '@/features/security/SessionList';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SettingsSection } from '@/shell/SettingsSection';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Settings · Security - screen 16.
@@ -50,7 +51,9 @@ export default async function Page() {
         <section className={styles.card} data-testid="section-mfa">
           <h2 className="srOnly">{t('heading.mfa')}</h2>
           {tenant ? (
-            <MfaPolicy policy={tenant} />
+            <SupportRefused kind="ownership">
+              <MfaPolicy policy={tenant} />
+            </SupportRefused>
           ) : (
             <p className={styles.unavailable} data-testid="mfa-unavailable">
               {t('mfa.unavailable')}
@@ -81,7 +84,9 @@ export default async function Page() {
               </span>
             ) : null}
           </header>
-          <SessionList sessions={sessions} available={sessionsAvailable} />
+          <SupportRefused kind="ownership">
+            <SessionList sessions={sessions} available={sessionsAvailable} />
+          </SupportRefused>
         </section>
       </div>
 

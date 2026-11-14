@@ -5,13 +5,13 @@
     "reading": "Reading it",
     "learned": "What it learned",
     "truth": "Source of truth",
-    "try": "Try it"
+    "try": "Try it",
+    "learn": "Learning your site",
+    "systems": "Connect systems",
+    "channels": "Connect channels",
+    "live": "Check and go live"
   },
-  "mostImportant": "Most important",
   "website": {
-    "headline": "It starts from what you already have.",
-    "lead": "Your website, your store, your past conversations. You confirm, GOTCHA reads.",
-    "foot": "Nothing reaches a customer until you say so",
     "title": "Is this your website?",
     "fromEmail": "We took it from {email}",
     "from": {
@@ -28,6 +28,7 @@
     "readThis": "Read this one",
     "back": "Back to {host}",
     "notAnAddress": "That doesn't look like a website address. Try something like yourbusiness.com",
+    "startFailed": "Reading couldn't start. Try again in a moment.",
     "noWebsite": "No website? Start from something else",
     "sources": {
       "instagram": {
@@ -46,42 +47,7 @@
     "elsewhereWhy": "Starting from these isn't available yet. For now GOTCHA starts from a website",
     "consent": "By continuing you agree to the <terms>Terms of Service</terms> and the <privacy>Privacy Policy</privacy>"
   },
-  "reading": {
-    "headline": "It reads your website so you don't have to explain it.",
-    "lead": {
-      "starting": "Starting…",
-      "reading": "About two minutes. You can watch, or go make coffee",
-      "done": "Done. Here's what it found",
-      "failed": "It couldn't finish reading the site. You can try again, or try another address",
-      "notStarted": "The read hasn't started. Try again from your website"
-    },
-    "foot": "You can close this tab, it keeps going",
-    "title": "Reading <host></host>",
-    "titleNoHost": "Reading your website",
-    "progress": "How far the read is",
-    "tracks": {
-      "pages": "Pages",
-      "products": "Products",
-      "policies": "Policies",
-      "places": "Places",
-      "voice": "Voice"
-    },
-    "ofPages": "of {requested}",
-    "counting": "Counting as it reads",
-    "notCounted": "Not counted separately yet",
-    "found": "Found just now",
-    "factsSoon": "Facts appear here as pages are turned into knowledge",
-    "nothingWritten": "Nothing was added to Knowledge from this read",
-    "factsUnread": "Couldn't read Knowledge just now",
-    "notFound": "not found anywhere",
-    "missed": "Couldn't check just now. Trying again",
-    "next": "See what it learned",
-    "again": "Back to your website"
-  },
   "learned": {
-    "headline": "What it knows, and how it will sound.",
-    "lead": "Approve once. Everything here lands in Knowledge, where you can change it any time.",
-    "foot": "Nothing reaches a customer until you say so",
     "title": "What GOTCHA knows now",
     "count": "{facts, plural, =1 {1 topic from your website} other {# topics from your website}}",
     "countFromPages": "{facts, plural, =1 {1 topic} other {# topics}} from {pages, plural, =1 {1 page} other {# pages}}",
@@ -120,61 +86,7 @@
       "adjust": "Adjust"
     }
   },
-  "truth": {
-    "headline": "The most important connection you'll make.",
-    "lead": "Your website explains how things work. Your store knows what's true right now. GOTCHA checks it before every answer about an order, a price or stock.",
-    "foot": "You decide what it may change. Reading is always safe",
-    "title": "Where does the truth live?",
-    "subtitle": "Orders, stock, prices and customers. GOTCHA checks here before every answer, so it never guesses from an old web page",
-    "systems": {
-      "shopify": "Shopify",
-      "woocommerce": "WooCommerce",
-      "priority": "Priority",
-      "wix": "Wix",
-      "google_sheets": "Google Sheets",
-      "custom_api": "Your API"
-    },
-    "how": {
-      "shopify": "One sign-in, at Shopify",
-      "woocommerce": "Your store's address, then approve in WooCommerce",
-      "priority": "An API key from Priority",
-      "wix": "One sign-in, at Wix",
-      "google_sheets": "A sheet you share with GOTCHA",
-      "custom_api": "Set up with GOTCHA's team"
-    },
-    "foundOn": "Found on <host></host>",
-    "connected": "Connected",
-    "unread": "Couldn't read your systems just now. Try again in a moment.",
-    "notOffered": "Connecting {name} isn't available yet.",
-    "comesBack": "Connecting opens {name}. When it's done you come back to Studio · Integrations, where the connection shows.",
-    "others": "Other systems",
-    "may": {
-      "title": "What GOTCHA may do there",
-      "read": "Read everything above",
-      "always": "Always on",
-      "actions": {
-        "address": "Change a delivery address",
-        "cancel": "Cancel an order that hasn't shipped",
-        "refund": "Refund or give credit",
-        "prices": "Change prices or stock"
-      },
-      "stances": {
-        "allowed": "Allowed",
-        "ask": "Ask me first",
-        "never": "Never"
-      },
-      "why": "You set these in Studio · Integrations once the workspace is live. They can't be set during setup yet"
-    },
-    "next": "Continue",
-    "skip": "Skip for now",
-    "skipWhy": "Without it, GOTCHA can explain your policies, but it can't check an order, a price or stock",
-    "failing": "Needs reconnecting",
-    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to sign in again."
-  },
   "try": {
-    "headline": "Judge it on your own questions.",
-    "lead": "Things your customers really ask. If an answer is off, fix it once and it's fixed everywhere",
-    "foot": "Setup mode: it only talks to your team until you go live",
     "title": "Try GOTCHA on real questions",
     "leadNone": "No customer questions to try yet. Ask your own below",
     "unread": "Couldn't read your customers' questions just now. You can still ask your own below",
@@ -250,5 +162,573 @@
     "why": "In preview nothing here changes your workspace",
     "banner": "A preview of onboarding. Your workspace is live, and nothing here changes it",
     "home": "Back to Home"
+  },
+  "scan": {
+    "title": "Reading <ltr>{host}</ltr>",
+    "titleNoHost": "Reading your website",
+    "titleDone": "We read <ltr>{host}</ltr>",
+    "titleDoneNoHost": "We read your website",
+    "status": {
+      "QUEUED": "Starting to read…",
+      "RUNNING": "{stage}",
+      "COMPLETE": "Done. Here is what we learned.",
+      "FAILED": "Reading stopped.",
+      "STALLED": "Reading stopped responding."
+    },
+    "stages": {
+      "detect_platform": "Finding what the site is built on",
+      "harvest_platform": "Reading the store",
+      "sitemap": "Mapping the site's pages",
+      "read_pages": "Reading the pages",
+      "extract": "Putting what we found in order",
+      "write_knowledge": "Saving it to Knowledge",
+      "suggest_integrations": "Checking which systems to connect",
+      "done": "Finishing up"
+    },
+    "counts": "{read} of {planned, plural, one {# page} other {# pages}} read",
+    "countsBlocked": "{count, plural, one {# page refused} other {# pages refused}} automatic reading",
+    "found": "Found so far",
+    "foundNothingYet": "Nothing found yet. It comes in a few seconds.",
+    "chips": {
+      "products": "{count, plural, one {# product} other {# products}}",
+      "productsSampled": "{count, plural, one {# product sampled} other {# products sampled}}",
+      "faq": "{count, plural, one {# FAQ} other {# FAQs}}",
+      "contact": "Contact details",
+      "hours": "Opening hours",
+      "brand": "Writing style",
+      "policy": {
+        "returns": "Returns policy",
+        "exchange": "Exchange policy",
+        "shipping": "Shipping policy",
+        "refund": "Refund policy",
+        "warranty": "Warranty",
+        "terms": "Terms of use",
+        "privacy": "Privacy policy",
+        "other": "Another policy"
+      }
+    },
+    "feedLabel": "What is happening now",
+    "feedLabelDone": "What we did",
+    "feed": {
+      "job": {
+        "started": "Starting to read <ltr>{domain}</ltr>",
+        "done": "Finished reading the site",
+        "failed": "{code, select, site_unreachable {We couldn't reach the site} nothing_learned {We couldn't learn anything from the site} other {A step failed}}",
+        "retrying": "Carrying on from where it stopped"
+      },
+      "site": {
+        "opening": "Opening <ltr>{domain}</ltr>",
+        "unreadable": "{reason, select, same_page_everywhere {Every page looks the same, probably a password page} other {We couldn't read the site's pages}}",
+        "blocked": "The site refuses automatic reading"
+      },
+      "platform": {
+        "detected": "Found <ltr>{platform}</ltr>",
+        "none": "No known store platform found"
+      },
+      "products": {
+        "reading": "Reading the products from <ltr>{platform}</ltr>",
+        "found": "Found {count, plural, one {# product} other {# products}}{more, select, true {, and there are more} other {}}",
+        "feed_unavailable": "The store's product list is closed, so we'll read a few product pages",
+        "sampled": "Read {count, plural, one {# product page} other {# product pages}} as a sample"
+      },
+      "sitemap": {
+        "reading": "Mapping the site's pages"
+      },
+      "pages": {
+        "planned": "{count, plural, one {# page} other {# pages}} to read{fromSitemap, select, false {, from the site's links} other {}}",
+        "read": "{count, plural, one {Read # page} other {Read # pages}}",
+        "blocked": "{blocked} of {of} pages refused us; the rest were read"
+      },
+      "page": {
+        "reading": "Reading a page about {kind}"
+      },
+      "tool": {
+        "detected": "Saw <ltr>{tool}</ltr> on the site"
+      },
+      "extract": {
+        "reading": "Putting {kind} in order",
+        "none": "No pages about {kind}",
+        "failed": "Couldn't put {kind} in order",
+        "empty": "No details found about {kind}"
+      },
+      "policy": {
+        "found": "Found the {kind}"
+      },
+      "faq": {
+        "found": "Found {count, plural, one {# FAQ} other {# FAQs}}"
+      },
+      "profile": {
+        "found": "Found the business details"
+      },
+      "brand": {
+        "found": "Understood your writing style"
+      },
+      "knowledge": {
+        "written": "Saved to Knowledge: <user>{title}</user>",
+        "write_failed": "Couldn't save part of what we found"
+      },
+      "integrations": {
+        "suggested": "{count, plural, one {Found # system worth connecting} other {Found # systems worth connecting}}"
+      }
+    },
+    "feedDone": {
+      "job": {
+        "started": "Started reading <ltr>{domain}</ltr>",
+        "retrying": "Carried on from where it stopped"
+      },
+      "site": {
+        "opening": "Opened <ltr>{domain}</ltr>"
+      },
+      "products": {
+        "reading": "Read the products from <ltr>{platform}</ltr>"
+      },
+      "sitemap": {
+        "reading": "Mapped the site's pages"
+      },
+      "page": {
+        "reading": "Read a page about {kind}"
+      },
+      "extract": {
+        "reading": "Put {kind} in order"
+      }
+    },
+    "kinds": {
+      "page": {
+        "policy": "a policy",
+        "returns": "returns",
+        "shipping": "shipping",
+        "faq": "FAQs",
+        "about": "the business",
+        "contact": "contact",
+        "help": "help",
+        "page": "the site",
+        "product": "a product",
+        "other": "the site"
+      },
+      "policy": {
+        "returns": "returns policy",
+        "exchange": "exchange policy",
+        "shipping": "shipping policy",
+        "refund": "refund policy",
+        "warranty": "warranty",
+        "terms": "terms of use",
+        "privacy": "privacy policy",
+        "other": "another policy"
+      },
+      "extract": {
+        "policies": "the policies",
+        "faq": "the FAQs",
+        "profile": "the business details",
+        "brand": "the writing style"
+      }
+    },
+    "failed": {
+      "site_unreachable": "We couldn't reach the site. Check the address is right and the site is up.",
+      "stage_failed": "A step failed. You can carry on from where it stopped.",
+      "nothing_learned": "We couldn't learn anything from the site.",
+      "other": "Reading stopped. You can carry on from where it stopped.",
+      "stalled": "Reading stopped responding. You can carry on from where it stopped.",
+      "partway": "We stopped partway. Carry on from where we stopped, or continue with what we already found."
+    },
+    "blocked": "The site refuses automatic reading. We'll carry on with what we found, and at the check step you can upload files or paste your policies.",
+    "retry": "Carry on from where it stopped",
+    "retrying": "Carrying on…",
+    "retryFailed": "Couldn't carry on. Try again in a moment.",
+    "change": "Use another address",
+    "withFound": "Continue with what we found",
+    "next": "Continue",
+    "missed": "Couldn't check just now. Trying again in a second."
+  },
+  "stepOf": "Step {n} of {total}: {name}",
+  "back": "Back to the previous step",
+  "learn": {
+    "headline": "It reads your website so you don't have to explain it.",
+    "lead": "Every line here is what it is really doing, right now.",
+    "foot": "You can close this tab, it keeps going"
+  },
+  "systems": {
+    "headline": "Your store knows what's true right now.",
+    "lead": "Connect the systems your site already uses, so GOTCHA checks them before answering about an order.",
+    "foot": "You can skip and connect later",
+    "title": "Connect your systems",
+    "subtitle": "GOTCHA answers better when it can check your store. Connect what your site already runs on.",
+    "why": {
+      "platform": "Your site runs on <ltr>{name}</ltr>.",
+      "detected_on_site": "We saw <ltr>{name}</ltr> on your site."
+    },
+    "where": "Where we saw it",
+    "connected": "Connected",
+    "failing": "Needs reconnecting",
+    "failingWhy": "{name} stopped letting GOTCHA in. Reconnect to let it back in.",
+    "notOffered": "Connecting {name} isn't available yet.",
+    "catalogueUnread": "We couldn't load how {name} connects. Reload the page, or continue and connect it later in Settings.",
+    "unread": "We couldn't read what to connect. You can carry on and connect later.",
+    "empty": "We didn't find a system on your site to connect. You can connect systems later too.",
+    "next": "Continue",
+    "skip": "Continue without connecting",
+    "skipWhy": "Without a store connected, GOTCHA can explain your policies but can't check an order, a price or stock.",
+    "connectName": "Connect {name}",
+    "moreLater": "More systems can be connected later, in Settings.",
+    "detected": "Found on your site",
+    "reconnectName": "Reconnect {name}",
+    "opening": "Opening {name}…",
+    "gives": {
+      "title": "What it gives you",
+      "store": "GOTCHA checks the store before every answer about an order: its status, the shipping and what's in stock. No guessing from an old page.",
+      "other": "GOTCHA can check it before it answers, instead of guessing.",
+      "storeOn": "GOTCHA now checks the store before every answer about an order.",
+      "otherOn": "GOTCHA now checks it before it answers."
+    },
+    "how": {
+      "title": "What happens when you connect",
+      "store": {
+        "one": "You go to your store's admin",
+        "two": "You approve access for GOTCHA",
+        "three": "You come back here, and the store is connected"
+      },
+      "account": {
+        "one": "You go to {name} and sign in",
+        "two": "You approve access for GOTCHA",
+        "three": "You come back here, and it's connected"
+      }
+    },
+    "safe": "You can disconnect it any time in Settings.",
+    "store": {
+      "at": "Store: <ltr>{host}</ltr>",
+      "change": "Different address",
+      "label": "Store address",
+      "placeholder": "yourstore.com"
+    },
+    "startError": {
+      "invalid_store": "We couldn't reach a store at that address. Check it and try again.",
+      "forbidden": "Your role can't connect systems. Continue without connecting, and an admin can connect it later in Settings.",
+      "failed": "{name} didn't open. Try again in a moment.",
+      "not_configured": "This connection isn't set up on our side yet. Continue without it, and connect it later in Settings.",
+      "needs_store": "Install GOTCHA from the Shopify App Store first, then come back here.",
+      "not_here": "This one can't be connected from here. You can connect it later in Settings.",
+      "core_plan_required": "Connecting {name} needs an active GOTCHA Core plan first. Nothing was connected."
+    },
+    "shopifyUnread": "We couldn't check how Shopify connects right now. Reload the page in a moment, or continue and connect it later.",
+    "shopifyFromAdmin": "The Shopify install starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here.",
+    "shopifyHelp": "How to install",
+    "others": {
+      "title": "Also on your site",
+      "more": "More systems from your site"
+    },
+    "return": {
+      "connected": "{name} is connected. GOTCHA checks it before it answers from now on.",
+      "close": "Close",
+      "error": {
+        "denied": "Connecting {name} was cancelled, so nothing changed. Connect again when you're ready, or continue without it.",
+        "token_exchange_failed": "{name} didn't confirm the connection, so nothing was connected. Try connecting again.",
+        "catalog_missing": "{name} isn't set up on our side yet, so nothing was connected. Continue without it, and connect it later in Settings.",
+        "callback_error": "Something went wrong on the way back from {name}. Nothing was connected. Try connecting again.",
+        "validation_failed": "{name} connected, but our first check against it failed. Try connecting again; if it keeps failing, continue and fix it later in Settings.",
+        "shop_connected_elsewhere": "That store is already connected to another GOTCHA workspace. Disconnect it there first, or connect a different store.",
+        "billing_link_failed": "We couldn't finish connecting the store. Nothing was changed - connect it again in a moment.",
+        "link_failed": "{name} answered, but the store couldn't be linked to this workspace. Try connecting again.",
+        "not_configured": "This connection isn't set up on our side yet, so nothing was connected. Continue without it, and connect it later in Settings.",
+        "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Connect again and approve read and write access.",
+        "callback_not_received": "{name} didn't send the keys back, so nothing was connected. Try connecting again.",
+        "invalid_state": "That approval couldn't be matched to this workspace. Start again with the connect button.",
+        "invalid_request": "We couldn't confirm the request came from {name}, so nothing was connected. Start again with the connect button.",
+        "other": "{name} didn't connect. Try connecting again, or continue without it."
+      }
+    },
+    "shopifyCoreFirst": "Connecting a Shopify store needs an active GOTCHA Core plan first. Continue without it, and connect Shopify once GOTCHA Core is active."
+  },
+  "channels": {
+    "headline": "Where your customers write.",
+    "lead": "Connect the channels GOTCHA will answer on. One is enough to start.",
+    "foot": "Nothing reaches a customer until you go live",
+    "title": "Where your customers write",
+    "subtitle": "Connect at least one channel, and GOTCHA answers on it from the moment you go live. Nothing is sent before that.",
+    "why": {
+      "WEBCHAT": "A chat window on your site. Paste the code once.",
+      "WHATSAPP": "Your business's WhatsApp number, through Meta.",
+      "INSTAGRAM": "Direct messages to your Instagram account, through Meta.",
+      "MESSENGER": "Messages to your business's Facebook Page, through Meta.",
+      "EMAIL": "Your service mailbox, in Gmail, Outlook or on your own server."
+    },
+    "connected": "Connected",
+    "live": "Live on your site",
+    "codeReady": "The code is ready. Once you paste it into your site, the chat starts answering.",
+    "close": "Close",
+    "pasteCode": "Paste this code into your site, before the closing body tag. Once it appears on your site, you'll see it here.",
+    "codeUnread": "We couldn't read the chat code just now. Reload the page to try again.",
+    "notSetUp": "This channel can't be connected from here yet.",
+    "opening": "Opening {place}…",
+    "refused": {
+      "not_configured": "This channel can't be connected from here yet.",
+      "forbidden": "Only owners can connect channels.",
+      "failed": "We couldn't open {place}. Try again in a moment."
+    },
+    "unread": "We couldn't check which channels are already connected. You can connect, and the page will update.",
+    "next": "Continue",
+    "skip": "Continue without a channel",
+    "skipWhy": "Without a connected channel GOTCHA won't answer customers. You can connect one later too.",
+    "shop": "In your Shopify shop <ltr>{shop}</ltr>:",
+    "shopLive": "The chat is live in your shop",
+    "shopTheme": "Turn the chat on in Shopify's theme",
+    "shopThemeHow": "In the theme editor: App embeds, switch GOTCHA on, and save.",
+    "shopWaiting": "Waiting for the first visit to your shop. The status changes by itself.",
+    "shopNotLive": "We haven't seen the chat in your shop yet. Once you turn it on in the theme, it starts answering.",
+    "status": {
+      "none": "Not connected",
+      "waiting": "Not live yet",
+      "attention": "Needs attention"
+    },
+    "action": {
+      "connect": "Connect",
+      "again": "Connect again",
+      "install": "Install"
+    },
+    "attention": "Messages on this channel aren't arriving right now. Connect it again to fix it.",
+    "email": {
+      "lead": "Which mailbox do you use?",
+      "server": "A mailbox on another server",
+      "opening": "Taking you to sign in…"
+    },
+    "landing": {
+      "connected": "Connected. GOTCHA answers here from the moment you go live.",
+      "connectedCount": "{count, plural, =0 {No account came back, so nothing was connected. You can try again.} one {One account connected. GOTCHA answers on it from the moment you go live.} other {# accounts connected. GOTCHA answers on them from the moment you go live.}}",
+      "pending": "The account is connected, but it isn't ready to receive messages yet. You can connect it again from here.",
+      "pendingWhatsApp": "The number is connected, and Meta's approval isn't finished yet. You can continue meanwhile.",
+      "pendingReason": {
+        "subscribe_failed": "The account is connected, but messages aren't arriving: the platform didn't let GOTCHA receive them. You can connect it again from here."
+      },
+      "error": {
+        "denied": "You cancelled, so nothing was connected.",
+        "token_exchange_failed": "The connection wasn't approved, so nothing was connected. You can try again.",
+        "state_already_used": "This sign-in has expired. Start again from here.",
+        "invalid_state": "This sign-in has expired. Start again from here.",
+        "not_configured": "This channel can't be connected from here yet.",
+        "already_connected": "This account is already connected to this workspace.",
+        "gmail_no_email": "Google didn't share an email address, so Gmail wasn't connected.",
+        "outlook_no_email": "Microsoft didn't share an email address, so Outlook wasn't connected.",
+        "no_pages": "No Facebook Page was chosen. Choose a Page you manage and try again.",
+        "no_instagram_account": "No Instagram business account is linked to that Page. Link one at Meta and try again.",
+        "no_whatsapp_numbers": "Meta didn't share a WhatsApp number, so nothing was connected.",
+        "slack_no_team": "Slack didn't say which workspace. You can try again.",
+        "callback_error": "Something went wrong on the way back, so nothing was connected. You can try again.",
+        "limit_reached": "Your plan has no room for another channel, so nothing was connected.",
+        "picker_failed": "We couldn't keep your Pages to choose from, so nothing was connected. You can try again.",
+        "other": "That didn't connect. You can try again."
+      }
+    },
+    "way": {
+      "found": {
+        "shopify": "We found Shopify on your site, so this is the quickest way.",
+        "woocommerce": "We found WooCommerce on your site, so this is the quickest way."
+      },
+      "other": {
+        "shopify": "Not on Shopify? Choose another way",
+        "woocommerce": "Not on WooCommerce? Choose another way",
+        "code": "Is your site on Shopify or WooCommerce? Choose another way"
+      },
+      "shopify": "Connect your Shopify shop. Then switch the chat on in its theme, with one toggle."
+    }
+  },
+  "live": {
+    "headline": "Check, then go live.",
+    "lead": "Look over what was learned, fix what needs fixing, and press once.",
+    "foot": "Nothing reaches a customer until you say so"
+  },
+  "review": {
+    "title": "Check what we learned",
+    "subtitle": "This is what GOTCHA uses when it answers customers. Fix or remove anything, and the fix takes effect right away.",
+    "notLearned": "We didn't learn this from the site. You can add it.",
+    "edit": "Edit",
+    "remove": "Remove",
+    "removeYes": "Yes, remove",
+    "removing": "Removing…",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "source": "Where this came from",
+    "refused": {
+      "gone": "This item was already removed. The page shows what is left.",
+      "not_learned": "We haven't learned the site yet. Go back to the first step.",
+      "incomplete": "A question needs both a question and an answer.",
+      "failed": "We couldn't save. Try again in a moment."
+    },
+    "unavailable": {
+      "not_learned": "We haven't read the site yet, so there is nothing to check.",
+      "unread": "We couldn't read what we learned just now.",
+      "toWebsite": "Back to learning the site",
+      "retry": "Try again"
+    },
+    "profile": {
+      "title": "The business",
+      "name": "Business name",
+      "industry": "Field",
+      "summary": "What the business does"
+    },
+    "products": {
+      "title": "Products",
+      "notLearned": "We didn't learn the products from the site.",
+      "count": "{more, select, true {At least } other {}}{count, plural, one {# product} other {# products}} in the store",
+      "price": "Prices from {min} to {max}",
+      "fromStore": "Product and order details are checked in the store itself once it is connected."
+    },
+    "policies": {
+      "title": "Policies",
+      "none": "We didn't find policies on the site.",
+      "summary": "What the policy says",
+      "termsNote": "These terms are what GOTCHA answers from. Update them together with the description."
+    },
+    "terms": {
+      "window": "Returns within {days, plural, one {# day} other {# days}}",
+      "exchange": "Exchanges allowed",
+      "exchangeHow": "Exchanges allowed: {how}",
+      "noExchange": "No exchanges",
+      "shippingTimes": "Shipping times: {times}",
+      "shippingCosts": "Shipping costs: {costs}",
+      "freeOver": "Free shipping over {amount}",
+      "refundMethod": "Refunds: {method}",
+      "refundDays": "Refunded within {days, plural, one {# day} other {# days}}",
+      "warranty": "{months, plural, one {# month} other {# months}} warranty"
+    },
+    "faq": {
+      "title": "Frequently asked questions",
+      "none": "We didn't find FAQs on the site.",
+      "q": "Question",
+      "a": "Answer",
+      "add": "Add a question"
+    },
+    "contact": {
+      "title": "Contact and hours",
+      "address": "Address",
+      "hours": "Opening hours",
+      "hoursLine": "Hours: {hours}"
+    },
+    "brand": {
+      "title": "Writing style",
+      "voice": "How you write to customers",
+      "greeting": "Example greeting",
+      "greetingLine": "Example greeting: {greeting}",
+      "never": "Never says: {words}"
+    },
+    "tools": {
+      "title": "Tools we saw on the site"
+    },
+    "fromPasted": "From what you pasted",
+    "fromFile": "From your file <file>{name}</file>",
+    "add": {
+      "title": "Add from what you have",
+      "lead": "A policy missing, or the site blocked reading? Paste the text or upload a file, and GOTCHA learns from it.",
+      "kind": "Which policy",
+      "text": "The policy text",
+      "addPolicy": "Add the policy",
+      "adding": "Adding…",
+      "refused": {
+        "text_required": "Paste the text first.",
+        "text_too_long": "The text is too long. Paste only the policy itself.",
+        "bad_kind": "That kind of policy can't be added. Choose another.",
+        "not_learned": "We haven't learned the site yet. Go back to the first step.",
+        "failed": "We couldn't add it. Try again in a moment."
+      },
+      "file": "File",
+      "fileHint": "<ltr>PDF</ltr>, <ltr>Word (docx)</ltr>, text or <ltr>Markdown</ltr>, up to <ltr>5MB</ltr>.",
+      "readFile": "Read the file",
+      "reading": "Reading the file…",
+      "readingWhy": "This takes a few seconds.",
+      "added": "From the file: {policies, plural, =0 {no policies} one {# policy} other {# policies}} and {faq, plural, =0 {no questions} one {# question} other {# questions}}.",
+      "partial": "The file is long, so only its start was read.",
+      "uploadRefused": {
+        "too_large": "The file is too large. Up to 5MB.",
+        "unsupported": "That kind of file can't be read. PDF, docx, text or Markdown.",
+        "unreadable": "We couldn't open the file. It may be damaged.",
+        "nothing_found": "We found no policy, question or business details in the file. Nothing was added.",
+        "not_learned": "We haven't learned the site yet. Go back to the first step.",
+        "failed": "We couldn't read the file. Try again in a moment."
+      },
+      "choose": "Choose a file",
+      "noFile": "No file chosen yet",
+      "collapsed": "A policy missing? Add from what you have",
+      "skipped": "Already learned, left as it was: {policy}. If the file is newer, edit it above."
+    },
+    "termFields": {
+      "windowDays": "Days to return",
+      "exchange": "Exchanges allowed?",
+      "exchangeHow": "How to exchange",
+      "unknown": "Not stated",
+      "yes": "Yes",
+      "no": "No",
+      "shippingTimes": "Shipping times",
+      "shippingCosts": "Shipping costs",
+      "freeOver": "Free shipping over",
+      "refundMethod": "How refunds are paid",
+      "refundDays": "Days to refund",
+      "warrantyMonths": "Warranty, in months",
+      "stale": {
+        "days": "The description still says {count, plural, one {# day} other {# days}}. Update it too.",
+        "months": "The description still says {count, plural, one {# month} other {# months}}. Update it too.",
+        "amount": "The description still says {amount}. Update it too."
+      }
+    },
+    "sync": {
+      "customized": "The employee was edited by hand in the studio, so we didn't change its instructions. Update them there.",
+      "failed": "The change is saved, but we couldn't update the employee. Saving again retries."
+    }
+  },
+  "goLive": {
+    "title": "Go live",
+    "someone": "Your AI employee",
+    "nameLabel": "Your employee's name",
+    "nameHint": "Leave it empty and we'll choose one.",
+    "willAnswer": "{name} answers customers on {channels} from now on.",
+    "noReach": "Going live, but there's no channel customers can write on yet, so nowhere to answer yet.",
+    "reachUnread": "We couldn't read your channels just now. After you press, we'll show where customers get answers.",
+    "nothingSent": "Pressing sends nothing to anyone. An answer goes out only when a customer writes.",
+    "press": "Go live",
+    "pressNoReach": "Go live, with no channel yet",
+    "pressAgain": "Update the employee",
+    "pressing": "Going live…",
+    "toChannels": "Connect a channel first",
+    "again": "{name} is already live. Pressing again updates the employee with what you corrected here.",
+    "refused": {
+      "not_learned": "We haven't read the site yet, so there is nothing to build the employee from.",
+      "suspended": "This account is suspended, so nothing went live.",
+      "failed": "We couldn't go live, and nothing changed. You can try again.",
+      "no_admin": "This account has no active admin right now, so nothing went live. Please contact us."
+    },
+    "live": "{name} is live.",
+    "reachLive": "Answering here",
+    "reachWaiting": "Waiting for install",
+    "orders": "{name} can look up orders {inPlatform}.",
+    "warn": {
+      "no_channels": "No channel is connected yet, so customers aren't getting answers.",
+      "no_reachable_channel": "No channel is open to customers yet: the website code hasn't been seen, or the shop's chat is off.",
+      "no_platform_connected": "No store is connected, so there's no access to orders yet.",
+      "playbook_customized": "You had changed how conversations are routed, so we left it as it was.",
+      "employee_customized": "You had changed this employee before, so we kept your changes."
+    },
+    "test": {
+      "title": "Try {name}",
+      "lead": "One question, as a customer would ask it. The answer stays here: nothing is sent to anyone.",
+      "question": "Question",
+      "ask": "Ask",
+      "asking": "Asking…",
+      "fromOrder": "The answer is based on order #{number} {inPlatform}.",
+      "fromOrderNoPlatform": "The answer is based on order #{number}.",
+      "orderUnread": "We tried to read the order in the store and couldn't, so the answer isn't based on it.",
+      "fromKnowledge": "The answer is based on what we learned: {sources}",
+      "refused": {
+        "not_live": "{name} isn't live yet. Press “Go live” first.",
+        "question_required": "Write a question.",
+        "too_long": "The question is too long.",
+        "rate_limited": "Too many questions in a row. Try again in {seconds, plural, one {# second} other {# seconds}}.",
+        "rate_limited_soon": "Too many questions in a row. Try again in a moment.",
+        "failed": "The test didn't run this time. You can try again.",
+        "ai_paused": "Automatic answers are paused for this account, so there was no answer. Check the plan and its AI units.",
+        "no_answer": "No answer came back for this question. Try asking it another way."
+      },
+      "titleNoName": "Try your employee"
+    },
+    "finish": "Done, to Home",
+    "nameHintLive": "This is the name customers see today. Changing it here renames it.",
+    "ready": "Everything is ready. {name} starts answering as soon as payment clears.",
+    "toPayment": "Go to payment"
   }
 }

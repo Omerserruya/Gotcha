@@ -33,6 +33,9 @@ vi.mock('@/auth/session', async (importOriginal) => {
   return { ...actual, unsealIdToken };
 });
 vi.mock('@/api/client/csrf', () => ({ assertSameOrigin: () => null }));
+const endSupportOnLogout = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/features/support/end-on-logout', () => ({ endSupportOnLogout }));
+vi.mock('server-only', () => ({}));
 
 const { serverEnv } = vi.hoisted(() => ({
   serverEnv: vi.fn(() => ({
@@ -221,3 +224,19 @@ describe('⚠⚠ the property that broke: a session must reach the provider', ()
  *   Removed with the wrapping: running the invalidation flow by fetch does not
  *   invalidate anything, so there is nothing for the other origin to do.
  */
+
+describe('★★ support mode ends with the sign-out (Backend 41755eb2)', () => {
+  it('a signed-in sign-out ends the support session it holds, and clears its cookie at /', async () => {
+    const response = await post(true);
+    expect(endSupportOnLogout).toHaveBeenCalledTimes(1);
+    const sup = response.cookies.getAll().find((cookie) => cookie.name === 'sup');
+    expect(sup?.value).toBe('');
+    expect(sup?.path).toBe('/');
+  });
+
+  it('no session: nothing to end on its behalf', async () => {
+    readSession.mockResolvedValue(null);
+    await post(false);
+    expect(endSupportOnLogout).not.toHaveBeenCalled();
+  });
+});

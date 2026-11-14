@@ -2242,6 +2242,11 @@
     flex: 0 0 220px;
   }
 
+  /*
+   * ⚠ A light card, also inside GOTCHA's ink bubble: it inherited the bubble's
+   *   light text, and its name and price nearly vanished on the card (dev,
+   *   1440px, 2026-11-03). Its own text colour, on the website and the phone.
+   */
   .product {
     display: flex;
     gap: var(--space-8);
@@ -2250,6 +2255,7 @@
     border: var(--border-width-thin) solid var(--border-subtle);
     border-radius: 10px;
     background-color: var(--panel-field);
+    color: var(--text-primary);
   }
 
   .productImage {
@@ -2392,5 +2398,398 @@
     margin: 0;
     font-size: 12px;
     color: var(--text-subtle);
+  }
+
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * ★★ THE PHONE - `data-variant='phone'` (`GOTCHA Mobile App.dc.html`)
+   * ════════════════════════════════════════════════════════════════════════
+   * The same stream and the same composer, so the phone sends through the
+   * same actions and refuses what the website refuses; only the look is the
+   * phone's. The bubbles are larger and the customer's sits on the thread's
+   * warm ground with no border; a colleague's action is an amber note, not a
+   * rule across the screen. The composer is a white pill with the send
+   * button beside it, round and ink, and the rewrite chips and the channel's
+   * name stay on the website: the bar above already says where this goes.
+   */
+  /*
+   * ⚠ The `<ol>` IS the scroller, as on the desktop (`.conversationPane
+   *   .stream`): `StreamPin` scrolls `[data-stream-scroller]`, and the phone's
+   *   wrapper clips. Without this a long conversation was cut at the
+   *   composer, opened at its top and could not be scrolled at all.
+   */
+  .stream[data-variant='phone'] {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    gap: var(--space-6);
+    padding-block: var(--space-12) var(--space-8);
+  }
+
+  /* A flex column's items would shrink to fit instead of overflowing it. */
+  .stream[data-variant='phone'] > * {
+    flex: none;
+  }
+
+  /*
+   * The website's hover bar ("השב") has no hover on a phone: a tap focused it
+   * and it stayed over the bubble below. Quoting is the website's.
+   */
+  .stream[data-variant='phone'] .messageActions {
+    display: none;
+  }
+
+  /*
+   * ★ A photo fills its bubble edge to edge, and the bubble is the photo's
+   *   width: the image was 240px at the start of a wider bubble, which left a
+   *   band of bubble on one side (Omer, 2026-11-04).
+   */
+  .stream[data-variant='phone'] .message:has(.photo) {
+    inline-size: min(82%, 280px);
+  }
+
+  /*
+   * ⚠⚠ STRETCHED, OR THE PHOTO IS 0 WIDE. A bubble shrinks to its content,
+   *    and an image at 100% of a shrink-to-fit box resolves to nothing: no
+   *    photo was drawn, and a lazy image of no size never even loaded
+   *    (Omer, 2026-11-04). The message has the width; the bubble takes it.
+   */
+  .stream[data-variant='phone'] .bubble:has(.photo) {
+    align-self: stretch;
+    padding-inline: 4px;
+    padding-block-start: 4px;
+  }
+
+  .stream[data-variant='phone'] .bubble:has(.photo) > :not(.photo) {
+    padding-inline: var(--space-6);
+  }
+
+  .stream[data-variant='phone'] .photo {
+    margin: 0;
+    border-radius: 11px;
+  }
+
+  .stream[data-variant='phone'] .photo img {
+    inline-size: 100%;
+    max-block-size: 340px;
+    aspect-ratio: auto;
+  }
+
+  /*
+   * ★ Product cards stay inside their bubble: the row is the bubble's width
+   *   and scrolls, where its cards used to push the bubble past the screen's
+   *   edge (Omer, 2026-11-04).
+   */
+  .stream[data-variant='phone'] .message:has(.productRow) {
+    inline-size: 82%;
+  }
+
+  .stream[data-variant='phone'] .bubble,
+  .stream[data-variant='phone'] .productRow {
+    min-inline-size: 0;
+  }
+
+  .stream[data-variant='phone'] .message:has(.productRow) .bubble {
+    max-inline-size: 100%;
+  }
+
+  .stream[data-variant='phone'] .productRow {
+    max-inline-size: 100%;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  .stream[data-variant='phone'] .productRow .product {
+    flex: 0 0 86%;
+    scroll-snap-align: start;
+  }
+
+  /* The phone's photo, whole, over the thread: tap anywhere or X to close. */
+  .photoViewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-16);
+    background-color: color-mix(in srgb, var(--mobile-ink) 96%, transparent);
+  }
+
+  .photoViewerImage {
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    object-fit: contain;
+  }
+
+  .photoViewerClose {
+    position: absolute;
+    /*
+     * ⚠ Below the phone's status bar even where the WebView reports no safe
+     *   area (Android draws under it): under the clock it could not be tapped.
+     */
+    inset-block-start: calc(max(env(safe-area-inset-top, 0px), 28px) + var(--space-12));
+    inset-inline-end: var(--space-12);
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 48px;
+    block-size: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background-color: color-mix(in srgb, var(--mobile-ink-text) 16%, transparent);
+    color: var(--mobile-ink-text);
+    cursor: pointer;
+  }
+
+  .stream[data-variant='phone'] .message {
+    max-inline-size: 82%;
+    gap: var(--space-3);
+  }
+
+  .stream[data-variant='phone'] .bubble {
+    gap: var(--space-3);
+    padding: var(--space-6) var(--space-9) 5px;
+    border: 0;
+    border-radius: 14px;
+    border-start-start-radius: var(--space-4);
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-bubble);
+    font-size: 15.5px;
+    line-height: 1.42;
+    color: var(--mobile-ink);
+  }
+
+  .stream[data-variant='phone'] .message[data-direction='OUTBOUND'] .bubble {
+    min-inline-size: 120px;
+    padding: 7px var(--space-10) var(--space-6);
+    border-radius: 14px;
+    border-start-end-radius: var(--space-4);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  /* Who answered, at the top of the bubble: GOTCHA in lavender, a person in the accent. */
+  .bubbleBy {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.3;
+    color: var(--mobile-accent-lite);
+  }
+
+  .bubbleBy[data-gotcha] {
+    color: var(--mobile-copilot-accent);
+  }
+
+  /* The time and the tick, inside the bubble at its end. */
+  .bubbleStamp {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--font-size-micro);
+    line-height: 1;
+    color: var(--text-subtle);
+  }
+
+  .message[data-direction='OUTBOUND'] .bubbleStamp {
+    color: var(--frame-text-secondary);
+  }
+
+  .bubbleTick {
+    display: inline-flex;
+  }
+
+  .bubbleTick[data-read] {
+    color: var(--mobile-copilot-accent);
+  }
+
+  .message[data-direction='INBOUND'] .bubbleTick[data-read] {
+    color: var(--mobile-read-tick);
+  }
+
+  /* Where the day turns: a white chip in the middle. */
+  .dayChip {
+    align-self: center;
+    margin-block: var(--space-4);
+    padding: 5px var(--space-12);
+    border-radius: var(--radius-item);
+    background-color: var(--mobile-surface);
+    color: var(--text-muted);
+    font-size: var(--font-size-meta);
+    line-height: normal;
+  }
+
+  .stream[data-variant='phone'] .meta {
+    font-size: var(--font-size-micro);
+    color: var(--text-subtle);
+  }
+
+  .stream[data-variant='phone'] .divider {
+    align-self: center;
+    max-inline-size: 86%;
+    margin-block: var(--space-4);
+    padding: var(--space-6) var(--space-12);
+    border-radius: var(--space-10);
+    background-color: var(--mobile-tag-warn);
+    color: var(--mobile-tag-warn-text);
+    font-size: var(--font-size-meta);
+    line-height: 1.4;
+  }
+
+  .stream[data-variant='phone'] .divider::before,
+  .stream[data-variant='phone'] .divider::after {
+    content: none;
+  }
+
+  /* The composer: one row - the pill, then the send button - under whatever it has to say. */
+  .composer[data-variant='phone'] {
+    flex-flow: row wrap;
+    align-items: flex-end;
+    gap: var(--space-8) 0;
+    padding-block: 0 var(--space-10);
+    padding-inline: var(--space-8);
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    overflow: visible;
+  }
+
+  .composer[data-variant='phone']:focus-within {
+    border-color: transparent;
+  }
+
+  .composer[data-variant='phone'] > * {
+    flex-basis: 100%;
+  }
+
+  /*
+   * ★ The pill is the field alone, rounded on both sides, so all of it grows
+   *   with what is typed (`field-sizing: content`, up to about six lines, then
+   *   it scrolls). The attach icons used to sit inside it, took the width and
+   *   stayed a stub beside a tall box; they are one "+" beside it now
+   *   (Omer, 2026-11-03).
+   */
+  .composer[data-variant='phone'] .composerInput {
+    order: 1;
+    flex: 1 1 0;
+    min-block-size: 48px;
+    max-block-size: 152px;
+    line-height: 1.4;
+    box-sizing: border-box;
+    padding-block: var(--space-12);
+    padding-inline: var(--space-16);
+    border-radius: 24px;
+    background-color: var(--mobile-surface);
+    font-size: var(--font-size-lead);
+    color: var(--mobile-ink);
+  }
+
+  .composer[data-variant='phone'] .composerInput::placeholder {
+    color: var(--text-subtle);
+  }
+
+  /* The bar's own children join the row: Send, the pill, then "+". */
+  .composer[data-variant='phone'] .composerBar {
+    display: contents;
+  }
+
+  .composer[data-variant='phone'] .composerDivider,
+  .composer[data-variant='phone'] .composerChips,
+  .composer[data-variant='phone'] .composerChannel {
+    display: none;
+  }
+
+  /* "+" on the far side from Send, on the bottom line as the pill grows. */
+  .composer[data-variant='phone'] .composerPlus {
+    order: 2;
+    flex: none;
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: var(--space-6);
+    inline-size: 40px;
+    block-size: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .composer[data-variant='phone'] .composerPlus[aria-expanded='true'] {
+    color: var(--mobile-ink);
+  }
+
+  /* The sheet "+" opens, above the row: photos, camera, files. */
+  .composer[data-variant='phone'] .composerAttachSheet {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-8);
+    padding: var(--space-14) var(--space-8);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-surface);
+    box-shadow: var(--mobile-shadow-card);
+  }
+
+  .composer[data-variant='phone'] .composerAttachOption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--mobile-ink);
+    cursor: pointer;
+  }
+
+  .composer[data-variant='phone'] .composerAttachOption:disabled {
+    opacity: 0.4;
+  }
+
+  .composer[data-variant='phone'] .composerAttachBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  /*
+   * Send leads the row, on the side the language reads from: the right in
+   * Hebrew, the left in English (Omer, 2026-11-03, after WhatsApp). It stays on
+   * the bottom line as the pill grows.
+   */
+  .composer[data-variant='phone'] .composerSend {
+    order: 0;
+    align-self: flex-end;
+    margin-inline-end: var(--space-8);
+    inline-size: 48px;
+    block-size: 48px;
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+  }
+
+  /* Ink with nothing to send, as the design draws it: pressing it does nothing. */
+  .composer[data-variant='phone'] .composerSend:disabled {
+    opacity: 1;
+  }
+
+  .composer[data-variant='phone'] .composerActions {
+    order: 4;
   }
 }

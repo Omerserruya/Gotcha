@@ -1,0 +1,377 @@
+@layer features {
+  /*
+   * Customers on the phone - `GOTCHA Mobile App.dc.html`, the `isCust` tab
+   * and the customer profile. The screen, search pill, chips, rows, tags and
+   * cards are the shared parts (`mobile-ui.module.css`); what is here is the
+   * customers' own.
+   */
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* "2,418 customers · recent activity": the list's count and its order. */
+  .count {
+    margin: 0;
+    padding-block: var(--space-4) var(--space-6);
+    padding-inline: var(--space-18);
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  /* No word for 90 days: the row is dimmed, as on the website. */
+  .list a[data-faded] {
+    opacity: 0.6;
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-inline-size: 0;
+  }
+
+  .who {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    color: var(--mobile-ink);
+    /* A name is in its own direction: an English one in Hebrew cuts at its end. */
+    unicode-bidi: plaintext;
+    text-align: match-parent;
+  }
+
+  /* The channels they write from, at the row's end. */
+  .marks {
+    flex: none;
+    display: flex;
+    gap: var(--space-3);
+    opacity: 0.9;
+  }
+
+  /* ── The profile ──────────────────────────────────────────────────── */
+  .profile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding-block: 0 var(--space-24);
+    padding-inline: var(--space-16);
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+    padding-block-end: var(--space-4);
+    text-align: center;
+  }
+
+  .disc {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 96px;
+    block-size: 96px;
+    margin-block-end: var(--space-6);
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-avatar);
+    color: var(--text-secondary);
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .name {
+    margin: 0;
+    font-size: 24px;
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-heading);
+    color: var(--mobile-ink);
+    overflow-wrap: anywhere;
+  }
+
+  .phone {
+    font-size: 15px;
+    color: var(--text-muted);
+    unicode-bidi: isolate;
+  }
+
+  .meta {
+    margin: 0;
+    font-size: var(--font-size-item);
+    color: var(--text-subtle);
+    text-wrap: pretty;
+  }
+
+  /* Four across, as the design sets them - fewer tiles keep their width. */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-8);
+  }
+
+  .tiles:empty {
+    display: none;
+  }
+
+  .tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+    padding-block: var(--space-12);
+    padding-inline: var(--space-4);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--space-16);
+    background-color: var(--mobile-surface);
+    color: var(--mobile-ink);
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tile svg {
+    color: var(--mobile-accent-text);
+  }
+
+  .tile:active {
+    background-color: var(--mobile-press);
+  }
+
+  .tile:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--space-2);
+  }
+
+  /* The store's figures: the value over its label, in Archivo. */
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-8);
+    margin: 0;
+    padding: var(--space-16);
+    border: var(--border-width-thin) solid var(--mobile-card-edge);
+    border-radius: var(--radius-panel);
+    background-color: var(--mobile-surface);
+  }
+
+  .figures[data-count='1'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .figures[data-count='2'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .figures > div {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .figures dt {
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
+  }
+
+  .figures dd {
+    margin: 0;
+    font-size: 21px;
+    overflow-wrap: anywhere;
+    letter-spacing: var(--letter-spacing-heading);
+  }
+
+  /* GOTCHA remembers: the AI's lavender card. */
+  .memory {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding: var(--space-16);
+    border-radius: var(--radius-panel);
+    background-color: var(--mobile-memory);
+  }
+
+  .memoryTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-7);
+    margin: 0;
+    font-size: var(--font-size-control);
+    font-weight: var(--font-weight-bold);
+    color: var(--mobile-memory-title);
+  }
+
+  .memoryLine {
+    margin: 0;
+    font-size: var(--font-size-body);
+    line-height: 1.45;
+    color: var(--mobile-memory-text);
+  }
+
+  .cardHeading {
+    margin: 0;
+    padding-block: var(--space-14) var(--space-6);
+    padding-inline: var(--space-16);
+    font-size: 15px;
+    font-weight: var(--font-weight-bold);
+  }
+
+  /* ── Orders: the number and the total, then the date and the store's status ── */
+  .orders {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .order {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-block: var(--space-11);
+    padding-inline: var(--space-16);
+  }
+
+  .order + .order {
+    border-block-start: var(--border-width-thin) solid var(--mobile-row-rule);
+  }
+
+  .orderTop,
+  .orderSub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+  }
+
+  .orderNumber {
+    min-inline-size: 0;
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .orderTotal {
+    flex: none;
+    font-size: var(--font-size-body);
+  }
+
+  .orderSub {
+    font-size: var(--font-size-body-sm);
+    color: var(--text-muted);
+  }
+
+  /* ── The history: a mono date, a coloured dot, a title and a line ─── */
+  .history {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .historyRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-12);
+    padding-block: var(--space-11);
+    padding-inline: var(--space-16);
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  a.historyRow:active {
+    background-color: var(--mobile-press);
+  }
+
+  a.historyRow:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--space-2));
+  }
+
+  .date {
+    flex: none;
+    inline-size: 44px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-caption);
+    line-height: 20px;
+    color: var(--text-subtle);
+  }
+
+  .dot {
+    flex: none;
+    inline-size: var(--space-8);
+    block-size: var(--space-8);
+    margin-block-start: var(--space-7);
+    border-radius: var(--radius-round);
+    background-color: var(--mobile-dot-mute);
+  }
+
+  .dot[data-tone='attention'] {
+    background-color: var(--mobile-accent);
+  }
+
+  .dot[data-tone='action'] {
+    background-color: var(--mobile-dot-ai);
+  }
+
+  .dot[data-tone='order'] {
+    background-color: var(--mobile-dot-ok);
+  }
+
+  .dot[data-tone='note'],
+  .dot[data-tone='handover'] {
+    background-color: var(--mobile-dot-warn);
+  }
+
+  .event {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .eventTitle {
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .eventLine {
+    font-size: var(--font-size-body-sm);
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
+  .none {
+    margin: 0;
+    padding-block: var(--space-4) var(--space-14);
+    padding-inline: var(--space-16);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-muted);
+  }
+
+  /* The newest note: who and when, then what they wrote. */
+  .noteHead {
+    margin: 0;
+    font-size: var(--font-size-item);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .noteText {
+    margin: 0;
+    font-size: var(--font-size-control);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+  }
+}

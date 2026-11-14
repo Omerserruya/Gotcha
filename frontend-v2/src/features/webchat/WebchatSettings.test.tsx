@@ -32,6 +32,30 @@ const actions = vi.hoisted(() => ({ saveWebsiteWidget: vi.fn(), loadWidgetPromot
 const browser = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('@/api/client/browser-api', () => ({ browserApi: browser }));
 vi.mock('./website-widget-actions', () => actions);
+/*
+ * The real widget runs in an iframe jsdom cannot boot. In its place: exactly
+ * what the settings would boot it with (previewWidget), so a test reads the
+ * draft the merchant would see in the real widget.
+ */
+vi.mock('./WidgetFrame', async (load) => {
+  const real = await load<typeof Frame>();
+  return {
+    ...real,
+    WidgetFrame: (props: Parameters<typeof real.WidgetFrame>[0]) => (
+      <pre data-testid="webchat-preview-widget">
+        {JSON.stringify(real.previewWidget(props.config, props))}
+      </pre>
+    ),
+  };
+});
+/** What the real widget would be booted with, as read from the stub. */
+const booted = () =>
+  JSON.parse(screen.getByTestId('webchat-preview-widget').textContent ?? '{}') as {
+    welcome: { assistantName: string; suggestedQuestions: string[] };
+    appearance: { showPoweredBy: boolean; language: string };
+    features: { whatsappHandoff: boolean; humanHandoff: boolean };
+    brand: { name: string; initial: string } | null;
+  };
 const channelActions = vi.hoisted(() => ({ connectWebChat: vi.fn() }));
 vi.mock('@/features/channels/actions', () => channelActions);
 // The existing install (10 / 00g), tested where it lives: here, only that it is the one used.
@@ -49,6 +73,8 @@ import { brandInitial, brandMark, initials, inkOn, logoFit } from '@/lib/brand-m
 
 import type { ShopifyData } from './load-website-widget';
 import { SAVE_AFTER_MS, WebchatSettings } from './WebchatSettings';
+import { previewWidget } from './WidgetFrame';
+import type * as Frame from './WidgetFrame';
 
 const config: WebchatConfig = webchatSettingsSchema.parse({
   data: {
@@ -105,6 +131,7 @@ const show = (
     assigned = null,
     numbers = null,
     initial = config,
+    answering = null,
   }: {
     read?: WidgetInstall | null;
     data?: ShopifyData | null;
@@ -112,6 +139,7 @@ const show = (
     /** Stage B's numbers; `null` is a stage A service. */
     numbers?: readonly HandoffNumber[] | null;
     initial?: WebchatConfig;
+    answering?: WebsiteWidget['answering'];
   } = {},
 ) =>
   render(
@@ -125,6 +153,7 @@ const show = (
         business="Aviv & Co."
         tab={tab}
         handoffNumbers={numbers}
+        answering={answering}
       />
     </NextIntlClientProvider>,
   );
@@ -186,6 +215,36 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     expect(screen.getByTestId('webchat-saving')).not.toHaveTextContent('Change it again');
   });
 
+  it.each([
+    ['nowhere', 'Get the code under Install'],
+    ['nowhereLimit', 'your plan has no room for another one'],
+    ['nowhereForbidden', 'Ask a workspace admin'],
+    ['failed', 'Not saved'],
+    ['number', 'Not saved'],
+    ['kindNumber', 'Not saved'],
+    ['couponPersonal', 'Not saved'],
+  ] as const)(
+    '★★ a refused save (%s) says so in words, in the urgent tone',
+    async (reason, words) => {
+      actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason });
+      show('behaviour', { read: install({ code: null }) });
+      fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+      await pause();
+      const line = screen.getByTestId('webchat-saving');
+      expect(line).toHaveTextContent(words);
+      expect(line).toHaveTextContent(/^Not saved: |^Not saved\. /);
+      expect(line).toHaveAttribute('data-failed');
+    },
+  );
+
+  it('saved: not in the urgent tone', async () => {
+    show('behaviour');
+    fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent('Saved');
+    expect(screen.getByTestId('webchat-saving')).not.toHaveAttribute('data-failed');
+  });
+
   it('a half-typed colour is never saved; a whole one is', async () => {
     show('appearance');
     fireEvent.click(screen.getByTestId('webchat-swatch-custom'));
@@ -237,7 +296,7 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     fireEvent.change(screen.getByTestId('webchat-question-1'), {
       target: { value: 'Can I exchange?' },
     });
-    expect(screen.getByTestId('webchat-preview-questions')).toHaveTextContent('Can I exchange?');
+    expect(booted().welcome.suggestedQuestions).toContain('Can I exchange?');
     await pause();
     expect(bodyOfWidget(sentAt()).ux.welcome.suggestedQuestions).toEqual([
       'Where is my order?',
@@ -250,9 +309,11 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
     const { displayName: _sent, ...expected } = bodyOfConfig(config);
     expect(bodyOfWidget(settings)).toEqual({
       ...expected,
+      nameSource: 'custom',
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     });
@@ -263,28 +324,187 @@ describe('★★ no Save button: a change is saved after a pause, the last one w
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: true,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     };
     expect(bodyOfWidget(odd).commerce.addToCartEnabled).toBe(false);
+    // Add-ons are product cards too (Backend f7c36959).
+    const addOns = { ...odd, commerce: { ...odd.commerce, suggestComplementary: true } };
+    expect(bodyOfWidget(addOns).commerce.suggestComplementary).toBe(false);
+  });
+});
+
+describe('★★ "Talk to a person": opt-in, off unless switched on (Omer, 2026-10-26)', () => {
+  const withHandoff = (handoff: unknown): WebchatConfig =>
+    webchatSettingsSchema.parse({ data: { ...config, handoff } }).data;
+
+  it('★★ unset reads as OFF: the switch off, and no link in the preview', () => {
+    show('behaviour');
+    const row = screen.getByTestId('webchat-human');
+    expect(row).toHaveTextContent('Let shoppers ask for a person');
+    expect(row).toHaveTextContent('Shows a "Talk to a person" link in the widget');
+    expect(screen.getByTestId('webchat-human-switch')).not.toBeChecked();
+    expect(booted().features.humanHandoff).toBe(false);
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['unreadable', 'yes'],
+    ['a non-boolean', { allowHumanHandoff: 'true' }],
+  ])(
+    '★ %s reads as off - and a save of something else sends no default for it',
+    async (_name, handoff) => {
+      const read = withHandoff(handoff);
+      expect(read.handoff.allowHumanHandoff).toBeUndefined();
+      show('behaviour', { initial: read });
+      expect(screen.getByTestId('webchat-human-switch')).not.toBeChecked();
+      expect(booted().features.humanHandoff).toBe(false);
+      fireEvent.click(screen.getByTestId('webchat-popup-switch'));
+      await pause();
+      expect(bodyOfWidget(sentAt())).not.toHaveProperty('handoff');
+    },
+  );
+
+  it('★★ switched on: the preview shows the link at once, and it is saved as handoff.allowHumanHandoff', async () => {
+    show('behaviour');
+    fireEvent.click(screen.getByTestId('webchat-human-switch'));
+    expect(booted().features.humanHandoff).toBe(true);
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    await pause();
+    expect(sentAt().handoff).toEqual({ allowHumanHandoff: true });
+    expect(bodyOfWidget(sentAt()).handoff).toEqual({ allowHumanHandoff: true });
+    expect(screen.getByTestId('webchat-human-switch')).toBeChecked();
+
+    fireEvent.click(screen.getByTestId('webchat-human-switch'));
+    expect(booted().features.humanHandoff).toBe(false);
+    await pause();
+    expect(sentAt(1).handoff).toEqual({ allowHumanHandoff: false });
+  });
+
+  it('a widget stored with it on reads on', () => {
+    show('behaviour', { initial: withHandoff({ allowHumanHandoff: true }) });
+    expect(screen.getByTestId('webchat-human-switch')).toBeChecked();
+    expect(booted().features.humanHandoff).toBe(true);
+  });
+
+  it('★ a WhatsApp widget has no chat to hand over from: no switch, no link', () => {
+    const whatsapp = withHandoff({ allowHumanHandoff: true });
+    show('behaviour', {
+      initial: { ...whatsapp, ux: { ...whatsapp.ux, kind: 'whatsapp', look: 'whatsapp' } },
+      numbers: [],
+    });
+    expect(screen.queryByTestId('webchat-human')).toBeNull();
+    // Its preview is not the chat; the chat's boot would carry no link either.
+    const opts = { language: 'en', employeeName: null, handoff: false } as const;
+    const boot = previewWidget({ ...whatsapp, ux: { ...whatsapp.ux, kind: 'whatsapp' } }, opts);
+    expect(boot.features.humanHandoff).toBe(false);
+    expect(previewWidget(whatsapp, opts).features.humanHandoff).toBe(true);
+  });
+
+  it("★ legacy's words, in Hebrew too", () => {
+    const he = heChannelsMessages.webchat.behaviour;
+    expect(he.human).toBe('לאפשר ללקוח לבקש נציג');
+    expect(he.humanHint).toBe('מציג קישור "לדבר עם נציג" בווידג׳ט');
+  });
+});
+
+describe("★★ the header name: the answering employee's, or one you choose (Backend 330b0461)", () => {
+  const employee = { employee: { id: 'e1', name: 'Noa' }, automation: null };
+
+  it('an existing widget reads as "custom": the typed name, in its field and in the preview', () => {
+    show('conversation', { answering: employee });
+    expect(screen.getByTestId('webchat-name-custom')).toBeChecked();
+    expect(screen.getByTestId('webchat-name-input')).toHaveValue(config.ux.welcome.assistantName);
+  });
+
+  it('★ "the employee\'s name": the field goes, the name shows, the choice is saved, the typed one kept', async () => {
+    show('conversation', { answering: employee });
+    fireEvent.click(screen.getByTestId('webchat-name-employee'));
+    expect(screen.queryByTestId('webchat-name-input')).toBeNull();
+    expect(screen.getByTestId('webchat-name')).toHaveTextContent('Noa');
+    expect(screen.getByTestId('webchat-preview')).toHaveTextContent('Noa');
+    await pause();
+    expect(bodyOfWidget(sentAt()).nameSource).toBe('employee');
+    // Kept while unused, so switching back restores it.
+    expect(bodyOfWidget(sentAt()).ux.welcome.assistantName).toBe(config.ux.welcome.assistantName);
+  });
+
+  it('no employee yet: says so, never a guessed name', () => {
+    show('conversation', { initial: { ...config, nameSource: 'employee' } });
+    expect(screen.getByTestId('webchat-name-employee')).toBeChecked();
+    expect(screen.getByTestId('webchat-name')).toHaveTextContent(
+      'No AI employee is set for the web chat yet.',
+    );
+  });
+
+  it('★ "set by automation <name>", a link to that automation', () => {
+    show('conversation', {
+      answering: {
+        employee: null,
+        automation: { id: 'au 1', name: 'Website triage', dedicated: true, everyChannel: false },
+      },
+    });
+    const line = screen.getByTestId('webchat-employee-automation');
+    expect(line).toHaveTextContent('Set by the automation Website triage.');
+    expect(screen.getByTestId('webchat-employee-automation-link')).toHaveAttribute(
+      'href',
+      '/studio/automations/au%201',
+    );
+  });
+
+  it('an automation for every channel says so', () => {
+    show('conversation', {
+      answering: {
+        employee: { id: 'e1', name: 'Noa' },
+        automation: { id: 'a2', name: 'All channels', dedicated: false, everyChannel: true },
+      },
+    });
+    expect(screen.getByTestId('webchat-employee-automation')).toHaveTextContent(
+      'which covers every channel',
+    );
+  });
+
+  it('no automation read: nothing is said about one', () => {
+    show('conversation', { answering: employee });
+    expect(screen.queryByTestId('webchat-employee-automation')).toBeNull();
   });
 });
 
 describe("★★ who answers is the playbook's - read here, never chosen", () => {
-  it('names the employee the playbook routes the website to, and where that is decided', () => {
-    show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
+  it('★★ the onboarding route (no automation): names the employee as answering here - never sends to Automations', () => {
+    const maya = { id: 'a1', name: 'Maya' };
+    show('conversation', { assigned: maya, answering: { employee: maya, automation: null } });
     expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent('Maya');
-    const where = screen.getByTestId('webchat-employee-where');
-    expect(where).toHaveTextContent('Studio · Automations');
-    expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
+    // The avatar is the name's first letter, never two letters of one word ("נו" read as one glyph).
+    expect(screen.getByTestId('webchat-employee-who').querySelector('span')).toHaveTextContent(
+      /^M$/,
+    );
+    expect(screen.getByTestId('webchat-employee-via-route')).toHaveTextContent(
+      'Maya answers website conversations: the route set up at onboarding sends every channel to this employee. There is nothing more to set up.',
+    );
+    expect(screen.queryByTestId('webchat-employee-where')).toBeNull();
+    expect(
+      screen.getByTestId('webchat-employee').querySelector('a[href="/studio/automations"]'),
+    ).toBeNull();
     expect(screen.getByTestId('webchat-employee').querySelector('button, input')).toBeNull();
   });
 
-  it('routes to no one employee: says so, never a name', () => {
+  it('an older service (no answering read): never claims the onboarding route', () => {
+    show('conversation', { assigned: { id: 'a1', name: 'Maya' } });
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    expect(screen.getByTestId('webchat-employee-where')).toBeInTheDocument();
+  });
+
+  it('routes to no one employee: says so, never a name, and where it is decided', () => {
     show('conversation');
     expect(screen.getByTestId('webchat-employee-who')).toHaveTextContent(
       "The playbook doesn't send website conversations to one employee",
     );
+    expect(screen.queryByTestId('webchat-employee-via-route')).toBeNull();
+    const where = screen.getByTestId('webchat-employee-where');
+    expect(where).toHaveTextContent('Studio · Automations');
+    expect(where.querySelector('a')).toHaveAttribute('href', '/studio/automations');
   });
 });
 
@@ -537,11 +757,13 @@ describe("★ the preview's marks come from one name - the business's", () => {
     show('appearance');
     // The launcher carries the initial now (design 7; supervisor, 2026-10-14).
     expect(screen.getByTestId('webchat-preview-launcher')).toHaveTextContent(/^A$/);
-    expect(screen.getByTestId('webchat-preview')).toHaveTextContent('AVIV & CO.');
+    // The widget draws its own wordmark from the brand it is booted with.
+    expect(booted().brand).toEqual({ name: 'Aviv & Co.', initial: 'A' });
   });
 
   it('★★ the logo is sized by its longest word, never broken in one; initials when none fits', () => {
-    // dev: "URBAN SUPPL / Y" across three lines in the circle.
+    // dev: "URBAN SUPPL / Y" across three lines in the circle. The rules the
+    // drawn launcher and pop-up still use; the widget's own logo is the widget's.
     expect(logoFit('AVIV & CO.')).toBe('l');
     expect(logoFit('URBAN SUPPLY')).toBe('m');
     expect(logoFit('LUMIÈRE')).toBe('s');
@@ -549,36 +771,6 @@ describe("★ the preview's marks come from one name - the business's", () => {
     expect(initials('Urban Supply - GOTCHA demo store')).toBe('US');
     expect(initials('Aviv & Co.')).toBe('AC');
     expect(initials('Lumièreparis')).toBe('LU');
-    const { unmount } = render(
-      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
-        <WebchatSettings
-          initial={config}
-          assigned={null}
-          install={install()}
-          shopifyData="ok"
-          shopifyAvailability={null}
-          business="Urban Supply - GOTCHA demo store"
-          tab="appearance"
-        />
-      </NextIntlClientProvider>,
-    );
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveAttribute('data-fit', 'm');
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent('URBAN SUPPLY');
-    unmount();
-    render(
-      <NextIntlClientProvider locale="en" messages={{ channels: channelsMessages }}>
-        <WebchatSettings
-          initial={config}
-          assigned={null}
-          install={install()}
-          shopifyData="ok"
-          shopifyAvailability={null}
-          business="Lumièreparis"
-          tab="appearance"
-        />
-      </NextIntlClientProvider>,
-    );
-    expect(screen.getByTestId('webchat-preview-logo')).toHaveTextContent(/^LU$/);
   });
 
   it('★ the mark sits ABOVE the cover it overlaps (dev: "URBAN" was under the cover, 4cbbcc0)', () => {
@@ -661,7 +853,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       kind: 'whatsapp',
       look: 'whatsapp',
       // The only number that can take it: chosen with the kind.
-      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
     });
     expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
   });
@@ -685,18 +877,140 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'whatsapp',
-      whatsapp: { enabled: true, channelAccountId: 'wa4' },
+      whatsapp: { enabled: true, channelAccountId: 'wa4', phone: null },
     });
   });
 
-  it('W1: no number that can take it - said, with where to connect one, nothing saved', async () => {
+  it('W1: no number that can take it - said, with where to connect one, and the field to type one; nothing saved', async () => {
     show('appearance', { numbers: NUMBERS.filter((n) => !n.available) });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
     expect(screen.getByTestId('webchat-kind-no-number')).toHaveTextContent(
-      'A WhatsApp widget needs a connected WhatsApp number',
+      'No WhatsApp number is connected. Type the number customers should write to',
     );
+    expect(screen.getByTestId('webchat-kind-phone')).toBeInTheDocument();
     await pause();
     expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('★★ typed: asked first, then saved as typed - no channel, the number as the route will normalise it', async () => {
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: ' 054-123 4567 ' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    expect(screen.getByTestId('webchat-kind-ask')).toBeInTheDocument();
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(sentAt().ux.kind).toBe('whatsapp');
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: '054-123 4567',
+    });
+  });
+
+  it('★ typed, not a number: said here, nothing asked, nothing saved', async () => {
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    for (const value of ['', 'call me', '12345', '+1 234 567 890 123 456']) {
+      fireEvent.change(screen.getByTestId('webchat-kind-phone'), { target: { value } });
+      fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+      expect(screen.getByTestId('webchat-kind-phone-bad')).toHaveTextContent(
+        "That isn't a phone number",
+      );
+      expect(screen.queryByTestId('webchat-kind-ask')).toBeNull();
+    }
+    await pause();
+    expect(actions.saveWebsiteWidget).not.toHaveBeenCalled();
+  });
+
+  it('★ with connected numbers, "Another number" is one more choice - and opens the field', () => {
+    show('appearance', {
+      numbers: [...NUMBERS, { ...NUMBERS[0]!, channelId: 'wa9', name: 'Second' }],
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.queryByTestId('webchat-kind-phone')).toBeNull();
+    fireEvent.click(screen.getByTestId('webchat-kind-number-typed'));
+    expect(screen.getByTestId('webchat-kind-phone')).toBeInTheDocument();
+  });
+
+  it('★ a typed number kept: said as the number; a connected one, when there is one, wins', () => {
+    const typed = (channelAccountId: string | null) => ({
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId, phone: '+972541234567' },
+      },
+    });
+    const { unmount } = show('appearance', { numbers: NUMBERS, initial: typed(null) });
+    expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent(
+      'On WhatsApp with +972541234567',
+    );
+    unmount();
+    show('appearance', { numbers: NUMBERS, initial: typed('wa1') });
+    expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
+    expect(screen.getByTestId('webchat-kind-number')).not.toHaveTextContent('+972541234567');
+  });
+
+  it('★★ "Another number" over a connected one: sent without the channel - else the connected one would win', async () => {
+    const wa = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'whatsapp' as const,
+        look: 'whatsapp' as const,
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+      },
+    };
+    show('appearance', { numbers: NUMBERS, initial: wa });
+    fireEvent.click(screen.getByTestId('webchat-kind-change-number'));
+    fireEvent.click(screen.getByTestId('webchat-kind-number-typed'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: '052-123 4567' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: '052-123 4567',
+    });
+  });
+
+  it('★ back to WhatsApp with a typed number kept: asked straight away, nothing to pick', () => {
+    const chat = {
+      ...config,
+      ux: {
+        ...config.ux,
+        kind: 'chat' as const,
+        whatsapp: { enabled: true, channelAccountId: null, phone: '+972541234567' },
+      },
+    };
+    show('appearance', { numbers: [], initial: chat });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    expect(screen.getByTestId('webchat-kind-ask')).toBeInTheDocument();
+    expect(screen.queryByTestId('webchat-kind-phone')).toBeNull();
+  });
+
+  it('★ the route refusing the typed number says so in words', async () => {
+    actions.saveWebsiteWidget.mockResolvedValue({ ok: false, reason: 'phone' });
+    show('appearance', { numbers: [] });
+    fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
+    fireEvent.change(screen.getByTestId('webchat-kind-phone'), {
+      target: { value: '+999 1234 5678' },
+    });
+    fireEvent.click(screen.getByTestId('webchat-kind-phone-use'));
+    fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
+    await pause();
+    expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
+      "Not saved: that isn't a phone number WhatsApp can open",
+    );
   });
 
   it('★★ W1: a WhatsApp widget shows only its own settings, in every tab', () => {
@@ -706,7 +1020,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
       },
     };
     const appearance = show('appearance', { numbers: NUMBERS, initial: wa });
@@ -752,7 +1066,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     fireEvent.click(screen.getByTestId('webchat-kind-ask-yes'));
     await pause();
     expect(screen.getByTestId('webchat-saving')).toHaveTextContent(
-      'a WhatsApp widget needs a connected WhatsApp number',
+      'a WhatsApp widget needs a number. Choose a connected one or type one.',
     );
   });
 
@@ -779,9 +1093,9 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     show('behaviour', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1' });
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1', phone: null });
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
-      whatsapp: { enabled: true, channelAccountId: 'wa1' },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
     });
     const one = within(screen.getByTestId('webchat-wa-wa1')).getByRole('radio');
     expect(one).toBeChecked();
@@ -813,17 +1127,17 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       "The button won't show on your site until a number that can take it is chosen.",
     );
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null });
+    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null, phone: null });
   });
 
   it('the preview shows the WhatsApp action only when the button will show', () => {
     const { unmount } = show('behaviour', { numbers: [NUMBERS[1]!] });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
-    expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
+    expect(booted().features.whatsappHandoff).toBe(false);
     unmount();
     show('behaviour', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
-    expect(screen.getByTestId('webchat-preview-wa-button')).toBeInTheDocument();
+    expect(booted().features.whatsappHandoff).toBe(true);
   });
 
   it('★ a stored choice of a number that cannot take it: no button in the preview, and said', () => {
@@ -831,7 +1145,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       numbers: NUMBERS,
       initial: {
         ...config,
-        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2' } },
+        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2', phone: null } },
       },
     });
     expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
@@ -865,7 +1179,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     const { look: _l, whatsapp: _w, ...stageA } = config.ux;
     expect(webchatSettingsSchema.parse({ data: { ...config, ux: stageA } }).data.ux).toMatchObject({
       look: 'gotcha',
-      whatsapp: { enabled: false, channelAccountId: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null },
     });
   });
 });
@@ -895,9 +1209,8 @@ describe('★★ W8 (2026-10-14) - "Powered by GOTCHA" is always on, with our lo
     show('appearance', {
       initial: { ...config, appearance: { ...config.appearance, showPoweredBy: false } },
     });
-    const line = screen.getByTestId('webchat-preview-powered');
-    expect(line).toHaveTextContent('Powered by');
-    expect(line.querySelector('img')).toHaveAttribute('alt', 'GOTCHA');
+    // The real widget is booted with it on (W8), whatever the server once said.
+    expect(booted().appearance.showPoweredBy).toBe(true);
   });
 });
 
@@ -988,7 +1301,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
   it('★★ back to chat is asked too, and puts back the hand-off as it was before - never the widget’s number', async () => {
     const off = {
       ...config,
-      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null } },
+      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null, phone: null } },
     };
     show('appearance', { numbers: NUMS, initial: off });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
@@ -1004,7 +1317,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     expect(bodyOfWidget(last, { stageB: true }).ux).toMatchObject({
       kind: 'chat',
       look: 'gotcha',
-      whatsapp: { enabled: true, channelAccountId: null },
+      whatsapp: { enabled: true, channelAccountId: null, phone: null },
     });
   });
 
@@ -1015,7 +1328,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1' },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
       },
     };
     show('appearance', { numbers: NUMS, initial: wa });
@@ -1024,7 +1337,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'chat',
-      whatsapp: { enabled: false, channelAccountId: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null },
     });
   });
 
@@ -1234,16 +1547,11 @@ describe('★ dev, 2026-10-14: after an upload, Remove is still there - and the 
 });
 
 describe('★★ W2 (2026-10-14) - the preview is design 7’s', () => {
-  it('★ the chat widget: cover, logo disc, name, the questions as rows with the live widget’s arrow, the composer and powered-by', () => {
+  it('★★ the chat widget is the real one, booted on the draft; the pop-up and the button stay on the stage', () => {
     show('appearance');
     const widget = screen.getByTestId('webchat-preview-widget');
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-cover'));
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-logo'));
-    expect(screen.getByTestId('webchat-preview-questions').querySelectorAll('li')).toHaveLength(1);
-    // The live widget's rows carry an arrow; the preview matches it (supervisor, dev).
-    const rows = screen.getByTestId('webchat-preview-questions').querySelectorAll('li');
-    expect(Array.from(rows).every((li) => li.querySelector('svg') !== null)).toBe(true);
-    expect(widget).toContainElement(screen.getByTestId('webchat-preview-powered'));
+    expect(booted().welcome.assistantName).toBe(config.ux.welcome.assistantName);
+    expect(booted().welcome.suggestedQuestions).toHaveLength(1);
     // The pop-up and the button sit on the stage, outside the widget.
     expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-bubble'));
     expect(widget).not.toContainElement(screen.getByTestId('webchat-preview-launcher'));
@@ -1304,10 +1612,6 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     const launcher = screen.getByTestId('webchat-preview-launcher');
     expect(launcher).toHaveTextContent(/^A$/);
     expect(launcher).toHaveStyle({ backgroundColor: '#f5e6c8', color: '#2B2622' });
-    expect(screen.getByTestId('webchat-preview-send')).toHaveStyle({
-      backgroundColor: '#f5e6c8',
-      color: '#2B2622',
-    });
     expect(launcher.querySelector('span[aria-hidden="true"]')).not.toBeNull();
   });
 
@@ -1316,6 +1620,45 @@ describe('★★ the bubble and the pop-up carry the brand, as the live widget d
     const bubble = screen.getByTestId('webchat-preview-bubble');
     expect(bubble).toHaveTextContent(/^AAviv assistantreplies right away✕Hi$/);
     expect(screen.getByTestId('webchat-preview-popup-message')).toHaveTextContent(/^Hi$/);
+  });
+
+  it('★ one logo (Omer, 2026-10-25): the bubble and the pop-up draw it on white, the initial without one', () => {
+    const logo = 'https://dev.gotcha.co.il/api/uploads/widget/logo.png';
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, logoUrl: logo } },
+    });
+    for (const id of ['webchat-preview-launcher', 'webchat-preview-bubble']) {
+      const img = screen.getByTestId(id).querySelector('img')!;
+      expect(img).toHaveAttribute('src', logo);
+      expect(img.parentElement).toHaveAttribute('data-logo');
+    }
+    expect(screen.getByTestId('webchat-preview-launcher')).not.toHaveTextContent('A');
+    // And the real widget is booted with it, for its header and disc.
+    expect(
+      JSON.parse(screen.getByTestId('webchat-preview-widget').textContent!).appearance.logoUrl,
+    ).toBe(logo);
+  });
+
+  it('★ "in the customer\'s language": the merchant picks which language to preview, and is told the page decides', () => {
+    show('appearance');
+    const pick = screen.getByTestId('webchat-preview-language');
+    expect(pick).toHaveTextContent('follows the language of the page the customer is on');
+    // This screen's language first.
+    expect(screen.getByTestId('webchat-preview-language-en')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(booted().appearance).toMatchObject({ language: 'en' });
+    fireEvent.click(screen.getByTestId('webchat-preview-language-he'));
+    expect(booted().appearance).toMatchObject({ language: 'he' });
+  });
+
+  it('a fixed language previews in it, with no choice to make', () => {
+    show('appearance', {
+      initial: { ...config, appearance: { ...config.appearance, language: 'he' } },
+    });
+    expect(screen.queryByTestId('webchat-preview-language')).toBeNull();
+    expect(booted().appearance).toMatchObject({ language: 'he' });
   });
 });
 
@@ -1374,7 +1717,22 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
     expect(sentAt().commerce).toEqual({
       productMessagingEnabled: true,
       addToCartEnabled: true,
+      suggestComplementary: false,
       promotions: { couponIds: [] },
+    });
+  });
+
+  it('★ complementary products wait for product cards, then save (Backend f7c36959)', async () => {
+    show('behaviour', { read: woo() });
+    expect(screen.getByTestId('webchat-complementary-unavailable')).toHaveTextContent(
+      'add-ons show as product cards',
+    );
+    fireEvent.click(screen.getByTestId('webchat-products-switch'));
+    fireEvent.click(screen.getByTestId('webchat-complementary-switch'));
+    await pause();
+    expect(sentAt().commerce).toMatchObject({
+      productMessagingEnabled: true,
+      suggestComplementary: true,
     });
   });
 
@@ -1384,6 +1742,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: true,
         addToCartEnabled: true,
+        suggestComplementary: false,
         promotions: { couponIds: [] },
       },
     };
@@ -1433,6 +1792,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: ['1', '2', '3', '4', '5'] },
       },
     };
@@ -1522,6 +1882,7 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
       commerce: {
         productMessagingEnabled: false,
         addToCartEnabled: false,
+        suggestComplementary: false,
         promotions: { couponIds: ['31'] },
       },
     };

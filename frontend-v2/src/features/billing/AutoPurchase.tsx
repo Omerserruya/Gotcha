@@ -14,6 +14,7 @@ import {
 import { AutoPurchaseForm, type PackChoice } from './AutoPurchaseForm';
 import styles from './Billing.module.css';
 import { packName } from './pack-name';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * Screen 17c - when credits run low, and what happens when you stop.
@@ -129,79 +130,83 @@ export async function AutoPurchase({
         billing is the production payment account. What each holds now is
         still drawn here, into the form.
       */}
-      <AutoPurchaseForm
-        initialOption={option}
-        initialThreshold={policy?.thresholdPct ?? 10}
-        initialCap={policy?.maxMonthlySpend ?? null}
-        initialBehavior={policy?.limitBehavior ?? 'STOP_AI'}
-        packs={packs}
-        currency={currency}
-        card={card}
-        heldTag={heldTag}
-        heldWhy={heldWhy}
-        live={live}
-        stored={{
-          packageKey: policy?.packageKey ?? null,
-          warningThresholdPct: policy?.warningThresholdPct ?? 80,
-          incrementCredits: policy?.incrementCredits ?? null,
-          pricePerCredit: policy?.pricePerCredit ?? null,
-        }}
-        current={{
-          pack: (
-            <>
-              {policy ? (
-                <p className={styles.lowOptionText} data-testid="auto-state">
-                  {policy.enabled
-                    ? t('autoPurchase.on', { threshold: policy.thresholdPct })
-                    : t('autoPurchase.off')}
-                </p>
-              ) : null}
-              {/* The cap, with what has gone against it - "-" when nothing is set. */}
-              {policy ? (
-                <p className={styles.lowOptionText} data-testid="auto-cap">
-                  {policy.maxMonthlySpend === null
-                    ? t('autoPurchase.noCap')
-                    : t('autoPurchase.cap', {
-                        cap: policy.maxMonthlySpend,
-                        spent: policy.monthSpentAmount,
-                        currency,
-                        used: used === null ? '' : format.number(used, { style: 'percent' }),
-                      })}
-                </p>
-              ) : (
-                <p className={styles.lowOptionText} data-testid="auto-cap">
-                  {t('autoPurchase.mostYouCould')} -
-                </p>
-              )}
-            </>
-          ),
-          payg: (
-            <>
-              {paygRate ? (
-                <p className={styles.lowOptionText} data-testid="auto-payg-rate">
-                  {t('autoPurchase.paygRate', { rate: paygRate, currency })}
-                </p>
-              ) : null}
-              {/*
-            A behaviour the platform honours and the settings API refuses -
-            shown, not hidden: the warning below is ABOUT pay-as-you-go.
-          */}
-              {policy && !isSettable(policy.limitBehavior) ? (
-                <p className={styles.lowOptionText} data-testid="auto-unsettable">
-                  {t('autoPurchase.unsettable')}
-                </p>
-              ) : null}
-              {/* THE COMBINATION THAT LOOKS SAFE AND IS NOT. */}
-              {policy && policy.maxMonthlySpend !== null && spendsPastZero(policy.limitBehavior) ? (
-                <p className={styles.autoContradiction} data-testid="auto-cap-not-a-cap">
-                  {t('autoPurchase.capIsNotACap')}
-                </p>
-              ) : null}
-            </>
-          ),
-          stop: <span className={styles.lowOptionText}>{t('autoPurchase.stopText')}</span>,
-        }}
-      />
+      <SupportRefused kind="billing">
+        <AutoPurchaseForm
+          initialOption={option}
+          initialThreshold={policy?.thresholdPct ?? 10}
+          initialCap={policy?.maxMonthlySpend ?? null}
+          initialBehavior={policy?.limitBehavior ?? 'STOP_AI'}
+          packs={packs}
+          currency={currency}
+          card={card}
+          heldTag={heldTag}
+          heldWhy={heldWhy}
+          live={live}
+          stored={{
+            packageKey: policy?.packageKey ?? null,
+            warningThresholdPct: policy?.warningThresholdPct ?? 80,
+            incrementCredits: policy?.incrementCredits ?? null,
+            pricePerCredit: policy?.pricePerCredit ?? null,
+          }}
+          current={{
+            pack: (
+              <>
+                {policy ? (
+                  <p className={styles.lowOptionText} data-testid="auto-state">
+                    {policy.enabled
+                      ? t('autoPurchase.on', { threshold: policy.thresholdPct })
+                      : t('autoPurchase.off')}
+                  </p>
+                ) : null}
+                {/* The cap, with what has gone against it - "-" when nothing is set. */}
+                {policy ? (
+                  <p className={styles.lowOptionText} data-testid="auto-cap">
+                    {policy.maxMonthlySpend === null
+                      ? t('autoPurchase.noCap')
+                      : t('autoPurchase.cap', {
+                          cap: policy.maxMonthlySpend,
+                          spent: policy.monthSpentAmount,
+                          currency,
+                          used: used === null ? '' : format.number(used, { style: 'percent' }),
+                        })}
+                  </p>
+                ) : (
+                  <p className={styles.lowOptionText} data-testid="auto-cap">
+                    {t('autoPurchase.mostYouCould')} -
+                  </p>
+                )}
+              </>
+            ),
+            payg: (
+              <>
+                {paygRate ? (
+                  <p className={styles.lowOptionText} data-testid="auto-payg-rate">
+                    {t('autoPurchase.paygRate', { rate: paygRate, currency })}
+                  </p>
+                ) : null}
+                {/*
+              A behaviour the platform honours and the settings API refuses -
+              shown, not hidden: the warning below is ABOUT pay-as-you-go.
+            */}
+                {policy && !isSettable(policy.limitBehavior) ? (
+                  <p className={styles.lowOptionText} data-testid="auto-unsettable">
+                    {t('autoPurchase.unsettable')}
+                  </p>
+                ) : null}
+                {/* THE COMBINATION THAT LOOKS SAFE AND IS NOT. */}
+                {policy &&
+                policy.maxMonthlySpend !== null &&
+                spendsPastZero(policy.limitBehavior) ? (
+                  <p className={styles.autoContradiction} data-testid="auto-cap-not-a-cap">
+                    {t('autoPurchase.capIsNotACap')}
+                  </p>
+                ) : null}
+              </>
+            ),
+            stop: <span className={styles.lowOptionText}>{t('autoPurchase.stopText')}</span>,
+          }}
+        />
+      </SupportRefused>
 
       <h3 className={styles.lowHeading}>{t('autoPurchase.alerts')}</h3>
       {/*

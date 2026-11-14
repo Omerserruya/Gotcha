@@ -1,0 +1,151 @@
+@layer shell {
+  /*
+   * The phone's frame, as `GOTCHA Mobile App.dc.html` draws it: the warm
+   * paper edge to edge, the screen, and a white tab bar under it. No dark
+   * ground: that is the desktop's frame, and on a phone it was a border
+   * around a screen that has no room for one.
+   *
+   * `100dvh`, not `100vh`: on a phone `vh` is the height with the browser's
+   * bars hidden, so a `100vh` frame puts the tabs under the toolbar.
+   */
+  .frame {
+    display: flex;
+    flex-direction: column;
+    block-size: 100dvh;
+    background-color: var(--mobile-ground);
+    color: var(--mobile-ink);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    padding-block-start: env(safe-area-inset-top);
+  }
+
+  /* The screen is the positioning box for what floats over it: a list's action button. */
+  .main {
+    position: relative;
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--mobile-ground);
+    overflow: hidden;
+  }
+
+  /*
+   * ── The incoming-message banner: over the screen's top, the person and
+   *    the first line; tap to open, X or five seconds to go.
+   */
+  .banner {
+    position: fixed;
+    inset-block-start: calc(env(safe-area-inset-top) + var(--space-8));
+    inset-inline: var(--space-8);
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding-block: var(--space-10);
+    padding-inline: var(--space-14) var(--space-6);
+    border-radius: var(--space-18);
+    background-color: var(--mobile-ink);
+    color: var(--mobile-ink-text);
+    box-shadow: var(--mobile-shadow-card);
+  }
+
+  .bannerOpen {
+    flex: 1;
+    min-inline-size: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .bannerTitle {
+    font-size: var(--font-size-body);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .bannerBody {
+    overflow: hidden;
+    font-size: var(--font-size-label);
+    color: var(--mobile-copilot-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .bannerClose {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 36px;
+    block-size: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  /* ── Tabs: 70px of white, a pill behind the current one ───────────── */
+  .tabs {
+    flex: none;
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    padding-inline: var(--space-4);
+    padding-block-end: env(safe-area-inset-bottom);
+    background-color: var(--mobile-surface);
+    border-block-start: var(--border-width-thin) solid var(--mobile-card-edge);
+  }
+
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    min-block-size: 70px;
+    color: var(--text-muted);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tab:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: calc(-1 * var(--space-4));
+  }
+
+  .tabPill {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 58px;
+    block-size: 32px;
+    border-radius: 16px;
+    color: var(--text-body);
+  }
+
+  .tab[aria-current='page'] .tabPill {
+    background-color: var(--mobile-accent-tint);
+    color: var(--mobile-accent-text);
+  }
+
+  .tabLabel {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    line-height: 1;
+  }
+
+  .tab[aria-current='page'] .tabLabel {
+    font-weight: var(--font-weight-bold);
+    color: var(--mobile-ink);
+  }
+}

@@ -6,6 +6,9 @@ import { getLocale } from 'next-intl/server';
 import { activeSession } from '@/auth/session-store';
 import { serverEnv } from '@/config/env.server';
 import { logger } from '@/observability/logger';
+import { isSupportEnded } from '@/support/support-codes';
+import { markSupportEnded } from '@/support/support-ended';
+import { supportHeaders } from '@/support/support-headers';
 import { TENANT_HEADER } from '@/tenant/tenant-header';
 
 import { HttpClient } from './http-client';
@@ -32,8 +35,10 @@ export function serverApi(): HttpClient {
      */
     prepareHeaders: platformHeaders,
     // A streamed section asks after its reads: it cannot redirect from a loader.
-    onUnauthenticated() {
-      markSessionRejected();
+    onUnauthenticated(error) {
+      // Support mode ended: the admin's own sign-in stands (`signInHere`).
+      if (isSupportEnded(error.code)) markSupportEnded();
+      else markSessionRejected();
     },
     onError(error) {
       const level = error.kind === 'server' || error.kind === 'contract' ? 'error' : 'warn';
@@ -51,7 +56,9 @@ export function serverApi(): HttpClient {
  * Exported for the one route that streams a platform file through a
  * transform (the audit export); every JSON call goes through `serverApi()`.
  */
-export async function platformHeaders(): Promise<Record<string, string>> {
+export async function platformHeaders(request?: {
+  readonly route?: string;
+}): Promise<Record<string, string>> {
   const env = serverEnv();
   /*
    * ★ THE INTERFACE LANGUAGE, ON EVERY CALL. Routes that answer in words
@@ -65,15 +72,24 @@ export async function platformHeaders(): Promise<Record<string, string>> {
   if (env.PLATFORM_SESSION_COOKIE) {
     const platform = (await cookies()).get(env.PLATFORM_SESSION_COOKIE);
     if (platform) {
-      return { cookie: `${platform.name}=${platform.value}`, ...lang };
+      return {
+        cookie: `${platform.name}=${platform.value}`,
+        ...(await supportHeaders(request?.route)),
+        ...lang,
+      };
     }
   }
 
   const session = await activeSession();
   if (!session) return lang;
+  /*
+   * ★ SUPPORT MODE LAST, so its workspace wins over the session's `tid`: the
+   *   platform honours the session only for the tenant it names.
+   */
   return {
     authorization: `Bearer ${session.at}`,
     ...(session.tid ? { [TENANT_HEADER]: session.tid } : {}),
+    ...(await supportHeaders(request?.route)),
     ...lang,
   };
 }

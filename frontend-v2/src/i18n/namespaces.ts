@@ -103,6 +103,7 @@ export const NAMESPACES = [
   'roles',
   /** The customer checkout (/checkout/*), signed in or out. */
   'checkout',
+  'mobile',
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

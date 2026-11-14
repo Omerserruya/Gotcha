@@ -6,6 +6,7 @@ import { platformErrorReason } from '@/api/contracts/platform-errors';
 import { ConnectFor } from './ConnectFor';
 import { DisconnectSystem } from './DisconnectSystem';
 import styles from './Capabilities.module.css';
+import { SupportRefused } from '@/features/support/SupportRefused';
 
 /**
  * 10 for a connected system whose connection broke: what that means, and the
@@ -58,7 +59,9 @@ export async function ReconnectSystem({
           noForm: t('available.noForm'),
         }}
       />
-      <DisconnectSystem slug={integration.slug} name={integration.name} />
+      <SupportRefused kind="delete">
+        <DisconnectSystem slug={integration.slug} name={integration.name} />
+      </SupportRefused>
     </section>
   );
 }

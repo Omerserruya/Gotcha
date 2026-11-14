@@ -168,6 +168,20 @@ const displayPhone = z
 export const QUALITY_RATINGS = ['GREEN', 'YELLOW', 'RED'] as const;
 export type QualityRating = (typeof QUALITY_RATINGS)[number];
 
+/**
+ * Which business account (WABA) a number is on, and whether it is the
+ * workspace's primary number (Backend feat/wa-primary-number). Every field is
+ * tolerant: a backend without them reads as "not known", never as a failed
+ * list. Numbers connected before the field existed carry null names.
+ */
+const accountFields = {
+  wabaId: z.string().nullable().catch(null).default(null),
+  wabaName: z.string().nullable().catch(null).default(null),
+  businessPortfolioId: z.string().nullable().catch(null).default(null),
+  businessName: z.string().nullable().catch(null).default(null),
+  isPrimary: z.boolean().catch(false).default(false),
+};
+
 export const numberSchema = z.object({
   id: z.string(),
   phoneNumber: displayPhone,
@@ -181,6 +195,7 @@ export const numberSchema = z.object({
   qualityRating: z.string().nullable().default(null),
   throughputLevel: z.string().nullable().default(null),
   health: healthReportSchema,
+  ...accountFields,
 });
 
 export type WhatsAppNumber = z.infer<typeof numberSchema>;
@@ -218,13 +233,29 @@ export const unprofiledSchema = z.object({
    * errors, and nothing about a plan's price depends on the wording.
    */
   note: z.string().nullable().default(null),
+  ...accountFields,
 });
 
 export type UnprofiledNumber = z.infer<typeof unprofiledSchema>;
 
+export const PRIMARY_SOURCES = ['chosen', 'default', 'none'] as const;
+export type PrimarySource = (typeof PRIMARY_SOURCES)[number];
+
+/**
+ * The workspace's primary number: what sends anything no number was chosen
+ * for. `chosen` by a person, the `default` (first connected), or `none`.
+ */
+export const primarySchema = z.object({
+  channelAccountId: z.string().nullable().catch(null).default(null),
+  source: z.enum(PRIMARY_SOURCES).catch('none'),
+});
+export type Primary = z.infer<typeof primarySchema>;
+
 export const numbersResponseSchema = z.object({
   data: z.array(numberSchema).default([]),
   unprofiled: z.array(unprofiledSchema).default([]),
+  /** `null` = a backend that has no primary yet: nothing about it is drawn. */
+  primary: primarySchema.nullable().catch(null).default(null),
 });
 
 export type NumbersResponse = z.infer<typeof numbersResponseSchema>;
@@ -339,6 +370,52 @@ export function repliesStillFlow(health: HealthReport): boolean {
  */
 export function numberCount(numbers: NumbersResponse): number {
   return numbers.data.length + numbers.unprofiled.length;
+}
+
+/* ── Business accounts and the primary number ────────────────────────────── */
+
+type AccountRow = Pick<WhatsAppNumber, 'wabaId' | 'wabaName' | 'businessName'>;
+
+/** The business accounts the numbers are on, in the order first seen; unknown ones are not counted. */
+export function accountIds(numbers: NumbersResponse): readonly string[] {
+  const ids: string[] = [];
+  for (const n of [...numbers.data, ...numbers.unprofiled]) {
+    if (n.wabaId && !ids.includes(n.wabaId)) ids.push(n.wabaId);
+  }
+  return ids;
+}
+
+/**
+ * The words for a number's account: the WABA's name, else its business's,
+ * else `…` and the id's last four - never the raw full id. `null` when
+ * nothing is known.
+ */
+export function accountLabel(row: AccountRow): AccountName | null {
+  const name = row.wabaName?.trim() || row.businessName?.trim();
+  if (name) return { text: name, unnamed: false };
+  return row.wabaId ? { text: `…${row.wabaId.slice(-4)}`, unnamed: true } : null;
+}
+
+/**
+ * An account's words, and whether they are the `…last4` stand-in - drawn
+ * left to right in either language, or a Hebrew line reads it as "4444…".
+ */
+export interface AccountName {
+  readonly text: string;
+  readonly unnamed: boolean;
+}
+
+/**
+ * Rows grouped by account, each group where its account is first seen; the
+ * server's order inside a group. Rows with no account id come last.
+ */
+export function byAccount<R extends Pick<WhatsAppNumber, 'wabaId'>>(rows: readonly R[]): R[] {
+  const known: string[] = [];
+  for (const r of rows) if (r.wabaId && !known.includes(r.wabaId)) known.push(r.wabaId);
+  return [
+    ...known.flatMap((id) => rows.filter((r) => r.wabaId === id)),
+    ...rows.filter((r) => !r.wabaId),
+  ];
 }
 
 /**

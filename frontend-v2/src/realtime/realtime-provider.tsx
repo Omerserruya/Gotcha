@@ -17,6 +17,10 @@ import type { RealtimeEventType } from './events';
 import { SocketTransport } from './socket-transport';
 import type { ConnectionState, RealtimeListener, RealtimeTransport } from './transport';
 import { appPath } from '@/lib/base-path';
+import { isSupportEnded, SUPPORT_ENDED_EVENT } from '@/support/support-codes';
+
+/** Support mode ended under the socket: the one listener (the banner) sends the admin to the console. */
+const supportEnded = () => window.dispatchEvent(new CustomEvent(SUPPORT_ENDED_EVENT));
 
 const RealtimeContext = createContext<RealtimeTransport | null>(null);
 
@@ -47,6 +51,11 @@ export function RealtimeProvider({
             credentials: 'same-origin',
             headers: { 'content-type': 'application/json' },
           });
+          if (response.status === 401) {
+            const { code } = (await response.json().catch(() => ({}))) as { code?: string };
+            if (isSupportEnded(code)) supportEnded();
+            return null;
+          }
           if (!response.ok) return null;
           const { ticket } = (await response.json()) as { ticket?: string };
           return ticket ? { ticket, tenantId } : null;
@@ -55,6 +64,7 @@ export function RealtimeProvider({
           return null;
         }
       },
+      onSupportEnded: supportEnded,
     });
   }, [tenantId]);
 

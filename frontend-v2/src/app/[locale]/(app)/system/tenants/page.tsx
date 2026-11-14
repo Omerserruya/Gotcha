@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { CreateTenant } from '@/features/console/CreateTenant';
+import { DeletedNotice } from '@/features/console/DeletedNotice';
 import { loadCreateOptions, loadTenants } from '@/features/console/load-tenants';
 import { TenantSearch, TenantsTable } from '@/features/console/TenantsTable';
 import { pageMetadata } from '@/shell/page-metadata';
@@ -29,6 +30,7 @@ export default async function Page({
 
   return (
     <SettingsSection title={t('title')} description={t('description')}>
+      <DeletedNotice />
       <CreateTenant plans={options.plans} domains={options.domains} />
       <TenantSearch search={search} />
       {list.ok ? (

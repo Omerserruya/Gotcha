@@ -736,21 +736,183 @@
   }
 
   .askSend {
+    display: inline-flex;
     flex: none;
+    align-items: center;
+    justify-content: center;
     inline-size: 22px;
     block-size: 22px;
     padding: 0;
     border: 0;
     border-radius: 50%;
     background-color: var(--copilot-ask-mark);
+    /* The arrow never takes the fill's colour: muted on the dark mark, dark on lavender. */
+    color: var(--menu-dark-icon);
     cursor: pointer;
   }
 
   .askSend:enabled {
     background-color: var(--signal-ai);
+    color: var(--copilot-input-surface);
   }
 
   .askSend:disabled {
     cursor: default;
+  }
+
+  /*
+   * The side chat (Backend c49f3830): this agent's private thread with the
+   * Copilot, above the field. It scrolls in its own window so the wall above
+   * keeps its place; a draft is set apart, with the one way into the composer.
+   */
+  .chat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chatHead {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .chatPrivate {
+    font-size: 11px;
+    color: var(--menu-dark-icon);
+  }
+
+  /* "Start over" stays one line beside the note. */
+  .chatHead .textButton {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .chatTurns {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-block-size: min(46vh, 420px);
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+
+  .chatTurn {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-inline-size: 92%;
+    padding: 9px 12px;
+    border-radius: 11px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--frame-text);
+  }
+
+  /* The agent's own words, at the end; the Copilot's at the start, like the stream. */
+  .chatTurn[data-role='agent'] {
+    align-self: flex-end;
+    background-color: var(--copilot-raised);
+  }
+
+  .chatTurn[data-role='copilot'] {
+    align-self: flex-start;
+    background-color: var(--copilot-card);
+  }
+
+  .chatText {
+    white-space: pre-line;
+  }
+
+  .chatThinking {
+    align-self: flex-start;
+    font-size: 12px;
+    color: var(--menu-dark-icon);
+  }
+
+  .chatDraft {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px 11px;
+    border-inline-start: 2px solid var(--signal-ai);
+    border-radius: 8px;
+    background-color: var(--copilot-well);
+  }
+
+  .chatDraftLabel {
+    font-size: 11px;
+    color: var(--copilot-text-muted);
+  }
+
+  /*
+   * ★★ FOLDED (Omer, 2026-10-25): a 44px strip at the panel's edge with
+   *   "show" in it. Everything else in the column stays mounted and is only
+   *   not drawn, so the thread and a half-typed question survive the fold.
+   */
+  .panel[data-collapsed='1'] {
+    flex-basis: 44px;
+  }
+
+  .panel[data-collapsed='1'] > :not(.reopen) {
+    display: none;
+  }
+
+  .collapse,
+  .reopen {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--menu-dark-icon);
+    cursor: pointer;
+  }
+
+  .collapse {
+    inline-size: 24px;
+    block-size: 24px;
+    margin-block: -4px;
+    margin-inline-start: auto;
+    border-radius: 6px;
+  }
+
+  /* "Working on this" already takes the free space; the button sits after it. */
+  .headerState + .collapse {
+    margin-inline-start: 0;
+  }
+
+  .reopen {
+    flex: 1;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 12px;
+    padding-block: 14px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--frame-text);
+  }
+
+  .reopen > svg {
+    color: var(--menu-dark-icon);
+  }
+
+  .reopenName {
+    writing-mode: vertical-rl;
+  }
+
+  .collapse:hover,
+  .reopen:hover > svg {
+    color: var(--frame-text);
+  }
+
+  .collapse:focus-visible,
+  .reopen:focus-visible {
+    outline: var(--focus-ring-width) solid var(--signal-ai);
+    outline-offset: -2px;
   }
 }

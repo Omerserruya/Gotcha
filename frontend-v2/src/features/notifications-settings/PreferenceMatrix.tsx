@@ -2,6 +2,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 
 import { eventCell, type NotificationPreferences } from '@/api/contracts/notifications';
 import { UnavailableStatus } from '@/design-system/primitives/unavailable/Unavailable';
+import { SupportRefused } from '@/features/support/SupportRefused';
 import { Link } from '@/i18n/navigation';
 
 import { DeviceAlerts } from './DeviceAlerts';
@@ -10,6 +11,7 @@ import styles from './Notifications.module.css';
 import { PreferenceSwitch } from './PreferenceSwitch';
 import { QuietHours } from './QuietHours';
 import type { ObservedVolume } from './volume';
+import { WhatsAppAlerts } from './WhatsAppAlerts';
 
 /** 02's rows, each tied to the event that sends it - or to none. */
 /**
@@ -26,9 +28,11 @@ const ROWS = [
   { key: 'complaints', event: null, about: true },
   { key: 'campaign', event: 'broadcast.completed' },
   { key: 'assigned', event: 'conversation.assigned' },
+  { key: 'waiting', event: 'conversation.waiting' },
 ] as const;
 
 const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
+type Channel = (typeof CHANNELS)[number];
 
 /**
  * Screen 15 - "Tell me when" × In app · Email · WhatsApp, measured.
@@ -47,9 +51,13 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
  *   A switch in every cell would flip a whole column from one cell - the
  *   cells show what reaches you, and change when their switch does.
  *
- * ⚠ WHATSAPP TO A PERSON DOES NOT EXIST (Backend, 2026-10-08): no number to
- *   send from, no templates. Its column is a status, and its cells "-" -
- *   never a mark saying something reaches you that nothing sends.
+ * ★ WHATSAPP TO A PERSON (Backend 73f76d2c): only where the deployment has
+ *   the platform's number (`whatsappAvailable`) - otherwise the column is
+ *   not drawn at all. Its switch needs the person's own number, confirmed
+ *   by a code (the card below); until then the column head says so. Its
+ *   cells are switches only on the events that have a template for it.
+ * ★ NOT IN SUPPORT MODE: these are the support actor's own, and every write
+ *   is refused (403 support_denied:ownership) - drawn refused, still read.
  * ★ THE FAN-OUT OBEYS THEM (notifications 9164a058): per recipient and
  *   channel - the channel's switch, approvals off on every channel, and
  *   quiet hours (the workspace's time zone): inside them no email is sent
@@ -70,16 +78,16 @@ const CHANNELS = ['inApp', 'email', 'whatsapp'] as const;
 export async function PreferenceMatrix({
   preferences,
   volume,
-  whatsappDestination,
 }: {
   readonly preferences: NotificationPreferences | null;
   readonly volume: ObservedVolume | null;
-  readonly whatsappDestination: string | null;
 }) {
   const t = await getTranslations('notifications-settings.matrix');
   const format = await getFormatter();
 
-  const on = (row: (typeof ROWS)[number], channel: (typeof CHANNELS)[number]) =>
+  const whatsapp = preferences?.whatsappAvailable === true;
+  const channels: readonly Channel[] = whatsapp ? CHANNELS : ['inApp', 'email'];
+  const on = (row: (typeof ROWS)[number], channel: Channel) =>
     preferences !== null &&
     preferences[channel] &&
     (!('approvals' in row) || preferences.approvals);
@@ -88,122 +96,131 @@ export async function PreferenceMatrix({
 
   return (
     <>
-      <section className={styles.matrix} data-testid="pref-matrix">
-        <div className={styles.matrixHead}>
-          <span className={styles.matrixEvent}>{t('when')}</span>
-          {CHANNELS.map((channel) => (
-            <span key={channel} className={styles.matrixHeadCell}>
-              <span>{t(`channel.${channel}`)}</span>
-              {preferences === null ? null : channel === 'whatsapp' ? (
-                <UnavailableStatus
-                  tag={t('whatsappUnavailable.tag')}
-                  why={t('whatsappUnavailable.why')}
-                  testid="pref-switch-whatsapp-unavailable"
-                />
-              ) : (
-                <PreferenceSwitch
-                  field={channel}
-                  on={preferences[channel]}
-                  label={t('channelSwitch', { channel: t(`channel.${channel}`) })}
-                />
-              )}
-            </span>
-          ))}
-        </div>
-        <ul className={styles.matrixRows}>
-          {ROWS.map((row) => (
-            <li key={row.key} className={styles.matrixRow} data-testid={`pref-row-${row.key}`}>
-              <span className={styles.matrixEvent}>
-                <span className={styles.matrixName}>{t(`row.${row.key}`)}</span>
-                {/*
+      <SupportRefused kind="ownership">
+        <section className={styles.matrix} data-testid="pref-matrix">
+          <div className={styles.matrixHead}>
+            <span className={styles.matrixEvent}>{t('when')}</span>
+            {channels.map((channel) => (
+              <span key={channel} className={styles.matrixHeadCell}>
+                <span>{t(`channel.${channel}`)}</span>
+                {preferences === null ? null : channel === 'whatsapp' &&
+                  preferences.whatsappPhone === null ? (
+                  <UnavailableStatus
+                    tag={t('whatsappNoNumber.tag')}
+                    why={t('whatsappNoNumber.why')}
+                    testid="pref-switch-whatsapp-no-number"
+                  />
+                ) : (
+                  <PreferenceSwitch
+                    field={channel}
+                    on={preferences[channel]}
+                    label={t('channelSwitch', { channel: t(`channel.${channel}`) })}
+                  />
+                )}
+              </span>
+            ))}
+          </div>
+          <ul className={styles.matrixRows}>
+            {ROWS.map((row) => (
+              <li key={row.key} className={styles.matrixRow} data-testid={`pref-row-${row.key}`}>
+                <span className={styles.matrixEvent}>
+                  <span className={styles.matrixName}>{t(`row.${row.key}`)}</span>
+                  {/*
                   A row nothing sends says so; what it would cover rides on
                   its title. A live row carries 02's line beneath it.
                 */}
-                {row.event === null ? (
-                  <span
-                    className={styles.matrixSub}
-                    title={'about' in row ? t(`about.${row.key}`) : undefined}
-                  >
-                    {t('nothingSends')}
-                  </span>
-                ) : 'about' in row ? (
-                  <span className={styles.matrixSub} data-testid={`pref-about-${row.key}`}>
-                    {t(`about.${row.key}`)}
-                  </span>
-                ) : null}
-                {/* The one event the platform lets you switch on its own. */}
-                {'approvals' in row && preferences !== null ? (
-                  <span className={styles.matrixRowSwitch}>
-                    <PreferenceSwitch
-                      field="approvals"
-                      on={preferences.approvals}
-                      label={t('approvalsSwitch')}
-                    />
-                    <span className={styles.matrixSub}>{t('approvalsSwitch')}</span>
-                  </span>
-                ) : null}
-              </span>
-              {CHANNELS.map((channel) => {
-                if (row.event === null || preferences === null || channel === 'whatsapp') {
+                  {row.event === null ? (
+                    <span
+                      className={styles.matrixSub}
+                      title={'about' in row ? t(`about.${row.key}`) : undefined}
+                    >
+                      {t('nothingSends')}
+                    </span>
+                  ) : 'about' in row ? (
+                    <span className={styles.matrixSub} data-testid={`pref-about-${row.key}`}>
+                      {t(`about.${row.key}`)}
+                    </span>
+                  ) : null}
+                  {/* The one event the platform lets you switch on its own. */}
+                  {'approvals' in row && preferences !== null ? (
+                    <span className={styles.matrixRowSwitch}>
+                      <PreferenceSwitch
+                        field="approvals"
+                        on={preferences.approvals}
+                        label={t('approvalsSwitch')}
+                      />
+                      <span className={styles.matrixSub}>{t('approvalsSwitch')}</span>
+                    </span>
+                  ) : null}
+                </span>
+                {channels.map((channel) => {
+                  if (row.event === null || preferences === null) {
+                    return (
+                      <span key={channel} className={styles.matrixCell}>
+                        <span className={styles.matrixNone}>-</span>
+                      </span>
+                    );
+                  }
+                  const cell = eventCell(preferences, row.event, channel);
                   return (
                     <span key={channel} className={styles.matrixCell}>
-                      <span className={styles.matrixNone}>-</span>
+                      {cell.kind === 'unreachable' ? (
+                        <span
+                          className={styles.matrixNone}
+                          title={t(
+                            channel === 'email'
+                              ? 'notByEmail'
+                              : channel === 'whatsapp'
+                                ? 'notByWhatsApp'
+                                : 'notInApp',
+                          )}
+                          data-testid={`pref-${row.key}-${channel}-none`}
+                        >
+                          -
+                        </span>
+                      ) : cell.kind === 'switch' && preferences[channel] ? (
+                        <EventSwitch
+                          eventType={row.event}
+                          channel={channel}
+                          on={cell.on && on(row, channel)}
+                          label={t('rowSwitch', {
+                            channel: t(`channel.${channel}`),
+                            event: t(`row.${row.key}`),
+                          })}
+                          testid={`pref-${row.key}-${channel}-switch`}
+                        />
+                      ) : (
+                        <span
+                          className={styles.cellState}
+                          role="img"
+                          data-on={on(row, channel) ? 'yes' : 'no'}
+                          aria-label={`${t(`channel.${channel}`)}: ${on(row, channel) ? t('on') : t('off')}`}
+                          title={t('cellWhy')}
+                          data-testid={`pref-${row.key}-${channel}`}
+                        />
+                      )}
                     </span>
                   );
-                }
-                const cell = eventCell(preferences, row.event, channel);
-                return (
-                  <span key={channel} className={styles.matrixCell}>
-                    {cell.kind === 'unreachable' ? (
-                      <span
-                        className={styles.matrixNone}
-                        title={t(channel === 'email' ? 'notByEmail' : 'notInApp')}
-                        data-testid={`pref-${row.key}-${channel}-none`}
-                      >
-                        -
-                      </span>
-                    ) : cell.kind === 'switch' && preferences[channel] ? (
-                      <EventSwitch
-                        eventType={row.event}
-                        channel={channel}
-                        on={cell.on && on(row, channel)}
-                        label={t('rowSwitch', {
-                          channel: t(`channel.${channel}`),
-                          event: t(`row.${row.key}`),
-                        })}
-                        testid={`pref-${row.key}-${channel}-switch`}
-                      />
-                    ) : (
-                      <span
-                        className={styles.cellState}
-                        role="img"
-                        data-on={on(row, channel) ? 'yes' : 'no'}
-                        aria-label={`${t(`channel.${channel}`)}: ${on(row, channel) ? t('on') : t('off')}`}
-                        title={t('cellWhy')}
-                        data-testid={`pref-${row.key}-${channel}`}
-                      />
-                    )}
-                  </span>
-                );
-              })}
-            </li>
-          ))}
-        </ul>
-        {/* The matrix is not the whole story: the rules are a page of their own. */}
-        <p className={styles.matrixFoot}>
-          {t.rich('foot', {
-            rules: (chunks) => (
-              <Link
-                href="/settings/notifications/rules"
-                className={styles.matrixFootLink}
-                data-testid="pref-rules-link"
-              >
-                {chunks} →
-              </Link>
-            ),
-          })}
-        </p>
-      </section>
+                })}
+              </li>
+            ))}
+          </ul>
+          {/* The matrix is not the whole story: the rules are a page of their own. */}
+          <p className={styles.matrixFoot}>
+            {t.rich('foot', {
+              rules: (chunks) => (
+                <Link
+                  href="/settings/notifications/rules"
+                  className={styles.matrixFootLink}
+                  data-testid="pref-rules-link"
+                >
+                  {chunks} →
+                </Link>
+              ),
+            })}
+          </p>
+        </section>
+      </SupportRefused>
 
       <div className={styles.prefCards}>
         <section className={styles.prefCard} data-testid="pref-quiet">
@@ -211,15 +228,21 @@ export async function PreferenceMatrix({
           {preferences === null ? (
             <p className={styles.prefValue}>-</p>
           ) : (
-            <QuietHours initial={preferences.quietHours} />
+            <SupportRefused kind="ownership">
+              <QuietHours initial={preferences.quietHours} />
+            </SupportRefused>
           )}
           <p className={styles.prefNote}>{t('quiet.note')}</p>
         </section>
-        <section className={styles.prefCard} data-testid="pref-whatsapp">
-          <h2 className={styles.prefTitle}>{t('whatsapp.title')}</h2>
-          <p className={styles.prefValue}>{whatsappDestination ?? t('whatsapp.none')}</p>
-          <p className={styles.prefNote}>{t('whatsapp.note')}</p>
-        </section>
+        {whatsapp ? (
+          <section className={styles.prefCard} data-testid="pref-whatsapp">
+            <h2 className={styles.prefTitle}>{t('whatsapp.title')}</h2>
+            <SupportRefused kind="ownership">
+              <WhatsAppAlerts phone={preferences.whatsappPhone} />
+            </SupportRefused>
+            <p className={styles.prefNote}>{t('whatsapp.note')}</p>
+          </section>
+        ) : null}
         <section className={styles.prefCardAi} data-testid="pref-volume">
           <h2 className={styles.prefTitleAi}>
             {volume === null

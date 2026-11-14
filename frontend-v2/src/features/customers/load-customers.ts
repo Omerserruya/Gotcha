@@ -171,7 +171,8 @@ type SegmentField =
   | 'lastInteractionBefore'
   | 'createdAfter'
   | 'createdBefore'
-  | 'optedOut';
+  | 'optedOut'
+  | 'identified';
 
 /**
  * Which single field a free-text query is matched against.
@@ -197,10 +198,28 @@ function rulesForQuery(query: string): {
   return field ? { rules: [{ field, operator: 'contains', value: query.trim() }] } : { rules: [] };
 }
 
+/** The query's rules, plus the one that leaves out anonymous website visitors. */
+export function withIdentified(
+  body: ReturnType<typeof rulesForQuery>,
+): ReturnType<typeof rulesForQuery> {
+  return { rules: [...body.rules, { field: 'identified', operator: 'equals', value: 'true' }] };
+}
+
 export async function loadCustomers(
   query = '',
   /** 04 reads the day too; the dialer's search does not need it. */
-  { today: withToday = false }: { readonly today?: boolean } = {},
+  {
+    today: withToday = false,
+    identified = false,
+  }: {
+    readonly today?: boolean;
+    /**
+     * Leave out the anonymous website visitor - a website-chat contact with no
+     * phone and no email (the segment's `identified` rule, conversation
+     * 628b1399). The phone app's list asks for it; the website does not.
+     */
+    readonly identified?: boolean;
+  } = {},
 ): Promise<CustomersData> {
   const q = query.trim();
   const today = withToday
@@ -215,7 +234,7 @@ export async function loadCustomers(
     const result = await serverApi().post({
       endpoint: customerEndpoints.list(),
       payload: customerListSchema,
-      body: rulesForQuery(q),
+      body: identified ? withIdentified(rulesForQuery(q)) : rulesForQuery(q),
       // `{ data, total }` sit side by side, so unwrapping `data` would throw
       // the count away - and the count is the only honest total on the screen.
       raw: true,
