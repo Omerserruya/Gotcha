@@ -94,7 +94,7 @@ describe("★ the micro tier on gpt-5-mini", () => {
 
   it("every prod micro output so far, reasoning included, fits the cap it would get on gpt-5-mini with room to spare", () => {
     for (const [feature, [asked, seen]] of Object.entries(PROD_MAX_OUT)) {
-      const req = shapeChatRequest({}, "gpt-5-mini", { maxTokens: asked, reasoningHeadroom: 2048, defaultEffort: "low" });
+      const req: Record<string, any> = shapeChatRequest({} as Record<string, any>, "gpt-5-mini", { maxTokens: asked, reasoningHeadroom: 2048, defaultEffort: "low" });
       expect(req.max_completion_tokens, feature).toBeGreaterThan(seen * 1.5);
     }
   });
