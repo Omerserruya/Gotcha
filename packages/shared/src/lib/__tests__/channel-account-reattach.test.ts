@@ -15,20 +15,30 @@ function store(accounts: any[], conversations: any[]) {
   const matchConv = (c: any, w: any) => (w.id === undefined || c.id === w.id) && c.tenantId === w.tenantId
     && (w.channel === undefined || c.channel === w.channel)
     && (w.channelAccountId === undefined || c.channelAccountId === w.channelAccountId);
+  const sql: string[] = [];
   return {
-    accounts, conversations,
+    accounts, conversations, sql,
+    // The raw adopt: values are (accountId, tenantId, channel). No updated_at stamp, as in Postgres.
+    $executeRaw: async (strings: TemplateStringsArray, ...v: any[]) => {
+      sql.push(strings.join("?"));
+      const hits = conversations.filter((c) => c.tenantId === v[1] && c.channel === v[2] && c.channelAccountId === null);
+      hits.forEach((c) => { c.channelAccountId = v[0]; });
+      return hits.length;
+    },
     channelAccount: { findMany: async (a: any) => accounts.filter((x) => matchAcc(x, a.where)).slice(0, a.take ?? 99).map((x) => ({ id: x.id })) },
     conversation: {
       updateMany: async (a: any) => {
         const hits = conversations.filter((c) => matchConv(c, a.where));
-        hits.forEach((c) => Object.assign(c, a.data));
+        // Prisma's @updatedAt: every updateMany stamps the rows it touches.
+        hits.forEach((c) => Object.assign(c, a.data, { updatedAt: new Date("2026-11-14T21:00:00Z") }));
         return { count: hits.length };
       },
     },
   };
 }
 const acc = (id: string, o: any = {}) => ({ id, tenantId: "gotcha", channel: "WHATSAPP", isActive: true, connectionStatus: "CONNECTED", ...o });
-const conv = (id: string, o: any = {}) => ({ id, tenantId: "gotcha", channel: "WHATSAPP", channelAccountId: null, ...o });
+const OLD = new Date("2026-09-01T10:00:00Z");
+const conv = (id: string, o: any = {}) => ({ id, tenantId: "gotcha", channel: "WHATSAPP", channelAccountId: null, updatedAt: OLD, ...o });
 
 describe("singleActiveChannelAccountId", () => {
   it("one active connected account: its id", async () => {
@@ -58,6 +68,14 @@ describe("★ adoptDetachedConversations: the re-onboarded number takes the conv
     expect(await adoptDetachedConversations(s as any, { tenantId: "gotcha", channel: "WHATSAPP", channelAccountId: "ca_new" })).toBe(3);
     const by = Object.fromEntries(s.conversations.map((c) => [c.id, c.channelAccountId]));
     expect(by).toEqual({ c1: "ca_new", c2: "ca_new", closed: "ca_new", attached: "ca_old_other", gmail: null, "other-tenant": null });
+  });
+  it("★ updated_at is untouched: a reconnect must not lift hundreds of old conversations to the top", async () => {
+    const s = store([acc("ca_new")], [conv("c1"), conv("c2")]);
+    await adoptDetachedConversations(s as any, { tenantId: "gotcha", channel: "WHATSAPP", channelAccountId: "ca_new" });
+    expect(s.conversations.map((c) => c.updatedAt)).toEqual([OLD, OLD]);
+    expect(s.sql).toHaveLength(1);
+    expect(s.sql[0]).not.toMatch(/updated_at/i);
+    expect(s.sql[0]).toMatch(/channel_account_id IS NULL/);
   });
   it("still PENDING is fine: onboarding proves the new account later, so only OTHER active accounts block", async () => {
     const s = store([acc("ca_new", { connectionStatus: "PENDING" })], [conv("c1")]);

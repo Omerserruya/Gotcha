@@ -19,6 +19,7 @@
 type Db = {
   channelAccount: { findMany: (args: any) => Promise<Array<{ id: string }>> };
   conversation: { updateMany: (args: any) => Promise<{ count: number }> };
+  $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<number>;
 };
 
 const ACTIVE = { isActive: true, connectionStatus: "CONNECTED" } as const;
@@ -52,11 +53,13 @@ export async function adoptDetachedConversations(
     take: 1,
   });
   if (others.length > 0) return 0;
-  const r = await db.conversation.updateMany({
-    where: { tenantId: args.tenantId, channel: args.channel, channelAccountId: null },
-    data: { channelAccountId: args.channelAccountId },
-  });
-  return r.count;
+  // Raw SQL on purpose: Prisma's @updatedAt would stamp every adopted row,
+  // and a reconnect would lift hundreds of old conversations to the top of
+  // the inbox. Re-pointing the account is not activity; updated_at stays.
+  // (No trigger touches conversations.updated_at; it is Prisma-side only.)
+  return db.$executeRaw`
+    UPDATE conversations SET channel_account_id = ${args.channelAccountId}
+    WHERE tenant_id = ${args.tenantId} AND channel::text = ${args.channel} AND channel_account_id IS NULL`;
 }
 
 /**

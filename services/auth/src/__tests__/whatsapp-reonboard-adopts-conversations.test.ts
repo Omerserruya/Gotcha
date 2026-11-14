@@ -11,6 +11,7 @@ const H = vi.hoisted(() => ({
   accounts: [] as any[],
   conversations: [] as any[],
   failAdopt: false,
+  sql: [] as string[],
 }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
@@ -23,6 +24,13 @@ vi.mock("@chatcenter/shared", async () => {
       create: vi.fn(async (a: any) => { const row = { id: "ca_new", ...a.data }; H.accounts.push(row); return row; }),
       update: vi.fn(async (a: any) => Object.assign(H.accounts.find((x) => x.id === a.where.id), a.data)),
     },
+    $executeRaw: vi.fn(async (strings: TemplateStringsArray, ...v: any[]) => {
+      if (H.failAdopt) throw new Error("db blip");
+      H.sql.push(strings.join("?"));
+      const hits = H.conversations.filter((c) => c.tenantId === v[1] && c.channel === v[2] && c.channelAccountId === null);
+      hits.forEach((c) => { c.channelAccountId = v[0]; });
+      return hits.length;
+    }),
     whatsAppNumber: { upsert: vi.fn(async (a: any) => ({ id: "wn1", ...a.create })) },
     conversation: {
       updateMany: vi.fn(async (a: any) => {
@@ -45,7 +53,7 @@ const onboard = () => upsertNumberRecord({
 const conv = (id: string, o: any = {}) => ({ id, tenantId: "gotcha", channel: "WHATSAPP", channelAccountId: null, ...o });
 
 beforeEach(() => {
-  H.accounts = []; H.failAdopt = false;
+  H.accounts = []; H.failAdopt = false; H.sql = [];
   H.conversations = [conv("cmsztwsru0hytz6dblovgaqdd"), conv("old2", { status: "CLOSED" }), conv("gmail", { channel: "GMAIL" }), conv("other", { tenantId: "t2" })];
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -57,6 +65,14 @@ describe("★ re-onboarding a removed number adopts the conversations its old ro
     expect(channelAccount.id).toBe("ca_new");
     const by = Object.fromEntries(H.conversations.map((c) => [c.id, c.channelAccountId]));
     expect(by).toEqual({ cmsztwsru0hytz6dblovgaqdd: "ca_new", old2: "ca_new", gmail: null, other: null });
+  });
+
+  it("★ updated_at is never written: one raw UPDATE without it, no Prisma updateMany (whose @updatedAt would stamp every row)", async () => {
+    const shared: any = await import("@chatcenter/shared");
+    await onboard();
+    expect(H.sql).toHaveLength(1);
+    expect(H.sql[0]).not.toMatch(/updated_at/i);
+    expect(shared.prisma.conversation.updateMany).not.toHaveBeenCalled();
   });
 
   it("an existing row being reconnected adopts them too", async () => {
