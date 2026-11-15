@@ -1,0 +1,79 @@
+@layer features {
+  /* What to change when a firewall answered instead of the store: a panel under the sentence. */
+  .help {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    margin-block: var(--space-12);
+    padding: var(--space-14) var(--space-16);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-card);
+    color: var(--text-body);
+    font-size: var(--font-size-body-sm);
+  }
+
+  .title {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .lead,
+  .note,
+  .or,
+  .result {
+    margin: 0;
+  }
+
+  .note {
+    color: var(--text-muted);
+  }
+
+  .rule {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .or {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-subtle);
+  }
+
+  .ruleTitle {
+    margin: 0;
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .steps {
+    margin: 0;
+    padding-inline-start: var(--space-16);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* Cloudflare's own words and the values to type: as written, left to right. */
+  .ui {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-meta);
+    overflow-wrap: anywhere;
+  }
+
+  .result[data-result='open'] {
+    color: var(--action-text);
+  }
+
+  .result[data-result='blocked'] {
+    color: var(--alert-text);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8);
+  }
+}

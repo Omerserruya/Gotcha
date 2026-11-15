@@ -180,7 +180,8 @@
       "insufficient_permissions": "{name} was approved without the access GOTCHA needs. Approve again with read and write access.",
       "callback_not_received": "{name} didn't send the keys back. Nothing was connected - try again.",
       "invalid_state": "That approval couldn't be matched to this workspace. Start again from Connect.",
-      "invalid_request": "That request couldn't be confirmed as coming from {name}. Nothing was connected - start again from {name}."
+      "invalid_request": "That request couldn't be confirmed as coming from {name}. Nothing was connected - start again from {name}.",
+      "store_firewall_challenge": "{name}: the store's firewall stopped GOTCHA before the keys were checked. Here's how to let it through."
     },
     "close": "Close"
   },
@@ -314,5 +315,38 @@
     "username": "Username",
     "password": "Password",
     "account_id": "Account ID"
+  },
+  "wooFirewall": {
+    "title": "Your store's firewall stopped GOTCHA",
+    "lead": "The keys weren't checked: the store's firewall{name, select, none {} other { ({name})}} blocked GOTCHA's server before the request reached WooCommerce. New keys won't help.",
+    "checking": "Checking what blocked GOTCHA…",
+    "ipTitle": "Let GOTCHA's address through",
+    "pathTitle": "Let WooCommerce's API path through",
+    "orInstead": "Or instead",
+    "ipScope": "Only GOTCHA's address skips the firewall. Everyone else is checked as before.",
+    "pathScope": "Requests to {path} skip the firewall. WooCommerce still asks them for the store's keys, and your pages and checkout stay protected.",
+    "mayChange": "GOTCHA's address may still change. If it does, this rule stops working.",
+    "thenConnect": "When the rule is deployed, connect the store again.",
+    "step": {
+      "open": "Open <ui>dash.cloudflare.com</ui> and choose the store.",
+      "create": "Go to <ui>Security › Security rules</ui>, press <ui>Create rule</ui> and choose <ui>Custom rules</ui>. (Older dashboards: <ui>Security › WAF › Custom rules</ui>, then <ui>Create rule</ui>.)",
+      "ip": "Field <ui>IP Source Address</ui>, operator <ui>{operator}</ui>, value <ui>{value}</ui>.",
+      "path": "Field <ui>URI Path</ui>, operator <ui>starts with</ui>, value <ui>{path}</ui>.",
+      "skipAll": "Action <ui>Skip</ui>, and tick every option under it.",
+      "skipPath": "Action <ui>Skip</ui>: tick <ui>All remaining custom rules</ui>, and under <ui>More components to skip</ui> tick <ui>Super Bot Fight Mode</ui>.",
+      "deploy": "Press <ui>Deploy</ui>.",
+      "botFight": "If <ui>Bot Fight Mode</ui> is on (<ui>Security › Bots</ui>), turn it off: a rule can't skip it."
+    },
+    "host": "Ask your host to allow requests to {path}. If the store uses a security plugin{name, select, none {} other { ({name})}}, allow that path in its settings.",
+    "checkNow": "Check now",
+    "connectAgain": "Connect again",
+    "copy": "Copy the steps for your developer",
+    "copied": "Copied",
+    "result": {
+      "open": "GOTCHA's server gets through now. Connect again to finish.",
+      "blocked": "Still blocked. Check that the rule was deployed, then check again.",
+      "unknown": "We couldn't check the store just now."
+    },
+    "developerIntro": "GOTCHA's server is blocked by the store's firewall before it reaches WooCommerce's API. Please add this rule:"
   }
 }

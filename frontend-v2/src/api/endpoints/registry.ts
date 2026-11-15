@@ -656,6 +656,12 @@ export const channelEndpoints = {
    */
   wooPluginBind: () => endpoint('/api/woocommerce-plugin/bind'),
   wooPluginSite: (id: string) => endpoint('/api/woocommerce-plugin/sites/{id}', { id }),
+  /**
+   * GOTCHA's servers try the workspace's WooCommerce REST API (Backend
+   * fb28bd20): what answered - the store, or a firewall in front of it - and,
+   * when blocked, GOTCHA's own address to allow (`egress`). See woo-probe.ts.
+   */
+  wooProbeStore: () => endpoint('/api/woocommerce-plugin/probe-store'),
   /** SMTP/IMAP credentials. Stores real secrets; never exercised by a test. */
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),

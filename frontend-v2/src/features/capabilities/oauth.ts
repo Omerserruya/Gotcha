@@ -44,6 +44,8 @@ export const OAUTH_FAILURES = [
   'invalid_state',
   // Shopify's refused install (shopify-install.ts), when it lands here.
   'invalid_request',
+  // A firewall answered instead of the WooCommerce store (Backend 7816b537): WooFirewallHelp.
+  'store_firewall_challenge',
 ] as const;
 export type OAuthFailure = (typeof OAUTH_FAILURES)[number];
 

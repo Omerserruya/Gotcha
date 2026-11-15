@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from '@/i18n/navigation';
 
 import type { OAuthFailure } from './oauth';
+import { WooFirewallHelp } from './WooFirewallHelp';
 import styles from './Capabilities.module.css';
 
 /**
@@ -54,30 +55,38 @@ export function OAuthLanding({
 
   if (said === null) return null;
   return (
-    <p
-      className={styles.landing}
-      role="status"
-      data-outcome={
-        said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
-          ? 'ok'
-          : 'problem'
-      }
-      data-testid="oauth-landing"
-    >
-      <span>
-        {said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
-          ? t(said, { name })
-          : t(`error.${said}`, { name })}
-      </span>
-      <button
-        type="button"
-        className={styles.landingClose}
-        aria-label={t('close')}
-        data-testid="oauth-landing-close"
-        onClick={() => setSaid(null)}
+    <>
+      <p
+        className={styles.landing}
+        role="status"
+        data-outcome={
+          said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
+            ? 'ok'
+            : 'problem'
+        }
+        data-testid="oauth-landing"
       >
-        <X size={14} aria-hidden="true" />
-      </button>
-    </p>
+        <span>
+          {said === 'connected' || said === 'disconnected' || said === 'disconnected_chat_off'
+            ? t(said, { name })
+            : t(`error.${said}`, { name })}
+        </span>
+        <button
+          type="button"
+          className={styles.landingClose}
+          aria-label={t('close')}
+          data-testid="oauth-landing-close"
+          onClick={() => setSaid(null)}
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
+      </p>
+      {/*
+      ★ HERE, NOT IN THE PAGE: the address is tidied by a router replace, so the
+        page renders again without `?error=`; this keeps what it was told.
+        A firewall answered, not the store: what to change, then this panel's Connect.
+    */}
+      {slug === 'woocommerce' && said === 'store_firewall_challenge' ? <WooFirewallHelp /> : null}
+    </>
   );
 }

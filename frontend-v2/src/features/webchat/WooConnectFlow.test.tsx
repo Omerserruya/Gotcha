@@ -7,6 +7,9 @@ import heChannels from '@/i18n/messages/he/channels.json';
 
 const actions = vi.hoisted(() => ({ bindWooPlugin: vi.fn(), startWooPluginStore: vi.fn() }));
 vi.mock('./woo-plugin-actions', () => actions);
+vi.mock('@/features/capabilities/WooFirewallHelp', () => ({
+  WooFirewallHelp: () => <div data-testid="woo-firewall-help" />,
+}));
 
 import { linkOf, WOO_LINK_KEY, WooConnectFlow } from './WooConnectFlow';
 
@@ -193,5 +196,20 @@ describe('Hebrew: a prefix letter stays on its word (measured on dev: "ב-" ende
     expect(breakable).toEqual([]);
     // The non-breaking hyphen is what holds them.
     expect(heChannels.wooConnect.cancel).toBe('חזרה ל\u2011WordPress');
+  });
+});
+
+describe('★★ back from the store with a firewall in front of it (2026-11-15)', () => {
+  it('★★ says so, and draws the help - not "rejected"', () => {
+    show({ back: 'store_firewall_challenge' });
+    expect(screen.getByTestId('woo-connect-back-error')).toHaveTextContent(
+      channels.wooConnect.back.store_firewall_challenge,
+    );
+    expect(screen.getByTestId('woo-firewall-help')).toBeInTheDocument();
+  });
+
+  it('★ a refusal draws no firewall help', () => {
+    show({ back: 'denied' });
+    expect(screen.queryByTestId('woo-firewall-help')).toBeNull();
   });
 });

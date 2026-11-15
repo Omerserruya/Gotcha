@@ -433,7 +433,8 @@
         "callback_not_received": "{name} didn't send the keys back, so nothing was connected. Try connecting again.",
         "invalid_state": "That approval couldn't be matched to this workspace. Start again with the connect button.",
         "invalid_request": "We couldn't confirm the request came from {name}, so nothing was connected. Start again with the connect button.",
-        "other": "{name} didn't connect. Try connecting again, or continue without it."
+        "other": "{name} didn't connect. Try connecting again, or continue without it.",
+        "store_firewall_challenge": "{name}: the store's firewall stopped GOTCHA before the keys were checked. Here's how to let it through."
       }
     },
     "shopifyCoreFirst": "Connecting a Shopify store needs an active GOTCHA Core plan first. Continue without it, and connect Shopify once GOTCHA Core is active."

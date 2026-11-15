@@ -180,7 +180,8 @@
       "insufficient_permissions": "{name} אושר בלי ההרשאות ש‑GOTCHA צריכה. מאשרים שוב עם הרשאת קריאה וכתיבה.",
       "callback_not_received": "{name} לא שלח את המפתחות בחזרה. שום דבר לא חובר - אפשר לנסות שוב.",
       "invalid_state": "לא הצלחנו לשייך את האישור לסביבת העבודה. מתחילים שוב מ\"חיבור\".",
-      "invalid_request": "לא הצלחנו לוודא שהבקשה הגיעה מ‑{name}. שום דבר לא חובר - אפשר להתחיל שוב מ‑{name}."
+      "invalid_request": "לא הצלחנו לוודא שהבקשה הגיעה מ‑{name}. שום דבר לא חובר - אפשר להתחיל שוב מ‑{name}.",
+      "store_firewall_challenge": "{name}: חומת האש של החנות עצרה את GOTCHA לפני שהמפתחות נבדקו. כך מאפשרים לה לעבור."
     },
     "close": "סגירה"
   },
@@ -314,5 +315,38 @@
     "username": "שם משתמש",
     "password": "סיסמה",
     "account_id": "מזהה חשבון"
+  },
+  "wooFirewall": {
+    "title": "חומת האש של החנות עצרה את GOTCHA",
+    "lead": "המפתחות לא נבדקו: חומת האש של החנות{name, select, none {} other { ({name})}} חסמה את השרת של GOTCHA לפני שהבקשה הגיעה ל‑WooCommerce. מפתחות חדשים לא יעזרו.",
+    "checking": "בודקים מה חסם את GOTCHA…",
+    "ipTitle": "אפשרו את הכתובת של GOTCHA",
+    "pathTitle": "אפשרו את הנתיב של ה‑API של WooCommerce",
+    "orInstead": "או במקום זה",
+    "ipScope": "רק הכתובת של GOTCHA עוברת את חומת האש. כל השאר נבדקים כמו קודם.",
+    "pathScope": "בקשות ל‑{path} עוברות את חומת האש. WooCommerce עדיין דורשת מהן את המפתחות של החנות, והדפים והקופה נשארים מוגנים.",
+    "mayChange": "הכתובת של GOTCHA עוד עשויה להשתנות. אם תשתנה, הכלל הזה יפסיק לעבוד.",
+    "thenConnect": "כשהכלל פועל, חברו את החנות שוב.",
+    "step": {
+      "open": "פתחו את <ui>dash.cloudflare.com</ui> ובחרו את החנות.",
+      "create": "עברו אל <ui>Security › Security rules</ui>, לחצו <ui>Create rule</ui> ובחרו <ui>Custom rules</ui>. (בלוחות בקרה ישנים יותר: <ui>Security › WAF › Custom rules</ui>, ואז <ui>Create rule</ui>.)",
+      "ip": "שדה <ui>IP Source Address</ui>, אופרטור <ui>{operator}</ui>, ערך <ui>{value}</ui>.",
+      "path": "שדה <ui>URI Path</ui>, אופרטור <ui>starts with</ui>, ערך <ui>{path}</ui>.",
+      "skipAll": "פעולה <ui>Skip</ui>, וסמנו את כל האפשרויות שמתחתיה.",
+      "skipPath": "פעולה <ui>Skip</ui>: סמנו <ui>All remaining custom rules</ui>, ותחת <ui>More components to skip</ui> סמנו <ui>Super Bot Fight Mode</ui>.",
+      "deploy": "לחצו <ui>Deploy</ui>.",
+      "botFight": "אם <ui>Bot Fight Mode</ui> פועל (<ui>Security › Bots</ui>), כבו אותו: כלל לא יכול לדלג עליו."
+    },
+    "host": "בקשו מחברת האחסון לאפשר בקשות ל‑{path}. אם בחנות פועל תוסף אבטחה{name, select, none {} other { ({name})}}, אפשרו את הנתיב הזה בהגדרות שלו.",
+    "checkNow": "בדקו עכשיו",
+    "connectAgain": "התחברו שוב",
+    "copy": "העתיקו את השלבים למפתח שלכם",
+    "copied": "הועתק",
+    "result": {
+      "open": "השרת של GOTCHA עובר עכשיו. התחברו שוב כדי לסיים.",
+      "blocked": "עדיין חסום. ודאו שהכלל הופעל, ובדקו שוב.",
+      "unknown": "לא הצלחנו לבדוק את החנות כרגע."
+    },
+    "developerIntro": "חומת האש של החנות חוסמת את השרת של GOTCHA לפני שהוא מגיע ל‑API של WooCommerce. אנא הוסיפו את הכלל הזה:"
   }
 }

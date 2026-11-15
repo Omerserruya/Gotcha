@@ -12,6 +12,7 @@ import {
   type WooBind,
   type WooStoreStart,
 } from './woo-plugin-actions';
+import { WooFirewallHelp } from '@/features/capabilities/WooFirewallHelp';
 
 /** What WordPress sent: the site, its settings page to return to, and its nonce. */
 export interface WooLink {
@@ -24,7 +25,7 @@ export interface WooLink {
 export const WOO_LINK_KEY = 'gotcha:woo-connect';
 
 /** The store's approval answers with these (woocommerce-oauth WOO_ERROR_CODES). */
-const BACK_ERRORS = ['denied', 'insufficient_permissions'] as const;
+const BACK_ERRORS = ['denied', 'insufficient_permissions', 'store_firewall_challenge'] as const;
 
 const host = (url: string) => (URL.canParse(url) ? new URL(url).host.toLowerCase() : '');
 
@@ -205,6 +206,8 @@ export function WooConnectFlow({
           {t(`back.${backError}`)}
         </p>
       ) : null}
+      {/* A firewall answered, not the store: what to change, then this page's own Approve. */}
+      {backError === 'store_firewall_challenge' ? <WooFirewallHelp /> : null}
 
       <ol className={styles.steps}>
         <li data-done={storeState === 'this' ? '' : undefined} data-testid="woo-connect-store">

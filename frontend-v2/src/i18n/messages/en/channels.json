@@ -1039,6 +1039,7 @@
     "back": {
       "denied": "The store didn't approve GOTCHA. Approve it to continue.",
       "insufficient_permissions": "Your WordPress user can't approve this - a store administrator must.",
+      "store_firewall_challenge": "The store's firewall stopped GOTCHA before the keys were checked. Here's how to let it through.",
       "other": "The store's approval didn't finish. Try again."
     },
     "store": {

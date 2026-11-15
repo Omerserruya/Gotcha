@@ -59,6 +59,9 @@ vi.mock('@/features/capabilities/ShopifyConnect', () => ({
   ),
 }));
 vi.mock('@/features/capabilities/IntegrationLogo', () => ({ IntegrationLogo: () => null }));
+vi.mock('@/features/capabilities/WooFirewallHelp', () => ({
+  WooFirewallHelp: () => <div data-testid="woo-firewall-help" />,
+}));
 vi.mock('./step-actions', () => ({ saveStep: vi.fn(async () => true) }));
 vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -313,6 +316,22 @@ describe('★★ the way back to step 2 (flow=onboarding_systems): each return q
       he,
     );
   };
+
+  it("★★ a firewall answered, not the store: the help, in WooCommerce's card, under the sentence (2026-11-15)", () => {
+    back('system=woocommerce&error=store_firewall_challenge');
+    const landing = screen.getByTestId('systems-landing-woocommerce');
+    expect(landing).toHaveTextContent(
+      onboardingEn.systems.return.error.store_firewall_challenge.replace('{name}', 'WooCommerce'),
+    );
+    expect(screen.getByTestId('systems-woocommerce')).toContainElement(
+      screen.getByTestId('woo-firewall-help'),
+    );
+  });
+
+  it('★ any other failure draws no firewall help', () => {
+    back('system=woocommerce&error=denied');
+    expect(screen.queryByTestId('woo-firewall-help')).toBeNull();
+  });
 
   it('★★ connected=1: said in the card, the card is connected, Continue is primary, the query is gone', () => {
     back('system=woocommerce&connected=1&preview=1', {

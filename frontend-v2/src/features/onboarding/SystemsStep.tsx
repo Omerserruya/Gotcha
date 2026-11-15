@@ -17,6 +17,7 @@ import { SystemsConnect } from './SystemsConnect';
 import { CleanReturnQuery, SystemsLanding } from './SystemsLanding';
 import type { SystemsReturn } from './systems-return';
 import styles from './SystemsStep.module.css';
+import { WooFirewallHelp } from '@/features/capabilities/WooFirewallHelp';
 
 export type Standing = 'connected' | 'failing' | 'none';
 
@@ -107,11 +108,19 @@ export function SystemsStep({
     returned &&
     returned.slug === slug &&
     (returned.kind === 'connected' || returned.kind === 'error') ? (
-      <SystemsLanding
-        slug={slug}
-        name={nameOf(slug)}
-        outcome={returned.kind === 'connected' ? 'connected' : returned.code}
-      />
+      <>
+        <SystemsLanding
+          slug={slug}
+          name={nameOf(slug)}
+          outcome={returned.kind === 'connected' ? 'connected' : returned.code}
+        />
+        {/* A firewall answered, not the store: what to change, then this card's own Connect. */}
+        {slug === 'woocommerce' &&
+        returned.kind === 'error' &&
+        returned.code === 'store_firewall_challenge' ? (
+          <WooFirewallHelp />
+        ) : null}
+      </>
     ) : null;
   const landingShownBelow = returned !== null && shown.some((each) => each.slug === returned.slug);
   const shopifyRow = of('shopify');
