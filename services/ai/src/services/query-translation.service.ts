@@ -97,3 +97,37 @@ export async function translatedQuery(tenantId: string, query: string): Promise<
     return null;
   }
 }
+
+/**
+ * A product search in Hebrew or Arabic on a store whose titles are English
+ * (eval A05 on dev 2026-11-15: "גרביים" found nothing, "Crew Socks 3-Pack" is
+ * the title, and the model said "לא מצאנו" instead of retrying in English as
+ * the tool told it). The product word(s) in English, or null: already Latin,
+ * or the call was refused / failed / timed out (the empty result stands).
+ * One micro-model call, metered as "product_query_translation".
+ */
+export async function productQueryInEnglish(tenantId: string, query: string): Promise<string | null> {
+  const q = String(query ?? "").trim();
+  const from = dominantScript(q);
+  if (!tenantId || !q || !from || from === "latin") return null;
+  try {
+    const resp = await generateResponse({
+      tenantId,
+      model: getMicroModel(),
+      maxTokens: 40,
+      temperature: 1,
+      reasoningEffort: "minimal",
+      signal: AbortSignal.timeout(TRANSLATION_TIMEOUT_MS),
+      metadata: { type: "product_query_translation" },
+      messages: [
+        { role: "system", content: "Translate this shop search into the English word(s) a product title would use. Reply with one to three English words only, no quotes, no explanation." },
+        { role: "user", content: q.slice(0, 200) },
+      ],
+    });
+    const out = String(resp?.content ?? "").trim().replace(/^["'\s]+|["'.\s]+$/g, "");
+    return out && /^[A-Za-z][A-Za-z0-9 '\-]{0,60}$/.test(out) ? out : null;
+  } catch (err: any) {
+    console.warn(`[woo-search] product query translation skipped: ${err?.name ?? ""} ${err?.message ?? err}`);
+    return null;
+  }
+}

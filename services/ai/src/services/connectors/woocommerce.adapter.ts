@@ -1177,7 +1177,7 @@ const WooCommerceAdapter: ProviderAdapter = {
           : `The store could not be reached to check the keys (${v.reason}).` };
   },
 
-  async execute({ toolName, args, credentials, config }) {
+  async execute({ toolName, args, credentials, config, ctx }: any) {
     const consumerKey = credentials.consumerKey || credentials.consumer_key;
     const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
     const storeUrl = String(config.storeUrl || credentials.storeUrl || credentials.store_url || "").replace(/\/$/, "");
@@ -1240,6 +1240,16 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/customers?${params}`);
       }
       case "list_products": {
+        // "In stock only" is often the model's own addition: an empty in-stock
+        // search is searched again without it, so a sold-out product is said to
+        // be sold out (each product carries stock_status), never "not found".
+        if (args.in_stock === true && !args._stockRetried) {
+          const strict: any = await WooCommerceAdapter.execute({ toolName, args: { ...args, _stockRetried: true }, credentials, config, ctx } as any);
+          if (!Array.isArray(strict) || strict.length) return strict;
+          const any: any = await WooCommerceAdapter.execute({ toolName, args: { ...args, in_stock: undefined, _stockRetried: true }, credentials, config, ctx } as any);
+          console.log(`[woo-search] in_stock empty, searched without it: results=${Array.isArray(any) ? any.length : "n/a"}`);
+          return Array.isArray(any) && any.length ? any : strict;
+        }
         // Who it is for (dev 2026-10-27: "בשבילי לגבר" got the women's trench):
         // the store's own top-level Men / Women category, applied to what the
         // search finds. A store with no such category: the search as it is.
@@ -1252,9 +1262,15 @@ const WooCommerceAdapter: ProviderAdapter = {
             args: { ...args, audience: undefined, per_page: Math.max(per, 50) },
             credentials,
             config,
+            ctx,
           } as any);
           if (!cat || !Array.isArray(found)) return Array.isArray(found) ? found.slice(0, per) : found;
-          return found.filter((p: any) => (p?.categories ?? []).some((c: any) => String(c?.id) === cat)).slice(0, per);
+          const forThem = found.filter((p: any) => (p?.categories ?? []).some((c: any) => String(c?.id) === cat));
+          if (forThem.length || !found.length) return forThem.slice(0, per);
+          // None in the store's Men / Women category (unisex socks): what the
+          // search found, each marked, so the bot never says the store lacks it.
+          console.log(`[woo-search] audience=${audience} empty, the search's own results=${found.length}`);
+          return found.slice(0, per).map((p: any) => ({ ...p, outside_audience: audience }));
         }
         // The customer wrote Hebrew and the model searched in Latin (Tehila:
         // "מטפחה חגיגית" sent as "scarf", every scarf instead of the festive
@@ -1288,8 +1304,8 @@ const WooCommerceAdapter: ProviderAdapter = {
           if (await storeCatalogIsHebrew(auth, base, lang).catch(() => false)) {
             const per = Math.min(100, Number(args.per_page ?? 10));
             const [mine, theirs]: any[] = await Promise.all([
-              WooCommerceAdapter.execute({ toolName, args: { ...rest, query: own, kind: undefined, rank: undefined }, credentials, config } as any).catch(() => []),
-              WooCommerceAdapter.execute({ toolName, args: rest, credentials, config } as any),
+              WooCommerceAdapter.execute({ toolName, args: { ...rest, query: own, kind: undefined, rank: undefined }, credentials, config, ctx } as any).catch(() => []),
+              WooCommerceAdapter.execute({ toolName, args: rest, credentials, config, ctx } as any),
             ]);
             const a = Array.isArray(mine) ? mine : [], b = Array.isArray(theirs) ? theirs : [];
             const copyOnly = (l: any[]) => l.length > 0 && l.every((p) => p?.matched_in === "description");
@@ -1312,6 +1328,7 @@ const WooCommerceAdapter: ProviderAdapter = {
             args: { ...args, query: wanted.rest || undefined, per_page: wanted.rest ? Math.max(per, 20) : 50 },
             credentials,
             config,
+            ctx,
           } as any);
           if (!Array.isArray(found)) return found;
           return found.filter((p: any) => offersAttributes(p, wanted.colours, wanted.sizes)).slice(0, per);
@@ -1324,7 +1341,8 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (lang) params.set("lang", lang);
         const price = (v: unknown) => (typeof v === "number" || typeof v === "string") && Number.isFinite(Number(v)) && Number(v) >= 0 ? String(Number(v)) : null;
         if (price(args.price_min)) params.set("min_price", price(args.price_min)!);
-        if (price(args.price_max)) params.set("max_price", price(args.price_max)!);
+        // A budget of 0 is no budget (gpt-6-luna fills every field: price_max 0).
+        if (price(args.price_max) && Number(args.price_max) > 0) params.set("max_price", price(args.price_max)!);
         if (args.in_stock === true) params.set("stock_status", "instock");
         // Internal callers only (the web chat's complementary products): not in
         // the model's schema. Numeric ids and a numeric category, nothing else.
@@ -1360,7 +1378,18 @@ const WooCommerceAdapter: ProviderAdapter = {
         // is searched in titles too, in parallel, and those come first. An
         // empty result retries the words' other forms (מטפחה -> מטפחת, מטפחות).
         if (/[֐-׿]/.test(String(args.query ?? "")) && !params.has("category") && !params.has("include")) {
-          return await hebrewProductSearch(auth, base, params, String(args.query), Math.min(100, Number(args.per_page ?? 10)), visible);
+          const heHits = await hebrewProductSearch(auth, base, params, String(args.query), Math.min(100, Number(args.per_page ?? 10)), visible);
+          if (heHits.length || !ctx?.tenantId || args._translated) return heHits;
+          // Eval A05 (dev 2026-11-15): "גרביים" on an English-title store found
+          // nothing and the model said "לא מצאנו" rather than retry in English.
+          // On a store whose catalogue is not Hebrew, the words in English, once.
+          if (await storeCatalogIsHebrew(auth, base, lang).catch(() => true)) return heHits;
+          const { productQueryInEnglish } = await import("../query-translation.service");
+          const en = await productQueryInEnglish(ctx.tenantId, String(args.query)).catch(() => null);
+          if (!en) return heHits;
+          const found: any = await WooCommerceAdapter.execute({ toolName, args: { ...args, query: en, _translated: true }, credentials, config, ctx } as any);
+          console.log(`[woo-search] hebrew empty on a non-Hebrew catalogue: ${JSON.stringify(String(args.query).slice(0, 40))} -> ${JSON.stringify(en)} results=${Array.isArray(found) ? found.length : "n/a"}`);
+          return Array.isArray(found) && found.length ? found : heHits;
         }
         // An allow-list filters after the read: read a whole page, then cut (the
         // store's newest ten may all be outside it, Smoovee's Woody line).
