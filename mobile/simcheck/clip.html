@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>clip probe</title>
+<style>
+  /* The shell rules of prod frontend-v2-f4fbd448 (MobileShell.module.css),
+     run once with "hidden" alone (before) and once with "hidden; clip". */
+  html, body { margin: 0; }
+  body { font: 14px -apple-system, sans-serif; background: #f4efe6; color: #16150f; }
+  .frame { display: flex; flex-direction: column; block-size: 100dvh; background: #f4efe6;
+           overflow: hidden; padding-block-start: env(safe-area-inset-top); }
+  .main { position: relative; flex: 1; min-block-size: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .clip .frame, .clip .main { overflow: hidden; overflow: clip; }
+  /* The screen fills the frame; one box overflows below it, so a hidden
+     frame has somewhere to scroll to (the control must be able to fail). */
+  .screen { display: flex; flex-direction: column; flex: none; block-size: 100%; }
+  .bar { flex: none; block-size: 58px; display: flex; align-items: center; padding: 0 16px;
+         background: #fff; border-bottom: 1px solid #ddd; font-weight: 700; }
+  .scroll { flex: 1; min-block-size: 0; overflow-y: auto; padding: 12px 16px 90px; }
+  .tall { flex: none; block-size: 400px; }
+  pre { white-space: pre-wrap; font: 13px ui-monospace, monospace; background: #fff; padding: 10px; border-radius: 10px; }
+  .ok { color: #0a7a2f; font-weight: 700; } .bad { color: #b00020; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <main class="main" id="main-content" tabindex="-1">
+    <div class="screen">
+      <div class="bar" id="bar">← מידע על הלקוח (the 58px bar)</div>
+      <div class="scroll"><pre id="out">running…</pre></div>
+    </div>
+    <div class="tall" id="below">below the screen</div>
+  </main>
+</div>
+<script>
+  var frame = document.getElementById('frame'), main = document.getElementById('main-content');
+  var bar = document.getElementById('bar'), below = document.getElementById('below');
+  function attack(name) {
+    // What can move an overflow:hidden box from code: a direct offset,
+    // focus on #main-content, and scrollIntoView (as Next does on navigation).
+    main.scrollTop = 58; frame.scrollTop = 58;
+    main.focus(); below.scrollIntoView();
+    return name + ': main.scrollTop=' + main.scrollTop + ' frame.scrollTop=' + frame.scrollTop +
+      ' barTop=' + Math.round(bar.getBoundingClientRect().top) + ' scrollY=' + window.scrollY;
+  }
+  function reset() { main.scrollTop = 0; frame.scrollTop = 0; window.scrollTo(0, 0); }
+  setTimeout(function () {
+    var lines = ['CSS.supports(overflow, clip) = ' + CSS.supports('overflow', 'clip'),
+                 'innerH=' + innerHeight];
+    var before = attack('hidden only (before)');
+    var moved = main.scrollTop > 0 || frame.scrollTop > 0;
+    reset();
+    document.documentElement.className = 'clip';
+    reset();
+    var after = attack('hidden; clip (prod now)');
+    var good = main.scrollTop === 0 && frame.scrollTop === 0 && Math.round(bar.getBoundingClientRect().top) >= 0;
+    lines.push(before, after, moved ? 'control: hidden alone moved (as expected)' : 'CONTROL DID NOT MOVE: probe invalid', good ? 'RESULT: clip holds the bar' : 'RESULT: the bar still moves');
+    var out = document.getElementById('out');
+    out.textContent = lines.join('\n');
+    out.className = good ? 'ok' : 'bad';
+    console.log(lines.join(' | '));
+  }, 1500);
+</script>
+</body>
+</html>

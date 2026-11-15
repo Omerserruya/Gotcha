@@ -6,6 +6,11 @@
 #   2-thread.png  mobile/simcheck/thread.html, a copy of the /m conversation
 #                 layout rules, loaded locally; it prints innerH, scrollY, the
 #                 page's env(safe-area-inset-*) and the composer's gap
+#   4-clip.png    mobile/simcheck/clip.html: the shell's overflow rules, hidden
+#                 alone then hidden; clip, each pushed by scrollTop, focus and
+#                 scrollIntoView; prints where the 58px bar ends up
+#   5-viewer-tall.png, 5-viewer-wide.png  mobile/simcheck/viewer.html: the
+#                 photo viewer's rules, the X's and the photo's boxes
 # Expected today: top bar visible, envTop=0, envBottom=0 (the app keeps the
 # edges natively, see MainViewController.swift).
 #
@@ -82,6 +87,30 @@ jobs:
           xcrun simctl launch "$UDID" il.co.gotcha.app
           sleep 15
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
+
+      - name: Shot 4, the shell clip (customer info's bar)
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          cp simcheck/clip.html "$APP/public/index.html"
+          xcrun simctl uninstall "$UDID" il.co.gotcha.app
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 12
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/4-clip.png"
+
+      - name: Shot 5, the photo viewer (tall photo, then wide)
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          cp simcheck/viewer.html "$APP/public/index.html"
+          xcrun simctl uninstall "$UDID" il.co.gotcha.app
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 7
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/5-viewer-tall.png"
+          sleep 12
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/5-viewer-wide.png"
 
       - uses: actions/upload-artifact@v4
         if: always()
