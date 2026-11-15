@@ -51,7 +51,13 @@ export function WooFirewallHelp({ connectAgain = null }: { readonly connectAgain
     };
   }, []);
 
-  const plan = probe === undefined ? null : firewallPlan(probe);
+  /*
+   * ★ ALREADY THROUGH: the merchant may have fixed the rule before this
+   *   loaded. A reachable store gets no steps - "connect again" is the only
+   *   thing left - never "ask your host" about a store that answers.
+   */
+  const through = probe !== undefined && probeState(probe) === 'open';
+  const plan = probe === undefined || through ? null : firewallPlan(probe);
   const firewall = probe?.firewall;
   const name = firewall && firewall !== 'other' ? NAMES[firewall] : 'none';
 
@@ -110,7 +116,7 @@ export function WooFirewallHelp({ connectAgain = null }: { readonly connectAgain
       </h3>
       <p className={styles.lead}>{t('lead', { name })}</p>
 
-      {plan === null ? (
+      {through ? null : plan === null ? (
         <p className={styles.note} role="status" data-testid="woo-firewall-checking">
           {t('checking')}
         </p>
@@ -140,10 +146,21 @@ export function WooFirewallHelp({ connectAgain = null }: { readonly connectAgain
         </p>
       )}
 
-      {connectAgain === null && plan !== null ? (
+      {connectAgain === null && plan !== null && !through ? (
         // The screen's own connect control is beside this: it is the way to connect again.
         <p className={styles.lead} data-testid="woo-firewall-then">
           {t('thenConnect')}
+        </p>
+      ) : null}
+
+      {through && checked === null ? (
+        <p
+          className={styles.result}
+          role="status"
+          data-result="open"
+          data-testid="woo-firewall-result"
+        >
+          {t('result.open')}
         </p>
       ) : null}
 

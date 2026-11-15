@@ -145,3 +145,16 @@ describe('★ Check now, and the steps for a developer', () => {
     expect(screen.getByTestId('woo-firewall-then')).toHaveTextContent(en.wooFirewall.thenConnect);
   });
 });
+
+describe('★★ the store already answers: no steps, only "connect again"', () => {
+  it('★★ a reachable store gets the way on, never "ask your host"', async () => {
+    probeWooStore.mockResolvedValue({
+      ok: true,
+      probe: { reachable: true, reason: 'reachable', egress: null },
+    });
+    await show();
+    expect(screen.getByTestId('woo-firewall-result')).toHaveAttribute('data-result', 'open');
+    expect(screen.queryByTestId('woo-firewall-host')).toBeNull();
+    expect(screen.queryByTestId(/woo-firewall-rule-/)).toBeNull();
+  });
+});
