@@ -9,6 +9,7 @@ import {
   buildTemplateComponents,
   renderTemplateText,
   closeProposedExecutions,
+  assignSoleMemberOnHandoff,
 } from "@chatcenter/shared";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
 
@@ -75,6 +76,8 @@ export async function expireDueApprovals(): Promise<void> {
             where: { id: ar.conversationId },
             data: { handledBy: "human", isHandedOver: true },
           });
+          // In a workspace of one, to that one (sole-member.ts).
+          await assignSoleMemberOnHandoff(ar.tenantId, ar.conversationId);
         }
         // (An "instant handoff summary" used to be requested here. It called
         // an authenticated ai route without a token, always failed, and fell

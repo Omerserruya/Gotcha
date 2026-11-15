@@ -36,6 +36,8 @@ vi.mock("fs", () => {
 });
 
 vi.mock("@chatcenter/shared", () => ({
+  // One-member workspaces (sole-member.ts): two or more members here, nothing assigned.
+  assignSoleMemberOnHandoff: async () => null,
   probeUploadsDir: () => ({ ok: true, dir: "/tmp/uploads" }),
   describeUploadsProbe: () => "uploads ok",
   classifyMediaFailure: () => "download_failed",

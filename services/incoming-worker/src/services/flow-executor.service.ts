@@ -1418,6 +1418,12 @@ async function walk(
           if (to === "person" && node.data?.userId) Object.assign(data, { assignedAgentId: String(node.data.userId), status: "OPEN" });
           else Object.assign(data, { status: "WAITING", ...(node.data?.departmentId ? { departmentId: String(node.data.departmentId) } : {}) });
           await prisma.conversation.update({ where: { id: ctx.conversationId }, data });
+          // To the team with no one named: in a workspace of one, to that one (sole-member.ts).
+          if (!data.assignedAgentId) {
+            const { assignSoleMemberOnHandoff } = await import("@chatcenter/shared");
+            const soleMember = await assignSoleMemberOnHandoff(ctx.tenantId, ctx.conversationId);
+            if (soleMember) Object.assign(data, { assignedAgentId: soleMember, status: "OPEN" });
+          }
           publishEvent({ event: "conversation:updated", tenantId: ctx.tenantId, data: { id: ctx.conversationId, ...data } }).catch(() => {});
           // A person owns it now: the AI must not also answer this message.
           if (ctx.run) { ctx.run.answered = true; ctx.run.prevOwner = "human"; }

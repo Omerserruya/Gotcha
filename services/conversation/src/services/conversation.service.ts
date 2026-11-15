@@ -115,7 +115,7 @@ export interface ConversationFilters {
    * every status (closed included) and every assignee, so it disagreed with
    * Home (10 vs 9).
    */
-  view?: "queue";
+  view?: "queue" | "open";
   /**
    * A period in the workspace's days (YYYY-MM-DD, `to` inclusive): the
    * conversations STARTED in it, cut at the business-hours time zone's
@@ -162,6 +162,22 @@ export async function listWhere(tenantId: string, filters: ConversationFilters):
   } else if (status) where.status = status;
   if (view === "queue") {
     // Fully defined above.
+  } else if (view === "open") {
+    // Everything not closed, minus exactly what GOTCHA is handling alone (the
+    // automatedOnly set below): the one view of a workspace with one member
+    // (Frontend contract, 2026-11-15). Written as an OR, not a NOT of the
+    // three, because NOT over a NULL handledBy is NULL and would drop every
+    // conversation nobody claimed.
+    if (!status) where.status = { not: "CLOSED" };
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { handledBy: null },
+        { handledBy: { notIn: AUTOMATED_HANDLERS } },
+        { isHandedOver: true },
+        { assignedAgentId: { not: null } },
+      ],
+    });
   } else if (automatedOnly) {
     // All three conditions are required, and each one alone is wrong:
     // `handledBy` names the driver, `isHandedOver` is the latch a takeover
@@ -430,7 +446,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
  * The inbox views, as list filters: the same mapping as frontend-v2's
  * `viewQuery` (features/inbox/inbox-views.ts), so a count and its list agree.
  */
-export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved", "mine_open"] as const;
+export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved", "mine_open", "open"] as const;
 export type UnreadCountView = (typeof UNREAD_COUNT_VIEWS)[number];
 
 function viewFilters(view: UnreadCountView, userId: string): Partial<ConversationFilters> {
@@ -444,6 +460,8 @@ function viewFilters(view: UnreadCountView, userId: string): Partial<Conversatio
     // The phone's "Assigned to me": the same list without what was resolved
     // (the list's `excludeClosed=true`), so its chip counts what it shows.
     case "mine_open": return { assignedAgentId: userId, includeAutomated: true, excludeClosed: true };
+    // A workspace of one: everything not closed that a person has (see listWhere).
+    case "open": return { view: "open" };
   }
 }
 

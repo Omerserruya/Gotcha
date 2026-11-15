@@ -74,6 +74,8 @@ function table(name: string) {
 }
 
 vi.mock("@chatcenter/shared", () => ({
+  // One-member workspaces (sole-member.ts): two or more members here, nothing assigned.
+  assignSoleMemberOnHandoff: async () => null,
   readDurableSetting: async () => null,
   writeDurableSetting: async () => undefined,
   settingCacheKey: (t: string, k: string) => `tenant:${t}:${k}`,

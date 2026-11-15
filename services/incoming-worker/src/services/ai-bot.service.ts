@@ -1,7 +1,7 @@
 import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
 import { localizedFallback } from "./escalation-language";
 import { emitEscalated } from "./notifications-emit";
-import { getInternalServiceKey, readDurableSetting, recordHandover } from "@chatcenter/shared";
+import { getInternalServiceKey, readDurableSetting, recordHandover, assignSoleMemberOnHandoff } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
  *
@@ -1116,6 +1116,8 @@ async function escalateToHuman(
     reason: "escalation",
     data: { isHandedOver: true, status: "WAITING" },
   });
+  // A workspace of one: the handoff is theirs, not a queue's (sole-member.ts).
+  const soleMember = await assignSoleMemberOnHandoff(tenantId, conversationId);
 
   await prisma.message.create({
     data: {
@@ -1139,7 +1141,7 @@ async function escalateToHuman(
   await publishEvent({
     event: "conversation:updated",
     tenantId,
-    data: { id: conversationId, isHandedOver: true, status: "WAITING", ...(reason ? { escalationCase: reason.case } : {}) },
+    data: { id: conversationId, isHandedOver: true, ...(soleMember ? { status: "OPEN", assignedAgentId: soleMember } : { status: "WAITING" }), ...(reason ? { escalationCase: reason.case } : {}) },
   });
 
   // Tell the team (the notifications service routes it), unless the AI turn

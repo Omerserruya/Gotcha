@@ -48,7 +48,7 @@ import {
   isWidgetLocale,
   handoffMessage, plainHandoffMessage,
   waMeUrl,
-  recordHandover } from "@chatcenter/shared";
+  recordHandover, assignSoleMemberOnHandoff } from "@chatcenter/shared";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import {
   resolveForBootstrap,
@@ -805,6 +805,8 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
       reason: "takeover",
       data: { isHandedOver: true, status: "WAITING" },
     });
+    // A workspace of one: the handoff is theirs, not a queue's (sole-member.ts).
+    const soleMember = await assignSoleMemberOnHandoff(session.tenantId, conversation.id);
     const handoffMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,
@@ -832,7 +834,7 @@ router.post("/handoff", conversationLimiter, async (req: Request, res: Response)
     await publishEvent({
       event: "conversation:updated",
       tenantId: session.tenantId,
-      data: { id: conversation.id, isHandedOver: true, status: "WAITING", channel: "SHOPIFY_LIVE_CHAT" },
+      data: { id: conversation.id, isHandedOver: true, ...(soleMember ? { status: "OPEN", assignedAgentId: soleMember } : { status: "WAITING" }), channel: "SHOPIFY_LIVE_CHAT" },
     });
     // The team is told, not only the inbox socket (2026-10-26: a visitor's
     // press reached nobody who was not already looking at the inbox).
@@ -946,6 +948,8 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
         isHandedOver: true,
       },
     });
+    // The visitor left their details for a person: in a workspace of one, that person.
+    await assignSoleMemberOnHandoff(session.tenantId, conversation.id);
     const offlineMessage = await prisma.message.create({
       data: {
         tenantId: session.tenantId,

@@ -1,5 +1,5 @@
 import { Job } from "bullmq";
-import { prisma, OutboundEchoJob, publishEvent, decryptCredentials, isInboundExcluded } from "@chatcenter/shared";
+import { prisma, OutboundEchoJob, publishEvent, decryptCredentials, isInboundExcluded, assignSoleMemberOnHandoff } from "@chatcenter/shared";
 import type { MediaFacts } from "../workers/incoming.worker";
 
 /**
@@ -191,6 +191,10 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
     },
   });
 
+  // The owner took it from the phone: in a workspace of one, it is theirs
+  // (sole-member.ts). A conversation the echo created is a takeover too.
+  const soleMember = aiWasDriving || createdConversation ? await assignSoleMemberOnHandoff(tenantId, conversation.id) : null;
+
   // Explain the takeover on the inbox timeline. Without the divider the thread
   // shows an outbound message from nobody and an AI that silently stopped.
   if (aiWasDriving && !createdConversation) {
@@ -221,6 +225,7 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
       ...conversation,
       channel,
       ...(aiWasDriving ? { isHandedOver: true, handledBy: "human", status: "OPEN" } : {}),
+      ...(soleMember ? { assignedAgentId: soleMember } : {}),
     },
   });
 
