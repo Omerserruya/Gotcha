@@ -106,10 +106,19 @@ export async function translatedQuery(tenantId: string, query: string): Promise<
  * or the call was refused / failed / timed out (the empty result stands).
  * One micro-model call, metered as "product_query_translation".
  */
-export async function productQueryInEnglish(tenantId: string, query: string): Promise<string | null> {
+const productQueryCache = new Map<string, { en: string; at: number }>();
+const PRODUCT_QUERY_TTL_MS = 10 * 60_000;
+/** For tests. */
+export function clearProductQueryCache(): void { productQueryCache.clear(); }
+
+export async function productQueryInEnglish(tenantId: string, query: string, now = Date.now()): Promise<string | null> {
   const q = String(query ?? "").trim();
   const from = dominantScript(q);
   if (!tenantId || !q || !from || from === "latin") return null;
+  // One search can ask twice (in stock, then without it): one call for both.
+  const key = `${tenantId}\u0000${q}`;
+  const hit = productQueryCache.get(key);
+  if (hit && now - hit.at < PRODUCT_QUERY_TTL_MS) return hit.en;
   try {
     const resp = await generateResponse({
       tenantId,
@@ -125,7 +134,10 @@ export async function productQueryInEnglish(tenantId: string, query: string): Pr
       ],
     });
     const out = String(resp?.content ?? "").trim().replace(/^["'\s]+|["'.\s]+$/g, "");
-    return out && /^[A-Za-z][A-Za-z0-9 '\-]{0,60}$/.test(out) ? out : null;
+    if (!out || !/^[A-Za-z][A-Za-z0-9 '\-]{0,60}$/.test(out)) return null;
+    if (productQueryCache.size > 500) productQueryCache.clear();
+    productQueryCache.set(key, { en: out, at: now });
+    return out;
   } catch (err: any) {
     console.warn(`[woo-search] product query translation skipped: ${err?.name ?? ""} ${err?.message ?? err}`);
     return null;
