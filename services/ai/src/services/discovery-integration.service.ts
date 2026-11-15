@@ -25,8 +25,8 @@ import {
 import { extractFieldsLive } from "./intelligence-live-extract.service";
 import { capped, extractionCapMs } from "./judgement-cap";
 import { prisma } from "@chatcenter/shared";
-import { normalizeShopifyProducts, normalizeWooProducts, applyDiscount, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
-import { discountFor, priceString } from "./woo-rendered-price.service";
+import { normalizeShopifyProducts, normalizeWooProducts, applyDiscount, priceOnSiteOnly, type ProductSearchEnvelope, type ProductProvider } from "./product-search.service";
+import { pagePriceFor, priceString, storeKnownToUseRules } from "./woo-rendered-price.service";
 import { getCatalogFacets, profileForStore } from "./shopify-facets.service";
 import { detectProductInquiry, type ProductInquiryKind } from "./product-intent.service";
 // STATIC import on purpose. A dynamic `await import(...)` of this module
@@ -286,12 +286,17 @@ export async function groundProductSearchResult(opts: {
     const env = normalizeWooProducts(products, { storeUrl: storeUrl!, budget, requestedFilters, storeCurrency: shopCurrency });
     // A store discount the API does not carry (a discount-rules plugin, Smoovee
     // 2026-11-08): read from the page for the first few, marked on sale with no
-    // lower price. Not found: the API price stands.
+    // lower price. Not found: the API price stands. A page that could not be
+    // read on a store that prices by rules: no number at all (Smoovee prod
+    // 2026-11-14 21:26, full prices quoted during a 37% sale).
     const byId = new Map(products.map((p: any) => [String(p?.id), p]));
     env.candidates = await Promise.all(env.candidates.map(async (c, i) => {
-      if (i >= 5) return c;
-      const d = await discountFor(byId.get(c.productId), c.url).catch(() => null);
-      return d ? applyDiscount(c, priceString(d.was), priceString(d.now), env.budget) : c;
+      // Past the first five no page is read; on a rules store their API price is not trusted either.
+      if (i >= 5) return storeKnownToUseRules(c.url) ? priceOnSiteOnly(c) : c;
+      const page = await pagePriceFor(byId.get(c.productId), c.url).catch(() => ({ state: "none" as const }));
+      if (page.state === "discount") return applyDiscount(c, priceString(page.discount.was), priceString(page.discount.now), env.budget);
+      if (page.state === "unknown") return priceOnSiteOnly(c);
+      return c;
     }));
     return env;
   } catch (err: any) {

@@ -782,6 +782,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // and fire-and-forget; subsequent inbounds short-circuit at the read.
   void (async () => {
     try {
+      // A placeholder ("[unsupported message]") is not the customer's language.
+      if ((producerMetadata as any)?.unsupported) return;
       const { recordDetectedLocaleIfMissing } = await import("../services/locale-detect.service");
       await recordDetectedLocaleIfMissing({
         conversationId: conversation.id,
@@ -862,6 +864,20 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     const handled = await interceptOptOutReply({
       tenantId, contactId: savedContact?.id ?? "", channel, conversationId: conversation.id,
       channelAccountId, recipientExternalId: senderId, messageId: message.id, messageType, body,
+    });
+    if (handled) return;
+  }
+
+  // A message WhatsApp could not deliver (no content, only a placeholder body):
+  // never the AI's input. The customer is asked once to resend it as text,
+  // while no person owns the conversation. See undeliverable-message.service.
+  {
+    const { handleUndeliverable } = await import("../services/undeliverable-message.service");
+    const handled = await handleUndeliverable({
+      tenantId, conversationId: conversation.id, channel, channelAccountId,
+      recipientExternalId: senderId, metadata: producerMetadata,
+      detectedLocale: (conversation as any).detectedLocale ?? null,
+      humanOwned: !!(conversation.assignedAgentId || conversation.isHandedOver),
     });
     if (handled) return;
   }

@@ -647,47 +647,63 @@ function extractWhatsAppContent(msg: any): NormalizedInboundMessage["content"] {
           : `${cards[0].name || "[Contact]"} +${cards.length - 1}`;
       return { type: "contact", text: summary, contacts: cards };
     }
-    default: {
-      // A type this adapter does not model. Two very different things land
-      // here and both used to be reduced to a placeholder string:
-      //
-      //   * `unsupported` - Meta itself could not represent the message. It
-      //     sends NO content and an `errors[]` array saying why. That array is
-      //     the only explanation that will ever exist for this message, and
-      //     dropping it left a support question permanently unanswerable.
-      //   * everything else Meta may add later (revoke, edit, reaction, …).
-      //
-      // The reason travels on the content so the worker can persist it. The
-      // body stays a readable placeholder, because an agent still has to see
-      // that something arrived.
-      const errors = Array.isArray((msg as any).errors)
-        ? ((msg as any).errors as Array<Record<string, unknown>>).map((e) => ({
-            code: typeof e?.code === "number" ? e.code : undefined,
-            title: typeof e?.title === "string" ? e.title : undefined,
-            message: typeof e?.message === "string" ? e.message : undefined,
-            details:
-              typeof (e as any)?.error_data?.details === "string"
-                ? (e as any).error_data.details
-                : typeof e?.details === "string"
-                  ? (e.details as string)
-                  : undefined,
-          }))
-        : [];
-
-      const providerType = String(msg.type || "unknown");
-      // Loud, and untruncated. The 500-char cap on the payload log is what
-      // made the last one undiagnosable.
-      console.warn(
-        `[whatsapp] message type "${providerType}" is not modelled; wamid=${msg.id ?? "?"} errors=${JSON.stringify(errors)} raw=${JSON.stringify(msg).slice(0, 2000)}`,
-      );
-
-      return {
-        type: "text",
-        text: `[${providerType} message]`,
-        unsupported: { providerType, errors, raw: msg },
-      };
+    case "edit": {
+      // The customer edited an earlier message: its new text is the customer's
+      // latest words. An edit with no text (a caption on media, a type Meta
+      // adds later) is kept as unmodelled, below.
+      const edit = (msg as any).edit;
+      const inner = edit?.message;
+      const text = typeof inner?.text?.body === "string" ? inner.text.body.trim() : "";
+      if (inner?.type === "text" && text) {
+        const original = typeof edit?.original_message_id === "string" ? edit.original_message_id : null;
+        return { type: "text", text, edited: { originalExternalId: original } };
+      }
+      return unmodelled(msg);
     }
+    default:
+      return unmodelled(msg);
   }
+}
+
+function unmodelled(msg: any): NormalizedInboundMessage["content"] {
+  // A type this adapter does not model. Two very different things land
+  // here and both used to be reduced to a placeholder string:
+  //
+  //   * `unsupported` - Meta itself could not represent the message. It
+  //     sends NO content and an `errors[]` array saying why. That array is
+  //     the only explanation that will ever exist for this message, and
+  //     dropping it left a support question permanently unanswerable.
+  //   * everything else Meta may add later (revoke, edit, reaction, …).
+  //
+  // The reason travels on the content so the worker can persist it. The
+  // body stays a readable placeholder, because an agent still has to see
+  // that something arrived.
+  const errors = Array.isArray((msg as any).errors)
+    ? ((msg as any).errors as Array<Record<string, unknown>>).map((e) => ({
+        code: typeof e?.code === "number" ? e.code : undefined,
+        title: typeof e?.title === "string" ? e.title : undefined,
+        message: typeof e?.message === "string" ? e.message : undefined,
+        details:
+          typeof (e as any)?.error_data?.details === "string"
+            ? (e as any).error_data.details
+            : typeof e?.details === "string"
+              ? (e.details as string)
+              : undefined,
+      }))
+    : [];
+
+  const providerType = String(msg.type || "unknown");
+  // Loud, and untruncated. The 500-char cap on the payload log is what
+  // made the last one undiagnosable.
+  console.warn(
+    `[whatsapp] message type "${providerType}" is not modelled; wamid=${msg.id ?? "?"} errors=${JSON.stringify(errors)} raw=${JSON.stringify(msg).slice(0, 2000)}`,
+  );
+
+  return {
+    type: "text",
+    text: `[${providerType} message]`,
+    unsupported: { providerType, errors, raw: msg },
+  };
 }
 
 // ─── Outbound Adapter ────────────────────────────────────────

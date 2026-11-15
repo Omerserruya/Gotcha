@@ -195,3 +195,81 @@ export function validateActionHonesty(
   });
   return { ok: unsupported.length === 0, unsupported };
 }
+
+// ─── An offer to do what no tool can do ────────────────────────────────────
+//
+// Smoovee prod 2026-11-14 19:19 (cmwgscs7): "מובן, לאשר הוספת 1 יחידה של
+// 'סמובי אלכסה' (שחור) להזמנה מס' 97828?". No tool adds an item to an order;
+// the customer said "כן" and was handed over. The bot asked her to confirm an
+// action it could never take. A confirm-question or offer for an order change
+// is kept only when a tool that makes that change is on the surface;
+// otherwise it is rewritten into the true offer: the team does it.
+
+/** An action the customer may be offered, and the tools that can actually do it. */
+const ORDER_ACTIONS: Array<{ action: string; offer: RegExp; tools: RegExp }> = [
+  {
+    action: "add_to_order",
+    offer: /(?:לאשר|שאוסיף|שנוסיף|להוסיף|אוסיף|נוסיף|הוספת)[^.!?؟\n]{0,60}(?:להזמנה|להזמנת|בהזמנה)|(?:shall|should|can|may)\s+i\s+add[^.!?\n]{0,60}(?:to|into)\s+(?:your|the)\s+order|confirm\s+adding[^.!?\n]{0,60}order/iu,
+    tools: /(?:add_(?:order_)?(?:item|line|product)s?|add_to_order|edit_order|update_order(?!_status)|order_edit|create_order|draft_order)/i,
+  },
+  {
+    action: "change_order_items",
+    offer: /(?:לאשר|שאחליף|שנחליף|להחליף|החלפת|שאשנה|שנשנה|לשנות|שינוי)[^.!?؟\n]{0,40}(?:פריט|מוצר|צבע|מידה|דגם)[^.!?؟\n]{0,40}(?:בהזמנה|להזמנה)|(?:shall|should|can)\s+i\s+(?:swap|change|replace)[^.!?\n]{0,40}(?:in|on)\s+(?:your|the)\s+order/iu,
+    tools: /(?:edit_order|update_order(?!_status)|order_edit|exchange|replace_item|swap_item)/i,
+  },
+  {
+    action: "cancel_order",
+    offer: /(?:לאשר|שאבטל|שנבטל|לבטל|ביטול)[^.!?؟\n]{0,30}(?:ההזמנה|הזמנה|את ההזמנה)|(?:shall|should|can)\s+i\s+cancel[^.!?\n]{0,30}order/iu,
+    tools: /cancel_order|cancel/i,
+  },
+  {
+    action: "refund",
+    offer: /(?:לאשר|שאחזיר|להחזיר|החזר)[^.!?؟\n]{0,20}(?:כספי|את הכסף|תשלום|זיכוי)|(?:shall|should|can)\s+i\s+refund/iu,
+    tools: /refund/i,
+  },
+  {
+    action: "change_address",
+    offer: /(?:לאשר|שאעדכן|שנעדכן|לעדכן|לשנות|עדכון|שינוי)[^.!?؟\n]{0,20}(?:כתובת|את הכתובת)|(?:shall|should|can)\s+i\s+(?:update|change)[^.!?\n]{0,20}address/iu,
+    tools: /update_shipping_address|update_address|redirect/i,
+  },
+];
+
+export const TEAM_DOES_IT = {
+  offer: { he: "את זה צוות החנות מבצע. להעביר אליו את הבקשה?", en: "That is something the store's team does. Shall I pass the request to them?" },
+  plain: { he: "את זה צוות החנות מבצע.", en: "That is something the store's team does." },
+} as const;
+
+/**
+ * The reply's offers of an order change that no offered tool can make.
+ * `toolNames` are the tools on this turn's surface (dotted or not).
+ */
+export function unbackedActionOffers(text: string | null | undefined, toolNames: string[]): string[] {
+  const t = String(text ?? "");
+  if (!t) return [];
+  return ORDER_ACTIONS
+    .filter((a) => a.offer.test(t) && !toolNames.some((n) => a.tools.test(String(n))))
+    .map((a) => a.action);
+}
+
+/**
+ * The reply with each such offer rewritten into the true one: the team does
+ * it (and, when the bot can hand over, an offer to pass it on). Null when
+ * nothing needed changing.
+ */
+export function rewriteUnbackedActionOffers(
+  text: string | null | undefined,
+  toolNames: string[],
+  locale: "he" | "en",
+): string | null {
+  const actions = unbackedActionOffers(text, toolNames);
+  if (!actions.length) return null;
+  const offers = ORDER_ACTIONS.filter((a) => actions.includes(a.action)).map((a) => a.offer);
+  const sentences = String(text).split(SENTENCE_SPLIT);
+  const kept = sentences.filter((s) => !offers.some((re) => re.test(s)));
+  const canHandOver = toolNames.some((n) => /escalate_to_human/.test(String(n)));
+  const line = canHandOver ? TEAM_DOES_IT.offer[locale] : TEAM_DOES_IT.plain[locale];
+  const rest = kept.join(" ").replace(/\s{2,}/g, " ").trim();
+  // A rest that only acknowledged ("מובן,") says nothing on its own.
+  const meaningful = rest.replace(/^[\s,.;:!?]*(?:מובן|בסדר|אוקיי|הבנתי|ok|okay|got it|sure)[\s,.;:!?]*$/iu, "").trim();
+  return meaningful.length >= 3 ? `${rest}\n${line}` : line;
+}

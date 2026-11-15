@@ -63,8 +63,8 @@ describe("what the model and the card get", () => {
   });
   it("grounding reads it for the first five products; the card gets price and compareAtPrice", () => {
     const g = readFileSync(join(__dirname, "../services/discovery-integration.service.ts"), "utf8");
-    expect(g).toContain("if (i >= 5) return c;");
-    expect(g).toContain("await discountFor(byId.get(c.productId), c.url)");
+    expect(g).toContain("if (i >= 5) return storeKnownToUseRules(c.url) ? priceOnSiteOnly(c) : c;");
+    expect(g).toContain("await pagePriceFor(byId.get(c.productId), c.url)");
     const w = readFileSync(join(__dirname, "../services/woo-chat-turn.service.ts"), "utf8");
     expect(w).toContain("const d = await discountFor(raw, card.productUrl)");
     expect(w).toContain("card.compareAtPrice = was;");

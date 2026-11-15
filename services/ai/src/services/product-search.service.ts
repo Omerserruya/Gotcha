@@ -33,7 +33,22 @@ export interface ProductCandidate {
   discount?: { was: string; now: string };
   /** Picked because it fits the customer's base size: its footprint, "23 x 40 cm". */
   fit?: string;
+  /**
+   * The store sets prices at render time (a discount-rules plugin) and this
+   * product's page could not be read: the API price may not be what a buyer
+   * pays, so no number is shown, only a pointer to the price on the site.
+   */
+  priceOnSite?: true;
 }
+
+/** A rules store's product whose page could not be read: no number, the site's price. */
+export function priceOnSiteOnly(c: ProductCandidate): ProductCandidate {
+  const { price: _price, discount: _discount, ...rest } = c;
+  return { ...rest, priceOnSite: true, matchQuality: "approximate" };
+}
+
+/** The line a candidate with no trusted price carries instead of a number. */
+export const PRICE_ON_SITE = { he: "למחיר העדכני באתר", en: "Current price on the site" } as const;
 
 /** The store's own discount on a candidate: its price is the discounted one, the old one kept. */
 export function applyDiscount(c: ProductCandidate, was: string, now: string, budget?: { target: number; currency: string }): ProductCandidate {
@@ -490,7 +505,9 @@ export function buildKeyedModelSummary(
   }
   const lines = env.candidates.map((c, i) => {
     const key = `PRODUCT_${i + 1}`;
-    const price = c.price !== undefined ? `${c.currency ?? ""} ${c.price}`.trim() : "unknown price";
+    const price = c.priceOnSite
+      ? "price: NOT KNOWN (the store's sale prices are set on its site; never state, guess or work out a price for this product, say the current price is on the site)"
+      : c.price !== undefined ? `${c.currency ?? ""} ${c.price}`.trim() : "unknown price";
     const avail =
       c.inventoryState === "in_stock" ? "in stock" :
       c.inventoryState === "out_of_stock" ? "out of stock" : "availability unknown";
@@ -635,8 +652,9 @@ export function renderGroundedProductReply(
   const overBudget = locale === "he" ? "מעט מעל התקציב" : "slightly over budget";
   const blocks = chosen.map((c, i) => {
     const parts = [`${i + 1}. ${c.title}`];
-    if (c.price !== undefined) parts.push([c.currency, c.price].filter(Boolean).join(" "));
-    if (c.matchQuality === "approximate") parts[parts.length - 1] += ` (${overBudget})`;
+    if (c.priceOnSite) parts.push(PRICE_ON_SITE[locale]);
+    else if (c.price !== undefined) parts.push([c.currency, c.price].filter(Boolean).join(" "));
+    if (c.matchQuality === "approximate" && !c.priceOnSite) parts[parts.length - 1] += ` (${overBudget})`;
     if (c.inventoryState === "in_stock") parts.push(inStockLabel);
     else if (c.inventoryState === "out_of_stock") parts.push(outLabel);
     parts.push(c.url);
@@ -682,7 +700,8 @@ export function renderCandidatesForWhatsApp(
 
   const lines = env.candidates.map((c, i) => {
     const parts: string[] = [`${i + 1}. ${c.title}`];
-    if (c.price !== undefined) {
+    if (c.priceOnSite) parts.push(PRICE_ON_SITE[locale]);
+    else if (c.price !== undefined) {
       const priceStr = [c.currency, c.price].filter(Boolean).join(" ");
       parts.push(priceStr);
     }

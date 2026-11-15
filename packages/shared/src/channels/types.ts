@@ -146,6 +146,13 @@ export interface MessageContent {
    * can show a map link and the AI reads where it is, not "[Location]".
    */
   location?: SharedLocation;
+  /**
+   * The customer EDITED an earlier message (WhatsApp `type: "edit"`): `text`
+   * is the corrected text, and this names the message it replaces (Smoovee
+   * prod 2026-11-13: an edit added the size "49 על 32", was stored as
+   * "[edit message]", and the bot asked for the size she had just given).
+   */
+  edited?: { originalExternalId: string | null };
   unsupported?: {
     /** The provider's own type string, e.g. "unsupported", "revoke", "edit". */
     providerType: string;

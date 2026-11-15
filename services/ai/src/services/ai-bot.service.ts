@@ -52,7 +52,7 @@ import {
   reasonPhrase,
   type ExecutionFacts,
 } from "./grounded-message.service";
-import { validateActionHonesty, stripUnsupportedDelegation } from "./action-honesty.service";
+import { validateActionHonesty, stripUnsupportedDelegation, rewriteUnbackedActionOffers, unbackedActionOffers } from "./action-honesty.service";
 import {
   containsPrivateShopifyData,
   redactString,
@@ -137,6 +137,7 @@ import { agentKernelEligible } from "./agent-loop/operation-status"; // TEMPORAR
 import { runAgentLoopForBotTurn } from "./agent-loop/bot-loop-adapter";
 import { executeAction, type PlannedAction } from "./action-executor.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
+import { stripCardAsk, redactCardDetails, redactCardDetailsInArgs } from "./card-details-guard";
 import { validateAndPersist } from "./output-validator.service";
 import {
   createTurnBudget,
@@ -1232,7 +1233,8 @@ export async function generateAIBotReply(opts: {
     if (kernelDrivesTurn) {
       try {
         const r = await runAgentLoopForBotTurn(opts, "autonomous", turn.signal);
-        return { ...r, interimMessages: r.interimMessages };
+        dropIfAborted(turn.signal, r, opts.conversationId);
+        return guardCardDetails({ ...r, interimMessages: r.interimMessages }, opts.conversationId);
       } catch (loopErr) {
         if (isAbortError(loopErr)) throw loopErr;
         console.warn("[agent-loop] fell back to planner:", (loopErr as any)?.message ?? loopErr);
@@ -1253,7 +1255,9 @@ export async function generateAIBotReply(opts: {
       });
     }
 
-    return await generateAIBotReplyInner(opts, turn.signal);
+    const result = await generateAIBotReplyInner(opts, turn.signal);
+    dropIfAborted(turn.signal, result, opts.conversationId);
+    return guardCardDetails(result, opts.conversationId);
   } catch (err) {
     if (isAbortError(err)) {
       throw Object.assign(new Error("aborted-by-newer-turn"), { status: 499, aborted: true });
@@ -1434,6 +1438,58 @@ async function buildSessionFactsBlock(opts: {
   // Awaited later in the turn; an abort meanwhile must not surface as unhandled.
   full.catch(() => undefined);
   return { base, full };
+}
+
+/**
+ * No payment-card details leave a turn (Smoovee prod 2026-11-15 06:44: the
+ * bot asked for the card's last four digits and wrote them into the
+ * escalation). A sentence asking for or repeating them is dropped from the
+ * reply; card digits in the escalation are masked. See card-details-guard.
+ */
+export function guardCardDetails<T extends Pick<AIBotReplyResult, "reply" | "escalation"> & { interimMessages?: string[] }>(r: T, conversationId: string): T {
+  const loc = (t: string) => (/[\u0590-\u05FF]/.test(t) ? "he" : "en") as "he" | "en";
+  let changed = false;
+  const fix = (t: string) => { const out = stripCardAsk(t, loc(t)); if (out !== t) changed = true; return out; };
+  const reply = typeof r.reply === "string" && r.reply ? fix(r.reply) : r.reply;
+  const interim = r.interimMessages?.map((m) => (typeof m === "string" ? fix(m) : m));
+  const escalation = r.escalation
+    ? { ...r.escalation, reason: redactCardDetails(String(r.escalation.reason ?? "")), ...(r.escalation.summary ? { summary: redactCardDetails(r.escalation.summary) } : {}) }
+    : r.escalation;
+  if (changed) console.warn(`[ai-bot] card-details guard: removed a sentence about card details conv=${conversationId}`);
+  return { ...r, reply, ...(interim ? { interimMessages: interim } : {}), escalation };
+}
+
+/** A store or system read: running it changes nothing, so an aborted turn that ran it committed nothing. */
+const READ_TOOL = /(?:^|\.)(?:list|get|search|find|check|lookup|read|count|describe|resolve)_|^__/;
+
+/**
+ * Did this turn already change something the customer must hear about (an
+ * escalation, an approval request, a write that ran)? Then its reply goes out
+ * even when a newer message aborted it; otherwise the newer turn answers.
+ */
+export function turnCommitted(r: Pick<AIBotReplyResult, "escalation" | "awaitingApproval" | "toolCallLog">): boolean {
+  if (r.escalation || r.awaitingApproval) return true;
+  return (r.toolCallLog ?? []).some((c) =>
+    !READ_TOOL.test(String(c.tool)) && (c.decision === "executed" || c.decision === "escalate" || c.decision === "awaiting_approval"));
+}
+
+/**
+ * A newer message aborted this turn while its reply was being checked
+ * (Smoovee prod 2026-11-15 06:44: "final gate failed: Request was aborted",
+ * and the unchecked draft still went out, beside the newer turn's reply; 06:47:
+ * a "בכיף 🙂" close answered a request). The catches around the checkers keep
+ * a customer from losing a reply to a checker bug, so they swallow the abort
+ * too: the abort is decided here, once, after the turn. Aborted and nothing
+ * committed: the reply is dropped (499), and the newer turn answers.
+ */
+export function dropIfAborted(signal: AbortSignal, r: Pick<AIBotReplyResult, "escalation" | "awaitingApproval" | "toolCallLog">, conversationId: string): void {
+  if (!signal.aborted) return;
+  if (turnCommitted(r)) {
+    console.warn(`[ai-bot] turn aborted after it committed an action: its reply is still sent conv=${conversationId}`);
+    return;
+  }
+  console.log(`[ai-bot] turn aborted while its reply was checked: reply dropped conv=${conversationId}`);
+  throw Object.assign(new Error("aborted-by-newer-turn"), { name: "AbortError", status: 499, aborted: true });
 }
 
 async function generateAIBotReplyInner(
@@ -3707,7 +3763,7 @@ async function generateAIBotReplyInner(
       for (const tc of toolCalls) {
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
-        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
 
         // Required-input gate - structurally refuse to execute a tool before its
         // schema-required inputs exist (OpenAI does not enforce `required`). The
@@ -4115,7 +4171,7 @@ async function generateAIBotReplyInner(
       for (const tc of retryToolCalls) {
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
-        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
         const exec = await getActionOrchestrator().submit(
           {
             id: randomUUID(),
@@ -4318,7 +4374,7 @@ async function generateAIBotReplyInner(
         for (const tc of apToolCalls) {
           const toolName = tc.function?.name || "unknown";
           let toolArgs: Record<string, unknown> = {};
-          try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+          try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
 
           // Same required-input backstop as the main loop: a forced call must
           // never fire an under-specified write. If inputs are missing, return
@@ -4537,7 +4593,7 @@ async function generateAIBotReplyInner(
           for (const tc of recToolCalls) {
             const toolName = tc.function?.name || "unknown";
             let toolArgs: Record<string, unknown> = {};
-            try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+            try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
 
             const recMissing = Array.from(
               new Set([
@@ -4755,7 +4811,7 @@ async function generateAIBotReplyInner(
         const toolName = tc.function?.name || "unknown";
         if (toolName !== bgTool) continue; // forced single tool; ignore anything else
         let toolArgs: Record<string, unknown> = {};
-        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
         // Structural backstop: never fire an under-specified write. If the args
         // aren't actually derivable, skip SILENTLY - do not pester the customer.
         const missingInputs = Array.from(
@@ -5027,7 +5083,7 @@ async function generateAIBotReplyInner(
       for (const tc of regenToolCalls) {
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
-        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        try { toolArgs = redactCardDetailsInArgs(JSON.parse(tc.function?.arguments || "{}")); } catch {}
         // This regen exists to GROUND a booking claim, not to hand off. If the
         // model grabs the always-present escalate_to_human here it's an
         // off-purpose artifact (observed live: a stray escalation executed during
@@ -5349,6 +5405,22 @@ async function generateAIBotReplyInner(
     }
   } catch (err: any) {
     console.warn("[ai-bot] action-honesty check failed:", err?.message);
+  }
+
+  // An offer to change an order in a way no tool on this turn can (Smoovee
+  // prod 2026-11-14 19:19: "לאשר הוספת 1 יחידה... להזמנה 97828?" with no
+  // add-to-order tool): rewritten into the true offer, the team does it.
+  // Not while an approval or a handover is already under way.
+  if (replyText && !awaitingApproval && !pendingEscalation) {
+    try {
+      const rewritten = rewriteUnbackedActionOffers(replyText, toolFunctionNames, replyLocale);
+      if (rewritten) {
+        console.warn(`[ai-bot] ACTION-HONESTY: rewrote an offer no tool can keep (${unbackedActionOffers(replyText, toolFunctionNames).join(",")}) conv=${opts.conversationId}`);
+        replyText = rewritten;
+      }
+    } catch (err: any) {
+      console.warn("[ai-bot] unbacked-offer check failed:", err?.message);
+    }
   }
 
   // ── Outbound credential check ───────────────────────────────────

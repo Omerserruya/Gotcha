@@ -394,7 +394,7 @@ router.post("/", async (req: Request, res: Response) => {
             // Structured and already reduced by the adapter to name, numbers,
             // emails and organization. The worker copies producer metadata onto
             // the message row verbatim.
-            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention || msg.content.location
+            ...(msg.content.contacts?.length || msg.content.unsupported || msg.content.storyMention || msg.content.location || msg.content.edited
               ? {
                   metadata: {
                     ...(msg.content.contacts?.length ? { contacts: msg.content.contacts } : {}),
@@ -409,6 +409,8 @@ router.post("/", async (req: Request, res: Response) => {
                     // that will exist: the payload log truncates, and the
                     // queue holds the already-normalized message.
                     ...(msg.content.unsupported ? { unsupported: msg.content.unsupported } : {}),
+                    // An edit: the body is the corrected text; this names the message it replaces.
+                    ...(msg.content.edited ? { edited: msg.content.edited } : {}),
                   },
                 }
               : {}),

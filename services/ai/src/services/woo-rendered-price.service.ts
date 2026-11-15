@@ -10,6 +10,12 @@
  * </del><ins>…170.30…</ins></p>`. Ten minutes per page, a short timeout, only
  * for the few products being shown, and only the store's own product link.
  * No difference found: null, and the API's price stands (never a guess).
+ *
+ * A page that could not be READ is not a page with no discount (Smoovee prod
+ * 2026-11-14 21:26: five product pages read at once all timed out at 4 s, were
+ * logged and cached as "none", and a customer was quoted the full ₪219 to ₪252
+ * during a store-wide 37% sale). A failed read is "unknown", it is never
+ * cached, and on a store that prices by rules the caller shows no number.
  */
 import { safeFetch } from "@chatcenter/shared";
 
@@ -65,40 +71,113 @@ export async function storeHasRuleDiscounts(sampleProductUrl: string): Promise<b
   const hit = storeRules.get(origin);
   if (hit && Date.now() - hit.at < STORE_TTL_MS) return hit.rules;
   const html = await pageHtml(sampleProductUrl);
-  const rules = !!html && hasRuleDiscountMarkers(html);
+  // Unreadable: not "no rules". A store already known to use rules keeps that.
+  if (!html) {
+    console.log(`[woo-discount] store ${origin} rules=unknown (page read failed)`);
+    return hit?.rules ?? false;
+  }
+  const rules = hasRuleDiscountMarkers(html);
   storeRules.set(origin, { at: Date.now(), rules });
   console.log(`[woo-discount] store ${origin} rules=${rules}`);
-  if (html) remember(sampleProductUrl, parseRenderedDiscount(html));
+  remember(sampleProductUrl, parseRenderedDiscount(html));
   return rules;
 }
 
-async function pageHtml(url: string): Promise<string | null> {
+/** Known (within a day) to price by rules: its API prices are not what a buyer pays. */
+export function storeKnownToUseRules(productUrl: string): boolean {
+  const hit = storeRules.get(originOf(productUrl));
+  return !!hit && hit.rules;
+}
+
+/** Per read; a store's uncached page renders in PHP and can take seconds. */
+export const PAGE_TIMEOUT_MS = 8000;
+/** At most this many page reads at once per store (five at once all timed out). */
+export const PAGE_CONCURRENCY = 2;
+
+const running = new Map<string, number>();
+const waiting = new Map<string, Array<() => void>>();
+
+async function withStoreSlot<T>(url: string, fn: () => Promise<T>): Promise<T> {
+  const origin = originOf(url) || url;
+  if ((running.get(origin) ?? 0) >= PAGE_CONCURRENCY) {
+    await new Promise<void>((resolve) => {
+      const q = waiting.get(origin) ?? [];
+      q.push(resolve);
+      waiting.set(origin, q);
+    });
+  }
+  running.set(origin, (running.get(origin) ?? 0) + 1);
   try {
-    const r: any = await safeFetch(url, { timeoutMs: 4000, maxBytes: 2_000_000, headers: { Accept: "text/html" } });
+    return await fn();
+  } finally {
+    running.set(origin, (running.get(origin) ?? 1) - 1);
+    const next = waiting.get(origin)?.shift();
+    if (next) next();
+  }
+}
+
+async function fetchOnce(url: string): Promise<string | null> {
+  try {
+    const r: any = await safeFetch(url, { timeoutMs: PAGE_TIMEOUT_MS, maxBytes: 2_000_000, headers: { Accept: "text/html" } });
     return r?.ok && typeof r.text === "string" ? r.text : null;
   } catch { return null; }
+}
+
+/** The page, or null when it could not be read (timeout, error, not 2xx), after one retry. */
+async function pageHtml(url: string): Promise<string | null> {
+  return withStoreSlot(url, async () => (await fetchOnce(url)) ?? (await fetchOnce(url)));
 }
 
 function remember(productUrl: string, value: RenderedDiscount | null) {
   cache.set(productUrl, { at: Date.now(), value });
 }
 
+/**
+ * What the product's page says about its price:
+ *   - "discount": the page sells it below the API price (was / now);
+ *   - "none": the page was read and shows no discount, or the store does not
+ *     price by rules: the API price is the price;
+ *   - "unknown": the page could not be read on a store whose prices are set
+ *     at render time. The API price may be wrong: show no number.
+ */
+export type PagePrice =
+  | { state: "discount"; discount: RenderedDiscount }
+  | { state: "none" }
+  | { state: "unknown" };
+
+export async function pagePriceFor(raw: any, productUrl: string): Promise<PagePrice> {
+  if (!productUrl) return { state: "none" };
+  const hidden = hiddenSale(raw);
+  if (!hidden && !(await storeHasRuleDiscounts(productUrl).catch(() => false))) return { state: "none" };
+  const d = await readPage(productUrl);
+  if (d === undefined) return hidden || storeKnownToUseRules(productUrl) ? { state: "unknown" } : { state: "none" };
+  return d ? { state: "discount", discount: d } : { state: "none" };
+}
+
 /** Read this product's page price when the store hides its discount from the API, or prices by rules. */
 export async function discountFor(raw: any, productUrl: string): Promise<RenderedDiscount | null> {
-  if (!productUrl) return null;
-  if (!hiddenSale(raw) && !(await storeHasRuleDiscounts(productUrl).catch(() => false))) return null;
-  return renderedDiscount(productUrl);
+  const p = await pagePriceFor(raw, productUrl);
+  return p.state === "discount" ? p.discount : null;
 }
 
 export async function renderedDiscount(productUrl: string): Promise<RenderedDiscount | null> {
+  return (await readPage(productUrl)) ?? null;
+}
+
+/** The page's discount, null for none, undefined when the page could not be read (never cached). */
+async function readPage(productUrl: string): Promise<RenderedDiscount | null | undefined> {
   const hit = cache.get(productUrl);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const html = await pageHtml(productUrl);
-  const value: RenderedDiscount | null = html ? parseRenderedDiscount(html) : null;
-  remember(productUrl, value);
   // One line per page read (not per cache hit): which product, what the page said.
   let path = productUrl;
   try { path = new URL(productUrl).pathname; } catch { /* keep the url */ }
+  if (!html) {
+    console.log(`[woo-discount] ${path.slice(0, 80)} fail`);
+    return undefined;
+  }
+  const value = parseRenderedDiscount(html);
+  remember(productUrl, value);
   console.log(`[woo-discount] ${path.slice(0, 80)} ${value ? `was=${value.was} now=${value.now}` : "none"}`);
   if (cache.size > 500) for (const [k, v] of cache) if (Date.now() - v.at > TTL_MS) cache.delete(k);
   return value;
