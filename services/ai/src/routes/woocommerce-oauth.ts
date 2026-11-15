@@ -40,6 +40,7 @@ import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign
 import { findCatalog, upsertConnection } from "../services/connector-connection.service";
 import { normalizeStoreUrl, validateWooKeys } from "../services/connectors/woocommerce.adapter";
 import { rememberPendingStore } from "../services/woo-store-probe.service";
+import { egressConfig } from "../lib/egress";
 
 export { normalizeStoreUrl, validateWooKeys };
 
@@ -78,23 +79,31 @@ function publicApiBase(): string {
 }
 
 /** Where the browser lands. Fixed paths; nothing from the request. */
+/** A firewall answered: the addresses to let through ride on the return (config: lib/egress). */
+function withEgress(p: URLSearchParams, error: string | undefined): URLSearchParams {
+  if (error !== "store_firewall_challenge") return p;
+  const egress = egressConfig();
+  if (egress) { p.set("egress", egress.ips.join(",")); p.set("egressStable", egress.stable ? "1" : "0"); }
+  return p;
+}
+
 export function wooReturnUrl(flow: string | undefined, result: { error?: string }): string {
   const origin = resolveAppPublicUrl(process.env);
   if (flow === "wp_plugin") {
     const p = new URLSearchParams(result.error ? { error: WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error" } : { connected: "1" });
-    return `${origin}/connect/woocommerce?${p.toString()}`;
+    return `${origin}/connect/woocommerce?${withEgress(p, result.error).toString()}`;
   }
   if (isRedesignSystemsFlow(flow)) {
     const p = new URLSearchParams({ system: PROVIDER });
     if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
     else p.set("connected", "1");
-    return `${origin}${redesignSystemsPath(flow)}?${p.toString()}`;
+    return `${origin}${redesignSystemsPath(flow)}?${withEgress(p, result.error).toString()}`;
   }
   // The legacy marketplace page is gone (2026-10-21): same landing as above.
   const p = new URLSearchParams({ system: PROVIDER });
   if (result.error) p.set("error", WOO_ERROR_CODES.has(result.error) ? result.error : "callback_error");
   else p.set("connected", "1");
-  return `${origin}/studio/capabilities?${p.toString()}`;
+  return `${origin}/studio/capabilities?${withEgress(p, result.error).toString()}`;
 }
 
 /** Signature-only read of a state we issued (no consume). For choosing a landing. */

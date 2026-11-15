@@ -127,3 +127,10 @@ moment..."). It depends on the caller's IP, so the merchant never sees it.
   for a store behind Cloudflare (CF-Ray on the admin request), the rule before
   connecting: WAF custom rule, URI Path starts with `/wp-json/wc/`, action Skip
   on all remaining custom rules and Super Bot Fight Mode.
+- GOTCHA's own address, for the primary Cloudflare rule (IP Source Address,
+  Skip), rides on every `store_firewall_challenge` answer as
+  `egress: { ips: string[], stable: boolean } | null`: the probe's `data.egress`,
+  the pasted-keys 422's `egress`, and the wc-auth return's `egress=<ips,comma>`
+  plus `egressStable=1|0`. It is config, per environment (`PUBLIC_EGRESS_IP`,
+  comma-separated, and `PUBLIC_EGRESS_IP_STABLE=true` once static); unset means
+  null, and the path rule alone is shown.

@@ -571,6 +571,10 @@ services:
       # The micro tier (per-turn helper calls); unset keeps gpt-5-nano. Any model
       # works: the request shape comes from packages/shared lib/model-caps.
       OPENAI_MICRO_MODEL: ${OPENAI_MICRO_MODEL:-gpt-5-nano}
+      # The address our store calls leave from, for a store behind a firewall
+      # (lib/egress). Each environment sets its own; empty = path rule only.
+      PUBLIC_EGRESS_IP: ${PUBLIC_EGRESS_IP:-}
+      PUBLIC_EGRESS_IP_STABLE: ${PUBLIC_EGRESS_IP_STABLE:-false}
       # ── Paid-access gate: off|audit|enforce (hard/soft/observe still accepted).
       # Checks BOTH halves of the question - is the organization commercially in
       # good standing, AND does their plan include the capability being used.

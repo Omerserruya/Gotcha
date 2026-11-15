@@ -186,12 +186,28 @@ function gotcha_wc_probe() {
 	return is_array( $data ) && isset( $data['data'] ) && is_array( $data['data'] ) ? $data['data'] : array( 'reason' => 'gotcha_unreachable' );
 }
 
-/** The Cloudflare rule that lets GOTCHA through, on the WooCommerce API only. */
-function gotcha_wc_cloudflare_rule_html() {
+/**
+ * The Cloudflare rule that lets GOTCHA through. With GOTCHA's address (from the
+ * probe, never hardcoded): the rule by that address first, the WooCommerce
+ * API path as the alternative. Without it: the path rule only.
+ */
+function gotcha_wc_cloudflare_rule_html( $egress = null ) {
+	$ips = ( is_array( $egress ) && ! empty( $egress['ips'] ) && is_array( $egress['ips'] ) ) ? array_values( array_filter( $egress['ips'], 'is_string' ) ) : array();
 	?>
 	<ol>
 		<li><?php esc_html_e( 'In Cloudflare, open Security, then WAF, then Custom rules, and create a rule.', 'gotcha-for-woocommerce' ); ?></li>
+		<?php if ( $ips ) : ?>
+			<li><?php
+			/* translators: %s: GOTCHA's IP address or addresses */
+			echo wp_kses( sprintf( __( 'Field <code>IP Source Address</code>, operator <code>%1$s</code>, value <code>%2$s</code>.', 'gotcha-for-woocommerce' ), count( $ips ) > 1 ? 'is in' : 'equals', esc_html( implode( ' ', $ips ) ) ), array( 'code' => array() ) );
+			if ( empty( $egress['stable'] ) ) {
+				echo ' ' . esc_html__( '(GOTCHA\'s address may change; the rule below does not.)', 'gotcha-for-woocommerce' );
+			}
+			?></li>
+			<li><?php echo wp_kses( __( 'Or instead: field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<?php else : ?>
 		<li><?php echo wp_kses( __( 'Field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<?php endif; ?>
 		<li><?php echo wp_kses( __( 'Action <code>Skip</code>: skip <code>All remaining custom rules</code> and <code>Super Bot Fight Mode</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
 		<li><?php esc_html_e( 'Deploy the rule, then press "Test GOTCHA access" again.', 'gotcha-for-woocommerce' ); ?></li>
 	</ol>
@@ -295,7 +311,7 @@ function gotcha_wc_settings_page() {
 				<?php if ( ! empty( $probe['reachable'] ) ) : ?>
 					<div class="notice notice-success inline"><p><?php esc_html_e( 'GOTCHA reaches your store\'s WooCommerce API.', 'gotcha-for-woocommerce' ); ?></p></div>
 				<?php elseif ( 'store_firewall_challenge' === ( $probe['reason'] ?? '' ) && 'cloudflare' === ( $probe['firewall'] ?? '' ) ) : ?>
-					<div class="notice notice-warning inline"><p><?php esc_html_e( 'Cloudflare is blocking GOTCHA from your store\'s WooCommerce API, so your AI employee cannot read products and orders. Add this rule:', 'gotcha-for-woocommerce' ); ?></p><?php gotcha_wc_cloudflare_rule_html(); ?></div>
+					<div class="notice notice-warning inline"><p><?php esc_html_e( 'Cloudflare is blocking GOTCHA from your store\'s WooCommerce API, so your AI employee cannot read products and orders. Add this rule:', 'gotcha-for-woocommerce' ); ?></p><?php gotcha_wc_cloudflare_rule_html( $probe['egress'] ?? null ); ?></div>
 				<?php elseif ( 'store_firewall_challenge' === ( $probe['reason'] ?? '' ) ) : ?>
 					<div class="notice notice-warning inline"><p><?php echo wp_kses( __( 'A firewall (your host\'s, or a security plugin) is blocking GOTCHA from your store\'s WooCommerce API. Ask your host to allow requests to <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></p></div>
 				<?php elseif ( 'gotcha_unreachable' === ( $probe['reason'] ?? '' ) ) : ?>

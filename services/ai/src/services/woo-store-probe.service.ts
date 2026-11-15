@@ -12,9 +12,10 @@
  */
 import { assertPublicUrl, getRedis, prisma } from "@chatcenter/shared";
 import { isFirewallChallenge, firewallOf, normalizeStoreUrl, STORE_FIREWALL_CHALLENGE, type StoreFirewall } from "./connectors/woocommerce.adapter";
+import { egressConfig, type Egress } from "../lib/egress";
 
 export type ProbeReason = "reachable" | typeof STORE_FIREWALL_CHALLENGE | "rest_api_not_found" | "redirected" | "timeout" | "unreachable" | `http_${number}`;
-export interface ProbeResult { reachable: boolean; reason: ProbeReason; status?: number; firewall?: StoreFirewall; storeUrl: string; checkedAt: string }
+export interface ProbeResult { reachable: boolean; reason: ProbeReason; status?: number; firewall?: StoreFirewall; storeUrl: string; checkedAt: string; egress?: Egress | null }
 
 export const PROBE_TIMEOUT_MS = 10_000;
 export const PROBE_CACHE_SECONDS = 60;
@@ -42,13 +43,18 @@ export async function storeToProbe(tenantId: string): Promise<string | null> {
   return normalizeStoreUrl(pending);
 }
 
+/** A blocked answer carries this environment's egress, read now (a config change shows on the next probe). */
+function withEgressOf(r: ProbeResult): ProbeResult {
+  return r.reason === STORE_FIREWALL_CHALLENGE ? { ...r, egress: egressConfig() } : r;
+}
+
 /** Probe a store already chosen by storeToProbe or by a bound plugin site. Never throws. */
 export async function probeStore(storeUrl: string, fetchImpl: typeof fetch = fetch): Promise<ProbeResult> {
   const base = normalizeStoreUrl(storeUrl);
   const at = () => new Date().toISOString();
   if (!base) return { reachable: false, reason: "unreachable", storeUrl: String(storeUrl), checkedAt: at() };
   const cached = await getRedis().get(cacheKey(base)).catch(() => null);
-  if (cached) { try { return JSON.parse(cached) as ProbeResult; } catch { /* probe again */ } }
+  if (cached) { try { return withEgressOf(JSON.parse(cached) as ProbeResult); } catch { /* probe again */ } }
   const url = `${base}/wp-json/wc/v3/system_status`;
   let out: ProbeResult;
   try {
@@ -59,6 +65,7 @@ export async function probeStore(storeUrl: string, fetchImpl: typeof fetch = fet
     clearTimeout(t);
     const body = await res.text().catch(() => "");
     if (isFirewallChallenge(res.status, res.headers, body)) {
+      // The addresses to let through (config, this environment's), read on every answer, never cached stale.
       out = { reachable: false, reason: STORE_FIREWALL_CHALLENGE, status: res.status, firewall: firewallOf(res.headers, body), storeUrl: base, checkedAt: at() };
     } else if ((res.status === 401 || res.status === 403 || res.ok) && /"code"\s*:\s*"woocommerce_rest_|"environment"\s*:/.test(body)) {
       out = { reachable: true, reason: "reachable", status: res.status, storeUrl: base, checkedAt: at() };
@@ -73,5 +80,5 @@ export async function probeStore(storeUrl: string, fetchImpl: typeof fetch = fet
     out = { reachable: false, reason: err?.name === "AbortError" ? "timeout" : "unreachable", storeUrl: base, checkedAt: at() };
   }
   await getRedis().set(cacheKey(base), JSON.stringify(out), "EX", PROBE_CACHE_SECONDS).catch(() => undefined);
-  return out;
+  return withEgressOf(out);
 }

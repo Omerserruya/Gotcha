@@ -1164,11 +1164,10 @@ const WooCommerceAdapter: ProviderAdapter = {
         const { rememberPendingStore } = await import("../woo-store-probe.service");
         await rememberPendingStore(ctx.tenantId, storeUrl);
       }
-      return {
-        ok: false,
-        code: STORE_FIREWALL_CHALLENGE,
-        error: "The store's firewall (Cloudflare) blocked GOTCHA before it could check the keys. In Cloudflare, add a WAF custom rule: URI Path starts with /wp-json/wc/, action Skip, skipping all remaining custom rules and Super Bot Fight Mode. Then connect again.",
-      };
+      // The address to let through goes with it (config: lib/egress); the IP rule first.
+      const { egressConfig, firewallFixMessage } = await import("../../lib/egress");
+      const egress = egressConfig();
+      return { ok: false, code: STORE_FIREWALL_CHALLENGE, egress, error: firewallFixMessage(egress) } as any;
     }
     return v.ok
       ? { ok: true }

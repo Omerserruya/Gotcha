@@ -853,7 +853,13 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
         .validate({ ctx: { tenantId: req.tenantId!, tenantIntegrationId: existing?.id ?? "" }, credentials, config: cfg })
         .catch((err: any) => ({ ok: false, error: `The credentials could not be checked (${String(err?.message || "error").slice(0, 80)}).` }));
       if (!verdict.ok) {
-        res.status(422).json({ error: "validation_failed", ...((verdict as any).code ? { code: (verdict as any).code } : {}), message: verdict.error ?? "The credentials were rejected." });
+        res.status(422).json({
+          error: "validation_failed",
+          ...((verdict as any).code ? { code: (verdict as any).code } : {}),
+          // A firewall answered: the addresses to let through (null = path rule only).
+          ...((verdict as any).code === "store_firewall_challenge" ? { egress: (verdict as any).egress ?? null } : {}),
+          message: verdict.error ?? "The credentials were rejected.",
+        });
         return;
       }
     } else {
