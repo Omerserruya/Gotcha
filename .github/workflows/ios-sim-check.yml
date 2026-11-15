@@ -6,6 +6,9 @@
 #   2-thread.png  mobile/simcheck/thread.html, a copy of the /m conversation
 #                 layout rules, loaded locally; it prints innerH, scrollY, the
 #                 page's env(safe-area-inset-*) and the composer's gap
+#   3-stale-offset.png  mobile/simcheck/stale-offset.html: the page is scrolled
+#                 58px and shrinks back, as the keyboard leaves the web view;
+#                 expected "after 2s: scrollY=0 barTop=0"
 # Expected today: top bar visible, envTop=0, envBottom=0 (the app keeps the
 # edges natively, see MainViewController.swift).
 #
@@ -82,6 +85,17 @@ jobs:
           xcrun simctl launch "$UDID" il.co.gotcha.app
           sleep 15
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
+
+      - name: Shot 3, a stale scroll offset (customer info without its bar)
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          cp simcheck/stale-offset.html "$APP/public/index.html"
+          xcrun simctl uninstall "$UDID" il.co.gotcha.app
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 15
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/3-stale-offset.png"
 
       - uses: actions/upload-artifact@v4
         if: always()
