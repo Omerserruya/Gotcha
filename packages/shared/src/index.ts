@@ -245,6 +245,7 @@ export {
   claimCustomerNotification,
   linkCustomerMessage,
   describeApprovalAction,
+  closeProposedExecutions,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";

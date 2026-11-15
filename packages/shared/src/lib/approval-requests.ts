@@ -515,5 +515,46 @@ export async function rejectRequest(
     },
   });
   if (claimed.count === 0) return null;
-  return (prisma as any).approvalRequest.findFirst({ where: { id, tenantId } });
+  const row = await (prisma as any).approvalRequest.findFirst({ where: { id, tenantId } });
+  if (row) await closeProposedExecutions(row, "rejected");
+  return row;
+}
+
+/**
+ * The orchestrator's execution rows an approval was opened for, closed when
+ * the approval is decided against them (Smoovee prod 2026-11-15: the two
+ * approvals EXPIRED at 30 minutes, but their three tool_execution_requests
+ * rows stayed "proposed" and the conversation's AI-activity panel listed them
+ * as waiting forever).
+ *
+ * No column links the two, so the rows are matched: same tenant, conversation
+ * and tool, still "proposed", proposed from a minute before the approval was
+ * created up to its decision. A re-proposal while it was pending was folded
+ * into the same approval (operationKey), so it closes with it. They become
+ * "denied" (the execution status set has no "expired"), with the reason as
+ * the error. Never throws: a failure here must not undo the decision.
+ */
+export async function closeProposedExecutions(
+  ar: { tenantId: string; conversationId?: string | null; tool: string; createdAt: Date | string; decidedAt?: Date | string | null },
+  outcome: "expired" | "rejected",
+): Promise<number> {
+  if (!ar?.conversationId) return 0;
+  try {
+    const created = new Date(ar.createdAt).getTime();
+    const decided = ar.decidedAt ? new Date(ar.decidedAt) : new Date();
+    const r = await (prisma as any).toolExecutionRequest.updateMany({
+      where: {
+        tenantId: ar.tenantId,
+        conversationId: ar.conversationId,
+        tool: ar.tool,
+        status: "proposed",
+        proposedAt: { gte: new Date(created - 60_000), lte: decided },
+      },
+      data: { status: "denied", error: outcome === "expired" ? "approval expired" : "approval rejected", completedAt: decided },
+    });
+    return r?.count ?? 0;
+  } catch (err: any) {
+    console.warn(`[approvals] closing execution rows failed tool=${ar.tool}: ${err?.message}`);
+    return 0;
+  }
 }

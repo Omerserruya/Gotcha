@@ -8,6 +8,7 @@ import {
   readDurableSetting,
   buildTemplateComponents,
   renderTemplateText,
+  closeProposedExecutions,
 } from "@chatcenter/shared";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
 
@@ -52,14 +53,17 @@ export async function expireDueApprovals(): Promise<void> {
     });
     for (const ar of expired) {
       try {
+        const decidedAt = new Date();
         await (prisma as any).approvalRequest.update({
           where: { id: ar.id },
           data: {
             status: "EXPIRED",
-            decidedAt: new Date(),
+            decidedAt,
             decisionReason: "auto-expired (no human decision within TTL)",
           },
         });
+        // Its execution rows stop saying "proposed" (the AI-activity panel).
+        await closeProposedExecutions({ ...ar, decidedAt }, "expired");
         // A plan the team proposed in GOTCHA (Home or the command bar) never
         // parked the customer's conversation: its expiry must not hand that
         // conversation to a person, which stops GOTCHA answering the customer.
