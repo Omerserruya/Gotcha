@@ -1075,6 +1075,23 @@ export function normalizeStoreUrl(raw: unknown, env: NodeJS.ProcessEnv = process
 }
 
 /**
+ * A firewall answered instead of WooCommerce (prod 2026-11-11 alphamom.co.il,
+ * 2026-11-15 chanivainberger.co.il): Cloudflare's bot challenge returns 403
+ * "Just a moment..." to any server, whatever the keys. Cloudflare marks it
+ * with cf-mitigated: challenge; the page itself carries cf-chl / challenge-
+ * platform. Its block page (1020, "Attention Required! | Cloudflare") and the
+ * other common WordPress firewalls' block pages say the same thing: the keys
+ * were never checked. Read from at most the first 64 KB of the body.
+ */
+export const STORE_FIREWALL_CHALLENGE = "store_firewall_challenge";
+const FIREWALL_BODY = /Just a moment\.\.\.|cf-chl|challenge-platform|cf_chl_opt|Attention Required! \| Cloudflare|cf-error-details|Sucuri WebSite Firewall|imunify360|bot-protection/i;
+export function isFirewallChallenge(status: number, headers: { get(name: string): string | null }, body: string): boolean {
+  if (![403, 429, 503].includes(status)) return false;
+  if (String(headers.get("cf-mitigated") ?? "").toLowerCase() === "challenge") return true;
+  return FIREWALL_BODY.test(body.slice(0, 64 * 1024));
+}
+
+/**
  * Prove the keys work against THIS store before calling the connection
  * CONNECTED. system_status needs the manage_woocommerce capability the
  * read_write key of an administrator carries; orders is the fallback for a
@@ -1100,6 +1117,11 @@ export async function validateWooKeys(
         await res.json();
         return { ok: true };
       }
+      const body = await res.text().catch(() => "");
+      // A firewall, not the store: the keys were never checked, and the other
+      // path would meet the same wall. Its own reason, so the merchant is told
+      // to allow us, not to make new keys.
+      if (isFirewallChallenge(res.status, res.headers, body)) return { ok: false, reason: STORE_FIREWALL_CHALLENGE };
       lastReason = `http_${res.status}`;
     } catch (err: any) {
       lastReason = err?.name === "AbortError" ? "timeout" : String(err?.message || "fetch_failed").slice(0, 80);
@@ -1126,6 +1148,13 @@ const WooCommerceAdapter: ProviderAdapter = {
     const storeUrl = normalizeStoreUrl(config.storeUrl || credentials.storeUrl || credentials.store_url);
     if (!storeUrl) return { ok: false, error: "Enter the store's https:// address." };
     const v = await validateWooKeys(storeUrl, String(consumerKey), String(consumerSecret));
+    if (!v.ok && v.reason === STORE_FIREWALL_CHALLENGE) {
+      return {
+        ok: false,
+        code: STORE_FIREWALL_CHALLENGE,
+        error: "The store's firewall (Cloudflare) blocked GOTCHA before it could check the keys. In Cloudflare, add a WAF custom rule: URI Path starts with /wp-json/wc/, action Skip, skipping all remaining custom rules and Super Bot Fight Mode. Then connect again.",
+      };
+    }
     return v.ok
       ? { ok: true }
       : { ok: false, error: v.reason === "http_401" || v.reason === "http_403"

@@ -141,7 +141,7 @@ export interface ProviderAdapter {
     ctx: AdapterContext;
     credentials: Record<string, any>;
     config: Record<string, any>;
-  }): Promise<{ ok: boolean; error?: string; grantedScopes?: string[]; missingScopes?: string[] }>;
+  }): Promise<{ ok: boolean; error?: string; /** A machine-readable refusal kind, sent to the client as the 422's `code`. */ code?: string; grantedScopes?: string[]; missingScopes?: string[] }>;
   /**
    * (Optional) This adapter's refreshTokens can also EXCHANGE a legacy
    * credential blob that has an accessToken but no refreshToken (one-way

@@ -853,7 +853,7 @@ router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Respo
         .validate({ ctx: { tenantId: req.tenantId!, tenantIntegrationId: existing?.id ?? "" }, credentials, config: cfg })
         .catch((err: any) => ({ ok: false, error: `The credentials could not be checked (${String(err?.message || "error").slice(0, 80)}).` }));
       if (!verdict.ok) {
-        res.status(422).json({ error: "validation_failed", message: verdict.error ?? "The credentials were rejected." });
+        res.status(422).json({ error: "validation_failed", ...((verdict as any).code ? { code: (verdict as any).code } : {}), message: verdict.error ?? "The credentials were rejected." });
         return;
       }
     } else {

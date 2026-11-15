@@ -66,6 +66,8 @@ export const WOO_ERROR_CODES = new Set([
   "callback_not_received",
   "invalid_state",
   "callback_error",
+  // A firewall (Cloudflare's bot challenge) answered instead of the store.
+  "store_firewall_challenge",
 ]);
 
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
@@ -203,7 +205,7 @@ router.post(
       const valid = await validateWooKeys(claims.storeUrl, consumerKey, consumerSecret);
       if (!valid.ok) {
         console.warn(`[woocommerce oauth] key validation failed: ${valid.reason}`);
-        await record("error:validation_failed");
+        await record(valid.reason === "store_firewall_challenge" ? "error:store_firewall_challenge" : "error:validation_failed");
         // 200 on purpose: the store then sends the merchant to the return URL,
         // which explains what happened. A non-200 strands them on a WordPress
         // error page with nowhere to go.
