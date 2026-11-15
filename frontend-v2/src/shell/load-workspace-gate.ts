@@ -2,7 +2,7 @@ import 'server-only';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
-import { currentUserSchema } from '@/api/contracts/identity';
+import { currentUserSchema, isSoleHuman } from '@/api/contracts/identity';
 import { authEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -39,6 +39,8 @@ export async function readWorkspaceGate(): Promise<{
   readonly tenantId: string | null;
   /** A system admin of a tenant not live: the console, and nothing else. */
   readonly consoleOnly: boolean;
+  /** One person in the workspace (`isSoleHuman`): the inbox draws one view. */
+  readonly soleHuman: boolean;
 }> {
   try {
     const me = await serverApi().get({ endpoint: authEndpoints.me(), payload: currentUserSchema });
@@ -49,6 +51,7 @@ export async function readWorkspaceGate(): Promise<{
       mayPreview: mayPreviewOnboarding(who),
       tenantId: me.user.tenantId || null,
       consoleOnly: consoleOnly(who),
+      soleHuman: isSoleHuman(me),
     };
   } catch (cause) {
     if (isApiError(cause) && cause.status === 401) {
@@ -58,6 +61,7 @@ export async function readWorkspaceGate(): Promise<{
         mayPreview: false,
         tenantId: null,
         consoleOnly: false,
+        soleHuman: false,
       };
     }
     logger.warn('gate.me_failed', { status: isApiError(cause) ? cause.status : undefined });
@@ -67,6 +71,7 @@ export async function readWorkspaceGate(): Promise<{
       mayPreview: false,
       tenantId: null,
       consoleOnly: false,
+      soleHuman: false,
     };
   }
 }

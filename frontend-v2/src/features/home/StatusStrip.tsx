@@ -21,9 +21,15 @@ export async function StatusStrip({
   signals,
   isQuiet,
   dayOne = null,
+  counts = 'waiting',
 }: {
   /** Conversations sitting unassigned. Null when the count failed to load. */
   waiting: number | null;
+  /**
+   * What `waiting` counts: the queue, or - in a one-person workspace - that
+   * person's Open conversations, and then it says so (Omer, 2026-11-15).
+   */
+  counts?: 'waiting' | 'open';
   /** Unread notifications. Null when unavailable. */
   signals: number | null;
   isQuiet: boolean;
@@ -115,7 +121,13 @@ export async function StatusStrip({
         depended on something no test holds still.
       */}
       <span className={styles.statusMeta}>
-        {waiting === null ? t('waitingUnknown') : t('waitingOnYou', { count: waiting })}
+        {counts === 'open'
+          ? waiting === null
+            ? t('waitingOpenUnknown')
+            : t('waitingOpen', { count: waiting })
+          : waiting === null
+            ? t('waitingUnknown')
+            : t('waitingOnYou', { count: waiting })}
         {/* 01b's "Last handover 3 hours ago": nothing records it. */}
         {isQuiet ? (
           <span

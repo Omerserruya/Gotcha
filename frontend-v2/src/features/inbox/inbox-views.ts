@@ -31,8 +31,64 @@
  *   `automatedOnly` already returns.
  */
 
-export const INBOX_VIEW_IDS = ['queue', 'mine', 'active', 'gotcha', 'resolved', 'all'] as const;
+export const INBOX_VIEW_IDS = [
+  'queue',
+  'mine',
+  'active',
+  'gotcha',
+  'resolved',
+  'all',
+  'open',
+] as const;
 export type InboxView = (typeof INBOX_VIEW_IDS)[number];
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ ONE PERSON, ONE VIEW (Omer, 2026-11-15)
+ * ════════════════════════════════════════════════════════════════════════════
+ * In a workspace with one person (`/auth/me`'s `workspace.soleHuman`),
+ * "Waiting in queue", "Assigned to me" and "Active" are one list: a handoff
+ * is assigned to that person at once (Backend's auto-assign, by the same
+ * predicate as the flag), so nothing waits and everything open is theirs.
+ * They become `open`: every conversation not resolved, except the ones
+ * GOTCHA handles alone - which keep their own view. Open + GOTCHA +
+ * Resolved is everything.
+ *
+ * ⚠ NOT "active". `active` is status OPEN with the default automated
+ *   exclusion: it misses WAITING, and a conversation assigned to the person
+ *   while still driven by the AI (a claim that never flipped the latch).
+ *   `open` is the route's own `view=open`, defined by Backend for this.
+ */
+export const SOLO_MERGED_VIEWS: readonly InboxView[] = ['queue', 'mine', 'active'];
+
+/** The views the inbox offers, in the rail's order. The phone adds "All" first. */
+export function railViews(soleHuman: boolean): readonly InboxView[] {
+  return soleHuman
+    ? ['open', 'gotcha', 'resolved']
+    : ['queue', 'mine', 'active', 'gotcha', 'resolved'];
+}
+
+/**
+ * The view a one-person workspace shows instead of `view`, or null when it
+ * shows `view` itself. Never anything for a team.
+ */
+export function soloView(view: InboxView, soleHuman: boolean): InboxView | null {
+  return soleHuman && SOLO_MERGED_VIEWS.includes(view) ? 'open' : null;
+}
+
+/**
+ * The views whose sizes the page asks the count route for.
+ *
+ * ⚠ `open` ONLY FOR ONE PERSON. The route answers 400 to a view it does not
+ *   know, and then EVERY count in the rail is gone - so a team inbox never
+ *   asks for it. Backend ships the flag and the view in one change, so a
+ *   workspace that says `soleHuman` is served by a route that knows `open`.
+ */
+export function countViews(soleHuman: boolean): readonly InboxView[] {
+  return soleHuman
+    ? ['open', 'gotcha', 'resolved', 'all']
+    : INBOX_VIEW_IDS.filter((v) => v !== 'open');
+}
 
 /**
  * The two views `gotcha` replaced. A bookmark, a shared link or an old tab
@@ -62,7 +118,14 @@ export const DEFAULT_INBOX_VIEW: InboxView = 'mine';
  * "mine" when the viewer is unknown, which is "Active". An explicit
  * `?view=mine` keeps its honest "could not read": that is what was asked.
  */
-export function shownView(view: InboxView, explicit: boolean, meKnown: boolean): InboxView {
+export function shownView(
+  view: InboxView,
+  explicit: boolean,
+  meKnown: boolean,
+  /** One person (`soleHuman`): the bare inbox is "Open". Known only when `me` is. */
+  soleHuman = false,
+): InboxView {
+  if (!explicit && soleHuman) return soloView(view, true) ?? view;
   return view === 'mine' && !explicit && !meKnown ? 'active' : view;
 }
 
@@ -102,7 +165,13 @@ export const VIEW_AFTER = {
  *   it - rather than on a list that can only say it could not read
  *   (supervisor, 2026-10-11).
  */
-export function viewAfter(verb: keyof typeof VIEW_AFTER, meKnown: boolean): InboxView {
+export function viewAfter(
+  verb: keyof typeof VIEW_AFTER,
+  meKnown: boolean,
+  /** One person: a claimed conversation is in "Open", the one view that holds it. */
+  soleHuman = false,
+): InboxView {
+  if (verb === 'claim' && soleHuman) return 'open';
   if (verb === 'claim' && !meKnown) return 'active';
   return VIEW_AFTER[verb];
 }
@@ -133,6 +202,13 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
       return meId === null ? null : { assignedAgentId: meId, includeAutomated: 'true' };
     case 'active':
       return { status: 'OPEN' };
+    case 'open':
+      /*
+       * One person's whole inbox (Backend, 2026-11-15): not CLOSED (OPEN and
+       * WAITING), minus exactly what `automatedOnly` returns. The route's own
+       * predicate, so the list and the count route's `open` agree.
+       */
+      return { view: 'open' };
     case 'all':
       /*
        * Every conversation, open or closed, the AI's and the flows' too - what
@@ -280,7 +356,10 @@ export function parseChannelFilters(raw: string | undefined): readonly QueueChan
  * ★ Its chip counts the same set: `phoneCountView("mine")` is the count route's
  *   `mine_open`, which is this query.
  */
-export function phoneViewQuery(view: InboxView, meId: string | null): Record<string, string> | null {
+export function phoneViewQuery(
+  view: InboxView,
+  meId: string | null,
+): Record<string, string> | null {
   const query = viewQuery(view, meId);
   return view === 'mine' && query !== null ? { ...query, excludeClosed: 'true' } : query;
 }
@@ -288,6 +367,24 @@ export function phoneViewQuery(view: InboxView, meId: string | null): Record<str
 /** The count route's view for each phone chip: its own id, except "mine". */
 export function phoneCountView(view: InboxView): string {
   return view === 'mine' ? 'mine_open' : view;
+}
+
+/*
+ * The design's chips, in its order: All, then the desktop rail's views with
+ * the rail's own ids and `?view=`, so a view means here what it means on the
+ * website - for one person, "Open" in place of three (`railViews`).
+ */
+export function phoneViews(soleHuman: boolean): readonly InboxView[] {
+  return ['all', ...railViews(soleHuman)];
+}
+
+/**
+ * The count route's views for the chips: the same, except "mine", which on
+ * the phone leaves out what was resolved (`phoneViewQuery`), so its count is
+ * the route's `mine_open` - the number of rows the chip opens.
+ */
+export function phoneCountViews(soleHuman: boolean): readonly string[] {
+  return phoneViews(soleHuman).map(phoneCountView);
 }
 
 /**

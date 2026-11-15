@@ -109,9 +109,28 @@ export const currentUserSchema = z.looseObject({
    */
   setupAdmin: z.looseObject({ name: z.string() }).nullish().catch(null),
   memberships: z.array(membershipSchema).default([]),
+  /**
+   * ★ ONE PERSON IN THE WORKSPACE (Omer, 2026-11-15). `soleHuman` is true
+   *   exactly when Backend's handoff auto-assign has its one person to
+   *   assign to, by the same predicate, so the inbox's views and the
+   *   routing cannot disagree. A bad or absent shape is NOT one person:
+   *   the views stay as they were, never a parse failure of who this is.
+   */
+  workspace: z
+    .looseObject({ soleHuman: z.boolean().optional().catch(undefined) })
+    .nullish()
+    .catch(null),
 });
 
 export type CurrentUser = z.infer<typeof currentUserSchema>;
+
+/**
+ * Is this a one-person workspace? Only an explicit `true` says so; absent,
+ * null, or anything else is the team inbox, today's views.
+ */
+export function isSoleHuman(me: Pick<CurrentUser, 'workspace'>): boolean {
+  return me.workspace?.soleHuman === true;
+}
 
 /**
  * `GET /api/permissions/me`. Enveloped in `data`.

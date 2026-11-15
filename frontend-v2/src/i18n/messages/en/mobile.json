@@ -10,6 +10,7 @@
     "today": "Today",
     "handled": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation today} other {GOTCHA handled # conversations today}}",
     "handledWaiting": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation} other {GOTCHA handled # conversations}}{waiting, plural, =0 {, and none are waiting for you} one {, and one is waiting for you} other {, and # are waiting for you}}",
+    "handledOpen": "{handled, plural, =0 {GOTCHA hasn't handled a conversation yet today} one {GOTCHA handled one conversation} other {GOTCHA handled # conversations}}{open, plural, =0 {, and none are open} one {, and one is open} other {, and # are open}}",
     "tiles": {
       "conversations": "Conversations today",
       "byYourTeam": "By your team",
@@ -18,6 +19,7 @@
     "needsYou": "Needs you",
     "open": "Open chat",
     "more": "{count, plural, one {# more waiting} other {# more waiting}}",
+    "moreOpen": "{count, plural, one {# more open} other {# more open}}",
     "updates": "Updates",
     "ask": "Ask GOTCHA…",
     "updatesEmpty": "No updates yet. When GOTCHA takes an action, like a refund or a booking, or asks for an approval, it shows here.",

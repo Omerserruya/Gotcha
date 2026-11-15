@@ -48,12 +48,13 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
   const t = await getTranslations('mobile.home');
   const home = await getTranslations('home');
   const needsYou = await getTranslations('home.needsYou');
+  const inbox = await getTranslations('inbox');
   const working = await getTranslations('home.working');
   const channelNames = await getTranslations('channels');
   const format = await getFormatter();
 
   const [data, firstName] = await Promise.all([loadHomeData(), loadViewerFirstName()]);
-  const { overview, queue, queueItems, activity, isQuiet, setup, gate } = data;
+  const { overview, queue, queueItems, activity, isQuiet, setup, gate, open } = data;
   const now = new Date();
 
   const bar = <MobileHomeBar account={account} />;
@@ -70,7 +71,16 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
     );
   }
 
-  const waiting = queue?.waiting ?? null;
+  /*
+   * ★ ONE PERSON (Omer, 2026-11-15): the headline and "Needs you" are that
+   *   person's Open conversations - the inbox's "Open" - as on the website.
+   */
+  const waiting = open ? open.count : (queue?.waiting ?? null);
+  const needs = open
+    ? { items: open.items, total: open.count ?? open.items?.length ?? 0, view: 'open' as const }
+    : queueItems
+      ? { items: queueItems.data, total: queueItems.totalWaiting, view: 'queue' as const }
+      : { items: null, total: 0, view: 'queue' as const };
   const events = activity ?? [];
   const ask = (
     // The design's ask bar, floating over the screen's foot: a tap opens the full-screen chat.
@@ -103,7 +113,9 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
               <p className={styles.headline}>
                 {waiting === null
                   ? t('handled', { handled: overview.aiHandledCount })
-                  : t('handledWaiting', { handled: overview.aiHandledCount, waiting })}
+                  : open
+                    ? t('handledOpen', { handled: overview.aiHandledCount, open: waiting })
+                    : t('handledWaiting', { handled: overview.aiHandledCount, waiting })}
               </p>
             </div>
             <div className={styles.tiles}>
@@ -126,24 +138,24 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
         <section className={styles.block} data-testid="mobile-home-needs-you">
           <div className={styles.blockHead}>
             <h2 className={styles.blockTitle}>{t('needsYou')}</h2>
-            {queueItems && queueItems.totalWaiting > 0 ? (
-              <span className={styles.blockCount}>{format.number(queueItems.totalWaiting)}</span>
+            {needs.items && needs.total > 0 ? (
+              <span className={styles.blockCount}>{format.number(needs.total)}</span>
             ) : null}
           </div>
           <div className={ui.card}>
-            {queueItems === null ? (
+            {needs.items === null ? (
               <p className={styles.note} role="status">
-                {needsYou('unavailable')}
+                {needsYou(open ? 'open.unavailable' : 'unavailable')}
               </p>
-            ) : queueItems.data.length === 0 ? (
-              <p className={styles.note}>{needsYou('empty')}</p>
+            ) : needs.items.length === 0 ? (
+              <p className={styles.note}>{needsYou(open ? 'open.empty' : 'empty')}</p>
             ) : (
               <>
-                {queueItems.data.map((item) => (
+                {needs.items.map((item) => (
                   <div key={item.conversationId} className={`${ui.cardRow} ${styles.need}`}>
                     <span
                       className={styles.needDot}
-                      data-tone={rowTone(item.intent)}
+                      data-tone={item.intent === null ? 'neutral' : rowTone(item.intent)}
                       aria-hidden="true"
                     />
                     <div className={styles.needBody}>
@@ -153,11 +165,13 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
                           {item.customer.name ? (
                             <PersonName name={item.customer.name} />
                           ) : (
-                            item.customer.id
+                            item.customer.id || inbox('queue.unnamed')
                           )}
                         </span>
                         <span className={styles.needTime}>
-                          {waitLabel(item.waitingSince, now.getTime(), needsYou)}
+                          {item.waitingSince === null
+                            ? ''
+                            : waitLabel(item.waitingSince, now.getTime(), needsYou)}
                         </span>
                       </div>
                       <span className={styles.needSub}>
@@ -181,12 +195,12 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
                     </div>
                   </div>
                 ))}
-                {queueItems.totalWaiting > queueItems.data.length ? (
+                {needs.total > needs.items.length ? (
                   <Link
-                    href={{ pathname: '/m/inbox', query: { view: 'queue' } }}
+                    href={{ pathname: '/m/inbox', query: { view: needs.view } }}
                     className={`${ui.cardRow} ${ui.more}`}
                   >
-                    {t('more', { count: queueItems.totalWaiting - queueItems.data.length })}
+                    {t(open ? 'moreOpen' : 'more', { count: needs.total - needs.items.length })}
                   </Link>
                 ) : null}
               </>

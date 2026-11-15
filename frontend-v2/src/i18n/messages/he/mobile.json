@@ -10,6 +10,7 @@
     "today": "היום",
     "handled": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת היום} other {GOTCHA טיפלה ב־# שיחות היום}}",
     "handledWaiting": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת} other {GOTCHA טיפלה ב־# שיחות}}{waiting, plural, =0 {, ואף שיחה לא מחכה לך} one {, ושיחה אחת מחכה לך} other {, ו־# מחכות לך}}",
+    "handledOpen": "{handled, plural, =0 {GOTCHA עוד לא טיפלה בשיחות היום} one {GOTCHA טיפלה בשיחה אחת} other {GOTCHA טיפלה ב־# שיחות}}{open, plural, =0 {, ואין שיחות פתוחות} one {, ושיחה אחת פתוחה} other {, ו‑# פתוחות}}",
     "tiles": {
       "conversations": "שיחות היום",
       "byYourTeam": "על ידי הצוות",
@@ -18,6 +19,7 @@
     "needsYou": "צריך אותך",
     "open": "לשיחה",
     "more": "{count, plural, one {עוד שיחה אחת ממתינה} other {עוד # שיחות ממתינות}}",
+    "moreOpen": "{count, plural, one {עוד שיחה אחת פתוחה} other {עוד # שיחות פתוחות}}",
     "updates": "עדכונים",
     "ask": "שאלו את GOTCHA…",
     "updatesEmpty": "עדיין אין עדכונים. כש־GOTCHA תבצע פעולה, כמו החזר או קביעת פגישה, או תבקש אישור, זה יופיע כאן.",

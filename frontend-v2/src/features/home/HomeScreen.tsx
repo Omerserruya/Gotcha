@@ -64,7 +64,13 @@ export async function HomeScreen({
     signals,
     presence,
     gate,
+    open,
   } = await loadHomeData();
+  /*
+   * ★ ONE PERSON (Omer, 2026-11-15): the strip, the backlog sentence and the
+   *   card say Open, with the inbox's Open count, never a permanent queue 0.
+   */
+  const waiting = open ? open.count : (queue?.waiting ?? null);
 
   /*
    * The tenant is locked out commercially, so every figure below would be
@@ -94,7 +100,8 @@ export async function HomeScreen({
     <HomeConversation answerWords={answerWords}>
       <div className={styles.page}>
         <StatusStrip
-          waiting={queue?.waiting ?? null}
+          waiting={waiting}
+          counts={open ? 'open' : 'waiting'}
           signals={signals}
           isQuiet={isQuiet}
           dayOne={
@@ -138,8 +145,8 @@ export async function HomeScreen({
                 ? t('summaryUnavailable')
                 : isQuiet
                   ? t('summaryQuiet')
-                  : overview.totalConversations === 0 && (queue?.waiting ?? 0) > 0
-                    ? t('summaryBacklog', { waiting: queue?.waiting ?? 0 })
+                  : overview.totalConversations === 0 && (waiting ?? 0) > 0
+                    ? t(open ? 'summaryBacklogOpen' : 'summaryBacklog', { waiting: waiting ?? 0 })
                     : t('summary', {
                         total: overview.totalConversations,
                         handled: overview.aiHandledCount,
@@ -196,10 +203,26 @@ export async function HomeScreen({
                       {t('needsYou.title')}
                     </Text>
                     <Text role="caption" tone="subtle" as="span">
-                      {t('needsYou.sortedBy')}
+                      {t(open ? 'needsYou.open.sortedBy' : 'needsYou.sortedBy')}
                     </Text>
                   </div>
-                  {queueItems && queueItems.data.length > 0 ? (
+                  {open ? (
+                    /* One person: their open conversations, newest first - the inbox's "Open". */
+                    open.items && open.items.length > 0 ? (
+                      <QueueList
+                        items={open.items}
+                        totalWaiting={open.count ?? open.items.length}
+                        now={now}
+                        of="open"
+                      />
+                    ) : (
+                      <div className={styles.queueCard}>
+                        <p className={styles.emptyNote} style={{ paddingInline: 16 }}>
+                          {open.items ? t('needsYou.open.empty') : t('needsYou.open.unavailable')}
+                        </p>
+                      </div>
+                    )
+                  ) : queueItems && queueItems.data.length > 0 ? (
                     <QueueList
                       items={queueItems.data}
                       totalWaiting={queueItems.totalWaiting}

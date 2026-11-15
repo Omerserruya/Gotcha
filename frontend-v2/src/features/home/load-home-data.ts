@@ -46,7 +46,10 @@ import {
   notificationEndpoints,
   presenceEndpoints,
 } from '@/api/endpoints/registry';
-import { currentUserSchema } from '@/api/contracts/identity';
+import { currentUserSchema, isSoleHuman } from '@/api/contracts/identity';
+import { loadOpenConversations } from '@/features/inbox/load-inbox';
+
+import type { NeedsYouItem } from './QueueList';
 import { logger } from '@/observability/logger';
 
 /**
@@ -142,6 +145,50 @@ export interface HomeData {
    * which is a lie. Home renders the reason instead.
    */
   readonly gate: TenantGate | null;
+  /**
+   * ★ ONE PERSON (Omer, 2026-11-15): with auto-assign nothing waits in a
+   *   one-person workspace, so the queue is always 0. Home counts and lists
+   *   that person's Open conversations instead - the inbox's own `open`
+   *   view - and `isQuiet` is that count reaching 0. `null` for a team.
+   */
+  readonly open: {
+    /** The view's size; null when it could not be read. */
+    readonly count: number | null;
+    /** The first rows, newest first; null when the list could not be read. */
+    readonly items: readonly NeedsYouItem[] | null;
+  } | null;
+}
+
+/** How many open conversations Home's card shows, as the queue's four. */
+export const OPEN_CARD_ROWS = 4;
+
+/**
+ * One person's open conversations, or `null` for a team - or when `/auth/me`
+ * could not be read, which is the team's Home, today's, never an empty one.
+ */
+async function loadSoloOpen(api: ReturnType<typeof serverApi>): Promise<HomeData['open']> {
+  const me = await api
+    .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
+    .catch((cause: unknown) => {
+      logger.warn('home.me_failed', { cause });
+      return null;
+    });
+  if (me === null || !isSoleHuman(me)) return null;
+  const { rows, total } = await loadOpenConversations(OPEN_CARD_ROWS);
+  return {
+    // A full page with no size from the route is not a count: the rest are unknown.
+    count: total ?? (rows !== null && rows.length < OPEN_CARD_ROWS ? rows.length : null),
+    items:
+      rows?.map((row) => ({
+        conversationId: row.id,
+        customer: { id: row.customerExternalId ?? '', name: row.customerName },
+        channel: row.channel ?? '',
+        preview: row.lastMessageBody ?? '',
+        // Nobody ranked these: no intent chip, and the age is the last message's.
+        intent: null,
+        waitingSince: row.lastMessageAt,
+      })) ?? null,
+  };
 }
 
 /** Today, as the backend expects it: ISO instants bounding the local day. */
@@ -208,6 +255,7 @@ export async function loadHomeData(): Promise<HomeData> {
     conflicts,
     signals,
     presence,
+    open,
   ] = await Promise.all([
     api
       .get({
@@ -302,6 +350,7 @@ export async function loadHomeData(): Promise<HomeData> {
     api
       .get({ endpoint: presenceEndpoints.roster(), payload: presenceRosterSchema })
       .catch(degrade<readonly AgentPresence[]>('home.presence_failed', [])),
+    loadSoloOpen(api),
   ]);
 
   return {
@@ -323,8 +372,10 @@ export async function loadHomeData(): Promise<HomeData> {
     // would be the more damaging mistake of the two.
     signals,
     presence: new Map(presence.map((entry) => [entry.agentId, entry])),
-    isQuiet: queue !== null && queue.waiting === 0,
+    // One person: quiet is no open conversation; an unread count is busy, as below.
+    isQuiet: open ? open.count === 0 : queue !== null && queue.waiting === 0,
     gate,
+    open,
   };
 }
 

@@ -17,12 +17,13 @@ import { CopilotPanel } from '@/features/inbox/wall/CopilotPanel';
 import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
 import {
-  INBOX_VIEW_IDS,
+  countViews,
   parseChannelFilter,
   parseInboxView,
   shownView,
   parsePeriod,
   retiredView,
+  soloView,
 } from '@/features/inbox/inbox-views';
 import { redirect } from '@/i18n/navigation';
 import { loadClearQueue } from '@/features/inbox/load-clear-queue';
@@ -103,14 +104,14 @@ export default async function Page({
    * `gotcha` - so the rail lights the view the list is showing. Not the
    * cursor: a new view starts at page one, as every inbox link does.
    */
+  const kept = Object.fromEntries(
+    Object.entries(params).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' && entry[0] !== 'view' && entry[0] !== 'cursor',
+    ),
+  );
   const retired = retiredView(rawView);
   if (retired !== null) {
-    const kept = Object.fromEntries(
-      Object.entries(params).filter(
-        (entry): entry is [string, string] =>
-          typeof entry[1] === 'string' && entry[0] !== 'view' && entry[0] !== 'cursor',
-      ),
-    );
     redirect({
       href: { pathname: '/inbox', query: { ...kept, view: retired } },
       locale: await getLocale(),
@@ -133,8 +134,22 @@ export default async function Page({
     slaSettings,
     (data.rows ?? []).flatMap((row) => (row.departmentId === null ? [] : [row.departmentId])),
   );
+  /*
+   * ★ ONE PERSON: A NAMED QUEUE, "MINE" OR "ACTIVE" IS "OPEN" (2026-11-15).
+   *   An old link or bookmark lands on the one view, with the rest of its
+   *   address kept and `view=open` in it, so the rail lights what the list
+   *   shows - the same move as a retired view. Known only from `/auth/me`,
+   *   so after the reads; the list read for the old view is discarded.
+   */
+  const solo = explicit ? soloView(askedView, data.soleHuman) : null;
+  if (solo !== null) {
+    redirect({
+      href: { pathname: '/inbox', query: { ...kept, view: solo } },
+      locale: await getLocale(),
+    });
+  }
   // The view the rows are of - "Active" when the default could not know who "me" is.
-  const view = shownView(askedView, explicit, data.meId !== null);
+  const view = shownView(askedView, explicit, data.meId !== null, data.soleHuman);
   /*
     02b: the queue is clear - the default view, unfiltered, read and empty.
     Its own reads only then, so a busy inbox pays for nothing.
@@ -142,7 +157,8 @@ export default async function Page({
   const clear =
     data.rows !== null &&
     data.rows.length === 0 &&
-    view === 'queue' &&
+    // One person's "Open" empty is the same news as an empty queue.
+    (view === 'queue' || view === 'open') &&
     channel === null &&
     // A conversation opened by link on an empty queue is open, not "all clear".
     data.open === null &&
@@ -203,7 +219,7 @@ export default async function Page({
           Renders nothing: the rail's unread count per view - one read on
           load, then one per burst of events, never one per page render.
         */}
-        <RailUnreadCounts views={INBOX_VIEW_IDS} />
+        <RailUnreadCounts views={countViews(data.soleHuman)} />
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
             rows={data.rows}

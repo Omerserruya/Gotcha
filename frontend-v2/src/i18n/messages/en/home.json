@@ -21,6 +21,7 @@
   },
   "summary": "{total, plural, =0 {Nothing has come in yet today.} one {One conversation today, # handled without you.} other {# conversations today, {handled} handled without you.}}",
   "summaryBacklog": "{waiting, plural, one {Nothing new today. # conversation is still waiting from before.} other {Nothing new today. # conversations are still waiting from before.}}",
+  "summaryBacklogOpen": "{waiting, plural, one {Nothing new today. # conversation is still open from before.} other {Nothing new today. # conversations are still open from before.}}",
   "command": {
     "label": "Ask GOTCHA a question, or tell it what to do",
     "placeholder": "Ask anything, or tell GOTCHA what to do…",
@@ -85,6 +86,12 @@
       "PRODUCT_QUESTION": "Question",
       "WAITING_EXTERNAL": "Waiting",
       "OTHER": "Other"
+    },
+    "open": {
+      "sortedBy": "Newest first",
+      "empty": "No open conversations.",
+      "unavailable": "Open conversations could not be loaded just now.",
+      "more": "{count, plural, one {# more open} other {# more open}} · open Inbox"
     }
   },
   "working": {
@@ -285,6 +292,8 @@
     "signalsUnknown": "Signals unavailable",
     "waitingOnYou": "{count, plural, =0 {Nothing waiting on you} one {# waiting on you} other {# waiting on you}}",
     "waitingUnknown": "Waiting count unavailable",
+    "waitingOpen": "{count, plural, =0 {No open conversations} one {# open conversation} other {# open conversations}}",
+    "waitingOpenUnknown": "Open count unavailable",
     "lastHandover": "Last handover",
     "lastHandoverNone": "Nothing records when a conversation was last handed to a person.",
     "notLive": "Setting up · not live yet",

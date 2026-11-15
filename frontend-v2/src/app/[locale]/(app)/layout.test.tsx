@@ -326,3 +326,30 @@ describe('★★ two-step sign-in is a gate (Omer, 2026-11-09; the legacy MfaEnr
     expect(propsOf(AppShellMock, tree)).not.toBeNull();
   });
 });
+
+describe('★★ one person: the layout hands the shell `soleHuman` from its own /auth/me read (2026-11-15)', () => {
+  const me = (body: Record<string, unknown> | 'fails') =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      if (endpoint.path === '/api/auth/me') {
+        if (body === 'fails') throw new ApiError({ kind: 'server', status: 500 });
+        return { user: { id: 'u', role: 'ADMIN' }, tenantStatus: 'ACTIVE', ...body };
+      }
+      return { permissions: [], features: [] };
+    });
+  const soleHuman = async () => propsOf(AppProviders, await render())?.soleHuman;
+
+  it('★★ `workspace.soleHuman: true` is one person - in the first render, so no flash', async () => {
+    me({ workspace: { soleHuman: true } });
+    expect(await soleHuman()).toBe(true);
+  });
+
+  it.each([
+    ['false', { workspace: { soleHuman: false } }],
+    ['absent', {}],
+    ['a string', { workspace: { soleHuman: 'true' } }],
+    ['a null workspace', { workspace: null }],
+  ])("★ %s is a team - today's views", async (_name, body) => {
+    me(body);
+    expect(await soleHuman()).toBe(false);
+  });
+});

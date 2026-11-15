@@ -63,6 +63,33 @@ export interface NavigationItem {
   readonly viewParam?: string;
   /** The view that applies when the parameter is absent. */
   readonly defaultView?: string;
+  /**
+   * A one-person workspace's children instead of `children` (Inbox only),
+   * with its own default, and the team views that now mean that default -
+   * an old `?view=queue` lights "Open", which is what the page shows.
+   */
+  readonly solo?: {
+    readonly children: readonly NavigationChild[];
+    readonly defaultView: string;
+    readonly merged: readonly string[];
+  };
+}
+
+/** The children the rail draws for `item`: a one-person workspace's own, when it has them. */
+export function childrenFor(item: NavigationItem, soleHuman: boolean): readonly NavigationChild[] {
+  return (soleHuman ? item.solo?.children : undefined) ?? item.children ?? [];
+}
+
+/** The view in force for `item`, given the address's `view` parameter (or null). */
+export function viewInForce(
+  item: NavigationItem,
+  raw: string | null,
+  soleHuman: boolean,
+): string | undefined {
+  const solo = soleHuman ? item.solo : undefined;
+  if (!solo) return raw ?? item.defaultView;
+  if (raw === null || solo.merged.includes(raw)) return solo.defaultView;
+  return raw;
 }
 
 const under = (pathname: string, href: string) =>
@@ -106,6 +133,17 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
    * grows, and next to the views that need someone it reads as work waiting.
    */
   { id: 'resolved', labelKey: 'inbox.resolved', view: 'resolved', showsSize: false },
+];
+
+/**
+ * One person, one view (Omer, 2026-11-15): "Open" stands for the queue,
+ * "Assigned to me" and "Active", which in a one-person workspace are one
+ * list. Mirrors inbox-views' `railViews(true)` and `SOLO_MERGED_VIEWS`,
+ * which the shell may not import; navigation.test.ts holds them equal.
+ */
+const SOLO_INBOX_VIEWS: readonly NavigationChild[] = [
+  { id: 'open', labelKey: 'inbox.open', view: 'open' },
+  ...INBOX_VIEWS.filter((child) => child.id === 'gotcha' || child.id === 'resolved'),
 ];
 
 /**
@@ -264,6 +302,7 @@ export const PRIMARY_NAVIGATION: readonly NavigationItem[] = [
     viewParam: 'view',
     // A bare /inbox is "Assigned to me" (inbox-views' DEFAULT_INBOX_VIEW; the shell may not import it).
     defaultView: 'mine',
+    solo: { children: SOLO_INBOX_VIEWS, defaultView: 'open', merged: ['queue', 'mine', 'active'] },
   },
   {
     id: 'approvals',

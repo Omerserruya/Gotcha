@@ -6,12 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { queueItemSchema } from '@/api/contracts/analytics';
 import channels from '@/i18n/messages/en/channels.json';
 import home from '@/i18n/messages/en/home.json';
+import inbox from '@/i18n/messages/en/inbox.json';
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
       locale: 'en',
-      messages: { home, channels },
+      messages: { home, channels, inbox },
       namespace: namespace as 'home',
     }),
 }));
@@ -68,5 +69,44 @@ describe('★★ "N more" is the rest of the QUEUE - named, since a bare /inbox 
       .getAllByRole('link')
       .find((link) => !link.getAttribute('href')?.includes('c='));
     expect(more).toHaveAttribute('href', '/inbox?view=queue');
+  });
+});
+
+describe('★★ one person: the card lists open conversations (2026-11-15)', () => {
+  const open = (over: Record<string, unknown> = {}) => ({
+    conversationId: 'c1',
+    customer: { id: '+972541234567', name: 'Dana' },
+    channel: 'WHATSAPP',
+    preview: 'Hi',
+    intent: null,
+    waitingSince: '2026-11-15T09:00:00Z',
+    ...over,
+  });
+  const now = new Date('2026-11-15T10:00:00Z');
+
+  it('★★ "N more open" opens the inbox\'s "Open"', async () => {
+    render(await QueueList({ items: [open()], totalWaiting: 3, now, of: 'open' }));
+    const more = screen.getByText(/more open/);
+    expect(more).toHaveTextContent('2 more open · open Inbox');
+    expect(more.closest('a')).toHaveAttribute('href', '/inbox?view=open');
+  });
+
+  it('★ nobody ranked it: no intent chip - never a guessed "Other"', async () => {
+    render(await QueueList({ items: [open()], totalWaiting: 1, now, of: 'open' }));
+    expect(screen.queryByText(home.needsYou.intent.OTHER)).toBeNull();
+    expect(screen.getByText('1h')).toBeInTheDocument();
+  });
+
+  it('★ no time is no age; no name and no handle is the inbox\'s "Someone"', async () => {
+    render(
+      await QueueList({
+        items: [open({ customer: { id: '', name: null }, waitingSince: null })],
+        totalWaiting: 1,
+        now,
+        of: 'open',
+      }),
+    );
+    expect(screen.getByText(inbox.queue.unnamed)).toBeInTheDocument();
+    expect(screen.queryByText(/\d+[mhd]$/)).toBeNull();
   });
 });

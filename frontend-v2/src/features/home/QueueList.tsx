@@ -45,13 +45,33 @@ const LABELLED_INTENTS = new Set([
   'OTHER',
 ]);
 
+/**
+ * A row of the card: a ranked queue item, or - in a one-person workspace -
+ * an open conversation (`openItem`), which has no intent and no wait the
+ * ranker measured. `null` draws no chip and no age, never an invented one.
+ */
+export type NeedsYouItem = Pick<
+  QueueItem,
+  'conversationId' | 'customer' | 'channel' | 'preview'
+> & {
+  readonly intent: string | null;
+  readonly waitingSince: string | null;
+};
+
 export async function QueueList({
   items,
   totalWaiting,
   now,
+  of = 'queue',
 }: {
-  items: readonly QueueItem[];
+  items: readonly NeedsYouItem[];
   totalWaiting: number;
+  /**
+   * What the card lists: the ranked queue, or one person's open
+   * conversations (Omer, 2026-11-15) - whose footer opens "Open", and whose
+   * words say open, not waiting.
+   */
+  of?: 'queue' | 'open';
   /**
    * The instant the page was rendered, decided once by the screen and passed
    * down. Reading the clock here would make this component impure, and every
@@ -62,13 +82,16 @@ export async function QueueList({
   const t = await getTranslations('home.needsYou');
   /* The channel labels screen 13 already maintains, in both languages. */
   const channelNames = await getTranslations('channels');
+  // An open conversation with neither a name nor a handle reads as the inbox reads it.
+  const inbox = await getTranslations('inbox');
   const remaining = Math.max(0, totalWaiting - items.length);
 
   return (
     <div className={styles.queueCard}>
       {items.map((item) => {
-        const tone = TONE_BY_INTENT[item.intent];
-        const intentKey = LABELLED_INTENTS.has(item.intent) ? item.intent : 'OTHER';
+        const tone = item.intent === null ? undefined : TONE_BY_INTENT[item.intent];
+        const intentKey =
+          item.intent === null ? null : LABELLED_INTENTS.has(item.intent) ? item.intent : 'OTHER';
 
         return (
           <Link
@@ -88,7 +111,11 @@ export async function QueueList({
                    * No name means no contact record. The channel identifier is
                    * shown as itself rather than dressed up as a name.
                    */}
-                  {item.customer.name ? <PersonName name={item.customer.name} /> : item.customer.id}
+                  {item.customer.name ? (
+                    <PersonName name={item.customer.name} />
+                  ) : (
+                    item.customer.id || inbox('queue.unnamed')
+                  )}
                 </span>
                 {/*
                   ★★ THE CHANNEL'S NAME, ON EVERY ROW OF THE FIRST SCREEN.
@@ -107,14 +134,16 @@ export async function QueueList({
               </span>
             </span>
 
-            <span
-              className={[styles.queueChip, tone ? CHIP_TONE_CLASS[tone] : ''].join(' ').trim()}
-            >
-              {t(`intent.${intentKey}`)}
-            </span>
+            {intentKey === null ? null : (
+              <span
+                className={[styles.queueChip, tone ? CHIP_TONE_CLASS[tone] : ''].join(' ').trim()}
+              >
+                {t(`intent.${intentKey}`)}
+              </span>
+            )}
 
             <span className={styles.queueWait}>
-              {waitLabel(item.waitingSince, now.getTime(), t)}
+              {item.waitingSince === null ? '' : waitLabel(item.waitingSince, now.getTime(), t)}
             </span>
           </Link>
         );
@@ -123,10 +152,10 @@ export async function QueueList({
       {remaining > 0 ? (
         <Link
           // The rest of the QUEUE: named, since a bare /inbox is "Assigned to me".
-          href={{ pathname: '/inbox', query: { view: 'queue' } }}
+          href={{ pathname: '/inbox', query: { view: of } }}
           className={styles.queueFooter}
         >
-          {t('more', { count: remaining })}
+          {t(of === 'open' ? 'open.more' : 'more', { count: remaining })}
         </Link>
       ) : null}
     </div>

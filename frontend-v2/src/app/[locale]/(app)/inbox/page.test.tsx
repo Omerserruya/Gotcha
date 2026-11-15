@@ -165,6 +165,7 @@ const data = (over: Record<string, unknown> = {}) => {
     timeline: null as unknown,
     orders: null as unknown,
     meId: 'me',
+    soleHuman: false,
     colleagues: [{ id: 'u2', name: 'Dana' }],
     greeting: null,
     ...over,
@@ -833,8 +834,59 @@ describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
     // (gateway, 2026-10-11): every refresh is a render.
     const tree = await page();
     expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)).toEqual({
-      views: INBOX_VIEW_IDS,
+      // ⚠ Never `open` for a team: the route 400s a view it does not know, and every count goes.
+      views: INBOX_VIEW_IDS.filter((view) => view !== 'open'),
     });
+    expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)?.views).not.toContain(
+      'open',
+    );
+  });
+});
+
+describe('★★ one person, one view: "Open" (Omer, 2026-11-15)', () => {
+  it('★★ the bare inbox shows "Open", and the counts ask for it', async () => {
+    const tree = await page({ soleHuman: true });
+    expect(redirect).not.toHaveBeenCalled();
+    expect(propsOf<{ view?: string }>(tree, ConversationList)?.view).toBe('open');
+    expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)?.views).toEqual([
+      'open',
+      'gotcha',
+      'resolved',
+      'all',
+    ]);
+  });
+
+  it.each(['queue', 'mine', 'active'])(
+    '★★ a named `?view=%s` lands on `?view=open`, the rest of the address kept',
+    async (old) => {
+      await expect(
+        page({ soleHuman: true }, { view: old, c: 'c7', channel: 'WHATSAPP', cursor: 'k1' }),
+      ).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect).toHaveBeenCalledWith({
+        href: { pathname: '/inbox', query: { view: 'open', c: 'c7', channel: 'WHATSAPP' } },
+        locale: 'he',
+      });
+    },
+  );
+
+  it.each(['gotcha', 'resolved', 'open'])('★ `?view=%s` is read as named', async (kept) => {
+    const tree = await page({ soleHuman: true }, { view: kept });
+    expect(redirect).not.toHaveBeenCalled();
+    expect(propsOf<{ view?: string }>(tree, ConversationList)?.view).toBe(kept);
+  });
+
+  it('★★ a team is untouched: `?view=queue` is the queue, and the bare inbox "Assigned to me"', async () => {
+    expect(
+      propsOf<{ view?: string }>(await page({}, { view: 'queue' }), ConversationList)?.view,
+    ).toBe('queue');
+    expect(propsOf<{ view?: string }>(await page(), ConversationList)?.view).toBe('mine');
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('★ an empty "Open" is the all-clear, as an empty queue is', async () => {
+    loadClearQueue.mockClear();
+    await page({ soleHuman: true, rows: [], open: null });
+    expect(loadClearQueue).toHaveBeenCalled();
   });
 });
 

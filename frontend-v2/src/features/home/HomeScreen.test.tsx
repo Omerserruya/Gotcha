@@ -21,6 +21,7 @@ import { CommandSurface } from './CommandSurface';
 import { FirstSteps } from './FirstSteps';
 import styles from './Home.module.css';
 import { HomeScreen } from './HomeScreen';
+import { QueueList } from './QueueList';
 import { QuietWork } from './QuietWork';
 import { StatusStrip } from './StatusStrip';
 import { TeamPanel } from './TeamPanel';
@@ -93,6 +94,7 @@ const data = (over: Record<string, unknown>) => ({
   signals: 0,
   presence: new Map(),
   gate: null,
+  open: null,
   ...over,
 });
 
@@ -245,5 +247,51 @@ describe('★★ 01c - day one: the same Home, its own head', () => {
     expect(box?.props.tone).toBe('dayOne');
     expect(all(tree, (e) => e.type === FirstSteps)).toHaveLength(1);
     expect(all(tree, (e) => e.type === QuietWork)).toHaveLength(0);
+  });
+});
+
+describe('★★ one person: the strip, the sentence and the card say Open (2026-11-15)', () => {
+  const item = {
+    conversationId: 'c1',
+    customer: { id: '+972541234567', name: 'Dana' },
+    channel: 'WHATSAPP',
+    preview: 'Hi',
+    intent: null,
+    waitingSince: '2026-11-15T09:00:00Z',
+  };
+  const busy = { isQuiet: false, queue: { waiting: 0 }, queueItems: { data: [], totalWaiting: 0 } };
+
+  it("★★ the strip counts Open, labelled Open - never the queue's 0", async () => {
+    const tree = await screen({ ...busy, open: { count: 5, items: [item] } });
+    const [strip] = all(tree, (e) => e.type === StatusStrip);
+    expect(strip?.props).toMatchObject({ waiting: 5, counts: 'open' });
+  });
+
+  it('★★ the card lists the open conversations, and its footer opens "Open"', async () => {
+    const tree = await screen({ ...busy, open: { count: 5, items: [item] } });
+    const [list] = all(tree, (e) => e.type === QueueList);
+    expect(list?.props).toMatchObject({ items: [item], totalWaiting: 5, of: 'open' });
+  });
+
+  it('★ the caption says how the card is ordered: newest first, not by risk', async () => {
+    const tree = await screen({ ...busy, open: { count: 5, items: [item] } });
+    expect(JSON.stringify(tree)).toContain('needsYou.open.sortedBy');
+    expect(JSON.stringify(tree)).not.toContain('"needsYou.sortedBy"');
+  });
+
+  it('⚠ none open says so; an unread list says it could not read', async () => {
+    expect(JSON.stringify(await screen({ ...busy, open: { count: 0, items: [] } }))).toContain(
+      'needsYou.open.empty',
+    );
+    expect(JSON.stringify(await screen({ ...busy, open: { count: null, items: null } }))).toContain(
+      'needsYou.open.unavailable',
+    );
+  });
+
+  it("★ a team is today's: the queue's count and its ranked card", async () => {
+    const tree = await screen({ ...busy, queue: { waiting: 3 } });
+    const [strip] = all(tree, (e) => e.type === StatusStrip);
+    expect(strip?.props).toMatchObject({ waiting: 3, counts: 'waiting' });
+    expect(JSON.stringify(tree)).toContain('needsYou.sortedBy');
   });
 });

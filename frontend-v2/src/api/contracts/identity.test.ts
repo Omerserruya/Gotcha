@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   currentUserSchema,
   identitySuggestionsSchema,
+  isSoleHuman,
   membershipSchema,
   suggestionMatch,
 } from './identity';
@@ -299,5 +300,25 @@ describe('★ F1 - an accepted suggestion says what it had in common', () => {
       linked: [{ contactId: 'a', link: { contactIds: ['me', 'a'], signal: 'same_name' } }],
     }).linked;
     expect(linkMatch(row!.link!)).toBe('sameName');
+  });
+});
+
+describe('★★ `workspace.soleHuman` (Backend, 2026-11-15)', () => {
+  const parse = (extra: Record<string, unknown>) =>
+    currentUserSchema.parse({ user: { id: 'u1' }, ...extra });
+
+  it('★★ only an explicit true is one person', () => {
+    expect(isSoleHuman(parse({ workspace: { soleHuman: true } }))).toBe(true);
+    expect(isSoleHuman(parse({ workspace: { soleHuman: false } }))).toBe(false);
+    expect(isSoleHuman(parse({}))).toBe(false);
+    expect(isSoleHuman(parse({ workspace: null }))).toBe(false);
+  });
+
+  it('★★ a bad shape is a team - never a failed parse of who this is', () => {
+    for (const workspace of [{ soleHuman: 'true' }, { soleHuman: 1 }, 'yes', 7, []]) {
+      const me = parse({ workspace });
+      expect(me.user.id).toBe('u1');
+      expect(isSoleHuman(me)).toBe(false);
+    }
   });
 });

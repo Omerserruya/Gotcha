@@ -44,6 +44,7 @@ import { menuPlan, type MenuRow } from './queue-menu-rules';
 import { clearSelected, currentSelection, useSelection } from './queue-selection';
 import styles from './Inbox.module.css';
 import { useSupport } from '@/support/support-context';
+import { useSoleHuman } from '@/tenant/sole-human-context';
 
 /**
  * 02's right-click menu on the queue - and shift-click to pick several.
@@ -86,6 +87,8 @@ export function QueueMenu({
   const viewName = useTranslations('navigation.inbox');
   // Support mode: deleting a conversation is refused (Omer, 2026-11-01).
   const deleteRefused = useSupport().refuses('delete');
+  // One person: a claim lands on "Open", the view that holds it (`viewAfter`).
+  const soleHuman = useSoleHuman();
   const supportWords = useTranslations('console.support');
   const router = useRouter();
   const selection = useSelection();
@@ -238,7 +241,11 @@ export function QueueMenu({
               data-testid="menu-assign-me"
               disabled={busy}
               onSelect={() =>
-                void run(plan.assignToMe, claimConversation, viewAfter('claim', meId !== null))
+                void run(
+                  plan.assignToMe,
+                  claimConversation,
+                  viewAfter('claim', meId !== null, soleHuman),
+                )
               }
             >
               <UserPlus size={13} aria-hidden="true" />

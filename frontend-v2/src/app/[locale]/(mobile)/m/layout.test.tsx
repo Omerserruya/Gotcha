@@ -95,3 +95,24 @@ describe('★★ the phone: two-step sign-in is a gate too', () => {
     expect(propsOf(MobileShell, tree)).not.toBeNull();
   });
 });
+
+describe("★★ one person: the phone's layout hands the shell `soleHuman` too (2026-11-15)", () => {
+  const me = (workspace: unknown) =>
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      if (endpoint.path === '/api/auth/me')
+        return { user: { id: 'u', role: 'ADMIN' }, tenantStatus: 'ACTIVE', workspace };
+      if (endpoint.path === '/api/account/mfa-gate')
+        return { required: false, mustEnroll: false, identityAvailable: true };
+      return { permissions: [], features: [] };
+    });
+
+  it.each([
+    [true, { soleHuman: true }],
+    [false, { soleHuman: false }],
+    [false, undefined],
+  ])('★ soleHuman: %s', async (expected, workspace) => {
+    me(workspace);
+    const { AppProviders } = await import('@/shell/AppProviders');
+    expect(propsOf(AppProviders, await render())?.soleHuman).toBe(expected);
+  });
+});

@@ -25,7 +25,7 @@ import {
   commerceContextSchema,
   type CommerceContextResponse,
 } from '@/api/contracts/customer-orders';
-import { currentUserSchema } from '@/api/contracts/identity';
+import { currentUserSchema, isSoleHuman } from '@/api/contracts/identity';
 import { authEndpoints, customerEndpoints, inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -173,6 +173,8 @@ export interface InboxData {
   readonly meId: string | null;
   /** Their role (`ADMIN`, `AGENT`, …), or `null` when we could not read it. */
   readonly role: string | null;
+  /** A one-person workspace (`/auth/me`'s `workspace.soleHuman`); `false` when unread. */
+  readonly soleHuman: boolean;
   /** Active colleagues this viewer may transfer to. Never includes them. */
   readonly colleagues: readonly { readonly id: string; readonly name: string }[];
   /**
@@ -247,12 +249,13 @@ export async function loadInbox(
    */
   const viewerRead = api
     .get({ endpoint: authEndpoints.me(), payload: currentUserSchema })
-    .then((it) => ({ id: it.user.id, role: it.user.role ?? null }))
+    .then((it) => ({ id: it.user.id, role: it.user.role ?? null, soleHuman: isSoleHuman(it) }))
     .catch((cause: unknown) => {
       logger.warn('inbox.me_failed', { cause });
       return null;
     });
   const meRead = viewerRead.then((viewer) => viewer?.id ?? null);
+  const soleHumanRead = viewerRead.then((viewer) => viewer?.soleHuman ?? false);
 
   /*
    * ════════════════════════════════════════════════════════════════════════
@@ -309,7 +312,14 @@ export async function loadInbox(
 
   const queueRead =
     view === 'mine'
-      ? meRead.then((id) => fetchQueue(queryOf(shownView(view, explicit, id !== null), id)))
+      ? /*
+         * ★ The bare inbox already waits for `me`, so it learns here, at no
+         *   extra round, whether the workspace is one person - and then
+         *   shows "Open" (`shownView`). A named view is redirected by the page.
+         */
+        Promise.all([meRead, soleHumanRead]).then(([id, solo]) =>
+          fetchQueue(queryOf(shownView(view, explicit, id !== null, solo), id)),
+        )
       : fetchQueue(queryOf(view, null));
 
   const [queue, viewerMe, colleagues, greeting] = await Promise.all([
@@ -398,6 +408,8 @@ export async function loadInbox(
      * reassigning a conversation somebody else holds. `null` when unread.
      */
     role: viewerMe?.role ?? null,
+    /** One person in the workspace (`isSoleHuman`); `false` when `me` is unread. */
+    soleHuman: viewerMe?.soleHuman ?? false,
     colleagues: transferableTo(colleagues, me),
     greeting,
   };
@@ -478,4 +490,31 @@ export async function loadConversation(conversationId: string): Promise<Conversa
   ]);
 
   return { messages, timeline, orders };
+}
+
+/**
+ * One person's open conversations for Home's "Needs you" card (Omer,
+ * 2026-11-15): the first `limit` rows of the inbox's own `open` view, newest
+ * first, and the view's whole size - the number the inbox's header and the
+ * rail show, from the same predicate, so Home and Inbox cannot disagree.
+ *
+ * `rows: null` when the list could not be read; `total` is `undefined` on a
+ * service that sends no `viewTotal` - absent, never 0.
+ */
+export async function loadOpenConversations(limit: number): Promise<{
+  readonly rows: readonly ConversationRow[] | null;
+  readonly total: number | undefined;
+}> {
+  return serverApi()
+    .get({
+      endpoint: inboxEndpoints.list(),
+      payload: queuePageSchema,
+      raw: true,
+      query: { ...viewQuery('open', null), limit, cursor: '', total: '1' },
+    })
+    .then((page) => ({ rows: page.data, total: page.viewTotal }))
+    .catch((cause: unknown) => {
+      logger.warn('home.open_failed', { cause });
+      return { rows: null, total: undefined };
+    });
 }

@@ -203,9 +203,18 @@ describe('★★ "all" - every conversation, as an assistant counts them (Backen
 });
 
 describe('★★ one view for what GOTCHA handles, not two (Omer, 2026-10-11)', () => {
-  it('★★ the views are six, and neither "AI managed" nor "Flow managed" is one', () => {
+  it('★★ the views are seven, and neither "AI managed" nor "Flow managed" is one', () => {
     // The rail's own list is asserted in shell/navigation.test.ts (the shell may not import this).
-    expect(INBOX_VIEW_IDS).toEqual(['queue', 'mine', 'active', 'gotcha', 'resolved', 'all']);
+    // `open` is one person's view (2026-11-15).
+    expect(INBOX_VIEW_IDS).toEqual([
+      'queue',
+      'mine',
+      'active',
+      'gotcha',
+      'resolved',
+      'all',
+      'open',
+    ]);
   });
 
   it('★★ named in both languages, with the gershayim and no old label left', () => {

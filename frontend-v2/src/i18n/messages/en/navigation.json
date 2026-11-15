@@ -25,6 +25,7 @@
   "totalCount": "{count, plural, one {# conversation} other {# conversations}}",
   "mainNavigation": "Main navigation",
   "inbox": {
+    "open": "Open",
     "queue": "Waiting in queue",
     "mine": "Assigned to me",
     "active": "Active",

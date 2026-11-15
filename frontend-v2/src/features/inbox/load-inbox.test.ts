@@ -211,3 +211,83 @@ describe('★★ the page does not wait for the conversation - the second round 
     expect(requested().some((p) => p.includes('/messages'))).toBe(true);
   });
 });
+
+/** The list route's call, in this file's two one-person blocks. */
+const listCall = () =>
+  get.mock.calls.find((c) => pathOf(c[0]).endsWith('/conversations'))?.[0] as
+    { query: Record<string, unknown> } | undefined;
+
+describe('★★ one person: the bare inbox is "Open", at no extra round (2026-11-15)', () => {
+  const answer = (me: Record<string, unknown>) => {
+    for (const [path, resolve] of pending) {
+      if (path.includes('/auth/me')) resolve(me);
+      else if (path.endsWith('/conversations'))
+        resolve({ data: [], page: { limit: 0, hasMore: false, nextCursor: null } });
+      else if (path.includes('auto-greeting')) resolve({ template: '' });
+      else resolve([]);
+    }
+  };
+
+  it('★★ the default view learns it from the `me` it already waits for, and asks for `view=open`', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'mine', null, null, false);
+    await settleMicrotasks();
+    // Still the one real dependency: no list before `me`.
+    expect(requested().some((p) => p.endsWith('/conversations'))).toBe(false);
+    const meKey = requested().find((p) => p.includes('/auth/me'))!;
+    pending.get(meKey)!({ user: { id: 'u7' }, workspace: { soleHuman: true } });
+    await settleMicrotasks();
+    expect(listCall()?.query).toMatchObject({ view: 'open' });
+    expect(listCall()?.query).not.toHaveProperty('assignedAgentId');
+  });
+
+  it('★ a team\'s default is still "Assigned to me"', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'mine', null, null, false);
+    await settleMicrotasks();
+    const meKey = requested().find((p) => p.includes('/auth/me'))!;
+    pending.get(meKey)!({ user: { id: 'u7' }, workspace: { soleHuman: false } });
+    await settleMicrotasks();
+    expect(listCall()?.query).toMatchObject({ assignedAgentId: 'u7' });
+  });
+
+  it('★★ a named view is not held back for it: four reads at once, as before', async () => {
+    const { loadInbox } = await import('./load-inbox');
+    void loadInbox(undefined, undefined, 'queue', null, null, true);
+    await settleMicrotasks();
+    expect(requested()).toHaveLength(4);
+  });
+
+  it.each([
+    [true, { workspace: { soleHuman: true } }],
+    [false, { workspace: { soleHuman: false } }],
+    [false, {}],
+  ])('★ hands the page `soleHuman: %s`', async (expected, extra) => {
+    const { loadInbox } = await import('./load-inbox');
+    const loading = loadInbox(undefined, undefined, 'gotcha', null, null, true);
+    await settleMicrotasks();
+    answer({ user: { id: 'u7' }, ...extra });
+    expect((await loading).soleHuman).toBe(expected);
+  });
+});
+
+describe('★ Home\'s "Needs you" for one person reads the inbox\'s own `open` view', () => {
+  it("★★ the first rows and the view's size, newest first, one call", async () => {
+    const { loadOpenConversations } = await import('./load-inbox');
+    const loading = loadOpenConversations(4);
+    await settleMicrotasks();
+    expect(listCall()?.query).toMatchObject({ view: 'open', limit: 4, cursor: '', total: '1' });
+    pending.get(requested().find((p) => p.endsWith('/conversations'))!)!({
+      data: [],
+      page: { limit: 4, hasMore: false, nextCursor: null },
+      viewTotal: 9,
+    });
+    expect(await loading).toEqual({ rows: [], total: 9 });
+  });
+
+  it('⚠ a failed read is no rows and no size - never an empty list', async () => {
+    get.mockReset().mockRejectedValue(new Error('down'));
+    const { loadOpenConversations } = await import('./load-inbox');
+    expect(await loadOpenConversations(4)).toEqual({ rows: null, total: undefined });
+  });
+});

@@ -6,13 +6,16 @@ import { useSearchParams } from 'next/navigation';
 import { Link, usePathname } from '@/i18n/navigation';
 import { isSystemAdminRole } from '@/permissions/permission-set';
 import { usePermissions } from '@/permissions/permissions-context';
+import { useSoleHuman } from '@/tenant/sole-human-context';
 
 import styles from './AppShell.module.css';
 import {
+  childrenFor,
   CONSOLE_NAVIGATION,
   isCurrentHrefChild,
   PRIMARY_NAVIGATION,
   SETTINGS_NAVIGATION,
+  viewInForce,
   type NavigationChild,
   type NavigationItem,
 } from './navigation';
@@ -39,6 +42,7 @@ export function PrimaryNavigation() {
   const searchParams = useSearchParams();
   const { canSee } = usePermissions();
   const counts = useRailCounts();
+  const soleHuman = useSoleHuman();
 
   const isPermitted = (entry: { permission?: string }) => canSee(entry.permission);
 
@@ -57,8 +61,7 @@ export function PrimaryNavigation() {
   function isCurrentChild(parent: NavigationItem, child: NavigationChild): boolean {
     if (child.href) return isCurrentHrefChild(pathname, child, parent.children ?? []);
     if (!parent.viewParam) return false;
-    const current = searchParams.get(parent.viewParam) ?? parent.defaultView;
-    return current === child.view;
+    return viewInForce(parent, searchParams.get(parent.viewParam), soleHuman) === child.view;
   }
 
   function childHref(parent: NavigationItem, child: NavigationChild): string {
@@ -83,7 +86,8 @@ export function PrimaryNavigation() {
     </li>
   );
 
-  const children = (active?.children ?? []).filter(isPermitted);
+  // One person: "Open" in place of the queue, "Assigned to me" and "Active".
+  const children = (active ? childrenFor(active, soleHuman) : []).filter(isPermitted);
   const groupLabel = active?.childrenLabelKey ? t(active.childrenLabelKey) : '';
 
   return (

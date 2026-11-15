@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
+import { useSoleHuman } from '@/tenant/sole-human-context';
 
 import {
   claimConversation,
@@ -88,6 +89,8 @@ export function ConversationVerbs({
   const [isPending, startTransition] = useTransition();
   const [transferTo, setTransferTo] = useState('');
   const router = useRouter();
+  // One person: a claim lands on "Open", the view that holds it (`viewAfter`).
+  const soleHuman = useSoleHuman();
 
   /*
    * ════════════════════════════════════════════════════════════════════════
@@ -142,7 +145,9 @@ export function ConversationVerbs({
           className={styles.verbButton}
           data-testid={`claim-${conversationId}`}
           disabled={isPending}
-          onClick={() => run(() => claimConversation(conversationId), viewAfter('claim', meKnown))}
+          onClick={() =>
+            run(() => claimConversation(conversationId), viewAfter('claim', meKnown, soleHuman))
+          }
         >
           {t('claim')}
         </button>

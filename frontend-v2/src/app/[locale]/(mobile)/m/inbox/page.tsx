@@ -1,42 +1,30 @@
 import { Lock } from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 
 import { channelName } from '@/api/contracts/inbox';
 import { ListLive } from '@/features/inbox/ListLive';
 import { loadFilterChips } from '@/features/inbox/load-filter-chips';
 import { loadInbox } from '@/features/inbox/load-inbox';
 import {
-  type InboxView,
   parseChannelFilters,
   parseInboxView,
   phoneCountView,
+  phoneCountViews,
   phoneViewQuery,
+  phoneViews,
   shownView,
+  soloView,
 } from '@/features/inbox/inbox-views';
 import { MobileChannelFilter } from '@/features/mobile/inbox/MobileChannelFilter';
 import { MobileConversationList } from '@/features/mobile/inbox/MobileConversationList';
 import { searchQuery } from '@/features/mobile/inbox/inbox-search';
 import { MobileInboxSearch } from '@/features/mobile/inbox/MobileInboxSearch';
 import ui from '@/features/mobile/mobile-ui.module.css';
-import { Link } from '@/i18n/navigation';
+import { Link, redirect } from '@/i18n/navigation';
 import { MobileBar } from '@/shell/mobile/MobileBar';
 import { MobileViewCount } from '@/shell/mobile/MobileViewCount';
 import { pageMetadata } from '@/shell/page-metadata';
 import { RailUnreadCounts } from '@/shell/rail-counts';
-
-/*
- * The design's chips, in its order: All, then the desktop rail's views with
- * the rail's own ids and `?view=`, so a view means here what it means on the
- * website.
- */
-const MOBILE_VIEWS: readonly InboxView[] = ['all', 'queue', 'mine', 'active', 'gotcha', 'resolved'];
-
-/**
- * The count route's views for the chips: the same, except "mine", which on
- * the phone leaves out what was resolved (`phoneViewQuery`), so its count is
- * the route's `mine_open` - the number of rows the chip opens.
- */
-const MOBILE_COUNT_VIEWS: readonly string[] = MOBILE_VIEWS.map(phoneCountView);
 
 /**
  * The mobile inbox (`GOTCHA Mobile App.dc.html`): the wordmark, the channel
@@ -82,7 +70,25 @@ export default async function Page({
     ),
     loadFilterChips(channels),
   ]);
-  const view = shownView(askedView, explicit, data.meId !== null);
+  /*
+   * One person: a named queue, "mine" or "active" is "Open", as on the
+   * website - the address says so, and the chip lit is the list shown.
+   */
+  const solo = explicit ? soloView(askedView, data.soleHuman) : null;
+  if (solo !== null) {
+    redirect({
+      href: {
+        pathname: '/m/inbox',
+        query: {
+          view: solo,
+          ...(channelParam === '' ? {} : { channel: channelParam }),
+          ...(q === '' ? {} : { q }),
+        },
+      },
+      locale: await getLocale(),
+    });
+  }
+  const view = shownView(askedView, explicit, data.meId !== null, data.soleHuman);
   const now = new Date();
 
   const keepFilter = { view, ...(q === '' ? {} : { q }) };
@@ -100,7 +106,7 @@ export default async function Page({
       {/* Renders nothing: re-reads this page when a message arrives or a conversation changes. */}
       <ListLive openId={null} />
       {/* Renders nothing: each view's size, for the chips, kept current by the platform's events. */}
-      <RailUnreadCounts views={MOBILE_COUNT_VIEWS} />
+      <RailUnreadCounts views={phoneCountViews(data.soleHuman)} />
       <MobileBar
         brand
         actions={
@@ -110,7 +116,7 @@ export default async function Page({
       <div className={ui.scroll}>
         <MobileInboxSearch value={q} keep={keepSearch} placeholder={t('inbox.search')} />
         <nav className={ui.chips} aria-label={t('inbox.views')}>
-          {MOBILE_VIEWS.map((id) => (
+          {phoneViews(data.soleHuman).map((id) => (
             <Link
               key={id}
               href={{ pathname: '/m/inbox', query: { ...keepView, view: id } }}

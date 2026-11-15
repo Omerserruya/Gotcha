@@ -8,6 +8,7 @@ import { PermissionsProvider, type PermissionsStatus } from '@/permissions/permi
 import { RealtimeProvider } from '@/realtime/realtime-provider';
 import { QueryProvider } from '@/server-state/query-provider';
 import { SupportProvider, type SupportView } from '@/support/support-context';
+import { SoleHumanProvider } from '@/tenant/sole-human-context';
 import { TenantProvider } from '@/tenant/tenant-context';
 
 import { InboundAlerts } from './InboundAlerts';
@@ -33,6 +34,7 @@ export function AppProviders({
   roleKey,
   permissionsStatus,
   support = null,
+  soleHuman = false,
   children,
 }: {
   locale: string;
@@ -42,31 +44,35 @@ export function AppProviders({
   permissionsStatus?: PermissionsStatus;
   /** The support session this page is drawn in (`load-support.ts`), or none. */
   support?: SupportView | null;
+  /** A one-person workspace (`isSoleHuman`): the inbox draws one view. */
+  soleHuman?: boolean;
   children: ReactNode;
 }) {
   return (
     <DirectionProvider locale={locale}>
       <TenantProvider tenantId={tenantId}>
-        <QueryProvider tenantId={tenantId}>
-          <PermissionsProvider
-            permissions={permissions}
-            roleKey={roleKey}
-            status={permissionsStatus}
-            tenantId={tenantId}
-          >
-            <RealtimeProvider tenantId={tenantId}>
-              <TooltipProvider delayDuration={400} skipDelayDuration={200}>
-                <SupportProvider session={support}>
-                  <SessionExpiryWatcher />
-                  {/* A chime and a desktop notification for a customer's message, on every screen. */}
-                  <InboundAlerts tenantId={tenantId} />
-                  <ScrollFades />
-                  {children}
-                </SupportProvider>
-              </TooltipProvider>
-            </RealtimeProvider>
-          </PermissionsProvider>
-        </QueryProvider>
+        <SoleHumanProvider soleHuman={soleHuman}>
+          <QueryProvider tenantId={tenantId}>
+            <PermissionsProvider
+              permissions={permissions}
+              roleKey={roleKey}
+              status={permissionsStatus}
+              tenantId={tenantId}
+            >
+              <RealtimeProvider tenantId={tenantId}>
+                <TooltipProvider delayDuration={400} skipDelayDuration={200}>
+                  <SupportProvider session={support}>
+                    <SessionExpiryWatcher />
+                    {/* A chime and a desktop notification for a customer's message, on every screen. */}
+                    <InboundAlerts tenantId={tenantId} />
+                    <ScrollFades />
+                    {children}
+                  </SupportProvider>
+                </TooltipProvider>
+              </RealtimeProvider>
+            </PermissionsProvider>
+          </QueryProvider>
+        </SoleHumanProvider>
       </TenantProvider>
     </DirectionProvider>
   );

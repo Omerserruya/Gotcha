@@ -25,6 +25,7 @@
   "totalCount": "{count, plural, one {שיחה אחת} other {# שיחות}}",
   "mainNavigation": "ניווט ראשי",
   "inbox": {
+    "open": "פתוח",
     "queue": "ממתין בתור",
     "mine": "מוקצה לי",
     "active": "פעיל",

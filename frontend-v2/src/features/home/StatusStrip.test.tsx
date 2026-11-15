@@ -135,3 +135,21 @@ describe('★ 01c - "Book a setup call", only where it books', () => {
     expect(screen.queryByTestId('setup-call')).toBeNull();
   });
 });
+
+describe('★★ one person: the strip counts Open, and says Open (2026-11-15)', () => {
+  it('counts them', async () => {
+    render(await strip({ waiting: 5, counts: 'open' }));
+    expect(screen.getByText('5 open conversations')).toBeInTheDocument();
+    expect(screen.queryByText(/waiting/)).toBeNull();
+  });
+
+  it('none is none', async () => {
+    render(await strip({ waiting: 0, counts: 'open' }));
+    expect(screen.getByText('No open conversations')).toBeInTheDocument();
+  });
+
+  it('unread is unread, never 0', async () => {
+    render(await strip({ waiting: null, counts: 'open' }));
+    expect(screen.getByText('Open count unavailable')).toBeInTheDocument();
+  });
+});
