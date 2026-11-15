@@ -29,6 +29,12 @@ import {
   buildEmbeddedSignupLaunch,
   embeddedSignupDialogUrl,
   EMBEDDED_SIGNUP_DIALOG_VERSION,
+  exchangeSignupCode,
+  signupTokenWabaIds,
+  subscribeSignupWaba,
+  listSignupPhoneIds,
+  getSignupPhoneDetails,
+  registerSignupPhone,
   resolveAppPublicUrl,
   hasPermission,
   assertWithinLimit,
@@ -514,58 +520,18 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     const { code, wabaId: sessionWabaId, phoneNumberId: sessionPhoneNumberId } = req.body;
     console.log("[WA-CONNECT] Starting. Session WABA:", sessionWabaId, "Session Phone:", sessionPhoneNumberId);
 
-    // Step 1: Exchange code for business token
-    // Per Meta Tech Provider docs: GET /oauth/access_token with client_id, client_secret, code
-    // FB.login popup may require redirect_uri matching, so try multiple approaches
-    let accessToken: string | undefined;
-
-    // Try exchanging the popup code with various redirect_uri values and API versions.
-    //
-    // The second URL is deliberately NOT our configured Graph version: the FB
-    // JavaScript SDK mints the popup code against its OWN version, and the
-    // exchange can fail if the versions disagree. So this is a genuine
-    // SDK-compatibility fallback, not version drift - it tracks whatever the
-    // loaded SDK uses, independently of META_GRAPH_VERSION.
-    //
-    // Review together with the SDK version in the frontend when either moves.
-    // Tracks the SDK, from the one constant the SDK version is asserted against.
-    // Named `v25` historically; the value now comes from shared so the exchange
-    // cannot fall behind the dialog that minted the code.
-    const FB_JS_SDK_GRAPH_VERSION = EMBEDDED_SIGNUP_DIALOG_VERSION;
-    const v25 = `https://graph.facebook.com/${FB_JS_SDK_GRAPH_VERSION}`;
-    const exchangeAttempts: Array<{ label: string; method: "get" | "post"; url: string; data: any }> = [
-      // Official docs method: GET, no redirect_uri
-      { label: "GET no redirect_uri", method: "get", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
-      // Same but v25.0 (SDK uses v25.0)
-      { label: "GET no redirect_uri v25", method: "get", url: `${v25}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
-      // POST no redirect_uri
-      { label: "POST no redirect_uri", method: "post", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
-      // POST with grant_type
-      { label: "POST grant_type v25", method: "post", url: `${v25}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, grant_type: "authorization_code", code } },
-    ];
-
-    for (const attempt of exchangeAttempts) {
-      try {
-        console.log(`[WA-CONNECT] Trying: ${attempt.label}`);
-        let tokenResponse;
-        if (attempt.method === "get") {
-          tokenResponse = await axios.get(attempt.url, { params: attempt.data });
-        } else {
-          tokenResponse = await axios.post(attempt.url, attempt.data, {
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        const tokenData = tokenResponse.data;
-        accessToken = typeof tokenData === "string" ? tokenData : tokenData.access_token;
-        if (accessToken && typeof accessToken === "string" && accessToken.length > 10) {
-          console.log(`[WA-CONNECT] Business token obtained with: ${attempt.label}`);
-          break;
-        }
-        accessToken = undefined;
-      } catch (err: any) {
-        console.warn(`[WA-CONNECT] Failed ${attempt.label}:`, err.response?.data?.error?.message);
-      }
-    }
+    // Step 1: Exchange code for business token (four attempts; see
+    // exchangeSignupCode). The SDK-version URL tracks the dialog that minted
+    // the code, from the one constant the SDK version is asserted against.
+    const signup = {
+      http: axios,
+      graphUrl: FB_API_URL,
+      sdkGraphUrl: `https://graph.facebook.com/${EMBEDDED_SIGNUP_DIALOG_VERSION}`,
+      appId: META_APP_ID,
+      appSecret: META_APP_SECRET,
+      tag: "[WA-CONNECT]",
+    };
+    const accessToken = await exchangeSignupCode(signup, code);
 
     if (!accessToken) {
       res.status(400).json({ error: "Failed to exchange code for business token. Check Facebook App redirect_uri settings." });
@@ -579,19 +545,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     if (!wabaId) {
       // Fallback: debug_token to discover WABA IDs from granular_scopes
       console.log("[WA-CONNECT] No session WABA ID, trying debug_token...");
-      try {
-        const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
-          params: { input_token: accessToken },
-          headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
-        });
-        console.log("[WA-CONNECT] debug_token:", JSON.stringify(debugResponse.data?.data?.granular_scopes, null, 2));
-        const granularScopes = debugResponse.data?.data?.granular_scopes || [];
-        const wabaScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
-        const wabaIds = wabaScope?.target_ids || [];
-        if (wabaIds.length > 0) wabaId = wabaIds[0];
-      } catch (debugErr: any) {
-        console.warn("[WA-CONNECT] debug_token failed:", debugErr.response?.data?.error?.message);
-      }
+      const wabaIds = await signupTokenWabaIds(signup, accessToken);
+      if (wabaIds.length > 0) wabaId = wabaIds[0];
     }
 
     if (!wabaId) {
@@ -603,27 +558,12 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
     // makes inbound messages actually arrive - if it fails, the channel is
     // NOT usable and must not be presented as CONNECTED.
     console.log("[WA-CONNECT] Subscribing app to WABA webhooks:", wabaId);
-    let webhookSubscribed = false;
-    let webhookError: string | null = null;
-    try {
-      await axios.post(
-        `${FB_API_URL}/${wabaId}/subscribed_apps`,
-        {},
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      webhookSubscribed = true;
-    } catch (subErr: any) {
-      webhookError = subErr.response?.data?.error?.message || subErr.message || "webhook subscription failed";
-      console.warn(`[WA-CONNECT] Webhook subscription FAILED for WABA ${wabaId}:`, webhookError);
-    }
+    const { subscribed: webhookSubscribed, error: webhookError } = await subscribeSignupWaba(signup, wabaId, accessToken);
 
     // If we don't have phone number IDs from session info, fetch them from the WABA
     if (phoneNumberIds.length === 0) {
       console.log("[WA-CONNECT] Fetching phone numbers for WABA:", wabaId);
-      const phonesResponse = await axios.get(`${FB_API_URL}/${wabaId}/phone_numbers`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      phoneNumberIds = (phonesResponse.data?.data || []).map((p: any) => p.id);
+      phoneNumberIds = await listSignupPhoneIds(signup, wabaId, accessToken);
     }
 
     if (phoneNumberIds.length === 0) {
@@ -636,31 +576,13 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
 
     for (const phoneNumberId of phoneNumberIds) {
       // Get phone number details
-      let phoneDetails: any = { id: phoneNumberId };
-      try {
-        const phoneResponse = await axios.get(`${FB_API_URL}/${phoneNumberId}`, {
-          params: { fields: "id,display_phone_number,verified_name,quality_rating" },
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        phoneDetails = phoneResponse.data;
-      } catch (err: any) {
-        console.warn(`[WA-CONNECT] Failed to get details for phone ${phoneNumberId}:`, err.response?.data?.error?.message);
-      }
+      const phoneDetails: any = await getSignupPhoneDetails(signup, phoneNumberId, accessToken);
 
       const displayPhone = phoneDetails.display_phone_number || phoneDetails.verified_name || phoneNumberId;
 
-      // Step 3: Register customer's phone number
-      try {
-        await axios.post(
-          `${FB_API_URL}/${phoneNumberId}/register`,
-          { messaging_product: "whatsapp", pin: "000000" },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        console.log(`[WA-CONNECT] Registered phone ${phoneNumberId}`);
-      } catch (regErr: any) {
-        // Phone may already be registered - that's OK
-        console.warn(`[WA-CONNECT] Phone registration note for ${phoneNumberId}:`, regErr.response?.data?.error?.message);
-      }
+      // Step 3: Register customer's phone number. A failure (often "already
+      // registered") is a note, not an error.
+      await registerSignupPhone(signup, phoneNumberId, accessToken, "000000");
 
       // Check if already connected. findUnique on the (channel, externalId)
       // compound unique index - TenantGuard exempts single-row lookups by
