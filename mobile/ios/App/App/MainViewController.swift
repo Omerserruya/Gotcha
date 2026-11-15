@@ -11,6 +11,8 @@ class MainViewController: CAPBridgeViewController {
     /// Under the web view, between where the page ends and the screen's edge.
     private let bottomStrip = UIView()
     private var webBottom: NSLayoutConstraint?
+    private var offsetWatch: NSKeyValueObservation?
+    private var keyboardUp = false
 
     /// How much of the bottom safe area the page keeps clear of: half of it.
     /// The whole of it (builds 3 and 4, 34pt on a Face ID iPhone) lifted the
@@ -84,6 +86,47 @@ class MainViewController: CAPBridgeViewController {
             bottomStrip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bottomStrip.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+
+        watchScrollOffset(web.scrollView)
+    }
+
+    /// ★ A screen that fits never stays scrolled (Omer, 2026-11-15).
+    ///
+    /// Every /m screen is exactly the web view's height (a 100dvh frame whose
+    /// lists scroll inside it), so the web view's own scroll view has nothing
+    /// to scroll. The keyboard still pushes it up to keep the composer in
+    /// view, and WebKit does not always bring it back: "customer info" then
+    /// opened with its 58px bar above the screen. Whenever the page fits, the
+    /// keyboard is down, no finger is on it and it is not pinch-zoomed (the
+    /// photo viewer pans a zoomed page), the offset goes back to the top. A
+    /// page taller than the screen (a sign-in on a small phone) keeps its own.
+    private func watchScrollOffset(_ scroll: UIScrollView) {
+        scroll.contentInsetAdjustmentBehavior = .never
+        offsetWatch = scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.settleScrollOffset() }
+        }
+        let center = NotificationCenter.default
+        center.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.keyboardUp = true
+        }
+        center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.keyboardUp = false
+        }
+        center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.keyboardUp = false
+            self?.settleScrollOffset()
+        }
+    }
+
+    private func settleScrollOffset() {
+        guard !keyboardUp, let scroll = webView?.scrollView else { return }
+        guard !scroll.isTracking, !scroll.isDragging, !scroll.isDecelerating, !scroll.isZooming else { return }
+        guard scroll.zoomScale <= scroll.minimumZoomScale + 0.01 else { return }
+        let inset = scroll.adjustedContentInset
+        let fits = scroll.contentSize.height <= scroll.bounds.height - inset.top - inset.bottom + 1
+        let top = -inset.top
+        guard fits, abs(scroll.contentOffset.y - top) > 0.5 else { return }
+        scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: top), animated: false)
     }
 
     override open func viewSafeAreaInsetsDidChange() {
