@@ -49,116 +49,21 @@
  * comment wrong.
  * ════════════════════════════════════════════════════════════════════════════
  */
-export type TemplateLocale = "en" | "he";
+// The definitions live in @chatcenter/shared (platform-templates.ts) since
+// 2026-11-15, so auth's console routes read the same ones; re-exported here so
+// every existing import keeps working.
+import {
+  TEMPLATE_LOCALES,
+  PLATFORM_TEMPLATES,
+  APPROVAL_REVIEW_TEMPLATE,
+  VERIFICATION_TEMPLATE_NAME,
+  type TemplateLocale,
+  type PlatformTemplate,
+} from "@chatcenter/shared";
+export { TEMPLATE_LOCALES, PLATFORM_TEMPLATES, APPROVAL_REVIEW_TEMPLATE, VERIFICATION_TEMPLATE_NAME };
+export type { TemplateLocale, PlatformTemplate };
 
-/** The languages a platform notification can be sent in. */
-export const TEMPLATE_LOCALES: readonly TemplateLocale[] = ["en", "he"];
-
-export interface PlatformTemplate {
-  /**
-   * The name registered with Meta. Sent verbatim; a mismatch is a send failure,
-   * not a fallback.
-   */
-  name: string;
-  /**
-   * The submitted body per language, with `{{1}}`-style placeholders.
-   *
-   * Kept here to be reviewable against the Meta console, and to make the
-   * parameter count checkable rather than remembered.
-   */
-  body: Record<TemplateLocale, string>;
-  /** How many body parameters the template takes, derived from the text. */
-  parameterCount: number;
-  /** A URL button whose dynamic suffix is a parameter (app.gotcha.co.il/inbox?c={{1}}). */
-  urlButton?: boolean;
-  /** Quick-reply buttons whose payloads are set per send (the approval refs). */
-  quickReplies?: number;
-}
-
-/**
- * One template per notification event that may be delivered on WhatsApp.
- * Category UTILITY, languages he + en; the list submitted to Meta (2026-11-02).
- *
- * ★ KEYED BY EVENT TYPE ON PURPOSE. An event offered on the WhatsApp column
- * with no template here cannot be delivered outside the 24-hour window, so
- * `templateFor()` returning null is what a caller must check BEFORE offering
- * the channel - the same shape as a tool that must not be surfaced when it
- * cannot execute. Meta refuses a body that starts or ends with a variable.
- */
-export const PLATFORM_TEMPLATES: Record<string, PlatformTemplate> = {
-  // Sent by the approval sender (whatsapp-approval.service), with Approve /
-  // Reject quick replies; never by the generic dispatcher.
-  "tool.approval_required": {
-    name: "gotcha_approval_request",
-    body: {
-      en: "An action is waiting for your approval in GOTCHA: {{1}}. Tap a button below, or open the app to review.",
-      he: "פעולה ממתינה לאישור שלך ב-GOTCHA: {{1}}. אפשר לבחור בכפתור למטה, או לפתוח את האפליקציה כדי לבדוק.",
-    },
-    parameterCount: 1,
-    quickReplies: 2,
-  },
-  "conversation.escalated": {
-    name: "gotcha_conversation_escalated",
-    body: {
-      en: "A conversation was passed to a person in GOTCHA: {{1}}. It is waiting for a reply.",
-      he: "שיחה הועברה לטיפול אנושי ב-GOTCHA: {{1}}. היא ממתינה למענה.",
-    },
-    parameterCount: 1,
-    urlButton: true,
-  },
-  "tool.action_failed": {
-    name: "gotcha_action_failed",
-    body: {
-      en: "An action your AI employee tried to take did not complete: {{1}}. Open GOTCHA to see what happened.",
-      he: "פעולה שהעובד ה-AI שלכם ניסה לבצע לא הושלמה: {{1}}. היכנסו ל-GOTCHA כדי לראות מה קרה.",
-    },
-    parameterCount: 1,
-  },
-  "credit.threshold": {
-    name: "gotcha_credit_low",
-    body: {
-      en: "You have used {{1}}% of your AI credit for this period. Open GOTCHA to review or top up.",
-      he: "השתמשתם ב-{{1}}% מקרדיט ה-AI לתקופה הזו. היכנסו ל-GOTCHA כדי לבדוק או לטעון.",
-    },
-    parameterCount: 1,
-  },
-  "credit.exhausted": {
-    name: "gotcha_credit_exhausted",
-    body: {
-      en: "Your AI credit for this period is used up, so your AI employees have stopped replying. Open GOTCHA to top up.",
-      he: "קרדיט ה-AI לתקופה הזו נגמר, ולכן העובדים ה-AI הפסיקו לענות. היכנסו ל-GOTCHA כדי לטעון.",
-    },
-    // No parameter: the message is the same every time it fires, and a number
-    // in it would only ever be 100.
-    parameterCount: 0,
-  },
-  "conversation.waiting": {
-    name: "gotcha_customer_waiting",
-    body: {
-      en: "A customer has been waiting {{1}} minutes for a reply on {{2}} in GOTCHA. Open the conversation to answer.",
-      he: "לקוח ממתין כבר {{1}} דקות למענה ב-{{2}} ב-GOTCHA. פתחו את השיחה כדי לענות.",
-    },
-    parameterCount: 2,
-    urlButton: true,
-  },
-};
-
-/** High-risk approvals: review in GOTCHA, no one-tap buttons. */
-export const APPROVAL_REVIEW_TEMPLATE: PlatformTemplate = {
-  name: "gotcha_approval_required",
-  body: {
-    en: "An action is waiting for your approval in GOTCHA: {{1}}. Open the app to review and decide.",
-    he: "פעולה ממתינה לאישור שלך ב-GOTCHA: {{1}}. פתחו את האפליקציה כדי לבדוק ולהחליט.",
-  },
-  parameterCount: 1,
-};
-
-/**
- * The opt-in code (category AUTHENTICATION). Meta fixes the body for this
- * category; we send the code as the body parameter and as the copy-code
- * button's parameter.
- */
-export const VERIFICATION_TEMPLATE_NAME = "gotcha_verification_code";
+/** The opt-in code (AUTHENTICATION): the code as the body parameter and as the copy-code button's. */
 export function verificationComponents(code: string): any[] {
   return [
     { type: "body", parameters: [{ type: "text", text: code }] },

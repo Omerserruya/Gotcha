@@ -21,3 +21,5 @@ export * from "./path-fallback";
 export * from "./embedded-signup";
 export * from "./primary-number";
 export * from "./signup-connect";
+export * from "./platform-templates";
+export * from "./platform-contract";
