@@ -314,11 +314,16 @@ const firewallFlagged = new Set<string>();
 export async function noteFirewallChallenge(tenantIntegrationId: string, message: string): Promise<void> {
   if (!tenantIntegrationId || firewallFlagged.has(tenantIntegrationId)) return;
   const firewall = /firewall \(([a-z0-9]+)\)/.exec(message)?.[1] ?? "other";
-  await (prisma as any).tenantIntegration.update({
-    where: { id: tenantIntegrationId },
-    data: { lastError: `${FIREWALL_ERROR_PREFIX} firewall=${firewall}: the store's firewall answered instead of the store`, lastTestedAt: new Date() },
-  }).catch((e: any) => console.warn("[integration-framework] firewall note failed:", e?.message));
-  firewallFlagged.add(tenantIntegrationId);
+  // Never the store call's problem: a note that cannot be written is only logged.
+  try {
+    await (prisma as any).tenantIntegration.update({
+      where: { id: tenantIntegrationId },
+      data: { lastError: `${FIREWALL_ERROR_PREFIX} firewall=${firewall}: the store's firewall answered instead of the store`, lastTestedAt: new Date() },
+    });
+    firewallFlagged.add(tenantIntegrationId);
+  } catch (e: any) {
+    console.warn("[integration-framework] firewall note failed:", e?.message);
+  }
 }
 // Connections this process has checked for a stale note (one clear after a restart, then only when flagged).
 const firewallChecked = new Set<string>();
@@ -327,10 +332,15 @@ export async function clearFirewallChallenge(tenantIntegrationId: string): Promi
   if (!firewallFlagged.has(tenantIntegrationId) && firewallChecked.has(tenantIntegrationId)) return;
   firewallFlagged.delete(tenantIntegrationId);
   firewallChecked.add(tenantIntegrationId);
-  await (prisma as any).tenantIntegration.updateMany({
-    where: { id: tenantIntegrationId, lastError: { startsWith: FIREWALL_ERROR_PREFIX } },
-    data: { lastError: null },
-  }).catch((e: any) => console.warn("[integration-framework] firewall clear failed:", e?.message));
+  // Never a successful call's problem: a clear that cannot be written is only logged.
+  try {
+    await (prisma as any).tenantIntegration.updateMany({
+      where: { id: tenantIntegrationId, lastError: { startsWith: FIREWALL_ERROR_PREFIX } },
+      data: { lastError: null },
+    });
+  } catch (e: any) {
+    console.warn("[integration-framework] firewall clear failed:", e?.message);
+  }
 }
 
 export async function setConnectionStatus(opts: {

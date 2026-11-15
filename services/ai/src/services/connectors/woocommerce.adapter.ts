@@ -1127,7 +1127,8 @@ export async function validateWooKeys(
         await res.json();
         return { ok: true };
       }
-      const body = await res.text().catch(() => "");
+      // Read defensively: a missing or failing body is just "no markers".
+      const body = typeof (res as any).text === "function" ? await (res as any).text().catch(() => "") : "";
       // A firewall, not the store: the keys were never checked, and the other
       // path would meet the same wall. Its own reason, so the merchant is told
       // to allow us, not to make new keys.

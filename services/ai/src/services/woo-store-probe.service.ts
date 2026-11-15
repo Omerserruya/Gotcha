@@ -63,7 +63,7 @@ export async function probeStore(storeUrl: string, fetchImpl: typeof fetch = fet
     const t = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
     const res = await fetchImpl(url, { headers: { Accept: "application/json" }, redirect: "manual", signal: ctrl.signal });
     clearTimeout(t);
-    const body = await res.text().catch(() => "");
+    const body = typeof (res as any).text === "function" ? await (res as any).text().catch(() => "") : "";
     if (isFirewallChallenge(res.status, res.headers, body)) {
       // The addresses to let through (config, this environment's), read on every answer, never cached stale.
       out = { reachable: false, reason: STORE_FIREWALL_CHALLENGE, status: res.status, firewall: firewallOf(res.headers, body), storeUrl: base, checkedAt: at() };
