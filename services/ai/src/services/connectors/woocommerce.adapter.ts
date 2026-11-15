@@ -1692,6 +1692,11 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    // A firewall, not the store (a connected store that later meets Cloudflare's
+    // challenge): its own error, which the framework records on the connection.
+    if (isFirewallChallenge(res.status, res.headers, text)) {
+      throw new Error(`${STORE_FIREWALL_CHALLENGE}: the store's firewall (${firewallOf(res.headers, text)}) answered instead of WooCommerce`);
+    }
     throw new Error(`woocommerce_${res.status}: ${text.slice(0, 240)}`);
   }
   if (res.status === 204) return null;
