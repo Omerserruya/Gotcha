@@ -49,6 +49,7 @@
     "owner": {
       "mine": "אצלכם",
       "waiting": "ממתין בתור",
+      "waitingYou": "ממתין לכם",
       "gotcha": "GOTCHA",
       "flow": "תהליך",
       "resolved": "טופל"

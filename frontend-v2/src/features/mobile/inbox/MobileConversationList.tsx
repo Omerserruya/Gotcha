@@ -38,6 +38,7 @@ export async function MobileConversationList({
   meId,
   colleagues,
   filtered,
+  soleHuman = false,
 }: {
   /** `null` is a failed read, not an empty inbox. */
   readonly rows: readonly ConversationRow[] | null;
@@ -46,6 +47,8 @@ export async function MobileConversationList({
   readonly colleagues: readonly { readonly id: string; readonly name: string }[];
   /** A search or a channel is narrowing the list: an empty one says so. */
   readonly filtered: boolean;
+  /** One person in the workspace: an unheld handoff is "waiting for you", not "in queue". */
+  readonly soleHuman?: boolean;
 }) {
   const t = await getTranslations('mobile');
   const inbox = await getTranslations('inbox');
@@ -74,7 +77,7 @@ export async function MobileConversationList({
         const mark = unreadMark(row);
         const said = quoteOf({ body: row.lastMessageBody ?? '', messageType: row.lastMessageType });
         const channel = channelName(row.channel, channelNames) ?? inbox('queue.unknownChannel');
-        const owner = rowOwner(row, meId, colleagues);
+        const owner = rowOwner(row, meId, colleagues, soleHuman);
         return (
           <li key={row.id}>
             <Link

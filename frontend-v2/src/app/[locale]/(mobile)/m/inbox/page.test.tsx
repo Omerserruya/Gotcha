@@ -19,6 +19,7 @@ const redirect = vi.hoisted(() =>
 );
 vi.mock('@/i18n/navigation', () => ({ Link: 'a', redirect }));
 
+import { MobileConversationList } from '@/features/mobile/inbox/MobileConversationList';
 import { RailUnreadCounts } from '@/shell/rail-counts';
 
 const elements = (node: ReactNode, out: ReactElement[] = []): ReactElement[] => {
@@ -110,5 +111,13 @@ describe("★★ one person: the phone's chips are All, Open, GOTCHA, Resolved",
     const tree = await page({}, { view: 'queue' });
     expect(redirect).not.toHaveBeenCalled();
     expect(lit(tree)?.['data-testid']).toBe('mobile-view-queue');
+  });
+});
+
+describe("★ the list is told it is one person, for its rows' tags", () => {
+  it.each([true, false])('soleHuman: %s', async (soleHuman) => {
+    const tree = await page({ soleHuman });
+    const list = elements(tree).find((e) => e.type === MobileConversationList);
+    expect((list?.props as { soleHuman?: boolean }).soleHuman).toBe(soleHuman);
   });
 });

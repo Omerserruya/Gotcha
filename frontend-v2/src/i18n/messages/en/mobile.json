@@ -49,6 +49,7 @@
     "owner": {
       "mine": "With you",
       "waiting": "Waiting in queue",
+      "waitingYou": "Waiting for you",
       "gotcha": "GOTCHA",
       "flow": "Flow",
       "resolved": "Resolved"

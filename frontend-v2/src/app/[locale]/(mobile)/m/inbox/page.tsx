@@ -138,6 +138,7 @@ export default async function Page({
           meId={data.meId}
           colleagues={data.colleagues}
           filtered={channels.length > 0 || q !== ''}
+          soleHuman={data.soleHuman}
         />
         {data.hasMore && data.nextCursor !== null ? (
           <Link

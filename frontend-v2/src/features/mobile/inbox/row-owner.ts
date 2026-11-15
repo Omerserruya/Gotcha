@@ -4,6 +4,7 @@ import type { ConversationRow } from '@/api/contracts/inbox';
 export type RowOwner =
   | { readonly kind: 'resolved'; readonly tone: 'ok' }
   | { readonly kind: 'waiting'; readonly tone: 'warn' }
+  | { readonly kind: 'waitingYou'; readonly tone: 'warn' }
   | { readonly kind: 'mine'; readonly tone: 'mute' }
   | { readonly kind: 'colleague'; readonly tone: 'mute'; readonly name: string }
   | { readonly kind: 'gotcha'; readonly tone: 'ai' }
@@ -25,14 +26,22 @@ export function rowOwner(
   row: Pick<ConversationRow, 'status' | 'handledBy' | 'assignedAgentId' | 'isHandedOver'>,
   meId: string | null,
   colleagues: readonly { readonly id: string; readonly name: string }[],
+  /**
+   * One person (2026-11-15): there is no queue to name. A handed-over
+   * conversation nobody holds - one from before auto-assign - is waiting
+   * for the only person there is, and says so, in the same warning tone.
+   */
+  soleHuman = false,
 ): RowOwner | null {
   if (row.status === 'CLOSED') return { kind: 'resolved', tone: 'ok' };
   if (row.assignedAgentId !== null) {
     if (row.assignedAgentId === meId) return { kind: 'mine', tone: 'mute' };
     const colleague = colleagues.find((c) => c.id === row.assignedAgentId);
-    return colleague === undefined ? null : { kind: 'colleague', tone: 'mute', name: colleague.name };
+    return colleague === undefined
+      ? null
+      : { kind: 'colleague', tone: 'mute', name: colleague.name };
   }
-  if (row.isHandedOver) return { kind: 'waiting', tone: 'warn' };
+  if (row.isHandedOver) return { kind: soleHuman ? 'waitingYou' : 'waiting', tone: 'warn' };
   if (row.handledBy === 'ai_agent') return { kind: 'gotcha', tone: 'ai' };
   if (row.handledBy === 'flow') return { kind: 'flow', tone: 'mute' };
   return null;
