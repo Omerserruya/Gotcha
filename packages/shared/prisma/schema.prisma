@@ -8274,3 +8274,75 @@ model AccountDeletionRequest {
   @@index([identityId])
   @@map("account_deletion_requests")
 }
+
+// ─── Platform WhatsApp alerts number (2026-11-15) ────────────
+// GOTCHA's own sending number, connected by a SYSTEM_ADMIN via Embedded
+// Signup. Deliberately NOT a ChannelAccount and not under any tenant: it must
+// never appear in a channel list, a billing count or a tenant delete cascade.
+// Written only by auth's /api/system/platform-whatsapp routes; every other
+// service reads it through packages/shared/src/whatsapp/platform-sender.ts.
+
+enum PlatformSenderStatus {
+  CONNECTED
+  PENDING_WEBHOOK
+  TOKEN_INVALID
+  DISCONNECTED
+}
+
+/// Singleton: id is always "platform".
+model PlatformWhatsAppSender {
+  id                  String               @id @default("platform")
+  status              PlatformSenderStatus @default(DISCONNECTED)
+  businessPortfolioId String?              @map("business_portfolio_id")
+  wabaId              String?              @map("waba_id")
+  phoneNumberId       String?              @unique @map("phone_number_id")
+  displayPhoneNumber  String?              @map("display_phone_number")
+  verifiedName        String?              @map("verified_name")
+  qualityRating       String?              @map("quality_rating")
+  messagingLimitTier  String?              @map("messaging_limit_tier")
+  /// encryptCredentials({ accessToken, pin }); never returned by any route.
+  credentials         String?
+  /// { [eventType]: boolean }
+  alertsEnabled       Json                 @default("{}") @map("alerts_enabled")
+  /// "[CODE] sentence" (splitErrorCode)
+  lastError           String?              @map("last_error")
+  connectedAt         DateTime?            @map("connected_at")
+  connectedBy         String?              @map("connected_by")
+  disconnectedAt      DateTime?            @map("disconnected_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  @@map("platform_whatsapp_senders")
+}
+
+enum PlatformTemplateStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+  DISABLED
+  IN_APPEAL
+  PENDING_DELETION
+}
+
+/// One row per (template key, language); seeded from platform-templates.ts.
+model PlatformWhatsAppTemplate {
+  id             String                 @id @default(cuid())
+  eventType      String                 @map("event_type")
+  language       String
+  name           String
+  category       String
+  body           String
+  status         PlatformTemplateStatus @default(NOT_SUBMITTED)
+  rejectedReason String?                @map("rejected_reason")
+  metaTemplateId String?                @map("meta_template_id")
+  draftBody      String?                @map("draft_body")
+  submittedAt    DateTime?              @map("submitted_at")
+  lastSyncedAt   DateTime?              @map("last_synced_at")
+  updatedBy      String?                @map("updated_by")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+
+  @@unique([eventType, language])
+  @@index([name, language])
+  @@map("platform_whatsapp_templates")
+}
