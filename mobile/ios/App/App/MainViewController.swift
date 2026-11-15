@@ -6,8 +6,22 @@ import WebKit
 /// that live in this target (they are not npm packages, so Capacitor cannot
 /// discover them on its own).
 class MainViewController: CAPBridgeViewController {
-    /// Under the web view, between the bottom safe line and the screen's edge.
+    /// Under the web view, between where the page ends and the screen's edge.
     private let bottomStrip = UIView()
+    /// The web view's bottom edge, kept above the screen's edge by `bottomLift`.
+    private var webBottom: NSLayoutConstraint?
+
+    /// How much of the bottom safe area the page keeps clear of: half of it.
+    /// The whole of it (build 3, 34pt on a Face ID iPhone) lifted the tab bar
+    /// and the composer too far (Omer, 2026-11-15); none of it (build 2) left
+    /// them on the rounded corners.
+    static let bottomLift: CGFloat = 0.5
+
+    /// The web view reports no bottom safe area to the page, so a page that
+    /// pads by `env(safe-area-inset-bottom)` does not add to the lift above.
+    override open func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        return GotchaWebView(frame: frame, configuration: configuration)
+    }
 
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(NavigationPolicyPlugin())
@@ -21,16 +35,15 @@ class MainViewController: CAPBridgeViewController {
         content?.add(BottomColorHandler(owner: self), name: Self.bottomColorMessage)
     }
 
-    /// ★ The web view stops at the bottom safe line (Omer, 2026-11-15, TestFlight build 2).
+    /// ★ The web view stops above the bottom of the screen (Omer, 2026-11-15, TestFlight builds 2 and 3).
     ///
     /// Build 2 asked the page for `viewport-fit=cover` so its own
     /// `env(safe-area-inset-bottom)` padding would lift the tab bar and the
     /// composer, and on the device they still sat on the rounded corners and
     /// the home indicator. Rather than depend on what the page does, the app
-    /// keeps the page out of that area: the web view ends at the safe line,
-    /// and a strip painted in the page's own bottom colour fills the rest.
-    /// Inside the web view the bottom inset is then 0, so a page that does pad
-    /// by `env()` does not pad twice. The top stays as it was (the page pads it).
+    /// keeps the page out of part of that area (`bottomLift`), and a strip
+    /// painted in the page's own bottom colour fills the rest. The top stays as
+    /// it was (the page pads it).
     ///
     /// Capacitor's `loadView` is final and makes the web view the root view, so
     /// the swap into a container happens here, before the view is on screen.
@@ -49,17 +62,24 @@ class MainViewController: CAPBridgeViewController {
         container.addSubview(bottomStrip)
         container.addSubview(web)
 
+        let bottom = web.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        webBottom = bottom
         NSLayoutConstraint.activate([
+            bottom,
             web.topAnchor.constraint(equalTo: container.topAnchor),
             web.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             web.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            web.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor),
 
             bottomStrip.topAnchor.constraint(equalTo: web.bottomAnchor),
             bottomStrip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             bottomStrip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             bottomStrip.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+    }
+
+    override open func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        webBottom?.constant = -(view.safeAreaInsets.bottom * Self.bottomLift).rounded()
     }
 
     fileprivate func setBottomColor(_ css: String) {
@@ -168,6 +188,16 @@ class MainViewController: CAPBridgeViewController {
       window.addEventListener('popstate', apply);
     })();
     """
+}
+
+/// A web view that reports no bottom safe area to its page: the app decides
+/// the bottom gap natively (`MainViewController.bottomLift`), once.
+private final class GotchaWebView: WKWebView {
+    override var safeAreaInsets: UIEdgeInsets {
+        var insets = super.safeAreaInsets
+        insets.bottom = 0
+        return insets
+    }
 }
 
 /// The script message handler holds the controller weakly: the content
