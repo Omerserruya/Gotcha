@@ -6,21 +6,17 @@ import WebKit
 /// that live in this target (they are not npm packages, so Capacitor cannot
 /// discover them on its own).
 class MainViewController: CAPBridgeViewController {
+    /// Over the web view, under the status bar and the Dynamic Island.
+    private let topStrip = UIView()
     /// Under the web view, between where the page ends and the screen's edge.
     private let bottomStrip = UIView()
-    /// The web view's bottom edge, kept above the screen's edge by `bottomLift`.
     private var webBottom: NSLayoutConstraint?
 
     /// How much of the bottom safe area the page keeps clear of: half of it.
-    /// The whole of it (build 3, 34pt on a Face ID iPhone) lifted the tab bar
-    /// and the composer too far (Omer, 2026-11-15); none of it (build 2) left
-    /// them on the rounded corners.
+    /// The whole of it (builds 3 and 4, 34pt on a Face ID iPhone) lifted the
+    /// tab bar and the composer too far; none of it (build 2) left them on the
+    /// rounded corners (Omer, 2026-11-15).
     static let bottomLift: CGFloat = 0.5
-
-    // ⚠ Build 4 also overrode the web view's `safeAreaInsets` (bottom 0) so
-    //   the page's env() padding could not add to the lift. On the device the
-    //   page then lost its top bar (Omer, 2026-11-15): WebKit lays out from
-    //   the real insets too, and the two disagreed. Do not override them.
 
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(NavigationPolicyPlugin())
@@ -29,20 +25,26 @@ class MainViewController: CAPBridgeViewController {
             WKUserScript(source: Self.viewportScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
         content?.addUserScript(
-            WKUserScript(source: Self.bottomColorScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            WKUserScript(source: Self.edgeColorScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
-        content?.add(BottomColorHandler(owner: self), name: Self.bottomColorMessage)
+        content?.add(EdgeColorHandler(owner: self), name: Self.edgeColorMessage)
     }
 
-    /// ★ The web view stops above the bottom of the screen (Omer, 2026-11-15, TestFlight builds 2 and 3).
+    /// ★ The app, not the page, keeps clear of the iPhone's edges (Omer, 2026-11-15).
     ///
-    /// Build 2 asked the page for `viewport-fit=cover` so its own
-    /// `env(safe-area-inset-bottom)` padding would lift the tab bar and the
-    /// composer, and on the device they still sat on the rounded corners and
-    /// the home indicator. Rather than depend on what the page does, the app
-    /// keeps the page out of part of that area (`bottomLift`), and a strip
-    /// painted in the page's own bottom colour fills the rest. The top stays as
-    /// it was (the page pads it).
+    /// The web view sits between the status bar and `bottomLift` of the bottom
+    /// safe area; strips in the page's own edge colours fill the rest. The page
+    /// is not asked for `viewport-fit=cover`, so its `env(safe-area-inset-*)`
+    /// stays 0 and its own padding cannot add to the app's.
+    ///
+    /// History, so nobody repeats it:
+    /// - Build 2 asked the page for cover and let it pad by env(): on the
+    ///   device the bottom still sat on the rounded corners.
+    /// - Builds 3 and 5 (simulator) let the web view reach into the safe area:
+    ///   WebKit then hands the page the overlap as env(), and the page pads
+    ///   it again (measured: envBottom=17px over a 17pt native lift).
+    /// - Build 4 overrode the web view's `safeAreaInsets` to hide that: the
+    ///   conversation lost its top bar. Do not override them.
     ///
     /// Capacitor's `loadView` is final and makes the web view the root view, so
     /// the swap into a container happens here, before the view is on screen.
@@ -52,22 +54,30 @@ class MainViewController: CAPBridgeViewController {
 
         let container = UIView(frame: web.frame)
         // The splash's colour until the page reports its own.
-        container.backgroundColor = UIColor(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255, alpha: 1)
+        let splash = UIColor(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255, alpha: 1)
+        container.backgroundColor = splash
         view = container
 
-        bottomStrip.backgroundColor = container.backgroundColor
-        bottomStrip.translatesAutoresizingMaskIntoConstraints = false
+        for strip in [topStrip, bottomStrip] {
+            strip.backgroundColor = splash
+            strip.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(strip)
+        }
         web.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(bottomStrip)
         container.addSubview(web)
 
         let bottom = web.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         webBottom = bottom
         NSLayoutConstraint.activate([
-            bottom,
-            web.topAnchor.constraint(equalTo: container.topAnchor),
+            web.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
             web.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             web.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bottom,
+
+            topStrip.topAnchor.constraint(equalTo: container.topAnchor),
+            topStrip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            topStrip.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            topStrip.bottomAnchor.constraint(equalTo: web.topAnchor),
 
             bottomStrip.topAnchor.constraint(equalTo: web.bottomAnchor),
             bottomStrip.leadingAnchor.constraint(equalTo: container.leadingAnchor),
@@ -81,10 +91,15 @@ class MainViewController: CAPBridgeViewController {
         webBottom?.constant = -(view.safeAreaInsets.bottom * Self.bottomLift).rounded()
     }
 
-    fileprivate func setBottomColor(_ css: String) {
+    /// `edge` is "top" or "bottom"; `css` is a computed background colour.
+    fileprivate func setEdgeColor(edge: String, css: String) {
         guard let color = Self.color(fromCSS: css) else { return }
-        bottomStrip.backgroundColor = color
-        view.backgroundColor = color
+        if edge == "top" {
+            topStrip.backgroundColor = color
+        } else {
+            bottomStrip.backgroundColor = color
+            view.backgroundColor = color
+        }
     }
 
     /// `rgb(r, g, b)` or `rgba(r, g, b, a)`, as `getComputedStyle` writes it.
@@ -99,30 +114,34 @@ class MainViewController: CAPBridgeViewController {
         return UIColor(red: r / 255, green: g / 255, blue: b / 255, alpha: 1)
     }
 
-    static let bottomColorMessage = "gotchaBottomColor"
+    static let edgeColorMessage = "gotchaEdgeColor"
 
-    /// Reports the colour at the page's bottom edge (the tab bar's white, the
-    /// conversation's paper), so the strip under the web view continues it.
-    static let bottomColorScript = """
+    /// Reports the colours at the page's top and bottom edges (the header's
+    /// paper, the tab bar's white), so the strips continue them.
+    static let edgeColorScript = """
     (function () {
-      var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.\(bottomColorMessage);
+      var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.\(edgeColorMessage);
       if (!handler) return;
-      var last = '';
+      var last = { top: '', bottom: '' };
       function opaque(c) {
         return c && c !== 'transparent' && !/rgba\\([^)]*,\\s*0\\)$/.test(c);
       }
-      function report() {
-        var el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 1);
-        var color = '';
+      function colorAt(y) {
+        var el = document.elementFromPoint(window.innerWidth / 2, y);
         while (el) {
           var c = getComputedStyle(el).backgroundColor;
-          if (opaque(c)) { color = c; break; }
+          if (opaque(c)) return c;
           el = el.parentElement;
         }
-        if (!color && document.body) color = getComputedStyle(document.body).backgroundColor;
-        if (!opaque(color) || color === last) return;
-        last = color;
-        handler.postMessage(color);
+        return document.body ? getComputedStyle(document.body).backgroundColor : '';
+      }
+      function report() {
+        [['top', 1], ['bottom', window.innerHeight - 1]].forEach(function (e) {
+          var c = colorAt(e[1]);
+          if (!opaque(c) || c === last[e[0]]) return;
+          last[e[0]] = c;
+          handler.postMessage(e[0] + '|' + c);
+        });
       }
       report();
       setInterval(report, 500);
@@ -130,17 +149,15 @@ class MainViewController: CAPBridgeViewController {
     })();
     """
 
-    /// ★ The iPhone's viewport, per page (Omer, 2026-11-14 and 2026-11-15).
+    /// ★ The sign-in pages keep the screen's width (Omer, 2026-11-14 and 2026-11-15).
     ///
-    /// - The app's pages (*.gotcha.co.il): `viewport-fit=cover`, so the page's
-    ///   `env(safe-area-inset-top)` is real. Pinch zoom stays (the photo viewer
-    ///   relies on it).
-    /// - The sign-in pages: iOS zooms in when a field under 16px is focused and
-    ///   does not zoom back, so the page was left wider than the screen.
-    ///   `maximum-scale=1` stops that zoom. On prod the sign-in is the app's
-    ///   own page (app.gotcha.co.il/he/sign-in), not the auth host, which build
-    ///   2 missed: it is matched by path too, and taken off again once the
-    ///   person leaves those pages (the app's navigation does not reload).
+    /// iOS zooms in when a field under 16px is focused and does not zoom back,
+    /// so the page was left wider than the screen. `maximum-scale=1` stops that
+    /// zoom. On prod the sign-in is the app's own page
+    /// (app.gotcha.co.il/he/sign-in), not the auth host, so it is matched by
+    /// path too, and taken off again once the person leaves those pages (the
+    /// app's navigation does not reload). Pinch zoom elsewhere stays (the photo
+    /// viewer relies on it). No `viewport-fit=cover`: see `viewDidLoad`.
     ///
     /// Re-applied when the head changes, because React may re-render the tag.
     static let viewportScript = """
@@ -163,9 +180,6 @@ class MainViewController: CAPBridgeViewController {
         var parts = c.split(',').map(function (p) { return p.trim(); }).filter(function (p) {
           return p && p.indexOf('maximum-scale') !== 0;
         });
-        if (appHost && !parts.some(function (p) { return p.indexOf('viewport-fit') === 0; })) {
-          parts.push('viewport-fit=cover');
-        }
         if (noZoom) parts.push('maximum-scale=1');
         var next = parts.join(', ');
         if (next !== c) m.setAttribute('content', next);
@@ -191,7 +205,7 @@ class MainViewController: CAPBridgeViewController {
 
 /// The script message handler holds the controller weakly: the content
 /// controller keeps its handlers alive, and a strong one would never let go.
-private final class BottomColorHandler: NSObject, WKScriptMessageHandler {
+private final class EdgeColorHandler: NSObject, WKScriptMessageHandler {
     weak var owner: MainViewController?
 
     init(owner: MainViewController) {
@@ -199,7 +213,9 @@ private final class BottomColorHandler: NSObject, WKScriptMessageHandler {
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let css = message.body as? String else { return }
-        DispatchQueue.main.async { [weak owner] in owner?.setBottomColor(css) }
+        guard let body = message.body as? String, let bar = body.firstIndex(of: "|") else { return }
+        let edge = String(body[..<bar])
+        let css = String(body[body.index(after: bar)...])
+        DispatchQueue.main.async { [weak owner] in owner?.setEdgeColor(edge: edge, css: css) }
     }
 }
