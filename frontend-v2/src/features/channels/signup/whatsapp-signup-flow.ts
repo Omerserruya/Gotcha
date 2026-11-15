@@ -86,6 +86,12 @@
 export interface SignupAssets {
   businessPortfolioId?: string;
   wabaIds?: string[];
+  /**
+   * The number the person picked in Meta's window (`phone_number_id` on
+   * FINISH). Only the console's platform connect sends it; the tenant's
+   * inspect lists every number and the person picks again.
+   */
+  phoneNumberId?: string;
 }
 
 /** What a `WA_EMBEDDED_SIGNUP` message means for us. */
@@ -179,10 +185,12 @@ export function interpretSignupMessage(raw: unknown): SignupMessage {
         return single ? [single] : [];
       })();
 
-  if (!businessPortfolioId && wabaIds.length === 0) return { kind: 'ignore' };
+  const phoneNumberId = text(data, 'phone_number_id');
+
+  if (!businessPortfolioId && wabaIds.length === 0 && !phoneNumberId) return { kind: 'ignore' };
   return {
     kind: 'assets',
-    assets: { businessPortfolioId, wabaIds },
+    assets: { businessPortfolioId, wabaIds, ...(phoneNumberId ? { phoneNumberId } : {}) },
     event: typeof event === 'string' ? event : '',
   };
 }
@@ -199,6 +207,9 @@ export function mergeSignupAssets(prev: SignupAssets, next: SignupAssets): Signu
   return {
     businessPortfolioId: next.businessPortfolioId || prev.businessPortfolioId,
     wabaIds: next.wabaIds?.length ? next.wabaIds : prev.wabaIds,
+    ...((next.phoneNumberId ?? prev.phoneNumberId)
+      ? { phoneNumberId: next.phoneNumberId ?? prev.phoneNumberId }
+      : {}),
   };
 }
 

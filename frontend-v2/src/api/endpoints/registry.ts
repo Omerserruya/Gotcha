@@ -2213,6 +2213,38 @@ export const consoleEndpoints = {
 } as const;
 
 /**
+ * GOTCHA's own WhatsApp number - the platform alerts' sender (Backend PLAN.md,
+ * 2026-11-15). SYSTEM_ADMIN only, in auth under `/api/system`, so no new
+ * gateway route. Never a tenant channel: the number is in no channel list.
+ */
+export const platformWhatsAppEndpoints = {
+  /** GET → status, number, source, launch. */
+  status: () => endpoint('/api/system/platform-whatsapp'),
+  /** POST `{ code, wabaId?, phoneNumberId? }` from the signup session. */
+  connect: () => endpoint('/api/system/platform-whatsapp/connect'),
+  /** POST → Meta read again: token, phone, subscription. */
+  recheck: () => endpoint('/api/system/platform-whatsapp/recheck'),
+  /** POST `{ deregister?: boolean }`: unlink + unsubscribe; deregister retires the number. */
+  disconnect: () => endpoint('/api/system/platform-whatsapp/disconnect'),
+  /** GET → per event, both languages. */
+  templates: () => endpoint('/api/system/platform-whatsapp/templates'),
+  /** POST → Meta's states pulled into the rows. */
+  syncTemplates: () => endpoint('/api/system/platform-whatsapp/templates/sync'),
+  /** PUT `{ body }` → saved as the draft, validated. */
+  template: (eventType: string, lang: string) =>
+    endpoint('/api/system/platform-whatsapp/templates/{eventType}/{lang}', { eventType, lang }),
+  /** POST → sent to Meta for review. Real and outward. */
+  submitTemplate: (eventType: string, lang: string) =>
+    endpoint('/api/system/platform-whatsapp/templates/{eventType}/{lang}/submit', {
+      eventType,
+      lang,
+    }),
+  /** PUT `{ enabled }` → 409 template_not_approved / no_platform_number. */
+  alert: (eventType: string) =>
+    endpoint('/api/system/platform-whatsapp/alerts/{eventType}', { eventType }),
+} as const;
+
+/**
  * Coupons - billing `routes/admin-coupons.ts`, through the gateway's
  * `/api/admin/coupons`. SYSTEM_ADMIN only (`requirePlatformPermission`).
  * Bare envelopes: `{ coupons }`, `{ coupon }`, `{ assignments }`, `{ assignment }`.

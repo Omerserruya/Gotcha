@@ -9,7 +9,9 @@
     "coupons": "Coupons",
     "couponsLine": "Discounts on what an organization is charged: issue them, and switch them on or off.",
     "security": "Security",
-    "securityLine": "Your two-step sign-in: set up, replace, recovery codes."
+    "securityLine": "Your two-step sign-in: set up, replace, recovery codes.",
+    "whatsapp": "GOTCHA's WhatsApp number",
+    "whatsappLine": "The number platform alerts go out from: connecting it, its templates, which alerts it sends."
   },
   "tenants": {
     "title": "Tenants",
@@ -602,5 +604,159 @@
       "failed": "That didn't remove. Try again."
     },
     "close": "Close"
+  },
+  "platformWhatsApp": {
+    "title": "GOTCHA's WhatsApp number",
+    "description": "Platform alerts (approvals, credit, a waiting customer) go out from this number, never from a workspace's own number.",
+    "unread": "The number's state couldn't be read, so it isn't shown. This doesn't mean nothing is connected.",
+    "status": {
+      "CONNECTED": "Connected. Alerts go out from this number.",
+      "PENDING_WEBHOOK": "Connected, but this number's replies aren't reaching GOTCHA from Meta yet. Alerts go out; a tap on Approve may not arrive.",
+      "TOKEN_INVALID": "Meta no longer accepts GOTCHA's access to this number. Connect it again to restore it.",
+      "DISCONNECTED": "No number is connected. Platform alerts don't go out on WhatsApp.",
+      "UNKNOWN": "This number's state has no name in this version. Check with Meta to read it again."
+    },
+    "badge": {
+      "CONNECTED": "Connected",
+      "PENDING_WEBHOOK": "Replies not arriving",
+      "TOKEN_INVALID": "Access expired",
+      "DISCONNECTED": "Not connected",
+      "UNKNOWN": "State unknown"
+    },
+    "stoppedTitle": "Alerts aren't going out",
+    "source": {
+      "env": "Alerts go out now from the number set in the server's configuration. Connecting a number here replaces it.",
+      "dbOverEnv": "A number is also set in the server's configuration. The number here is the one used."
+    },
+    "facts": {
+      "title": "The number",
+      "number": "Number",
+      "name": "Display name",
+      "quality": "Quality at Meta",
+      "limit": "Messaging limit",
+      "waba": "WhatsApp Business account",
+      "connected": "Connected",
+      "by": "{date}, by {name}"
+    },
+    "quality": {
+      "GREEN": "High",
+      "YELLOW": "Medium",
+      "RED": "Low"
+    },
+    "connect": {
+      "action": "Connect a number",
+      "again": "Connect again",
+      "needs": "Use a new number that has never been on WhatsApp, not GOTCHA's sales number. In Meta's window, create a new WhatsApp Business account for it.",
+      "waiting": "Finish in Meta's window.",
+      "reading": "Connecting the number",
+      "done": "Connected. Read the number's state above.",
+      "problem": {
+        "cancelled": "Meta's window closed before a number was chosen. Nothing was connected.",
+        "noCode": "Meta didn't send back what's needed to connect. Try again.",
+        "exchangeFailed": "The number couldn't be connected. Try again.",
+        "unavailable": "Meta's window couldn't open here. Check that nothing blocks facebook.com, then try again.",
+        "notConfigured": "Signing up through Meta isn't set up on this server."
+      }
+    },
+    "recheck": {
+      "action": "Check with Meta",
+      "done": "Checked. The state above is what Meta reports now."
+    },
+    "disconnect": {
+      "action": "Disconnect",
+      "yes": "Disconnect",
+      "done": "Disconnected. Alerts no longer go out on WhatsApp.",
+      "first": "Alerts stop going out on WhatsApp at once.",
+      "second": "The number stays registered with Meta and its templates stay, so connecting it again needs no new code."
+    },
+    "retire": {
+      "action": "Retire the number",
+      "match": "Type the number to confirm",
+      "yes": "Retire",
+      "done": "The number was retired.",
+      "first": "Alerts stop, and the number is taken off WhatsApp's Cloud API: it can't send or receive until someone registers it again.",
+      "second": "Use this only to stop using the number for good, or to move it to the WhatsApp app."
+    },
+    "refusal": {
+      "choose_one_number": "That Meta account has more than one number. Connect again and pick exactly one in Meta's window.",
+      "number_belongs_to_workspace": "That number belongs to a workspace on GOTCHA, so it can't be the platform's number. Use a new one.",
+      "waba_belongs_to_workspace": "That WhatsApp Business account belongs to a workspace. In Meta's window, create a separate one for GOTCHA's alerts.",
+      "template_body_invalid": "The text must keep each of its placeholders exactly once, and can't start or end with one.",
+      "template_not_editable": "Meta sets this template's text. It can only be sent for review.",
+      "meta_edit_limit": "Meta limits how often an approved template can be edited. Try again later.",
+      "template_not_approved": "This alert can go out only once its template is approved in both Hebrew and English.",
+      "no_platform_number": "Connect a number first. Without one, no alert goes out on WhatsApp.",
+      "meta_error": "Meta refused the request. Try again; if it repeats, check the number in Meta's Business Manager.",
+      "forbidden": "Only platform admins can change this.",
+      "failed": "That didn't go through. Try again.",
+      "unknown_template": "This version names a template the platform doesn't have. Refresh the page.",
+      "code_exchange_failed": "Meta's sign-in couldn't be completed. Connect again.",
+      "no_waba": "Meta's window gave no WhatsApp Business account. Connect again and create one for GOTCHA's alerts.",
+      "no_phone_numbers": "That WhatsApp Business account has no number. Connect again and add the new number in Meta's window.",
+      "platform_store_unavailable": "The platform isn't ready for this number yet: its tables aren't on this server. Nothing was changed."
+    },
+    "templates": {
+      "title": "Alert templates",
+      "description": "Meta must approve each template, in Hebrew and in English, before its alert can go out.",
+      "unread": "The templates couldn't be read, so they aren't shown.",
+      "sync": "Read states from Meta",
+      "synced": "Read. Each state below is Meta's.",
+      "noNumber": "Templates can be sent for review once a number is connected.",
+      "lang": {
+        "he": "Hebrew",
+        "en": "English"
+      },
+      "missing": "No row for this language yet. Read states from Meta to create it.",
+      "status": {
+        "NOT_SUBMITTED": "Not sent to Meta",
+        "PENDING": "Awaiting Meta",
+        "APPROVED": "Approved",
+        "REJECTED": "Rejected by Meta",
+        "PAUSED": "Paused by Meta",
+        "DISABLED": "Disabled by Meta",
+        "IN_APPEAL": "In appeal",
+        "PENDING_DELETION": "Being deleted",
+        "UNKNOWN": "State unknown"
+      },
+      "rejectedBecause": "Meta's reason: {reason}",
+      "draft": "Edited, not sent yet.",
+      "fixed": "Meta sets this text.",
+      "placeholders": "Placeholders",
+      "edit": "Edit",
+      "save": "Save draft",
+      "cancel": "Cancel",
+      "saved": "Saved as a draft. Nothing was sent to Meta.",
+      "submit": {
+        "action": "Send to Meta for review",
+        "yes": "Send",
+        "done": "Sent. Meta is reviewing it.",
+        "first": "Meta reviews the text, usually within a day.",
+        "second": "Once sent, it can't be called back."
+      },
+      "bodyLabel": "{alert}, {lang}",
+      "approvedEdit": "Meta reviews an approved template again after an edit, and limits how often one can be edited."
+    },
+    "alerts": {
+      "title": "Which alerts go out on WhatsApp",
+      "description": "These switches are the platform's. Each person's own alert settings still apply on top.",
+      "switchLabel": "{alert} on WhatsApp",
+      "needsNumber": "Needs a connected number.",
+      "needsApproval": "Needs its template approved in Hebrew and English.",
+      "stopped": "On, but nothing goes out until a number is connected again.",
+      "rides": {
+        "gotcha_approval_required": "Goes with the switch for an approval waiting.",
+        "gotcha_verification_code": "Sent when someone adds their WhatsApp number for alerts."
+      }
+    },
+    "event": {
+      "gotcha_approval_request": "An approval waiting",
+      "gotcha_approval_required": "A high-risk approval",
+      "gotcha_conversation_escalated": "A conversation handed to a person",
+      "gotcha_action_failed": "An action failed",
+      "gotcha_credit_low": "AI credit running low",
+      "gotcha_credit_exhausted": "AI credit used up",
+      "gotcha_customer_waiting": "A customer is waiting",
+      "gotcha_verification_code": "Verification code"
+    }
   }
 }
