@@ -862,6 +862,17 @@ export const publicLinkEndpoints = {
   resendSetup: () => endpoint('/api/auth/setup/resend'),
 } as const;
 
+/**
+ * Public account deletion (Google Play, 2026-11-14): no session on either, on
+ * the auth service (gateway `location /api/auth`). POST `{ email, workspace,
+ * locale }` → 202, whatever the address; POST `{ token }` → 200 scheduled. The token is spent only by the confirm POST,
+ * which a person's click sends - never by opening the link.
+ */
+export const accountDeletionEndpoints = {
+  request: () => endpoint('/api/auth/account-deletion/request'),
+  confirm: () => endpoint('/api/auth/account-deletion/confirm'),
+} as const;
+
 export const goLiveEndpoints = {
   complete: () => endpoint('/api/onboarding/complete'),
 } as const;

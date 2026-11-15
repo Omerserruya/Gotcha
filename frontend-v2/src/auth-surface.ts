@@ -52,6 +52,10 @@ export const PUBLIC_PATH_PATTERN = new RegExp(
  *                        (services/auth setup-link.ts `expiredPage`)
  *   checkout/…           the payment pages; the backend sends a person there
  *                        from an email or a payment provider
+ *   account-deletion     Google Play's deletion request (2026-11-14): whoever
+ *                        asks may no longer be able to sign in, and Play
+ *                        requires the page to work without the app
+ *   account-deletion/confirm   its email link's landing
  *
  * ★ `/account/verify-email` is NOT here, on purpose: its backend route
  *   (`POST /api/account/email-change/verify`) requires the session, and the
@@ -71,6 +75,8 @@ export const SIGNED_OUT_ROUTES = [
   'checkout/failed',
   'checkout/cancelled',
   'checkout/expired',
+  'account-deletion',
+  'account-deletion/confirm',
 ] as const;
 
 /** `/join`, `/he/join`, `/en/checkout/failed/` - exactly these, locale or not. */
