@@ -130,7 +130,8 @@ moment..."). It depends on the caller's IP, so the merchant never sees it.
 - GOTCHA's own address, for the primary Cloudflare rule (IP Source Address,
   Skip), rides on every `store_firewall_challenge` answer as
   `egress: { ips: string[], stable: boolean } | null`: the probe's `data.egress`,
-  the pasted-keys 422's `egress`, and the wc-auth return's `egress=<ips,comma>`
-  plus `egressStable=1|0`. It is config, per environment (`PUBLIC_EGRESS_IP`,
+  and the pasted-keys 422's `egress`: signed-in server answers only. The
+  wc-auth return carries the error code alone, never an address (a URL anyone
+  can craft must not name one). It is config, per environment (`PUBLIC_EGRESS_IP`,
   comma-separated, and `PUBLIC_EGRESS_IP_STABLE=true` once static); unset means
   null, and the path rule alone is shown.

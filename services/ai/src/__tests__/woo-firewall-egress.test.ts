@@ -58,17 +58,14 @@ describe("every store_firewall_challenge answer carries it", () => {
     const route = readFileSync(join(__dirname, "../routes/integrations.ts"), "utf8");
     expect(route).toContain('...((verdict as any).code === "store_firewall_challenge" ? { egress: (verdict as any).egress ?? null } : {}),');
   });
-  it("the wc-auth return: egress and egressStable, only for this error, every flow; nothing when unset", () => {
+  it("the wc-auth return carries the code only, never an address (a crafted URL must not name one)", () => {
     process.env.PUBLIC_EGRESS_IP = "51.17.184.220";
     for (const flow of ["wp_plugin", "redesign_studio", "onboarding_systems", undefined]) {
       const u = new URL(wooReturnUrl(flow as any, { error: "store_firewall_challenge" }));
       expect(u.searchParams.get("error")).toBe("store_firewall_challenge");
-      expect(u.searchParams.get("egress")).toBe("51.17.184.220");
-      expect(u.searchParams.get("egressStable")).toBe("0");
+      expect(u.searchParams.get("egress")).toBeNull();
+      expect(u.search).not.toContain("51.17.184.220");
     }
-    expect(new URL(wooReturnUrl("wp_plugin", { error: "validation_failed" })).searchParams.get("egress")).toBeNull();
-    delete process.env.PUBLIC_EGRESS_IP;
-    expect(new URL(wooReturnUrl("wp_plugin", { error: "store_firewall_challenge" })).searchParams.get("egress")).toBeNull();
   });
   it("the probe: egress on a blocked answer, read now, so a config change shows within the cache minute", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => CHALLENGE));
