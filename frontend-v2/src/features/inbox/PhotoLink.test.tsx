@@ -37,6 +37,12 @@ describe('PhotoLink', () => {
     // Over everything, not inside the thread's layers (Omer, 2026-11-04).
     expect(screen.getByTestId('photo-m1-viewer').parentElement).toBe(document.body);
     expect(scroller).toHaveStyle({ overflow: 'hidden' });
+    // WhatsApp's layout (2026-11-15): the X in its own bar, the photo in its own stage.
+    const close = screen.getByTestId('photo-m1-viewer-close');
+    const image = screen.getByTestId('photo-m1-viewer-image');
+    expect(close.parentElement).not.toBe(image.parentElement);
+    expect(close.parentElement?.parentElement).toBe(screen.getByTestId('photo-m1-viewer'));
+    expect(image.parentElement?.parentElement).toBe(screen.getByTestId('photo-m1-viewer'));
     fireEvent.click(screen.getByTestId('photo-m1-viewer-close'));
     expect(screen.queryByTestId('photo-m1-viewer')).toBeNull();
     expect(scroller.style.overflow).toBe('');

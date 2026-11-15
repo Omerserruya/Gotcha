@@ -2507,16 +2507,42 @@
     scroll-snap-align: start;
   }
 
-  /* The phone's photo, whole, over the thread: tap anywhere or X to close. */
+  /*
+   * The phone's photo, whole, over the thread: tap anywhere or X to close.
+   *
+   * ★ WHATSAPP'S LAYOUT (Omer, 2026-11-15): the X alone in a bar at the top,
+   *   and the photo contained in the area under it - never under the X.
+   */
   .photoViewer {
     position: fixed;
     inset: 0;
     z-index: 1000;
     display: flex;
+    flex-direction: column;
+    background-color: color-mix(in srgb, var(--mobile-ink) 96%, transparent);
+  }
+
+  .photoViewerBar {
+    flex: none;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    /*
+     * ⚠ Below the phone's status bar even where the WebView reports no safe
+     *   area (Android draws under it): under the clock it could not be tapped.
+     */
+    padding-block: calc(max(env(safe-area-inset-top, 0px), 28px) + var(--space-8)) var(--space-8);
+    padding-inline: var(--space-12);
+  }
+
+  .photoViewerStage {
+    flex: 1;
+    min-block-size: 0;
+    display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--space-16);
-    background-color: color-mix(in srgb, var(--mobile-ink) 96%, transparent);
+    padding-block: 0 calc(env(safe-area-inset-bottom, 0px) + var(--space-16));
+    padding-inline: var(--space-16);
   }
 
   .photoViewerImage {
@@ -2526,14 +2552,6 @@
   }
 
   .photoViewerClose {
-    position: absolute;
-    /*
-     * ⚠ Below the phone's status bar even where the WebView reports no safe
-     *   area (Android draws under it): under the clock it could not be tapped.
-     */
-    inset-block-start: calc(max(env(safe-area-inset-top, 0px), 28px) + var(--space-12));
-    inset-inline-end: var(--space-12);
-    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;

@@ -100,23 +100,29 @@ export function PhotoLink({
               data-testid={`${testId}-viewer`}
               onClick={() => setOpen(false)}
             >
-              <button
-                type="button"
-                className={styles.photoViewerClose}
-                aria-label={closeLabel}
-                data-testid={`${testId}-viewer-close`}
-                autoFocus
-                onClick={() => setOpen(false)}
-              >
-                <X size={22} aria-hidden="true" />
-              </button>
-              {/* eslint-disable-next-line @next/next/no-img-element -- the same file, whole */}
-              <img
-                className={styles.photoViewerImage}
-                src={url}
-                alt={alt}
-                onClick={(event) => event.stopPropagation()}
-              />
+              {/* The X alone in its bar; the photo below it, never under it. */}
+              <div className={styles.photoViewerBar}>
+                <button
+                  type="button"
+                  className={styles.photoViewerClose}
+                  aria-label={closeLabel}
+                  data-testid={`${testId}-viewer-close`}
+                  autoFocus
+                  onClick={() => setOpen(false)}
+                >
+                  <X size={22} aria-hidden="true" />
+                </button>
+              </div>
+              <div className={styles.photoViewerStage}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- the same file, whole */}
+                <img
+                  className={styles.photoViewerImage}
+                  src={url}
+                  alt={alt}
+                  data-testid={`${testId}-viewer-image`}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              </div>
             </div>,
             document.body,
           )

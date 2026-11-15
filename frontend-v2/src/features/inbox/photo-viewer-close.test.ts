@@ -66,3 +66,24 @@ describe('★ the photo viewer X reads over any photo', () => {
     expect(rule).toMatch(/,\s*0 2px 8px color-mix\(in srgb, var\(--mobile-ink\)/);
   });
 });
+
+describe("★★ WhatsApp's layout: the X alone in a top bar, the photo below it (Omer, 2026-11-15)", () => {
+  const block = (name: string) => new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`).exec(inbox)?.[1] ?? '';
+
+  it('★★ the X is in the flow, never positioned over the photo', () => {
+    expect(rule).not.toMatch(/position:\s*(absolute|fixed)/);
+  });
+
+  it('★★ a column: the bar, then the stage that holds the photo', () => {
+    expect(block('photoViewer')).toMatch(/flex-direction:\s*column/);
+    expect(block('photoViewerBar')).toMatch(/flex:\s*none/);
+    expect(block('photoViewerStage')).toMatch(/flex:\s*1/);
+    expect(block('photoViewerStage')).toMatch(/min-block-size:\s*0/);
+    expect(block('photoViewerImage')).toMatch(/max-block-size:\s*100%/);
+  });
+
+  it('★ the safe areas: the bar clears the status bar, the stage the home bar', () => {
+    expect(block('photoViewerBar')).toMatch(/max\(env\(safe-area-inset-top, 0px\), 28px\)/);
+    expect(block('photoViewerStage')).toMatch(/env\(safe-area-inset-bottom, 0px\)/);
+  });
+});
