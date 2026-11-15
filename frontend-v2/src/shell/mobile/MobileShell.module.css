@@ -15,7 +15,17 @@
     background-color: var(--mobile-ground);
     color: var(--mobile-ink);
     font-family: var(--font-sans);
+    /*
+     * ⚠⚠ CLIP, NOT ONLY HIDDEN (2026-11-15). `hidden` can still be scrolled
+     *    from script - focus on #main-content, scrollIntoView, Next's scroll
+     *    on navigation - and nothing scrolls it back: Omer's customer screen
+     *    opened shifted up by exactly the bar's 58pt, with no way back in
+     *    sight. `clip` cannot be scrolled at all. `hidden` stays first as the
+     *    fallback for a WebView without `clip` (iOS 15). Only the lists
+     *    inside a screen scroll.
+     */
     overflow: hidden;
+    overflow: clip;
     padding-block-start: env(safe-area-inset-top);
   }
 
@@ -27,7 +37,9 @@
     display: flex;
     flex-direction: column;
     background-color: var(--mobile-ground);
+    /* As the frame: never scrolled from script (see `.frame`). */
     overflow: hidden;
+    overflow: clip;
   }
 
   /*
