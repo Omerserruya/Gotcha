@@ -17,11 +17,10 @@ class MainViewController: CAPBridgeViewController {
     /// them on the rounded corners.
     static let bottomLift: CGFloat = 0.5
 
-    /// The web view reports no bottom safe area to the page, so a page that
-    /// pads by `env(safe-area-inset-bottom)` does not add to the lift above.
-    override open func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
-        return GotchaWebView(frame: frame, configuration: configuration)
-    }
+    // ⚠ Build 4 also overrode the web view's `safeAreaInsets` (bottom 0) so
+    //   the page's env() padding could not add to the lift. On the device the
+    //   page then lost its top bar (Omer, 2026-11-15): WebKit lays out from
+    //   the real insets too, and the two disagreed. Do not override them.
 
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(NavigationPolicyPlugin())
@@ -188,16 +187,6 @@ class MainViewController: CAPBridgeViewController {
       window.addEventListener('popstate', apply);
     })();
     """
-}
-
-/// A web view that reports no bottom safe area to its page: the app decides
-/// the bottom gap natively (`MainViewController.bottomLift`), once.
-private final class GotchaWebView: WKWebView {
-    override var safeAreaInsets: UIEdgeInsets {
-        var insets = super.safeAreaInsets
-        insets.bottom = 0
-        return insets
-    }
 }
 
 /// The script message handler holds the controller weakly: the content
