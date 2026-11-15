@@ -250,7 +250,8 @@ import {
 import { tryEmit } from "./notifications-emit";
 import { prepareShopifyTurn } from "./shopify-chat-turn.service";
 import { uncachedInputOf, alertIfOverBudget } from "./turn-usage.service";
-import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked, storeProductAsk, supportTurn } from "./woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, withoutOtherStoreTools, cardsMatchTurn, webchatPromotionsFor, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, singleProductVariations, lastProductMention, asksSize, namesProduct, HEBREW_PRODUCT_GLOSSARY, pickLastProduct, productsFromSearch, storeQuestion, productQuestion, commitsToBuy, crossSellAnchor, claimCrossSell, releaseCrossSell, crossSellCards, goesWellWithLine, pageProductId, pureChoice, predictedSearch, lastSearchArgs, audienceOf, budgetOf, conversationAudience, carriedColour, broadKind, customerSearchQuery, shippingQuestion, baseSizeAsked, baseSizesAsked, storeProductAsk, supportTurn } from "./woo-chat-turn.service";
+import { genericStoreQuery } from "./connectors/woocommerce.adapter";
 import type { SystemEventType } from "./notifications-emit";
 import { guardCustomerReply, turnEvidenceFrom } from "./reply-guard.service";
 
@@ -2381,15 +2382,17 @@ async function generateAIBotReplyInner(
       }
       // The customer's own Hebrew words ride along when the model searched in
       // Latin; the adapter uses them only on a store whose catalogue is Hebrew.
-      if (toolFunctionName === "woocommerce.list_products" && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {
+      // So do they when the model's Hebrew query names nothing ("משטח" for
+      // "סמובי אלכסה שחור", Smoovee prod 2026-11-14 19:18).
+      if (toolFunctionName === "woocommerce.list_products" && (!/[א-ת]/.test(String(effectiveArgs?.query ?? "")) || genericStoreQuery(effectiveArgs?.query))) {
         const own = customerSearchQuery(messages as any[], opts.incomingMessage, effectiveArgs?.query);
         if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };
       }
       // A base size the customer gave: the store picks what fits it (Smoovee
       // 2026-11-08: 40 x 20 was offered 31 x 41 while 23 x 40 fits).
       if (toolFunctionName === "woocommerce.list_products") {
-        const size = baseSizeAsked(messages as any[], opts.incomingMessage);
-        if (size) effectiveArgs = { ...effectiveArgs, fits_cm: size };
+        const sizes = baseSizesAsked(messages as any[], opts.incomingMessage);
+        if (sizes.length) effectiveArgs = { ...effectiveArgs, fits_cm: sizes[0], fits_cm_all: sizes };
       }
       // The person the customer is shopping for goes with every store search
       // (urban replay 2026-10-28: "אקססורי חמוד" after "מתנה לבת זוגג שלי" was
@@ -3626,8 +3629,8 @@ async function generateAIBotReplyInner(
     && !supportTurn(opts.incomingMessage)) {
     try {
       const words = customerSearchQuery(messages as any[], opts.incomingMessage, "") ?? String(opts.incomingMessage ?? "").slice(0, 120);
-      const size = baseSizeAsked(messages as any[], opts.incomingMessage);
-      const args: Record<string, unknown> = { query: words, per_page: 10, lang: conversationLang(), ...(size ? { fits_cm: size } : {}) };
+      const sizes = baseSizesAsked(messages as any[], opts.incomingMessage);
+      const args: Record<string, unknown> = { query: words, per_page: 10, lang: conversationLang(), ...(sizes.length ? { fits_cm: sizes[0], fits_cm_all: sizes } : {}) };
       const got = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
@@ -3642,7 +3645,7 @@ async function generateAIBotReplyInner(
       // Nothing found in the customer's words is told only for a size (what fits
       // is the store's answer); otherwise the model searches as before (an
       // English-title store needs its translation, urban).
-      if (envlp && envlp.status !== "error" && (envlp.candidates.length > 0 || size)) {
+      if (envlp && envlp.status !== "error" && (envlp.candidates.length > 0 || sizes.length > 0)) {
         productEnvelope = envlp;
         productBudget = envlp.budget ?? null;
         presearch2 = { args, content };

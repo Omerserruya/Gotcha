@@ -36,7 +36,7 @@ import { detectProductInquiry, type ProductInquiryKind } from "./product-intent.
 // `unknown_provider:shopify`. Same specifier as every other caller, same
 // instance, populated registry.
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
-import { fetchWooStoreCurrency } from "./connectors/woocommerce.adapter";
+import { fetchWooStoreCurrency, storeSellsBySize } from "./connectors/woocommerce.adapter";
 
 /**
  * Which store a product tool reads, or null when it is not one this typed
@@ -284,6 +284,7 @@ export async function groundProductSearchResult(opts: {
     ];
     if (provider !== "woocommerce") return normalizeShopifyProducts(products, { shopDomain: shopDomain!, budget, requestedFilters, shopCurrency });
     const env = normalizeWooProducts(products, { storeUrl: storeUrl!, budget, requestedFilters, storeCurrency: shopCurrency });
+    if (storeSellsBySize(storeUrl!)) env.sellsBySize = true;
     // A store discount the API does not carry (a discount-rules plugin, Smoovee
     // 2026-11-08): read from the page for the first few, marked on sale with no
     // lower price. Not found: the API price stands. A page that could not be

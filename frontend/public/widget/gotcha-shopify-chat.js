@@ -225,6 +225,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       viewCart: "View cart",
       keepShopping: "Keep shopping",
       soldOut: "Sold out",
+      priceOnSite: "Current price on the site",
       unavailable: "Unavailable",
       notPublished: "Not published",
       chooseOption: "Choose an option",
@@ -289,6 +290,7 @@ window.__gotchaShopifyChatApp = function (boot) {
       viewCart: "לסל הקניות",
       keepShopping: "להמשיך לגלוש",
       soldOut: "אזל מהמלאי",
+      priceOnSite: "למחיר העדכני באתר",
       unavailable: "לא זמין",
       notPublished: "לא מפורסם",
       chooseOption: "בחרו אפשרות",
@@ -816,6 +818,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".card-pr{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}",
     ".pr{font-weight:650;font-size:15px;}",
     ".pr-was{font-size:12.5px;color:#94a3b8;text-decoration:line-through;}",
+    ".pr-site{font-size:13px;font-weight:600;color:" + (brand || "#0f172a") + ";text-decoration:underline;text-underline-offset:2px;}",
     ".tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;}",
     ".tag-sale{background:#fee2e2;color:#b91c1c;}",
     ".tag-out{background:#f1f5f9;color:#64748b;}",
@@ -2223,8 +2226,18 @@ window.__gotchaShopifyChatApp = function (boot) {
       var price = variant && variant.price != null ? variant.price : product.price;
       var wasPrice =
         variant && variant.compareAtPrice != null ? variant.compareAtPrice : product.compareAtPrice;
-      priceRow.appendChild(ltrAtom("pr", money(price, product.currency)));
-      if (wasPrice && Number(wasPrice) > Number(price)) {
+      // A store that prices at render time whose page could not be read: no
+      // number (it may be the full price during a sale), a link to the site's.
+      if (product.priceOnSite === true && price == null) {
+        var siteHref = safeUrl(product.productUrl);
+        var onSite = el(siteHref ? "a" : "span", "pr-site", T.priceOnSite);
+        if (siteHref) attr(onSite, { href: siteHref, target: "_blank", rel: "noopener" });
+        attr(priceRow, { dir: "auto" });
+        priceRow.appendChild(onSite);
+      } else {
+        priceRow.appendChild(ltrAtom("pr", money(price, product.currency)));
+      }
+      if (price != null && wasPrice && Number(wasPrice) > Number(price)) {
         priceRow.appendChild(ltrAtom("pr-was", money(wasPrice, product.currency)));
         priceRow.appendChild(ltrAtom("tag tag-sale", "-" +
           Math.round((1 - Number(price) / Number(wasPrice)) * 100) + "%"));

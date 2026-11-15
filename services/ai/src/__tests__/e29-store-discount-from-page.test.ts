@@ -66,7 +66,9 @@ describe("what the model and the card get", () => {
     expect(g).toContain("if (i >= 5) return storeKnownToUseRules(c.url) ? priceOnSiteOnly(c) : c;");
     expect(g).toContain("await pagePriceFor(byId.get(c.productId), c.url)");
     const w = readFileSync(join(__dirname, "../services/woo-chat-turn.service.ts"), "utf8");
-    expect(w).toContain("const d = await discountFor(raw, card.productUrl)");
+    // Since 2026-11-15 the card reads the three-state page price (an unreadable page shows no number).
+    expect(w).toContain("const page = await pagePriceFor(raw, card.productUrl)");
+    expect(w).toContain('const d = page.state === "discount" ? page.discount : null;');
     expect(w).toContain("card.compareAtPrice = was;");
     expect(w).toContain("card.variants.every((v) => Number(v.price) === d.was)");
   });

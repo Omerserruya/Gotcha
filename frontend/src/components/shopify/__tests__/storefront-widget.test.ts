@@ -847,6 +847,32 @@ describe("product card", () => {
     expect(shadow.querySelector(".pr-was")).toBeTruthy();
     expect(shadow.querySelector(".tag-sale")!.textContent).toBe("-20%");
   });
+
+  // Smoovee 2026-11-14 21:26: the store prices by rules at render time, its
+  // pages could not be read, and the full price was shown during a 37% sale.
+  // Such a card carries priceOnSite and no number: the link says where it is.
+  it("a price the store sets on its site: no number, no sale badge, a link to the product", async () => {
+    const product = makeProduct({
+      price: null, compareAtPrice: null, priceOnSite: true,
+      variants: [{ variantId: "9001", title: "Default", price: null, compareAtPrice: null, available: true, options: [], requiresSellingPlan: false }],
+      optionNames: [],
+    });
+    const { shadow } = await cardHarness(product);
+    const site = shadow.querySelector(".pr-site") as HTMLAnchorElement;
+    expect(site).toBeTruthy();
+    expect(site.textContent).toBe("Current price on the site");
+    expect(site.getAttribute("href")).toBe(`https://${SHOP}/products/cloud-pro`);
+    expect(shadow.querySelector(".card-pr .pr")).toBeNull();
+    expect(shadow.querySelector(".pr-was")).toBeNull();
+    expect(shadow.querySelector(".tag-sale")).toBeNull();
+    expect(shadow.querySelector(".card-pr")!.textContent).not.toMatch(/\$|120/);
+  });
+
+  it("a card without priceOnSite keeps its price, even when the flag is absent", async () => {
+    const { shadow } = await cardHarness(makeProduct({ priceOnSite: undefined }));
+    expect(shadow.querySelector(".pr-site")).toBeNull();
+    expect(shadow.querySelector(".card-pr .pr")!.textContent).toMatch(/120/);
+  });
 });
 
 // ─── Add to Cart ────────────────────────────────────────────

@@ -201,12 +201,13 @@ describe("the model searched in Latin; the customer wrote Hebrew (walk 2026-11-0
 });
 
 describe("the bot passes the customer's Hebrew words with a Latin search", () => {
-  it("only on list_products, only when the model's query has no Hebrew", async () => {
+  it("only on list_products, only when the model's query has no Hebrew or names nothing", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
     // On every channel since 2026-11-13 (Smoovee on WhatsApp), not only the widget's turn.
-    expect(src).toContain(`if (toolFunctionName === "woocommerce.list_products" && !/[א-ת]/.test(String(effectiveArgs?.query ?? ""))) {`);
+    // ...and since 2026-11-15 when the model's Hebrew query names nothing ("משטח").
+    expect(src).toContain(`if (toolFunctionName === "woocommerce.list_products" && (!/[א-ת]/.test(String(effectiveArgs?.query ?? "")) || genericStoreQuery(effectiveArgs?.query))) {`);
     expect(src).toContain("if (own && /[א-ת]/.test(own)) effectiveArgs = { ...effectiveArgs, customer_query: own };");
   });
 });

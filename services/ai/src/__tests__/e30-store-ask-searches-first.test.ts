@@ -28,11 +28,12 @@ describe("the bot searches before the model writes", () => {
   it("with the customer's words, their size and the conversation's language", () => {
     expect(at).toBeGreaterThan(0);
     expect(block).toContain("storeProductAsk(messages as any[], opts.incomingMessage)");
-    expect(block).toContain("query: words, per_page: 10, lang: conversationLang(), ...(size ? { fits_cm: size } : {})");
+    // Every size since 2026-11-15 (two devices, two sizes).
+    expect(block).toContain("query: words, per_page: 10, lang: conversationLang(), ...(sizes.length ? { fits_cm: sizes[0], fits_cm_all: sizes } : {})");
     expect(block).toMatch(/Answer ONLY from these results, never from the knowledge text, and do NOT work out sizes or fits yourself/);
   });
   it("nothing found is told only for a size; otherwise the model searches as before (urban)", () => {
-    expect(block).toContain('envlp.status !== "error" && (envlp.candidates.length > 0 || size)');
+    expect(block).toContain('envlp.status !== "error" && (envlp.candidates.length > 0 || sizes.length > 0)');
   });
   it("before the model's first round, and its results are carded even when the reply names none", () => {
     expect(at).toBeLessThan(src.indexOf("for (let round = 0;") > 0 ? src.indexOf("for (let round = 0;") : Number.MAX_SAFE_INTEGER);

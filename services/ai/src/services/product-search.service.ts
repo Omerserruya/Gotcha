@@ -33,6 +33,14 @@ export interface ProductCandidate {
   discount?: { was: string; now: string };
   /** Picked because it fits the customer's base size: its footprint, "23 x 40 cm". */
   fit?: string;
+  /** The customer's base it was picked for, "21 x 24 cm" (several devices, several sizes). */
+  fitFor?: string;
+  /** No product is big enough for that base: this is the store's largest. */
+  tooSmall?: true;
+  /** The second choice for a single base, after the closest fit. */
+  secondChoice?: true;
+  /** Found because its own "מתאים ל" list names what the customer named. */
+  fitsListed?: true;
   /**
    * The store sets prices at render time (a discount-rules plugin) and this
    * product's page could not be read: the API price may not be what a buyer
@@ -148,6 +156,8 @@ export interface ProductSearchEnvelope {
    * without an FX rate.
    */
   budgetCurrencyMismatch?: { budget: string; shop: string };
+  /** The store sells by size (its products name footprints): an unknown device is a size question. */
+  sellsBySize?: boolean;
   /**
    * The COMPARABLE budget, in the store's own currency, when there is one.
    *
@@ -469,6 +479,10 @@ export function normalizeWooProducts(
       matchQuality: deriveMatchQuality(price, comparableBudget),
       details: productCopy(raw, detailsMax),
       ...(raw?.matched_in === "dimensions" && Array.isArray(raw?.footprint_cm) ? { fit: `${raw.footprint_cm[0]} x ${raw.footprint_cm[1]} cm` } : {}),
+      ...(raw?.matched_in === "dimensions" && Array.isArray(raw?.fit_for) ? { fitFor: `${raw.fit_for[0]} x ${raw.fit_for[1]} cm` } : {}),
+      ...(raw?.too_small ? { tooSmall: true as const } : {}),
+      ...(raw?.second_choice ? { secondChoice: true as const } : {}),
+      ...(raw?.matched_in === "fits_list" ? { fitsListed: true as const } : {}),
     };
   });
 
@@ -524,7 +538,11 @@ export function buildKeyedModelSummary(
         // Not a refinement or a preorder we cannot take (P4/P7, Smoovee
         // 2026-11-08: "לבדוק אפשרות להזמנה מראש?" after a search that missed
         // the product): what the store has is not known from an empty search.
-        : " Say you did not find it in the catalogue (never that the store lacks it), and offer to pass the question to the team so they can check and get back to the customer. Do NOT suggest searching by colour or other details, and do NOT offer a preorder.")
+        : env.sellsBySize
+          // Smoovee 2026-11-13/14: "מיקרו", "מעמד", "נועם 3" were each answered
+          // "לא מצאתי מוצר בשם ..." and handed over; the owner asked the size.
+          ? " This store sells products by SIZE. If the customer named a device, an appliance or a use (a water bar, a microwave, a mixer), do NOT say it was not found and do NOT hand over: ask, in one short question, for the device's base size (width x depth in cm), so the store can pick the closest fit. Only when they named a product by its own name: say you did not find it in the catalogue and offer to pass the question to the team."
+          : " Say you did not find it in the catalogue (never that the store lacks it), and offer to pass the question to the team so they can check and get back to the customer. Do NOT suggest searching by colour or other details, and do NOT offer a preorder.")
     );
   }
   const lines = env.candidates.map((c, i) => {
@@ -545,7 +563,11 @@ export function buildKeyedModelSummary(
     );
     const unknown = askedUnknown.length ? ` | unknown: ${askedUnknown.join(", ")}` : "";
     const details = c.details ? ` | store text: «${c.details.replace(/[«»]/g, '"')}»` : "";
-    const fitNote = c.fit ? ` | FITS the customer's base (${c.fit})` : "";
+    const fitNote = c.tooSmall
+      ? ` | TOO SMALL: the store's LARGEST (${c.fit}); nothing it sells fits the customer's ${c.fitFor ?? ""} base`
+      : c.fit
+        ? ` | ${c.secondChoice ? "SECOND CHOICE" : "CLOSEST FIT"} for the customer's ${c.fitFor ?? "base"} base (its size ${c.fit})`
+        : c.fitsListed ? " | LISTED: the store's own text says it fits what the customer named" : "";
     const disc = c.discount ? ` | DISCOUNT: was ${c.currency ?? ""} ${c.discount.was}, now ${c.currency ?? ""} ${c.discount.now}` : "";
     return `${key}: "${c.title}" | ${price}${disc} | ${avail} | ${match}${fitNote}${unknown}${details}`;
   });
@@ -584,7 +606,7 @@ export function buildKeyedModelSummary(
     "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
     ...lines,
     ...(env.candidates.some((c) => c.fit)
-      ? ["", "FITS: these were picked by the store because they are at least the customer's base size both ways, smallest first. Recommend PRODUCT_1 as the best fit (the next ones are larger). Do not recommend a product that is not marked FITS for this base, and do not work out sizes yourself."]
+      ? ["", "SIZES: the store picked these by the customer's base sizes. A product marked CLOSEST FIT for a base is the one to recommend for that base (a mat may be a centimetre or two smaller than the base: the device stands on feet). When the customer gave several bases (several devices), name each device with its CLOSEST FIT, one each, and never offer the whole list. A SECOND CHOICE is only a second option. TOO SMALL means nothing the store sells fits that base: say so plainly, and that the largest it has is that product with its size; never call it a fit. Do not work out sizes yourself."]
       : []),
     ...(env.candidates.some((c) => c.discount)
       ? ["", "DISCOUNT marks a product the store sells below its regular price right now. When you recommend one, say it is on sale and the price it is now. Never state or work out a percentage, and never call a product discounted that is not marked."]

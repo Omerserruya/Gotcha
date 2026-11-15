@@ -498,6 +498,88 @@ export function hebrewVariants(word: string): string[] {
 /** Words of a general stock ask, stemmed ("מה יש כרגע במלאי", "אילו מוצרים זמינים"). */
 const STOCK_ASK = new Set(["במלאי", "מלאי", "כרגע", "עכשיו", "זמינ", "זמין", "מוצר", "הכל", "אצלכ", "אצלכם", "אילו", "חדש"].map((w) => hebrewStem(w)));
 
+/**
+ * What a store of stands calls the product itself (Smoovee 2026-11-14: "מה
+ * הגובה של המעמד?" searched "מעמד" and found nothing). Alone they browse the
+ * range; beside other words they name nothing.
+ */
+const STAND_WORDS = new Set(["מעמד", "מעמדים", "סטנד", "בסיס", "משטח", "משטחים", "משטחי"].map((w) => hebrewStem(w)));
+
+/**
+ * A Hebrew query that names nothing in particular on a store of stands ("משטח",
+ * "מעמד", "מוצרים"): the customer's own words go beside it (Smoovee prod
+ * 2026-11-14 19:18: "סמובי אלכסה שחור" was searched as "משטח" and Ariel came back).
+ */
+export function genericStoreQuery(query: unknown): boolean {
+  const words = searchWords(query).filter((w) => /[א-ת]/.test(w));
+  return words.length > 0 && words.every((w) => STAND_WORDS.has(hebrewStem(w)) || STOCK_ASK.has(hebrewStem(w)) || HEBREW_STOP.has(hebrewStem(w)));
+}
+
+/** A product's text without its usage notes ("הערות שימוש: ..."), which say nothing of what it fits. */
+function withoutUsageNotes(t: unknown): string {
+  return String(t ?? "").split(/הערות\s*שימוש|הערות:|usage notes/i)[0];
+}
+
+/**
+ * A product's own "מתאים ל: ..." list (Smoovee: "מתאים ל: מיקרוגל ארגז חול
+ * לחתולים נינג'ה גריל XL"), short description first, without the notes after
+ * it. Empty when it has none.
+ */
+export function fitListOf(p: any): string {
+  for (const src of [p?.short_description, p?.description]) {
+    const t = decodeEntities(String(src ?? "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ");
+    const m = /(?:מתאים|מתאימה|מתאימים)\s*ל\s*[:\-]?\s*(.+)/u.exec(t) ?? /\b(?:suitable for|fits)\s*:?\s*(.+)/i.exec(t);
+    if (m) return m[1].split(/הערות|מידע נוסף|יתרונות המוצר|מפרט|\bnotes?:/u)[0].trim();
+  }
+  return "";
+}
+
+/** A fit-list word's forms: its description forms, and a Hebrew construct plural without its yod ("ברי מים", "מעבדי מזון"). */
+function fitForms(text: unknown): Set<string> {
+  const out = new Set<string>();
+  for (const forms of descriptionTokens(text)) for (const f of forms) {
+    out.add(f);
+    if (/[א-ת]י$/.test(f) && f.length >= 3) out.add(f.slice(0, -1));
+  }
+  return out;
+}
+
+/** The customer's word against a list word: the same, or the start of it ("מיקרו" is "מיקרוגל"). */
+function fitWordMatches(q: string, doc: Set<string>): boolean {
+  if (doc.has(q)) return true;
+  if (/^[0-9]+$/.test(q) || q.length < 4) return false;
+  for (const t of doc) if (t.length > q.length && t.startsWith(q)) return true;
+  return false;
+}
+
+/**
+ * The products whose own "מתאים ל" list names what the customer named
+ * (Smoovee 2026-11-15: "בר מים" found only a sold-out title, while Ariel, Adam
+ * and Alexa list "ברי מים"; "מיקרו" found nothing, Asaf lists "מיקרוגל"). The
+ * most words matched wins, a number never counts alone, a word most lists
+ * hold counts for nothing; in stock first.
+ */
+export function fitListMatches(list: any[], query: string, per: number): any[] {
+  // A three-letter word keeps its one-letter prefix in descriptionTokens ("לבר");
+  // here it also stands without it ("בר", the list's "ברי מים").
+  const words = descriptionTokens(query)
+    .filter((forms) => !forms.some((f) => STAND_WORDS.has(f) || STOCK_ASK.has(f)))
+    .map((forms) => (forms.length === 1 && /^[לבמשכוה][א-ת]{2}$/.test(forms[0]) ? [forms[0], forms[0].slice(1)] : forms));
+  if (!words.length) return [];
+  const docs = list.map((p) => ({ p, d: fitForms(fitListOf(p)) })).filter((x) => x.d.size);
+  if (!docs.length) return [];
+  const hit = (d: Set<string>, forms: string[]) => forms.some((f) => fitWordMatches(f, d));
+  const generic = words.map((forms) => /^[0-9]+$/.test(forms[0]) || docs.filter((x) => hit(x.d, forms)).length > docs.length / 2);
+  if (generic.every(Boolean)) return [];
+  const scored = docs.map((x) => {
+    const m = words.map((forms) => hit(x.d, forms));
+    return { p: x.p, n: m.filter(Boolean).length, specific: m.some((v, i) => v && !generic[i]) };
+  }).filter((x) => x.specific);
+  if (!scored.length) return [];
+  const top = Math.max(...scored.map((x) => x.n));
+  return inStockFirst(scored.filter((x) => x.n === top).map((x) => ({ ...x.p, matched_in: "fits_list" }))).slice(0, per);
+}
+
 /** In stock first, keeping each group's order. */
 function inStockFirst(list: any[]): any[] {
   const out = (p: any) => p?.stock_status === "outofstock";
@@ -604,6 +686,22 @@ export function descriptionTokens(text: unknown): string[][] {
 const catalogCache = new Map<string, { at: number; list: any[] | null }>();
 
 /**
+ * Stores whose products are sold by size (most of them name a footprint:
+ * Smoovee's "משטח הזזה 34*38 ס\"מ"). For such a store a device the search
+ * does not know is a question of its base size, not "not found".
+ */
+const sizedStores = new Map<string, boolean>();
+const storeKey = (u: string) => { try { return new URL(u).origin.toLowerCase(); } catch { return u.toLowerCase(); } };
+function rememberSizedStore(base: string, list: any[]): void {
+  const products = list.filter((p: any) => (p?.status ?? "publish") === "publish");
+  if (!products.length) return;
+  sizedStores.set(storeKey(base), products.filter((p: any) => footprintOf(p)).length > products.length / 2);
+}
+export function storeSellsBySize(storeUrl: string): boolean {
+  return sizedStores.get(storeKey(storeUrl)) === true;
+}
+
+/**
  * The store's whole published catalogue, at most two pages of 100, ten
  * minutes per store and language; null when it is bigger (a full second page).
  * A Hebrew ask reads lang=he: on a WPML / Polylang store that is the Hebrew
@@ -626,6 +724,7 @@ async function wholeCatalog(auth: string, base: string, lang: string | null): Pr
     list = second.length >= 100 ? null : [...list, ...second];
   }
   catalogCache.set(key, { at: Date.now(), list });
+  if (list) rememberSizedStore(base, list);
   return list;
 }
 
@@ -656,7 +755,9 @@ async function descriptionSearch(
     && (!Number.isFinite(maxP) || Number(p?.price) <= maxP));
   if (!pool.length) return [];
   const flat = (t: unknown) => new Set(descriptionTokens(t).flat());
-  const docs = pool.map((p) => ({ p, strong: flat(`${p?.name ?? ""} ${p?.short_description ?? ""}`), weak: flat(p?.description ?? "") }));
+  // The usage notes are not what a product fits (Smoovee: "במידה וסמובי זה
+  // נרכש עבור מיקסר מכל דגם, יש לרכוש מעצור" made ten surfaces "fit" a mixer).
+  const docs = pool.map((p) => ({ p, strong: flat(`${p?.name ?? ""} ${withoutUsageNotes(p?.short_description)}`), weak: flat(withoutUsageNotes(p?.description)) }));
   const has = (d: { strong: Set<string>; weak: Set<string> }, w: string[]) => w.some((f) => d.strong.has(f)) ? 2 : w.some((f) => d.weak.has(f)) ? 1 : 0;
   // A word most of the catalogue holds names nothing in particular.
   const generic = words.map((w) => /^[0-9]+$/.test(w[0]) || docs.filter((d) => has(d, w)).length > docs.length / 2);
@@ -703,6 +804,55 @@ export function fitsBase(list: any[], a: number, b: number): any[] | null {
   return fits.sort((x, y) => x.f![0] * x.f![1] - y.f![0] * y.f![1]).map((x) => x.p);
 }
 
+/** A product may be this much smaller than the base, per side: it stands on feet (the owner's picks, 11-15). */
+export const FIT_TOLERANCE_CM = 2;
+
+/**
+ * The closest fit for each base size the customer gave (Smoovee owner,
+ * 2026-11-15: a 21 x 24 base takes Monica 20 x 25, a 22 x 35 base takes
+ * Christina 23 x 40, a 49 x 32 microwave has none: "our largest is Asaf 33 x 46").
+ * A product fits when it is no more than FIT_TOLERANCE_CM smaller than the base
+ * on each side, turned either way; the closest is the one whose area is
+ * nearest the base's, in stock first. One size: the closest and one other
+ * size as a second choice. Several sizes: the closest for each, marked with
+ * the size it is for. A size nothing fits: the store's largest, marked
+ * too_small, so the bot can say so honestly. Null when no product names a
+ * footprint (not such a store).
+ */
+export function closestFits(list: any[], sizes: Array<[number, number]>): any[] | null {
+  const sized = list.map((p) => ({ p, f: footprintOf(p) })).filter((x) => x.f) as Array<{ p: any; f: [number, number] }>;
+  if (!sized.length) return null;
+  const T = FIT_TOLERANCE_CM;
+  const out: any[] = [];
+  const seen = new Set<string>();
+  const add = (x: { p: any; f: [number, number] }, size: [number, number], extra: Record<string, unknown> = {}) => {
+    const id = String(x.p?.id);
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({ ...x.p, matched_in: "dimensions", footprint_cm: x.f, fit_for: size, ...extra });
+  };
+  const outOfStock = (p: any) => p?.stock_status === "outofstock";
+  for (const size of sizes) {
+    const [a, b] = size, area = a * b;
+    const fits = sized
+      .filter(({ f }) => (f[0] >= a - T && f[1] >= b - T) || (f[0] >= b - T && f[1] >= a - T))
+      .sort((x, y) => Number(outOfStock(x.p)) - Number(outOfStock(y.p)) || Math.abs(x.f[0] * x.f[1] - area) - Math.abs(y.f[0] * y.f[1] - area));
+    if (!fits.length) {
+      const largest = [...sized].sort((x, y) => Number(outOfStock(x.p)) - Number(outOfStock(y.p)) || y.f[0] * y.f[1] - x.f[0] * x.f[1])[0];
+      add(largest, size, { too_small: true });
+      continue;
+    }
+    add(fits[0], size);
+    if (sizes.length === 1) {
+      // A second choice of another size (not the same footprint in another finish).
+      const area0 = fits[0].f[0] * fits[0].f[1];
+      const next = fits.slice(1).find((x) => x.f[0] * x.f[1] !== area0);
+      if (next) add(next, size, { second_choice: true });
+    }
+  }
+  return out;
+}
+
 /**
  * The products whose NAME holds one of these words, read from the store's
  * cached catalogue rather than its search (Smoovee prod 2026-11-13: the
@@ -746,7 +896,7 @@ async function hebrewProductSearch(
   // title search for "במלאי" found one sold-out scarf by its description. A
   // general stock ask is a browse of what is in stock, newest first, one from
   // each kind in turn so it is not ten of the same.
-  if (words.every((w) => STOCK_ASK.has(hebrewStem(w)))) {
+  if (words.every((w) => STOCK_ASK.has(hebrewStem(w)) || STAND_WORDS.has(hebrewStem(w)))) {
     const browse = new URLSearchParams(params);
     browse.delete("search");
     browse.set("stock_status", "instock");
@@ -785,6 +935,23 @@ async function hebrewProductSearch(
     ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
   ]);
   const named = [...perWord.flat(), ...local, ...(wantsStock && !rest.length ? [] : whole)].filter((p: any) => !wantsStock || p?.stock_status !== "outofstock");
+  // The name that holds the most of the words first: "סמובי" is in every one of
+  // Smoovee's names, so "סמובי אלכסה" listed the catalogue in its own order
+  // and Alexa came tenth (11-14 19:18, Ariel shown). Stable for equal counts.
+  const heldBy = (p: any) => words.filter((w) => nameHolds(p, w)).length;
+  named.sort((a: any, b: any) => heldBy(b) - heldBy(a));
+  // What the customer named is in a product's own "מתאים ל" list: those first,
+  // unless an in-stock product's NAME holds the words (the customer named it).
+  if (!named.some((p: any) => p?.stock_status !== "outofstock")) {
+    const all = await wholeCatalog(auth, base, params.get("lang") || "he").catch(() => null);
+    const fitted = all ? fitListMatches((visible(all) as any[]).filter((p: any) => (p?.status ?? "publish") === "publish" && (!wantsStock || p?.stock_status !== "outofstock")), query, per) : [];
+    if (fitted.length) {
+      const seen = new Set<string>();
+      const out = [...fitted, ...named].filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
+      log("fits_list", fitted.length);
+      return out.slice(0, per);
+    }
+  }
   if (inCat.length) {
     const catIds = new Set(inCat.map((p: any) => String(p?.id)));
     // A product the words name AND in the category first ("מטפחת אנה"), then the category, then other title hits.
@@ -1055,21 +1222,24 @@ const WooCommerceAdapter: ProviderAdapter = {
         // words): the catalogue's products that fit it, smallest first, in stock
         // first; the model only phrases them. A store whose products name no size
         // searches as usual.
-        const fit = Array.isArray(args.fits_cm) && args.fits_cm.length === 2 && args.fits_cm.every((n: unknown) => Number(n) > 0 && Number(n) < 1000)
-          ? [Number(args.fits_cm[0]), Number(args.fits_cm[1])] : null;
-        if (fit && !args.include && !args.category) {
+        // Every size the customer gave (two devices, two sizes: 11-14 21:25).
+        const pair = (v: unknown): [number, number] | null =>
+          Array.isArray(v) && v.length === 2 && v.every((n: unknown) => Number(n) > 0 && Number(n) < 1000) ? [Number(v[0]), Number(v[1])] : null;
+        const sizes = (Array.isArray(args.fits_cm_all) ? (args.fits_cm_all as unknown[]).map(pair) : [pair(args.fits_cm)])
+          .filter((x): x is [number, number] => !!x).slice(0, 4);
+        if (sizes.length && !args.include && !args.category) {
           const visibleNow = (l: any[]) => l.filter((p: any) => p?.catalog_visibility !== "hidden" && (p?.status ?? "publish") === "publish" && wooProductAllowed(storeUrl, p));
           const all = await wholeCatalog(auth, base, lang ?? (/[א-ת]/.test(String(args.customer_query ?? args.query ?? "")) ? "he" : null)).catch(() => null);
-          const fitting = all ? fitsBase(visibleNow(all), fit[0], fit[1]) : null;
-          if (fitting) {
+          const picks = all ? closestFits(visibleNow(all), sizes) : null;
+          if (picks) {
             const per = Math.min(10, Number(args.per_page ?? 10));
-            const out = inStockFirst(fitting).slice(0, per).map((p: any) => ({ ...p, matched_in: "dimensions", footprint_cm: footprintOf(p) }));
-            console.log(`[woo-search] fits=${fit.join("x")} results=${out.length} first=${out[0] ? `${out[0].id}:${(out[0].footprint_cm ?? []).join("x")}` : "none"}`);
+            const out = picks.slice(0, per);
+            console.log(`[woo-search] fits=${sizes.map((x) => x.join("x")).join(",")} results=${out.length} picks=${out.map((p: any) => `${p.id}:${(p.footprint_cm ?? []).join("x")}${p.too_small ? "(too-small)" : ""}`).join(",") || "none"}`);
             return out;
           }
         }
         const own = typeof args.customer_query === "string" ? args.customer_query.trim() : "";
-        if (own && /[א-ת]/.test(own) && !/[א-ת]/.test(String(args.query ?? "")) && !args.include && !args.category) {
+        if (own && /[א-ת]/.test(own) && (!/[א-ת]/.test(String(args.query ?? "")) || (genericStoreQuery(args.query) && !genericStoreQuery(own))) && !args.include && !args.category) {
           const rest = { ...args, customer_query: undefined };
           if (await storeCatalogIsHebrew(auth, base, lang).catch(() => false)) {
             const per = Math.min(100, Number(args.per_page ?? 10));

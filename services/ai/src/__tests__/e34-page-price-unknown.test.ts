@@ -8,6 +8,8 @@
  * stays unknown shows no number, only "למחיר העדכני באתר".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const fetchMock = vi.fn();
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -163,5 +165,17 @@ describe("a product its own page sells below its price says so (Omer 2026-11-15)
     expect(ps.salePriceLine(c, "he")).toBe("עכשיו במבצע: ₪217 במקום ₪227");
     expect(ps.salePriceLine(env.candidates[0], "he")).toBeNull();
     expect(ps.salePriceLine(ps.priceOnSiteOnly(c), "he")).toBeNull();
+  });
+});
+
+describe("the web chat card: a rules store's product whose page could not be read", () => {
+  it("carries no number and priceOnSite, on the card and every variant", () => {
+    const w = readFileSync(join(__dirname, "../services/woo-chat-turn.service.ts"), "utf8");
+    expect(w).toContain('const page = await pagePriceFor(raw, card.productUrl).catch(() => ({ state: "none" as const }));');
+    const block = w.slice(w.indexOf('if (page.state === "unknown") {'), w.indexOf("return card;", w.indexOf('if (page.state === "unknown") {')));
+    expect(block).toContain("card.price = null;");
+    expect(block).toContain("card.compareAtPrice = null;");
+    expect(block).toContain("card.priceOnSite = true;");
+    expect(block).toContain("price: null, compareAtPrice: null");
   });
 });
