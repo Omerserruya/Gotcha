@@ -15,7 +15,7 @@ import { defaultRoute, DELIVERABLE_CHANNELS, wantsPush, ASSIGNEE_PUSH_ONLY } fro
 import { fcmConfig } from "./push-sender";
 import { apnsConfig } from "./apns-sender";
 import { wantsWhatsApp } from "./whatsapp-notice.service";
-import { getPlatformWhatsAppSender } from "./platform-whatsapp";
+import { platformSenderFor, whatsAppReadiness } from "./platform-whatsapp";
 import { resolveRecipients, type RecipientSpec } from "./recipient-resolver.service";
 
 export interface ReceivableEvent { type: string; label: string; group: string; channels: string[] }
@@ -35,7 +35,10 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
     return resolved.get(key)!;
   };
   const deliverable = new Set<string>(DELIVERABLE_CHANNELS as readonly string[]);
-  const whatsappReady = !!getPlatformWhatsAppSender();
+  // A person can only have WhatsApp if they can confirm a number: the
+  // verification code must be sendable. Each event is then gated on its own
+  // template (approved, alert on) below.
+  const whatsappReady = !!(await platformSenderFor("verification", null));
   // Push per event: only where the event pushes and a provider is set up.
   const pushReady = !!fcmConfig() || !!apnsConfig();
   const out: ReceivableEvent[] = [];
@@ -64,7 +67,7 @@ export async function receivableEvents(tenantId: string, userId: string): Promis
     const list = PER_EVENT_CHANNELS.filter((c) => channels.has(c));
     if (list.length) {
       // WhatsApp per event: only where a template exists and GOTCHA's number is set up.
-      if (whatsappReady && wantsWhatsApp(entry.key)) list.push("whatsapp");
+      if (whatsappReady && wantsWhatsApp(entry.key) && (await whatsAppReadiness(entry.key)).ready) list.push("whatsapp");
     }
     if (reached && pushReady && wantsPush(entry.key)) list.push("push");
     if (list.length) out.push({ type: entry.key, label: entry.label, group: entry.group, channels: list });

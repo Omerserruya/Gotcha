@@ -10,9 +10,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 
-const H = vi.hoisted(() => ({ updates: [] as any[] }));
+const H = vi.hoisted(() => ({ updates: [] as any[], platformWabas: new Set<string>(), platform: [] as any[], quality: [] as any[] }));
 
-vi.mock("@chatcenter/shared", () => ({
+vi.mock("@chatcenter/shared", async () => ({
+  metaTemplateStatus: (await import("@chatcenter/shared/src/whatsapp/platform-store")).metaTemplateStatus,
+  isPlatformWaba: async (w: string) => H.platformWabas.has(w),
+  applyPlatformTemplateStatus: async (u: any) => { H.platform.push(u); return true; },
+  notePlatformPhoneQuality: async (v: any) => { H.quality.push(v); },
   prisma: {
     channelAccount: {
       findFirst: vi.fn(async () => null),
@@ -48,12 +52,12 @@ const app = express();
 app.use(express.json());
 app.use("/api/webhook", webhookRoutes);
 
-const post = async (value: any, field = "message_template_status_update") => {
-  await request(app).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: "waba1", changes: [{ field, value }] }] });
+const post = async (value: any, field = "message_template_status_update", waba = "waba1") => {
+  await request(app).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ id: waba, changes: [{ field, value }] }] });
   await new Promise((r) => setTimeout(r, 20));
 };
 
-beforeEach(() => { H.updates = []; });
+beforeEach(() => { H.updates = []; H.platformWabas = new Set(); H.platform = []; H.quality = []; });
 
 describe("template status updates", () => {
   it("★ PAUSED: no longer usable, the Meta state in front of the reason", async () => {
@@ -88,5 +92,31 @@ describe("template status updates", () => {
   it("without an id or language, by name on this number (as before)", async () => {
     await post({ event: "APPROVED", message_template_name: "old" });
     expect(H.updates[0].where.OR).toEqual([{ AND: [{ name: "old" }, { OR: [{ channelAccountId: "ca1" }, { channelAccountId: null }] }] }]);
+  });
+});
+
+describe("GOTCHA's own alerts WABA (2026-11-15): no ChannelAccount, its own rows", () => {
+  it("a status for the platform WABA updates the platform template, never a tenant's", async () => {
+    H.platformWabas.add("waba_platform");
+    await post({ event: "PAUSED", message_template_id: 77, message_template_name: "gotcha_customer_waiting", message_template_language: "he", reason: "LOW_QUALITY" }, "message_template_status_update", "waba_platform");
+    expect(H.updates).toEqual([]);
+    expect(H.platform).toEqual([{ name: "gotcha_customer_waiting", language: "he", metaTemplateId: "77", status: "PAUSED", rejectedReason: "LOW_QUALITY", source: "webhook" }]);
+  });
+  it("REINSTATED is APPROVED; FLAGGED (still sending) is not stored", async () => {
+    H.platformWabas.add("waba_platform");
+    await post({ event: "REINSTATED", message_template_name: "gotcha_credit_low", message_template_language: "en" }, "message_template_status_update", "waba_platform");
+    await post({ event: "FLAGGED", message_template_name: "gotcha_credit_low", message_template_language: "en" }, "message_template_status_update", "waba_platform");
+    expect(H.platform.map((u) => u.status)).toEqual(["APPROVED"]);
+  });
+  it("an unknown WABA is still dropped", async () => {
+    await post({ event: "APPROVED", message_template_name: "x" }, "message_template_status_update", "waba_unknown");
+    expect(H.platform).toEqual([]);
+    expect(H.updates).toEqual([]);
+  });
+  it("the platform number's quality and limit", async () => {
+    H.platformWabas.add("waba_platform");
+    await post({ display_phone_number: "972501112222", event: "UPGRADE", current_limit: "TIER_10K" }, "phone_number_quality_update", "waba_platform");
+    await post({ current_limit: "TIER_10K" }, "phone_number_quality_update", "waba1");
+    expect(H.quality).toEqual([{ display_phone_number: "972501112222", event: "UPGRADE", current_limit: "TIER_10K" }]);
   });
 });

@@ -16,6 +16,7 @@ import request from "supertest";
 const H = vi.hoisted(() => ({ users: [] as any[], locales: {} as Record<string, string>, inApp: [] as any[], emails: [] as any[], dedup: new Set<string>(), viewer: "dana" }));
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
   authenticate: (req: any, _r: any, n: any) => { req.user = { userId: H.viewer }; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },

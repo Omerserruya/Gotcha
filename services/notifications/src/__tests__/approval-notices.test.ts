@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const H = vi.hoisted(() => ({ users: [] as any[], inApp: [] as any[], approvals: [] as any[], dedup: new Set<string>(), onEvent: null as null | ((e: any) => void), pinged: [] as any[] }));
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
   resolveEffectiveLocale: async () => ({ effective: "he" }),
   prisma: {

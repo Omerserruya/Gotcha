@@ -23,3 +23,5 @@ export * from "./primary-number";
 export * from "./signup-connect";
 export * from "./platform-templates";
 export * from "./platform-contract";
+export * from "./platform-sender";
+export * from "./platform-store";

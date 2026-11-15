@@ -19,7 +19,8 @@ import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatc
 import { EVENT_PREFS_KEY, type EventChannels } from "../services/personal-preferences.service";
 import { receivableEvents } from "../services/receivable-events";
 import { EVENT_CATALOGUE } from "../services/event-catalogue";
-import { getPlatformWhatsAppSender } from "../services/platform-whatsapp";
+import { platformSenderFor } from "../services/platform-whatsapp";
+import { VERIFICATION_EVENT } from "@chatcenter/shared";
 import { startVerification, confirmVerification } from "../services/whatsapp-verify.service";
 
 const router = Router();
@@ -49,7 +50,7 @@ const DEFAULTS = {
 /** "HH:MM", 24-hour. Anything else is rejected rather than coerced. */
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-function shape(row: Record<string, unknown> | null) {
+function shape(row: Record<string, unknown> | null, whatsappAvailable: boolean) {
   const r = { ...DEFAULTS, ...(row ?? {}) } as typeof DEFAULTS;
   return {
     inApp: r.inApp,
@@ -63,7 +64,7 @@ function shape(row: Record<string, unknown> | null) {
       r.quietHoursFrom && r.quietHoursTo ? { from: r.quietHoursFrom, to: r.quietHoursTo } : null,
     // WhatsApp alerts (2026-11-02): offered only when GOTCHA's number is set
     // up; on only with a number confirmed by code.
-    whatsappAvailable: !!getPlatformWhatsAppSender(),
+    whatsappAvailable,
     whatsappPhone: ((row ?? {}) as any).whatsappPhone ?? null,
     whatsappOptedInAt: ((row ?? {}) as any).whatsappOptedInAt ?? null,
   };
@@ -112,7 +113,7 @@ router.get("/notification-preferences/me", async (req: Request, res: Response) =
     const row = await prisma.userNotificationPreference.findUnique({
       where: { userId: me.userId },
     });
-    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
+    res.json({ data: { ...shape(row as never, !!(await platformSenderFor(VERIFICATION_EVENT, null))), ...(await eventsFor(me)) } });
   } catch (err) {
     console.error("Get own notification preferences error:", err);
     res.status(500).json({ error: "Failed to get notification preferences" });
@@ -245,7 +246,7 @@ router.patch("/notification-preferences/me", async (req: Request, res: Response)
         update: { value: { events: merged } as never, updatedBy: me.userId },
       });
     }
-    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
+    res.json({ data: { ...shape(row as never, !!(await platformSenderFor(VERIFICATION_EVENT, null))), ...(await eventsFor(me)) } });
   } catch (err) {
     console.error("Update own notification preferences error:", err);
     res.status(500).json({ error: "Failed to update notification preferences" });
@@ -276,7 +277,7 @@ router.post("/notification-preferences/me/whatsapp/confirm", async (req: Request
     const r = await confirmVerification(me, (req.body ?? {}).phone, (req.body ?? {}).code);
     if (!r.ok) { res.status(422).json({ error: "The code did not confirm the number", code: r.code }); return; }
     const row = await prisma.userNotificationPreference.findUnique({ where: { userId: me.userId } });
-    res.json({ data: { ...shape(row as never), ...(await eventsFor(me)) } });
+    res.json({ data: { ...shape(row as never, !!(await platformSenderFor(VERIFICATION_EVENT, null))), ...(await eventsFor(me)) } });
   } catch (err) {
     console.error("WhatsApp confirm error:", err);
     res.status(500).json({ error: "Failed to confirm the code" });

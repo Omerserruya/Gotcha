@@ -17,6 +17,11 @@ import {
   timingSafeEqualStr,
   reportOperationalFailure,
   ERROR_CODES,
+  isPlatformWaba,
+  isPlatformPhoneNumberId,
+  metaTemplateStatus,
+  applyPlatformTemplateStatus,
+  notePlatformPhoneQuality,
 } from "@chatcenter/shared";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -220,6 +225,13 @@ router.post("/", async (req: Request, res: Response) => {
     ]);
     if (adapter.channel === "WHATSAPP") {
       for (const entry of body.entry || []) {
+        // The platform number's quality and messaging limit (its WABA has no
+        // ChannelAccount, so nothing else would record them).
+        for (const c of (entry.changes || []).filter((x: any) => x.field === "phone_number_quality_update")) {
+          if (await isPlatformWaba(String(entry.id || ""))) {
+            await notePlatformPhoneQuality(c.value || {}).catch((e: any) => console.warn("[WEBHOOK] platform quality update failed:", e?.message));
+          }
+        }
         const templateChanges = (entry.changes || []).filter((c: any) => TEMPLATE_FIELDS.has(c.field));
         if (templateChanges.length === 0) continue;
 
@@ -241,6 +253,26 @@ router.post("/", async (req: Request, res: Response) => {
           } catch {}
         }
         if (!matchedAccount) {
+          // GOTCHA's own alerts number has no ChannelAccount: its WABA's
+          // template statuses go to platform_whatsapp_templates (2026-11-15).
+          if (await isPlatformWaba(wabaId)) {
+            for (const change of templateChanges) {
+              if (change.field !== "message_template_status_update") continue;
+              const tu = change.value || {};
+              const status = metaTemplateStatus(tu.event);
+              if (!tu.message_template_name || !status) continue;
+              await applyPlatformTemplateStatus({
+                name: String(tu.message_template_name),
+                language: tu.message_template_language ? String(tu.message_template_language) : null,
+                metaTemplateId: tu.message_template_id ? String(tu.message_template_id) : null,
+                status,
+                rejectedReason: tu.reason ? String(tu.reason) : null,
+                source: "webhook",
+              }).catch((e: any) => console.error("[WEBHOOK] platform template update failed:", e?.message));
+              console.log(`[WEBHOOK] Platform template "${tu.message_template_name}" ${tu.message_template_language ?? ""} -> ${status}`);
+            }
+            continue;
+          }
           console.warn(`[WEBHOOK] No channel account found for WABA ${wabaId} template update`);
           continue;
         }
@@ -351,8 +383,9 @@ router.post("/", async (req: Request, res: Response) => {
     if (!channelAccount) {
       // GOTCHA's own number (approval requests to managers) belongs to no
       // workspace: only its button replies are taken, as approval decisions.
-      const platformId = (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
-      if (adapter.channel === "WHATSAPP" && platformId && channelExternalId === platformId) {
+      // The console's number or the env one: both during a switch, so a tap
+      // on a message sent before it still lands (2026-11-15).
+      if (adapter.channel === "WHATSAPP" && (await isPlatformPhoneNumberId(channelExternalId))) {
         for (const msg of adapter.extractMessages(body)) {
           const payload = msg.content.interactiveReply?.payload;
           if (!payload) continue;

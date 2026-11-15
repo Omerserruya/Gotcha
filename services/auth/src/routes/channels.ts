@@ -35,6 +35,8 @@ import {
   listSignupPhoneIds,
   getSignupPhoneDetails,
   registerSignupPhone,
+  isPlatformPhoneNumberId,
+  isPlatformWaba,
   resolveAppPublicUrl,
   hasPermission,
   assertWithinLimit,
@@ -509,6 +511,21 @@ router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channel
 
 // ─── WhatsApp Embedded Signup Connect ────────────────────────
 
+/**
+ * GOTCHA's own alerts number (platform_whatsapp_senders, or the env one) and
+ * its WABA belong to no workspace: a tenant connect of either is refused
+ * before anything changes at Meta (2026-11-15).
+ */
+const NUMBER_IS_PLATFORM = {
+  error: "number_is_platform",
+  message: "This number is GOTCHA's own alerts number and cannot be connected to a workspace.",
+};
+async function touchesPlatformNumber(wabaId: string | null | undefined, phoneNumberIds: string[]): Promise<boolean> {
+  if (await isPlatformWaba(wabaId)) return true;
+  for (const id of phoneNumberIds) if (await isPlatformPhoneNumberId(id)) return true;
+  return false;
+}
+
 const whatsappConnectSchema = z.object({
   code: z.string().min(1),
   wabaId: z.string().optional(),       // From Embedded Signup session info
@@ -554,6 +571,11 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
       return;
     }
 
+    if (await touchesPlatformNumber(wabaId, phoneNumberIds)) {
+      res.status(409).json(NUMBER_IS_PLATFORM);
+      return;
+    }
+
     // Step 2: Subscribe app to webhooks on customer's WABA. This is what
     // makes inbound messages actually arrive - if it fails, the channel is
     // NOT usable and must not be presented as CONNECTED.
@@ -568,6 +590,10 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission(
 
     if (phoneNumberIds.length === 0) {
       res.status(400).json({ error: "No phone numbers found in the WhatsApp Business Account." });
+      return;
+    }
+    if (await touchesPlatformNumber(null, phoneNumberIds)) {
+      res.status(409).json(NUMBER_IS_PLATFORM);
       return;
     }
 
@@ -681,6 +707,10 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
     await redis.del(`wa_pending_token:${req.tenantId!}`);
 
     console.log("[WA-SESSION] Completing setup with WABA:", wabaId, "Phone:", phoneNumberId);
+    if (await touchesPlatformNumber(wabaId, phoneNumberId ? [phoneNumberId] : [])) {
+      res.status(409).json(NUMBER_IS_PLATFORM);
+      return;
+    }
 
     // Subscribe app to WABA webhooks
     try {
@@ -698,6 +728,10 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePer
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       phoneNumberIds = (phonesResponse.data?.data || []).map((p: any) => p.id);
+    }
+    if (await touchesPlatformNumber(null, phoneNumberIds)) {
+      res.status(409).json(NUMBER_IS_PLATFORM);
+      return;
     }
 
     const connectedAccounts: any[] = [];

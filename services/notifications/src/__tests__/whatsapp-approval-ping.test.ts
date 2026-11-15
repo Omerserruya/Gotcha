@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const H = vi.hoisted(() => ({ sent: [] as any[], notify: [] as any[], recipient: { userId: "boss", phoneE164: "+972500000000" }, locale: "he", primaryAsked: [] as any[], from: [] as string[] }));
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   resolveEffectiveLocale: async () => ({ effective: H.locale }),
   readDurableSetting: async () => ({ timezone: "Asia/Jerusalem" }),
   parseBusinessHours: (v: any) => v,
@@ -38,13 +39,14 @@ vi.mock("@chatcenter/shared", async () => ({
 }));
 
 import { approvalPingText, notifyManagerOfApproval } from "../services/whatsapp-approval.service";
+import { PS } from "./helpers/platform-sender-double";
 
 const NEUTRAL = "לשייך ל-Noa את השיחה של Omer Serruya (וואטסאפ)";
 const TO_YOU = "לשייך אליך את השיחה של Omer Serruya (וואטסאפ)";
 const plan = (o: any = {}) => ({ steps: [{ riskLevel: "low", target: { assigneeId: "noa" }, summary: NEUTRAL, summaryForAssignee: TO_YOU }], requester: { userId: "matan", name: "Matan" }, source: "home_assistant", ...o });
 const DATA = { id: "apr1", tool: "propose_plan", summary: NEUTRAL, riskLevel: "medium", reason: "בקשה של Matan מ-GOTCHA ב-Home", expiresAt: "2026-10-08T15:30:00Z" };
 
-beforeEach(() => { H.sent = []; H.notify = []; H.primaryAsked = []; H.from = []; H.recipient = { userId: "boss", phoneE164: "+972500000000" }; H.locale = "he"; });
+beforeEach(() => { PS.reset(); H.sent = []; H.notify = []; H.primaryAsked = []; H.from = []; H.recipient = { userId: "boss", phoneE164: "+972500000000" }; H.locale = "he"; });
 
 describe("★ the ping's words", () => {
   it("a plan: who asked, where, the steps for this reader; its own risk; no tool name, no requester line as a reason", () => {
@@ -114,5 +116,31 @@ describe("★ from GOTCHA's own number (2026-11-02)", () => {
   it("not set up yet: the workspace's number, as before (approvals keep arriving while the number is created)", async () => {
     await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
     expect(H.from).toEqual(["pn_primary"]);
+  });
+});
+
+describe("★ from the console's number (2026-11-15)", () => {
+  const db = (approved: string[], enabled: Record<string, boolean>) => { PS.db = { externalId: "pn_console", accessToken: "tok_db", approved: new Set(approved), enabled }; };
+  it("approved in both languages and switched on: sent from the console's number", async () => {
+    db(["tool.approval_required"], { "tool.approval_required": true });
+    await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
+    expect(H.from).toEqual(["pn_console"]);
+    expect(H.sent[0].template).toBe("gotcha_approval_request");
+  });
+  it("switched off, or not approved: the workspace's number exactly as before", async () => {
+    db(["tool.approval_required"], { "tool.approval_required": false });
+    await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
+    db([], { "tool.approval_required": true });
+    await notifyManagerOfApproval("T", { ...DATA, tool: "issue_refund", summary: "Refund" }, null);
+    expect(H.from).toEqual(["pn_primary", "pn_primary"]);
+  });
+  it("high risk with the review template not approved: not sent there, said so", async () => {
+    db(["tool.approval_required"], { "tool.approval_required": true });
+    await notifyManagerOfApproval("T", DATA, plan({ steps: [{ riskLevel: "high", summary: NEUTRAL }], source: "automation" }));
+    expect(H.sent).toEqual([]);
+    expect(H.notify.at(-1)).toMatchObject({ managerNotifyState: "skipped" });
+    db(["tool.approval_required", "tool.approval_required.review"], { "tool.approval_required": true });
+    await notifyManagerOfApproval("T", DATA, plan({ steps: [{ riskLevel: "high", summary: NEUTRAL }], source: "automation" }));
+    expect(H.sent[0]).toMatchObject({ template: "gotcha_approval_required" });
   });
 });

@@ -13,9 +13,10 @@
  * `ChannelAccount` is tenant-scoped. The platform number belongs to no tenant,
  * and giving it a row under some tenant id would put it in every query that
  * lists "your channels" - including the ones a merchant sees and the ones
- * billing counts. It is deployment configuration, so it lives in the
- * environment, and `getPlatformWhatsAppSender()` returns null when it is absent
- * rather than falling back to a tenant's number. There is no fallback on
+ * billing counts. Since 2026-11-15 it lives in its own table
+ * (platform_whatsapp_senders, set by a SYSTEM_ADMIN in the console) with the
+ * env pair as the fallback, and `getPlatformWhatsAppSender()` returns null when
+ * neither is set rather than falling back to a tenant's number. There is no fallback on
  * purpose: sending a platform alert from a merchant's number is the failure this
  * module exists to prevent, so it must never be the degraded path.
  *
@@ -53,6 +54,9 @@
 // 2026-11-15, so auth's console routes read the same ones; re-exported here so
 // every existing import keeps working.
 import {
+  resolvePlatformWhatsAppSender,
+  platformTemplateSendable,
+  markPlatformTokenInvalid,
   TEMPLATE_LOCALES,
   PLATFORM_TEMPLATES,
   APPROVAL_REVIEW_TEMPLATE,
@@ -102,20 +106,44 @@ export interface PlatformSender {
   /** The phone number id Meta sends from. */
   externalId: string;
   accessToken: string;
+  /** "db": the console's number; "env": the deployment's env pair. */
+  source: "db" | "env";
 }
 
 /**
  * GOTCHA's own sending number, or null when the deployment has none.
  *
+ * Since 2026-11-15 the console's number (platform_whatsapp_senders) wins and
+ * the env pair is the fallback; see packages/shared/src/whatsapp/platform-sender.ts.
+ *
  * Null is a real answer and must not be worked around. A caller that cannot get
  * a platform sender must skip WhatsApp and say so - never borrow the tenant's
  * channel, which is the failure this module exists to prevent.
  */
-export function getPlatformWhatsAppSender(): PlatformSender | null {
-  const externalId = (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
-  const accessToken = (process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN ?? "").trim();
-  if (!externalId || !accessToken) return null;
-  return { externalId, accessToken };
+export async function getPlatformWhatsAppSender(): Promise<PlatformSender | null> {
+  const s = await resolvePlatformWhatsAppSender();
+  return s ? { externalId: s.externalId, accessToken: s.accessToken, source: s.source } : null;
+}
+
+/**
+ * The platform sender for one template, or null when it may not send it now:
+ * no number, or (for the console's number) the template is not APPROVED in
+ * both languages or its alert is switched off. `governedBy` is the alert whose
+ * switch applies (null for the verification code, which has none).
+ */
+export async function platformSenderFor(templateKey: string, governedBy: string | null): Promise<PlatformSender | null> {
+  const sender = await getPlatformWhatsAppSender();
+  if (!sender) return null;
+  const gate = await platformTemplateSendable(templateKey, governedBy, sender.source);
+  return gate.ok ? sender : null;
+}
+
+/**
+ * A send from the platform number failed: when the console's token is dead,
+ * the row becomes TOKEN_INVALID so the console says so and sends stop.
+ */
+export async function notePlatformSendFailure(sender: PlatformSender, err: unknown): Promise<void> {
+  if (sender.source === "db") await markPlatformTokenInvalid(err).catch(() => false);
 }
 
 /** The template for an event, or null when that event has none. */
@@ -126,20 +154,22 @@ export function templateFor(eventType: string): PlatformTemplate | null {
 /**
  * Whether an event can be delivered on WhatsApp at all.
  *
- * Both halves are required: a template AND a configured platform number.
- * Reported as a reason rather than a boolean, because "we have no number yet"
- * and "this event has no template" need different sentences and neither should
- * surface as a silently missing notification.
+ * All are required: a template, a platform number, and for the console's
+ * number the template APPROVED in both languages with its alert switched on.
+ * Reported as a reason rather than a boolean, because each needs its own
+ * sentence and none should surface as a silently missing notification.
  */
 export type WhatsAppReadiness =
   | { ready: true; template: PlatformTemplate; sender: PlatformSender }
-  | { ready: false; reason: "no_platform_number" | "no_template_for_event" };
+  | { ready: false; reason: "no_platform_number" | "no_template_for_event" | "alert_disabled" | "template_not_approved" };
 
-export function whatsAppReadiness(eventType: string): WhatsAppReadiness {
+export async function whatsAppReadiness(eventType: string): Promise<WhatsAppReadiness> {
   const template = templateFor(eventType);
   if (!template) return { ready: false, reason: "no_template_for_event" };
-  const sender = getPlatformWhatsAppSender();
+  const sender = await getPlatformWhatsAppSender();
   if (!sender) return { ready: false, reason: "no_platform_number" };
+  const gate = await platformTemplateSendable(eventType, eventType, sender.source);
+  if (!gate.ok) return { ready: false, reason: gate.reason };
   return { ready: true, template, sender };
 }
 

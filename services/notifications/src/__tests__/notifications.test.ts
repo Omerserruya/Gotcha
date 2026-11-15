@@ -55,6 +55,7 @@ const { prismaMock, redisMock, emailQueueMock, publishEventMock } = vi.hoisted((
 });
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   // The real (pure, import-free) category/target rules: an exhaustive mock that
   // omitted them made every in-app delivery throw inside deliverChannel's
   // catch, so these tests failed while the code worked.

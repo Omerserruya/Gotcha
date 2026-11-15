@@ -29,6 +29,13 @@ vi.mock("@chatcenter/shared", () => {
     // Pass-through: webhook.ts mounts this as router-level middleware at module
     // load, so the mock must define it or the whole suite fails to import.
     crossTenantMiddleware: (_req: any, _res: any, next: any) => next(),
+    // GOTCHA's own number (2026-11-15): the console's id (set by a test on
+    // globalThis) or the env one.
+    isPlatformPhoneNumberId: vi.fn(async (id: string) => !!id && (id === (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim() || id === (globalThis as any).__platformDbId)),
+    isPlatformWaba: vi.fn(async () => false),
+    metaTemplateStatus: vi.fn(() => null),
+    applyPlatformTemplateStatus: vi.fn(async () => true),
+    notePlatformPhoneQuality: vi.fn(async () => undefined),
     // The verifier reports a failed handshake before it answers. Without these
     // two the double threw on ERROR_CODES.webhook_verification_failed and the
     // route answered 500, which read as a broken verifier (2026-10-09).
@@ -124,6 +131,29 @@ describe("Webhook Service", () => {
       expect(incomingMessageQueue.add).toHaveBeenCalledTimes(1);
       expect(incomingMessageQueue.add).toHaveBeenCalledWith("platform-approval-reply", { payload: "apr_ref_1", senderId: "972500000001" }, { jobId: "platform-approval-wamid.B1" });
       delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
+    });
+
+    it("★ the console's number (2026-11-15, env unset): a button reply is an approval decision; a tenant-less unknown number is not", async () => {
+      (globalThis as any).__platformDbId = "pn-console";
+      (prisma.channelAccount.findFirst as any).mockResolvedValue(null);
+      const adapterFor = (id: string) => ({
+        channel: "WHATSAPP",
+        getSignatureHeader: () => "x-hub-signature-256",
+        verifySignature: vi.fn().mockReturnValue(true),
+        resolveChannelAccountExternalId: vi.fn().mockReturnValue(id),
+        extractMessages: vi.fn().mockReturnValue([
+          { externalMessageId: `wamid.${id}`, senderId: "972500000001", timestamp: new Date(), content: { type: "interactive", interactiveReply: { type: "button", payload: "apr_ref_2", title: "אישור" } } },
+        ]),
+        extractStatusUpdates: vi.fn().mockReturnValue([]),
+      });
+      for (const id of ["pn-console", "pn-stranger"]) {
+        (detectInboundAdapter as any).mockReturnValue(adapterFor(id));
+        await request(createTestApp()).post("/api/webhook").send({ object: "whatsapp_business_account", entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: id } } }] }] });
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(incomingMessageQueue.add).toHaveBeenCalledTimes(1);
+      expect(incomingMessageQueue.add).toHaveBeenCalledWith("platform-approval-reply", { payload: "apr_ref_2", senderId: "972500000001" }, { jobId: "platform-approval-wamid.pn-console" });
+      delete (globalThis as any).__platformDbId;
     });
 
     it("should respond 200 immediately and queue messages via adapter", async () => {

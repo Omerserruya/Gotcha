@@ -8,7 +8,7 @@
  * is sent, and the row says why: never a tenant's number instead.
  */
 import { prisma, getOutboundAdapter } from "@chatcenter/shared";
-import { whatsAppReadiness, buildComponents, templateParams, localeForRecipient, templateFor } from "./platform-whatsapp";
+import { whatsAppReadiness, notePlatformSendFailure, buildComponents, templateParams, localeForRecipient, templateFor } from "./platform-whatsapp";
 
 /** Events the dispatcher sends on WhatsApp: a template, and not the approval request. */
 export function wantsWhatsApp(eventType: string): boolean {
@@ -29,7 +29,7 @@ export async function deliverWhatsAppNotice(opts: {
   const { user, event } = opts;
   const phone = String(opts.phone ?? "").replace(/^\+/, "");
   if (!phone) { await log(user.tenantId, event.type, "", "skipped", "no confirmed WhatsApp number"); return "skipped"; }
-  const ready = whatsAppReadiness(event.type);
+  const ready = await whatsAppReadiness(event.type);
   if (!ready.ready) { await log(user.tenantId, event.type, `+${phone}`, "skipped", ready.reason); return "skipped"; }
   const conversationId = String(event.metadata?.conversationId ?? (event.data as any)?.conversationId ?? "");
   if (ready.template.urlButton && !conversationId) { await log(user.tenantId, event.type, `+${phone}`, "skipped", "no conversation for the template's link"); return "skipped"; }
@@ -42,6 +42,7 @@ export async function deliverWhatsAppNotice(opts: {
     await log(user.tenantId, event.type, `+${phone}`, "sent");
     return "sent";
   } catch (err: any) {
+    await notePlatformSendFailure(ready.sender, err);
     await log(user.tenantId, event.type, `+${phone}`, "failed", String(err?.message ?? "send failed").slice(0, 240));
     return "failed";
   }

@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const H = vi.hoisted(() => ({ kv: new Map<string, string>(), settings: new Map<string, string>(), members: [] as any[], emitted: [] as any[] }));
 vi.mock("@chatcenter/shared", async (importOriginal) => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   ...(await importOriginal<any>()),
   getRedis: () => ({ set: async (k: string, v: string, ...a: any[]) => { if (a.includes("NX") && H.kv.has(k)) return null; H.kv.set(k, v); return "OK"; } }),
   readDurableSetting: async (_t: string, k: string) => H.settings.get(k) ?? null,

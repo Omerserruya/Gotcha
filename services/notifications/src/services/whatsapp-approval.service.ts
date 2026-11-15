@@ -28,8 +28,9 @@ import {
   recipientRejectionMessage,
   type ChannelCredentials,
   resolvePrimaryWhatsAppAccount,
+  APPROVAL_REVIEW_EVENT,
 } from "@chatcenter/shared";
-import { localeForRecipient, getPlatformWhatsAppSender, templateFor, APPROVAL_REVIEW_TEMPLATE, buildComponents, type TemplateLocale } from "./platform-whatsapp";
+import { localeForRecipient, platformSenderFor, notePlatformSendFailure, type PlatformSender, templateFor, APPROVAL_REVIEW_TEMPLATE, buildComponents, type TemplateLocale } from "./platform-whatsapp";
 import { workspaceTimeZone } from "./personal-preferences.service";
 
 /** Risk levels above this are never one-tap; the manager is sent to the UI. */
@@ -179,9 +180,12 @@ export async function notifyManagerOfApproval(tenantId: string, data: ApprovalEv
   // 2. GOTCHA's own number when it is set up (2026-11-02: approvals off the
   // merchant's customer-facing number). Until it is, the workspace's number,
   // as before, so approvals do not stop arriving while the number is created.
-  const platform = getPlatformWhatsAppSender();
+  // The console's number sends only templates that are approved with the
+  // approval alert switched on; otherwise this falls through to the
+  // workspace's number exactly as before. (Both variants share the switch.)
+  const platform = await platformSenderFor("tool.approval_required", "tool.approval_required");
   if (platform) {
-    await sendApprovalFromPlatform(tenantId, approvalId, data, plan, resolved.recipient, riskLevel);
+    await sendApprovalFromPlatform(platform, tenantId, approvalId, data, plan, resolved.recipient, riskLevel);
     return;
   }
   const sender = await resolveWhatsAppSender(tenantId);
@@ -260,6 +264,7 @@ export async function notifyManagerOfApproval(tenantId: string, data: ApprovalEv
  * platform_approval_reply), not into any workspace's inbox.
  */
 async function sendApprovalFromPlatform(
+  platform: PlatformSender,
   tenantId: string,
   approvalId: string,
   data: ApprovalEventData,
@@ -267,7 +272,6 @@ async function sendApprovalFromPlatform(
   recipient: { userId: string; phoneE164: string },
   riskLevel: string,
 ): Promise<void> {
-  const platform = getPlatformWhatsAppSender()!;
   const fromHome = plan && (plan.source === "home_assistant" || plan.source === "command_bar");
   if (fromHome && plan.requester?.userId && plan.requester.userId === recipient.userId) {
     await markNotifyState(approvalId, "skipped", "The approver is the person who proposed this plan in GOTCHA, so it was not sent to them again.");
@@ -284,6 +288,11 @@ async function sendApprovalFromPlatform(
   const to = recipient.phoneE164.replace(/^\+/, "");
   try {
     if (ping.highRisk) {
+      // The review variant has its own approval at Meta: not approved there, no send.
+      if (!(await platformSenderFor(APPROVAL_REVIEW_EVENT, "tool.approval_required"))) {
+        await markNotifyState(approvalId, "skipped", "GOTCHA's WhatsApp review template is not approved yet, so this high-risk approval was not sent there.");
+        return;
+      }
       await adapter.sendTemplateMessage({ accessToken: platform.accessToken }, platform.externalId, to, APPROVAL_REVIEW_TEMPLATE.name, locale, buildComponents(APPROVAL_REVIEW_TEMPLATE, [action]));
       await markNotifyState(approvalId, "sent", "Sent for in-app review (high risk - no one-tap buttons).");
       return;
@@ -295,6 +304,7 @@ async function sendApprovalFromPlatform(
     await markNotifyState(approvalId, "sent");
     console.log(`[wa-approval] ${approvalId} sent from GOTCHA's number (risk ${riskLevel})`);
   } catch (err: any) {
+    await notePlatformSendFailure(platform, err);
     await markNotifyState(approvalId, "failed", `WhatsApp delivery failed: ${err?.message ?? "unknown error"}`);
     console.warn(`[wa-approval] ${approvalId} platform delivery failed:`, err?.message);
   }

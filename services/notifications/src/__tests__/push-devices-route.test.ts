@@ -20,6 +20,7 @@ const H = vi.hoisted(() => ({
 }));
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   authenticate: (req: any, res: any, n: any) => {
     H.authCalls++;
     if (!H.me) { res.status(401).json({ error: "unauthenticated" }); return; }

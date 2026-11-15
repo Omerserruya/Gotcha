@@ -15,7 +15,12 @@
  * These tests pin the shape and the guards; the send itself is untested against
  * Meta and that is stated rather than implied.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+vi.mock("@chatcenter/shared", async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
+}));
 import {
   PLATFORM_TEMPLATES,
   TEMPLATE_LOCALES,
@@ -43,7 +48,7 @@ function placeholders(body: string): number {
 }
 
 describe("the templates agree with themselves", () => {
-  it("★ declares a parameter count matching its own text, in every language", () => {
+  it("★ declares a parameter count matching its own text, in every language", async () => {
     for (const [eventType, template] of Object.entries(PLATFORM_TEMPLATES)) {
       for (const locale of TEMPLATE_LOCALES) {
         expect(
@@ -54,7 +59,7 @@ describe("the templates agree with themselves", () => {
     }
   });
 
-  it("exists in both languages, non-empty", () => {
+  it("exists in both languages, non-empty", async () => {
     // A missing Hebrew body would send English to a Hebrew recipient, or fail,
     // depending on what Meta has approved - neither discoverable from here.
     for (const [eventType, template] of Object.entries(PLATFORM_TEMPLATES)) {
@@ -64,14 +69,14 @@ describe("the templates agree with themselves", () => {
     }
   });
 
-  it("uses a distinct Meta name per event", () => {
+  it("uses a distinct Meta name per event", async () => {
     const names = Object.values(PLATFORM_TEMPLATES).map((t) => t.name);
     // Two events sharing a name would silently send one event's wording for the
     // other, because Meta resolves by name alone.
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("names templates in the gotcha_ namespace", () => {
+  it("names templates in the gotcha_ namespace", async () => {
     // The platform's templates live on GOTCHA's own WABA beside nothing else
     // today, but a merchant's templates will never collide with a prefixed name.
     for (const t of Object.values(PLATFORM_TEMPLATES)) {
@@ -81,37 +86,37 @@ describe("the templates agree with themselves", () => {
 });
 
 describe("the platform number is never substituted", () => {
-  it("returns null when the deployment has no number", () => {
+  it("returns null when the deployment has no number", async () => {
     // Null is the real answer. A caller must skip WhatsApp and say so, never
     // borrow the tenant's customer-facing channel.
-    expect(getPlatformWhatsAppSender()).toBeNull();
+    expect(await getPlatformWhatsAppSender()).toBeNull();
   });
 
-  it("returns null when only one half is configured", () => {
+  it("returns null when only one half is configured", async () => {
     process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "123456";
-    expect(getPlatformWhatsAppSender()).toBeNull();
+    expect(await getPlatformWhatsAppSender()).toBeNull();
 
     delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
     process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok";
-    expect(getPlatformWhatsAppSender()).toBeNull();
+    expect(await getPlatformWhatsAppSender()).toBeNull();
   });
 
-  it("ignores whitespace-only configuration", () => {
+  it("ignores whitespace-only configuration", async () => {
     process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "   ";
     process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "   ";
-    expect(getPlatformWhatsAppSender()).toBeNull();
+    expect(await getPlatformWhatsAppSender()).toBeNull();
   });
 
-  it("returns the sender when both halves are present", () => {
+  it("returns the sender when both halves are present", async () => {
     process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "123456";
     process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok";
-    expect(getPlatformWhatsAppSender()).toEqual({ externalId: "123456", accessToken: "tok" });
+    expect(await getPlatformWhatsAppSender()).toEqual({ externalId: "123456", accessToken: "tok", source: "env" });
   });
 });
 
 describe("readiness distinguishes its two failures", () => {
-  it("says no_platform_number when the event has a template but GOTCHA has no number", () => {
-    const readiness = whatsAppReadiness("tool.approval_required");
+  it("says no_platform_number when the event has a template but GOTCHA has no number", async () => {
+    const readiness = await whatsAppReadiness("tool.approval_required");
 
     expect(readiness.ready).toBe(false);
     if (readiness.ready) return;
@@ -119,11 +124,11 @@ describe("readiness distinguishes its two failures", () => {
     expect(readiness.reason).toBe("no_platform_number");
   });
 
-  it("says no_template_for_event for an event nothing can carry", () => {
+  it("says no_template_for_event for an event nothing can carry", async () => {
     process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "123456";
     process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok";
 
-    const readiness = whatsAppReadiness("broadcast.completed");
+    const readiness = await whatsAppReadiness("broadcast.completed");
 
     expect(readiness.ready).toBe(false);
     if (readiness.ready) return;
@@ -132,11 +137,11 @@ describe("readiness distinguishes its two failures", () => {
     expect(readiness.reason).toBe("no_template_for_event");
   });
 
-  it("is ready only when both halves are in place", () => {
+  it("is ready only when both halves are in place", async () => {
     process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "123456";
     process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok";
 
-    const readiness = whatsAppReadiness("credit.exhausted");
+    const readiness = await whatsAppReadiness("credit.exhausted");
 
     expect(readiness.ready).toBe(true);
     if (!readiness.ready) return;
@@ -144,13 +149,13 @@ describe("readiness distinguishes its two failures", () => {
     expect(readiness.sender.externalId).toBe("123456");
   });
 
-  it("has no template for an unknown event", () => {
+  it("has no template for an unknown event", async () => {
     expect(templateFor("something.invented")).toBeNull();
   });
 });
 
 describe("components are built or refused, never sent wrong", () => {
-  it("wraps body parameters in Meta's shape", () => {
+  it("wraps body parameters in Meta's shape", async () => {
     const template = PLATFORM_TEMPLATES["credit.threshold"]!;
 
     expect(buildComponents(template, ["90"])).toEqual([
@@ -158,7 +163,7 @@ describe("components are built or refused, never sent wrong", () => {
     ]);
   });
 
-  it("returns no components for a template that takes none", () => {
+  it("returns no components for a template that takes none", async () => {
     const template = PLATFORM_TEMPLATES["credit.exhausted"]!;
 
     // An empty `components` array is omitted by the adapter, which is what Meta
@@ -166,7 +171,7 @@ describe("components are built or refused, never sent wrong", () => {
     expect(buildComponents(template, [])).toEqual([]);
   });
 
-  it("★ throws on the wrong parameter count rather than letting Meta refuse it", () => {
+  it("★ throws on the wrong parameter count rather than letting Meta refuse it", async () => {
     const template = PLATFORM_TEMPLATES["credit.threshold"]!;
 
     // Meta answers a mismatch generically, so the caller would learn only that

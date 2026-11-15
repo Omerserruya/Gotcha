@@ -8,7 +8,7 @@
  */
 import crypto from "crypto";
 import { prisma, getRedis, getOutboundAdapter, normalizeWhatsappPhone } from "@chatcenter/shared";
-import { getPlatformWhatsAppSender, VERIFICATION_TEMPLATE_NAME, verificationComponents, localeForRecipient } from "./platform-whatsapp";
+import { platformSenderFor, notePlatformSendFailure, VERIFICATION_TEMPLATE_NAME, verificationComponents, localeForRecipient } from "./platform-whatsapp";
 
 export const CODE_TTL_S = 600;
 const MAX_TRIES = 5;
@@ -27,7 +27,7 @@ export async function startVerification(me: { userId: string; tenantId: string }
   Promise<{ ok: true; expiresInSeconds: number } | { ok: false; code: VerifyRefusal }> {
   const phone = normalizeWhatsappPhone(rawPhone);
   if (!phone) return { ok: false, code: "whatsapp_phone_invalid" };
-  const sender = getPlatformWhatsAppSender();
+  const sender = await platformSenderFor("verification", null);
   if (!sender) return { ok: false, code: "whatsapp_unavailable" };
   const redis = getRedis();
   if ((await redis.set(lastKey(me.userId), "1", "EX", RESEND_AFTER_S, "NX")) !== "OK") return { ok: false, code: "whatsapp_rate_limited" };
@@ -42,6 +42,7 @@ export async function startVerification(me: { userId: string; tenantId: string }
     await adapter.sendTemplateMessage({ accessToken: sender.accessToken }, sender.externalId, phone.slice(1), VERIFICATION_TEMPLATE_NAME, locale, verificationComponents(code));
   } catch (err: any) {
     await redis.del(codeKey(me.userId));
+    await notePlatformSendFailure(sender, err);
     console.warn(`[notifications] verification code not sent user=${me.userId}:`, err?.message);
     return { ok: false, code: "whatsapp_send_failed" };
   }

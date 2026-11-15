@@ -12,6 +12,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
+    ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
     getRedis: () => ({
       set: async (k: string, v: string, ...a: any[]) => { if (a.includes("NX") && H.kv.has(k)) return null; H.kv.set(k, v); return "OK"; },
       get: async (k: string) => H.kv.get(k) ?? null,
@@ -32,10 +33,12 @@ import { personalAllows, PERSONAL_DEFAULTS } from "../services/personal-preferen
 import { deliverWhatsAppNotice, wantsWhatsApp } from "../services/whatsapp-notice.service";
 import { startVerification, confirmVerification } from "../services/whatsapp-verify.service";
 
+import { PS } from "./helpers/platform-sender-double";
+
 const ME = { userId: "u1", tenantId: "T" };
 const env = { id: process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID, tok: process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN };
 const platformOn = () => { process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "pn_1"; process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok"; };
-beforeEach(() => { H.kv.clear(); H.sent = []; H.logs = []; H.prefs.clear(); delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID; delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN; });
+beforeEach(() => { PS.reset(); H.kv.clear(); H.sent = []; H.logs = []; H.prefs.clear(); delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID; delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN; });
 afterEach(() => { if (env.id) process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = env.id; if (env.tok) process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = env.tok; });
 
 describe("personal: who may get WhatsApp", () => {
@@ -113,5 +116,30 @@ describe("the opt-in code", () => {
   });
   it("no code sent: expired", async () => {
     expect(await confirmVerification(ME, "+972521234567", "123456")).toEqual({ ok: false, code: "whatsapp_code_expired" });
+  });
+});
+
+describe("★ the console's number (2026-11-15)", () => {
+  const db = (approved: string[], enabled: Record<string, boolean>) => { PS.db = { externalId: "pn_console", accessToken: "tok_db", approved: new Set(approved), enabled }; };
+  const notice = () => deliverWhatsAppNotice({ user: { id: "u1", tenantId: "T" }, event: { type: "credit.exhausted", data: {} }, phone: "+972501234567" });
+  it("switched on and approved: sent from it", async () => {
+    db(["credit.exhausted"], { "credit.exhausted": true });
+    expect(await notice()).toBe("sent");
+    expect(H.sent[0][1]).toBe("pn_console");
+  });
+  it("a stale switch (on, not approved) never sends; off never sends; each logged with why", async () => {
+    db([], { "credit.exhausted": true });
+    expect(await notice()).toBe("skipped");
+    db(["credit.exhausted"], {});
+    expect(await notice()).toBe("skipped");
+    expect(H.sent).toEqual([]);
+    expect(H.logs.map((l) => l.error)).toEqual(["template_not_approved", "alert_disabled"]);
+  });
+  it("the opt-in code needs its own template approved", async () => {
+    db([], {});
+    expect(await startVerification(ME, "+972501234567")).toEqual({ ok: false, code: "whatsapp_unavailable" });
+    db(["verification"], {});
+    expect((await startVerification(ME, "+972501234567")).ok).toBe(true);
+    expect(H.sent[0][1]).toBe("pn_console");
   });
 });

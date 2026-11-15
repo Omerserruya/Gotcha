@@ -23,6 +23,7 @@ const H = vi.hoisted(() => ({
   calls: [] as Array<[string, string, any]>,
   failExchange: 0, subscribeFails: false, registerFails: false, phonesFail: false,
   scopes: [] as any[], phones: [] as string[], existing: {} as Record<string, any>, writes: [] as any[], dels: [] as string[],
+  platformIds: new Set<string>(), platformWabas: new Set<string>(),
 }));
 const fail = (m: string, code?: number) => Object.assign(new Error(m), { response: { data: { error: { message: m, code } } } });
 
@@ -68,6 +69,8 @@ vi.mock("@chatcenter/shared", async () => {
     requirePermission: () => (_q: any, _s: any, n: any) => n(),
     requirePermissionOrRole: () => (_q: any, _s: any, n: any) => n(),
     requireCapacity: () => (_q: any, _s: any, n: any) => n(),
+    isPlatformPhoneNumberId: async (id: string) => H.platformIds.has(id),
+    isPlatformWaba: async (w: string) => H.platformWabas.has(w),
   };
 });
 
@@ -85,7 +88,7 @@ const AUTH = "business-token-0123456789";
 
 beforeEach(() => {
   H.calls = []; H.failExchange = 0; H.subscribeFails = false; H.registerFails = false; H.phonesFail = false;
-  H.scopes = []; H.phones = []; H.existing = {}; H.writes = []; H.dels = [];
+  H.scopes = []; H.phones = []; H.existing = {}; H.writes = []; H.dels = []; H.platformIds = new Set(); H.platformWabas = new Set();
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -198,5 +201,30 @@ describe("tenant /connect/whatsapp, call by call", () => {
     const r = await connect({ code: "c1", wabaId: "waba_1", phoneNumberId: "pn_1" });
     expect(r.status).toBe(201);
     expect(H.writes[0]).toMatchObject({ op: "update", id: "ca_1", data: { connectionStatus: "CONNECTED", isActive: true } });
+  });
+
+  describe("GOTCHA's own alerts number is never a workspace's (2026-11-15)", () => {
+    it("named by the session: 409 number_is_platform before anything at Meta changes", async () => {
+      H.platformIds.add("pn_1");
+      const r = await connect({ code: "c1", wabaId: "waba_1", phoneNumberId: "pn_1" });
+      expect(r.status).toBe(409);
+      expect(r.body.error).toBe("number_is_platform");
+      expect(H.calls.map(([m, u]) => `${m} ${u.split("/").pop()}`)).toEqual(["GET access_token"]);
+      expect(H.writes).toHaveLength(0);
+    });
+    it("its WABA: 409 before the subscribe", async () => {
+      H.platformWabas.add("waba_1");
+      const r = await connect({ code: "c1", wabaId: "waba_1" });
+      expect(r.status).toBe(409);
+      expect(H.calls.some(([m, u]) => m === "POST" && u.endsWith("/subscribed_apps"))).toBe(false);
+    });
+    it("found in the WABA's list: 409, nothing registered or written", async () => {
+      H.platformIds.add("pn_b");
+      H.phones = ["pn_a", "pn_b"];
+      const r = await connect({ code: "c1", wabaId: "waba_1" });
+      expect(r.status).toBe(409);
+      expect(H.calls.some(([m, u]) => m === "POST" && u.endsWith("/register"))).toBe(false);
+      expect(H.writes).toHaveLength(0);
+    });
   });
 });

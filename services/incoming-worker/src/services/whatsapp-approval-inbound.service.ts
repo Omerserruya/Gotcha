@@ -29,6 +29,7 @@ import {
   decryptCredentials,
   type ChannelCredentials,
   resolvePrimaryWhatsAppAccount,
+  resolvePlatformWhatsAppSender,
 } from "@chatcenter/shared";
 
 export interface InboundApprovalResult {
@@ -48,10 +49,10 @@ async function replyToManager(
     // The request came from GOTCHA's own number: answer from it (the manager
     // just wrote, so the 24h window is open for plain text).
     if (viaPlatform) {
-      const id = (process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
-      const token = (process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN ?? "").trim();
+      // The number in effect: the console's, else the env pair (2026-11-15).
+      const platform = await resolvePlatformWhatsAppSender();
       const adapter = getOutboundAdapter("WHATSAPP");
-      if (id && token && adapter) await adapter.sendTextMessage({ accessToken: token } as ChannelCredentials, id, toPhone, text);
+      if (platform && adapter) await adapter.sendTextMessage({ accessToken: platform.accessToken } as ChannelCredentials, platform.externalId, toPhone, text);
       return;
     }
     // Same number the request went out on: the tenant's primary.

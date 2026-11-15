@@ -157,6 +157,15 @@ export const AuditAction = {
   // an irreversible action on a customer's account taken by an operator.
   REFUND_ISSUED: "billing.refund_issued",
   REFUND_REFUSED: "billing.refund_refused",
+  // ── GOTCHA's own WhatsApp alerts number (tenantId "platform") ──
+  PLATFORM_WHATSAPP_CONNECTED: "platform_whatsapp.connected",
+  PLATFORM_WHATSAPP_RECHECKED: "platform_whatsapp.rechecked",
+  PLATFORM_WHATSAPP_DISCONNECTED: "platform_whatsapp.disconnected",
+  PLATFORM_WHATSAPP_TEMPLATE_EDITED: "platform_whatsapp.template_edited",
+  PLATFORM_WHATSAPP_TEMPLATE_SUBMITTED: "platform_whatsapp.template_submitted",
+  PLATFORM_WHATSAPP_TEMPLATES_SYNCED: "platform_whatsapp.templates_synced",
+  PLATFORM_WHATSAPP_ALERT_TOGGLED: "platform_whatsapp.alert_toggled",
+  PLATFORM_WHATSAPP_ALERT_AUTO_DISABLED: "platform_whatsapp.alert_auto_disabled",
   // ── GDPR data-subject actions ──
   DSR_EXPORT_REQUESTED: "gdpr.export_requested",
   DSR_EXPORT_COMPLETED: "gdpr.export_completed",

@@ -19,6 +19,7 @@ const H = vi.hoisted(() => ({
 
 vi.mock("@chatcenter/shared", async () => ({
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   normalizeWhatsappPhone: (await import("@chatcenter/shared/src/lib/shopify-chat-ux")).normalizeWhatsappPhone,
   authenticate: (req: any, _r: any, n: any) => { req.user = H.me; n(); },
   resolveTenant: (req: any, _r: any, n: any) => { req.tenantId = "T"; n(); },

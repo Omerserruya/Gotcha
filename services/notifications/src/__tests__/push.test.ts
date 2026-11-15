@@ -70,6 +70,7 @@ vi.mock("http2", async () => {
 });
 
 vi.mock("@chatcenter/shared", async () => ({
+  ...(await import("./helpers/platform-sender-double")).platformSenderDouble,
   ...(await import("@chatcenter/shared/src/lib/notification-category")),
   prisma: {
     notificationPreference: { findMany: async (a: any) => H.rules.filter((r) => r.tenantId === a.where.tenantId && r.eventType === a.where.eventType) },
