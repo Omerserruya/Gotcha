@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* A copy of the /m conversation layout rules (MobileShell.module.css .frame,
+     mobile-inbox.module.css .thread/.stream/.composer), for a simulator check. */
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #f7f4ee; font-family: -apple-system, sans-serif; }
+  .frame { display: flex; flex-direction: column; block-size: 100dvh; overflow: hidden;
+           padding-block-start: env(safe-area-inset-top); background: #f7f4ee; }
+  .bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+         background: #f7f4ee; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 20px; }
+  .stream { flex: 1; min-block-size: 0; overflow: auto; padding: 12px; background: #efe9de; }
+  .msg { background: #fff; border-radius: 14px; padding: 10px 14px; margin: 8px 0; max-width: 80%; }
+  .composer { flex: none; padding-block-end: env(safe-area-inset-bottom); background: #efe9de; }
+  .row { display: flex; gap: 8px; align-items: center; padding: 8px 12px; }
+  .input { flex: 1; height: 48px; border-radius: 24px; background: #fff; padding: 0 16px;
+           display: flex; align-items: center; color: #999; }
+  .send { width: 48px; height: 48px; border-radius: 24px; background: #121212; }
+  #m { font: 13px monospace; color: #b00; padding: 8px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="bar">→ Omer Serruya (top bar)</div>
+  <div class="stream">
+    <div id="m"></div>
+    <div class="msg">הודעה 1</div><div class="msg">הודעה 2</div><div class="msg">הודעה 3</div>
+  </div>
+  <div class="composer"><div class="row">+ <div class="input">כתבו הודעה</div><div class="send"></div></div></div>
+</div>
+<script>
+  var p = document.createElement('div');
+  p.style.cssText = 'position:fixed;top:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.appendChild(p);
+  function show() {
+    var cs = getComputedStyle(p);
+    document.getElementById('m').textContent =
+      'innerH=' + innerHeight + ' scrollY=' + scrollY + ' envTop=' + cs.paddingTop + ' envBottom=' + cs.paddingBottom + ' composerGap=' + Math.round(innerHeight - document.querySelector('.row').getBoundingClientRect().bottom);
+  }
+  show(); setTimeout(show, 1500);
+</script>
+</body>
+</html>
