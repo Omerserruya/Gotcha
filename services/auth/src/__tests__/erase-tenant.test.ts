@@ -19,6 +19,13 @@ const H = vi.hoisted(() => ({
   otherMemberships: 0,
   mediaCount: 1,
   slug: "acme",
+  // The other stored files (2026-11-15): a web chat logo and cover, a broadcast's header, an avatar.
+  webchatCredentials: null as any,
+  broadcasts: [] as any[],
+  contacts: [] as any[],
+  conversations: [] as any[],
+  otherTenantNames: [] as string[],
+  queryRawFails: false,
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -48,7 +55,10 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       ],
     },
     scheduledMessage: { findMany: async () => [{ mediaUrl: "/api/uploads/7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf?x=1" }] },
-    channelAccount: { findMany: async () => [{ channel: "WHATSAPP", displayName: "Acme WA", externalId: "pn1" }] },
+    channelAccount: { findMany: async () => [{ channel: "WHATSAPP", displayName: "Acme WA", externalId: "pn1", credentials: "enc:v1:abc" }, ...(H.webchatCredentials ? [{ channel: "WEBCHAT", displayName: "Site", externalId: "w1", credentials: H.webchatCredentials }] : [])] },
+    broadcast: { findMany: async () => H.broadcasts },
+    contact: { findMany: async () => H.contacts },
+    conversation: { findMany: async () => H.conversations },
     tenantIntegration: { findMany: async () => [{ status: "CONNECTED", integration: { slug: "hubspot" } }] },
     commerceConnection: { findMany: async () => [] },
     calendarAccount: { findMany: async () => [] },
@@ -72,6 +82,12 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       : rec(k)),
   });
   db.$transaction = async (fn: any) => fn(db);
+  // The cross-workspace check for a widget image: does another tenant's channel name it?
+  db.$queryRaw = async (_strings: TemplateStringsArray, _tenant: string, like: string) => {
+    if (H.queryRawFails) throw new Error("db down");
+    const name = String(like).replace(/%/g, "");
+    return [{ n: H.otherTenantNames.includes(name) ? 1 : 0 }];
+  };
   return { ...actual, prisma: db, getInternalServiceKey: () => "k", writeAudit: async () => {} };
 });
 vi.mock("../services/invitation.service", () => ({
@@ -89,6 +105,7 @@ beforeEach(() => {
   H.ops = []; H.audit = null; H.erasedSubjects = []; H.otherMemberships = 0; H.funded = 1; H.mediaCount = 1; H.slug = "acme";
   H.sub = { id: "s1", status: "ACTIVE", cancelAtPeriodEnd: true };
   calls = []; logged = []; failBatch = -1;
+  H.webchatCredentials = null; H.broadcasts = []; H.contacts = []; H.conversations = []; H.otherTenantNames = []; H.queryRawFails = false;
   uploadsReply = { status: 200, body: { ok: true, removed: 2, missing: 0 } };
   vi.stubGlobal("fetch", async (url: string, init: any) => {
     calls.push({ url, body: JSON.parse(init.body) });
@@ -124,6 +141,37 @@ describe("eraseTenant", () => {
     const purge = calls.find((c) => c.url.endsWith("/internal/uploads/purge"));
     expect(purge.body.files.sort()).toEqual(["0f8fad5b-d9cb-469f-a165-000000000000.jpg", "7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf"]);
     expect(out).toMatchObject({ uploadsRemoved: true, uploadFiles: 2, uploadsLeftBehind: [] });
+  });
+
+  it("also removes the web chat's logo and cover, a broadcast's header media and our stored avatars (the retention gap, 2026-11-15)", async () => {
+    const LOGO = "widget/3f2504e0-4f89-11d3-9a0c-0305e82c3301.png", COVER = "widget/16fd2706-8baf-433b-82eb-8c7fada847da.jpg";
+    H.webchatCredentials = { appearance: { logoUrl: `https://dev.gotcha.co.il/api/uploads/${LOGO}` }, ux: { hero: { mediaUrl: `/api/uploads/${COVER}` } } };
+    H.broadcasts = [{ headerMediaUrl: "/api/uploads/6ba7b810-9dad-11d1-80b4-00c04fd430c8.jpg" }, { headerMediaUrl: "https://cdn.example.com/x.jpg" }];
+    H.contacts = [{ avatarUrl: "/api/uploads/6ba7b811-9dad-11d1-80b4-00c04fd430c8.png" }, { avatarUrl: "https://pps.whatsapp.net/v/x.jpg" }];
+    H.conversations = [{ customerAvatarUrl: "/api/uploads/6ba7b812-9dad-11d1-80b4-00c04fd430c8.png" }];
+    const out = await eraseTenant("T", "admin");
+    const purge = calls.find((c) => c.url.endsWith("/internal/uploads/purge"));
+    expect(purge.body.files.sort()).toEqual([
+      "0f8fad5b-d9cb-469f-a165-000000000000.jpg",
+      "6ba7b810-9dad-11d1-80b4-00c04fd430c8.jpg",
+      "6ba7b811-9dad-11d1-80b4-00c04fd430c8.png",
+      "6ba7b812-9dad-11d1-80b4-00c04fd430c8.png",
+      "7c9e6679-7425-40de-944b-e07fc1f90ae7.pdf",
+      COVER,
+      LOGO,
+    ].sort());
+    expect(out!.uploadFiles).toBe(7);
+  });
+
+  it("a widget image another workspace's channel still names is kept; an unreadable check keeps it too", async () => {
+    const LOGO = "widget/3f2504e0-4f89-11d3-9a0c-0305e82c3301.png";
+    H.webchatCredentials = { appearance: { logoUrl: `/api/uploads/${LOGO}` } };
+    H.otherTenantNames = [LOGO];
+    await eraseTenant("T", "admin");
+    expect(calls.find((c) => c.url.endsWith("/internal/uploads/purge")).body.files).not.toContain(LOGO);
+    H.otherTenantNames = []; H.queryRawFails = true; calls.length = 0;
+    await eraseTenant("T", "admin");
+    expect(calls.find((c) => c.url.endsWith("/internal/uploads/purge")).body.files).not.toContain(LOGO);
   });
 
   it("a failed or partial unlink never undoes the delete: it is reported and logged", async () => {
