@@ -3,7 +3,7 @@
  * address through, the primary rule ("IP Source Address equals <ip>", Skip),
  * with the /wp-json/wc/ path rule as the alternative. The address is config
  * (PUBLIC_EGRESS_IP, PUBLIC_EGRESS_IP_STABLE), never code: prod leaves from
- * 51.17.184.220 today and will move to a static address. It rides on every
+ * its Elastic IP 51.84.227.95 since 2026-11-15 13:53Z (51.17.184.220 before). It rides on every
  * store_firewall_challenge answer as egress { ips, stable } (null when unset).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -30,17 +30,19 @@ afterEach(() => { process.env.PUBLIC_EGRESS_IP = saved.ip ?? ""; process.env.PUB
 
 describe("the egress config", () => {
   it("one address, several, IPv6; invalid entries dropped; unset is null", () => {
-    expect(egressConfig({ PUBLIC_EGRESS_IP: "51.17.184.220" } as any)).toEqual({ ips: ["51.17.184.220"], stable: false });
-    expect(egressConfig({ PUBLIC_EGRESS_IP: " 51.17.184.220, 2001:db8::1 ,nonsense,51.17.184.220", PUBLIC_EGRESS_IP_STABLE: "true" } as any)).toEqual({ ips: ["51.17.184.220", "2001:db8::1"], stable: true });
+    expect(egressConfig({ PUBLIC_EGRESS_IP: "51.84.227.95" } as any)).toEqual({ ips: ["51.84.227.95"], stable: false });
+    expect(egressConfig({ PUBLIC_EGRESS_IP: " 51.84.227.95, 2001:db8::1 ,nonsense,51.84.227.95", PUBLIC_EGRESS_IP_STABLE: "true" } as any)).toEqual({ ips: ["51.84.227.95", "2001:db8::1"], stable: true });
     expect(egressConfig({} as any)).toBeNull();
     expect(egressConfig({ PUBLIC_EGRESS_IP: "localhost, example.com" } as any)).toBeNull();
   });
-  it("the IP rule first, the path rule as the alternative; no address, the path rule alone", () => {
-    const m = firewallFixMessage({ ips: ["51.17.184.220"], stable: false });
-    expect(m.indexOf("IP Source Address equals 51.17.184.220")).toBeGreaterThan(0);
-    expect(m.indexOf("IP Source Address")).toBeLessThan(m.indexOf("URI Path starts with /wp-json/wc/"));
-    expect(m).toContain("may still change");
-    expect(firewallFixMessage({ ips: ["51.17.184.220"], stable: true })).not.toContain("may still change");
+  it("stable: the IP rule first; not stable: the path rule first and the IP rule as 'may change'; no address: the path rule alone", () => {
+    const stable = firewallFixMessage({ ips: ["51.84.227.95"], stable: true });
+    expect(stable.indexOf("IP Source Address equals 51.84.227.95")).toBeGreaterThan(0);
+    expect(stable.indexOf("IP Source Address")).toBeLessThan(stable.indexOf("URI Path starts with /wp-json/wc/"));
+    expect(stable).not.toContain("may still change");
+    const moving = firewallFixMessage({ ips: ["89.138.9.205"], stable: false });
+    expect(moving.indexOf("URI Path starts with /wp-json/wc/")).toBeLessThan(moving.indexOf("IP Source Address equals 89.138.9.205"));
+    expect(moving).toContain("may still change");
     expect(firewallFixMessage({ ips: ["1.2.3.4", "2001:db8::1"], stable: true })).toContain("IP Source Address is in {1.2.3.4 2001:db8::1}");
     const none = firewallFixMessage(null);
     expect(none).not.toMatch(/IP Source Address/);
@@ -50,27 +52,27 @@ describe("the egress config", () => {
 
 describe("every store_firewall_challenge answer carries it", () => {
   it("pasted keys: the verdict's egress and message, and the 422 sends egress", async () => {
-    process.env.PUBLIC_EGRESS_IP = "51.17.184.220";
+    process.env.PUBLIC_EGRESS_IP = "51.84.227.95"; process.env.PUBLIC_EGRESS_IP_STABLE = "true";
     vi.stubGlobal("fetch", vi.fn(async () => CHALLENGE));
     const v: any = await (Woo as any).validate({ ctx: {}, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: "https://chanivainberger.co.il" } });
-    expect(v).toMatchObject({ ok: false, code: "store_firewall_challenge", egress: { ips: ["51.17.184.220"], stable: false } });
-    expect(v.error).toContain("IP Source Address equals 51.17.184.220");
+    expect(v).toMatchObject({ ok: false, code: "store_firewall_challenge", egress: { ips: ["51.84.227.95"], stable: true } });
+    expect(v.error).toContain("IP Source Address equals 51.84.227.95");
     const route = readFileSync(join(__dirname, "../routes/integrations.ts"), "utf8");
     expect(route).toContain('...((verdict as any).code === "store_firewall_challenge" ? { egress: (verdict as any).egress ?? null } : {}),');
   });
   it("the wc-auth return carries the code only, never an address (a crafted URL must not name one)", () => {
-    process.env.PUBLIC_EGRESS_IP = "51.17.184.220";
+    process.env.PUBLIC_EGRESS_IP = "51.84.227.95";
     for (const flow of ["wp_plugin", "redesign_studio", "onboarding_systems", undefined]) {
       const u = new URL(wooReturnUrl(flow as any, { error: "store_firewall_challenge" }));
       expect(u.searchParams.get("error")).toBe("store_firewall_challenge");
       expect(u.searchParams.get("egress")).toBeNull();
-      expect(u.search).not.toContain("51.17.184.220");
+      expect(u.search).not.toContain("51.84.227.95");
     }
   });
   it("the probe: egress on a blocked answer, read now, so a config change shows within the cache minute", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => CHALLENGE));
-    process.env.PUBLIC_EGRESS_IP = "51.17.184.220";
-    expect((await probeStore("https://shop.example.com")).egress).toEqual({ ips: ["51.17.184.220"], stable: false });
+    process.env.PUBLIC_EGRESS_IP = "51.84.227.95";
+    expect((await probeStore("https://shop.example.com")).egress).toEqual({ ips: ["51.84.227.95"], stable: false });
     process.env.PUBLIC_EGRESS_IP = "3.3.3.3"; process.env.PUBLIC_EGRESS_IP_STABLE = "true";
     expect((await probeStore("https://shop.example.com")).egress).toEqual({ ips: ["3.3.3.3"], stable: true });
     delete process.env.PUBLIC_EGRESS_IP;

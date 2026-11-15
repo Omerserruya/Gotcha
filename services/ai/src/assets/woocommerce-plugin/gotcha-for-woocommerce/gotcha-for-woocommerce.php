@@ -196,15 +196,18 @@ function gotcha_wc_cloudflare_rule_html( $egress = null ) {
 	?>
 	<ol>
 		<li><?php esc_html_e( 'In Cloudflare, open Security, then WAF, then Custom rules, and create a rule.', 'gotcha-for-woocommerce' ); ?></li>
-		<?php if ( $ips ) : ?>
+		<?php if ( $ips && ! empty( $egress['stable'] ) ) : ?>
 			<li><?php
-			/* translators: %s: GOTCHA's IP address or addresses */
+			/* translators: 1: operator, 2: GOTCHA's IP address or addresses */
 			echo wp_kses( sprintf( __( 'Field <code>IP Source Address</code>, operator <code>%1$s</code>, value <code>%2$s</code>.', 'gotcha-for-woocommerce' ), count( $ips ) > 1 ? 'is in' : 'equals', esc_html( implode( ' ', $ips ) ) ), array( 'code' => array() ) );
-			if ( empty( $egress['stable'] ) ) {
-				echo ' ' . esc_html__( '(GOTCHA\'s address may change; the rule below does not.)', 'gotcha-for-woocommerce' );
-			}
 			?></li>
 			<li><?php echo wp_kses( __( 'Or instead: field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<?php elseif ( $ips ) : ?>
+			<li><?php echo wp_kses( __( 'Field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+			<li><?php
+			/* translators: 1: operator, 2: GOTCHA's IP address or addresses */
+			echo wp_kses( sprintf( __( 'Or instead: field <code>IP Source Address</code>, operator <code>%1$s</code>, value <code>%2$s</code> (GOTCHA\'s address may change).', 'gotcha-for-woocommerce' ), count( $ips ) > 1 ? 'is in' : 'equals', esc_html( implode( ' ', $ips ) ) ), array( 'code' => array() ) );
+			?></li>
 		<?php else : ?>
 		<li><?php echo wp_kses( __( 'Field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
 		<?php endif; ?>

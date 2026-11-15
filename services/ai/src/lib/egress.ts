@@ -5,7 +5,8 @@
  * or IPv6) and PUBLIC_EGRESS_IP_STABLE ("true" once the address is a static
  * one; until then the merchant is told it may change). Unset or invalid: null,
  * and the merchant gets the path rule only, never a guessed address.
- * Each environment sets its own (prod 2026-11-15: 51.17.184.220, not static).
+ * Each environment sets its own (prod since 2026-11-15 13:53Z: the Elastic IP
+ * 51.84.227.95, stable; dev 89.138.9.205).
  */
 import net from "net";
 
@@ -17,10 +18,20 @@ export function egressConfig(env: NodeJS.ProcessEnv = process.env): Egress | nul
   return { ips: Array.from(new Set(ips)), stable: String(env.PUBLIC_EGRESS_IP_STABLE ?? "").toLowerCase() === "true" };
 }
 
-/** The fix, in plain English, with the IP rule first when there is an address (the client writes its own copy). */
+/**
+ * The fix, in plain English (the client writes its own copy, in the same
+ * order, agreed with Frontend 2026-11-15): a stable address leads with the IP
+ * rule, the path rule as the alternative; an address that may still change
+ * leads with the path rule (an IP rule would silently stop matching), the IP
+ * rule second; no address, the path rule alone.
+ */
 export function firewallFixMessage(egress: Egress | null): string {
+  const head = "The store's firewall (Cloudflare) blocked GOTCHA before it could check the keys. In Cloudflare, add";
   const path = "a WAF custom rule with URI Path starts with /wp-json/wc/, action Skip, skipping all remaining custom rules and Super Bot Fight Mode";
-  if (!egress) return `The store's firewall (Cloudflare) blocked GOTCHA before it could check the keys. In Cloudflare, add ${path}. Then connect again.`;
-  const ip = egress.ips.length === 1 ? `IP Source Address equals ${egress.ips[0]}` : `IP Source Address is in {${egress.ips.join(" ")}}`;
-  return `The store's firewall (Cloudflare) blocked GOTCHA before it could check the keys. In Cloudflare, add a WAF custom rule: ${ip}, action Skip, skipping all remaining custom rules and Super Bot Fight Mode${egress.stable ? "" : " (GOTCHA's address may still change)"}. Or instead, ${path}. Then connect again.`;
+  if (!egress) return `${head} ${path}. Then connect again.`;
+  const ipValue = egress.ips.length === 1 ? `IP Source Address equals ${egress.ips[0]}` : `IP Source Address is in {${egress.ips.join(" ")}}`;
+  const ip = `a WAF custom rule with ${ipValue}, action Skip, skipping all remaining custom rules and Super Bot Fight Mode`;
+  return egress.stable
+    ? `${head} ${ip}. Or instead, ${path}. Then connect again.`
+    : `${head} ${path}. Or instead, ${ip} (GOTCHA's address may still change). Then connect again.`;
 }
