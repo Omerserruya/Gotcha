@@ -1018,7 +1018,11 @@ router.get("/:id/conversations", async (req: Request, res: Response) => {
     const [counts, intel] = await Promise.all([
       prisma.message.groupBy({
         by: ["conversationId"],
-        where: { tenantId, conversationId: { in: ids }, messageType: { not: "system" } },
+        // The same origin scope as the conversations listed (Omer's iPhone,
+        // 2026-11-15: an imported conversation showed "0 הודעות"). Without it the
+        // live-by-default guard counts LIVE messages only, and an imported
+        // conversation's messages are all HISTORICAL_IMPORT.
+        where: { tenantId, conversationId: { in: ids }, messageType: { not: "system" }, ...originClause },
         _count: { _all: true },
       }),
       prisma.conversationIntelligence.findMany({
