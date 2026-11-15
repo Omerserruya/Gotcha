@@ -45,7 +45,7 @@ const roles = (list: any[]) => list.map((m) => m.role);
 beforeEach(() => {
   H.chat = []; H.responses = [];
   resetModelCaps();
-  initAIService("sk-test", "gpt-5-mini");
+  initAIService({ apiKey: "sk-test", defaultModel: "gpt-5-mini" });
 });
 
 describe("no request leaves with a system role", () => {
