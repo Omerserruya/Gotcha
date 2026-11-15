@@ -130,6 +130,7 @@ import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
 import { resolveAgentModel } from "../lib/agent-model";
+import { closeAllowed, closeRefusal } from "../lib/close-intent";
 import { isAgentArchitectureEnabled } from "@chatcenter/shared";
 import { runShadowEvaluationInBackground, toShadowContext } from "./reasoner/shadow-runner";
 import { agentLoopMode } from "./agent-loop/flags";
@@ -3801,6 +3802,31 @@ async function generateAIBotReplyInner(
           });
           chatMessages.push({ role: "tool", tool_call_id: tc.id, content: gateContent });
           continue;
+        }
+
+        // Close gate (eval A05, 2026-11-15): the model closes only on the
+        // customer's explicit end after an answer; otherwise it is refused
+        // and the model answers and continues. Idle closes are the automation's.
+        if (toolName === "close_conversation") {
+          const closeVerdict = closeAllowed(latestInbound, messages.filter((m) => m.direction === "OUTBOUND").length);
+          if (!closeVerdict.allowed) {
+            const gateContent = closeRefusal(closeVerdict);
+            toolCallLog.push({ tool: toolName, args: toolArgs, result: gateContent, decision: "close_not_allowed", sideEffect: "close_not_allowed" });
+            prisma.auditLog
+              .create({
+                data: {
+                  tenantId: opts.tenantId,
+                  actorType: "system",
+                  action: "ai.close_not_allowed",
+                  targetType: "conversation",
+                  targetId: opts.conversationId,
+                  metadata: { tool: toolName, reason: closeVerdict.reason, source: "ai_bot" } as any,
+                },
+              })
+              .catch((err: any) => console.error(`[ai-bot] close_not_allowed audit failed:`, err?.message));
+            chatMessages.push({ role: "tool", tool_call_id: tc.id, content: gateContent });
+            continue;
+          }
         }
 
         // Exit-criteria gate - refuse to close the conversation until
