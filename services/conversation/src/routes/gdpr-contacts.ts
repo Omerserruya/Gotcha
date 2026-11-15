@@ -10,6 +10,7 @@ import {
   withHistoricalRecords,
 } from "@chatcenter/shared";
 import { marksNaming } from "../lib/not-same";
+import { uploadNameOf, removeUnnamedUploads } from "../lib/erase-uploads";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
@@ -159,7 +160,23 @@ router.delete("/:id", async (req: Request, res: Response) => {
       });
       const conversationIds = conversations.map((c) => c.id);
 
-      return prisma.$transaction(async (tx) => {
+      // The stored files these rows name, read before they go (removed after
+      // the commit, unless the workspace still names them: erase-uploads.ts).
+      const [mediaRows, scheduledRows] = conversationIds.length
+        ? await Promise.all([
+            prisma.message.findMany({ where: { tenantId: req.tenantId!, conversationId: { in: conversationIds }, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+            prisma.scheduledMessage.findMany({ where: { tenantId: req.tenantId!, conversationId: { in: conversationIds }, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+          ])
+        : [[], []];
+      const contactRows = [contact, ...mergedInRows, ...family];
+      const fileNames = [
+        ...mediaRows.map((m) => uploadNameOf(m.mediaUrl)),
+        ...scheduledRows.map((m) => uploadNameOf(m.mediaUrl)),
+        ...contactRows.map((c: any) => uploadNameOf(c?.avatarUrl)),
+        ...conversations.map((c: any) => uploadNameOf(c?.customerAvatarUrl)),
+      ].filter((n): n is string => !!n);
+
+      const deleted = await prisma.$transaction(async (tx) => {
         const deletedMessages = conversationIds.length
           ? await tx.message.deleteMany({
               where: { tenantId: req.tenantId!, conversationId: { in: conversationIds } },
@@ -196,6 +213,9 @@ router.delete("/:id", async (req: Request, res: Response) => {
           historicalMemory: deletedMemory.count,
         };
       });
+      // After the commit: a failed unlink must never undo the erasure.
+      const files = await removeUnnamedUploads(req.tenantId!, fileNames);
+      return { ...deleted, uploadsRemoved: files.removed, uploadsKeptShared: files.kept.length, uploadsLeftBehind: files.left };
     });
 
     await prisma.dataSubjectRequest.create({
