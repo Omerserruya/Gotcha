@@ -1,0 +1,91 @@
+# Simulator check before every iOS tag (Supervisor, 2026-11-15).
+#
+# Builds the iPhone app for the simulator from the chosen ref and takes two
+# screenshots on an iPhone Pro (Dynamic Island, home indicator):
+#   1-prod.png    the real prod page in the app (the sign-in, keyboard open)
+#   2-thread.png  mobile/simcheck/thread.html, a copy of the /m conversation
+#                 layout rules, loaded locally; it prints innerH, scrollY, the
+#                 page's env(safe-area-inset-*) and the composer's gap
+# Expected today: top bar visible, envTop=0, envBottom=0 (the app keeps the
+# edges natively, see MainViewController.swift).
+#
+# Run it by pushing a tag "simcheck-*" on the commit to check (works from any
+# branch; not "ios-*", which uploads to TestFlight), or, once this file is on
+# the default branch, gh workflow run ios-sim-check.yml --ref <branch>. Then
+# download the "sim-shots" artifact.
+name: iOS simulator check
+
+on:
+  push:
+    tags: ['simcheck-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sim:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: GOTCHA_ENV=prod npx cap sync ios
+
+      - name: Build for the simulator
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build | tail -5
+
+      - name: Boot an iPhone with a home indicator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Pro' in x['name'] and 'Max' not in x['name']]
+          print(c[-1]['udid'])")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices | grep "$UDID"
+
+      - name: Shot 1, the real prod page
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          mkdir -p "$RUNNER_TEMP/shots"
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 25
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/1-prod.png"
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+
+      - name: Shot 2, the conversation layout copy
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          cp simcheck/thread.html "$APP/public/index.html"
+          python3 - "$APP/capacitor.config.json" <<'EOF'
+          import json,sys
+          p=sys.argv[1]; c=json.load(open(p)); c.pop('server',None); json.dump(c,open(p,'w'))
+          EOF
+          xcrun simctl uninstall "$UDID" il.co.gotcha.app
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 15
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-shots
+          path: ${{ runner.temp }}/shots
+          retention-days: 3
