@@ -5,6 +5,7 @@ import { browserApi } from '@/api/client/browser-api';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
+import { prepareImage } from './prepare-image';
 import { windowRefusalOf, type WindowRefusal } from './reply-window';
 
 /**
@@ -46,9 +47,13 @@ const unchecked = z.unknown();
 
 export async function sendMedia(
   conversationId: string,
-  file: File,
+  chosen: File,
   caption: string,
+  /** The conversation's channel: Meta's take only some images (`prepareImage`). */
+  channel: string | null = null,
 ): Promise<MediaResult> {
+  // Before the size check: an iPhone PNG re-encoded as a JPEG is smaller.
+  const file = await prepareImage(chosen, channel);
   if (file.size > MAX_MEDIA_BYTES) return { ok: false, reason: 'too_large' };
 
   const form = new FormData();

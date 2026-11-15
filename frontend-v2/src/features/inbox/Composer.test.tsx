@@ -520,7 +520,7 @@ describe('★★ 02’s bar - the four controls that have a backend', () => {
     await u.type(screen.getByTestId('composer-body'), 'Here it is');
     await u.click(screen.getByTestId('composer-send'));
 
-    await waitFor(() => expect(media).toHaveBeenCalledWith('c1', file, 'Here it is'));
+    await waitFor(() => expect(media).toHaveBeenCalledWith('c1', file, 'Here it is', null));
     expect(sent).not.toHaveBeenCalled();
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(screen.queryByTestId('composer-files')).toBeNull();
@@ -661,8 +661,8 @@ describe('★★ up to five files - each its own upload, the words once', () => 
     await u.type(screen.getByTestId('composer-body'), 'Both');
     await u.click(screen.getByTestId('composer-send'));
     await waitFor(() => expect(media).toHaveBeenCalledTimes(2));
-    expect(media.mock.calls[0]).toEqual(['c1', a, 'Both']);
-    expect(media.mock.calls[1]).toEqual(['c1', b, '']);
+    expect(media.mock.calls[0]).toEqual(['c1', a, 'Both', null]);
+    expect(media.mock.calls[1]).toEqual(['c1', b, '', null]);
   });
 
   it('never more than five held; the attach buttons rest at five', async () => {
@@ -769,5 +769,22 @@ describe('★★ a live re-read keeps the draft (ListLive)', () => {
       </NextIntlClientProvider>,
     );
     expect(screen.getByTestId('composer-body')).toHaveValue('Half a reply');
+  });
+});
+
+describe('★ a file goes with its channel, so Meta gets an image it takes (2026-11-15)', () => {
+  it("★★ sendMedia is told the conversation's channel", async () => {
+    const u = userEvent.setup({ applyAccept: false });
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" channel="WHATSAPP" />
+      </NextIntlClientProvider>,
+    );
+    await u.upload(
+      screen.getByTestId('composer-file-input'),
+      new File(['x'], 'IMG_4538.png', { type: 'image/png' }),
+    );
+    await u.click(screen.getByTestId('composer-send'));
+    await waitFor(() => expect(media).toHaveBeenCalledWith('c1', expect.any(File), '', 'WHATSAPP'));
   });
 });

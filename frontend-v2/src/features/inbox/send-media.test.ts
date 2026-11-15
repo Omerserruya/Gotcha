@@ -8,6 +8,9 @@ import { ApiError } from '@/api/client/api-error';
  */
 const post = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/browser-api', () => ({ browserApi: { post } }));
+// Passes the chosen file through unless a test says otherwise (prepare-image.test.ts owns the rule).
+const prepareImage = vi.hoisted(() => vi.fn(async (file: File) => file));
+vi.mock('./prepare-image', () => ({ prepareImage }));
 
 import { MAX_MEDIA_BYTES, sendMedia } from './send-media';
 
@@ -94,5 +97,18 @@ describe('★★ the 24-hour window refuses a file the same way (Backend 47e376a
       new ApiError({ kind: 'conflict', status: 409, code: 'REPLY_WINDOW_CLOSED' }),
     );
     expect(await sendMedia('c1', fileOf(10), '')).toEqual({ ok: false, reason: 'window_closed' });
+  });
+});
+
+describe('★★ the upload is the prepared file (prod 131053, 2026-11-15)', () => {
+  it('★★ an image for WhatsApp is prepared first, and THAT is what is uploaded', async () => {
+    const prepared = new File(['jpeg'], 'IMG_4538.jpg', { type: 'image/jpeg' });
+    prepareImage.mockResolvedValueOnce(prepared);
+    post.mockResolvedValue({});
+    const png = new File(['png'], 'IMG_4538.png', { type: 'image/png' });
+    await sendMedia('c1', png, '', 'WHATSAPP');
+    expect(prepareImage).toHaveBeenCalledWith(png, 'WHATSAPP');
+    const form = (post.mock.calls.at(-1)![0] as { body: FormData }).body;
+    expect((form.get('file') as File).name).toBe('IMG_4538.jpg');
   });
 });

@@ -697,12 +697,17 @@ export const messageSchema = z.object({
       /**
        * Why a send failed (Backend 47e376a4): `{ channel, phase, type,
        * message, retryable, at }`, written by the outgoing worker and the flow
-       * executor. Only `type` is read - `TEMPLATE_REQUIRED` and
-       * `REPLY_WINDOW_CLOSED` are said in words; `message` is the platform's
-       * English and is never shown.
+       * executor. `type` (`TEMPLATE_REQUIRED`, `REPLY_WINDOW_CLOSED`) and, on
+       * WhatsApp, Meta's numeric `code` (131053: the media's format) are said
+       * in words (`sendFailure`); `message` is the platform's English and is
+       * never shown. Each field falls away on its own.
        */
       sendError: z
-        .object({ type: z.string().optional().catch(undefined) })
+        .object({
+          type: z.string().optional().catch(undefined),
+          code: z.number().int().optional().catch(undefined),
+          channel: z.string().optional().catch(undefined),
+        })
         .optional()
         .catch(undefined),
       /** The attachment could not be fetched (WhatsApp media expires) - said, never blank. */

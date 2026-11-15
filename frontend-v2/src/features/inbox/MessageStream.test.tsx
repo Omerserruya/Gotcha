@@ -212,6 +212,29 @@ describe('★★ a message the customer never received', () => {
     expect(screen.queryByText(/More than 24 hours since/)).toBeNull();
   });
 
+  it("★★ Meta 131053 on an image says the format, never Meta's English (prod, 2026-11-15)", async () => {
+    await show([
+      message({
+        id: 'm4',
+        direction: 'OUTBOUND',
+        status: 'FAILED',
+        messageType: 'image',
+        metadata: {
+          sendError: {
+            channel: 'WHATSAPP',
+            phase: 'delivery',
+            code: 131053,
+            message: 'Image is invalid',
+            retryable: false,
+            at: '2026-11-15T12:37:38.000Z',
+          },
+        },
+      }),
+    ]);
+    expect(screen.getByTestId('failed-m4')).toHaveTextContent(messages.stream.failedImageFormat);
+    expect(screen.queryByText(/Image is invalid/)).toBeNull();
+  });
+
   it('★★ a failure outranks a delivery timestamp recorded before it', async () => {
     await show([
       message({

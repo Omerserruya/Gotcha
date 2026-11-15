@@ -41,7 +41,11 @@ import { pageMetadata } from '@/shell/page-metadata';
  * ⚠⚠ THE COMPOSER SENDS TO A REAL PERSON. Nothing automated presses it, on
  *    dev or anywhere, without Omer's word: the same rule as the desktop.
  */
-export default async function Page({ params }: { readonly params: Promise<{ readonly id: string }> }) {
+export default async function Page({
+  params,
+}: {
+  readonly params: Promise<{ readonly id: string }>;
+}) {
   const { id } = await params;
   const t = await getTranslations('mobile');
   const channelNames = await getTranslations('channels');
@@ -65,16 +69,15 @@ export default async function Page({ params }: { readonly params: Promise<{ read
   const channel = channelName(open.channel, channelNames);
   const mine = data.meId !== null && open.assignedAgentId === data.meId;
   const resolved = open.status === 'CLOSED';
-  const owner =
-    resolved
-      ? t('inbox.owner.resolved')
-      : open.isHandedOver
-        ? mine
-          ? t('inbox.owner.mine')
-          : t('inbox.owner.waiting')
-        : open.handledBy === 'ai_agent'
-          ? t('inbox.owner.gotcha')
-          : null;
+  const owner = resolved
+    ? t('inbox.owner.resolved')
+    : open.isHandedOver
+      ? mine
+        ? t('inbox.owner.mine')
+        : t('inbox.owner.waiting')
+      : open.handledBy === 'ai_agent'
+        ? t('inbox.owner.gotcha')
+        : null;
 
   return (
     <div className={ui.screen} data-testid="mobile-thread">
@@ -145,6 +148,7 @@ export default async function Page({ params }: { readonly params: Promise<{ read
           <Composer
             conversationId={open.id}
             channelName={channel}
+            channel={open.channel}
             replyWindow={open.replyWindow}
             customerName={open.customerName}
             resolved={resolved}

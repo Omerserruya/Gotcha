@@ -21,6 +21,7 @@ import { ContactCards, LocationCard, MessageMedia, ProductCards } from './Messag
 import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './media';
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
+import { sendFailure } from './send-failure';
 import { plainDashes } from '@/lib/plain-dashes';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
@@ -114,39 +115,43 @@ export async function MessageStream({
     >
       {messages.map((message) => [
         variant === 'phone' && dayStarts.has(message.id) ? (
-          <li key={`day-${message.id}`} className={styles.dayChip} data-testid={`day-${message.id}`}>
+          <li
+            key={`day-${message.id}`}
+            className={styles.dayChip}
+            data-testid={`day-${message.id}`}
+          >
             {dayStarts.get(message.id)}
           </li>
         ) : null,
         ((): ReactNode => {
-        /*
-         * ════════════════════════════════════════════════════════════════
-         * ★★ A COLLEAGUE'S ACTION IS NOT A MESSAGE, AND NOT THE CUSTOMER'S
-         * ════════════════════════════════════════════════════════════════
-         * `createSystemMessage` writes `direction: "INBOUND"` with an empty
-         * body, so a claim, a transfer and a return to the AI all arrive
-         * looking like the customer sent nothing. Rendered as a bubble they
-         * sit on the customer's side of the thread and read as theirs.
-         *
-         * A divider instead: no side, no timestamp bubble, and it names who
-         * did what. This is the visible consequence of the three buttons
-         * below the stream - pressing "take control" writes one of these.
-         */
-        const systemEvent = systemEventOf(message);
-        if (systemEvent) {
-          return (
-            <li
-              key={message.id}
-              className={styles.divider}
-              data-testid={`system-${message.id}`}
-              data-event={systemEvent}
-            >
-              <span className={styles.dividerText}>{systemDivider(t, message, systemEvent)}</span>
-            </li>
-          );
-        }
+          /*
+           * ════════════════════════════════════════════════════════════════
+           * ★★ A COLLEAGUE'S ACTION IS NOT A MESSAGE, AND NOT THE CUSTOMER'S
+           * ════════════════════════════════════════════════════════════════
+           * `createSystemMessage` writes `direction: "INBOUND"` with an empty
+           * body, so a claim, a transfer and a return to the AI all arrive
+           * looking like the customer sent nothing. Rendered as a bubble they
+           * sit on the customer's side of the thread and read as theirs.
+           *
+           * A divider instead: no side, no timestamp bubble, and it names who
+           * did what. This is the visible consequence of the three buttons
+           * below the stream - pressing "take control" writes one of these.
+           */
+          const systemEvent = systemEventOf(message);
+          if (systemEvent) {
+            return (
+              <li
+                key={message.id}
+                className={styles.divider}
+                data-testid={`system-${message.id}`}
+                data-event={systemEvent}
+              >
+                <span className={styles.dividerText}>{systemDivider(t, message, systemEvent)}</span>
+              </li>
+            );
+          }
 
-        /*
+          /*
           ════════════════════════════════════════════════════════════════
           ★★ A REACTION IS NOT A MESSAGE, AND IT ARRIVES AS ONE
           ════════════════════════════════════════════════════════════════
@@ -165,29 +170,29 @@ export async function MessageStream({
           Inbound only, and not by restraint: `whatsAppOutboundAdapter` has
           no reaction send, so there is nothing a picker could call.
         */
-        const reaction = reactionOf(message);
-        if (reaction) {
-          const target = resolveExternal(reaction.toExternalId, messages);
-          const preview = target ? target.body.trim().slice(0, 40) : '';
-          return (
-            <li
-              key={message.id}
-              className={styles.reaction}
-              data-testid={`reaction-${message.id}`}
-              data-kind={reaction.kind}
-            >
-              {reaction.kind === 'removed'
-                ? t('stream.reaction.removed')
-                : preview !== ''
-                  ? t('stream.reaction.toMessage', { emoji: reaction.emoji, preview })
-                  : t('stream.reaction.toEarlier', { emoji: reaction.emoji })}
-            </li>
-          );
-        }
+          const reaction = reactionOf(message);
+          if (reaction) {
+            const target = resolveExternal(reaction.toExternalId, messages);
+            const preview = target ? target.body.trim().slice(0, 40) : '';
+            return (
+              <li
+                key={message.id}
+                className={styles.reaction}
+                data-testid={`reaction-${message.id}`}
+                data-kind={reaction.kind}
+              >
+                {reaction.kind === 'removed'
+                  ? t('stream.reaction.removed')
+                  : preview !== ''
+                    ? t('stream.reaction.toMessage', { emoji: reaction.emoji, preview })
+                    : t('stream.reaction.toEarlier', { emoji: reaction.emoji })}
+              </li>
+            );
+          }
 
-        const type = renderableType(message);
-        const quoted = quotedState(message);
-        /*
+          const type = renderableType(message);
+          const quoted = quotedState(message);
+          /*
           ★ AND ANYTHING ELSE THE PROVIDER COULD NOT GIVE US PROPERLY.
           `[revoke message]`, `[edit message]`, `[unsupported message]` - an
           agent reading a bracketed token cannot tell whether it is the
@@ -195,25 +200,25 @@ export async function MessageStream({
           can honestly do: for every type but `reaction`, we do not know what
           happened.
         */
-        const unsupported = unsupportedType(message);
-        /*
-         * Did any branch above draw the message's content? Recognising a
-         * type and rendering it are different things, and only the second
-         * one means the agent can see what was sent.
-         */
-        const products = message.metadata?.commerce?.products.length ?? 0;
-        const rendered =
-          products > 0 ||
-          mediaKind(message) !== null ||
-          (message.metadata?.contacts?.length ?? 0) > 0 ||
-          isLocationMessage(message);
-        return (
-          <li
-            key={message.id}
-            className={styles.message}
-            data-testid={`message-${message.id}`}
-            data-direction={message.direction}
-            /*
+          const unsupported = unsupportedType(message);
+          /*
+           * Did any branch above draw the message's content? Recognising a
+           * type and rendering it are different things, and only the second
+           * one means the agent can see what was sent.
+           */
+          const products = message.metadata?.commerce?.products.length ?? 0;
+          const rendered =
+            products > 0 ||
+            mediaKind(message) !== null ||
+            (message.metadata?.contacts?.length ?? 0) > 0 ||
+            isLocationMessage(message);
+          return (
+            <li
+              key={message.id}
+              className={styles.message}
+              data-testid={`message-${message.id}`}
+              data-direction={message.direction}
+              /*
               ★ THE TYPE WE COULD ACCOUNT FOR, OR NOTHING.
               `messageType` is an unconstrained String - the observed values
               are whatever writers have written. `renderableType` returns
@@ -221,54 +226,54 @@ export async function MessageStream({
               than a wrong one: a styling hook that said "system" for the
               next type somebody adds would mislabel it silently.
             */
-            {...(type ? { 'data-type': type } : {})}
-          >
-            {/*
+              {...(type ? { 'data-type': type } : {})}
+            >
+              {/*
               ★★ 02 DRAWS THE BUBBLE AND ITS TIME LINE AS TWO THINGS: the
               message in a card, and `09:12 · Support AI · read` underneath it
               in the open. The time was inside the bubble, so every message
               carried a footer 02 does not have.
             */}
-            <div className={styles.bubble}>
-              {/* The phone names who answered at the top of the bubble, as the design does. */}
-              {variant === 'phone' && senderLabel(message) !== null ? (
-                <span
-                  className={styles.bubbleBy}
-                  data-gotcha={senderLabel(message) === 'GOTCHA' ? '' : undefined}
-                >
-                  {senderLabel(message)}
-                </span>
-              ) : null}
-              {/*
+              <div className={styles.bubble}>
+                {/* The phone names who answered at the top of the bubble, as the design does. */}
+                {variant === 'phone' && senderLabel(message) !== null ? (
+                  <span
+                    className={styles.bubbleBy}
+                    data-gotcha={senderLabel(message) === 'GOTCHA' ? '' : undefined}
+                  >
+                    {senderLabel(message)}
+                  </span>
+                ) : null}
+                {/*
               ★★ THE QUOTE ITSELF, FROM THE REPLY. 02 draws who said it and a
               line of what they said, inside the bubble above the reply.
               `replyTo` travels with the message, so the quote shows whether
               or not the quoted message is on this page.
             */}
-              {message.replyTo ? (
-                <div className={styles.quote} data-testid={`quote-${message.id}`}>
-                  <span className={styles.quoteWho}>
-                    {message.replyTo.direction === 'INBOUND'
-                      ? t('stream.quote.customer')
-                      : (senderLabel(message.replyTo) ?? t('stream.quote.team'))}
-                  </span>
-                  <span className={styles.quoteText}>
-                    {(() => {
-                      // The adapter's filler ("[Image]") is not what they wrote: say what it was.
-                      const quoted = quoteOf(message.replyTo);
-                      return quoted === null ? (
-                        t('stream.quote.noText')
-                      ) : 'text' in quoted ? (
-                        <UserText>{quoted.text}</UserText>
-                      ) : (
-                        t(`stream.quote.kind.${quoted.kind}`)
-                      );
-                    })()}
-                  </span>
-                </div>
-              ) : null}
+                {message.replyTo ? (
+                  <div className={styles.quote} data-testid={`quote-${message.id}`}>
+                    <span className={styles.quoteWho}>
+                      {message.replyTo.direction === 'INBOUND'
+                        ? t('stream.quote.customer')
+                        : (senderLabel(message.replyTo) ?? t('stream.quote.team'))}
+                    </span>
+                    <span className={styles.quoteText}>
+                      {(() => {
+                        // The adapter's filler ("[Image]") is not what they wrote: say what it was.
+                        const quoted = quoteOf(message.replyTo);
+                        return quoted === null ? (
+                          t('stream.quote.noText')
+                        ) : 'text' in quoted ? (
+                          <UserText>{quoted.text}</UserText>
+                        ) : (
+                          t(`stream.quote.kind.${quoted.kind}`)
+                        );
+                      })()}
+                    </span>
+                  </div>
+                ) : null}
 
-              {/*
+                {/*
               ★★ A REPLY WHOSE QUOTE WE NEVER STORED IS STILL A REPLY.
               `replyToMessageId` can fail to resolve - the quoted message may
               predate GOTCHA or have been deleted - while
@@ -276,40 +281,40 @@ export async function MessageStream({
               nothing would lose the fact that the customer was answering
               something, which is often what makes the message legible.
             */}
-              {quoted === 'unresolved' ? (
-                <p className={styles.quoted} data-testid={`quoted-missing-${message.id}`}>
-                  {t('stream.quotedMissing')}
-                </p>
-              ) : null}
+                {quoted === 'unresolved' ? (
+                  <p className={styles.quoted} data-testid={`quoted-missing-${message.id}`}>
+                    {t('stream.quotedMissing')}
+                  </p>
+                ) : null}
 
-              {/*
+                {/*
                 ★ The attachment itself, as 02 draws it - a photo to see, a voice
                 note to play, a file to download - or, when it could not be
                 fetched, a sentence saying so. (Was "A photo." in words.)
               */}
-              <MessageMedia message={message} t={(key, values) => t(`stream.${key}`, values)} />
-              <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
-              <LocationCard message={message} t={(key) => t(`stream.${key}`)} />
-              <ProductCards
-                message={message}
-                t={(key) => t(`stream.${key}`)}
-                money={(amount, currency) => {
-                  const n = Number(amount);
-                  if (!Number.isFinite(n)) return amount;
-                  if (!currency) return format.number(n, { maximumFractionDigits: 2 });
-                  try {
-                    return format.number(n, {
-                      style: 'currency',
-                      currency,
-                      maximumFractionDigits: 2,
-                    });
-                  } catch {
-                    return format.number(n, { maximumFractionDigits: 2 });
-                  }
-                }}
-              />
+                <MessageMedia message={message} t={(key, values) => t(`stream.${key}`, values)} />
+                <ContactCards message={message} t={(key) => t(`stream.${key}`)} />
+                <LocationCard message={message} t={(key) => t(`stream.${key}`)} />
+                <ProductCards
+                  message={message}
+                  t={(key) => t(`stream.${key}`)}
+                  money={(amount, currency) => {
+                    const n = Number(amount);
+                    if (!Number.isFinite(n)) return amount;
+                    if (!currency) return format.number(n, { maximumFractionDigits: 2 });
+                    try {
+                      return format.number(n, {
+                        style: 'currency',
+                        currency,
+                        maximumFractionDigits: 2,
+                      });
+                    } catch {
+                      return format.number(n, { maximumFractionDigits: 2 });
+                    }
+                  }}
+                />
 
-              {/*
+                {/*
               ════════════════════════════════════════════════════════════════
               ★★ "NOTHING TO SHOW" IS ABOUT WHAT WE RENDERED, NOT ABOUT THE
                  TYPE BEING UNRECOGNISED
@@ -324,48 +329,52 @@ export async function MessageStream({
               no body and no branch - location, template, interactive,
               system, and whatever is added next - lands here and says so.
             */}
-              {unsupported !== null ? (
-                <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
-                  {t('stream.unsupported', { type: unsupported })}
-                </p>
-              ) : products === 0 && message.body.trim() !== '' && !isPlaceholderCaption(message) ? (
-                /* With cards drawn, the body is their plain-text fallback: not said twice. */
-                /* Isolated: a customer writes in their language, not the page's. */
-                <p className={styles.body}>
-                  {/* Our side's words (the AI's, mostly): plain hyphens. The customer's are theirs. */}
-                  <UserText>
-                    {message.direction === 'OUTBOUND' ? plainDashes(message.body) : message.body}
-                  </UserText>
-                </p>
-              ) : !rendered ? (
-                <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
-                  {t('stream.unknownType')}
-                </p>
-              ) : null}
-              {variant === 'phone' ? <PhoneStamp message={message} format={format} t={t} /> : null}
-            </div>
+                {unsupported !== null ? (
+                  <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
+                    {t('stream.unsupported', { type: unsupported })}
+                  </p>
+                ) : products === 0 &&
+                  message.body.trim() !== '' &&
+                  !isPlaceholderCaption(message) ? (
+                  /* With cards drawn, the body is their plain-text fallback: not said twice. */
+                  /* Isolated: a customer writes in their language, not the page's. */
+                  <p className={styles.body}>
+                    {/* Our side's words (the AI's, mostly): plain hyphens. The customer's are theirs. */}
+                    <UserText>
+                      {message.direction === 'OUTBOUND' ? plainDashes(message.body) : message.body}
+                    </UserText>
+                  </p>
+                ) : !rendered ? (
+                  <p className={styles.mediaNote} data-testid={`unknown-${message.id}`}>
+                    {t('stream.unknownType')}
+                  </p>
+                ) : null}
+                {variant === 'phone' ? (
+                  <PhoneStamp message={message} format={format} t={t} />
+                ) : null}
+              </div>
 
-            {variant === 'phone' && deliveryOf(message) !== 'failed' ? null : (
-            <p className={styles.meta}>
-              <time dateTime={message.createdAt}>
-                {format.dateTime(new Date(message.createdAt), {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  /* 02 writes `09:12` in both languages; see the queue's time. */
-                  hour12: false,
-                })}
-              </time>
-              {/* 02's middle slot - "Support AI" - when there is a name to put there. */}
-              {senderLabel(message) === null ? null : (
-                <span data-testid={`sender-${message.id}`}>{senderLabel(message)}</span>
-              )}
-              {/*
+              {variant === 'phone' && deliveryOf(message) !== 'failed' ? null : (
+                <p className={styles.meta}>
+                  <time dateTime={message.createdAt}>
+                    {format.dateTime(new Date(message.createdAt), {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      /* 02 writes `09:12` in both languages; see the queue's time. */
+                      hour12: false,
+                    })}
+                  </time>
+                  {/* 02's middle slot - "Support AI" - when there is a name to put there. */}
+                  {senderLabel(message) === null ? null : (
+                    <span data-testid={`sender-${message.id}`}>{senderLabel(message)}</span>
+                  )}
+                  {/*
                 ★ THE CUSTOMER READ IT. Labelled as theirs, because the same
                 word means the agent's queue elsewhere in this product and
                 collapsing them would empty a queue as customers open their
                 phones.
               */}
-              {/*
+                  {/*
                 ══════════════════════════════════════════════════════════════
                 ★★ A FAILED MESSAGE USED TO RENDER AS NOTHING AT ALL
                 ══════════════════════════════════════════════════════════════
@@ -384,69 +393,70 @@ export async function MessageStream({
                 this is the one field where the reassuring default would tell
                 somebody a customer has their answer.
               */}
-              {(() => {
-                const delivery = deliveryOf(message);
-                if (delivery === null) return null;
-                if (delivery === 'read')
-                  return <span data-testid={`read-${message.id}`}>{t('stream.customerRead')}</span>;
-                if (delivery === 'delivered')
-                  return (
-                    <span data-testid={`delivered-${message.id}`}>{t('stream.delivered')}</span>
-                  );
-                if (delivery === 'failed')
-                  return (
-                    <span className={styles.streamFailed} data-testid={`failed-${message.id}`}>
-                      {/*
+                  {(() => {
+                    const delivery = deliveryOf(message);
+                    if (delivery === null) return null;
+                    if (delivery === 'read')
+                      return (
+                        <span data-testid={`read-${message.id}`}>{t('stream.customerRead')}</span>
+                      );
+                    if (delivery === 'delivered')
+                      return (
+                        <span data-testid={`delivered-${message.id}`}>{t('stream.delivered')}</span>
+                      );
+                    if (delivery === 'failed')
+                      return (
+                        <span className={styles.streamFailed} data-testid={`failed-${message.id}`}>
+                          {/*
                         ★ The window's two refusals are said in words (Backend
                           47e376a4): the reason is the 24 hours, not a fault.
                       */}
-                      {message.metadata?.sendError?.type === 'TEMPLATE_REQUIRED'
-                        ? t('stream.failedTemplateRequired')
-                        : message.metadata?.sendError?.type === 'REPLY_WINDOW_CLOSED'
-                          ? t('stream.failedWindowClosed')
-                          : t('stream.failed')}
-                    </span>
-                  );
-                if (delivery === 'sent')
-                  return <span data-testid={`sent-${message.id}`}>{t('stream.sent')}</span>;
-                if (delivery === 'pending')
-                  return <span data-testid={`pending-${message.id}`}>{t('stream.pending')}</span>;
-                return (
-                  <span data-testid={`delivery-unknown-${message.id}`}>
-                    {t('stream.deliveryUnknown')}
-                  </span>
-                );
-              })()}
-            </p>
-            )}
+                          {/* And Meta's refusal of a file's format, by its code (`sendFailure`). */}
+                          {t(`stream.${sendFailure(message)}`)}
+                        </span>
+                      );
+                    if (delivery === 'sent')
+                      return <span data-testid={`sent-${message.id}`}>{t('stream.sent')}</span>;
+                    if (delivery === 'pending')
+                      return (
+                        <span data-testid={`pending-${message.id}`}>{t('stream.pending')}</span>
+                      );
+                    return (
+                      <span data-testid={`delivery-unknown-${message.id}`}>
+                        {t('stream.deliveryUnknown')}
+                      </span>
+                    );
+                  })()}
+                </p>
+              )}
 
-            {/*
+              {/*
               ★ 02's hover bar, with Reply - the one of its four actions with
                 a backend. The target is described here, where the quote's
                 words already are, so the composer can show what is being
                 answered before anything is sent.
             */}
-            <ReplyButton
-              target={{
-                id: message.id,
-                who:
-                  message.direction === 'INBOUND'
-                    ? t('stream.quote.customer')
-                    : (senderLabel(message) ?? t('stream.quote.team')),
-                preview: (() => {
-                  const quoted = quoteOf(message);
-                  return quoted === null
-                    ? t('stream.quote.noText')
-                    : 'text' in quoted
-                      ? quoted.text.slice(0, 140)
-                      : t(`stream.quote.kind.${quoted.kind}`);
-                })(),
-              }}
-              label={t('stream.reply')}
-              description={t('stream.replyTo')}
-            />
-          </li>
-        );
+              <ReplyButton
+                target={{
+                  id: message.id,
+                  who:
+                    message.direction === 'INBOUND'
+                      ? t('stream.quote.customer')
+                      : (senderLabel(message) ?? t('stream.quote.team')),
+                  preview: (() => {
+                    const quoted = quoteOf(message);
+                    return quoted === null
+                      ? t('stream.quote.noText')
+                      : 'text' in quoted
+                        ? quoted.text.slice(0, 140)
+                        : t(`stream.quote.kind.${quoted.kind}`);
+                  })(),
+                }}
+                label={t('stream.reply')}
+                description={t('stream.replyTo')}
+              />
+            </li>
+          );
         })(),
       ])}
     </ol>

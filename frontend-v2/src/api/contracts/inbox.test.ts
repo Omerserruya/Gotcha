@@ -646,3 +646,35 @@ describe('★★ metadata.media survives parsing, and a bad fact never costs the
     expect(parsed.metadata?.media?.originalName).toBeNull();
   });
 });
+
+describe("★ sendError keeps Meta's code and the channel (2026-11-15)", () => {
+  it('★★ code and channel survive; a bad one falls away alone', async () => {
+    const { messageSchema } = await import('./inbox');
+    const base = {
+      id: 'm1',
+      conversationId: 'c1',
+      direction: 'OUTBOUND',
+      body: '',
+      createdAt: '2026-11-15T12:37:38Z',
+    };
+    const meta = (sendError: unknown) =>
+      (
+        messageSchema.parse({ ...base, metadata: { sendError } }) as {
+          metadata?: { sendError?: unknown };
+        }
+      ).metadata?.sendError;
+    expect(
+      meta({
+        channel: 'WHATSAPP',
+        code: 131053,
+        type: 'OAuthException',
+        message: 'Image is invalid',
+      }),
+    ).toEqual({
+      channel: 'WHATSAPP',
+      code: 131053,
+      type: 'OAuthException',
+    });
+    expect(meta({ channel: 'WHATSAPP', code: 'x' })).toEqual({ channel: 'WHATSAPP' });
+  });
+});

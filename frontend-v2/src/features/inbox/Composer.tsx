@@ -68,6 +68,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 export function Composer({
   conversationId,
   channelName,
+  channel = null,
   replyWindow = null,
   customerName = null,
   resolved = false,
@@ -76,6 +77,8 @@ export function Composer({
   readonly conversationId: string;
   /** Already-named channel, for the sentence about where this goes. */
   readonly channelName: string | null;
+  /** The channel itself (`WHATSAPP`, …): an image for Meta's is re-encoded to one they take. */
+  readonly channel?: string | null;
   /** The row's window (Backend 47e376a4). Absent, null or unknown is free. */
   readonly replyWindow?: ConversationRow['replyWindow'];
   /** For a template's name variable. */
@@ -307,7 +310,7 @@ export function Composer({
                */
               outcome = { ok: true };
               for (const [i, f] of files.entries()) {
-                outcome = await sendMedia(conversationId, f, i === 0 ? text : '');
+                outcome = await sendMedia(conversationId, f, i === 0 ? text : '', channel);
                 if (!outcome.ok) break;
                 sent += 1;
               }

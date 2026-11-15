@@ -910,3 +910,10 @@ describe('★★ a bare /inbox is "Assigned to me" - and "Active" when we cannot
     ).toBe('mine');
   });
 });
+
+describe('★ the composer is told the channel, for an image Meta will take (2026-11-15)', () => {
+  it("★ the open conversation's channel", async () => {
+    const tree = await page({ open: row({ channel: 'WHATSAPP' }) });
+    expect(propsOf<{ channel?: string | null }>(tree, Composer)?.channel).toBe('WHATSAPP');
+  });
+});

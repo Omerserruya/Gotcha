@@ -52,6 +52,8 @@
     "failed": "This did not send. The customer never received it.",
     "failedTemplateRequired": "This did not send: 24 hours had passed since the customer last wrote, and WhatsApp then allows only an approved template.",
     "failedWindowClosed": "This did not send: 24 hours had passed since the customer last wrote, and nothing more can go out until they write again.",
+    "failedImageFormat": "This did not send: WhatsApp did not accept the image in this format.",
+    "failedMediaFormat": "This did not send: WhatsApp did not accept the file in this format.",
     "deliveryUnknown": "We can’t tell whether this arrived.",
     "quote": {
       "customer": "Customer",
