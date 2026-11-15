@@ -53,6 +53,20 @@ describe("POST /internal/uploads/purge", () => {
     expect(fs.existsSync(path.join(dir, "keep.txt"))).toBe(true);
   });
 
+  it("a widget image in uploads/widget/ is a stored name too; no other folder, and never a way out of it", async () => {
+    const W = "widget/3f2504e0-4f89-11d3-9a0c-0305e82c3301.png";
+    fs.mkdirSync(path.join(dir, "widget"));
+    fs.writeFileSync(path.join(dir, W), "x");
+    fs.mkdirSync(path.join(dir, "other"));
+    fs.writeFileSync(path.join(dir, "other", "3f2504e0-4f89-11d3-9a0c-0305e82c3301.png"), "x");
+    const r = await purge([W, "other/3f2504e0-4f89-11d3-9a0c-0305e82c3301.png", "widget/../outside-secret.txt", "widget/widget/3f2504e0-4f89-11d3-9a0c-0305e82c3301.png"]);
+    expect(r.body.removed).toBe(1);
+    expect(r.body.rejected).toHaveLength(3);
+    expect(fs.existsSync(path.join(dir, W))).toBe(false);
+    expect(fs.existsSync(path.join(dir, "other", "3f2504e0-4f89-11d3-9a0c-0305e82c3301.png"))).toBe(true);
+    expect(fs.existsSync(path.join(path.dirname(dir), "outside-secret.txt"))).toBe(true);
+  });
+
   it("is internal-key only", async () => {
     const r = await purge([A], "wrong");
     expect(r.status).toBe(403);

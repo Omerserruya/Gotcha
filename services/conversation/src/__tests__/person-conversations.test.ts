@@ -51,7 +51,10 @@ vi.mock("@chatcenter/shared", () => ({
     },
     message: {
       groupBy: async (a: any) => {
-        const rows = H.msgs.filter((m) => matches(m, a.where));
+        // As the real client's live-by-default guard does (shared prisma.ts): a
+        // bulk Message query that names no origin reads LIVE rows only.
+        const where = a.where && "origin" in a.where ? a.where : { ...a.where, origin: "LIVE" };
+        const rows = H.msgs.filter((m) => matches(m, where));
         const by = new Map<string, number>();
         for (const m of rows) by.set(m.conversationId, (by.get(m.conversationId) ?? 0) + 1);
         return [...by].map(([conversationId, n]) => ({ conversationId, _count: { _all: n } }));
@@ -85,10 +88,10 @@ beforeEach(() => {
     conv("c_other_tenant", { tenantId: "X", channel: "WHATSAPP", customerExternalId: "9725", lastMessageAt: at(9) }),
   ];
   H.msgs = [
-    { tenantId: "T", conversationId: "c_wa", messageType: "text" },
-    { tenantId: "T", conversationId: "c_wa", messageType: "text" },
-    { tenantId: "T", conversationId: "c_wa", messageType: "system" },
-    { tenantId: "T", conversationId: "c_ig", messageType: "text" },
+    { tenantId: "T", conversationId: "c_wa", messageType: "text", origin: "LIVE" },
+    { tenantId: "T", conversationId: "c_wa", messageType: "text", origin: "LIVE" },
+    { tenantId: "T", conversationId: "c_wa", messageType: "system", origin: "LIVE" },
+    { tenantId: "T", conversationId: "c_ig", messageType: "text", origin: "LIVE" },
   ];
   H.intel = [
     { tenantId: "T", conversationId: "c_wa", summary: "- **Summary:** Asked about the blue dress in size M.\n- Next: send link" },
@@ -123,6 +126,23 @@ describe("GET /api/identity/:id/conversations", () => {
     const r = await get("?limit=1");
     expect(r.body.data).toHaveLength(1);
     expect(r.body).toMatchObject({ total: 2, hasMore: true });
+  });
+
+  // Omer's iPhone 2026-11-15: two past WhatsApp conversations listed as
+  // "0 הודעות". They were imported history: every message HISTORICAL_IMPORT,
+  // and the count's groupBy named no origin, so the guard counted LIVE only.
+  it("★ an imported conversation counts its imported messages; opted out, it is not listed at all", async () => {
+    H.convs.push(conv("c_hist", { channel: "WHATSAPP", customerExternalId: "9725", lastMessageAt: at(2), origin: "HISTORICAL_IMPORT" }));
+    H.msgs.push(
+      { tenantId: "T", conversationId: "c_hist", messageType: "text", origin: "HISTORICAL_IMPORT" },
+      { tenantId: "T", conversationId: "c_hist", messageType: "text", origin: "HISTORICAL_IMPORT" },
+      { tenantId: "T", conversationId: "c_hist", messageType: "text", origin: "HISTORICAL_IMPORT" },
+    );
+    const r = await get();
+    expect(r.body.data.find((c: any) => c.conversationId === "c_hist")).toMatchObject({ messageCount: 3 });
+    expect(r.body.data.find((c: any) => c.conversationId === "c_wa")).toMatchObject({ messageCount: 2 });
+    const live = await get("?includeImported=false");
+    expect(live.body.data.map((c: any) => c.conversationId)).not.toContain("c_hist");
   });
 
   it("another tenant's contact is a 404, not an empty history", async () => {

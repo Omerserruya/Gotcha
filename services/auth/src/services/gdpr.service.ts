@@ -256,10 +256,19 @@ export async function tenantDeletionRefusal(
 }
 
 /** A stored upload's file name, from a /api/uploads/<name> URL. Null for anything else. */
-function uploadNameOf(url: string | null | undefined): string | null {
+export function uploadNameOf(url: string | null | undefined): string | null {
   if (!url) return null;
-  const m = /\/api\/uploads\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8})(?:[?#].*)?$/i.exec(url);
+  // A message's media at the top of the volume, or a widget image in its
+  // widget/ folder (logo, cover: conversation widget-images.ts).
+  const m = /\/api\/uploads\/((?:widget\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8})(?:[?#].*)?$/i.exec(url);
   return m ? m[1]! : null;
+}
+
+/** Every stored upload a text names ("/api/uploads/<name>" anywhere in it): a channel's settings JSON. */
+export function uploadNamesIn(text: string | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const m of String(text ?? "").matchAll(/\/api\/uploads\/((?:widget\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8})/gi)) out.add(m[1]!);
+  return [...out];
 }
 
 const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002";
@@ -362,7 +371,36 @@ export async function eraseTenant(
     prisma.message.findMany({ where: { tenantId, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
     prisma.scheduledMessage.findMany({ where: { tenantId, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
   ]);
-  const uploadFiles = Array.from(new Set(media.flat().map((m) => uploadNameOf(m.mediaUrl)).filter((n): n is string => !!n)));
+  // Every other stored file the workspace names (data-retention-policy, the
+  // gap closed 2026-11-15): a broadcast's header media, the avatars, and the
+  // web chat's logo and cover, which live in the channel's settings JSON.
+  const [broadcasts, contacts, conversations, channels] = await Promise.all([
+    prisma.broadcast.findMany({ where: { tenantId, headerMediaUrl: { not: null } }, select: { headerMediaUrl: true } }),
+    prisma.contact.findMany({ where: { tenantId, avatarUrl: { not: null } }, select: { avatarUrl: true } }),
+    prisma.conversation.findMany({ where: { tenantId, customerAvatarUrl: { not: null } }, select: { customerAvatarUrl: true } }),
+    prisma.channelAccount.findMany({ where: { tenantId }, select: { credentials: true } }),
+  ]);
+  const named = [
+    ...media.flat().map((m) => uploadNameOf(m.mediaUrl)),
+    ...(broadcasts ?? []).map((b) => uploadNameOf(b.headerMediaUrl)),
+    ...(contacts ?? []).map((c) => uploadNameOf(c.avatarUrl)),
+    ...(conversations ?? []).map((c) => uploadNameOf(c.customerAvatarUrl)),
+    ...(channels ?? []).flatMap((c) => uploadNamesIn(typeof c.credentials === "string" ? c.credentials : JSON.stringify(c.credentials ?? null))),
+  ].filter((n): n is string => !!n);
+  // A widget image another workspace's channel still names is not this one's to remove.
+  const widgetNames = Array.from(new Set(named.filter((n) => n.startsWith("widget/"))));
+  const sharedWidget = new Set<string>();
+  for (const n of widgetNames) {
+    // The settings are a JSON object: searched as text (n is a checked stored name, no wildcards).
+    let others = 1; // Unreadable: keep the file rather than remove another workspace's image.
+    try {
+      const r = await withCrossTenantAccess(() => prisma.$queryRaw<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM channel_accounts WHERE tenant_id <> ${tenantId} AND credentials::text LIKE ${"%" + n + "%"}`);
+      others = Number(r?.[0]?.n ?? 0);
+    } catch { /* kept */ }
+    if (others > 0) sharedWidget.add(n);
+  }
+  const uploadFiles = Array.from(new Set(named.filter((n) => !sharedWidget.has(n))));
 
   // 1. Authentik + local identities. Only erase a person whose ONLY
   //    membership lives in this tenant - an identity that also works in

@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       GOTCHA for WooCommerce
  * Description:       The GOTCHA chat on your store: your AI employee answers your customers, with your products and orders.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            GOTCHA
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GOTCHA_WC_VERSION', '0.1.0' );
+define( 'GOTCHA_WC_VERSION', '0.2.0' );
 if ( ! defined( 'GOTCHA_APP_URL' ) ) {
 	// The GOTCHA that served this zip writes its own address here when the zip
 	// is downloaded (a dev GOTCHA gives dev, production gives production).
@@ -156,6 +156,68 @@ add_action(
 	}
 );
 
+/**
+ * This admin page came through Cloudflare. Its bot challenge can stop GOTCHA's
+ * servers from reaching the WooCommerce API (the challenge depends on the
+ * caller, so the merchant's own browser never sees it).
+ */
+function gotcha_wc_behind_cloudflare() {
+	return ! empty( $_SERVER['HTTP_CF_RAY'] ) || ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] );
+}
+
+/** "Test GOTCHA access": GOTCHA probes this site's WooCommerce API from its own servers. */
+function gotcha_wc_probe() {
+	$key = (string) get_option( GOTCHA_WC_OPT_KEY );
+	if ( '' === $key ) {
+		return null;
+	}
+	$response = wp_remote_post(
+		untrailingslashit( GOTCHA_APP_URL ) . '/api/woocommerce-plugin/probe',
+		array(
+			'timeout' => 20,
+			'headers' => array( 'Content-Type' => 'application/json', 'Authorization' => 'Bearer ' . $key ),
+			'body'    => '{}',
+		)
+	);
+	if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+		return array( 'reason' => 'gotcha_unreachable' );
+	}
+	$data = json_decode( wp_remote_retrieve_body( $response ), true );
+	return is_array( $data ) && isset( $data['data'] ) && is_array( $data['data'] ) ? $data['data'] : array( 'reason' => 'gotcha_unreachable' );
+}
+
+/**
+ * The Cloudflare rule that lets GOTCHA through. With GOTCHA's address (from the
+ * probe, never hardcoded): the rule by that address first, the WooCommerce
+ * API path as the alternative. Without it: the path rule only.
+ */
+function gotcha_wc_cloudflare_rule_html( $egress = null ) {
+	$ips = ( is_array( $egress ) && ! empty( $egress['ips'] ) && is_array( $egress['ips'] ) ) ? array_values( array_filter( $egress['ips'], 'is_string' ) ) : array();
+	?>
+	<ol>
+		<li><?php esc_html_e( 'In Cloudflare, open Security, then WAF, then Custom rules, and create a rule.', 'gotcha-for-woocommerce' ); ?></li>
+		<?php if ( $ips && ! empty( $egress['stable'] ) ) : ?>
+			<li><?php
+			/* translators: 1: operator, 2: GOTCHA's IP address or addresses */
+			echo wp_kses( sprintf( __( 'Field <code>IP Source Address</code>, operator <code>%1$s</code>, value <code>%2$s</code>.', 'gotcha-for-woocommerce' ), count( $ips ) > 1 ? 'is in' : 'equals', esc_html( implode( ' ', $ips ) ) ), array( 'code' => array() ) );
+			?></li>
+			<li><?php echo wp_kses( __( 'Or instead: field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<?php elseif ( $ips ) : ?>
+			<li><?php echo wp_kses( __( 'Field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+			<li><?php
+			/* translators: 1: operator, 2: GOTCHA's IP address or addresses */
+			echo wp_kses( sprintf( __( 'Or instead: field <code>IP Source Address</code>, operator <code>%1$s</code>, value <code>%2$s</code> (GOTCHA\'s address may change).', 'gotcha-for-woocommerce' ), count( $ips ) > 1 ? 'is in' : 'equals', esc_html( implode( ' ', $ips ) ) ), array( 'code' => array() ) );
+			?></li>
+		<?php else : ?>
+		<li><?php echo wp_kses( __( 'Field <code>URI Path</code>, operator <code>starts with</code>, value <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<?php endif; ?>
+		<li><?php echo wp_kses( __( 'Action <code>Skip</code>: skip <code>All remaining custom rules</code> and <code>Super Bot Fight Mode</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></li>
+		<li><?php esc_html_e( 'Deploy the rule, then press "Test GOTCHA access" again.', 'gotcha-for-woocommerce' ); ?></li>
+	</ol>
+	<p><?php esc_html_e( 'Only the WooCommerce API is opened; your pages and checkout stay protected.', 'gotcha-for-woocommerce' ); ?></p>
+	<?php
+}
+
 function gotcha_wc_settings_url() {
 	return admin_url( 'admin.php?page=gotcha-for-woocommerce' );
 }
@@ -209,6 +271,10 @@ function gotcha_wc_settings_page() {
 		gotcha_wc_forget();
 		$notice = __( 'Disconnected. The chat no longer shows on your store.', 'gotcha-for-woocommerce' );
 	}
+	$probe = null;
+	if ( isset( $_POST['gotcha_wc_probe'] ) && check_admin_referer( 'gotcha_wc_probe' ) ) {
+		$probe = gotcha_wc_probe();
+	}
 	$returned = gotcha_wc_handle_return();
 	if ( true === $returned ) {
 		$notice = __( 'Connected. The chat now shows on your store.', 'gotcha-for-woocommerce' );
@@ -241,11 +307,34 @@ function gotcha_wc_settings_page() {
 			</p>
 			<p><a class="button button-primary" href="<?php echo esc_url( untrailingslashit( GOTCHA_APP_URL ) . '/settings/channels/website' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open in GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
 			<form method="post">
+				<?php wp_nonce_field( 'gotcha_wc_probe' ); ?>
+				<p><button class="button" name="gotcha_wc_probe" value="1"><?php esc_html_e( 'Test GOTCHA access', 'gotcha-for-woocommerce' ); ?></button></p>
+			</form>
+			<?php if ( is_array( $probe ) ) : ?>
+				<?php if ( ! empty( $probe['reachable'] ) ) : ?>
+					<div class="notice notice-success inline"><p><?php esc_html_e( 'GOTCHA reaches your store\'s WooCommerce API.', 'gotcha-for-woocommerce' ); ?></p></div>
+				<?php elseif ( 'store_firewall_challenge' === ( $probe['reason'] ?? '' ) && 'cloudflare' === ( $probe['firewall'] ?? '' ) ) : ?>
+					<div class="notice notice-warning inline"><p><?php esc_html_e( 'Cloudflare is blocking GOTCHA from your store\'s WooCommerce API, so your AI employee cannot read products and orders. Add this rule:', 'gotcha-for-woocommerce' ); ?></p><?php gotcha_wc_cloudflare_rule_html( $probe['egress'] ?? null ); ?></div>
+				<?php elseif ( 'store_firewall_challenge' === ( $probe['reason'] ?? '' ) ) : ?>
+					<div class="notice notice-warning inline"><p><?php echo wp_kses( __( 'A firewall (your host\'s, or a security plugin) is blocking GOTCHA from your store\'s WooCommerce API. Ask your host to allow requests to <code>/wp-json/wc/</code>.', 'gotcha-for-woocommerce' ), array( 'code' => array() ) ); ?></p></div>
+				<?php elseif ( 'gotcha_unreachable' === ( $probe['reason'] ?? '' ) ) : ?>
+					<div class="notice notice-error inline"><p><?php esc_html_e( 'GOTCHA could not be reached to run the test. Try again in a minute.', 'gotcha-for-woocommerce' ); ?></p></div>
+				<?php else : ?>
+					<div class="notice notice-error inline"><p><?php
+					/* translators: %s: the probe's reason code */
+					printf( esc_html__( 'GOTCHA could not reach your store\'s WooCommerce API (%s).', 'gotcha-for-woocommerce' ), esc_html( (string) ( $probe['reason'] ?? '' ) ) );
+					?></p></div>
+				<?php endif; ?>
+			<?php endif; ?>
+			<form method="post">
 				<?php wp_nonce_field( 'gotcha_wc_disconnect' ); ?>
 				<p><button class="button" name="gotcha_wc_disconnect" value="1"><?php esc_html_e( 'Disconnect', 'gotcha-for-woocommerce' ); ?></button></p>
 			</form>
 		<?php else : ?>
 			<p><?php esc_html_e( 'Connect your store to your GOTCHA workspace: your AI employee will answer your customers on your store.', 'gotcha-for-woocommerce' ); ?></p>
+			<?php if ( gotcha_wc_behind_cloudflare() ) : ?>
+				<div class="notice notice-info inline"><p><?php esc_html_e( 'Your store is behind Cloudflare. Its bot protection can block GOTCHA from your WooCommerce API. Before connecting, add this rule:', 'gotcha-for-woocommerce' ); ?></p><?php gotcha_wc_cloudflare_rule_html(); ?></div>
+			<?php endif; ?>
 			<p><a class="button button-primary" href="<?php echo esc_url( $connect ); ?>"><?php esc_html_e( 'Connect to GOTCHA', 'gotcha-for-woocommerce' ); ?></a></p>
 		<?php endif; ?>
 	</div>

@@ -141,7 +141,7 @@ export interface ProviderAdapter {
     ctx: AdapterContext;
     credentials: Record<string, any>;
     config: Record<string, any>;
-  }): Promise<{ ok: boolean; error?: string; grantedScopes?: string[]; missingScopes?: string[] }>;
+  }): Promise<{ ok: boolean; error?: string; /** A machine-readable refusal kind, sent to the client as the 422's `code`. */ code?: string; grantedScopes?: string[]; missingScopes?: string[] }>;
   /**
    * (Optional) This adapter's refreshTokens can also EXCHANGE a legacy
    * credential blob that has an accessToken but no refreshToken (one-way
@@ -301,6 +301,48 @@ export async function persistCredentials(opts: {
  * unrecoverable auth failure so the marketplace card reflects reality and
  * the bot drops the tools next turn.
  */
+/**
+ * A store's firewall answered instead of the store (WooCommerce behind
+ * Cloudflare's challenge, 2026-11-15): said on the connection as
+ * lastError "[STORE_FIREWALL_CHALLENGE] ..." so the channels page can explain
+ * it without probing. The status is NOT changed: the keys are fine, and a
+ * challenge comes and goes. Written once while it holds; the next call that
+ * reaches the store clears it.
+ */
+export const FIREWALL_ERROR_PREFIX = "[STORE_FIREWALL_CHALLENGE]";
+const firewallFlagged = new Set<string>();
+export async function noteFirewallChallenge(tenantIntegrationId: string, message: string): Promise<void> {
+  if (!tenantIntegrationId || firewallFlagged.has(tenantIntegrationId)) return;
+  const firewall = /firewall \(([a-z0-9]+)\)/.exec(message)?.[1] ?? "other";
+  // Never the store call's problem: a note that cannot be written is only logged.
+  try {
+    await (prisma as any).tenantIntegration.update({
+      where: { id: tenantIntegrationId },
+      data: { lastError: `${FIREWALL_ERROR_PREFIX} firewall=${firewall}: the store's firewall answered instead of the store`, lastTestedAt: new Date() },
+    });
+    firewallFlagged.add(tenantIntegrationId);
+  } catch (e: any) {
+    console.warn("[integration-framework] firewall note failed:", e?.message);
+  }
+}
+// Connections this process has checked for a stale note (one clear after a restart, then only when flagged).
+const firewallChecked = new Set<string>();
+export async function clearFirewallChallenge(tenantIntegrationId: string): Promise<void> {
+  if (!tenantIntegrationId) return;
+  if (!firewallFlagged.has(tenantIntegrationId) && firewallChecked.has(tenantIntegrationId)) return;
+  firewallFlagged.delete(tenantIntegrationId);
+  firewallChecked.add(tenantIntegrationId);
+  // Never a successful call's problem: a clear that cannot be written is only logged.
+  try {
+    await (prisma as any).tenantIntegration.updateMany({
+      where: { id: tenantIntegrationId, lastError: { startsWith: FIREWALL_ERROR_PREFIX } },
+      data: { lastError: null },
+    });
+  } catch (e: any) {
+    console.warn("[integration-framework] firewall clear failed:", e?.message);
+  }
+}
+
 export async function setConnectionStatus(opts: {
   tenantIntegrationId: string;
   status: "CONNECTED" | "ERROR" | "DISCONNECTED";
@@ -1254,6 +1296,8 @@ export async function executeAdapterTool(opts: {
       const { redactPrivateShopifyData } = await import("./shopify-safe-output");
       result = redactPrivateShopifyData(result);
     }
+    // The store answered: a firewall note from an earlier call no longer holds.
+    if (slug === "woocommerce") await clearFirewallChallenge(conn.tenantIntegrationId);
     return { ok: true, result };
   } catch (err: any) {
     const message = err?.message || "execution_failed";
@@ -1265,7 +1309,9 @@ export async function executeAdapterTool(opts: {
       await addMissingScopes(conn.tenantIntegrationId, provedMissing).catch((e: any) =>
         console.warn(`[integration-framework] missing-scope persist failed for ${slug}:`, e?.message));
     }
-    if (isAuthError(message)) {
+    if (message.startsWith("store_firewall_challenge")) {
+      await noteFirewallChallenge(conn.tenantIntegrationId, message);
+    } else if (isAuthError(message)) {
       await setConnectionStatus({
         tenantIntegrationId: conn.tenantIntegrationId,
         status: "ERROR",

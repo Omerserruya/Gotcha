@@ -105,3 +105,33 @@ a business system).
 7. Minimum versions. Proposal: WordPress 6.4, WooCommerce 8.0, PHP 7.4.
 8. Testing: installing the plugin on the dev WordPress store
    (`~/services/woo-dev`, demo-store.28042000.xyz) needs his word.
+
+## 5. Reaching the store's WooCommerce API (0.2.0, 2026-11-15)
+
+Some stores answer GOTCHA's servers with a firewall instead of WooCommerce
+(Cloudflare's bot challenge: 403, `cf-mitigated: challenge`, "Just a
+moment..."). It depends on the caller's IP, so the merchant never sees it.
+
+- `POST /api/woocommerce-plugin/probe` (the site key as Bearer, empty body):
+  GOTCHA checks, from its own servers, the site the key is bound to, and
+  answers `{ data: { reachable, reason, status?, firewall?, storeUrl, checkedAt } }`.
+  `reason`: `reachable`, `store_firewall_challenge` (with `firewall`:
+  `cloudflare`, `sucuri`, `imunify360` or `other`), `rest_api_not_found`,
+  `redirected`, `timeout`, `unreachable`, or `http_<status>`. One check per
+  store a minute; the body names nothing (never another address).
+- `GET /api/woocommerce-plugin/probe-store` (signed in, permission to connect
+  systems): the same check of the workspace's WooCommerce store, connected or
+  being connected (the last hour's connect attempt). 404 `NO_STORE` when there
+  is none.
+- The plugin's settings page: "Test GOTCHA access" (connected sites), and,
+  for a store behind Cloudflare (CF-Ray on the admin request), the rule before
+  connecting: WAF custom rule, URI Path starts with `/wp-json/wc/`, action Skip
+  on all remaining custom rules and Super Bot Fight Mode.
+- GOTCHA's own address, for the primary Cloudflare rule (IP Source Address,
+  Skip), rides on every `store_firewall_challenge` answer as
+  `egress: { ips: string[], stable: boolean } | null`: the probe's `data.egress`,
+  and the pasted-keys 422's `egress`: signed-in server answers only. The
+  wc-auth return carries the error code alone, never an address (a URL anyone
+  can craft must not name one). It is config, per environment (`PUBLIC_EGRESS_IP`,
+  comma-separated, and `PUBLIC_EGRESS_IP_STABLE=true` once static); unset means
+  null, and the path rule alone is shown.

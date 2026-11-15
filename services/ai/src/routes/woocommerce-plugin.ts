@@ -14,7 +14,8 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, resolveAppPublicUrl } from "@chatcenter/shared";
-import { bindSite, exchangeCode, signal, removeSite, PluginError } from "../services/woocommerce-plugin.service";
+import { bindSite, exchangeCode, signal, removeSite, siteForKey, PluginError } from "../services/woocommerce-plugin.service";
+import { probeStore, storeToProbe } from "../services/woo-store-probe.service";
 import { zipStored } from "../lib/zip";
 
 const router = Router();
@@ -96,6 +97,32 @@ router.post("/signal", express.json(), signalByIp, signalBySite, async (req: Req
     await signal(req.headers.authorization, req.body ?? {});
     res.status(204).end();
   } catch (err) { fail(res, err, "signal"); }
+});
+
+/**
+ * "Test GOTCHA access" (plugin-side diagnosis, 2026-11-15): can GOTCHA's
+ * servers reach this store's WooCommerce API, or does a firewall (Cloudflare's
+ * bot challenge) answer instead? Only ever the site the key is bound to; the
+ * body names nothing. The plugin shows the answer and the fix.
+ */
+router.post("/probe", express.json(), signalByIp, signalBySite, async (req: Request, res: Response) => {
+  try {
+    const { siteUrl } = await siteForKey(req.headers.authorization);
+    res.json({ data: await probeStore(siteUrl) });
+  } catch (err) { fail(res, err, "probe"); }
+});
+
+/**
+ * The same probe from GOTCHA's screens: only the workspace's WooCommerce store,
+ * connected or being connected (rememberPendingStore). A storeUrl in the
+ * request is ignored: the address is never the caller's to choose.
+ */
+router.get("/probe-store", ...authed, canConnect, async (req: Request & { tenantId?: string }, res: Response) => {
+  try {
+    const storeUrl = await storeToProbe(req.tenantId!);
+    if (!storeUrl) { res.status(404).json({ error: "No WooCommerce store to check", code: "NO_STORE" }); return; }
+    res.json({ data: await probeStore(storeUrl) });
+  } catch (err) { fail(res, err, "probe-store"); }
 });
 
 router.delete("/sites/:id", ...authed, canDisconnect, async (req: Request & { tenantId?: string }, res: Response) => {

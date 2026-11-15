@@ -13,7 +13,9 @@ import { requireInternalKey } from "@chatcenter/shared";
  * upload paths write - so no caller can reach outside the directory or name a
  * file that was not an upload.
  */
-const STORED_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/i;
+// The widget's logo and cover live in uploads/widget/ (widget-images.ts): the
+// one folder a name may carry, never a parent.
+const STORED_NAME = /^(?:widget\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/i;
 const MAX_FILES = 50_000;
 
 export function internalUploadsRouter(uploadsDir: string): Router {

@@ -39,6 +39,7 @@ import {
 import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import { findCatalog, upsertConnection } from "../services/connector-connection.service";
 import { normalizeStoreUrl, validateWooKeys } from "../services/connectors/woocommerce.adapter";
+import { rememberPendingStore } from "../services/woo-store-probe.service";
 
 export { normalizeStoreUrl, validateWooKeys };
 
@@ -66,6 +67,8 @@ export const WOO_ERROR_CODES = new Set([
   "callback_not_received",
   "invalid_state",
   "callback_error",
+  // A firewall (Cloudflare's bot challenge) answered instead of the store.
+  "store_firewall_challenge",
 ]);
 
 const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
@@ -75,6 +78,12 @@ function publicApiBase(): string {
 }
 
 /** Where the browser lands. Fixed paths; nothing from the request. */
+/**
+ * The return carries the error code only, never GOTCHA's address (Frontend,
+ * 2026-11-15): a URL anyone can craft must not tell a merchant, under GOTCHA's
+ * name, which IP to let through. The address comes only from signed-in server
+ * answers (probe-store, the pasted-keys 422).
+ */
 export function wooReturnUrl(flow: string | undefined, result: { error?: string }): string {
   const origin = resolveAppPublicUrl(process.env);
   if (flow === "wp_plugin") {
@@ -132,6 +141,8 @@ router.get(
       res.status(500).json({ error: "woocommerce_catalog_missing" });
       return;
     }
+    // The store being connected may be probed ("Test GOTCHA access") for an hour.
+    await rememberPendingStore(req.tenantId!, storeUrl);
 
     const { state } = mintOAuthState(
       {
@@ -203,7 +214,7 @@ router.post(
       const valid = await validateWooKeys(claims.storeUrl, consumerKey, consumerSecret);
       if (!valid.ok) {
         console.warn(`[woocommerce oauth] key validation failed: ${valid.reason}`);
-        await record("error:validation_failed");
+        await record(valid.reason === "store_firewall_challenge" ? "error:store_firewall_challenge" : "error:validation_failed");
         // 200 on purpose: the store then sends the merchant to the return URL,
         // which explains what happened. A non-200 strands them on a WordPress
         // error page with nowhere to go.

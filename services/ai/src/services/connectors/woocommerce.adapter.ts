@@ -1075,6 +1075,33 @@ export function normalizeStoreUrl(raw: unknown, env: NodeJS.ProcessEnv = process
 }
 
 /**
+ * A firewall answered instead of WooCommerce (prod 2026-11-11 alphamom.co.il,
+ * 2026-11-15 chanivainberger.co.il): Cloudflare's bot challenge returns 403
+ * "Just a moment..." to any server, whatever the keys. Cloudflare marks it
+ * with cf-mitigated: challenge; the page itself carries cf-chl / challenge-
+ * platform. Its block page (1020, "Attention Required! | Cloudflare") and the
+ * other common WordPress firewalls' block pages say the same thing: the keys
+ * were never checked. Read from at most the first 64 KB of the body.
+ */
+export const STORE_FIREWALL_CHALLENGE = "store_firewall_challenge";
+const FIREWALL_BODY = /Just a moment\.\.\.|cf-chl|challenge-platform|cf_chl_opt|Attention Required! \| Cloudflare|cf-error-details|Sucuri WebSite Firewall|imunify360|bot-protection/i;
+export function isFirewallChallenge(status: number, headers: { get(name: string): string | null }, body: string): boolean {
+  if (![403, 429, 503].includes(status)) return false;
+  if (String(headers.get("cf-mitigated") ?? "").toLowerCase() === "challenge") return true;
+  return FIREWALL_BODY.test(body.slice(0, 64 * 1024));
+}
+
+/** Which firewall answered, so the merchant is told the right fix: Cloudflare's rule, or their host or security plugin. */
+export type StoreFirewall = "cloudflare" | "sucuri" | "imunify360" | "other";
+export function firewallOf(headers: { get(name: string): string | null }, body: string): StoreFirewall {
+  const b = body.slice(0, 64 * 1024);
+  if (headers.get("cf-mitigated") || headers.get("cf-ray") || /cf-chl|challenge-platform|cf_chl_opt|Cloudflare/i.test(b)) return "cloudflare";
+  if (/Sucuri WebSite Firewall/i.test(b) || headers.get("x-sucuri-id")) return "sucuri";
+  if (/imunify360/i.test(b)) return "imunify360";
+  return "other";
+}
+
+/**
  * Prove the keys work against THIS store before calling the connection
  * CONNECTED. system_status needs the manage_woocommerce capability the
  * read_write key of an administrator carries; orders is the fallback for a
@@ -1100,6 +1127,12 @@ export async function validateWooKeys(
         await res.json();
         return { ok: true };
       }
+      // Read defensively: a missing or failing body is just "no markers".
+      const body = typeof (res as any).text === "function" ? await (res as any).text().catch(() => "") : "";
+      // A firewall, not the store: the keys were never checked, and the other
+      // path would meet the same wall. Its own reason, so the merchant is told
+      // to allow us, not to make new keys.
+      if (isFirewallChallenge(res.status, res.headers, body)) return { ok: false, reason: STORE_FIREWALL_CHALLENGE };
       lastReason = `http_${res.status}`;
     } catch (err: any) {
       lastReason = err?.name === "AbortError" ? "timeout" : String(err?.message || "fetch_failed").slice(0, 80);
@@ -1119,13 +1152,24 @@ const WooCommerceAdapter: ProviderAdapter = {
    * A pasted key that is wrong, read-only for orders, or for another store
    * used to be stored as CONNECTED and fail on the first customer question.
    */
-  async validate({ credentials, config }) {
+  async validate({ ctx, credentials, config }) {
     const consumerKey = credentials.consumerKey || credentials.consumer_key;
     const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
     if (!consumerKey || !consumerSecret) return { ok: false, error: "Enter both the consumer key and the consumer secret." };
     const storeUrl = normalizeStoreUrl(config.storeUrl || credentials.storeUrl || credentials.store_url);
     if (!storeUrl) return { ok: false, error: "Enter the store's https:// address." };
     const v = await validateWooKeys(storeUrl, String(consumerKey), String(consumerSecret));
+    if (!v.ok && v.reason === STORE_FIREWALL_CHALLENGE) {
+      // The store being connected may be probed ("Test GOTCHA access") for an hour.
+      if (ctx?.tenantId) {
+        const { rememberPendingStore } = await import("../woo-store-probe.service");
+        await rememberPendingStore(ctx.tenantId, storeUrl);
+      }
+      // The address to let through goes with it (config: lib/egress); the IP rule first.
+      const { egressConfig, firewallFixMessage } = await import("../../lib/egress");
+      const egress = egressConfig();
+      return { ok: false, code: STORE_FIREWALL_CHALLENGE, egress, error: firewallFixMessage(egress) } as any;
+    }
     return v.ok
       ? { ok: true }
       : { ok: false, error: v.reason === "http_401" || v.reason === "http_403"
@@ -1648,6 +1692,11 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    // A firewall, not the store (a connected store that later meets Cloudflare's
+    // challenge): its own error, which the framework records on the connection.
+    if (isFirewallChallenge(res.status, res.headers, text)) {
+      throw new Error(`${STORE_FIREWALL_CHALLENGE}: the store's firewall (${firewallOf(res.headers, text)}) answered instead of WooCommerce`);
+    }
     throw new Error(`woocommerce_${res.status}: ${text.slice(0, 240)}`);
   }
   if (res.status === 204) return null;
