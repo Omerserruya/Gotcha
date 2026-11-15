@@ -1,0 +1,226 @@
+@layer features {
+  /*
+   * GOTCHA's alerts number. The console's own card and notice (Console.module.css);
+   * only what that file has no word for is here.
+   */
+  .page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-18);
+    min-inline-size: 0;
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8) var(--space-12);
+  }
+
+  .sentence {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .quiet {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-12);
+  }
+
+  /* ── Templates ────────────────────────────────────────────────────── */
+  .templates {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .template {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    padding-block: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .template + .template {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .templateHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-4) var(--space-10);
+  }
+
+  .templateName {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .metaName {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .languages {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: var(--space-12);
+  }
+
+  .language {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-inline-size: 0;
+    padding-block: var(--space-10);
+    padding-inline: var(--space-12);
+    background-color: var(--panel-inset);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+  }
+
+  .languageHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-6);
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .body {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: normal;
+    color: var(--text-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .editor {
+    inline-size: 100%;
+    min-block-size: 96px;
+    padding-block: var(--space-8);
+    padding-inline: var(--space-10);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    line-height: normal;
+    color: var(--text-primary);
+    resize: vertical;
+  }
+
+  .editor:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  /* ── Alerts ───────────────────────────────────────────────────────── */
+  .alerts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    padding-block: var(--space-12);
+    min-inline-size: 0;
+  }
+
+  .alert + .alert {
+    border-block-start: var(--border-width-thin) solid var(--row-divider);
+  }
+
+  .alertText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .alertWhy {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  /* A real switch: a button, its knob at the end it is set to (EventSwitch's). */
+  .switchWrap {
+    display: inline-flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+
+  .switch {
+    position: relative;
+    display: block;
+    inline-size: 34px;
+    block-size: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--border-default);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+  }
+
+  .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 18px;
+  }
+
+  .switch:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .switch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+}

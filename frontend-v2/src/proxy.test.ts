@@ -635,17 +635,26 @@ describe('★★ 13c - Meta’s signup reaches facebook.com from every product p
    * on the list) had no facebook.com in frame-src or connect-src. Every
    * product page carries it; the sign-in screen never does.
    */
-  it.each(['/en/home', '/he/onboarding/channels', '/en/settings/channels', '/he/m', '/en/inbox'])(
-    '%s → facebook.com in frame-src and connect-src',
-    (path) => {
-      const csp = cspFor(path);
-      for (const name of ['frame-src', 'connect-src']) {
-        expect(directive(csp, name)).toEqual(
-          expect.arrayContaining(['https://www.facebook.com', 'https://web.facebook.com']),
-        );
-      }
-    },
-  );
+  /*
+   * The console's platform number (/system/whatsapp, 2026-11-15) runs the same
+   * signup, for GOTCHA's own alerts number: pinned by name, both locales.
+   */
+  it.each([
+    '/en/home',
+    '/he/onboarding/channels',
+    '/en/settings/channels',
+    '/he/m',
+    '/en/inbox',
+    '/he/system/whatsapp',
+    '/en/system/whatsapp',
+  ])('%s → facebook.com in frame-src and connect-src', (path) => {
+    const csp = cspFor(path);
+    for (const name of ['frame-src', 'connect-src']) {
+      expect(directive(csp, name)).toEqual(
+        expect.arrayContaining(['https://www.facebook.com', 'https://web.facebook.com']),
+      );
+    }
+  });
 
   it('the sign-in screen names facebook.com nowhere', () => {
     expect(cspFor('/en/sign-in')).not.toContain('facebook.com');

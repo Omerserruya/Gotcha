@@ -45,9 +45,18 @@ describe('interpretSignupMessage', () => {
     });
     expect(msg).toEqual({
       kind: 'assets',
-      assets: { businessPortfolioId: 'biz_1', wabaIds: ['waba_1'] },
+      assets: { businessPortfolioId: 'biz_1', wabaIds: ['waba_1'], phoneNumberId: 'pn_1' },
       event: 'FINISH',
     });
+  });
+
+  it('has no phoneNumberId when Meta names none (never an empty one)', () => {
+    const msg = interpretSignupMessage({
+      type: 'WA_EMBEDDED_SIGNUP',
+      event: 'FINISH',
+      data: { business_id: 'biz_1', waba_id: 'waba_1', phone_number_id: '' },
+    });
+    expect(msg.kind === 'assets' && 'phoneNumberId' in msg.assets).toBe(false);
   });
 
   it('reads the multi-account form', () => {
@@ -132,6 +141,15 @@ describe('mergeSignupAssets', () => {
       { businessPortfolioId: 'new', wabaIds: ['new'] },
     );
     expect(merged).toEqual({ businessPortfolioId: 'new', wabaIds: ['new'] });
+  });
+
+  it('keeps the picked number when a later event names none, and takes a new one', () => {
+    expect(mergeSignupAssets({ phoneNumberId: 'pn_1' }, { wabaIds: ['w1'] }).phoneNumberId).toBe(
+      'pn_1',
+    );
+    expect(
+      mergeSignupAssets({ phoneNumberId: 'pn_1' }, { phoneNumberId: 'pn_2' }).phoneNumberId,
+    ).toBe('pn_2');
   });
 });
 
