@@ -37,6 +37,8 @@ const { isInboundExcluded, prisma, publishEvent } = vi.hoisted(() => ({
 prismaRef.current = prisma;
 
 vi.mock("@chatcenter/shared", () => ({
+  // One-member workspaces (sole-member.ts): two or more members here, nothing assigned.
+  assignSoleMemberOnHandoff: async () => null,
   // The uploads write probe runs at module load. Stubbed as writable so these
   // tests exercise their own subject rather than the storage check.
   probeUploadsDir: () => ({ ok: true, dir: "/tmp/uploads" }),

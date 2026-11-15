@@ -88,7 +88,8 @@ describe("Smoovee: what a product fits is in its description", () => {
     expect(got.map((p) => p.id).sort()).toEqual([1433, 59951]);
     expect(got.every((p) => fits(p, /תמי 4/))).toBe(true);
     expect(s.calls.some((u) => /lang=he/.test(u))).toBe(true);
-    expect(vi.mocked(console.log).mock.calls.flat().join("\n")).toMatch(/\[woo-search\] query="דגם לתמי 4" hit=description results=2/);
+    // Since 2026-11-15 the product's own "מתאים ל" list is read beside the title search.
+    expect(vi.mocked(console.log).mock.calls.flat().join("\n")).toMatch(/\[woo-search\] query="דגם לתמי 4" hit=fits_list results=2/);
   });
   it("\"תמי 4\" alone, and \"משטח לתמי 4\": the same two", async () => {
     for (const query of ["תמי 4", "משטח לתמי 4"]) {
@@ -255,11 +256,15 @@ describe("the store's own search reads copy in Hebrew: a title hit must hold the
 });
 
 describe("what fits a base size (cmw7r76pj 11:33: a 40 x 20 mixer base was offered Alice 31 x 41)", () => {
-  it("the supervisor's three: 40x20 Christina, 30x20 Gefen, 34x40 nothing", async () => {
+  // 2026-11-15 (Supervisor, Omer): a mat may be up to 2 cm smaller per side.
+  // The owner herself put Monica 20 x 25 under a 21 x 24 Magimix (prod
+  // cmwgwzvr, 11-15 09:38), so 34 x 40 now takes Ariel 34 x 38; the 11-08
+  // strict rule said "nothing".
+  it("the supervisor's three: 40x20 Christina, 30x20 Gefen, 34x40 Ariel (2 cm tolerance)", async () => {
     const ids = async (fits_cm: number[]) => (await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "mixer", fits_cm, lang: "he" })).map((p) => p.id);
     expect((await ids([40, 20]))[0]).toBe(614);   // כריסטינה 23*40
     expect((await ids([30, 20]))[0]).toBe(4831);  // גפן 20*30
-    expect(await ids([34, 40])).toEqual([]);
+    expect((await ids([34, 40]))[0]).toBe(32551); // אריאל 34*38
   });
   it("smallest first, either way round, marked for the model", async () => {
     const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "x", fits_cm: [20, 40], lang: "he" });
@@ -282,14 +287,14 @@ describe("what fits a base size (cmw7r76pj 11:33: a 40 x 20 mixer base was offer
   });
   it("the bot passes the customer's base size on its Woo searches", () => {
     const src = readFileSync(join(__dirname, "../services/ai-bot.service.ts"), "utf8");
-    expect(src).toContain("const size = baseSizeAsked(messages as any[], opts.incomingMessage);");
-    expect(src).toContain("if (size) effectiveArgs = { ...effectiveArgs, fits_cm: size };");
+    expect(src).toContain("const sizes = baseSizesAsked(messages as any[], opts.incomingMessage);");
+    expect(src).toContain("if (sizes.length) effectiveArgs = { ...effectiveArgs, fits_cm: sizes[0], fits_cm_all: sizes };");
   });
   it("the model is told the store picked them and to recommend the first", async () => {
     const { normalizeWooProducts, buildKeyedModelSummary } = await import("../services/product-search.service");
     const got = await store(CATALOG, { ...SHOP, storeLanguage: "he" }).run({ query: "x", fits_cm: [40, 20], lang: "he" });
     const s = buildKeyedModelSummary(normalizeWooProducts(got, { storeUrl: "https://smoovee-ltd.com", storeCurrency: "ILS" }), "he", true);
-    expect(s).toMatch(/PRODUCT_1: "סמובי כריסטינה[^"]*" .*FITS the customer's base \(23 x 40 cm\)/);
-    expect(s).toMatch(/Recommend PRODUCT_1 as the best fit/);
+    expect(s).toMatch(/PRODUCT_1: "סמובי כריסטינה[^"]*" .*CLOSEST FIT for the customer's 40 x 20 cm base \(its size 23 x 40 cm\)/);
+    expect(s).toMatch(/A product marked CLOSEST FIT for a base is the one to recommend for that base/);
   });
 });

@@ -14,7 +14,7 @@ import {
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
   visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce, wooCartLine,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, plainHandoffMessage, handoffButtonLabel, waMeUrl,
-  type HandoffRecord, type WebchatConfig, visitorSenderName, visitorAuthor } from "@chatcenter/shared";
+  type HandoffRecord, type WebchatConfig, visitorSenderName, visitorAuthor, assignSoleMemberOnHandoff } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
@@ -377,6 +377,8 @@ router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
       reason: "takeover",
       data: { isHandedOver: true, status: "WAITING" },
     });
+    // A workspace of one: the handoff is theirs, not a queue's (sole-member.ts).
+    const soleMember = await withCrossTenantAccess(() => assignSoleMemberOnHandoff(conv.tenantId, conv.id));
     const marker = await withCrossTenantAccess(() => prisma.message.create({
       data: {
         tenantId: conv.tenantId,
@@ -398,7 +400,7 @@ router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
     await publishEvent({
       event: "conversation:updated",
       tenantId: conv.tenantId,
-      data: { id: conv.id, isHandedOver: true, status: "WAITING", channel: "WEBCHAT" },
+      data: { id: conv.id, isHandedOver: true, ...(soleMember ? { status: "OPEN", assignedAgentId: soleMember } : { status: "WAITING" }), channel: "WEBCHAT" },
     });
     tryEmit({
       type: "conversation.escalated",

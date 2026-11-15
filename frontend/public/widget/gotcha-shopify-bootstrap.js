@@ -55,7 +55,7 @@
   // bootstrap can only ever load the exact bundle it was built against -
   // a hand-typed ?v= let four commits change the bundle without changing
   // its URL, and every cache kept serving the old one.
-  var CHAT_BUNDLE = "gotcha-shopify-chat.5ab3283cee9f.js";
+  var CHAT_BUNDLE = "gotcha-shopify-chat.acd148b77afa.js";
   // The shared WhatsApp widget (the WhatsApp kind), stamped the same way.
   var SITE_BUNDLE = "gotcha-site.0e775ace0e03.js";
 

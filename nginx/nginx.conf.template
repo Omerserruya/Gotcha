@@ -293,7 +293,7 @@ http {
         # feature outright. Deliberately NOT added to the /widget/,
         # /api/embedded-chat or help policies: those serve untrusted storefronts
         # and public pages and have no reason to reach Facebook.
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Health check for the gateway itself
         location /health {
@@ -306,7 +306,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # ─── Auth Service ─────────────────────────────────
@@ -1346,7 +1346,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
             if ($request_method = OPTIONS) {
                 return 204;
@@ -1415,7 +1415,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         location /widget/ {
@@ -1449,7 +1449,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # Content-hashed bundles (gotcha-shopify-chat.<12 hex>.js): new bytes
@@ -1478,7 +1478,7 @@ http {
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # ─── Shopify Live Chat (public storefront surface) ───

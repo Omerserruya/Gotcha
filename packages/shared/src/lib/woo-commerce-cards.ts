@@ -39,6 +39,12 @@ export interface WooProductCard {
   currency: string | null;
   price: string | null;
   compareAtPrice: string | null;
+  /**
+   * The store sets its prices at render time (a discount-rules plugin) and this
+   * product's page could not be read: no number is shown, only "the current
+   * price is on the site" linking to the product (2026-11-15).
+   */
+  priceOnSite?: true;
   available: boolean;
   published: true;
   selectedVariantId: string | null;

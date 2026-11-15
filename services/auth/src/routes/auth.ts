@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticate, prisma, withCrossTenantAccess, writeAudit, AuditAction } from "@chatcenter/shared";
+import { authenticate, prisma, withCrossTenantAccess, writeAudit, AuditAction, soleHumanMember } from "@chatcenter/shared";
 
 /**
  * Session routes.
@@ -123,12 +123,18 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
 
     // Only while the workspace is still being set up (see setupAdminFor).
     const setupAdmin = await setupAdminFor(user.tenantId, tenant?.status).catch(() => null);
+    // One human member: the inbox shows one view, and every automated handoff
+    // is assigned to them (sole-member.ts, the same predicate). A support
+    // session reads the workspace's value. Unreadable: the field is left out,
+    // and the inbox shows its usual views.
+    const soleHuman = await Promise.resolve().then(() => soleHumanMember(user.tenantId)).then((id) => id !== null).catch(() => null);
 
     res.json({
       user: { ...user, ...deptInfo },
       tenantStatus: tenant?.status || "ACTIVE",
       ...(setupAdmin ? { setupAdmin } : {}),
       tenantName: tenant?.name ?? null,
+      ...(soleHuman === null ? {} : { workspace: { soleHuman } }),
       // Every tenant this person can enter. length > 1 → the client shows the
       // tenant switcher / picker.
       memberships,

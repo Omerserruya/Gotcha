@@ -189,7 +189,10 @@ async function release(tenantId: string, conversationId: string, run: Automation
   if (!Object.keys(data).length) return;
   await prisma.conversation.update({ where: { id: conversationId }, data: data as any });
   if (data.status === "WAITING") {
-    publishEvent({ event: "conversation:updated", tenantId, data: { id: conversationId, status: "WAITING", handledBy: "human" } }).catch(() => {});
+    // A failed automation hands the chat to a person: in a workspace of one, to that one (sole-member.ts).
+    const { assignSoleMemberOnHandoff } = await import("@chatcenter/shared");
+    const soleMember = await assignSoleMemberOnHandoff(tenantId, conversationId);
+    publishEvent({ event: "conversation:updated", tenantId, data: { id: conversationId, handledBy: "human", ...(soleMember ? { status: "OPEN", assignedAgentId: soleMember } : { status: "WAITING" }) } }).catch(() => {});
   }
 }
 

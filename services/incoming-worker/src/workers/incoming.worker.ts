@@ -541,6 +541,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     const openedId = (opened.conversation as { id: string }).id;
     if (opened.created && ownerOwns) {
       console.log(`[incoming-worker] owner wrote from the phone within 24h: conv=${openedId} starts human-owned`);
+      // In a workspace of one, the owner's (sole-member.ts).
+      const { assignSoleMemberOnHandoff } = await import("@chatcenter/shared");
+      const soleMember = await assignSoleMemberOnHandoff(tenantId, openedId);
+      // The same row object as `conversation` (opened.conversation), so later reads see it.
+      if (soleMember) (opened.conversation as { assignedAgentId?: string | null }).assignedAgentId = soleMember;
       // The timeline says why the AI is not answering (the phone-takeover divider).
       await prisma.message.create({
         data: {

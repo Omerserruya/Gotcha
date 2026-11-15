@@ -92,7 +92,7 @@ router.get("/", async (req: Request, res: Response) => {
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
       excludeClosed: excludeClosed === "true",
-      view: view === "queue" ? "queue" : undefined,
+      view: view === "queue" ? "queue" : view === "open" ? "open" : undefined,
       // Present-but-invalid is refused (400), not ignored: a link that says
       // "this week" must never open every conversation.
       from: from === undefined ? undefined : String(from),
@@ -111,7 +111,7 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /**
- * GET /unread-counts?views=queue,mine,active,gotcha,all,resolved,mine_open
+ * GET /unread-counts?views=queue,mine,active,gotcha,all,resolved,mine_open,open
  *   -> { data: { queue: n, mine: n, ..., totals: { queue: n, mine: n, ... } } }
  * The view keys are the unread counts (unchanged); `totals` is each view's
  * size, equal to that view's list `viewTotal`.

@@ -96,4 +96,8 @@ export const KEPT_FINANCIAL: Record<string, string> = {
   UsageLedgerEntry: "metered usage that was or will be billed",
   BillingOutboxEntry: "usage records owed to a provider",
   Plan: "a custom plan a kept subscription is pinned to",
+  // Not money, but kept for the same reason: it is the record that a person
+  // asked to be erased and when it was done, and it must outlive what it
+  // erased (no foreign keys by design, 2026-11-14 account deletion).
+  AccountDeletionRequest: "the record that a person asked for their account to be deleted, and when it was done",
 };

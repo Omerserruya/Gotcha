@@ -26,7 +26,7 @@ import {
 } from "@chatcenter/shared";
 import { executeAdapterTool } from "./connectors/integration-framework";
 import { recentlyListedWooProduct } from "./connectors/woo-listed-products";
-import { discountFor, priceString, wholePercentOff } from "./woo-rendered-price.service";
+import { pagePriceFor, priceString, wholePercentOff } from "./woo-rendered-price.service";
 import { connectedWooStore } from "./website-widget.service";
 import { resolveWooCurrency } from "./discovery-integration.service";
 import type { ProductMessageRecord } from "./shopify-commerce-message.service";
@@ -99,7 +99,18 @@ async function readCard(tenantId: string, storeUrl: string, currency: string | n
   // discount-rules plugin): the page's price, with the old one struck through.
   // Variants get it only when they all sell at the price that was discounted.
   if (card && !card.compareAtPrice) {
-    const d = await discountFor(raw, card.productUrl).catch(() => null);
+    const page = await pagePriceFor(raw, card.productUrl).catch(() => ({ state: "none" as const }));
+    // A rules store whose page could not be read: no number on the card, the
+    // link to the site's price instead (the API price may be the full one
+    // during a sale: Smoovee 11-14 21:26).
+    if (page.state === "unknown") {
+      card.price = null;
+      card.compareAtPrice = null;
+      card.priceOnSite = true;
+      card.variants = card.variants.map((v) => ({ ...v, price: null, compareAtPrice: null }));
+      return card;
+    }
+    const d = page.state === "discount" ? page.discount : null;
     if (d) {
       const was = priceString(d.was), now = priceString(d.now);
       card.price = now;
@@ -970,6 +981,34 @@ export function baseSizeAsked(
   const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? ""));
   if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
   return earlier.length ? read(earlier[earlier.length - 1]) : null;
+}
+
+/**
+ * Every base size the customer gave, in cm, in order (Smoovee prod 2026-11-14
+ * 21:25: "מג'ימיקס 21x24 סמ', מיקסר 22x35 סמ'" was read as 21 x 24 alone, and
+ * all five mats came back). This message's, or the one before when this one
+ * is a short reply. Empty when none.
+ */
+export function baseSizesAsked(
+  messages: Array<{ direction?: string | null; body?: string | null }>,
+  incoming: string | null | undefined,
+): Array<[number, number]> {
+  const re = /(\d{1,3}(?:[.,]\d)?)\s*(?:ס["״']?מ|cm)?\s*(?:[x×*]|על|by)\s*(\d{1,3}(?:[.,]\d)?)/gi;
+  const read = (t: string): Array<[number, number]> => {
+    const out: Array<[number, number]> = [];
+    for (const m of t.matchAll(re)) {
+      const a = Number(m[1].replace(",", ".")), b = Number(m[2].replace(",", "."));
+      if (a > 0 && b > 0 && a < 300 && b < 300 && !out.some(([x, y]) => x === a && y === b)) out.push([a, b]);
+    }
+    return out.slice(0, 4);
+  };
+  const now = String(incoming ?? "");
+  const hit = read(now);
+  if (hit.length) return hit;
+  if (now.trim().length > 12) return [];
+  const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? ""));
+  if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
+  return earlier.length ? read(earlier[earlier.length - 1]) : [];
 }
 
 /**

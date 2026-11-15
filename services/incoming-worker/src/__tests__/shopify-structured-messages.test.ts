@@ -40,6 +40,8 @@ vi.mock("axios", () => ({
 }));
 
 vi.mock("@chatcenter/shared", () => ({
+  // One-member workspaces (sole-member.ts): two or more members here, nothing assigned.
+  assignSoleMemberOnHandoff: async () => null,
   // The uploads write probe runs at module load. Stubbed as writable so these
   // tests exercise their own subject rather than the storage check.
   // ai-bot calls this at MODULE LOAD, so its absence from this exhaustive
