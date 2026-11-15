@@ -130,3 +130,38 @@ describe("a rules store's product with no trusted price shows no number", () => 
     expect(ps.renderCandidatesForWhatsApp(env, "en")).toContain("Current price on the site");
   });
 });
+
+describe("a product its own page sells below its price says so (Omer 2026-11-15)", () => {
+  const STORE_URL = "https://smoovee-ltd.com";
+  it("'עכשיו במבצע: ₪137.97 במקום ₪219 (37% הנחה)', per product, only from its page", async () => {
+    const ps = await import("../services/product-search.service");
+    const env = ps.normalizeWooProducts([
+      { id: 614, name: "סמובי כריסטינה", status: "publish", price: "219", stock_status: "instock", permalink: `${STORE}/christina/` },
+      { id: 4068, name: "סמובי מוניקה", status: "publish", price: "199", stock_status: "instock", permalink: `${STORE}/monica/` },
+      { id: 2183, name: "סמובי אדם", status: "publish", price: "227", stock_status: "instock", permalink: `${STORE}/adam/` },
+    ], { storeUrl: STORE_URL, storeCurrency: "ILS" });
+    env.candidates = [
+      ps.applyDiscount(env.candidates[0], "219", "137.97"),   // its page: del 219, ins 137.97
+      env.candidates[1],                                        // its page: no discount
+      ps.priceOnSiteOnly(env.candidates[2]),                    // its page: unreadable
+    ];
+    const he = ps.renderCandidatesForWhatsApp(env, "he");
+    expect(he).toContain("סמובי כריסטינה\nעכשיו במבצע: ₪137.97 במקום ₪219 (37% הנחה)");
+    // No sale claim for a product whose page shows none, and none for an unknown one.
+    expect(he).toMatch(/סמובי מוניקה\n(?:ILS|₪) ?199/);
+    expect(he.split("סמובי מוניקה")[1].split("\n\n")[0]).not.toMatch(/מבצע/);
+    expect(he).toContain("סמובי אדם\nלמחיר העדכני באתר");
+    expect(he.split("סמובי אדם")[1]).not.toMatch(/מבצע|227/);
+    expect(ps.renderGroundedProductReply("", env, "he").message).toContain("עכשיו במבצע: ₪137.97 במקום ₪219 (37% הנחה)");
+    expect(ps.renderCandidatesForWhatsApp(env, "en")).toContain("On sale now: ₪137.97 instead of ₪219 (37% off)");
+  });
+
+  it("a cut that is not a whole percent shows the prices without a percent", async () => {
+    const ps = await import("../services/product-search.service");
+    const env = ps.normalizeWooProducts([{ id: 1, name: "X", status: "publish", price: "227", stock_status: "instock", permalink: `${STORE}/x/` }], { storeUrl: STORE_URL, storeCurrency: "ILS" });
+    const c = ps.applyDiscount(env.candidates[0], "227", "217");
+    expect(ps.salePriceLine(c, "he")).toBe("עכשיו במבצע: ₪217 במקום ₪227");
+    expect(ps.salePriceLine(env.candidates[0], "he")).toBeNull();
+    expect(ps.salePriceLine(ps.priceOnSiteOnly(c), "he")).toBeNull();
+  });
+});

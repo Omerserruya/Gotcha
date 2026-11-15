@@ -50,6 +50,30 @@ export function priceOnSiteOnly(c: ProductCandidate): ProductCandidate {
 /** The line a candidate with no trusted price carries instead of a number. */
 export const PRICE_ON_SITE = { he: "למחיר העדכני באתר", en: "Current price on the site" } as const;
 
+const SIGN: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€", GBP: "£" };
+const money = (currency: string | undefined, v: string) => {
+  const cur = (currency ?? "").toUpperCase();
+  return SIGN[cur] ? `${SIGN[cur]}${v}` : [currency, v].filter(Boolean).join(" ");
+};
+
+/**
+ * A product the store's own page sells below its price (Omer 2026-11-15: say
+ * so, it sells the sale): "עכשיו במבצע: ₪137.97 במקום ₪219 (37% הנחה)". Only
+ * from that product's page read (its discount), never a store-wide claim; the
+ * percent only when the cut is a whole percent, as the store's badge shows it.
+ */
+export function salePriceLine(c: ProductCandidate, locale: "he" | "en"): string | null {
+  if (!c.discount || c.priceOnSite) return null;
+  const was = Number(c.discount.was), now = Number(c.discount.now);
+  if (!(was > 0) || !(now > 0) || now >= was) return null;
+  const off = Math.round((1 - now / was) * 100);
+  const whole = off > 0 && off < 100 && Math.abs(Math.round(was * (100 - off)) / 100 - now) < 0.011;
+  const pct = whole ? (locale === "he" ? ` (${off}% הנחה)` : ` (${off}% off)`) : "";
+  return locale === "he"
+    ? `עכשיו במבצע: ${money(c.currency, c.discount.now)} במקום ${money(c.currency, c.discount.was)}${pct}`
+    : `On sale now: ${money(c.currency, c.discount.now)} instead of ${money(c.currency, c.discount.was)}${pct}`;
+}
+
 /** The store's own discount on a candidate: its price is the discounted one, the old one kept. */
 export function applyDiscount(c: ProductCandidate, was: string, now: string, budget?: { target: number; currency: string }): ProductCandidate {
   return { ...c, price: now, discount: { was, now }, matchQuality: deriveMatchQuality(now, budget) };
@@ -652,7 +676,9 @@ export function renderGroundedProductReply(
   const overBudget = locale === "he" ? "מעט מעל התקציב" : "slightly over budget";
   const blocks = chosen.map((c, i) => {
     const parts = [`${i + 1}. ${c.title}`];
+    const sale = salePriceLine(c, locale);
     if (c.priceOnSite) parts.push(PRICE_ON_SITE[locale]);
+    else if (sale) parts.push(sale);
     else if (c.price !== undefined) parts.push([c.currency, c.price].filter(Boolean).join(" "));
     if (c.matchQuality === "approximate" && !c.priceOnSite) parts[parts.length - 1] += ` (${overBudget})`;
     if (c.inventoryState === "in_stock") parts.push(inStockLabel);
@@ -700,7 +726,9 @@ export function renderCandidatesForWhatsApp(
 
   const lines = env.candidates.map((c, i) => {
     const parts: string[] = [`${i + 1}. ${c.title}`];
+    const sale = salePriceLine(c, locale);
     if (c.priceOnSite) parts.push(PRICE_ON_SITE[locale]);
+    else if (sale) parts.push(sale);
     else if (c.price !== undefined) {
       const priceStr = [c.currency, c.price].filter(Boolean).join(" ");
       parts.push(priceStr);
