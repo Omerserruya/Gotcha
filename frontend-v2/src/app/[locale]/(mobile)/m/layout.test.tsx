@@ -116,3 +116,17 @@ describe("★★ one person: the phone's layout hands the shell `soleHuman` too 
     expect(propsOf(AppProviders, await render())?.soleHuman).toBe(expected);
   });
 });
+
+describe("★★ the phone's payment gate is drawn as in-app (App Store 3.1.1)", () => {
+  it('★ an unpaid workspace: the gate, told it may be inside the app', async () => {
+    get.mockImplementation(async ({ endpoint }: { endpoint: { path: string } }) => {
+      if (endpoint.path === '/api/auth/me')
+        return { user: { id: 'u', role: 'ADMIN' }, tenantStatus: 'PENDING_PAYMENT' };
+      if (endpoint.path === '/api/checkout/mine')
+        return { data: { checkout: { reference: 'chk_1' } } };
+      return { permissions: [], features: [] };
+    });
+    const { WorkspaceGate } = await import('@/shell/WorkspaceGate');
+    expect(propsOf(WorkspaceGate, await render())).toMatchObject({ route: 'payment', inApp: true });
+  });
+});

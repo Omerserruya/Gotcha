@@ -478,6 +478,7 @@
       "rate": "That's more than 10 questions in a minute. Try again in {seconds, plural, one {# second} other {# seconds}}.",
       "rateSoon": "That's more than 10 questions in a minute. Try again in a minute.",
       "credits": "Your workspace can't use AI right now: its credits have run out. See <billing>Settings · Billing</billing>.",
+      "creditsApp": "Your workspace can't use AI right now: its credits have run out.",
       "missing": "This conversation isn't here any more. It may have been deleted.",
       "failed": "It couldn't answer just now. Try again in a moment."
     },

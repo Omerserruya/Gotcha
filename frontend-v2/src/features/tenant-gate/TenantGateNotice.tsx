@@ -5,6 +5,7 @@ import { Button } from '@/design-system/primitives/button/Button';
 import type { TenantGate } from '@/api/client/tenant-gate';
 import { Link } from '@/i18n/navigation';
 import { safeInternalPath } from '@/lib/safe-url';
+import { WebOnly } from '@/shell/mobile/web-only';
 
 /**
  * What the product says when the platform locks the whole organization out.
@@ -26,7 +27,17 @@ const KNOWN_CODES = [
   'TENANT_ONBOARDING_REQUIRED',
 ] as const;
 
-export async function TenantGateNotice({ gate }: { gate: TenantGate }) {
+export async function TenantGateNotice({
+  gate,
+  inApp = false,
+}: {
+  gate: TenantGate;
+  /**
+   * Drawn by /m, which the native app loads (App Store 3.1.1): the action
+   * goes to the checkout, so inside the app it is not drawn. The words stay.
+   */
+  inApp?: boolean;
+}) {
   const t = await getTranslations('errors.tenantGate');
 
   const key = KNOWN_CODES.find((known) => known === gate.code) ?? 'fallback';
@@ -39,9 +50,17 @@ export async function TenantGateNotice({ gate }: { gate: TenantGate }) {
       description={t(`${key}.body`)}
       actions={
         target ? (
-          <Button variant="primary" asChild>
-            <Link href={target}>{t('action')}</Link>
-          </Button>
+          inApp ? (
+            <WebOnly>
+              <Button variant="primary" asChild>
+                <Link href={target}>{t('action')}</Link>
+              </Button>
+            </WebOnly>
+          ) : (
+            <Button variant="primary" asChild>
+              <Link href={target}>{t('action')}</Link>
+            </Button>
+          )
         ) : undefined
       }
     />

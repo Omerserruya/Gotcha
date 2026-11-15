@@ -81,3 +81,23 @@ describe("★★ one person: the phone's Home says Open", () => {
     expect(tree).not.toContain('handledOpen');
   });
 });
+
+describe("★★ the phone's lock-out notice is drawn as in-app (App Store 3.1.1)", () => {
+  it('★ a gated workspace: TenantGateNotice, told it may be inside the app', async () => {
+    const { TenantGateNotice } = await import('@/features/tenant-gate/TenantGateNotice');
+    loadHomeData.mockResolvedValue({
+      overview: null,
+      queue: null,
+      queueItems: null,
+      activity: null,
+      isQuiet: false,
+      setup: null,
+      gate: { code: 'TENANT_PAYMENT_REQUIRED', checkoutPath: '/checkout' },
+      open: null,
+    });
+    const notice = elements(await MobileHome({ account: null })).find(
+      (e) => e.type === TenantGateNotice,
+    );
+    expect((notice?.props as { inApp?: boolean }).inApp).toBe(true);
+  });
+});

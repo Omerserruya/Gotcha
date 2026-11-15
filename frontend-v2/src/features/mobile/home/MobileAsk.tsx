@@ -27,6 +27,7 @@ import { useAssistantThread } from '@/features/home/use-assistant-thread';
 import { Link } from '@/i18n/navigation';
 import { appPath } from '@/lib/base-path';
 import { typedDir } from '@/lib/typed-dir';
+import { usePurchaseLinksAllowed } from '@/shell/mobile/web-only';
 
 import ui from '../mobile-ui.module.css';
 import styles from './mobile-ask.module.css';
@@ -277,10 +278,16 @@ function Answer({
 }
 
 /** Why there is no (whole) answer, in the website's words for each refusal. */
-function Problem({ problem }: { readonly problem: TurnProblem }) {
+export function Problem({ problem }: { readonly problem: TurnProblem }) {
   const t = useTurnTranslations('home.conversation.problem');
   const locale = useLocale();
-  // Billing is the website's: a full load, which the native shell opens in the browser.
+  /*
+   * ★ No billing inside the app (App Store 3.1.1): the shell would open it in
+   *   the browser - a purchase outside the app. There the sentence says what
+   *   happened and points nowhere (`creditsApp`); the web keeps the link.
+   */
+  const mayLinkBilling = usePurchaseLinksAllowed();
+  // Billing is the website's: a full load.
   const billing = (chunks: ReactNode) => (
     <a href={appPath(`/${locale}/settings/billing`)} className={styles.link}>
       {chunks}
@@ -298,7 +305,9 @@ function Problem({ problem }: { readonly problem: TurnProblem }) {
           ? t('rate', { seconds: problem.retryAfterSeconds })
           : t('rateSoon')
         : problem.kind === 'credits'
-          ? t.rich('credits', { billing })
+          ? mayLinkBilling
+            ? t.rich('credits', { billing })
+            : t('creditsApp')
           : t(problem.kind)}
     </p>
   );

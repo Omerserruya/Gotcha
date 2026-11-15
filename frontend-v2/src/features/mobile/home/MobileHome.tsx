@@ -65,7 +65,7 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
       <div className={ui.screen} data-testid="mobile-home">
         {bar}
         <div className={styles.scroll}>
-          <TenantGateNotice gate={gate} />
+          <TenantGateNotice gate={gate} inApp />
         </div>
       </div>
     );

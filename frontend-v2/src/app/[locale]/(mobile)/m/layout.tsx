@@ -109,6 +109,7 @@ export default async function AuthenticatedLayout({
               route={route}
               paymentPath={route === 'payment' ? await paymentPath(resolved) : null}
               setupAdmin={setupAdmin}
+              inApp
             />
           </WithSupportBanner>
         </SupportProvider>

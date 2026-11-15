@@ -153,6 +153,7 @@
     "payment": {
       "title": "Your workspace is waiting for payment",
       "lead": "Setup is done. The workspace opens once payment is confirmed. Taking you to payment…",
+      "leadApp": "Setup is done. The workspace opens once payment is confirmed.",
       "go": "Go to payment"
     }
   },

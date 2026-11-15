@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { Logo } from '@/design-system/brand/Logo';
 
+import { usePurchaseLinksAllowed } from './mobile/web-only';
 import styles from './WorkspaceGate.module.css';
 
 /**
@@ -21,18 +22,27 @@ export function WorkspaceGate({
   route,
   paymentPath = null,
   setupAdmin = null,
+  inApp = false,
 }: {
   readonly route: 'waiting' | 'unavailable' | 'payment';
   readonly paymentPath?: string | null;
   /** Who is setting it up, when the server names them (only while it is). */
   readonly setupAdmin?: string | null;
+  /**
+   * Drawn by /m, which the native app loads (App Store 3.1.1): inside the app
+   * no way to the checkout - no button, no redirect - and the lead says what
+   * is true there. The website and the web /m keep both.
+   */
+  readonly inApp?: boolean;
 }) {
   const t = useTranslations('onboarding.gate');
+  const purchaseLinks = usePurchaseLinksAllowed();
+  const mayPay = !inApp || purchaseLinks;
 
   useEffect(() => {
     // The server already decided this workspace pays first; the browser obeys.
-    if (route === 'payment' && paymentPath) window.location.replace(paymentPath);
-  }, [route, paymentPath]);
+    if (route === 'payment' && paymentPath && mayPay) window.location.replace(paymentPath);
+  }, [route, paymentPath, mayPay]);
 
   return (
     <main className={styles.gate} data-testid={`gate-${route}`}>
@@ -45,7 +55,9 @@ export function WorkspaceGate({
         <p className={styles.lead} data-testid="gate-lead">
           {route === 'waiting' && setupAdmin
             ? t.rich('waiting.leadBy', { name: () => <bdi dir="auto">{setupAdmin}</bdi> })
-            : t(`${route}.lead`)}
+            : route === 'payment' && !mayPay
+              ? t('payment.leadApp')
+              : t(`${route}.lead`)}
         </p>
         {route === 'unavailable' ? (
           <button
@@ -56,7 +68,7 @@ export function WorkspaceGate({
           >
             {t('unavailable.retry')}
           </button>
-        ) : route === 'payment' && paymentPath ? (
+        ) : route === 'payment' && paymentPath && mayPay ? (
           <a href={paymentPath} className={styles.primary} data-testid="gate-pay">
             {t('payment.go')}
           </a>
