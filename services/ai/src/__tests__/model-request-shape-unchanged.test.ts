@@ -5,9 +5,13 @@
  * the layer) sent for each case, captured from that tree's generateResponse
  * and streamResponse and compared as JSON strings, so key order counts too.
  *
- * The one deliberate difference: a modern model asked for temperature exactly
- * 1 no longer gets "temperature": 1 in the body. 1 is the only value gpt-5
- * accepts and its default, so the model runs the same.
+ * The deliberate differences:
+ *  - a modern model asked for temperature exactly 1 no longer gets
+ *    "temperature": 1 in the body. 1 is the only value gpt-5 accepts and its
+ *    default, so the model runs the same;
+ *  - (Omer, 2026-11-15) instructions go out as role "developer", not "system".
+ *    WIRE() below applies exactly that to what 43654db9 sent: every other byte,
+ *    the instructions' content included, is still pinned.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -31,6 +35,9 @@ import { resetModelCaps, withModelAdaptation, usesResponses } from "@chatcenter/
 
 const TOOLS = [{ type: "function", function: { name: "search_products", description: "Search", parameters: { type: "object", properties: { q: { type: "string" } } } } }];
 const MSG = [{ role: "system", content: "You are Noa." }, { role: "user", content: "אליס ואלכסה כמה זה" }];
+
+/** What 43654db9 sent, with "system" sent as "developer" and nothing else changed. */
+const WIRE = (sent: string) => sent.split('"role":"system"').join('"role":"developer"');
 
 /** What 43654db9 sent, verbatim. */
 const EXPECTED: Record<string, string> = {
@@ -71,13 +78,13 @@ describe("★ the request body is the one prod sent before the model layer", () 
     if (!(name in EXPECTED)) continue;
     it(name, async () => {
       await generateResponse(p);
-      expect(H.bodies).toEqual([EXPECTED[name]]);
+      expect(H.bodies).toEqual([WIRE(EXPECTED[name])]);
     });
   }
   for (const [name, p] of STREAMS) {
     it(name, async () => {
       for await (const _ of streamResponse(p)) { /* drain */ }
-      expect(H.bodies).toEqual([EXPECTED[name]]);
+      expect(H.bodies).toEqual([WIRE(EXPECTED[name])]);
     });
   }
 });
@@ -87,8 +94,8 @@ describe("the one difference: temperature exactly 1 on a modern model is left to
     await generateResponse({ tenantId: "t", model: "gpt-5-mini", messages: MSG, temperature: 1, maxTokens: 400 } as any);
     await generateResponse({ tenantId: "t", model: "gpt-5-nano", messages: MSG, temperature: 1, maxTokens: 120, reasoningEffort: "minimal" } as any);
     expect(H.bodies.map((b) => JSON.parse(b))).toEqual([
-      { model: "gpt-5-mini", messages: MSG, max_completion_tokens: 2448, reasoning_effort: "low" },
-      { model: "gpt-5-nano", messages: MSG, max_completion_tokens: 2168, reasoning_effort: "minimal" },
+      { model: "gpt-5-mini", messages: JSON.parse(WIRE(JSON.stringify(MSG))), max_completion_tokens: 2448, reasoning_effort: "low" },
+      { model: "gpt-5-nano", messages: JSON.parse(WIRE(JSON.stringify(MSG))), max_completion_tokens: 2168, reasoning_effort: "minimal" },
     ]);
   });
 });

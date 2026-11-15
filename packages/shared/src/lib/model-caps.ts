@@ -206,6 +206,22 @@ function adapt(model: string, refusal: Refusal, req: Record<string, any>): boole
 }
 
 /**
+ * Instructions go out as role "developer", never "system" (Omer, 2026-11-15:
+ * every model we move to takes it, and there is no per-model branching). The
+ * ONE place this happens: every chat-completions and /responses request passes
+ * through withModelAdaptation. The messages are copied, never mutated: callers
+ * keep their own "system" messages (the prompt-cache prefix hash and the
+ * redundancy guards read those, not the request on the wire), and the content
+ * is the same string, byte for byte.
+ */
+export function withDeveloperRole(req: Record<string, any>): Record<string, any> {
+  if (Array.isArray(req.messages) && req.messages.some((m: any) => m?.role === "system")) {
+    req.messages = req.messages.map((m: any) => (m?.role === "system" ? { ...m, role: "developer" } : m));
+  }
+  return req;
+}
+
+/**
  * Send a chat request shaped by everything learned about this model; on a 400
  * this layer understands, adapt and retry, at most MAX_ADAPTATIONS times, each
  * for a different fact. `send` receives the (possibly adapted) request.
@@ -216,6 +232,7 @@ export async function withModelAdaptation<T>(
   send: (req: Record<string, any>) => Promise<T>,
   opts: { responses?: (req: Record<string, any>) => Promise<T> } = {},
 ): Promise<T> {
+  withDeveloperRole(req);
   applyLearned(model, req, { canUseResponses: !!opts.responses });
   // A route already learned: straight to /responses. Its errors surface as
   // they are, never adapted or retried back here (no fallback loop).
