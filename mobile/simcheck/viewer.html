@@ -35,15 +35,14 @@
   <div class="photoViewerBar"><button class="photoViewerClose" id="x" aria-label="close">✕</button></div>
   <div class="photoViewerStage"><img class="photoViewerImage" id="img" alt=""></div>
 </div>
-<div id="out">…</div>
+<div id="out">script not run yet</div>
 <script>
   function photo(w, h) {
-    // A white photo with a red frame: the frame shows where the photo ends.
-    var c = document.createElement('canvas'); c.width = w; c.height = h;
-    var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#e00'; g.lineWidth = Math.round(w / 40); g.strokeRect(0, 0, w, h);
-    g.fillStyle = '#333'; g.font = (w / 12) + 'px sans-serif'; g.fillText(w + 'x' + h, w / 10, h / 2);
-    return c.toDataURL('image/png');
+    // A white photo with a red frame (SVG, no canvas): the frame shows where it ends.
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+      '<rect width="100%" height="100%" fill="#fff" stroke="#e00" stroke-width="' + Math.round(w / 20) + '"/>' +
+      '<text x="10%" y="50%" font-size="' + Math.round(w / 12) + '" fill="#333">' + w + 'x' + h + '</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
   var img = document.getElementById('img'), x = document.getElementById('x');
   function measure(label) {

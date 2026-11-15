@@ -107,10 +107,15 @@ jobs:
           xcrun simctl uninstall "$UDID" il.co.gotcha.app
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch "$UDID" il.co.gotcha.app
-          sleep 7
+          sleep 3
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/5-viewer-early.png"
+          sleep 5
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/5-viewer-tall.png"
           sleep 12
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/5-viewer-wide.png"
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+            --predicate 'process CONTAINS "WebContent" OR (process == "App" AND (eventMessage CONTAINS[c] "webkit" OR eventMessage CONTAINS[c] "crash"))' \
+            > "$RUNNER_TEMP/shots/5-webkit.log" 2>&1 || true
 
       - uses: actions/upload-artifact@v4
         if: always()
