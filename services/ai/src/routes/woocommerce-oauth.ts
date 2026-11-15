@@ -39,6 +39,7 @@ import {
 import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import { findCatalog, upsertConnection } from "../services/connector-connection.service";
 import { normalizeStoreUrl, validateWooKeys } from "../services/connectors/woocommerce.adapter";
+import { rememberPendingStore } from "../services/woo-store-probe.service";
 
 export { normalizeStoreUrl, validateWooKeys };
 
@@ -134,6 +135,8 @@ router.get(
       res.status(500).json({ error: "woocommerce_catalog_missing" });
       return;
     }
+    // The store being connected may be probed ("Test GOTCHA access") for an hour.
+    await rememberPendingStore(req.tenantId!, storeUrl);
 
     const { state } = mintOAuthState(
       {

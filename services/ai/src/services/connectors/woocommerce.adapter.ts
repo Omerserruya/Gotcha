@@ -1091,6 +1091,16 @@ export function isFirewallChallenge(status: number, headers: { get(name: string)
   return FIREWALL_BODY.test(body.slice(0, 64 * 1024));
 }
 
+/** Which firewall answered, so the merchant is told the right fix: Cloudflare's rule, or their host or security plugin. */
+export type StoreFirewall = "cloudflare" | "sucuri" | "imunify360" | "other";
+export function firewallOf(headers: { get(name: string): string | null }, body: string): StoreFirewall {
+  const b = body.slice(0, 64 * 1024);
+  if (headers.get("cf-mitigated") || headers.get("cf-ray") || /cf-chl|challenge-platform|cf_chl_opt|Cloudflare/i.test(b)) return "cloudflare";
+  if (/Sucuri WebSite Firewall/i.test(b) || headers.get("x-sucuri-id")) return "sucuri";
+  if (/imunify360/i.test(b)) return "imunify360";
+  return "other";
+}
+
 /**
  * Prove the keys work against THIS store before calling the connection
  * CONNECTED. system_status needs the manage_woocommerce capability the
@@ -1141,7 +1151,7 @@ const WooCommerceAdapter: ProviderAdapter = {
    * A pasted key that is wrong, read-only for orders, or for another store
    * used to be stored as CONNECTED and fail on the first customer question.
    */
-  async validate({ credentials, config }) {
+  async validate({ ctx, credentials, config }) {
     const consumerKey = credentials.consumerKey || credentials.consumer_key;
     const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
     if (!consumerKey || !consumerSecret) return { ok: false, error: "Enter both the consumer key and the consumer secret." };
@@ -1149,6 +1159,11 @@ const WooCommerceAdapter: ProviderAdapter = {
     if (!storeUrl) return { ok: false, error: "Enter the store's https:// address." };
     const v = await validateWooKeys(storeUrl, String(consumerKey), String(consumerSecret));
     if (!v.ok && v.reason === STORE_FIREWALL_CHALLENGE) {
+      // The store being connected may be probed ("Test GOTCHA access") for an hour.
+      if (ctx?.tenantId) {
+        const { rememberPendingStore } = await import("../woo-store-probe.service");
+        await rememberPendingStore(ctx.tenantId, storeUrl);
+      }
       return {
         ok: false,
         code: STORE_FIREWALL_CHALLENGE,

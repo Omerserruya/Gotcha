@@ -4,7 +4,7 @@ Tags: chat, ai, customer service, woocommerce, live chat
 Requires at least: 6.4
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,10 @@ Every setting of the chat (its look, its welcome, who answers) lives in GOTCHA. 
 The chat loads from GOTCHA's servers on your store's pages. When a cookie / consent plugin that supports the WP Consent API is active, the chat waits for the visitor's consent to functional cookies.
 
 == Changelog ==
+
+= 0.2.0 =
+* "Test GOTCHA access": checks from GOTCHA's servers that the WooCommerce API can be reached, and shows the exact fix when a firewall blocks it.
+* A store behind Cloudflare is shown the rule that lets GOTCHA through before connecting.
 
 = 0.1.0 =
 * Connect, the chat on the store, status signals.

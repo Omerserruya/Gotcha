@@ -137,6 +137,18 @@ async function tenantOfKey(keyHash: string): Promise<string | null> {
   return tenantId;
 }
 
+/** The connected site a plugin's site key belongs to, or a 401. */
+export async function siteForKey(bearer: string | undefined): Promise<{ tenantId: string; siteUrl: string }> {
+  const key = String(bearer ?? "").replace(/^Bearer\s+/i, "");
+  if (!key.startsWith("gws_")) throw new PluginError(401, "UNKNOWN_SITE");
+  const keyHash = sha256(key);
+  const tenantId = await tenantOfKey(keyHash);
+  if (!tenantId) throw new PluginError(401, "UNKNOWN_SITE");
+  const site = (await readSites(tenantId)).find((s) => s.keyHash === keyHash && s.status !== "removed");
+  if (!site) throw new PluginError(401, "UNKNOWN_SITE");
+  return { tenantId, siteUrl: site.siteUrl };
+}
+
 const EVENTS = new Set(["activated", "deactivated", "uninstalled", "disconnected", "heartbeat"]);
 const version = (v: unknown) => (typeof v === "string" && /^[0-9][0-9A-Za-z.\-+]{0,30}$/.test(v) ? v : null);
 
