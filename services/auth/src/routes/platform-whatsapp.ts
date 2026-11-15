@@ -434,7 +434,9 @@ export function platformTemplateComponents(eventType: string, lang: TemplateLoca
   }];
   if (d.buttons.url) {
     const base = resolveAppPublicUrl(process.env).replace(/\/+$/, "");
-    out.push({ type: "BUTTONS", buttons: [{ type: "URL", text: he ? "פתיחת השיחה" : "Open conversation", url: `${base}/inbox?c={{1}}`, example: [`${base}/inbox?c=example`] }] });
+    // Per language (Frontend, 2026-11-15): /he|en/inbox opens the
+    // conversation in the template's language without the locale redirect.
+    out.push({ type: "BUTTONS", buttons: [{ type: "URL", text: he ? "פתיחת השיחה" : "Open conversation", url: `${base}/${lang}/inbox?c={{1}}`, example: [`${base}/${lang}/inbox?c=example`] }] });
   }
   if (d.buttons.quickReplies === 2) {
     out.push({ type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: he ? "לאשר" : "Approve" }, { type: "QUICK_REPLY", text: he ? "לדחות" : "Reject" }] });

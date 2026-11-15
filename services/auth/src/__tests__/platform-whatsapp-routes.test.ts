@@ -368,7 +368,7 @@ describe("templates", () => {
     expect(data).toMatchObject({ name: "gotcha_customer_waiting", language: "en", category: "UTILITY" });
     expect(data.components[0]).toMatchObject({ type: "BODY", text: "A customer waited {{1}} minutes on {{2}}. Please answer." });
     expect(data.components[0].example.body_text[0]).toHaveLength(2);
-    expect(data.components[1].buttons[0]).toMatchObject({ type: "URL", url: "https://app.example.test/inbox?c={{1}}" });
+    expect(data.components[1].buttons[0]).toMatchObject({ type: "URL", url: "https://app.example.test/en/inbox?c={{1}}" });
     expect(r.body.data.languages.en).toMatchObject({ status: "PENDING", metaTemplateId: "meta_t1", draftBody: null, body: "A customer waited {{1}} minutes on {{2}}. Please answer." });
   });
   it("the approval template carries its two quick replies; verification its copy-code button", async () => {
