@@ -24,7 +24,7 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { loadState, mergeState, saveState, saveSummary, renderState } from "./state";
+import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
@@ -51,6 +51,27 @@ export function conversationLocale(inbound: string[]): "he" | "en" {
 }
 
 /** Parse the model's `respond` arguments, tolerantly. */
+const TEAM_PROMISE_PREFIX = "checking with the team: ";
+
+/** The team questions still open in this conversation's state (younger than TEAM_OPEN_MS). */
+export function openTeamQuestions(state: { pending?: Array<{ kind?: string; text?: string; at?: string }> } | null | undefined, now = Date.now()): string[] {
+  return (state?.pending ?? [])
+    .filter((p) => isTeamPromise(p) && !(now - Date.parse(p.at ?? new Date(now).toISOString()) > TEAM_OPEN_MS))
+    .map((p) => String(p.text).slice(TEAM_PROMISE_PREFIX.length));
+}
+
+// The model's team questions share a frame ("הלקוח שואל אם יש..."): never evidence of one issue.
+const FILLER = new Set(["הלקוח", "הלקוחה", "לקוח", "לקוחה", "שואל", "שואלת", "שואלים", "מבקש", "מבקשת", "רוצה", "האם", "אם", "יש", "אין", "של", "את", "על", "עם", "זה", "זו", "לו", "לה", "לי", "גם", "או", "כי", "מה", "איך", "מתי", "איפה", "אפשר", "לגבי", "בנוגע", "the", "customer", "asks", "asked", "wants", "whether", "if", "is", "are", "there", "can", "about", "for", "of", "to", "and", "or", "a", "an"]);
+const words = (s: string) => new Set(String(s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !FILLER.has(w)));
+/** Two team questions about the same issue: enough shared words (a reworded repeat still counts). */
+export function sameIssue(a: string, b: string): boolean {
+  const A = words(a), B = words(b);
+  if (!A.size || !B.size) return false;
+  let shared = 0;
+  for (const w of A) if (B.has(w)) shared++;
+  return shared / (A.size + B.size - shared) >= 0.2 || shared / Math.min(A.size, B.size) >= 0.5;
+}
+
 export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
   let v: any;
   try { v = JSON.parse(raw || "{}"); } catch { return null; }
@@ -479,6 +500,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ...chat.filter((m) => m.role === "user").map((m) => m.content),
   ].join("\n");
   const approvalPending = turnTools.approvals.length > 0;
+  // A question the team already has from this conversation (prod replay 2026-11-16:
+  // one damaged-delivery thread recorded the same question on 8 turns in a row).
+  const openTeam = openTeamQuestions(state);
+  const teamAlreadyOpen = openTeam.length > 0;
+  const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q));
   const g3Input = (o: ModelTurnOutput) => ({
     reply: resolveKeysInText(o.reply, candidates),
     claims: o.claims,
@@ -498,6 +524,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     approvalPending: approvalPending || !!o.teamQuestion,
     handoff: o.handoff ?? null,
     teamQuestion: !!o.teamQuestion,
+    teamAlreadyOpen,
+    newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
     recentInbound: inbound,
     toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
   });
@@ -512,7 +540,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       // An unread product gets ONE tool round to read it before the rewrite.
-      const mayRead = first.problems.some((p) => p.kind === "unread_product");
+      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge");
       let r = await call(mayRead ? "required" : forceRespond);
       if (mayRead) {
         const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
@@ -544,7 +572,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         ? { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) }
         : needlessHandoff("reply_failed_checks", inbound, approvalPending)
           // Nothing calls for a person: a question for the team, and the AI keeps the chat.
-          ? { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) || null, cards: [] }
+          ? { reply: safeFallback(locale, teamAlreadyOpen), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : String(opts.incomingMessage ?? "").slice(0, 300) || null, cards: [] }
           : { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
     }
   } else {
@@ -586,13 +614,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ? { approvalRequestId: firstApproval.approvalRequestId, tool: firstApproval.tool, reason: "requires_approval" }
     : null;
 
-  trace.teamQuestion = final.teamQuestion ?? null;
-  // A question for the team: on the owner's unanswered list, and an open promise in the state. No handoff.
-  const teamPromise = final.teamQuestion
-    ? [{ kind: "promise" as const, text: `checking with the team: ${final.teamQuestion.slice(0, 200)}`, at: now }]
+  // A question for the team: on the owner's unanswered list, and an open promise in
+  // the state. ONCE per open issue: a repeat of the open one is not recorded again.
+  const newTeamQuestion = isNewTeamQuestion(final.teamQuestion) ? final.teamQuestion! : null;
+  trace.teamQuestion = newTeamQuestion;
+  trace.teamQuestionRepeat = !!final.teamQuestion && !newTeamQuestion;
+  const teamPromise = newTeamQuestion
+    ? [{ kind: "promise" as const, text: `${TEAM_PROMISE_PREFIX}${newTeamQuestion.slice(0, 200)}`, at: now }]
     : [];
-  if (final.teamQuestion && lane === "live") {
-    void recordUnansweredQuestion({ tenantId: opts.tenantId, question: final.teamQuestion, reason: "no_knowledge", askerKey: opts.conversationId });
+  if (newTeamQuestion && lane === "live") {
+    void recordUnansweredQuestion({ tenantId: opts.tenantId, question: newTeamQuestion, reason: "no_knowledge", askerKey: opts.conversationId });
   }
 
   // ── Save ──

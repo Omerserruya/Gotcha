@@ -96,7 +96,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; fallbacks: number; rewrites: number; toolErrors: number; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; fallbacks: number; rewrites: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -122,7 +122,7 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, fallbacks: 0, rewrites: 0, toolErrors: 0, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, fallbacks: 0, rewrites: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
     md.push(`## Tenant ${tenantId}`, "");
     let lastConv = "";
@@ -143,9 +143,17 @@ async function main() {
         if (r.trace?.gate3?.rewrite === "fallback") s.fallbacks++;
         if (r.trace?.gate3?.rewrite === "rewritten") s.rewrites++;
         const tools = (r.trace?.tools ?? []) as any[];
-        s.toolErrors += tools.filter((x) => x.outcome === "error" || x.outcome === "timeout").length;
+        const errored = tools.filter((x) => x.outcome === "error" || x.outcome === "timeout");
+        s.toolErrors += errored.length;
+        // Codes only (tool name + error code), never arguments or results: safe for the console.
+        for (const x of errored) { const k = `${x.tool}:${x.errorKind ?? x.outcome}`; s.toolErrorKinds[k] = (s.toolErrorKinds[k] ?? 0) + 1; }
+        for (const p of (r.trace?.gate3?.problems ?? []) as any[]) {
+          const ks = p.kind === "style" ? (p.codes ?? []).map((c: string) => `style:${c}`) : [p.kind];
+          for (const k of ks) s.gate3Kinds[k] = (s.gate3Kinds[k] ?? 0) + 1;
+        }
         const teamQ = r.trace?.teamQuestion ?? null;
         if (teamQ) s.teamQuestions++;
+        if (r.trace?.teamQuestionRepeat) s.teamQuestionRepeats++;
         md.push(
           `**Customer:** ${oneLine(t.body)}`,
           "",
@@ -153,9 +161,9 @@ async function main() {
           "",
           `**v2:** ${oneLine(r.reply ?? "(no reply)")}`,
           "",
-          `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""}`).join("; ") : "none"}`,
+          `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""}`).join("; ") : "none"}`,
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
-          `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : "none"}`,
+          `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
           "",
         );
@@ -169,8 +177,8 @@ async function main() {
     summaries.push(s);
   }
 
-  md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions | gate3 rewrites | gate3 fallbacks | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|");
-  for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.rewrites} | ${s.fallbacks} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
+  md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | gate3 fallbacks | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|");
+  for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.fallbacks} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
   fs.writeFileSync(args.out, md.join("\n"));
 
   if (!args.keep && replayed.size) {

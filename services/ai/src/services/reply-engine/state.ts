@@ -52,6 +52,11 @@ export async function loadState(tenantId: string, conversationId: string, lane: 
 }
 
 /** Pure merge: the model's update on top of the stored state, bounded. */
+/** An open question for the team, written by the engine (engine.ts TEAM_PROMISE_PREFIX). */
+export const isTeamPromise = (p: { kind?: string; text?: string } | null | undefined) =>
+  p?.kind === "promise" && String(p.text ?? "").startsWith("checking with the team: ");
+export const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
+
 export function mergeState(
   prev: ConversationStateRecord,
   update: StateUpdate | null | undefined,
@@ -79,9 +84,18 @@ export function mergeState(
 
   let pending: PendingItem[] = prev.pending;
   if (Array.isArray(u.pending)) {
-    pending = u.pending
-      .filter((p) => p && p.text && ["promise", "pending", "approval"].includes(String(p.kind)))
-      .map((p) => ({ kind: p.kind, text: clip(p.text), ...(p.tool ? { tool: clip(p.tool, 80) } : {}), at: now }));
+    // The open team questions are the engine's, not the model's: the model's
+    // list replaces everything else, but cannot drop or re-stamp them (prod replay
+    // 2026-11-16: a dropped one was asked again on the next turn). They expire
+    // after TEAM_OPEN_MS, when the team has long answered in the chat.
+    const nowMs = Date.parse(now);
+    const team = prev.pending.filter((p) => isTeamPromise(p) && !(nowMs - Date.parse(p.at ?? now) > TEAM_OPEN_MS));
+    pending = [
+      ...team,
+      ...u.pending
+        .filter((p) => p && p.text && ["promise", "pending", "approval"].includes(String(p.kind)) && !isTeamPromise(p as any))
+        .map((p) => ({ kind: p.kind, text: clip(p.text), ...(p.tool ? { tool: clip(p.tool, 80) } : {}), at: now })),
+    ];
   }
   for (const a of extra.approvals ?? []) if (!pending.some((p) => p.kind === "approval" && p.tool === a.tool)) pending = [...pending, a];
 

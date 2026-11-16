@@ -407,3 +407,68 @@ describe("Gate 1", () => {
     expect(r.escalation?.reason).toBe("agent_inactive:PAUSED");
   });
 });
+
+describe("prod replay 2026-11-16 defects, through a whole turn", () => {
+  const OPEN = { kind: "promise", text: "checking with the team: הלקוח מדווח שהכיסא הגיע פגום וחסר בורג", at: new Date().toISOString() };
+  const withOpenTeamQuestion = async (fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+
+  it("★ the same team question on a later turn is NOT recorded again, and the open one stays", async () => {
+    await withOpenTeamQuestion(async () => {
+      h.responses.push({ toolCalls: [respond("t1", { reply: "אנחנו פתוחים בימים א עד ה.", team_question: "הכיסא הגיע פגום וחסר בורג, הלקוח מחכה" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה שעות הפתיחה?" }, "autonomous");
+      expect(h.teamQuestions).toEqual([]);
+      expect(r.trace.teamQuestion).toBeNull();
+      expect(r.trace.teamQuestionRepeat).toBe(true);
+      const saved = h.upserts[0].create;
+      expect(saved.pending.filter((p: any) => String(p.text).startsWith("checking with the team: "))).toHaveLength(1);
+    });
+  });
+
+  it("★ saying again \"I passed it to the team\" is rewritten into an answer to the new message", async () => {
+    await withOpenTeamQuestion(async () => {
+      h.responses.push(
+        { toolCalls: [respond("t2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט." })] },
+        { toolCalls: [respond("t3", { reply: "אנחנו פתוחים בימים א עד ה." })] },
+      );
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה שעות הפתיחה?" }, "autonomous");
+      expect((r.trace.gate3.problems.find((p: any) => p.kind === "style") as any)?.codes).toContain("repeated_team_line");
+      expect(r.trace.gate3.rewrite).toBe("rewritten");
+      expect(r.reply).toBe("אנחנו פתוחים בימים א עד ה.");
+    });
+  });
+
+  it("a NEW, different question still goes to the team while another is open", async () => {
+    await withOpenTeamQuestion(async () => {
+      h.responses.push({ toolCalls: [respond("t4", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "האם אפשר לשלם בתשלומים?" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
+      expect(h.teamQuestions).toHaveLength(1);
+      expect(r.trace.teamQuestion).toBe("האם אפשר לשלם בתשלומים?");
+      expect(r.trace.gate3.rewrite).toBe("none");
+    });
+  });
+
+  it("★ a damaged delivery in the customer's words keeps its handoff (no needless_handoff rewrite)", async () => {
+    h.responses.push({ toolCalls: [respond("d1", { reply: "מצטערים מאוד לשמוע. מישהו מהצוות ימשיך איתך כאן כדי לסדר את זה.", handoff: "damaged delivery" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הכיסא הגיע והרגליים לא מחוברות, וגם חסר בורג" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:damaged delivery/);
+  });
+
+  it("★ replay: a simulated write reaches the model as a live result, never a simulation note", async () => {
+    h.policy["woocommerce.create_coupon"] = "ALLOW";
+    h.responses.push(
+      { toolCalls: [tc("s1", "woocommerce.create_coupon", { amount: 10 })] },
+      { toolCalls: [respond("s2", { reply: "שלחתי לך קופון של 10%." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, replay: { asOf: new Date(), messageId: "m1" } }, "autonomous");
+    const toolMsg = h.calls[1].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "s1");
+    expect(toolMsg.content).not.toMatch(/simulat|sandbox|test/i);
+    // Judged as live would judge it: the coupon is "done", so the reply is not an unsupported claim.
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("unsupported_action");
+    expect(r.trace.tools.find((t: any) => t.tool === "woocommerce.create_coupon")?.decision).toBe("simulated");
+  });
+});

@@ -173,7 +173,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   const run = async (ctx: AgentToolContext): Promise<AgentToolDispatchResult> => {
     if (tool.startsWith("mcp.")) {
       if (ctx.sandbox?.enabled && ctx.sandbox.writes === "safe" && !isRead) {
-        return { toolCallId: call.id, content: JSON.stringify({ ok: true, simulated: true, note: "Simulated: nothing was changed." }), sideEffect: { simulated: true } as any };
+        return { toolCallId: call.id, content: JSON.stringify({ ok: true, tool, status: "done" }), sideEffect: { simulated: true } as any };
       }
       const r = await deps.mcp(env.tenantId, tool, args);
       return { toolCallId: call.id, content: r.content };
@@ -186,10 +186,13 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
       const v = await deps.evaluate({ tenantId: env.tenantId, toolName: tool, aiAgentId: env.aiAgentId, args });
       if (v.decision === "DENY") return { decision: "deny", r: unwrap(call.id, tool, { status: "denied", error: v.reason, attempts: 0 } as any) };
       if (v.decision === "REQUIRE_APPROVAL" || (!isRead && env.tightenApproval?.({ tool, args }))) {
-        return { decision: "simulated", r: { toolCallId: call.id, content: JSON.stringify({ ok: false, status: "awaiting_approval", simulated: true, note: "A person on the team must approve this first." }) } };
+        return { decision: "simulated", r: { toolCallId: call.id, content: JSON.stringify({ ok: false, status: "awaiting_approval", note: "A person on the team must approve this first." }) } };
       }
       const r = await run({ ...env.ctx, sandbox: { enabled: true, writes: "safe" } });
-      return { decision: isRead ? "allow" : "simulated", r };
+      // The model on these lanes must act exactly as live, so it never sees a
+      // simulation note (prod replay 2026-11-16: "לא בוצעה בפועל בסביבת הבדיקה"
+      // reached a reply). A write it was allowed is reported as done, as live would.
+      return { decision: isRead ? "allow" : "simulated", r: isRead ? r : { ...r, content: asLiveResult(tool, r.content) } };
     }
     const result = await deps.submit(
       {
@@ -218,18 +221,20 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     try { return await withTimeout(exec(), timeoutMs); } catch (err: any) { return { thrown: err } as const; }
   };
   let first: any = await attempt();
-  // A read that timed out, threw or came back errored is retried once (a write never is).
-  if (isRead && (first === TIMEOUT || "thrown" in first || readErrored(first.r?.content))) {
+  // A read that threw or came back errored is retried once (a write never is).
+  // Not one that timed out: it already took the whole budget, and a second try
+  // doubled the wait to 16s on slow Smoovee searches (prod replay 2026-11-16).
+  if (isRead && first !== TIMEOUT && ("thrown" in first || readErrored(first.r?.content))) {
     retried = true;
     first = await attempt();
   }
   if (first !== TIMEOUT && "thrown" in first) {
-    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", retried };
+    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", errorKind: "tool_error", retried };
   }
   outcome = first;
   if (outcome === TIMEOUT) {
     console.warn(`[reply-engine] tool ${tool} timed out after ${timeoutMs}ms conv=${env.conversationId}`);
-    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over." : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", retried };
+    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over." : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", errorKind: "timeout", retried };
   }
 
   let content = outcome.r.content;
@@ -244,7 +249,39 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   const side = outcome.r.sideEffect;
   if (side?.awaitingApproval) env.turn.approvals.push({ tool, approvalRequestId: String((side.awaitingApproval as any).approvalRequestId ?? call.id) });
   if (side?.escalate) env.turn.escalation = side.escalate as any;
-  return { ...rec(outcome.decision, content, side), outcome: outcomeOf(outcome.decision, content, resultCount), resultCount, retried };
+  const out = outcomeOf(outcome.decision, content, resultCount);
+  return { ...rec(outcome.decision, content, side), outcome: out, ...(out === "error" ? { errorKind: errorKindOf(content) } : {}), resultCount, retried };
+}
+
+/** What a live write would have told the model: done, with no word of a test or a simulation. */
+export function asLiveResult(tool: string, content: unknown): string {
+  try {
+    const v = JSON.parse(String(content ?? ""));
+    if (v && typeof v === "object" && (v.simulated || /simulat|test conversation|sandbox/i.test(String(v.note ?? "")))) {
+      return JSON.stringify({ ok: true, tool, status: "done" });
+    }
+  } catch { /* not JSON: scrubbed below */ }
+  const s = String(content ?? "");
+  return /simulat|sandbox|test conversation|not performed/i.test(s) ? JSON.stringify({ ok: true, tool, status: "done" }) : s;
+}
+
+/** A short code for an errored result: its reason/code/failure/error field when that is a code, else "error". Never free text. */
+export function errorKindOf(content: unknown): string {
+  const s = String(content ?? "");
+  if (/^PRODUCT_SEARCH_FAILED/.test(s)) return "product_search_failed";
+  try {
+    const v = JSON.parse(s);
+    for (const k of ["reason", "code", "errorCode", "error", "failure", "status"]) {
+      const x = v?.[k];
+      if (typeof x !== "string") continue;
+      if (/^[A-Za-z][A-Za-z0-9_.-]{1,40}$/.test(x)) return x.toLowerCase();
+      // "access_denied: requester identity ..." -> its leading code only, never the text after it.
+      const lead = /^([a-z][a-z0-9_]{2,40}):/.exec(x);
+      if (lead) return lead[1];
+    }
+    if (typeof v?.httpStatus === "number" || typeof v?.statusCode === "number") return `http_${v.httpStatus ?? v.statusCode}`;
+  } catch { /* not JSON */ }
+  return "error";
 }
 
 /** A read whose result is a failure (not an empty result). */

@@ -271,3 +271,168 @@ describe("the switch", () => {
     expect(engineConfig().toolTimeoutMs).toBe(8000);
   });
 });
+
+// ── Prod replay 2026-11-16 (Smoovee + Tehila, 150 turns): three defect classes ──
+import { simulationLeak, repeatedTeamLine, unreadOrder, unreadKnowledge } from "../services/reply-engine/gates";
+import { openTeamQuestions, sameIssue } from "../services/reply-engine/engine";
+import { asLiveResult, errorKindOf } from "../services/reply-engine/tools";
+
+describe("damage is a legitimate handoff (the detector read the Hebrew)", () => {
+  const damaged = [
+    "הכיסא הגיע והרגליים לא מחוברות",
+    "החלקים לא מחוברים אחד לשני",
+    "המוצר הגיע מפורק",
+    "הידית נשברה",
+    "חסר בורג בקופסה",
+    "חסרים שני חלקים בהזמנה",
+    "הגיע הרוס לגמרי",
+    "המנורה לא עובדת",
+    "the lamp arrived cracked",
+    "it came apart on day one",
+  ];
+  for (const m of damaged) {
+    it(`"${m}" -> a handoff is allowed`, () => {
+      expect(needlessHandoff("damaged item", [m], false)).toBe(false);
+    });
+  }
+  it("photos sent right after the words do not push them out of the window", () => {
+    expect(needlessHandoff("damaged item", ["הכיסא הגיע מפורק", "[Image]", "[Image]", "[Image]", "[Image]"], false)).toBe(false);
+  });
+  it("controls: stock and plain questions are still not a reason", () => {
+    expect(needlessHandoff("x", ["זה חסר במלאי?"], false)).toBe(true);
+    expect(needlessHandoff("x", ["אפשר לשלם בתשלומים?"], false)).toBe(true);
+    expect(needlessHandoff("x", ["מה חסר לך כדי להחליט?"], false)).toBe(true);
+  });
+});
+
+describe("no simulation note ever reaches a reply", () => {
+  it("the leaked replay wording and its variants are caught", () => {
+    for (const r of ["השליחה לא בוצעה בפועל בסביבת הבדיקה", "זו סימולציה", "This is a test conversation, so nothing was sent", "the action was simulated", "sandbox mode"]) {
+      expect(simulationLeak(r)).toBe(true);
+    }
+    expect(simulationLeak("ההזמנה נשלחה היום, והיא אמורה להגיע עד יום חמישי.")).toBe(false);
+    expect(simulationLeak("בדקתי את ההזמנה")).toBe(false);
+  });
+  it("gate3 flags it as style in every lane, and the correction says why", () => {
+    const v = gate3({ reply: "הקופון לא נוצר בפועל בסביבת הבדיקה.", claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "יש קופון?", isFirstReply: false, employeeGender: null, employeeName: null, toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false });
+    const style = v.problems.find((p: any) => p.kind === "style") as any;
+    expect(style.codes).toContain("simulation_leak");
+    expect(correctionNote(v.problems, "he")).toMatch(/Never mention a test/);
+  });
+  it("a simulated write is shown to the model as a live result: done, no note", () => {
+    const shared = JSON.stringify({ ok: true, simulated: true, executed: false, tool: "send_whatsapp", note: "SIMULATION: this is a test conversation, so the action was not performed." });
+    const out = asLiveResult("send_whatsapp", shared);
+    expect(JSON.parse(out)).toEqual({ ok: true, tool: "send_whatsapp", status: "done" });
+    expect(out).not.toMatch(/simulat|test|sandbox/i);
+    expect(asLiveResult("x", "plain text: Simulated, nothing changed")).not.toMatch(/simulat/i);
+    // A real result passes through untouched.
+    expect(asLiveResult("x", JSON.stringify({ ok: true, id: 5 }))).toBe(JSON.stringify({ ok: true, id: 5 }));
+  });
+});
+
+describe("one team question per open issue", () => {
+  const state = { pending: [{ kind: "promise", text: "checking with the team: הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג" }, { kind: "approval", text: "waiting for approval: x" }] };
+  it("open team questions are read from the state's promises only", () => {
+    expect(openTeamQuestions(state as any)).toEqual(["הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג"]);
+    expect(openTeamQuestions({ pending: [] } as any)).toEqual([]);
+    expect(openTeamQuestions(null)).toEqual([]);
+  });
+  it("a reworded repeat is the same issue; a different question is not", () => {
+    expect(sameIssue("הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג", "הכיסא הגיע פגום וחסר בורג, הלקוח מחכה")).toBe(true);
+    expect(sameIssue("הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג", "הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג")).toBe(true);
+    expect(sameIssue("הלקוח מדווח שהכיסא הגיע פגום ושחסר בורג", "האם אפשר לשלם בתשלומים?")).toBe(false);
+    // The model's shared frame is not one issue.
+    expect(sameIssue("הלקוח שואל אם יש משלוח לאילת", "הלקוח שואל אם אפשר לשלם בתשלומים")).toBe(false);
+    // Overlap without containment: six words each, two shared.
+    expect(sameIssue("כיסא אלכסה שחור רגל שבורה תמונות", "החלפה כיסא אלכסה מתי מגיע שליח")).toBe(true);
+  });
+  it("saying again that it went to the team is flagged, unless the customer asks for news or it is a new question", () => {
+    const line = "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+    expect(repeatedTeamLine(line, "ומה עם הצבע השני?", true, false)).toBe(true);
+    expect(repeatedTeamLine("הצוות יבדוק את זה ויעדכן כאן.", "תודה", true, false)).toBe(true);
+    expect(repeatedTeamLine(line, "יש עדכון?", true, false)).toBe(false);
+    expect(repeatedTeamLine(line, "ומה עם הצבע השני?", true, true)).toBe(false);
+    expect(repeatedTeamLine(line, "ומה עם הצבע השני?", false, false)).toBe(false);
+    expect(repeatedTeamLine("יש לנו את זה גם בכחול.", "ומה עם הצבע השני?", true, false)).toBe(false);
+  });
+  it("the fallback does not announce a second hand-off", () => {
+    expect(safeFallback("he", true)).not.toMatch(/העברתי/);
+    expect(safeFallback("he", true)).toMatch(/כבר אצל הצוות/);
+    expect(safeFallback("he")).toMatch(/העברתי/);
+  });
+});
+
+describe("look before asking the team", () => {
+  const offered = ["woocommerce.get_product", "woocommerce.list_products", "woocommerce.get_order", "search_knowledge"];
+  const rec = (tool: string) => ({ callId: "c", tool, args: {}, decision: "allow", content: "{}", ms: 1 }) as any;
+  it("colours of a product line, sent to the team without reading it -> unread_product", () => {
+    expect(unreadProduct("העברתי לצוות", "באילו צבעים זה מגיע?", [], offered, true)).toBe(true);
+    expect(unreadProduct("העברתי לצוות", "באילו צבעים זה מגיע?", [rec("woocommerce.get_product")], offered, true)).toBe(false);
+  });
+  it("a delivery date, sent to the team without the order tool -> unread_order", () => {
+    expect(unreadOrder("העברתי לצוות", "מתי יגיע המשלוח?", [], offered, true)).toBe(true);
+    expect(unreadOrder("העברתי לצוות", "מתי יגיע המשלוח?", [rec("woocommerce.get_order")], offered, true)).toBe(false);
+    expect(unreadOrder("העברתי לצוות", "מתי יגיע המשלוח?", [], ["woocommerce.get_product"], true)).toBe(false);
+    expect(unreadOrder("ההזמנה יצאה אתמול.", "מתי יגיע המשלוח?", [], offered, false)).toBe(false);
+  });
+  it("where to enter a coupon, sent to the team without the knowledge -> unread_knowledge", () => {
+    expect(unreadKnowledge("איפה מזינים את הקופון?", [], offered, true)).toBe(true);
+    expect(unreadKnowledge("איפה מזינים את הקופון?", [rec("search_knowledge")], offered, true)).toBe(false);
+    expect(unreadKnowledge("איפה מזינים את הקופון?", [], offered, false)).toBe(false);
+  });
+  it("gate3 picks the right kind and the correction names the tool", () => {
+    const base = { claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he" as const, isFirstReply: false, employeeGender: null, employeeName: null, toolsOffered: offered, shopFloor: true, handedOff: false, approvalPending: true, teamQuestion: true };
+    const v = gate3({ ...base, reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", incomingMessage: "מתי יגיע המשלוח שלי?" });
+    expect(v.problems.map((p: any) => p.kind)).toContain("unread_order");
+    expect(correctionNote(v.problems, "he")).toMatch(/order or tracking tool/);
+  });
+});
+
+describe("tool error kinds are codes, never text", () => {
+  it("reads the result's code field", () => {
+    expect(errorKindOf(JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }))).toBe("woocommerce_500");
+    expect(errorKindOf(JSON.stringify({ ok: false, code: "ORDER_NOT_FOUND" }))).toBe("order_not_found");
+    expect(errorKindOf("PRODUCT_SEARCH_FAILED: x")).toBe("product_search_failed");
+    expect(errorKindOf(JSON.stringify({ ok: false, statusCode: 401 }))).toBe("http_401");
+  });
+  it("free text (it may hold a customer's words) is never a kind", () => {
+    expect(errorKindOf(JSON.stringify({ ok: false, error: "Order 1234 for Dana Levi not found" }))).toBe("error");
+    expect(errorKindOf("not json at all")).toBe("error");
+  });
+});
+
+describe("open team questions are the engine's, not the model's", () => {
+  const at = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+  const prev = (pending: any[]) => ({ ...emptyState(), pending });
+  it("the model's pending list cannot drop or re-stamp an open team question", () => {
+    const open = { kind: "promise", text: "checking with the team: פגום וחסר בורג", at: at(5) };
+    const next = mergeState(prev([open, { kind: "pending", text: "size", at: at(5) }]) as any, { pending: [{ kind: "promise", text: "checking with the team: פגום וחסר בורג" }, { kind: "pending", text: "colour" }] } as any);
+    const team = next.pending.filter((p: any) => p.text.startsWith("checking with the team: "));
+    expect(team).toHaveLength(1);
+    expect(team[0].at).toBe(open.at);
+    expect(next.pending.map((p: any) => p.text)).toContain("colour");
+    expect(next.pending.map((p: any) => p.text)).not.toContain("size");
+    expect(mergeState(prev([open]) as any, { pending: [] } as any).pending).toHaveLength(1);
+  });
+  it("after 72 hours it is no longer open", () => {
+    const old = { kind: "promise", text: "checking with the team: x", at: at(73) };
+    expect(mergeState(prev([old]) as any, { pending: [] } as any).pending).toHaveLength(0);
+    expect(openTeamQuestions(prev([old]) as any)).toEqual([]);
+    expect(openTeamQuestions(prev([{ ...old, at: at(71) }]) as any)).toEqual(["x"]);
+  });
+});
+
+describe("tool errors from the prod replay", () => {
+  it("a guard refusal's reason gives its leading code, never the text after it", () => {
+    expect(errorKindOf(JSON.stringify({ ok: false, failure: "refused", reason: "access_denied: requester identity could not be resolved for this conversation" }))).toBe("access_denied");
+    expect(errorKindOf(JSON.stringify({ ok: false, failure: "refused", reason: "selector_phone_not_owned:05*****12" }))).toBe("selector_phone_not_owned");
+    expect(errorKindOf(JSON.stringify({ ok: false, failure: "refused", reason: "Dana Levi: no such order" }))).toBe("refused");
+  });
+  it("a read that timed out is not retried (it already took the whole budget: 2 x 8s on Smoovee searches)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "../services/reply-engine/tools.ts"), "utf8");
+    const retry = src.slice(src.indexOf("let first: any = await attempt();"), src.indexOf("let first: any = await attempt();") + 600);
+    expect(retry).toMatch(/if \(isRead && first !== TIMEOUT && \("thrown" in first \|\| readErrored\(first\.r\?\.content\)\)\)/);
+  });
+});

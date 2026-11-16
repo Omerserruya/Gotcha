@@ -126,6 +126,8 @@ export interface ToolRunRecord {
   resultCount?: number;
   /** A read retried once after an error or a timeout. */
   retried?: boolean;
+  /** A short machine code for an error outcome (reason/code/failure of the result, or tool_error/timeout). Never free text. */
+  errorKind?: string;
 }
 
 // ── Gate 3 ──
@@ -135,8 +137,12 @@ export type ClaimProblem =
   | { kind: "unsupported_action"; claims: string[] }
   | { kind: "unknown_product"; names: string[] }
   | { kind: "style"; codes: string[] }
-  /** An attribute question answered "no info" without reading the product. */
+  /** An attribute question answered "no info" (or sent to the team) without reading the product. */
   | { kind: "unread_product" }
+  /** A delivery or order question answered "no info" or sent to the team without the order/tracking tools. */
+  | { kind: "unread_order" }
+  /** A coupon or policy question sent to the team without searching the knowledge. */
+  | { kind: "unread_knowledge" }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 
@@ -159,6 +165,8 @@ export interface EngineTurnTrace {
   gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "fallback" };
   tokens: { input: number; output: number; cached: number };
   toolsOffered: number;
-  /** The question recorded for the team this turn (live) or that would have been (shadow, replay). */
+  /** The question recorded for the team this turn (live) or that would have been (shadow, replay). A repeat of an open one is not. */
   teamQuestion?: string | null;
+  /** The model asked the team again about an issue already open: not recorded a second time. */
+  teamQuestionRepeat?: boolean;
 }
