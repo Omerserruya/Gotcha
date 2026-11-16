@@ -41,6 +41,8 @@ export interface ProductCandidate {
   secondChoice?: true;
   /** Found because its own "מתאים ל" list names what the customer named. */
   fitsListed?: true;
+  /** Found by meaning, not by name: the closest the store sells to what was asked. */
+  related?: true;
   /**
    * The store sets prices at render time (a discount-rules plugin) and this
    * product's page could not be read: the API price may not be what a buyer
@@ -337,6 +339,7 @@ function normalizeOne(
     attributes: collectAttributes(raw),
     unknownAttributes: [...SHOPIFY_UNKNOWN_ATTRIBUTES],
     matchQuality: deriveMatchQuality(price, budget),
+    ...(raw?.matched_in === "related" ? { related: true as const } : {}),
     details: productCopy(raw, DETAILS_LIST),
   };
 }
@@ -483,6 +486,7 @@ export function normalizeWooProducts(
       ...(raw?.too_small ? { tooSmall: true as const } : {}),
       ...(raw?.second_choice ? { secondChoice: true as const } : {}),
       ...(raw?.matched_in === "fits_list" ? { fitsListed: true as const } : {}),
+      ...(raw?.matched_in === "related" ? { related: true as const } : {}),
     };
   });
 
@@ -567,7 +571,8 @@ export function buildKeyedModelSummary(
       ? ` | TOO SMALL: the store's LARGEST (${c.fit}); nothing it sells fits the customer's ${c.fitFor ?? ""} base`
       : c.fit
         ? ` | ${c.secondChoice ? "SECOND CHOICE" : "CLOSEST FIT"} for the customer's ${c.fitFor ?? "base"} base (its size ${c.fit})`
-        : c.fitsListed ? " | LISTED: the store's own text says it fits what the customer named" : "";
+        : c.fitsListed ? " | LISTED: the store's own text says it fits what the customer named"
+        : c.related ? " | RELATED: no product is named exactly that; this is among the closest the store sells - offer it as a close option, never as the exact item" : "";
     const disc = c.discount ? ` | DISCOUNT: was ${c.currency ?? ""} ${c.discount.was}, now ${c.currency ?? ""} ${c.discount.now}` : "";
     return `${key}: "${c.title}" | ${price}${disc} | ${avail} | ${match}${fitNote}${unknown}${details}`;
   });
