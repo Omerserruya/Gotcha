@@ -68,6 +68,7 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 export function Composer({
   conversationId,
   channelName,
+  accountName = null,
   channel = null,
   replyWindow = null,
   customerName = null,
@@ -77,6 +78,12 @@ export function Composer({
   readonly conversationId: string;
   /** Already-named channel, for the sentence about where this goes. */
   readonly channelName: string | null;
+  /**
+   * The number or account the reply goes out from ("Gotcha"), when the
+   * workspace has two or more of the channel (Omer, 2026-11-16). `null`:
+   * the channel alone names it.
+   */
+  readonly accountName?: string | null;
   /** The channel itself (`WHATSAPP`, …): an image for Meta's is re-encoded to one they take. */
   readonly channel?: string | null;
   /** The row's window (Backend 47e376a4). Absent, null or unknown is free. */
@@ -359,7 +366,11 @@ export function Composer({
           either: a placeholder is not a name.
       */}
       <label className="srOnly" htmlFor="composer-body">
-        {channelName ? t('labelOn', { channel: channelName }) : t('label')}
+        {channelName && accountName
+          ? t('labelFrom', { channel: channelName, account: accountName })
+          : channelName
+            ? t('labelOn', { channel: channelName })
+            : t('label')}
       </label>
 
       {/* What is being answered, and the way to stop answering it. */}
@@ -498,7 +509,17 @@ export function Composer({
         value={text}
         rows={1}
         disabled={busy || locked}
-        placeholder={variant === 'phone' ? t('placeholderPhone') : t('placeholder')}
+        /*
+          ★ The phone's pill has no room for the channel chip, so with two
+            numbers the empty field says which one this goes out from.
+        */
+        placeholder={
+          variant === 'phone'
+            ? accountName
+              ? t('placeholderPhoneFrom', { account: accountName })
+              : t('placeholderPhone')
+            : t('placeholder')
+        }
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           /*
@@ -673,13 +694,30 @@ export function Composer({
           Where this goes, named. An agent with four conversations open should
           not have to infer the channel from the thread above.
         */}
+        {/*
+          ★★ AND FROM WHICH NUMBER (Omer, 2026-11-16): "WhatsApp · Gotcha"
+            when the workspace has two or more, so a reply is not sent from
+            the sales number by someone who meant Matan's.
+        */}
         {channelName ? (
           <span
             className={styles.composerChannel}
-            title={channelName}
+            title={
+              accountName
+                ? t('labelFrom', { channel: channelName, account: accountName })
+                : channelName
+            }
             data-testid="composer-channel"
           >
             {channelName}
+            {accountName ? (
+              <>
+                {' · '}
+                <bdi dir="auto" data-testid="composer-account">
+                  {accountName}
+                </bdi>
+              </>
+            ) : null}
           </span>
         ) : null}
 

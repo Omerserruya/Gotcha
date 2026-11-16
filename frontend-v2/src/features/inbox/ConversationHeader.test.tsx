@@ -231,3 +231,19 @@ describe('★★ Wave 3 geometry, read from the stylesheet', () => {
     expect(rule('composerSend')).toMatch(/background-color:\s*var\(--action-send\)/);
   });
 });
+
+describe('★★ which number, when the workspace has two (Omer, 2026-11-16)', () => {
+  it('★★ "WhatsApp · Gotcha", the account isolated as the workspace’s own text', async () => {
+    await show({ channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } });
+    const facts = screen.getByTestId('conversation-facts');
+    expect(facts).toHaveTextContent(/^WhatsApp · Gotcha · /);
+    expect(screen.getByTestId('conversation-account').tagName).toBe('BDI');
+  });
+
+  it('★ one number: the subline exactly as before', async () => {
+    await show({ channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } });
+    expect(screen.queryByTestId('conversation-account')).toBeNull();
+    expect(screen.getByTestId('conversation-facts')).toHaveTextContent(/^WhatsApp · /);
+    expect(screen.getByTestId('conversation-facts').textContent!.replace(/\s+/g, ' ')).not.toMatch(/· ·/);
+  });
+});

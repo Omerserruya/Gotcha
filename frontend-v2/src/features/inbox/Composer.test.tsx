@@ -788,3 +788,31 @@ describe('★ a file goes with its channel, so Meta gets an image it takes (2026
     await waitFor(() => expect(media).toHaveBeenCalledWith('c1', expect.any(File), '', 'WHATSAPP'));
   });
 });
+
+describe('★★ which number the reply goes out from (Omer, 2026-11-16)', () => {
+  it('★★ two numbers: the bar says "WhatsApp · Gotcha", and the field is named for it', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" accountName="Gotcha" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('composer-channel')).toHaveTextContent('WhatsApp · Gotcha');
+    expect(screen.getByTestId('composer-account').tagName).toBe('BDI');
+    expect(screen.getByLabelText('Your reply, from Gotcha on WhatsApp')).toBeInTheDocument();
+  });
+
+  it('★★ on the phone, where the chip is hidden, the empty field says it', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={{ inbox }}>
+        <Composer conversationId="c1" channelName="WhatsApp" accountName="Gotcha" variant="phone" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByTestId('composer-body')).toHaveAttribute('placeholder', 'Reply from Gotcha');
+  });
+
+  it('★ one number: the bar says the channel alone, as before', () => {
+    show();
+    expect(screen.getByTestId('composer-channel')).toHaveTextContent(/^WhatsApp$/);
+    expect(screen.queryByTestId('composer-account')).toBeNull();
+  });
+});

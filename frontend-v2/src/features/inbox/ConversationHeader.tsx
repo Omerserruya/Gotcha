@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import {
+  channelAccountName,
   channelName,
   waitingMinutes,
   waitingScale,
@@ -114,8 +115,29 @@ export async function ConversationHeader({
           <span className={styles.openFactsMark}>
             <ChannelMark channel={conversation.channel} size={14} decorative />
           </span>
+          {(() => {
+            /*
+             * ★★ AND WHICH NUMBER (Omer, 2026-11-16): "WhatsApp · Gotcha" when
+             *   the workspace has two or more accounts of the channel. The
+             *   account's name is the workspace's own text: isolated.
+             */
+            const named = channelName(conversation.channel, channels);
+            const account = channelAccountName(conversation);
+            if (named === null && account === null) return null;
+            return (
+              <>
+                {named}
+                {named !== null && account !== null ? ' · ' : null}
+                {account === null ? null : (
+                  <bdi dir="auto" data-testid="conversation-account">
+                    {account}
+                  </bdi>
+                )}
+                {' · '}
+              </>
+            );
+          })()}
           {[
-            channelName(conversation.channel, channels),
             /*
              * The handle, which is what makes two unnamed people tellable
              * apart. Already on screen 04's rows, so this is not new exposure.
