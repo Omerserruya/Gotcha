@@ -2,6 +2,7 @@ import { CheckCheck, Inbox } from 'lucide-react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 
 import {
+  channelAccountName,
   channelName,
   type ConversationRow,
   UNREAD_BADGE_MAX,
@@ -78,6 +79,8 @@ export async function MobileConversationList({
         const said = quoteOf({ body: row.lastMessageBody ?? '', messageType: row.lastMessageType });
         const channel = channelName(row.channel, channelNames) ?? inbox('queue.unknownChannel');
         const owner = rowOwner(row, meId, colleagues, soleHuman);
+        /* Which number, when the workspace has two or more (Omer, 2026-11-16). */
+        const account = channelAccountName(row);
         return (
           <li key={row.id}>
             <Link
@@ -147,15 +150,22 @@ export async function MobileConversationList({
                     </span>
                   )}
                 </span>
-                {owner === null ? null : (
+                {owner === null && account === null ? null : (
                   <span className={ui.tags}>
-                    <span className={ui.tag} data-tone={owner.tone}>
-                      {owner.kind === 'colleague' ? (
-                        <PersonName name={owner.name} />
-                      ) : (
-                        t(`inbox.owner.${owner.kind}`)
-                      )}
-                    </span>
+                    {owner === null ? null : (
+                      <span className={ui.tag} data-tone={owner.tone}>
+                        {owner.kind === 'colleague' ? (
+                          <PersonName name={owner.name} />
+                        ) : (
+                          t(`inbox.owner.${owner.kind}`)
+                        )}
+                      </span>
+                    )}
+                    {account === null ? null : (
+                      <span className={ui.tag} data-testid={`mobile-account-${row.id}`}>
+                        {channel} · <bdi dir="auto">{account}</bdi>
+                      </span>
+                    )}
                   </span>
                 )}
               </span>

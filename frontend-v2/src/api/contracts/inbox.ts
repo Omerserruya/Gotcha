@@ -220,6 +220,31 @@ export const conversationRowSchema = z.object({
    *   unreadable window is `null` and the send goes ahead), so the composer
    *   must not be stricter than the route that decides.
    */
+  /**
+   * ★★ WHICH NUMBER OR ACCOUNT THIS CONVERSATION IS ON (Omer, 2026-11-16).
+   * A workspace with two WhatsApp numbers ("GOTCHA" for sales, "Gotcha" for
+   * Matan) could not tell from the inbox which one a customer had written to.
+   *
+   * Backend c39f5c95 (`presentChannelAccount`), on the list and on GET /:id:
+   * `{ id, channel, displayName, multipleOfChannel } | null`. `displayName`
+   * is the channel's name in GOTCHA (Settings), `null` when empty;
+   * `multipleOfChannel` is true when the workspace has 2+ ACTIVE accounts of
+   * that channel (false when the count could not be read); `null` is a
+   * conversation whose account was deleted. Read through
+   * `channelAccountName`, never directly.
+   *
+   * ★ Absent, null, empty or malformed: no account named, and never a
+   *   failed row (the handledBy lesson, prod 2026-11-16).
+   */
+  channelAccount: z
+    .object({
+      id: z.string().nullish().catch(null),
+      channel: z.string().nullish().catch(null),
+      displayName: z.string().nullish().catch(null),
+      multipleOfChannel: z.boolean().optional().catch(undefined),
+    })
+    .nullish()
+    .catch(null),
   replyWindow: z
     .object({
       channel: z.string().nullish().catch(null),
@@ -232,6 +257,21 @@ export const conversationRowSchema = z.object({
     .catch(null),
 });
 export type ConversationRow = z.infer<typeof conversationRowSchema>;
+
+/**
+ * The channel account to name beside the channel ("WhatsApp · Gotcha"), or
+ * `null` to name none. Named only when the platform says the workspace has
+ * two or more active accounts of that channel (`multipleOfChannel: true`);
+ * with one, or when it could not say, the channel's name says it all and
+ * nothing on the screen changes.
+ */
+export function channelAccountName(row: {
+  readonly channelAccount?: ConversationRow['channelAccount'];
+}): string | null {
+  if (row.channelAccount?.multipleOfChannel !== true) return null;
+  const name = row.channelAccount.displayName?.trim();
+  return name ? name : null;
+}
 
 /**
  * ★★ A LIST OF ROWS, EACH PARSED ON ITS OWN (prod, 2026-11-16).

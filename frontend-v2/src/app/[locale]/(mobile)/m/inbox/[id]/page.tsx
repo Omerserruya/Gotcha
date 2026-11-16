@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
-import { aiCarries, channelName, openReadState } from '@/api/contracts/inbox';
+import { aiCarries, channelAccountName, channelName, openReadState } from '@/api/contracts/inbox';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { PersonName } from '@/features/customers/PersonName';
 import { Composer } from '@/features/inbox/Composer';
@@ -67,6 +67,8 @@ export default async function Page({
   }
 
   const channel = channelName(open.channel, channelNames);
+  /* Which number, when the workspace has two or more (Omer, 2026-11-16). */
+  const account = channelAccountName(open);
   const mine = data.meId !== null && open.assignedAgentId === data.meId;
   const resolved = open.status === 'CLOSED';
   const owner = resolved
@@ -111,9 +113,17 @@ export default async function Page({
                 <PersonName name={open.customerName} />
               )}
             </span>
-            {channel === null && owner === null ? null : (
+            {channel === null && account === null && owner === null ? null : (
               <span className={styles.barMeta}>
-                {[channel, owner].filter((part) => part !== null).join(' · ')}
+                {channel}
+                {channel !== null && account !== null ? ' · ' : null}
+                {account === null ? null : (
+                  <bdi dir="auto" data-testid="mobile-thread-account">
+                    {account}
+                  </bdi>
+                )}
+                {(channel !== null || account !== null) && owner !== null ? ' · ' : null}
+                {owner}
               </span>
             )}
           </span>
@@ -150,6 +160,7 @@ export default async function Page({
           <Composer
             conversationId={open.id}
             channelName={channel}
+            accountName={account}
             channel={open.channel}
             replyWindow={open.replyWindow}
             customerName={open.customerName}

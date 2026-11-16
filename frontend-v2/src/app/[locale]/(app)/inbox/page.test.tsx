@@ -917,3 +917,17 @@ describe('★ the composer is told the channel, for an image Meta will take (202
     expect(propsOf<{ channel?: string | null }>(tree, Composer)?.channel).toBe('WHATSAPP');
   });
 });
+
+describe('★★ the composer is told which number it sends from (Omer, 2026-11-16)', () => {
+  it('★★ two numbers: the open conversation’s account', async () => {
+    const tree = await page({ open: row({ channel: 'WHATSAPP', channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } }) });
+    expect(propsOf<{ accountName?: string | null }>(tree, Composer)?.accountName).toBe('Gotcha');
+  });
+
+  it('★ one number: none', async () => {
+    const tree = await page({
+      open: row({ channel: 'WHATSAPP', channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } }),
+    });
+    expect(propsOf<{ accountName?: string | null }>(tree, Composer)?.accountName).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import type { ReactNode } from 'react';
 
 import {
+  channelAccountName,
   channelName,
   queueOrder,
   UNREAD_BADGE_MAX,
@@ -512,6 +513,20 @@ export async function ConversationList({
                   {t('queue.tag.flow')}
                 </span>
               ) : null}
+
+              {/*
+                ★★ WHICH NUMBER (Omer, 2026-11-16): with two WhatsApp numbers
+                the row says which one the customer wrote to, by the name the
+                workspace gave it. One account: no tag, the row as before.
+              */}
+              {(() => {
+                const account = channelAccountName(conversation);
+                return account === null ? null : (
+                  <span className={styles.tagNeutral} data-testid={`tag-account-${conversation.id}`}>
+                    {badgeLabel} · <bdi dir="auto">{account}</bdi>
+                  </span>
+                );
+              })()}
 
               {/* The AI paused on an approval: somebody has to give it (prod, 2026-11-16). */}
               {conversation.handledBy === 'awaiting_approval' ? (

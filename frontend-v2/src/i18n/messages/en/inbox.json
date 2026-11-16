@@ -255,8 +255,10 @@
   "composer": {
     "label": "Your reply",
     "labelOn": "Your reply, on {channel}",
+    "labelFrom": "Your reply, from {account} on {channel}",
     "placeholder": "Write the reply. Enter makes a new line.",
     "placeholderPhone": "Write a message",
+    "placeholderPhoneFrom": "Reply from {account}",
     "send": "Send to the customer",
     "sending": "Sending…",
     "queued": "Queued. It will show above as it goes out, and say so if it fails.",

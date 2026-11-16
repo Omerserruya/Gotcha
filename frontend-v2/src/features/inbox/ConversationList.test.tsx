@@ -807,6 +807,26 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
     expect(screen.queryByTestId('tag-approval-c2')).toBeNull();
     expect(screen.queryByTestId('tag-flow-c2')).toBeNull();
   });
+
+  it('★★ two numbers: the row names which one, "WhatsApp · Gotcha"; one number: no tag', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', channel: 'WHATSAPP', channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } }),
+          row({ id: 'c2', channel: 'WHATSAPP', channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } }),
+          row({ id: 'c3', channel: 'WHATSAPP' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    const tag = screen.getByTestId('tag-account-c1');
+    expect(tag).toHaveTextContent('WhatsApp · Gotcha');
+    expect(tag.querySelector('bdi')).toHaveTextContent('Gotcha');
+    expect(screen.queryByTestId('tag-account-c2')).toBeNull();
+    expect(screen.queryByTestId('tag-account-c3')).toBeNull();
+  });
 });
 
 describe('★★ the cap caption found the home the design gave it', () => {

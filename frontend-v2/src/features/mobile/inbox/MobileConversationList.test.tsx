@@ -70,3 +70,27 @@ describe('★ one person: the tag says "waiting for you", not "in queue"', () =>
     expect(screen.queryByText(mobile.inbox.owner.waitingYou)).toBeNull();
   });
 });
+
+describe('★★ which number on the phone row (Omer, 2026-11-16)', () => {
+  const list = async (channelAccount: unknown) =>
+    render(
+      await MobileConversationList({
+        rows: [{ ...handoff, channelAccount } as never],
+        now: new Date('2026-11-15T10:00:00Z'),
+        meId: 'u1',
+        colleagues: [],
+        filtered: false,
+      }),
+    );
+
+  it('★★ two numbers: "וואטסאפ · מכירות", beside the owner tag', async () => {
+    await list({ id: 'ch1', channel: 'WHATSAPP', displayName: 'מכירות', multipleOfChannel: true });
+    expect(screen.getByTestId('mobile-account-c1')).toHaveTextContent(`${channels.name.WHATSAPP} · מכירות`);
+    expect(screen.getByText(mobile.inbox.owner.waiting)).toBeInTheDocument();
+  });
+
+  it('★ one number: no tag', async () => {
+    await list({ id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false });
+    expect(screen.queryByTestId('mobile-account-c1')).toBeNull();
+  });
+});

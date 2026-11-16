@@ -255,8 +255,10 @@
   "composer": {
     "label": "התשובה שלכם",
     "labelOn": "התשובה שלכם, ב־{channel}",
+    "labelFrom": "התשובה שלכם, דרך {account} ב‑{channel}",
     "placeholder": "כתבו את התשובה. Enter יוצר שורה חדשה.",
     "placeholderPhone": "כתבו הודעה",
+    "placeholderPhoneFrom": "תשובה דרך {account}",
     "send": "שליחה ללקוח",
     "sending": "שולח…",
     "queued": "בתור לשליחה. ההודעה תופיע למעלה כשהיא תיצא, ותודיע אם היא נכשלה.",

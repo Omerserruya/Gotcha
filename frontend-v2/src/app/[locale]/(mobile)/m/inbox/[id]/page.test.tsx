@@ -59,3 +59,33 @@ describe("★ the phone's composer knows the channel", () => {
     expect((composer?.props as { channel?: string | null }).channel).toBe('WHATSAPP');
   });
 });
+
+describe('★★ which number, on the phone thread (Omer, 2026-11-16)', () => {
+  const tree = async (channelAccount: unknown) => {
+    loadInbox.mockResolvedValue({
+      open: { ...open, channelAccount },
+      missing: null,
+      meId: 'me',
+      colleagues: [],
+      greeting: null,
+      detail: Promise.resolve({ messages: [], timeline: null, orders: null }),
+    });
+    const { default: Page } = await import('./page');
+    return elements(await Page({ params: Promise.resolve({ id: 'c1' }) }));
+  };
+
+  it('★★ two numbers: the bar names the account, and the composer sends from it', async () => {
+    const all = await tree({ id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true });
+    const tag = all.find((e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account');
+    expect(tag?.type).toBe('bdi');
+    expect((tag?.props as { children: unknown }).children).toBe('Gotcha');
+    const composer = all.find((e) => e.type === Composer);
+    expect((composer?.props as { accountName?: string | null }).accountName).toBe('Gotcha');
+  });
+
+  it('★ one number: no account in the bar, none in the composer', async () => {
+    const all = await tree({ id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false });
+    expect(all.some((e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account')).toBe(false);
+    expect((all.find((e) => e.type === Composer)?.props as { accountName?: string | null }).accountName).toBeNull();
+  });
+});

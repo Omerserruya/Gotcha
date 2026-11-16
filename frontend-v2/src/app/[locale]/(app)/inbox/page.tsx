@@ -35,7 +35,7 @@ import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { RailUnreadCounts } from '@/shell/rail-counts';
 import { pageMetadata } from '@/shell/page-metadata';
-import { channelName, openReadState } from '@/api/contracts/inbox';
+import { channelAccountName, channelName, openReadState } from '@/api/contracts/inbox';
 import { SkeletonBubbles, SkeletonCards } from '@/design-system/primitives/skeleton/Skeleton';
 
 /**
@@ -421,6 +421,7 @@ export default async function Page({
                   <Composer
                     conversationId={data.open.id}
                     channelName={channelName(data.open.channel, channelNames)}
+                    accountName={channelAccountName(data.open)}
                     channel={data.open.channel}
                     /* What may be sent now (B7): free, a template only, or nothing. */
                     replyWindow={data.open.replyWindow}
