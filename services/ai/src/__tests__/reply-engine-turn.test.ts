@@ -52,6 +52,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     dispatchToolCall: async (tc: any, ctx: any) => {
       h.dispatched.push({ name: tc.function.name, args: JSON.parse(tc.function.arguments), sandbox: ctx.sandbox ?? null });
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
+      if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "denied") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
       return { toolCallId: tc.id, content: JSON.stringify({ ok: true, simulated: !!ctx.sandbox }) };
     },
@@ -470,5 +471,112 @@ describe("prod replay 2026-11-16 defects, through a whole turn", () => {
     // Judged as live would judge it: the coupon is "done", so the reply is not an unsupported claim.
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("unsupported_action");
     expect(r.trace.tools.find((t: any) => t.tool === "woocommerce.create_coupon")?.decision).toBe("simulated");
+  });
+});
+
+describe("prod replay 2 (2026-11-16): a canned team line never replaces a real answer", () => {
+  const withState = async (row: any, fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [], turnCount: 3, ...row });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+
+  it("★ style only, twice: the rewrite is cleaned and sent, no fallback, no team question", async () => {
+    h.responses.push(
+      { toolCalls: [respond("y1", { reply: "מצאתי תיק בד, מתאים לך?" })] },
+      { toolCalls: [respond("y2", { reply: "מצאתי כמה תיקי בד, איזה צבע מתאים לך?" })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect(r.reply).toBe("יש כמה תיקי בד, איזה צבע מתאים לך?");
+    expect(h.teamQuestions).toEqual([]);
+    expect(r.escalation).toBeNull();
+  });
+
+  it("★ the rewrite has a FACT problem but the original only style: the original goes out, cleaned", async () => {
+    h.responses.push(
+      { toolCalls: [respond("y3", { reply: "מצאתי תיק בד, מתאים לך?" })] },
+      { toolCalls: [respond("y4", { reply: "יש תיק בד ב-₪150." })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect(r.reply).toBe("יש תיק בד, מתאים לך?");
+  });
+
+  it("★ a needless handoff, twice: sent without the handoff, never the canned line", async () => {
+    h.responses.push(
+      { toolCalls: [respond("n1", { reply: "אפשר לשלם בתשלומים בקופה באתר.", handoff: "instalments" })] },
+      { toolCalls: [respond("n2", { reply: "אפשר לשלם בתשלומים בקופה באתר.", handoff: "instalments" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect(r.escalation).toBeNull();
+    expect(r.reply).toBe("אפשר לשלם בתשלומים בקופה באתר.");
+  });
+
+  it("★ unread product: an answer without the read is sent back once, the read runs, the answer comes from it", async () => {
+    h.responses.push(
+      { toolCalls: [respond("u1", { reply: "אין לי כאן מידע על זה, אבדוק מול הצוות." })] },
+      { toolCalls: [respond("u2", { reply: "אין לי מידע, אבדוק מול הצוות." })] },
+      { toolCalls: [tc("u3", "woocommerce.get_product", { product_id: "55" })] },
+      { toolCalls: [respond("u4", { reply: "הוא מכותנה אורגנית, נעים ולא מגרד." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הסוודר מגרד?" }, "autonomous");
+    expect(h.calls.map((c) => c.toolChoice)).toEqual(["required", "required", "required", { type: "function", function: { name: "respond" } }]);
+    expect(h.calls[2].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "u2")?.content).toMatch(/call the lookup tool first/);
+    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.get_product");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(r.reply).toMatch(/כותנה/);
+  });
+
+  it("★ the canned line goes out once: it is marked in the state (hidden from the model)", async () => {
+    h.responses.push(
+      { toolCalls: [respond("c1", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("c2", { reply: "בטח, ₪150 בלבד." })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
+    expect(h.upserts[0].create.facts._cannedTeamLineAt).toBeTruthy();
+  });
+
+  it("★ the canned line already went out: nothing is sent, the question still reaches the team once", async () => {
+    await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() } }, async () => {
+      h.responses.push(
+        { toolCalls: [respond("c3", { reply: "התיק עולה ₪120." })] },
+        { toolCalls: [respond("c4", { reply: "בטח, ₪150 בלבד." })] },
+      );
+      const r = await runReplyEngineTurn(opts, "autonomous");
+      expect(r.trace.gate3.rewrite).toBe("silent");
+      expect(r.reply).toBeNull();
+      expect(r.escalation).toBeNull();
+      expect(h.teamQuestions).toHaveLength(1);
+      // The engine's mark is not shown to the model.
+      expect(JSON.stringify(h.calls[0].messages)).not.toContain("_cannedTeamLineAt");
+    });
+  });
+
+  it("★ a person is needed after the canned line went out: the handoff happens, no second canned line", async () => {
+    await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() } }, async () => {
+      h.responses.push(
+        { toolCalls: [respond("c5", { reply: "התיק עולה ₪120." })] },
+        { toolCalls: [respond("c6", { reply: "בטח, ₪150 בלבד." })] },
+      );
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני רוצה לדבר עם נציג" }, "autonomous");
+      expect(r.reply).toBeNull();
+      expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
+    });
+  });
+
+  it("★ an order lookup refused as another customer's: the model is told to ask for the order number", async () => {
+    h.responses.push(
+      { toolCalls: [tc("o1", "woocommerce.get_product", { product_id: "denied" })] },
+      { toolCalls: [respond("o2", { reply: "מה מספר ההזמנה?" })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    const toolMsg = h.calls[1].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "o1");
+    expect(toolMsg.content).toMatch(/ask for it/);
+    expect(toolMsg.content).toMatch(/do not retry with a phone number or an email/);
+    expect(r.trace.tools[0]).toMatchObject({ outcome: "error", errorKind: "access_denied_cross_customer" });
   });
 });

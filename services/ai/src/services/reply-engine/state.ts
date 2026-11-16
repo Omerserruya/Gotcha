@@ -56,23 +56,27 @@ export async function loadState(tenantId: string, conversationId: string, lane: 
 export const isTeamPromise = (p: { kind?: string; text?: string } | null | undefined) =>
   p?.kind === "promise" && String(p.text ?? "").startsWith("checking with the team: ");
 export const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
+/** Engine-owned facts start with "_": the model neither sees nor writes them. */
+export const CANNED_SENT_FACT = "_cannedTeamLineAt";
+const engineFact = (k: string) => k.startsWith("_");
 
 export function mergeState(
   prev: ConversationStateRecord,
   update: StateUpdate | null | undefined,
-  extra: { offered?: OfferedItem[]; activeSkill?: string | null; approvals?: PendingItem[]; now?: Date } = {},
+  extra: { offered?: OfferedItem[]; activeSkill?: string | null; approvals?: PendingItem[]; engineFacts?: Record<string, string>; now?: Date } = {},
 ): ConversationStateRecord {
   const now = (extra.now ?? new Date()).toISOString();
   const u = update ?? {};
   const facts: Record<string, any> = { ...prev.facts };
   for (const [k, v] of Object.entries(obj(u.facts))) {
     const key = clip(k, 60);
-    if (!key) continue;
+    if (!key || engineFact(key)) continue;
     if (v === null || v === "") delete facts[key];
     else facts[key] = typeof v === "number" || typeof v === "boolean" ? v : clip(v);
   }
-  const factKeys = Object.keys(facts);
+  const factKeys = Object.keys(facts).filter((k) => !engineFact(k));
   for (const k of factKeys.slice(0, Math.max(0, factKeys.length - MAX_FACTS))) delete facts[k];
+  for (const [k, v] of Object.entries(extra.engineFacts ?? {})) facts[k] = v;
 
   // Offered items: newest last, one per ref (a re-show moves it to the end).
   const offered = [...prev.offeredItems];
@@ -159,7 +163,7 @@ export function renderState(s: ConversationStateRecord): string {
   const lines: string[] = [];
   if (s.stage) lines.push(`stage: ${s.stage}`);
   if (s.intent) lines.push(`intent: ${s.intent}`);
-  const facts = Object.entries(s.facts);
+  const facts = Object.entries(s.facts).filter(([k]) => !engineFact(k));
   if (facts.length) lines.push(`known facts: ${facts.map(([k, v]) => `${k}=${v}`).join("; ")}`);
   if (s.offeredItems.length) {
     lines.push(

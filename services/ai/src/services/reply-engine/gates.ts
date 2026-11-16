@@ -228,6 +228,33 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   return { ok: problems.length === 0, problems };
 }
 
+/**
+ * The problems that may stop a reply after the rewrite: a fact the customer would
+ * be misled by. Everything else (style, an unread lookup, a needless handoff) is
+ * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
+ * 17 fallbacks on Smoovee, most of them style, replaced real answers).
+ */
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product"]);
+export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
+
+const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
+const dropSentences = (s: string, re: RegExp) => (s.match(SENTENCES) ?? [s]).filter((x) => !re.test(x)).join("").trim();
+
+/**
+ * Deterministic cleanup of a reply whose remaining problems are style only: what
+ * code can fix safely is fixed, the rest is sent as written. An empty result means
+ * nothing is left to say.
+ */
+export function cleanStyle(reply: string, codes: string[]): string {
+  const c = new Set(codes);
+  let s = String(reply ?? "");
+  if (c.has("simulation_leak")) s = dropSentences(s, SIMULATION_LEAK);
+  if (c.has("repeated_team_line")) s = dropSentences(s, TEAM_LINE);
+  // "מצאתי כמה אפשרויות" -> "יש כמה אפשרויות"; "לא מצאתי" is left alone (the ban skips it too).
+  if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
+  return s.replace(/\s*[\u2013\u2014]\s*/g, ", ").replace(/[ \t]{2,}/g, " ").trim();
+}
+
 /** The ONE targeted correction note for the rewrite round. */
 export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): string {
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
@@ -257,6 +284,12 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     }
   }
   return lines.join("\n");
+}
+
+/** The canned team lines (both forms), to know one was already sent. */
+export function isCannedTeamLine(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  return !!t && ([safeFallback("he"), safeFallback("he", true), safeFallback("en"), safeFallback("en", true)].includes(t));
 }
 
 /** The safe fixed reply when the rewrite fails too: honest, short, hands the case on. */

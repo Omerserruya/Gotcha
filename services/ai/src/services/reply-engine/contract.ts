@@ -162,7 +162,7 @@ export interface EngineTurnTrace {
   stageMs: Record<string, number>;
   rounds: number;
   tools: ToolRunRecord[];
-  gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "fallback" };
+  gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "cleaned" | "fallback" | "silent" };
   tokens: { input: number; output: number; cached: number };
   toolsOffered: number;
   /** The question recorded for the team this turn (live) or that would have been (shadow, replay). A repeat of an open one is not. */

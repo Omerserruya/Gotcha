@@ -25,6 +25,7 @@ import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import { initAIService } from "../services/ai.service";
 import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
+import { isCannedTeamLine } from "../services/reply-engine/gates";
 
 interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string }
 
@@ -96,7 +97,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; fallbacks: number; rewrites: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -122,7 +123,7 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, fallbacks: 0, rewrites: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
     md.push(`## Tenant ${tenantId}`, "");
     let lastConv = "";
@@ -142,6 +143,9 @@ async function main() {
         if (handoff) s.handoffs++;
         if (r.trace?.gate3?.rewrite === "fallback") s.fallbacks++;
         if (r.trace?.gate3?.rewrite === "rewritten") s.rewrites++;
+        if (r.trace?.gate3?.rewrite === "cleaned") s.cleaned++;
+        if (r.trace?.gate3?.rewrite === "silent") s.silent++;
+        if (isCannedTeamLine(r.reply)) s.cannedLines++;
         const tools = (r.trace?.tools ?? []) as any[];
         const errored = tools.filter((x) => x.outcome === "error" || x.outcome === "timeout");
         s.toolErrors += errored.length;
@@ -177,8 +181,8 @@ async function main() {
     summaries.push(s);
   }
 
-  md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | gate3 fallbacks | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|");
-  for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.fallbacks} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
+  md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | cleaned | gate3 fallbacks | silent | canned lines | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.cleaned} | ${s.fallbacks} | ${s.silent} | ${s.cannedLines} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
   fs.writeFileSync(args.out, md.join("\n"));
 
   if (!args.keep && replayed.size) {

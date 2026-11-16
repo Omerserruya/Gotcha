@@ -246,11 +246,27 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
       resultCount = envlp.status === "ok" ? envlp.candidates.length : 0;
     }
   }
+  if (outcome.decision === "allow" && errorKindOf(content) === "access_denied_cross_customer") content = crossCustomerNote();
   const side = outcome.r.sideEffect;
   if (side?.awaitingApproval) env.turn.approvals.push({ tool, approvalRequestId: String((side.awaitingApproval as any).approvalRequestId ?? call.id) });
   if (side?.escalate) env.turn.escalation = side.escalate as any;
   const out = outcomeOf(outcome.decision, content, resultCount);
   return { ...rec(outcome.decision, content, side), outcome: out, ...(out === "error" ? { errorKind: errorKindOf(content) } : {}), resultCount, retried };
+}
+
+/**
+ * The order guard refused: what was looked up is not provably this chat's
+ * customer (prod replay 2: 9 refusals, the model passing a phone or an email the
+ * customer typed). The order number is the way in, never another identifier.
+ */
+export function crossCustomerNote(): string {
+  return JSON.stringify({
+    ok: false,
+    reason: "access_denied_cross_customer",
+    note:
+      "This lookup is allowed only for this chat's own customer, and what was given did not match. Reveal nothing about it and do not retry with a phone number or an email. " +
+      "If the customer has not given the order number yet, ask for it and look the order up by that number. If an order number was already refused, say the team will check the order and put it in team_question. Not a reason to hand over.",
+  });
 }
 
 /** What a live write would have told the model: done, with no word of a test or a simulation. */

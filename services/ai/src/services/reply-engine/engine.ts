@@ -24,11 +24,11 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS } from "./state";
+import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -44,10 +44,20 @@ export interface EngineTurnOpts {
 
 const HEB = /[֐-׿]/;
 
-/** The conversation's language: the customer's own recent words decide. */
-export function conversationLocale(inbound: string[]): "he" | "en" {
-  const recent = inbound.slice(-4).join(" ");
-  return HEB.test(recent) ? "he" : "en";
+const MEDIA_ONLY = /^\s*\[(?:Image|Photo|Video|Voice message|Audio|Document|Sticker|File|Location|Contact)[^\]]*\]\s*$/i;
+const LATIN_WORD = /[A-Za-z]{2,}/;
+
+/**
+ * The conversation's language: the customer's own recent words decide. Words
+ * with no language in them ("[Image]", an order number, "ok") do not: then the
+ * whole conversation does, ours included (prod replay 2: a Hebrew chat whose last
+ * messages were photos and a number got an English fallback).
+ */
+export function conversationLocale(inbound: string[], outbound: string[] = []): "he" | "en" {
+  const words = inbound.filter((m) => !MEDIA_ONLY.test(String(m ?? ""))).slice(-4).join(" ");
+  if (HEB.test(words)) return "he";
+  if (LATIN_WORD.test(words.replace(/\bok\b/gi, ""))) return "en";
+  return [...inbound, ...outbound].some((m) => HEB.test(String(m ?? ""))) ? "he" : "en";
 }
 
 /** Parse the model's `respond` arguments, tolerantly. */
@@ -256,7 +266,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   const inbound = history.filter((m: any) => m.direction === "INBOUND").map((m: any) => String(m.body ?? ""));
   if (opts.incomingMessage && inbound.at(-1) !== opts.incomingMessage) inbound.push(opts.incomingMessage);
-  const locale = conversationLocale(inbound);
+  const locale = conversationLocale(inbound, history.filter((m: any) => m.direction === "OUTBOUND").map((m: any) => String(m.body ?? "")));
   const storePlatform: "shopify" | "woocommerce" | null =
     connectedStores.some((r: any) => r.integration?.slug === "shopify") ? "shopify"
     : connectedStores.some((r: any) => r.integration?.slug === "woocommerce") ? "woocommerce" : null;
@@ -532,18 +542,31 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
   let verdict = output ? gate3(g3Input(output)) : { ok: false, problems: [{ kind: "style" as const, codes: ["empty"] }] };
+  // The canned team line goes out at most once per conversation (prod replay 2:
+  // it replaced real answers turn after turn). Ours in the history, or the state's mark.
+  const cannedSent = !!state.facts?.[CANNED_SENT_FACT] || history.some((m: any) => m.direction === "OUTBOUND" && isCannedTeamLine(m.body));
+  let cannedNow = false;
   if (!verdict.ok) {
     // ONE targeted rewrite.
     if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correctionNote(verdict.problems, locale) });
     else messages.push({ role: "system", content: correctionNote(verdict.problems, locale) });
     const first = verdict;
+    const original = output;
+    let second: ModelTurnOutput | null = null;
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
-      // An unread product gets ONE tool round to read it before the rewrite.
+      // An unread product, order or policy gets ONE tool round to read it before the rewrite.
       const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge");
       let r = await call(mayRead ? "required" : forceRespond);
       if (mayRead) {
-        const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
+        let calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
+        // It answered again without reading: the read is the point of this round, so it is asked once more.
+        if (!calls.some((c) => c.function?.name !== "respond") && calls.length) {
+          messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
+          for (const c of calls) messages.push({ role: "tool", tool_call_id: c.id, content: "Not sent: call the lookup tool first (product, order or knowledge), then respond from what it returns." });
+          r = await call("required");
+          calls = (r.toolCalls ?? []) as any;
+        }
         const work = calls.filter((c) => c.function?.name !== "respond");
         if (work.length) {
           messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
@@ -556,30 +579,59 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         }
       }
       const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
-      const second = rc ? parseRespond(rc.function.arguments) : null;
-      const v2 = second ? gate3(g3Input(second)) : first;
-      if (second && v2.ok) { output = second; verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" }; }
-      else { verdict = v2; output = null; }
+      second = rc ? parseRespond(rc.function.arguments) : null;
     } catch (err: any) {
       if ((err as any)?.name === "AbortError") throw err;
-      output = null;
+      second = null;
     }
-    if (!output) {
-      trace.gate3 = { ...first, rewrite: "fallback" };
-      // A product turn is answered from what the tools returned, never handed to a person.
-      const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
-      output = grounded
-        ? { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) }
-        : needlessHandoff("reply_failed_checks", inbound, approvalPending)
+    const v2 = second ? gate3(g3Input(second)) : null;
+    if (second && v2?.ok) {
+      output = second; verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
+    } else {
+      // Not clean: what is left is cleaned and sent unless it is a FACT problem
+      // (a price, a product or an action no tool backs). The rewrite first, else the original.
+      const salvage = (o: ModelTurnOutput | null) => {
+        if (!o) return null;
+        const v = gate3(g3Input(o));
+        const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
+        const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null : o.handoff;
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(o.reply, codes), handoff };
+        if (!cleaned.reply) return null;
+        const after = gate3(g3Input(cleaned));
+        return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
+      };
+      const kept = salvage(second) ?? salvage(original);
+      if (kept) {
+        output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: "cleaned" };
+      } else {
+        verdict = v2 ?? first;
+        trace.gate3 = { ...first, rewrite: "fallback" };
+        // A product turn is answered from what the tools returned, never handed to a person.
+        const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
+        const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
+        if (grounded) {
+          output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+        } else if (!needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
+          // The customer's words call for a person (asked for one, damage, a late order).
+          output = { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+          cannedNow = !cannedSent;
+        } else if (!cannedSent) {
           // Nothing calls for a person: a question for the team, and the AI keeps the chat.
-          ? { reply: safeFallback(locale, teamAlreadyOpen), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : String(opts.incomingMessage ?? "").slice(0, 300) || null, cards: [] }
-          : { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+          output = { reply: safeFallback(locale, teamAlreadyOpen), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
+          cannedNow = true;
+        } else {
+          // The canned line already went out once: nothing new to say. The question
+          // still reaches the team (once per issue) so the owner sees it.
+          output = { reply: "", stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
+          trace.gate3 = { ...first, rewrite: "silent" };
+        }
+      }
     }
   } else {
     trace.gate3 = { ...verdict, rewrite: "none" };
   }
   mark("gate3");
-  const final: ModelTurnOutput = output ?? { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+  const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
 
   // ── Send shape ──
   // A semicolon reads as a document; legacy banned it (eval I05). Fixed, not rewritten.
@@ -631,6 +683,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
+    engineFacts: cannedNow ? { [CANNED_SENT_FACT]: now } : undefined,
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");

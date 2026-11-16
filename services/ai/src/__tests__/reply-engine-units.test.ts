@@ -60,6 +60,10 @@ describe("keys and language", () => {
   it("follows the customer's own recent words", () => {
     expect(conversationLocale(["hi", "יש לכם?"])).toBe("he");
     expect(conversationLocale(["שלום", "a", "b", "c", "do you ship?"])).toBe("en");
+    // Prod replay 2: photos and a number after Hebrew words are not English.
+    expect(conversationLocale(["הכיסא הגיע שבור", "[Image]", "[Image]", "[Image]", "12345"])).toBe("he");
+    expect(conversationLocale(["[Image]", "4417"], ["שלום, איך אפשר לעזור?"])).toBe("he");
+    expect(conversationLocale(["[Image]", "ok"])).toBe("en");
   });
 });
 
@@ -434,5 +438,37 @@ describe("tool errors from the prod replay", () => {
     const src = readFileSync(join(__dirname, "../services/reply-engine/tools.ts"), "utf8");
     const retry = src.slice(src.indexOf("let first: any = await attempt();"), src.indexOf("let first: any = await attempt();") + 600);
     expect(retry).toMatch(/if \(isRead && first !== TIMEOUT && \("thrown" in first \|\| readErrored\(first\.r\?\.content\)\)\)/);
+  });
+});
+
+describe("prod replay 2: what may stop a reply, and the cleanup", () => {
+  it("only a price, a product or an action no tool backs is a FACT problem", async () => {
+    const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
+    expect([...FACTUAL_KINDS].sort()).toEqual(["ungrounded_price", "unknown_product", "unsupported_action"]);
+    expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
+  });
+  it("cleanStyle fixes what code can fix and keeps the rest", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(cleanStyle("מצאתי כמה תיקים. לא מצאתי אדום.", ["found_narration"])).toBe("יש כמה תיקים. לא מצאתי אדום.");
+    expect(cleanStyle("אנחנו פתוחים עד 18:00. העברתי את השאלה לצוות.", ["repeated_team_line"])).toBe("אנחנו פתוחים עד 18:00.");
+    expect(cleanStyle("ההזמנה נשלחה. זה לא בוצע בפועל בסביבת הבדיקה.", ["simulation_leak"])).toBe("ההזמנה נשלחה.");
+    expect(cleanStyle("העברתי את השאלה לצוות.", ["repeated_team_line"])).toBe("");
+    // A code not listed is not touched.
+    expect(cleanStyle("מצאתי תיק", [])).toBe("מצאתי תיק");
+  });
+  it("isCannedTeamLine knows both forms in both languages, and nothing else", async () => {
+    const { isCannedTeamLine, safeFallback } = await import("../services/reply-engine/gates");
+    for (const l of ["he", "en"] as const) for (const open of [false, true]) expect(isCannedTeamLine(safeFallback(l, open))).toBe(true);
+    expect(isCannedTeamLine("העברתי את השאלה לצוות.")).toBe(false);
+  });
+  it("engine facts (\"_\") are neither written by the model, trimmed, nor rendered", async () => {
+    const { mergeState, emptyState, renderState } = await import("../services/reply-engine/state");
+    const prev = { ...emptyState(), facts: { _cannedTeamLineAt: "t" } };
+    const many = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`k${i}`, "v"]));
+    const s = mergeState(prev, { facts: { ...many, _cannedTeamLineAt: null, _x: "model" } as any });
+    expect(s.facts._cannedTeamLineAt).toBe("t");
+    expect(s.facts._x).toBeUndefined();
+    expect(renderState(s)).not.toContain("_canned");
+    expect(mergeState(emptyState(), {}, { engineFacts: { _cannedTeamLineAt: "n" } }).facts._cannedTeamLineAt).toBe("n");
   });
 });
