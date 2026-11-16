@@ -46,33 +46,31 @@ export const HARD_STYLE: ReadonlySet<StyleViolationKind> = new Set<StyleViolatio
   "ungrounded_price",
 ] as StyleViolationKind[]);
 
-const DASH = /[–—―]/;
-
-const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /**
- * Products the reply's claims name that no tool this turn, no card and no
- * earlier offer backs. Lenient on purpose: a claim passes when its main words
- * appear in any grounding text (titles are matched loosely across languages by
- * the tool's own summary keys).
+ * Products are verified by KEY, never by name (eval 2026-11-16: the model names
+ * English catalogue titles in Hebrew, "טרנץ' כותנה דוחה מים", and name matching
+ * failed 22 of 66 correct turns). A claim or a card citing PRODUCT_n must point
+ * at a product this turn's tools returned; a claim with no key is not a fact to
+ * verify on its own (its price is still checked against the grounding).
  */
-export function unknownProducts(claims: Claim[], grounding: string): string[] {
-  const g = norm(grounding);
-  return claims
-    .filter((c) => c.kind === "product" && c.text)
-    .filter((c) => {
-      if (/PRODUCT_\d+/i.test(c.text) && g.includes(norm(c.text.match(/PRODUCT_\d+/i)![0]))) return false;
-      const words = norm(c.text).split(" ").filter((w) => w.length >= 3 && !/^\d+$/.test(w));
-      if (!words.length) return false;
-      const hit = words.filter((w) => g.includes(w)).length;
-      return hit / words.length < 0.5;
-    })
-    .map((c) => c.text);
+export function unknownProductKeys(claims: Claim[], cards: string[], candidateCount: number): string[] {
+  const keys = [
+    ...claims.filter((c) => c.kind === "product").flatMap((c) => String(c.text ?? "").match(/PRODUCT_\d+/gi) ?? []),
+    ...cards.flatMap((k) => String(k ?? "").match(/PRODUCT_\d+/gi) ?? []),
+  ];
+  return [...new Set(keys.map((k) => k.toUpperCase()))].filter((k) => {
+    const n = Number(k.slice("PRODUCT_".length));
+    return !(n >= 1 && n <= candidateCount);
+  });
 }
 
 export interface Gate3Input {
   reply: string;
   claims: Claim[];
+  cards: string[];
+  /** Products this turn's tools returned (keys PRODUCT_1..N). */
+  candidateCount: number;
   tools: ToolRunRecord[];
   /** Everything a price or product may come from: tool results, state, knowledge, the conversation. */
   grounding: string;
@@ -104,7 +102,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   const honesty = validateActionHonesty(reply, log as any, { hasBackgroundJob: i.approvalPending });
   if (!honesty.ok) problems.push({ kind: "unsupported_action", claims: honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u)) });
 
-  const unknown = unknownProducts(i.claims, i.grounding);
+  const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
 
   const style = checkReplyStyle(reply, {
@@ -124,7 +122,6 @@ export function gate3(i: Gate3Input): Gate3Verdict {
     .map((v) => v.kind)
     // Prices are the claims check above, with the same grounding.
     .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price");
-  if (DASH.test(reply)) style.push("dash" as any);
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
   return { ok: problems.length === 0, problems };
@@ -136,7 +133,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
   for (const p of problems) {
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
     if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn (${p.claims.join("; ")}). Say only what really happened; offer a person if needed.`);
-    if (p.kind === "unknown_product") lines.push(`- These products are not in this turn's results or what we showed: ${p.names.join("; ")}. Name only products a tool returned.`);
+    if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {
       const c = new Set(p.codes);
       if (c.has("gendered_address") || c.has("slash_form")) lines.push(locale === "he" ? "- Address the customer neutrally (לך / אפשר + infinitive), no gendered verbs and no slash forms." : "- Address the customer neutrally.");
@@ -154,4 +151,22 @@ export function safeFallback(locale: "he" | "en"): string {
   return locale === "he"
     ? "רגע, בודקים את זה עם הצוות ונחזור אליך כאן בהקדם."
     : "One moment, I'm checking this with the team and we'll get back to you here shortly.";
+}
+
+/**
+ * The fallback for a product turn whose reply failed twice: the products this
+ * turn's tools returned, with their store prices, never a handoff (a product
+ * question is ours to answer; eval 2026-11-16 handed 30 of them to a person).
+ */
+export function groundedProductFallback(
+  candidates: Array<{ title: string; price?: number | null; currency?: string | null; inventoryState?: string; priceOnSite?: boolean }>,
+  locale: "he" | "en",
+  cards: boolean,
+): string | null {
+  const shown = candidates.filter((c) => c?.title && c.inventoryState !== "out_of_stock").slice(0, 3);
+  if (!shown.length) return null;
+  if (cards) return locale === "he" ? "הנה מה שיש לנו שמתאים, אפשר לבחור מהכרטיסים." : "Here is what we have that fits, you can pick from the cards.";
+  const cur = (c: string | null | undefined) => (c === "ILS" || !c ? "₪" : `${c} `);
+  const line = (c: (typeof shown)[number]) => (c.price != null && !c.priceOnSite ? `${c.title}, ${cur(c.currency)}${c.price}` : c.title);
+  return (locale === "he" ? "הנה מה שיש לנו שמתאים:\n" : "Here is what we have that fits:\n") + shown.map((c) => `• ${line(c)}`).join("\n");
 }

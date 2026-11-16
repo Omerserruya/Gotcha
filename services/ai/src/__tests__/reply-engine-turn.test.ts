@@ -185,6 +185,49 @@ describe("one v2 turn, live", () => {
     expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
   });
 
+  it("Gate 3 fails twice on a PRODUCT turn: the turn's own products, never a handoff", async () => {
+    h.responses.push(
+      { toolCalls: [tc("p1", "woocommerce.list_products", { query: "tote" })] },
+      { toolCalls: [respond("p2", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("p3", { reply: "בטח, ₪150 בלבד." })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(r.escalation).toBeNull();
+    expect(r.reply).toMatch(/כרטיסים/);
+    expect(h.staged).toEqual([{ products: [{ productId: "101", variantId: undefined }] }]);
+  });
+
+  it("a Hebrew name for an English title passes Gate 3 (eval 2026-11-16)", async () => {
+    h.responses.push(
+      { toolCalls: [tc("q1", "woocommerce.list_products", { query: "tote" })] },
+      { toolCalls: [respond("q2", { reply: "יש תיק בד קנבס ב‑₪79, מתאים לך?", claims: [{ kind: "product", text: "תיק בד קנבס", source: "q1" }, { kind: "price", text: "₪79", source: "q1" }] })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("none");
+    expect(r.escalation).toBeNull();
+  });
+
+  it("an opened playbook is inlined on later turns, not read again", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const { starterStoreSkills } = await import("../services/starter-skills");
+    const key = starterStoreSkills("woocommerce", "he")[0].key;
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", activeSkill: key, facts: {}, offeredItems: [], pending: [], turnCount: 1 });
+    h.responses.push({ toolCalls: [respond("i1", { reply: "בטח, מה מספר ההזמנה?" })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    (prisma as any).conversationState.findUnique = async () => null;
+    const turnPart = h.calls[0].messages.find((m: any, i: number) => i > 0 && m.role === "system")?.content ?? "";
+    expect(turnPart).toMatch(/Playbook in use/);
+    expect(turnPart).toMatch(/# Playbook:/);
+  });
+
+  it("the role skill is a line in the prefix, never a readable playbook in the list", async () => {
+    h.responses.push({ toolCalls: [respond("j1", { reply: "בטח." })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    expect(h.calls[0].messages[0].content).toMatch(/Your job:/);
+    expect(h.calls[0].messages[0].content).not.toMatch(/- role_/);
+  });
+
   it("Gate 3: a rewrite that passes is sent", async () => {
     h.responses.push(
       { toolCalls: [respond("r1", { reply: "התיק עולה ₪120." })] },

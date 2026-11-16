@@ -28,7 +28,7 @@ You are a member of this business's team, answering customers in a chat. Think l
 ## Every turn
 - Read the conversation, the state and the knowledge below. Decide what the customer needs now.
 - If a tool can answer or do it, call the tool (several in parallel when they are independent). Never guess a price, stock, order status, a product's attributes or a store policy you could check.
-- A playbook in "Skills" fits the situation? Call read_skill with its name once, then follow it.
+- A playbook in "Skills" fits and is not already open below? Call read_skill IN THE SAME ROUND as the tools you need (parallel calls), never alone in a round of its own. Most turns need no playbook.
 - Finish EVERY turn by calling respond. Its reply is exactly what the customer receives.
 
 ## Truth (never broken)
@@ -54,12 +54,12 @@ Set respond.handoff (a short reason) when the customer asks for a person, is ups
 ## respond
 - reply: the message to the customer.
 - state_update: what changed this turn (stage, intent, facts the customer stated or a tool confirmed, the open items). Keep it short.
-- claims: every price, product, store fact and action your reply states, each with the tool call (or "knowledge" / "state") that backs it. A claim you cannot back must not be in the reply.`;
+- claims: every price, product, store fact and action your reply states, each with the tool call (or "knowledge" / "state") that backs it. A product claim names the product by its key (PRODUCT_3), never by a translated name. A claim you cannot back must not be in the reply.`;
 
 const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 export interface PrefixInput {
-  agent: { name: string; role: string; persona?: any; goal?: string | null; successCriteria?: string | null; salesContext?: any; escalationMessage?: string | null };
+  agent: { name: string; role: string; roleMission?: string | null; persona?: any; goal?: string | null; successCriteria?: string | null; salesContext?: any; escalationMessage?: string | null };
   company: CompanyContext | null;
   locale: "he" | "en";
   skills: EngineSkill[];
@@ -74,6 +74,7 @@ export function buildStablePrefix(p: PrefixInput): string {
   const who: string[] = ["# You"];
   const gender = p.agent.persona?.gender;
   who.push(`Name: ${clip(p.agent.name, 60)}. Role: ${clip(p.agent.role, 40)}.${gender === "female" ? " You speak of yourself in the feminine." : gender === "male" ? " You speak of yourself in the masculine." : ""}`);
+  if (p.agent.roleMission) who.push(`Your job: ${clip(p.agent.roleMission, 400)}`);
   if (p.agent.goal) who.push(`Goal: ${clip(p.agent.goal, 400)}`);
   if (p.agent.successCriteria) who.push(`You succeed when: ${clip(p.agent.successCriteria, 300)}`);
   if (p.agent.salesContext && typeof p.agent.salesContext === "object" && (p.agent.salesContext as any).whatWeSell) {
@@ -92,7 +93,8 @@ export function buildStablePrefix(p: PrefixInput): string {
   biz.push(`Channel: ${p.channel}${p.cardsChannel ? " (shows product cards)" : " (text only, no cards)"}.`);
   parts.push(biz.join("\n"));
 
-  parts.push(`# Skills (call read_skill with a name to open its playbook)\n${renderSkillList(p.skills)}`);
+  const readable = p.skills.filter((s) => s.source !== "role");
+  if (readable.length) parts.push(`# Skills (call read_skill with a name to open its playbook)\n${renderSkillList(readable)}`);
   return parts.join("\n\n");
 }
 
@@ -104,6 +106,8 @@ export interface TurnPartInput {
   closedHours: string | null;
   pendingApprovals: string[];
   customer: string | null;
+  /** The playbook already opened in this conversation (kept in state): never read twice. */
+  activeSkill?: string | null;
   nowIso: string;
 }
 
@@ -112,6 +116,7 @@ export function buildTurnPart(t: TurnPartInput): string {
   if (t.customer) parts.push(`## Customer\n${t.customer}`);
   parts.push(`## State\n${t.stateText}`);
   if (t.summary) parts.push(`## Earlier in this conversation (summary)\n${t.summary}`);
+  if (t.activeSkill) parts.push(`## Playbook in use (already open; read_skill only to switch to another)\n${t.activeSkill}`);
   if (t.pendingApprovals.length) parts.push(`## Waiting for a person's approval\n${t.pendingApprovals.map((a) => `- ${a}`).join("\n")}`);
   if (t.closedHours) parts.push(`## Hours\n${t.closedHours}`);
   if (t.page) parts.push(`## Where the customer is on the site\n${t.page}`);

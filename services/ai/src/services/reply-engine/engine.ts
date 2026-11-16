@@ -28,7 +28,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState } from "./st
 import { loadEngineSkills } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -144,7 +144,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60),
     prisma.contact.findFirst({
       where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
-      select: { id: true, email: true, phone: true, name: true } as any,
+      select: { id: true, email: true, phone: true },
     }).catch(() => null) as Promise<any>,
     getCompanyContext(opts.tenantId),
     prepareShopifyTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null),
@@ -288,7 +288,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // ── Prompt ──
   const prefix = buildStablePrefix({
-    agent: { name: config.name, role: config.role, persona: (config as any).persona, goal: (config as any).goal, successCriteria: (config as any).successCriteria, salesContext: (config as any).salesContext, escalationMessage: config.escalationMessage },
+    agent: { name: config.name, role: config.role, roleMission: skills.find((k) => k.source === "role")?.whenToUse ?? null, persona: (config as any).persona, goal: (config as any).goal, successCriteria: (config as any).successCriteria, salesContext: (config as any).salesContext, escalationMessage: config.escalationMessage },
     company,
     locale,
     skills,
@@ -301,7 +301,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   const windowed = chat.slice(-cfg.windowMessages);
   const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true }) || null;
-  const customerLine = contactRow?.name ? `Name: ${String(contactRow.name).slice(0, 60)}` : null;
+  const customerName = String((conversation as any).customerName ?? "").trim();
+  const customerLine = customerName ? `Name: ${customerName.slice(0, 60)}` : null;
   const turnPart = buildTurnPart({
     stateText: renderState(state),
     summary: chat.length > windowed.length ? state.summary : null,
@@ -310,6 +311,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     closedHours: closedHoursText(opts.closedHours, locale),
     pendingApprovals: (pendingApprovals as any[]).map((a) => `${a.tool}${a.summary ? `: ${String(a.summary).slice(0, 120)}` : ""}`),
     customer: customerLine,
+    activeSkill: (() => {
+      const k = skills.find((x) => x.name === state.activeSkill && x.source !== "role");
+      return k ? k.render() : null;
+    })(),
     nowIso: new Date().toISOString().slice(0, 16),
   });
   // Stable prefix first (cached), then the history, then this turn's facts right before the latest message.
@@ -387,6 +392,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const g3Input = (o: ModelTurnOutput) => ({
     reply: resolveKeysInText(o.reply, candidates),
     claims: o.claims,
+    cards: o.cards ?? [],
+    candidateCount: candidates.length,
     tools: turnTools.records,
     grounding,
     locale,
@@ -420,7 +427,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     }
     if (!output) {
       trace.gate3 = { ...first, rewrite: "fallback" };
-      output = { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+      // A product turn is answered from what the tools returned, never handed to a person.
+      const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
+      output = grounded
+        ? { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) }
+        : { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
     }
   } else {
     trace.gate3 = { ...verdict, rewrite: "none" };

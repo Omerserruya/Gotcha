@@ -5,12 +5,14 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { parseRespond, resolveKeysInText, conversationLocale } from "../services/reply-engine/engine";
 import { mergeState, emptyState, renderState } from "../services/reply-engine/state";
-import { gate3, unknownProducts, correctionNote, safeFallback } from "../services/reply-engine/gates";
+import { gate3, unknownProductKeys, correctionNote, safeFallback, groundedProductFallback } from "../services/reply-engine/gates";
 import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
 import { replyEngineMode, engineConfig } from "../services/reply-engine/flags";
 
 const baseG3 = {
   claims: [],
+  cards: [] as string[],
+  candidateCount: 0,
   tools: [],
   grounding: "",
   locale: "he" as const,
@@ -99,9 +101,9 @@ describe("Gate 3", () => {
     expect(v.ok).toBe(false);
     expect(v.problems.some((p) => p.kind === "ungrounded_price")).toBe(true);
   });
-  it("fails an em dash", () => {
-    const v = gate3({ ...baseG3, reply: "יש במלאי — רוצה לראות?", grounding: "" });
-    expect(v.problems.find((p) => p.kind === "style")).toMatchObject({ codes: expect.arrayContaining(["dash"]) });
+  it("an em dash is not a rewrite reason (humanizeReply fixes it before send)", () => {
+    const v = gate3({ ...baseG3, reply: "יש במלאי \u2014 מתאים לך?", grounding: "" });
+    expect(v.problems.filter((p) => p.kind === "style")).toEqual([]);
   });
   it("fails a gendered address to the customer", () => {
     const v = gate3({ ...baseG3, reply: "את רוצה שאבדוק?", grounding: "" });
@@ -110,14 +112,28 @@ describe("Gate 3", () => {
   it("fails an empty reply", () => {
     expect(gate3({ ...baseG3, reply: "  " }).ok).toBe(false);
   });
-  it("a product claim must be in the grounding", () => {
-    expect(unknownProducts([{ kind: "product", text: "Silk Scarf" }], "Canvas Tote, Leather Bag")).toEqual(["Silk Scarf"]);
-    expect(unknownProducts([{ kind: "product", text: "Canvas Tote" }], "canvas tote ₪79")).toEqual([]);
+  it("products are checked by KEY, never by name (eval 2026-11-16: Hebrew names for English titles)", () => {
+    expect(unknownProductKeys([{ kind: "product", text: "PRODUCT_4" }], [], 3)).toEqual(["PRODUCT_4"]);
+    expect(unknownProductKeys([{ kind: "product", text: "PRODUCT_2" }], ["PRODUCT_3"], 3)).toEqual([]);
+    expect(unknownProductKeys([], ["PRODUCT_9"], 3)).toEqual(["PRODUCT_9"]);
+    // A translated name is not a fact to verify on its own.
+    expect(unknownProductKeys([{ kind: "product", text: "טרנץ' כותנה דוחה מים" }], [], 2)).toEqual([]);
+    const v = gate3({ ...baseG3, reply: "יש טרנץ' כותנה דוחה מים, מתאים לך?", claims: [{ kind: "product", text: "טרנץ' כותנה דוחה מים" }], candidateCount: 2 });
+    expect(v.ok).toBe(true);
+  });
+  it("the product fallback is the turn's own products with store prices, in stock only", () => {
+    const c = [{ title: "Canvas Tote", price: 79, currency: "ILS", inventoryState: "in_stock" }, { title: "Old Bag", price: 50, inventoryState: "out_of_stock" }];
+    const text = groundedProductFallback(c, "he", false)!;
+    expect(text).toContain("Canvas Tote, ₪79");
+    expect(text).not.toContain("Old Bag");
+    expect(groundedProductFallback(c, "he", true)).toMatch(/כרטיסים/);
+    expect(groundedProductFallback([], "he", false)).toBeNull();
+    expect(gate3({ ...baseG3, reply: groundedProductFallback(c, "he", true)!, grounding: "" }).ok).toBe(true);
   });
   it("the correction names each problem; the fallback is neutral and dashless", () => {
-    const note = correctionNote([{ kind: "ungrounded_price", prices: ["120"] }, { kind: "style", codes: ["dash"] }], "he");
+    const note = correctionNote([{ kind: "ungrounded_price", prices: ["120"] }, { kind: "unknown_product", names: ["PRODUCT_7"] }], "he");
     expect(note).toMatch(/120/);
-    expect(note).toMatch(/dash/);
+    expect(note).toMatch(/PRODUCT_7/);
     expect(safeFallback("he")).not.toMatch(/[–—]/);
     expect(gate3({ ...baseG3, reply: safeFallback("he") }).problems.filter((p) => p.kind === "style")).toEqual([]);
   });

@@ -51,7 +51,7 @@ export const RESPOND_TOOL = {
             additionalProperties: false,
             properties: {
               kind: { type: "string", enum: ["price", "product", "action", "fact"] },
-              text: { type: "string" },
+              text: { type: "string", description: "For a product: its key, e.g. PRODUCT_2 (never a translated name). Otherwise a few words, e.g. the price as written." },
               source: { type: "string", description: "tool call id or tool name, or knowledge, or state" },
             },
             required: ["kind", "text", "source"],
