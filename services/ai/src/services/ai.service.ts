@@ -583,6 +583,30 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
   };
 }
 
+/**
+ * Several texts in ONE embeddings call (catalogue semantic search, 2026-11-16).
+ * Same model and usage tracking as generateEmbedding; order is preserved.
+ */
+export async function generateEmbeddings(params: { tenantId: string; inputs: string[]; feature?: string }): Promise<number[][]> {
+  if (!params.inputs.length) return [];
+  const client = getClient();
+  const model = defaultEmbeddingModel;
+  const response = await client.embeddings.create({
+    model,
+    input: params.inputs.map((t) => t.replace(/\n/g, " ").trim() || "-"),
+  });
+  trackAIUsage({
+    tenantId: params.tenantId,
+    feature: params.feature ?? "embedding",
+    model,
+    promptTokens: response.usage?.prompt_tokens ?? 0,
+    completionTokens: 0,
+    totalTokens: response.usage?.total_tokens ?? 0,
+    metadata: { count: params.inputs.length },
+  }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));
+  return [...response.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
+}
+
 // ─── Streaming variant ──────────────────────────────────────
 //
 // Used by the System Copilot (Command Center) so tokens reach the operator's

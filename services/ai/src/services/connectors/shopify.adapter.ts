@@ -57,6 +57,7 @@ import {
 import { quoteExchange, verifyExchange } from "./shopify-exchange";
 import { getShop } from "./shopify-gql-shop";
 import { escapeSearchValue } from "./shopify-graphql";
+import { semanticProductSearch } from "../catalog-semantic.service";
 import {
   getOrderById,
   getOrderByName,
@@ -996,7 +997,7 @@ const ShopifyAdapter: ProviderAdapter = {
     };
   },
 
-  async execute({ toolName, args, credentials, config }) {
+  async execute({ toolName, args, credentials, config, ctx: callCtx }: any) {
     const token = credentials.accessToken;
     const shop = config.shopDomain || credentials.shopDomain;
     if (!token) throw new Error("no_access_token");
@@ -1619,7 +1620,21 @@ const ShopifyAdapter: ProviderAdapter = {
           sort: q ? "RELEVANCE" : null,
         });
         const narrowed = narrowProducts((data?.products?.nodes || []).map(mapGraphQLProduct), bounds, inStockOnly);
-        return sortProducts(filterByOption(narrowed, option), args.sort, inStockOnly).slice(0, limit);
+        const found = sortProducts(filterByOption(narrowed, option), args.sort, inStockOnly).slice(0, limit);
+        // By meaning, when Shopify's own search found nothing (2026-11-16,
+        // catalog-semantic.service): "a gift for mom", a Hebrew ask on English
+        // titles, a synonym. The store's active catalogue (up to 250) is
+        // ranked by embedding; the same price, stock and option narrowing then
+        // applies, and each hit is marked "related" so it is never offered as
+        // the exact item.
+        if (found.length || !q || !callCtx?.tenantId || args._semantic) return found;
+        const all = await activeCatalog(ctx, shop).catch(() => null);
+        if (!all?.length) return found;
+        const hits = await semanticProductSearch({ tenantId: callCtx.tenantId, storeKey: `shopify:${shop}`, products: all, query: q, limit: Math.min(limit, 5) });
+        const related = sortProducts(filterByOption(narrowProducts(hits.map((h) => h.product), bounds, inStockOnly), option), args.sort, inStockOnly)
+          .map((p: any) => ({ ...p, matched_in: "related" }));
+        console.log(`[shopify-search] semantic fallback query=${JSON.stringify(q.slice(0, 60))} catalogue=${all.length} results=${related.length} top=${hits[0]?.score?.toFixed(3) ?? "-"}`);
+        return related.length ? related : found;
       }
       case "complementary_products": {
         const anchorId = String(args.product_id || "").trim();
@@ -3622,6 +3637,32 @@ const PRODUCT_SEARCH_QUERY = `
       nodes { ${PRODUCT_NODE_FIELDS} }
     }
   }`;
+
+/** The active catalogue in pages of 50, for search by meaning (catalog-semantic.service). */
+const PRODUCT_CATALOG_QUERY = `
+  query ProductCatalog($n: Int!, $after: String) {
+    products(first: $n, after: $after, query: "status:active") {
+      nodes { ${PRODUCT_NODE_FIELDS} }
+      pageInfo { hasNextPage endCursor }
+    }
+  }`;
+
+const activeCatalogCache = new Map<string, { at: number; list: any[] | null }>();
+/** Up to 250 active products, cached 10 minutes per shop. Null when the store has more (too big to rank in a turn). */
+async function activeCatalog(ctx: any, shop: string): Promise<any[] | null> {
+  const hit = activeCatalogCache.get(shop);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+  const out: any[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const data: any = await shopifyGraphQL(ctx, PRODUCT_CATALOG_QUERY, { n: 50, after });
+    out.push(...(data?.products?.nodes || []).map(mapGraphQLProduct));
+    if (!data?.products?.pageInfo?.hasNextPage) { activeCatalogCache.set(shop, { at: Date.now(), list: out }); return out; }
+    after = data.products.pageInfo.endCursor;
+  }
+  activeCatalogCache.set(shop, { at: Date.now(), list: null });
+  return null;
+}
 
 /**
  * The anchor product, plus the two things that can name its complements: the

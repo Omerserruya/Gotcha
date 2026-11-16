@@ -25,6 +25,7 @@ export { recentlyListedWooProduct } from "./woo-listed-products";
 export { orderPhoneSearchTerms };
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { SHIPMENT_TRACKING_NAMESPACE, recordShipmentTracking } from "./woo-shipment-tracking";
+import { semanticProductSearch } from "../catalog-semantic.service";
 
 const TOOLS: ToolDefinition[] = [
   {
@@ -1240,6 +1241,29 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/customers?${params}`);
       }
       case "list_products": {
+        // By meaning, when the store's own search found nothing (2026-11-16,
+        // catalog-semantic.service): the whole search below runs first, with
+        // every retry it has; only an empty answer reaches the catalogue's
+        // embeddings. Internal callers (ids, a category, a kind) are left as
+        // they are. The flag stops the inner call from wrapping again.
+        if (!args._semantic && ctx?.tenantId && !args.include && !args.category && !args.kind && String(args.customer_query ?? args.query ?? "").trim()) {
+          const plain: any = await WooCommerceAdapter.execute({ toolName, args: { ...args, _semantic: true }, credentials, config, ctx } as any);
+          if (!Array.isArray(plain) || plain.length) return plain;
+          const all = await wholeCatalog(auth, base, lang).catch(() => null);
+          if (!all?.length) return plain;
+          const minP = Number(args.price_min), maxP = Number(args.price_max);
+          const shown = all.filter((p: any) =>
+            p?.catalog_visibility !== "hidden" && (p?.status ?? "publish") === "publish" && wooProductAllowed(storeUrl, p) &&
+            (!(minP > 0) || Number(p?.price) >= minP) && (!(maxP > 0) || Number(p?.price) <= maxP));
+          const per = Math.min(10, Number(args.per_page ?? 10));
+          const q = String(args.customer_query || args.query);
+          const hits = await semanticProductSearch({ tenantId: ctx.tenantId, storeKey: storeUrl, products: shown, query: q, limit: Math.min(per, 5) });
+          const inStock = (p: any) => p?.stock_status === "instock" || p?.stock_status === "onbackorder";
+          const out = (args.in_stock === true && hits.some((h) => inStock(h.product)) ? hits.filter((h) => inStock(h.product)) : hits)
+            .map((h) => ({ ...h.product, matched_in: "related" }));
+          console.log(`[woo-search] semantic fallback query=${JSON.stringify(q.slice(0, 60))} catalogue=${shown.length} results=${out.length} top=${hits[0]?.score?.toFixed(3) ?? "-"}`);
+          return out.length ? out : plain;
+        }
         // "In stock only" is often the model's own addition: an empty in-stock
         // search is searched again without it, so a sold-out product is said to
         // be sold out (each product carries stock_status), never "not found".
