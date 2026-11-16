@@ -415,7 +415,23 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     else messages.push({ role: "system", content: correctionNote(verdict.problems, locale) });
     const first = verdict;
     try {
-      const r = await call({ type: "function", function: { name: "respond" } });
+      const forceRespond = { type: "function", function: { name: "respond" } };
+      // An unread product gets ONE tool round to read it before the rewrite.
+      const mayRead = first.problems.some((p) => p.kind === "unread_product");
+      let r = await call(mayRead ? "required" : forceRespond);
+      if (mayRead) {
+        const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
+        const work = calls.filter((c) => c.function?.name !== "respond");
+        if (work.length) {
+          messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
+          await runToolRound(env, work);
+          for (const c of calls) {
+            const rec = turnTools.records.find((x) => x.callId === c.id);
+            messages.push({ role: "tool", tool_call_id: c.id, content: rec?.content ?? "Not sent: read the results first." });
+          }
+          r = await call(forceRespond);
+        }
+      }
       const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
       const second = rc ? parseRespond(rc.function.arguments) : null;
       const v2 = second ? gate3(g3Input(second)) : first;
@@ -440,7 +456,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const final: ModelTurnOutput = output ?? { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
 
   // ── Send shape ──
-  const reply = humanizeReply(resolveKeysInText(final.reply, candidates)) ?? "";
+  // A semicolon reads as a document; legacy banned it (eval I05). Fixed, not rewritten.
+  const reply = (humanizeReply(resolveKeysInText(final.reply, candidates)) ?? "").replace(/\s*;\s*/g, ", ");
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
   const cardKeys = (final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length);

@@ -5,7 +5,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { parseRespond, resolveKeysInText, conversationLocale } from "../services/reply-engine/engine";
 import { mergeState, emptyState, renderState } from "../services/reply-engine/state";
-import { gate3, unknownProductKeys, correctionNote, safeFallback, groundedProductFallback } from "../services/reply-engine/gates";
+import { gate3, unknownProductKeys, correctionNote, safeFallback, groundedProductFallback, unreadProduct } from "../services/reply-engine/gates";
 import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
 import { replyEngineMode, engineConfig } from "../services/reply-engine/flags";
 
@@ -126,7 +126,7 @@ describe("Gate 3", () => {
     const text = groundedProductFallback(c, "he", false)!;
     expect(text).toContain("Canvas Tote, ₪79");
     expect(text).not.toContain("Old Bag");
-    expect(groundedProductFallback(c, "he", true)).toMatch(/כרטיסים/);
+    expect(groundedProductFallback(c, "he", true)).toBe("הנה מה שיש לנו שמתאים.");
     expect(groundedProductFallback([], "he", false)).toBeNull();
     expect(gate3({ ...baseG3, reply: groundedProductFallback(c, "he", true)!, grounding: "" }).ok).toBe(true);
   });
@@ -136,6 +136,34 @@ describe("Gate 3", () => {
     expect(note).toMatch(/PRODUCT_7/);
     expect(safeFallback("he")).not.toMatch(/[–—]/);
     expect(gate3({ ...baseG3, reply: safeFallback("he") }).problems.filter((p) => p.kind === "style")).toEqual([]);
+  });
+});
+
+describe("legacy phrasing rules, ported (eval 2026-11-16)", () => {
+  const codes = (reply: string) => (gate3({ ...baseG3, reply, grounding: "" }).problems.find((p) => p.kind === "style") as any)?.codes ?? [];
+  it("search narration fails; an honest not-found does not", () => {
+    expect(codes("מצאתי ג׳ינס כחול, מתאים לך?")).toContain("found_narration");
+    expect(codes("לא מצאתי את זה בשם הזה, אפשר לנסות לפי סוג?")).not.toContain("found_narration");
+  });
+  it("card narration fails", () => {
+    expect(codes("הכרטיס שלו מופיע כאן, מתאים לך?").length).toBeGreaterThan(0);
+  });
+  it("\"שים לב\" and \"מעדיף\" fail", () => {
+    expect(codes("שים לב שזה במבצע")).toContain("imperative_notice");
+    expect(codes("מה מעדיף, שחור או אפור?")).toContain("gendered_prefers");
+  });
+});
+
+describe("an attribute question reads the product first (eval A08: \"הסוודר מרינו מגרד?\")", () => {
+  const offered = ["woocommerce.get_product", "respond"];
+  it("\"no info\" without reading the product fails", () => {
+    expect(unreadProduct("אין לי כאן מידע על זה, אפשר לבדוק מול הצוות", "הסוודר מרינו מגרד?", [], offered)).toBe(true);
+  });
+  it("after a read, or with no product tool, or on a non-attribute question, it passes", () => {
+    const read = [{ callId: "c", tool: "woocommerce.get_product", args: {}, decision: "allow" as const, content: "", ms: 1 }];
+    expect(unreadProduct("אין לי כאן מידע על זה", "הסוודר מרינו מגרד?", read, offered)).toBe(false);
+    expect(unreadProduct("אין לי כאן מידע על זה", "הסוודר מרינו מגרד?", [], ["respond"])).toBe(false);
+    expect(unreadProduct("אין לי כאן מידע על זה", "מתי אתם פתוחים?", [], offered)).toBe(false);
   });
 });
 

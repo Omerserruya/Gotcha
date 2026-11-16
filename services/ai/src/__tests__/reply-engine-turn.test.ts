@@ -105,6 +105,7 @@ vi.mock("../services/tool-surface-adapters", () => ({
   buildAdapterToolSurface: async () => [
     { type: "function", function: { name: "woocommerce.list_products", description: "search", parameters: { type: "object", properties: { query: { type: "string" } } } } },
     { type: "function", function: { name: "woocommerce.create_coupon", description: "coupon", parameters: { type: "object", properties: {} } } },
+    { type: "function", function: { name: "woocommerce.get_product", description: "one product", parameters: { type: "object", properties: { product_id: { type: "string" } } } } },
     { type: "function", function: { name: "woocommerce.delete_everything", description: "denied", parameters: { type: "object", properties: {} } } },
   ],
 }));
@@ -194,7 +195,7 @@ describe("one v2 turn, live", () => {
     const r = await runReplyEngineTurn(opts, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.escalation).toBeNull();
-    expect(r.reply).toMatch(/כרטיסים/);
+    expect(r.reply).toBe("הנה מה שיש לנו שמתאים.");
     expect(h.staged).toEqual([{ products: [{ productId: "101", variantId: undefined }] }]);
   });
 
@@ -226,6 +227,33 @@ describe("one v2 turn, live", () => {
     await runReplyEngineTurn(opts, "autonomous");
     expect(h.calls[0].messages[0].content).toMatch(/Your job:/);
     expect(h.calls[0].messages[0].content).not.toMatch(/- role_/);
+  });
+
+  it("A08: \"no info\" without reading the product -> it reads the product, then answers", async () => {
+    const q = { ...opts, incomingMessage: "הסוודר מרינו מגרד?" };
+    h.responses.push(
+      { toolCalls: [respond("a1", { reply: "אין לי כאן מידע על זה, אפשר לבדוק מול הצוות." })] },
+      { toolCalls: [tc("a2", "woocommerce.get_product", { product_id: "55" })] },
+      { toolCalls: [respond("a3", { reply: "הוא בכלל מכותנה אורגנית 100%, לא מרינו, אז לא מגרד." })] },
+    );
+    const r = await runReplyEngineTurn(q, "autonomous");
+    expect(h.calls[1].toolChoice).toBe("required");
+    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.get_product");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(r.reply).toMatch(/כותנה/);
+  });
+
+  it("a semicolon is fixed before send, not sent", async () => {
+    h.responses.push({ toolCalls: [respond("s1", { reply: "יש במלאי; מתאים לך?" })] });
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.reply).toBe("יש במלאי, מתאים לך?");
+  });
+
+  it("the stable prefix carries the legacy bans for a Hebrew conversation", async () => {
+    h.responses.push({ toolCalls: [respond("b1", { reply: "בטח." })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    expect(h.calls[0].messages[0].content).toMatch(/Never write/);
+    expect(h.calls[0].messages[0].content).toContain("קיבלתי את התקציב");
   });
 
   it("Gate 3: a rewrite that passes is sent", async () => {

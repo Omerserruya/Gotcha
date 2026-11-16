@@ -125,7 +125,9 @@ export type ClaimProblem =
   | { kind: "ungrounded_price"; prices: string[] }
   | { kind: "unsupported_action"; claims: string[] }
   | { kind: "unknown_product"; names: string[] }
-  | { kind: "style"; codes: string[] };
+  | { kind: "style"; codes: string[] }
+  /** An attribute question answered "no info" without reading the product. */
+  | { kind: "unread_product" };
 
 export interface Gate3Verdict {
   ok: boolean;

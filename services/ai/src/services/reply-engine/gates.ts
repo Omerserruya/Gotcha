@@ -39,12 +39,36 @@ export async function gate1(opts: {
 /** Style kinds that are a hard fail in v2 (everything else is advisory, logged only). */
 export const HARD_STYLE: ReadonlySet<StyleViolationKind> = new Set<StyleViolationKind>([
   "gendered_address",
+  "mixed_address",
   "self_gender",
   "slash_form",
   "banned_phrase",
   "self_intro",
   "ungrounded_price",
+  "card_narration",
+  "recap_opener",
+  "echo_opener",
+  "false_absence",
 ] as StyleViolationKind[]);
+
+/** Hebrew phrasings the legacy engine learned to ban that its checker does not name (eval 2026-11-16). */
+const V2_BANS_HE: Array<[string, RegExp]> = [
+  // "מצאתי ..." narrates the search; "לא מצאתי" (honest not-found) stays allowed.
+  ["found_narration", /(?<![\u0590-\u05FF])(?<!לא\s)(?:ו|ש)?מצאתי(?![\u0590-\u05FF])/u],
+  ["imperative_notice", /(?<![\u0590-\u05FF])(?:שים|שימי)\s+לב(?![\u0590-\u05FF])/u],
+  ["gendered_prefers", /(?<![\u0590-\u05FF])(?:מעדיף|מעדיפה)(?![\u0590-\u05FF])/u],
+];
+
+const ATTRIBUTE_ASK = /(?<![\u0590-\u05FF])(?:מגרד|מגרדת|נעים|נעימה|רך|רכה|עבה|דק|דקה|חומר|בד|מאיזה|עשוי|עשויה|כותנה|צמר|מרינו|פשתן|גזרה|גזרת|מידות|מידה|קטן|גדול|לכבס|כביסה|מכונה|ייבוש|מיוצר|תוצרת|איפה מייצרים|שקוף|נמתח|נמתחת|מחמם|חם)(?![\u0590-\u05FF])|\b(?:itch(?:y)?|soft|material|fabric|made of|fit|sizing|runs (?:small|large)|wash|care|origin|made in|warm|stretch)\b/iu;
+const NO_INFO = /אין (?:לי|לנו)(?: כאן)? (?:מידע|פרטים)|לא (?:בטוח|בטוחה|יודע|יודעת|ידוע)|(?:לבדוק|אבדוק|נבדוק|בודקים)(?: את זה)? (?:מול|עם) הצוות|\b(?:I don'?t have (?:that |the )?(?:info|information|details)|not sure|check with the team)\b/iu;
+
+/** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
+export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
+  if (!ATTRIBUTE_ASK.test(incoming ?? "") || !NO_INFO.test(reply ?? "")) return false;
+  const canRead = toolsOffered.some((n) => /get_product|list_products|search_products|variation/i.test(n));
+  const read = tools.some((t) => /product|variation|inventory/i.test(t.tool) && t.decision === "allow");
+  return canRead && !read;
+}
 
 
 /**
@@ -102,6 +126,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   const honesty = validateActionHonesty(reply, log as any, { hasBackgroundJob: i.approvalPending });
   if (!honesty.ok) problems.push({ kind: "unsupported_action", claims: honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u)) });
 
+  if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered)) problems.push({ kind: "unread_product" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
 
@@ -121,7 +146,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   })
     .map((v) => v.kind)
     // Prices are the claims check above, with the same grounding.
-    .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price");
+    .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price") as string[];
+  if (i.locale === "he") for (const [code, re] of V2_BANS_HE) if (re.test(reply)) style.push(code);
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
   return { ok: problems.length === 0, problems };
@@ -133,13 +159,18 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
   for (const p of problems) {
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
     if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn (${p.claims.join("; ")}). Say only what really happened; offer a person if needed.`);
+    if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {
       const c = new Set(p.codes);
       if (c.has("gendered_address") || c.has("slash_form")) lines.push(locale === "he" ? "- Address the customer neutrally (לך / אפשר + infinitive), no gendered verbs and no slash forms." : "- Address the customer neutrally.");
       if (c.has("self_gender")) lines.push("- Speak of yourself in your configured gender, or neutrally.");
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
-      if (c.has("dash")) lines.push("- No em or en dashes; use a comma or a full stop.");
+      if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
+      if (c.has("found_narration")) lines.push("- Do not narrate the search (\"מצאתי\"); just say what there is.");
+      if (c.has("imperative_notice") || c.has("gendered_prefers") || c.has("mixed_address")) lines.push("- No \"שים לב\" or \"מעדיף/ה\": rephrase neutrally.");
+      if (c.has("recap_opener") || c.has("echo_opener")) lines.push("- Do not open by restating what the customer said; answer.");
+      if (c.has("false_absence")) lines.push("- An empty search is not proof the store lacks it: say you did not find it by that name.");
       if (c.has("empty")) lines.push("- The reply was empty: write the message to the customer.");
     }
   }
@@ -165,7 +196,7 @@ export function groundedProductFallback(
 ): string | null {
   const shown = candidates.filter((c) => c?.title && c.inventoryState !== "out_of_stock").slice(0, 3);
   if (!shown.length) return null;
-  if (cards) return locale === "he" ? "הנה מה שיש לנו שמתאים, אפשר לבחור מהכרטיסים." : "Here is what we have that fits, you can pick from the cards.";
+  if (cards) return locale === "he" ? "הנה מה שיש לנו שמתאים." : "Here is what we have that fits.";
   const cur = (c: string | null | undefined) => (c === "ILS" || !c ? "₪" : `${c} `);
   const line = (c: (typeof shown)[number]) => (c.price != null && !c.priceOnSite ? `${c.title}, ${cur(c.currency)}${c.price}` : c.title);
   return (locale === "he" ? "הנה מה שיש לנו שמתאים:\n" : "Here is what we have that fits:\n") + shown.map((c) => `• ${line(c)}`).join("\n");
