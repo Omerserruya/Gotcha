@@ -227,8 +227,19 @@ http {
     set_real_ip_from 192.168.0.0/16;
     real_ip_header CF-Connecting-IP;
 
+    # Our own egress is never rate limited (prod 2026-11-16). frontend-v2's
+    # server-side fetches go out to app.gotcha.co.il and come back through
+    # Cloudflare with CF-Connecting-IP = our egress IP, so every user's SSR
+    # shared ONE limit_req key. A console reload loop filled it and ordinary
+    # page loads (/api/auth/me, setup/state, mfa-gate, a WhatsApp inspect) got
+    # 429. An empty key means the request is not limited. These variables are
+    # not on the envsubst allowlist, so they survive rendering.
+    # Long-term fix: SSR should call the internal gateway, not the public URL.
+    geo $gotcha_self_egress { default 0; 51.84.227.95 1; }
+    map $gotcha_self_egress $api_limit_key { 0 $binary_remote_addr; 1 ""; }
+
     # Rate limiting zone
-    limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+    limit_req_zone $api_limit_key zone=api:10m rate=100r/s;
 
     # Authentik 2025.6+ (and the app's sign-in callback) answer with response
     # headers past nginx's 4k default; behind the proxy that is a 502 ("upstream
@@ -259,7 +270,7 @@ http {
     # Authentik gets its own zone. Login/token endpoints deserve a tighter
     # limit than the general API, and they must not share a bucket with it -
     # a burst of app traffic must never throttle someone's ability to log in.
-    limit_req_zone $binary_remote_addr zone=authentik:10m rate=20r/s;
+    limit_req_zone $api_limit_key zone=authentik:10m rate=20r/s;
 
     # ── Application: app.gotcha.co.il ─────────────────────────
     # The authenticated frontend, the public application API, every OAuth
