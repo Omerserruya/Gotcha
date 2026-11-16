@@ -112,6 +112,28 @@ export function scrubOrderSelectors(toolFunctionName: string, args: Record<strin
   return rest;
 }
 
+/**
+ * The orders came from the number the customer writes from, not the one they
+ * typed (prod replay 6, Smoovee: the order WAS theirs, and the reply called it a
+ * mismatch with the number they gave, opened a team check and repeated it seven
+ * times). The model is told what the lookup used.
+ */
+/** The model passed a phone, email or customer id to "my orders", which the scrub drops. */
+export function droppedOrderSelectors(toolFunctionName: string, args: Record<string, any>): boolean {
+  return toolFunctionName === "woocommerce.list_customer_orders" && ["phone", "email", "customer_id"].some((k) => args?.[k] != null && args[k] !== "");
+}
+
+export function withOwnNumberNote(result: any): any {
+  if (!result || result.ok !== true) return result;
+  const found = Array.isArray(result.result) ? result.result.length : null;
+  return {
+    ...result,
+    note: found
+      ? "These orders are registered on the number the customer is writing from (looked up by it, not by a number they typed). That is their own order: say it is registered on the number they are writing from (\"ההזמנה רשומה על המספר שממנו כותבים אלינו\"). It is not a mismatch; do not ask the team to check it."
+      : "Nothing is registered on the number the customer is writing from. A number they typed is not used to look orders up: ask for the order number.",
+  };
+}
+
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
 
@@ -443,8 +465,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // "My orders" are the ones the channel proves: a phone or an email the customer
       // typed is not proof, and the guard refused every such lookup (prod replay 5).
       // Without them the guard supplies the customer's own; with none, the adapter refuses.
+      const dropped = droppedOrderSelectors(toolFunctionName, effective);
       effective = scrubOrderSelectors(toolFunctionName, effective);
-      return executeAdapterTool({
+      const out: any = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         contactId: contactRow?.id,
@@ -452,6 +475,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         args: effective,
         accessScope: "customer",
       });
+      return dropped ? withOwnNumberNote(out) : out;
     },
   };
 

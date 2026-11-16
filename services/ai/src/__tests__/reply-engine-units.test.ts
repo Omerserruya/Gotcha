@@ -793,3 +793,20 @@ describe("prod replay 6 (2026-11-16)", () => {
     expect(cleanStyle("יש \u2014 במלאי", [])).toBe("יש, במלאי");
   });
 });
+
+describe("prod replay 6 follow-up: the customer's own order on their own number", () => {
+  it("★ orders found by the number they write from are called theirs, never a mismatch", async () => {
+    const { withOwnNumberNote } = await import("../services/reply-engine/engine");
+    const found = withOwnNumberNote({ ok: true, result: [{ id: 1 }] });
+    expect(found.note).toMatch(/registered on the number the customer is writing from/);
+    expect(found.note).toMatch(/not a mismatch/);
+    expect(found.result).toEqual([{ id: 1 }]);
+    expect(withOwnNumberNote({ ok: true, result: [] }).note).toMatch(/ask for the order number/);
+    const { droppedOrderSelectors } = await import("../services/reply-engine/engine");
+    expect(droppedOrderSelectors("woocommerce.list_customer_orders", { phone: "0501234567" })).toBe(true);
+    expect(droppedOrderSelectors("woocommerce.list_customer_orders", { per_page: 5, email: "" })).toBe(false);
+    expect(droppedOrderSelectors("woocommerce.get_order", { phone: "1" })).toBe(false);
+    // A refusal or an error is passed through untouched.
+    expect(withOwnNumberNote({ ok: false, reason: "x" })).toEqual({ ok: false, reason: "x" });
+  });
+});
