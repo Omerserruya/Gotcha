@@ -1,8 +1,8 @@
 # App Store screenshots: one screen per line, "<file name> <path>", in store order.
 # Ids come from the prod org "GOTCHA App Review" (Apple's reviewer account),
-# seeded 2026-11-16: מיכל אברהם's return request (pending refund), נועה לוי.
+# seeded 2026-11-16. No customer screen: every customer page there shows the
+# memory line in English (the system's own writer), wrong for a Hebrew listing.
 1-inbox /he/m/inbox?view=all
 2-conversation /he/m/inbox/cmwj44c5i001qpbfhkn2a3h03
 3-approvals /he/m/approvals
-4-customer /he/m/customers/cmwj44c330002pbfhnfnub5z1
-5-home /he/m/home
+4-home /he/m/home
