@@ -92,6 +92,13 @@ const serverEnvSchema = z.object({
    */
   BILLING_WRITES: z.enum(['on', 'off']).catch('off').default('off'),
 
+  /**
+   * ★★ SEND THE BROWSER'S ADDRESS UPSTREAM (`client-forwarding.ts`). On only
+   * with an internal `API_BASE_URL` (the gateway on the compose network),
+   * which trusts `CF-Connecting-IP` from there. Unset, empty or a typo: off.
+   */
+  API_FORWARD_CLIENT: z.enum(['on', 'off']).catch('off').default('off'),
+
   // --- Authentik OIDC (Authorization Code + PKCE, driven by the BFF) ---
   OIDC_ISSUER: z.url(),
   OIDC_CLIENT_ID: z.string().min(1),

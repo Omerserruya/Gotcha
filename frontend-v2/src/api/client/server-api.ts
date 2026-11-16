@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getLocale } from 'next-intl/server';
 
 import { activeSession } from '@/auth/session-store';
@@ -11,6 +11,7 @@ import { markSupportEnded } from '@/support/support-ended';
 import { supportHeaders } from '@/support/support-headers';
 import { TENANT_HEADER } from '@/tenant/tenant-header';
 
+import { clientForwarding } from './client-forwarding';
 import { HttpClient } from './http-client';
 import { markSessionRejected } from './session-rejected';
 
@@ -57,6 +58,29 @@ export function serverApi(): HttpClient {
  * transform (the audit export); every JSON call goes through `serverApi()`.
  */
 export async function platformHeaders(request?: {
+  readonly route?: string;
+}): Promise<Record<string, string>> {
+  /*
+   * ★★ WHO IS ASKING (`client-forwarding.ts`): the browser's address, so the
+   *   gateway's rate limit is per person, not one bucket for this server.
+   *   Outside a request there is no browser: nothing is sent.
+   */
+  const incoming = await incomingHeaders();
+  return {
+    ...clientForwarding(incoming, serverEnv()),
+    ...(await credentialHeaders(request)),
+  };
+}
+
+async function incomingHeaders(): Promise<Headers | null> {
+  try {
+    return await headers();
+  } catch {
+    return null;
+  }
+}
+
+async function credentialHeaders(request?: {
   readonly route?: string;
 }): Promise<Record<string, string>> {
   const env = serverEnv();

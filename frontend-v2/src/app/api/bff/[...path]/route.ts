@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { CLIENT_FORWARDING_HEADERS, clientForwarding } from '@/api/client/client-forwarding';
 import { assertSameOrigin } from '@/api/client/csrf';
 import { TENANT_HEADER } from '@/tenant/tenant-header';
 import { activeSession } from '@/auth/session-store';
@@ -27,6 +28,9 @@ import { readSupport, SUPPORT_COOKIE } from '@/support/support-cookie';
  */
 
 /** Headers that belong to one hop and must not be relayed. */
+/** Client-address headers: dropped from the browser's, set by `clientForwarding`. */
+const FORWARDING: ReadonlySet<string> = new Set(CLIENT_FORWARDING_HEADERS);
+
 const HOP_BY_HOP = new Set([
   'connection',
   'keep-alive',
@@ -135,8 +139,18 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
 
   const headers = new Headers();
   request.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
+    const name = key.toLowerCase();
+    if (!HOP_BY_HOP.has(name) && !FORWARDING.has(name)) headers.set(key, value);
   });
+  /*
+   * ★★ WHO IS ASKING IS THIS SERVER'S TO SAY, never the browser's
+   *   (`client-forwarding.ts`). Inside the network the gateway trusts
+   *   CF-Connecting-IP, so a value the browser sent and this route relayed
+   *   would choose its own rate-limit bucket.
+   */
+  for (const [name, value] of Object.entries(clientForwarding(request.headers, env))) {
+    headers.set(name, value);
+  }
   if (platformCookie) {
     // Only the platform's own session cookie is relayed - never this app's,
     // and never anything else the browser happens to be carrying.
