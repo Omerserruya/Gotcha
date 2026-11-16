@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { contactLabel } from "../lib/contact-label";
+import { conversationAccountScope } from "@chatcenter/shared/src/lib/channel-account-reattach";
 import {
   prisma,
   authenticate,
@@ -150,11 +151,15 @@ router.post("/initiate-conversation", async (req: Request, res: Response) => {
     }
 
     // Find existing OPEN conversation or create a new one
+    // With two numbers on the channel, the conversation of the number this
+    // message goes out from (prod GOTCHA 2026-11-16); never the other number's.
+    const accountScope = await conversationAccountScope(prisma as any, { tenantId: req.tenantId!, channel: contact.channel, channelAccountId });
     let conversation = await prisma.conversation.findFirst({
       where: {
         tenantId: req.tenantId!,
         customerExternalId: contact.externalId,
         channel: contact.channel,
+        ...accountScope,
         status: "OPEN",
       },
     });

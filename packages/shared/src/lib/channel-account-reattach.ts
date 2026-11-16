@@ -78,3 +78,38 @@ export async function attachConversationAccount(
   });
   return r.count === 1;
 }
+
+/**
+ * Which open conversations a message on `channelAccountId` may land in
+ * (prod GOTCHA 2026-11-16). Two WhatsApp numbers on one tenant shared
+ * conversations: a customer writing to the NEW number landed in the thread of
+ * the OLD one, and the inbox replied from the old number. A conversation is a
+ * (tenant, channel, ACCOUNT, customer) thing whenever the tenant has more than
+ * one account of that channel.
+ *
+ * - No account on the message (old jobs, channels without accounts): {} (as before).
+ * - No OTHER active account of that channel on the tenant: {} (as before, so
+ *   detached rows still match and are re-attached by the caller).
+ * - Another active account exists: only this account's conversations. A
+ *   detached (NULL) row is never guessed into one of several numbers.
+ *
+ * Spread the result into the conversation `where`.
+ */
+export async function conversationAccountScope(
+  db: Pick<Db, "channelAccount">,
+  args: { tenantId: string; channel: string; channelAccountId?: string | null },
+): Promise<{ channelAccountId?: string }> {
+  if (!args.channelAccountId) return {};
+  try {
+    const others = await db.channelAccount.findMany({
+      where: { tenantId: args.tenantId, channel: args.channel, isActive: true, id: { not: args.channelAccountId } },
+      select: { id: true },
+      take: 1,
+    });
+    return others.length > 0 ? { channelAccountId: args.channelAccountId } : {};
+  } catch (err) {
+    // Unreadable accounts: the lookup stays as it was before this rule, never lost.
+    console.warn("[channel-account] scope read failed, unscoped lookup:", (err as Error)?.message);
+    return {};
+  }
+}

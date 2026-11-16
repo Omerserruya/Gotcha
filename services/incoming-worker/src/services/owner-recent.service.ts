@@ -27,6 +27,8 @@ export async function ownerWroteRecently(args: {
   tenantId: string;
   channel: string;
   customerExternalId: string;
+  /** With two numbers on the channel, only the owner's writes on THIS number count. */
+  accountScope?: { channelAccountId?: string };
   now?: Date;
   db?: typeof defaultPrisma;
 }): Promise<boolean> {
@@ -41,7 +43,7 @@ export async function ownerWroteRecently(args: {
       channel: args.channel as any,
       direction: "OUTBOUND",
       createdAt: { gte: since },
-      conversation: { customerExternalId: args.customerExternalId },
+      conversation: { customerExternalId: args.customerExternalId, ...(args.accountScope ?? {}) },
       OR: [
         { origin: "HISTORICAL_IMPORT" },
         { metadata: { path: ["source"], equals: "whatsapp_business_app" } },

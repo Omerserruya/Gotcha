@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
 import { prisma, createWorker, type AutomationEventJob, IncomingMessageJob, IncomingCommentJob, OutboundEchoJob, WebhookTriggerJob, HistoricalImportChunkJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials, metaGraphBaseUrl, suggestBySameName, isInboundExcluded, probeUploadsDir, describeUploadsProbe, classifyMediaFailure, reportOperationalFailure, ERROR_CODES, type MediaFailureReason, type InboundReferral } from "@chatcenter/shared";
 import { safeUploadExtension } from "@chatcenter/shared/src/lib/upload-safety";
-import { attachConversationAccount } from "@chatcenter/shared/src/lib/channel-account-reattach";
+import { attachConversationAccount, conversationAccountScope } from "@chatcenter/shared/src/lib/channel-account-reattach";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 // A subpath, not the package root: this worker's tests mock "@chatcenter/shared" whole.
@@ -433,11 +433,18 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // (assignment, handoff, chatbot flow, escalation clock) and causes the
   // customer to hit whatever the previous session's terminal state was
   // instead of being routed fresh.
+  //
+  // With two numbers of one channel on the tenant, the number is part of the
+  // key: a customer writing to number B gets B's conversation, and the inbox
+  // answers from B (prod GOTCHA 2026-11-16: Matan's new number landed in the
+  // sales number's thread and the reply went out from the sales number).
+  const accountScope = await conversationAccountScope(prisma as any, { tenantId, channel, channelAccountId });
   let conversation = await prisma.conversation.findFirst({
     where: {
       tenantId,
       channel,
       customerExternalId: senderId,
+      ...accountScope,
       status: { not: "CLOSED" },
     },
     orderBy: { createdAt: "desc" },
@@ -511,7 +518,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     // Read only when a conversation is about to be created, so it costs one
     // query per new conversation and nothing per message.
     const { ownerWroteRecently } = await import("../services/owner-recent.service");
-    const ownerOwns = await ownerWroteRecently({ tenantId, channel, customerExternalId: senderId }).catch((err) => {
+    const ownerOwns = await ownerWroteRecently({ tenantId, channel, customerExternalId: senderId, accountScope }).catch((err) => {
       console.warn("[incoming-worker] owner-recent check failed, the conversation starts as usual:", err?.message);
       return false;
     });
@@ -521,6 +528,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       tenantId,
       channel,
       customerExternalId: senderId,
+      accountScope,
       create: {
         tenantId,
         channel,

@@ -65,11 +65,15 @@ export async function processOutboundEcho(job: Job<OutboundEchoJob>): Promise<vo
   // Same lookup rule as the inbound path: a CLOSED conversation stays closed.
   // The owner writing to an old customer from their phone opens a new thread
   // rather than resurrecting one with stale routing and escalation state.
+  // With two numbers on the channel, the echo belongs to the number it was sent from.
+  const { conversationAccountScope } = await import("@chatcenter/shared/src/lib/channel-account-reattach");
+  const accountScope = await conversationAccountScope(prisma as any, { tenantId, channel, channelAccountId });
   let conversation = await prisma.conversation.findFirst({
     where: {
       tenantId,
       channel,
       customerExternalId: echo.customerExternalId,
+      ...accountScope,
       status: { not: "CLOSED" },
     },
     orderBy: { createdAt: "desc" },

@@ -253,6 +253,35 @@ export async function listWhere(tenantId: string, filters: ConversationFilters):
   return where;
 }
 
+/**
+ * Tag the conversation's number when the tenant has two or more active
+ * accounts of that channel (prod GOTCHA 2026-11-16). `multipleOfChannel`
+ * lets the inbox show the tag only when it means something, without a
+ * channels read the agent may not be allowed. Unreadable: no flag, no failure.
+ */
+async function activeAccountCounts(tenantId: string): Promise<Map<string, number>> {
+  try {
+    const rows = await (prisma as any).channelAccount.groupBy({
+      by: ["channel"],
+      where: { tenantId, isActive: true },
+      _count: { _all: true },
+    });
+    return new Map((rows as any[]).map((r) => [String(r.channel), Number(r._count?._all ?? 0)]));
+  } catch (err) {
+    console.warn("[conversation] channel account counts unavailable:", (err as Error)?.message);
+    return new Map();
+  }
+}
+
+export function presentChannelAccount(
+  account: { id: string; channel: unknown; displayName: string | null } | null | undefined,
+  counts: Map<string, number>,
+): { id: string; channel: string; displayName: string | null; multipleOfChannel: boolean } | null {
+  if (!account) return null;
+  const channel = String(account.channel);
+  return { id: account.id, channel, displayName: account.displayName || null, multipleOfChannel: (counts.get(channel) ?? 0) > 1 };
+}
+
 export async function list(tenantId: string, filters: ConversationFilters) {
   const { page = 1, limit = 50, cursor, view, from, to, withTotal = false, userId } = filters;
   if ((from !== undefined && !isWorkspaceDay(from)) || (to !== undefined && !isWorkspaceDay(to)) || (from && to && from > to)) {
@@ -321,6 +350,9 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   const include = {
     assignedAgent: { select: { id: true, name: true, email: true } },
     department: { select: { id: true, name: true } },
+    // Which number the conversation is on, so the inbox can tag it when the
+    // tenant has two of a channel (prod GOTCHA 2026-11-16). No credentials.
+    channelAccount: { select: { id: true, channel: true, displayName: true } },
     _count: { select: { messages: true } },
     /**
      * ★ THE LAST MESSAGE, NOT THE LAST ROW.
@@ -382,7 +414,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Flatten last message info, and the contact behind each row (one batched,
   // read-only lookup for the page - see lib/conversation-contact.ts).
   const rows = keyset ? pageRows : conversations;
-  const [contactMap, unread, waiting, windows] = await Promise.all([
+  const [contactMap, unread, waiting, windows, accountCounts] = await Promise.all([
     contactIdsFor(tenantId, rows as any[]),
     // The VIEWER's read state, one query for the page (lib/unread-state.ts).
     // Decoration: if it fails the inbox still loads, its rows served as read.
@@ -404,6 +436,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       console.warn("[conversations] reply windows unavailable:", (err as Error)?.message);
       return new Map<string, ReplyWindow>();
     }),
+    activeAccountCounts(tenantId),
   ]);
   const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
@@ -411,6 +444,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     const state = unread.get(c.id);
     return {
       ...rest,
+      channelAccount: presentChannelAccount((rest as any).channelAccount, accountCounts),
       contactId: contactIdOf(contactMap, c as any),
       lastMessageDirection: lastMsg?.direction || null,
       lastMessageBody: lastMsg?.body || null,
@@ -506,9 +540,11 @@ export async function getById(tenantId: string, id: string) {
     },
   });
   if (!conversation) return null;
-  const contactMap = await contactIdsFor(tenantId, [conversation as any]);
+  const [contactMap, accountCounts] = await Promise.all([contactIdsFor(tenantId, [conversation as any]), activeAccountCounts(tenantId)]);
+  const account = conversation.channelAccount as any;
   return {
     ...conversation,
+    channelAccount: account ? { ...presentChannelAccount(account, accountCounts)!, externalId: account.externalId } : null,
     // Stored uploads go out as the logged-in media route (2026-10-10).
     ...(Array.isArray(conversation.messages) ? { messages: conversation.messages.map((m) => presentMessageMedia(m)) } : {}),
     contactId: contactIdOf(contactMap, conversation as any),
@@ -1025,13 +1061,12 @@ async function sendAutoGreeting(
     const recipientId = conversation.customerExternalId;
     let channelAccountId: string | null = conversation.channelAccountId;
 
-    // If no channelAccountId on conversation, try to find one for this tenant+channel
+    // No account on the conversation: only the tenant's ONE active account of
+    // the channel. With two numbers, guessing one sends from the wrong number
+    // (prod GOTCHA 2026-11-16), so no greeting goes out.
     if (!channelAccountId) {
-      const fallbackAccount = await prisma.channelAccount.findFirst({
-        where: { tenantId, channel, isActive: true },
-        select: { id: true },
-      });
-      if (fallbackAccount) channelAccountId = fallbackAccount.id;
+      const { singleActiveChannelAccountId } = await import("@chatcenter/shared/src/lib/channel-account-reattach");
+      channelAccountId = await singleActiveChannelAccountId(prisma as any, tenantId, channel);
     }
 
     if (!channelAccountId) return;

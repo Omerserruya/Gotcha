@@ -83,9 +83,12 @@ export async function findOrCreateOpenConversation<T extends { id: string }>(arg
   tenantId: string;
   channel: string;
   customerExternalId: string;
+  /** conversationAccountScope(): with two numbers on the channel, only this number's conversations. */
+  accountScope?: { channelAccountId?: string };
   create: Record<string, unknown>;
 }): Promise<{ conversation: T; created: boolean }> {
-  const lockKey = `conv:${args.tenantId}:${args.channel}:${args.customerExternalId}`;
+  const scope = args.accountScope ?? {};
+  const lockKey = `conv:${args.tenantId}:${args.channel}:${scope.channelAccountId ?? ""}:${args.customerExternalId}`;
   return (prisma as any).$transaction(async (tx: any) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
     const existing = await tx.conversation.findFirst({
@@ -93,6 +96,7 @@ export async function findOrCreateOpenConversation<T extends { id: string }>(arg
         tenantId: args.tenantId,
         channel: args.channel,
         customerExternalId: args.customerExternalId,
+        ...scope,
         status: { not: "CLOSED" },
       },
       orderBy: { createdAt: "desc" },

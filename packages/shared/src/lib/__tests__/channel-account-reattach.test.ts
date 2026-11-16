@@ -5,7 +5,7 @@
  * channel; with none or several nothing changes.
  */
 import { describe, it, expect } from "vitest";
-import { singleActiveChannelAccountId, adoptDetachedConversations, attachConversationAccount } from "../channel-account-reattach";
+import { singleActiveChannelAccountId, adoptDetachedConversations, attachConversationAccount, conversationAccountScope } from "../channel-account-reattach";
 
 function store(accounts: any[], conversations: any[]) {
   const matchAcc = (a: any, w: any) => a.tenantId === w.tenantId && a.channel === w.channel
@@ -103,5 +103,34 @@ describe("attachConversationAccount", () => {
     expect(await attachConversationAccount(s as any, { tenantId: "gotcha", conversationId: "c1", channelAccountId: "x" })).toBe(false);
     expect(await attachConversationAccount(s as any, { tenantId: "gotcha", conversationId: "c2", channelAccountId: "x" })).toBe(false);
     expect(s.conversations.map((c) => c.channelAccountId)).toEqual(["ca_keep", null]);
+  });
+});
+
+describe("conversationAccountScope (prod GOTCHA 2026-11-16: two numbers shared conversations)", () => {
+  const acc = (id: string, o: Record<string, unknown> = {}) => ({ id, tenantId: "t1", channel: "WHATSAPP", isActive: true, connectionStatus: "CONNECTED", ...o });
+  const args = { tenantId: "t1", channel: "WHATSAPP", channelAccountId: "a" };
+
+  it("another active number on the channel -> only this number's conversations", async () => {
+    expect(await conversationAccountScope(store([acc("a"), acc("b")], []) as any, args)).toEqual({ channelAccountId: "a" });
+  });
+  it("this number alone -> unscoped, as before", async () => {
+    expect(await conversationAccountScope(store([acc("a")], []) as any, args)).toEqual({});
+  });
+  it("the other number inactive, or on another tenant or channel -> unscoped", async () => {
+    expect(await conversationAccountScope(store([acc("a"), acc("b", { isActive: false })], []) as any, args)).toEqual({});
+    expect(await conversationAccountScope(store([acc("a"), acc("b", { tenantId: "t2" })], []) as any, args)).toEqual({});
+    expect(await conversationAccountScope(store([acc("a"), acc("b", { channel: "INSTAGRAM" })], []) as any, args)).toEqual({});
+  });
+  it("a PENDING second number already counts (it is active; inbound may reach it)", async () => {
+    expect(await conversationAccountScope(store([acc("a"), acc("b", { connectionStatus: "PENDING" })], []) as any, args)).toEqual({ channelAccountId: "a" });
+  });
+  it("no account on the message -> unscoped, no read", async () => {
+    const db = { channelAccount: { findMany: async () => { throw new Error("must not read"); } } };
+    expect(await conversationAccountScope(db as any, { ...args, channelAccountId: null })).toEqual({});
+  });
+  it("an unreadable accounts table -> unscoped, never a lost message", async () => {
+    const db = { channelAccount: { findMany: async () => { throw new Error("db down"); } } };
+    const warn = console.warn; console.warn = () => {};
+    try { expect(await conversationAccountScope(db as any, args)).toEqual({}); } finally { console.warn = warn; }
   });
 });

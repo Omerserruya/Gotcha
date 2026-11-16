@@ -55,6 +55,7 @@ export {
   singleActiveChannelAccountId,
   adoptDetachedConversations,
   attachConversationAccount,
+  conversationAccountScope,
 } from "./lib/channel-account-reattach";
 
 // Attachment storage. The probe exists because an unwritable uploads volume

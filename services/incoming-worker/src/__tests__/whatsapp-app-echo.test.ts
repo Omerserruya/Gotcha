@@ -17,7 +17,7 @@ const { prisma, publishEvent } = vi.hoisted(() => ({
     tenant: { findUnique: vi.fn() },
     message: { findFirst: vi.fn(), create: vi.fn() },
     conversation: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-    channelAccount: { findUnique: vi.fn() },
+    channelAccount: { findUnique: vi.fn(), findMany: vi.fn(async (): Promise<Array<{ id: string }>> => []) },
   },
   publishEvent: vi.fn().mockResolvedValue(undefined),
 }));
@@ -180,5 +180,28 @@ describe("WhatsApp business-app echo", () => {
     await processOutboundEcho(JOB);
 
     expect(prisma.message.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("two numbers on the tenant (prod GOTCHA 2026-11-16)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.tenant.findUnique.mockResolvedValue({ status: "ACTIVE" });
+    prisma.message.findFirst.mockResolvedValue(null);
+    prisma.message.create.mockImplementation(async (args: any) => ({ id: "m1", ...args.data }));
+    prisma.channelAccount.findUnique.mockResolvedValue({ id: "ca1", displayName: "GOTCHA Sales", credentials: {} });
+    prisma.conversation.findFirst.mockResolvedValue({ ...AI_DRIVEN_CONVERSATION });
+    prisma.conversation.update.mockImplementation(async (args: any) => ({ ...AI_DRIVEN_CONVERSATION, ...args.data }));
+    prisma.conversation.create.mockImplementation(async (args: any) => ({ id: "c-new", ...args.data }));
+  });
+  it("an echo from one number looks only in that number's conversations", async () => {
+    prisma.channelAccount.findMany.mockResolvedValueOnce([{ id: "ca2" }]);
+    await processOutboundEcho(JOB);
+    expect(prisma.conversation.findFirst.mock.calls[0][0].where).toMatchObject({ channelAccountId: "ca1" });
+  });
+  it("one number: the lookup is as before (unscoped)", async () => {
+    prisma.channelAccount.findMany.mockResolvedValueOnce([]);
+    await processOutboundEcho(JOB);
+    expect(prisma.conversation.findFirst.mock.calls[0][0].where).not.toHaveProperty("channelAccountId");
   });
 });

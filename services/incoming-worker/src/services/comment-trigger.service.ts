@@ -619,11 +619,15 @@ async function promoteToConversation(
   // findFirst keyed on (tenantId, channel, customerExternalId) and not CLOSED
   // - same lookup the message worker does. We can't use a unique index
   // because Conversation has no compound unique on (tenant, channel, psid).
+  // With two pages/accounts on the channel, the DM belongs to the account that sent it.
+  const { conversationAccountScope } = await import("@chatcenter/shared/src/lib/channel-account-reattach");
+  const accountScope = await conversationAccountScope(prisma as any, { tenantId: args.tenantId, channel, channelAccountId: args.send.channelAccountId });
   let conv = await prisma.conversation.findFirst({
     where: {
       tenantId: args.tenantId,
       channel: channel as any,
       customerExternalId: psid,
+      ...accountScope,
       status: { not: "CLOSED" },
     },
     orderBy: { createdAt: "desc" },
