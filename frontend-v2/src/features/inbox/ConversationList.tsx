@@ -512,6 +512,13 @@ export async function ConversationList({
                   {t('queue.tag.flow')}
                 </span>
               ) : null}
+
+              {/* The AI paused on an approval: somebody has to give it (prod, 2026-11-16). */}
+              {conversation.handledBy === 'awaiting_approval' ? (
+                <span className={styles.tagNeutral} data-testid={`tag-approval-${conversation.id}`}>
+                  {t('queue.tag.approval')}
+                </span>
+              ) : null}
             </span>
           </span>
         </QueueRowLink>

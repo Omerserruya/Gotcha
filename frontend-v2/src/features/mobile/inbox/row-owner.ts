@@ -1,4 +1,4 @@
-import type { ConversationRow } from '@/api/contracts/inbox';
+import { aiCarries, type ConversationRow } from '@/api/contracts/inbox';
 
 /** The tag under a row: who has it, in the design's tones. */
 export type RowOwner =
@@ -8,6 +8,8 @@ export type RowOwner =
   | { readonly kind: 'mine'; readonly tone: 'mute' }
   | { readonly kind: 'colleague'; readonly tone: 'mute'; readonly name: string }
   | { readonly kind: 'gotcha'; readonly tone: 'ai' }
+  /** The AI paused on an approval somebody has to give. */
+  | { readonly kind: 'approval'; readonly tone: 'warn' }
   | { readonly kind: 'flow'; readonly tone: 'mute' };
 
 /**
@@ -42,7 +44,9 @@ export function rowOwner(
       : { kind: 'colleague', tone: 'mute', name: colleague.name };
   }
   if (row.isHandedOver) return { kind: soleHuman ? 'waitingYou' : 'waiting', tone: 'warn' };
-  if (row.handledBy === 'ai_agent') return { kind: 'gotcha', tone: 'ai' };
+  if (row.handledBy === 'awaiting_approval') return { kind: 'approval', tone: 'warn' };
+  // Answering, or an employee's test chat: either way the AI has it.
+  if (aiCarries(row.handledBy)) return { kind: 'gotcha', tone: 'ai' };
   if (row.handledBy === 'flow') return { kind: 'flow', tone: 'mute' };
   return null;
 }
