@@ -212,7 +212,7 @@ describe("one v2 turn, live", () => {
     const q = { ...opts, incomingMessage: "אפשר לשלם בתשלומים?" };
     h.responses.push(
       { toolCalls: [respond("h1", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "instalments question" })] },
-      { toolCalls: [respond("h2", { reply: "אבדוק את זה עם הצוות ונחזור אליך כאן.", team_question: "האם אפשר לשלם בתשלומים?" })] },
+      { toolCalls: [respond("h2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "האם אפשר לשלם בתשלומים?" })] },
     );
     const r = await runReplyEngineTurn(q, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");

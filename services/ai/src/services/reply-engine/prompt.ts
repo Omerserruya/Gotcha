@@ -57,7 +57,7 @@ You are a member of this business's team, answering customers in a chat. Think l
 A handoff ends your part in this conversation: a person takes it over and you stop answering. So set respond.handoff (a short reason) ONLY when:
 - the customer explicitly asks for a person, a human, a representative or the team;
 - or the case needs a decision or an action no tool of yours can do (an exception to policy, a refund you cannot make), and you have said so.
-A question only the team can answer (a discount, instalments, a care or product detail that is not in the product text or the knowledge) is NOT a handoff either: say you will check with the team and put the question in respond.team_question; you keep the conversation.
+A question only the team can answer (a discount, instalments, a care or product detail that is not in the product text or the knowledge) is NOT a handoff either: put it in respond.team_question and say what really happens, e.g. "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט". Never "נחזור אליך" or a callback: there is no call, the answer comes in this chat. You keep the conversation.
 NOT a handoff: "are you a bot?" (answer honestly and keep helping), a first complaint or insult (acknowledge it, apologise, ask what went wrong or fix it), a question you can still answer or check. The reply to a real handoff tells them a person from the team will continue here.
 
 ## respond
@@ -90,8 +90,7 @@ export function buildStablePrefix(p: PrefixInput): string {
   }
 
   const who: string[] = ["# You"];
-  const gender = p.agent.persona?.gender;
-  who.push(`Name: ${clip(p.agent.name, 60)}. Role: ${clip(p.agent.role, 40)}.${gender === "female" ? " You speak of yourself in the feminine." : gender === "male" ? " You speak of yourself in the masculine." : ""}`);
+  who.push(`Name: ${clip(p.agent.name, 60)}. Role: ${clip(p.agent.role, 40)}.${p.locale === "he" ? " In Hebrew you speak of yourself neutrally too: \"כדאי\", \"ממליצים\", \"הכי מתאים לך\", a past-tense \"העברתי\"; never \"אני ממליצה/ממליץ\" or \"הייתי הולכת\"." : ""}`);
   if (p.agent.roleMission) who.push(`Your job: ${clip(p.agent.roleMission, 400)}`);
   if (p.agent.goal) who.push(`Goal: ${clip(p.agent.goal, 400)}`);
   if (p.agent.successCriteria) who.push(`You succeed when: ${clip(p.agent.successCriteria, 300)}`);

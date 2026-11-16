@@ -57,6 +57,10 @@ const V2_BANS_HE: Array<[string, RegExp]> = [
   ["found_narration", /(?<![\u0590-\u05FF])(?<!לא\s)(?:ו|ש)?מצאתי(?![\u0590-\u05FF])/u],
   ["imperative_notice", /(?<![\u0590-\u05FF])(?:שים|שימי)\s+לב(?![\u0590-\u05FF])/u],
   ["gendered_prefers", /(?<![\u0590-\u05FF])(?:מעדיף|מעדיפה)(?![\u0590-\u05FF])/u],
+  // A callback or a "we'll get back to you": there is no call tool, and the answer comes in the chat.
+  ["callback_promise", /(?<![\u0590-\u05FF])[וש]?(?:נחזור|יחזרו|יחזור|תחזור|נתקשר|יתקשרו|יתקשר|ניצור קשר|ייצרו קשר|יצרו איתך קשר)(?:\s+אלי(?:ך|כם))?(?![\u0590-\u05FF])/u],
+  // The employee speaking of itself in a gendered form (eval K02 "הייתי הולכת על"): always neutral.
+  ["self_gendered", /(?<![\u0590-\u05FF])(?:הייתי\s+(?:הולכת|הולך|לוקחת|לוקח|בוחרת|בוחר|ממליצה|ממליץ)|אני\s+(?:ממליצה|ממליץ|מציעה|מציע|חושבת|חושב|בודקת|בודק|מעבירה|מעביר|יודעת|יודע))(?![\u0590-\u05FF])/u],
 ];
 
 const ATTRIBUTE_ASK = /(?<![\u0590-\u05FF])(?:מגרד|מגרדת|נעים|נעימה|רך|רכה|עבה|דק|דקה|חומר|בד|מאיזה|עשוי|עשויה|כותנה|צמר|מרינו|פשתן|גזרה|גזרת|מידות|מידה|קטן|גדול|לכבס|כביסה|מכונה|ייבוש|מיוצר|תוצרת|איפה מייצרים|שקוף|נמתח|נמתחת|מחמם|חם)(?![\u0590-\u05FF])|\b(?:itch(?:y)?|soft|material|fabric|made of|fit|sizing|runs (?:small|large)|wash|care|origin|made in|warm|stretch)\b/iu;
@@ -123,6 +127,8 @@ export interface Gate3Input {
   shopFloor: boolean;
   handedOff: boolean;
   approvalPending: boolean;
+  /** A question was recorded for the team this turn (respond.team_question). */
+  teamQuestion?: boolean;
   /** The reply's handoff and the customer's last messages (the handoff check). */
   handoff?: string | null;
   recentInbound?: string[];
@@ -143,7 +149,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
     decision: t.decision === "allow" ? "executed" : t.decision === "approval" ? "awaiting_approval" : t.decision,
     sideEffect: t.decision === "approval" ? "awaiting_approval" : t.decision === "deny" ? "denied" : undefined,
   }));
-  if (i.handedOff) log.push({ tool: "escalate_to_human", decision: "executed", sideEffect: "escalate" });
+  // A handoff, or a question recorded for the team, is evidence for "I passed it to the team".
+  if (i.handedOff || i.teamQuestion) log.push({ tool: "escalate_to_human", decision: "executed", sideEffect: "escalate" });
   const honesty = validateActionHonesty(reply, log as any, { hasBackgroundJob: i.approvalPending });
   if (!honesty.ok) problems.push({ kind: "unsupported_action", claims: honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u)) });
 
@@ -190,6 +197,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("self_gender")) lines.push("- Speak of yourself in your configured gender, or neutrally.");
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
+      if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
+      if (c.has("self_gendered")) lines.push("- Speak of yourself neutrally (\"כדאי\", \"ממליצים\", \"הכי מתאים לך\"), never a gendered first person.");
       if (c.has("found_narration")) lines.push("- Do not narrate the search (\"מצאתי\"); just say what there is.");
       if (c.has("imperative_notice") || c.has("gendered_prefers") || c.has("mixed_address")) lines.push("- No \"שים לב\" or \"מעדיף/ה\": rephrase neutrally.");
       if (c.has("recap_opener") || c.has("echo_opener")) lines.push("- Do not open by restating what the customer said; answer.");
@@ -202,9 +211,12 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
 
 /** The safe fixed reply when the rewrite fails too: honest, short, hands the case on. */
 export function safeFallback(locale: "he" | "en"): string {
+  // What really happens: the question goes to the team (respond.team_question /
+  // the unanswered list) and the answer comes in this chat. Never a callback:
+  // there is no call tool (eval arm5 "promise" flags on "נחזור אליך").
   return locale === "he"
-    ? "רגע, בודקים את זה עם הצוות ונחזור אליך כאן בהקדם."
-    : "One moment, I'm checking this with the team and we'll get back to you here shortly.";
+    ? "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט."
+    : "I've passed your question to the team, and the answer will come here in the chat.";
 }
 
 /**

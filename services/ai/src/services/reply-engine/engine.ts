@@ -487,6 +487,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // A team question is real follow-up work: "we'll check with the team" is then true.
     approvalPending: approvalPending || !!o.teamQuestion,
     handoff: o.handoff ?? null,
+    teamQuestion: !!o.teamQuestion,
     recentInbound: inbound,
     toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
   });

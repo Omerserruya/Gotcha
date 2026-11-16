@@ -199,6 +199,18 @@ describe("legacy phrasing rules, ported (eval 2026-11-16)", () => {
     expect(codes("מצאתי ג׳ינס כחול, מתאים לך?")).toContain("found_narration");
     expect(codes("לא מצאתי את זה בשם הזה, אפשר לנסות לפי סוג?")).not.toContain("found_narration");
   });
+  it("a callback promise fails; the honest team line passes (eval arm5 C02, D01, E03)", () => {
+    expect(codes("נחזור אליך עם תשובה בהקדם")).toContain("callback_promise");
+    expect(codes("הצוות יחזרו אליך מחר")).toContain("callback_promise");
+    expect(codes("אבדוק עם הצוות ונחזור אליך")).toContain("callback_promise");
+    expect(codes("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.")).toEqual([]);
+    expect(codes(safeFallback("he"))).toEqual([]);
+  });
+  it("a gendered first person fails (eval K02 \"הייתי הולכת על\")", () => {
+    expect(codes("הייתי הולכת על השחור")).toContain("self_gendered");
+    expect(codes("אני ממליצה על המעיל")).toContain("self_gendered");
+    expect(codes("הכי מתאים לך כאן השחור")).not.toContain("self_gendered");
+  });
   it("card narration fails", () => {
     expect(codes("הכרטיס שלו מופיע כאן, מתאים לך?").length).toBeGreaterThan(0);
   });
