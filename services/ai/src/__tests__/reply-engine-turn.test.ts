@@ -365,6 +365,15 @@ describe("one v2 turn, shadow", () => {
   });
 });
 
+describe("the model", () => {
+  it("REPLY_ENGINE_MODEL sets v2's model without touching the platform default", async () => {
+    process.env.REPLY_ENGINE_MODEL = "gpt-6-luna-test";
+    h.responses.push({ toolCalls: [respond("m1", { reply: "בטח." })] });
+    try { await runReplyEngineTurn(opts, "autonomous"); } finally { delete process.env.REPLY_ENGINE_MODEL; }
+    expect(h.calls[0].model).toBe("gpt-6-luna-test");
+  });
+});
+
 describe("Gate 1", () => {
   it("an inactive employee never reaches the model", async () => {
     h.agentStatus = "PAUSED";

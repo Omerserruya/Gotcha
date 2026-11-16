@@ -158,7 +158,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   ]);
   if (!config || config.tenantId !== opts.tenantId) throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
-  const model = resolveAgentModel(config.model);
+  // v2's own model (prod: gpt-6-luna, as evaluated) without moving the legacy engine's default.
+  const model = (process.env.REPLY_ENGINE_MODEL || "").trim() || resolveAgentModel(config.model);
 
   const trace: EngineTurnTrace = {
     engine: "v2", mode, lane, gate1: "reply", stageMs, rounds: 0, tools: [],
