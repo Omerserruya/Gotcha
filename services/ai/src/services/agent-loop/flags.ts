@@ -24,7 +24,7 @@
 
 export type AgentLoopMode = "off" | "shadow" | "autonomous";
 
-function tenantAllowed(allowRaw: string | undefined, tenantId: string): boolean {
+export function tenantAllowed(allowRaw: string | undefined, tenantId: string): boolean {
   const allow = (allowRaw || "").trim();
   if (allow === "" || allow === "*") return true;
   return allow.split(",").map((s) => s.trim()).filter(Boolean).includes(tenantId);
