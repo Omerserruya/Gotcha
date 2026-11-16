@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { getTranslations } from 'next-intl/server';
 
 import type { Capability } from '@/api/contracts/capabilities';
@@ -43,7 +45,10 @@ export async function IntegrationRail({
   capabilities = [],
   selected = null,
   shopify = null,
+  ownTools = null,
 }: {
+  /** The business's own tools (MCP servers, Custom API), under the catalogue. */
+  readonly ownTools?: ReactNode;
   /** `null` when the read failed. Never an empty catalogue. */
   readonly integrations: readonly Integration[] | null;
   /** To count each connected system's actions, and the built-in ones. */
@@ -64,6 +69,7 @@ export async function IntegrationRail({
     return (
       <aside className={styles.rail} data-testid="rail-unavailable">
         <p className={styles.railNote}>{t('rail.unavailable')}</p>
+        {ownTools}
       </aside>
     );
   }
@@ -90,6 +96,7 @@ export async function IntegrationRail({
         builtInCount={(capabilities ?? []).filter((c) => !c.integration).length}
         selected={selected}
       />
+      {ownTools}
     </aside>
   );
 }

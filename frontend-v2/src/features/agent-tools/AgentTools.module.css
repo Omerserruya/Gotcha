@@ -1,0 +1,467 @@
+@layer features {
+  /*
+   * A business's own tools: MCP servers and Custom API, in screen 10's
+   * detail pane, and GOTCHA's approval queue in the console. Screen 10's
+   * words where it has them (rail, segmented control: Capabilities.module.css);
+   * only what that file has no word for is here. No line-height is set, as
+   * on the rest of 10 ([[design-sets-no-line-height]]).
+   */
+
+  .detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-18);
+    line-height: normal;
+    min-inline-size: 0;
+  }
+
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-14);
+  }
+
+  .headTitle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .name {
+    font-size: var(--font-size-lead);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .sub {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  /* The server's state: calm green when its tools are listed, amber while
+     waiting, red when it failed or we said no. */
+  .state {
+    flex: none;
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-item);
+    font-size: var(--font-size-label);
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .state[data-state='READY'] {
+    background-color: var(--signal-done-surface);
+    color: var(--signal-done-text);
+  }
+
+  .state[data-state='FAILED'],
+  .state[data-state='REJECTED'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  .state[data-state='UNKNOWN'] {
+    background-color: var(--intent-neutral-surface);
+    color: var(--intent-neutral-text);
+  }
+
+  .card,
+  .cardWarn,
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-18);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+  }
+
+  .cardWarn {
+    border-color: var(--intent-urgent-surface);
+  }
+
+  .lead {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .body {
+    margin: 0;
+    max-inline-size: var(--size-reading);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+    overflow-wrap: anywhere;
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  .warn {
+    margin: 0;
+    font-size: var(--font-size-label);
+    color: var(--alert-text);
+  }
+
+  .done {
+    margin: 0;
+    padding: var(--space-12) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+    font-size: var(--font-size-meta);
+    color: var(--signal-done-text);
+  }
+
+  .steps {
+    margin: 0;
+    padding-inline-start: var(--space-18);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-8) var(--space-16);
+    margin: 0;
+    font-size: var(--font-size-meta);
+  }
+
+  .facts > div {
+    display: contents;
+  }
+
+  .facts dt {
+    color: var(--text-muted);
+  }
+
+  .facts dd {
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .serverActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-12);
+  }
+
+  .actions,
+  .rowActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  /* ── Tools: screen 10's rows ── */
+  .tools {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .heading {
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .toolList {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+  }
+
+  .tool {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-16);
+    row-gap: var(--space-8);
+    align-items: center;
+    padding: 13px 18px;
+  }
+
+  .tool + .tool {
+    border-block-start: 1px solid var(--row-divider);
+  }
+
+  .tool[data-gone] {
+    opacity: 0.6;
+  }
+
+  /* The editor in a row takes the whole row. */
+  .tool > .form {
+    grid-column: 1 / -1;
+  }
+
+  .toolWhat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .toolName {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-body-sm);
+    color: var(--text-primary);
+  }
+
+  .toolDescription {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .risk,
+  .tag {
+    padding: 2px var(--space-8);
+    border-radius: 6px;
+    background-color: var(--intent-neutral-surface);
+    font-size: var(--font-size-micro);
+    color: var(--intent-neutral-text);
+    white-space: nowrap;
+  }
+
+  .risk[data-risk='change'] {
+    background-color: var(--intent-blocked-surface);
+    color: var(--intent-blocked-text);
+  }
+
+  .risk[data-risk='irreversible'],
+  .risk[data-risk='money'],
+  .risk[data-risk='UNKNOWN'] {
+    background-color: var(--intent-urgent-surface);
+    color: var(--intent-urgent-text);
+  }
+
+  /* ── Forms ── */
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    min-inline-size: 0;
+  }
+
+  .part {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: var(--space-16);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    min-inline-size: 0;
+  }
+
+  .partHeading,
+  .legend {
+    padding: 0 var(--space-4);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-12);
+  }
+
+  .row > * {
+    flex: 1 1 180px;
+    min-inline-size: 0;
+  }
+
+  .row > .riskPreview {
+    flex: 0 0 auto;
+    padding-block-end: var(--space-8);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-inline-size: 0;
+  }
+
+  .label {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-primary);
+  }
+
+  .hint {
+    font-size: var(--font-size-label);
+    color: var(--text-muted);
+  }
+
+  /* The design system's own error colour (Input.module.css), so a textarea and an input agree. */
+  .error {
+    font-size: var(--font-size-label);
+    color: var(--signal-ai-strong);
+  }
+
+  .textarea,
+  .select {
+    inline-size: 100%;
+    padding-block: var(--space-8);
+    padding-inline: var(--space-12);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    font: inherit;
+    font-size: var(--font-size-meta);
+    color: var(--text-primary);
+  }
+
+  .textarea {
+    resize: vertical;
+  }
+
+  .code {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-label);
+  }
+
+  .textarea[aria-invalid='true'] {
+    border-color: var(--signal-ai-strong);
+  }
+
+  .textarea:focus-visible,
+  .select:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .choiceSet {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-8) var(--space-16);
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .choiceSet > .legend {
+    flex-basis: 100%;
+    padding: 0;
+    margin-block-end: var(--space-4);
+  }
+
+  .radio,
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+    font-size: var(--font-size-meta);
+    color: var(--text-body);
+  }
+
+  /* ── Test result ── */
+  .test {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .result,
+  .resultWarn {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--signal-done-surface);
+  }
+
+  .resultWarn {
+    background-color: var(--intent-urgent-surface);
+  }
+
+  .pre {
+    margin: 0;
+    max-block-size: 280px;
+    overflow: auto;
+    padding: var(--space-8);
+    background-color: var(--panel-base);
+    border-radius: var(--radius-control);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-label);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── The console's queue ── */
+  .queue {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .queueRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-14);
+    padding: var(--space-18);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background-color: var(--panel-field);
+    line-height: normal;
+  }
+
+  .queueWhat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    flex: 1 1 320px;
+    min-inline-size: 0;
+  }
+
+  /* A phone: the control goes under the tool's words, never a squeezed second column. */
+  @media (max-width: 640px) {
+    .tool {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tool > .level {
+      grid-column: 1;
+      grid-row: auto;
+      align-items: flex-start;
+    }
+
+    .tool > .rowActions {
+      grid-column: 1;
+    }
+  }
+}

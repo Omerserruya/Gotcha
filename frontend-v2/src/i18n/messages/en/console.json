@@ -11,7 +11,9 @@
     "security": "Security",
     "securityLine": "Your two-step sign-in: set up, replace, recovery codes.",
     "whatsapp": "GOTCHA's WhatsApp number",
-    "whatsappLine": "The number platform alerts go out from: connecting it, its templates, which alerts it sends."
+    "whatsappLine": "The number platform alerts go out from: connecting it, its templates, which alerts it sends.",
+    "tools": "MCP servers",
+    "toolsLine": "Businesses' MCP servers waiting for our approval: approve or reject."
   },
   "tenants": {
     "title": "Tenants",
@@ -758,5 +760,26 @@
       "gotcha_customer_waiting": "A customer is waiting",
       "gotcha_verification_code": "Verification code"
     }
+  },
+  "toolsQueue": {
+    "title": "MCP servers waiting for approval",
+    "description": "A business's MCP server reaches its AI employees only after we approve it. Approve, or reject with a reason the business will read.",
+    "unread": "We couldn't read the queue just now.",
+    "empty": "Nothing is waiting for approval.",
+    "workspace": "Workspace",
+    "sentBy": "Sent by",
+    "url": "Address",
+    "auth": "Sign-in",
+    "sentAt": "Sent",
+    "approve": "Approve",
+    "approveFirst": "Approve {name}?",
+    "approveSecond": "We'll connect to it and read its tools. Each tool arrives off, for the business to turn on.",
+    "approveYes": "Approve",
+    "approved": "Approved.",
+    "reject": "Reject",
+    "rejectFirst": "Reject {name}? The business sees your reason on its screen.",
+    "rejectReason": "Reason, for the business",
+    "rejectYes": "Reject",
+    "rejected": "Rejected."
   }
 }

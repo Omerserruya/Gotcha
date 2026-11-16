@@ -351,13 +351,14 @@ export function openConversationsAtRisk(employee: Employee): number {
 
 /**
  * One system the workspace has set up, in any state: an integration by its
- * catalog slug, or a custom API tool / DB query as `custom:<id>`. `status`
+ * catalog slug, a custom API tool / DB query as `custom:<id>`, or an MCP
+ * server as `mcp:<id>` (Backend (c), 2026-11-16, provisional). `status`
  * is the connection's (`CONNECTED`, `ERROR`...) or a custom tool's
  * (`ACTIVE` / `INACTIVE`) - read as text, said in words by the screen.
  */
 export const accessChoiceSchema = z.object({
   key: z.string(),
-  kind: z.enum(['integration', 'custom_api', 'custom_db']).catch('integration'),
+  kind: z.enum(['integration', 'custom_api', 'custom_db', 'mcp']).catch('integration'),
   name: z.string(),
   status: z.string(),
 });
@@ -385,8 +386,10 @@ export function accessState(
   switch (choice.status) {
     case 'CONNECTED':
     case 'ACTIVE':
+    case 'READY': // an MCP server with its tools read
       return 'working';
     case 'ERROR':
+    case 'FAILED': // an MCP server we could not reach
       return 'failing';
     case 'DISCONNECTED':
       return 'disconnected';

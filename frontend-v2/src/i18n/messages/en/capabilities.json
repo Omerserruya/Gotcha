@@ -348,5 +348,245 @@
       "unknown": "We couldn't check the store just now."
     },
     "developerIntro": "GOTCHA's server is blocked by the store's firewall before it reaches WooCommerce's API. Please add this rule:"
+  },
+  "ownTools": {
+    "railLabel": "Your own tools",
+    "railTools": "{on} of {count} on",
+    "risk": {
+      "read": "Reads",
+      "change": "Changes data",
+      "irreversible": "Can't be undone",
+      "money": "Moves money",
+      "UNKNOWN": "Risk unknown"
+    },
+    "level": {
+      "lockedUnknown": "We can't tell what this tool does, so it can ask first or stay off, not run on its own.",
+      "lockedMoney": "This tool moves money, so it can ask first or stay off, not run on its own.",
+      "lockedIrreversible": "This tool does something that can't be undone, so it can ask first or stay off, not run on its own."
+    },
+    "refusal": {
+      "url_invalid": "That address isn't a web address we can use.",
+      "url_not_https": "The address has to start with https://.",
+      "url_private_host": "That address points inside a private network. Use one that can be reached from the internet.",
+      "duplicate_server": "This server is already connected to your workspace.",
+      "not_found": "We couldn't find it. It may have just been removed.",
+      "not_pending": "This server isn't waiting for approval any more.",
+      "slug_taken": "Another tool already uses this short name. Choose a different one.",
+      "invalid": "Some of the details weren't accepted. Check the fields and try again.",
+      "forbidden": "You don't have permission to change this.",
+      "failed": "That didn't save. Try again."
+    },
+    "form": {
+      "name": "Name",
+      "nameHint": "How your team will recognise it, for example \"Orders system\".",
+      "nameMissing": "Give it a name.",
+      "url": "Server address",
+      "urlHint": "The MCP endpoint, starting with https://.",
+      "urlInvalid": "Enter an address that starts with https://.",
+      "auth": "How it signs us in",
+      "authKind": {
+        "none": "No sign-in",
+        "bearer": "Bearer token",
+        "header": "A custom header"
+      },
+      "headerName": "Header name",
+      "headerMissing": "Enter the header's name.",
+      "token": "Token",
+      "headerValue": "Header value",
+      "secretKept": "Leave empty to keep the one we have.",
+      "secretMissing": "Enter it, or choose No sign-in.",
+      "approvalNote": "We review every server before your AI employees can use it. Nothing reaches the server until we approve it.",
+      "backToQueue": "A new address or sign-in goes back to GOTCHA for approval. Its tools stop until then.",
+      "cancel": "Cancel",
+      "send": "Send for approval",
+      "saveAndSend": "Save and send for approval",
+      "save": "Save"
+    },
+    "mcp": {
+      "kind": "MCP server",
+      "connectTitle": "Connect an MCP server",
+      "connectLine": "Give your AI employees the tools your own systems already offer.",
+      "railSub": "Your own systems' tools",
+      "railConnect": "Connect",
+      "sent": "Sent. GOTCHA will review it, and you'll see it here under Your own tools.",
+      "step": {
+        "send": "You send the server's address and how it signs us in.",
+        "approve": "GOTCHA reviews and approves it.",
+        "tools": "We read its tools. Each one arrives off, with what it can do.",
+        "employee": "You turn on the tools you want, and choose which AI employees may use them."
+      },
+      "state": {
+        "PENDING_APPROVAL": "Waiting for GOTCHA",
+        "DISCOVERING": "Reading its tools",
+        "READY": "Connected",
+        "FAILED": "Couldn't connect",
+        "REJECTED": "Not approved",
+        "UNKNOWN": "Status unknown"
+      },
+      "pending": {
+        "lead": "Waiting for GOTCHA to approve it.",
+        "body": "We check every server before your AI employees can use it. You'll see its tools here once it's approved."
+      },
+      "discovering": {
+        "lead": "Approved. We're reading its tools.",
+        "body": "This usually takes a moment. Each tool will arrive off."
+      },
+      "failed": {
+        "lead": "We couldn't connect to this server."
+      },
+      "failure": {
+        "unreachable": "The server didn't answer. Check the address and that it's online.",
+        "tls": "The server's security certificate isn't valid.",
+        "auth_rejected": "The server refused our sign-in. Check the token or header.",
+        "not_mcp": "This address answered, but not as an MCP server.",
+        "timeout": "The server took too long to answer.",
+        "protocol": "The server answered, but not in a way we could read.",
+        "unknown": "Something went wrong on the way. Try again in a few minutes."
+      },
+      "rejected": {
+        "lead": "GOTCHA didn't approve this server.",
+        "noReason": "No reason was given. Contact us if you need one."
+      },
+      "unknown": "We can't tell this server's state right now.",
+      "facts": {
+        "url": "Address",
+        "auth": "Sign-in",
+        "sent": "Sent",
+        "checked": "Last checked"
+      },
+      "tools": {
+        "heading": "{count, plural, one {# tool} other {# tools}}",
+        "offFirst": "A new tool stays off until you turn it on. Tools that change something ask first by default.",
+        "newCount": "{count, plural, one {# new tool since the last check.} other {# new tools since the last check.}}",
+        "new": "New",
+        "gone": "No longer offered",
+        "blocked": "These can be changed once the server is connected.",
+        "none": "This server offers no tools."
+      },
+      "edit": "Edit",
+      "editAndSend": "Edit and send again",
+      "tryAgain": "Try again",
+      "rediscover": "Check for new tools",
+      "withdraw": "Withdraw",
+      "remove": "Remove",
+      "withdrawFirst": "Withdraw {name}? It leaves GOTCHA's queue.",
+      "removeFirst": "Remove {name}?",
+      "removeSecond": "Its tools stop for every AI employee right away.",
+      "withdrawYes": "Withdraw",
+      "removeYes": "Remove",
+      "removed": "Removed.",
+      "unread": "We couldn't read your MCP servers just now.",
+      "notFound": "We couldn't find this server. It may have been removed."
+    },
+    "custom": {
+      "title": "Custom API",
+      "line": "Describe a call to your own API, and your AI employees can make it.",
+      "railSub": "Calls to your own API",
+      "count": "{count, plural, one {# tool} other {# tools}}",
+      "unreadShort": "Unavailable",
+      "unread": "We couldn't read your custom API tools just now.",
+      "add": "Add a tool",
+      "employeeNote": "Which AI employees may use each tool is set on the employee, under the systems it may use.",
+      "emptyLead": "No custom API tools yet.",
+      "emptyBody": "Add one for each call your AI employees should be able to make, such as looking up an order.",
+      "off": "Off",
+      "delete": "Delete",
+      "deleteFirst": "Delete {name}?",
+      "deleteSecond": "Your AI employees stop using it right away. This can't be undone.",
+      "deleteYes": "Delete",
+      "deleted": "Deleted.",
+      "problemsSummary": "Some fields need attention.",
+      "part": {
+        "about": "What it's for",
+        "request": "The request",
+        "auth": "Sign-in",
+        "shape": "Input and output"
+      },
+      "field": {
+        "name": "Name",
+        "slug": "Short name",
+        "slugHint": "How the AI refers to it: lowercase letters, digits and _. It can't be changed later.",
+        "slugFixed": "Can't be changed after the tool is created.",
+        "description": "What it does",
+        "whenToUse": "When to use it",
+        "whenToUseHint": "The AI reads this to decide, for example \"When a customer asks about a specific order\".",
+        "whenNotToUse": "When not to use it",
+        "whenNotToUseHint": "Optional.",
+        "category": "What it does to your data",
+        "active": "On",
+        "method": "Method",
+        "url": "Address",
+        "urlHint": "Use '{{name}}' for a value the AI fills in.",
+        "hosts": "Allowed hosts",
+        "hostsHint": "Comma separated. A call to any other host is blocked.",
+        "headers": "Headers",
+        "headerName": "Header name",
+        "headerValue": "Header value",
+        "headerRemove": "Remove",
+        "headerAdd": "Add a header",
+        "body": "Body",
+        "bodyHint": "JSON or text, with '{{name}}' for values. Empty sends the input as JSON.",
+        "timeout": "Timeout (ms)",
+        "authKind": "Sign-in",
+        "bearer": "Bearer token",
+        "keyIn": "Send the key in",
+        "keyName": "Key name",
+        "apiKey": "API key",
+        "basicUser": "Username",
+        "basicPass": "Password",
+        "input": "Input",
+        "inputHint": "A JSON schema of the values the AI sends.",
+        "output": "Output",
+        "outputHint": "Optional: comma-separated paths to keep from the response, such as data.status. Empty keeps all of it.",
+        "riskLevel": "Risk"
+      },
+      "category": {
+        "READ": "Reads only",
+        "WRITE": "Creates or changes",
+        "DELETE": "Deletes",
+        "ACTION": "Takes an action"
+      },
+      "authKind": {
+        "none": "No sign-in",
+        "bearer": "Bearer token",
+        "api_key": "API key",
+        "basic": "Username and password"
+      },
+      "keyIn": {
+        "header": "A header",
+        "query": "The address"
+      },
+      "problem": {
+        "name": "Give it a name.",
+        "slug": "Give it a short name.",
+        "description": "Say what it does.",
+        "whenToUse": "Say when to use it.",
+        "urlTemplate": "Enter an address that starts with https://.",
+        "allowedHosts": "Enter at least one host.",
+        "hostNotAllowed": "The address's host isn't in this list, so every call would be blocked.",
+        "authName": "Enter the key's name.",
+        "secret": "Enter the sign-in details, or choose No sign-in.",
+        "parameters": "This isn't a valid JSON object.",
+        "timeout": "Between 1000 and 60000."
+      },
+      "test": {
+        "open": "Test",
+        "realRead": "This sends a real {method} request to your API.",
+        "realWrite": "This sends a real {method} request to your API, and it may change data there.",
+        "args": "Sample input (JSON)",
+        "badArgs": "This isn't a valid JSON object.",
+        "run": "Send the request",
+        "worked": "It worked",
+        "failed": "It didn't work",
+        "status": "status {status}",
+        "duration": "{ms} ms",
+        "cut": "The response is longer; only the start is shown."
+      },
+      "riskLevel": {
+        "LOW": "Low",
+        "MEDIUM": "Medium",
+        "HIGH": "High"
+      }
+    }
   }
 }
