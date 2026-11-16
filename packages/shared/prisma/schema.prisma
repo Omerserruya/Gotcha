@@ -190,6 +190,7 @@ model Tenant {
   approvalRecipients      ApprovalRecipient[]
   durableSettings         TenantSetting[]
 
+  mcpServers                     McpServer[]
   @@index([status])
   inboundExclusions InboundExclusion[]
 
@@ -1103,6 +1104,7 @@ model Conversation {
   /// Every inbox, routing and analytics query means LIVE conversations. Without
   /// this index they would all start scanning imported history the moment a
   /// tenant connects Coexistence.
+  states             ConversationState[]
   @@index([tenantId, origin, status])
   // "Everything that came from an ad", and "everything from THIS ad" - the
   // inbox filter and the playbook trigger both ask exactly these.
@@ -1458,6 +1460,80 @@ model SkillRun {
   @@index([tenantId, skillId, startedAt])
   @@index([tenantId, aiAgentId, startedAt])
   @@map("skill_runs")
+}
+
+/// Reply engine v2: ONE row per conversation per lane holds everything the
+/// agent carries between turns. It replaces funnel stage, behavior state,
+/// objectives, contract progress, skill run, flow controller, discovery and
+/// session facts for the new engine. lane "live" drives replies; lane "shadow"
+/// is written only by a shadow run and is never read by the live lane.
+model ConversationState {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  conversationId String    @map("conversation_id")
+  // live | shadow
+  lane           String    @default("live")
+  aiAgentId      String?   @map("ai_agent_id")
+  // free text the model keeps short: browsing | choosing | ordering | support | handover | closed ...
+  stage          String?
+  // the customer's current intent, one short line
+  intent         String?
+  // {key: value} facts the customer stated or a tool confirmed
+  facts          Json      @default("{}")
+  // [{ref, title, price?, currency?, productId?, variantId?, at}] items we showed
+  offeredItems   Json      @default("[]") @map("offered_items")
+  // [{kind: promise|pending|approval, text, tool?, ref?, at}] open commitments
+  pending        Json      @default("[]")
+  // the skill the agent opened last, if any
+  activeSkill    String?   @map("active_skill")
+  // rolling summary of the messages older than the turn window
+  summary        String?
+  summaryUpTo    DateTime? @map("summary_up_to")
+  turnCount      Int       @default(0) @map("turn_count")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, lane])
+  @@index([tenantId, updatedAt])
+  @@map("conversation_states")
+}
+
+/// An MCP server a tenant connects from Studio · Capabilities ("Your own tools").
+/// A SYSTEM_ADMIN approves it before any tool is read or used (Omer 2026-11-16).
+/// Contract: docs/api/mcp-and-api-tools-contract.md.
+model McpServer {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  slug            String
+  name            String
+  url             String
+  // none | bearer | header
+  authKind        String    @default("none") @map("auth_kind")
+  authHeaderName  String?   @map("auth_header_name")
+  // encryptCredentials({ token } | { headerValue }); never returned by a read
+  secrets         String?   @db.Text
+  // PENDING_APPROVAL | REJECTED | DISCOVERING | READY | FAILED
+  status          String    @default("PENDING_APPROVAL")
+  rejectReason    String?   @map("reject_reason")
+  // unreachable | tls | auth_rejected | not_mcp | timeout | protocol
+  lastError       String?   @map("last_error")
+  // [{ name, description, inputSchema, effect, level, changedSinceLastDiscovery }]
+  tools           Json      @default("[]")
+  discoveredAt    DateTime? @map("discovered_at")
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at")
+  createdBy       String?   @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([status, createdAt])
+  @@map("mcp_servers")
 }
 
 // ─── Router Rules (Main Playbook) ───────────────────────────

@@ -58,9 +58,10 @@ describe("the predicate", () => {
 
 describe("the tool surface drops what cannot run", () => {
   it("checks toolCannotExecute where it builds the model's tool list", () => {
-    // A source guard: the surface is a long loop in ai-bot.service and the
-    // check is one `continue`. Deleting it would be silent everywhere else.
-    const surface = readFileSync(join(SRC, "services/ai-bot.service.ts"), "utf8");
+    // A source guard: the surface is a long loop (tool-surface-adapters, shared
+    // by the legacy turn and reply engine v2) and the check is one `continue`.
+    // Deleting it would be silent everywhere else.
+    const surface = readFileSync(join(SRC, "services/tool-surface-adapters.ts"), "utf8");
     expect(surface).toContain("toolCannotExecute(def)");
     const at = surface.indexOf("toolCannotExecute(def)");
     expect(surface.slice(at, at + 200)).toContain("continue");

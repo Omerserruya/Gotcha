@@ -47,7 +47,13 @@ export interface InboundConversation {
   isTest?: boolean | null;
   customerExternalId?: string | null;
   origin?: string | null;
+  /** A flow is parked on this conversation, waiting for the customer's reply. */
+  chatbotNodeId?: string | null;
+  automationRunId?: string | null;
 }
+
+/** handledBy values that mean the bot (or a flow) answers the customer. */
+const BOT_HANDLED = new Set(["ai_agent", "awaiting_approval", "bot", "chatbot", "flow", "automation"]);
 
 /**
  * Whether this inbound message is announced to someone's phone:
@@ -68,9 +74,20 @@ export interface InboundConversation {
  * And only real traffic - not a sandbox rehearsal, a test conversation or
  * imported history.
  */
-export function shouldEmitInbound(conversation: Omit<InboundConversation, "id">): boolean {
+export function shouldEmitInbound(
+  conversation: Omit<InboundConversation, "id">,
+  /**
+   * The caller has already run routing and NO bot is answering this message
+   * (no AI employee, no flow, routing ended with a person or the team): a
+   * brand-new conversation is announced on its FIRST message too. Still never
+   * while a bot or a parked flow holds the conversation.
+   */
+  opts: { noBotAnswers?: boolean } = {},
+): boolean {
   if (conversation.handledBy === "sandbox") return false;
-  const withPeople = !!conversation.assignedAgentId || !!conversation.isHandedOver || conversation.handledBy === "human";
+  const botHolds = BOT_HANDLED.has(String(conversation.handledBy ?? "")) || !!conversation.chatbotNodeId || !!conversation.automationRunId;
+  const withPeople = !!conversation.assignedAgentId || !!conversation.isHandedOver || conversation.handledBy === "human"
+    || (!!opts.noBotAnswers && !botHolds);
   if (!withPeople) return false;
   if (conversation.isTest) return false;
   if (String(conversation.customerExternalId ?? "").startsWith("sandbox:")) return false;
@@ -92,8 +109,10 @@ export function emitInboundMessage(input: {
   messageType: string | null | undefined;
   channel: string;
   customerName?: string | null;
+  /** See shouldEmitInbound: routing ran and no bot answers this message. */
+  noBotAnswers?: boolean;
 }): boolean {
-  if (!shouldEmitInbound(input.conversation)) return false;
+  if (!shouldEmitInbound(input.conversation, { noBotAnswers: input.noBotAnswers })) return false;
   // null = the team's queue: the engine routes it as an escalation would.
   const assignedAgentId = input.conversation.assignedAgentId ?? null;
   setImmediate(() => {

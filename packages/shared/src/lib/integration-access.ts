@@ -20,6 +20,8 @@ import { prisma } from "./prisma";
 
 export const CUSTOM_ACCESS_PREFIX = "custom:";
 export const customAccessKey = (id: string) => `${CUSTOM_ACCESS_PREFIX}${id}`;
+export const MCP_ACCESS_PREFIX = "mcp:";
+export const mcpAccessKey = (id: string) => `${MCP_ACCESS_PREFIX}${id}`;
 
 /** The employee's allowlist. Empty for an unknown employee (nothing allowed). */
 export async function loadIntegrationAccess(tenantId: string, aiAgentId: string): Promise<Set<string>> {
@@ -104,7 +106,7 @@ export async function defaultIntegrationAccess(tenantId: string): Promise<string
 
 export interface IntegrationAccessChoice {
   key: string;
-  kind: "integration" | "custom_api" | "custom_db";
+  kind: "integration" | "custom_api" | "custom_db" | "mcp";
   name: string;
   /** For an integration: the workspace's connection state; custom tools: "ACTIVE" | "INACTIVE". */
   status: string;
@@ -127,6 +129,9 @@ export async function integrationAccessChoices(tenantId: string): Promise<Integr
   }
   for (const c of api as any[]) out.push({ key: customAccessKey(c.id), kind: "custom_api", name: c.name || c.slug, status: c.isActive ? "ACTIVE" : "INACTIVE" });
   for (const c of db as any[]) out.push({ key: customAccessKey(c.id), kind: "custom_db", name: c.name || c.slug, status: c.isActive ? "ACTIVE" : "INACTIVE" });
+  // MCP servers (contract: READY counts as working, FAILED as failing). Never in the default allowlist: an employee gets one only when turned on.
+  const mcp = await (prisma as any).mcpServer?.findMany?.({ where: { tenantId }, select: { id: true, name: true, status: true } }).catch(() => []) ?? [];
+  for (const m of mcp as any[]) out.push({ key: mcpAccessKey(m.id), kind: "mcp", name: m.name, status: String(m.status) });
   return out;
 }
 
@@ -142,15 +147,18 @@ export async function validateIntegrationAccess(
   if (!Array.isArray(raw) || raw.some((k) => typeof k !== "string" || !k.trim())) return { ok: false, invalid: String(raw) };
   const keys = [...new Set((raw as string[]).map((k) => k.trim()))];
   const customIds = keys.filter((k) => k.startsWith(CUSTOM_ACCESS_PREFIX)).map((k) => k.slice(CUSTOM_ACCESS_PREFIX.length));
-  const slugs = keys.filter((k) => !k.startsWith(CUSTOM_ACCESS_PREFIX));
-  const [catalog, api, db] = await Promise.all([
+  const mcpIds = keys.filter((k) => k.startsWith(MCP_ACCESS_PREFIX)).map((k) => k.slice(MCP_ACCESS_PREFIX.length));
+  const slugs = keys.filter((k) => !k.startsWith(CUSTOM_ACCESS_PREFIX) && !k.startsWith(MCP_ACCESS_PREFIX));
+  const [catalog, api, db, mcp] = await Promise.all([
     slugs.length ? prisma.integrationCatalog.findMany({ where: { slug: { in: slugs } }, select: { slug: true } }) : [],
     customIds.length ? prisma.customApiTool.findMany({ where: { tenantId, id: { in: customIds } }, select: { id: true } }) : [],
     customIds.length ? prisma.customDbQueryTool.findMany({ where: { tenantId, id: { in: customIds } }, select: { id: true } }) : [],
+    mcpIds.length ? ((prisma as any).mcpServer?.findMany?.({ where: { tenantId, id: { in: mcpIds } }, select: { id: true } }) ?? []) : [],
   ]);
   const known = new Set<string>([
     ...(catalog as any[]).map((c) => c.slug),
     ...[...(api as any[]), ...(db as any[])].map((c) => customAccessKey(c.id)),
+    ...(mcp as any[]).map((m) => mcpAccessKey(m.id)),
   ]);
   const bad = keys.find((k) => !known.has(k));
   return bad ? { ok: false, invalid: bad } : { ok: true, keys: keys.sort() };

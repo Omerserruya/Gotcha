@@ -1341,6 +1341,8 @@ import "./types/express.d";
 export {
   CUSTOM_ACCESS_PREFIX,
   customAccessKey,
+  MCP_ACCESS_PREFIX,
+  mcpAccessKey,
   loadIntegrationAccess,
   agentGrantWhere,
   allowedIntegrationToolKeys,

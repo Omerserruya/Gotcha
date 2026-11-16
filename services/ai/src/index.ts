@@ -16,6 +16,7 @@ import funnelAdminRoutes from "./routes/funnel-admin";
 import stageAdminRoutes from "./routes/stage-admin";
 import actionContractsAdminRoutes from "./routes/action-contracts-admin";
 import customApiAdminRoutes from "./routes/custom-api-admin";
+import mcpServerRoutes from "./routes/mcp-servers";
 import customDbAdminRoutes from "./routes/custom-db-admin";
 import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
@@ -138,6 +139,7 @@ app.use("/api", funnelAdminRoutes);
 app.use("/api", stageAdminRoutes);
 app.use("/api", actionContractsAdminRoutes);
 app.use("/api", customApiAdminRoutes);
+app.use("/api", mcpServerRoutes);
 app.use("/api", customDbAdminRoutes);
 // Shopify installation. Mounted BEFORE connectorsAdminRoutes: the public
 // install handler must not be shadowed by that router's authenticated

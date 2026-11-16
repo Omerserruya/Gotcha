@@ -16,6 +16,8 @@ const S = vi.hoisted(() => ({
   answered: false,
   answeredBefore: false,
   afterAutomation: null as any,
+  /** When set: the Nth conversation read returns readSeq[N] (the last one repeats). */
+  readSeq: null as any[] | null,
 }));
 
 const { prisma, mocks } = vi.hoisted(() => {
@@ -37,7 +39,11 @@ const { prisma, mocks } = vi.hoisted(() => {
     },
     conversation: {
       // 1st read: the lookup; later reads: the refresh after automations ran.
-      findFirst: vi.fn(async () => { reads++; return reads === 1 ? { ...S.conv } : { ...(S.afterAutomation ?? S.conv) }; }),
+      findFirst: vi.fn(async () => {
+        reads++;
+        if (S.readSeq) return { ...S.readSeq[Math.min(reads - 1, S.readSeq.length - 1)] };
+        return reads === 1 ? { ...S.conv } : { ...(S.afterAutomation ?? S.conv) };
+      }),
       create: vi.fn(),
       update: vi.fn(async () => ({})),
       __reset: () => { reads = 0; },
@@ -108,7 +114,9 @@ const flush = () => new Promise((r) => setImmediate(r));
 beforeEach(() => {
   Object.values(mocks).forEach((f) => f.mockClear());
   (prisma.conversation as any).__reset();
-  S.conv = baseConv(); S.afterAutomation = null; S.messageCount = 4; S.answered = false; S.answeredBefore = false;
+  S.conv = baseConv(); S.afterAutomation = null; S.readSeq = null; S.messageCount = 4; S.answered = false; S.answeredBefore = false;
+  mocks.processAIBot.mockImplementation(async () => true);
+  mocks.routeConversation.mockImplementation(async () => ({ handledByAI: true }) as any);
   Q.adds = [];
 });
 
@@ -154,6 +162,102 @@ describe("★ through dispatch()", () => {
 
   it("the bot handling it with nobody assigned: no event", async () => {
     S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya", isHandedOver: false });
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(0);
+  });
+});
+
+describe("★ the FIRST message of a new conversation no bot answers (prod GOTCHA App Review, 2026-11-16)", () => {
+  const inbound = () => Q.adds.filter((a) => a.name === "message.inbound");
+  const newConv = () => { S.messageCount = 1; S.conv = baseConv(); };
+
+  it("no AI employee, no rule matched: the team is told, once", async () => {
+    newConv();
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: null }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(mocks.routeConversation).toHaveBeenCalled();
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0].data.data).toMatchObject({ conversationId: "c1", assignedAgentId: null, messageId: "m1", preview: "hello" });
+  });
+
+  it("routed to a department: that team is told", async () => {
+    S.messageCount = 1;
+    S.readSeq = [baseConv(), baseConv(), baseConv({ departmentId: "sales", status: "WAITING" })];
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: "sales" }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0].data).toMatchObject({ departmentId: "sales", data: { assignedAgentId: null } });
+  });
+
+  it("routing gave it to a person: that person is told", async () => {
+    S.messageCount = 1;
+    S.readSeq = [baseConv(), baseConv(), baseConv({ assignedAgentId: "matan", isHandedOver: true, handledBy: "human" })];
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: null }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0].data.data.assignedAgentId).toBe("matan");
+  });
+
+  it("NEGATIVE: routed to the AI (the bot answers): no event", async () => {
+    newConv();
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: true }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(0);
+  });
+
+  it("NEGATIVE: routing parked a flow waiting for the customer: no event", async () => {
+    S.messageCount = 1;
+    S.readSeq = [baseConv(), baseConv(), baseConv({ chatbotNodeId: "n1", chatbotFlowId: "f1" })];
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: null }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(0);
+  });
+
+  it("NEGATIVE: an automation answered the message: no event", async () => {
+    newConv();
+    S.answered = true;
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(0);
+  });
+
+  it("the AI was assigned but did not take the turn (routing withdrawn): the team is told", async () => {
+    S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "noa" });
+    S.readSeq = [S.conv, S.conv, baseConv({ handledBy: null, assignedAiAgentId: null })];
+    mocks.processAIBot.mockImplementation(async () => false);
+    await dispatch(JOB);
+    await flush();
+    expect(mocks.processAIBot).toHaveBeenCalled();
+    expect(inbound()).toHaveLength(1);
+  });
+
+  it("an automation handed it to a person: told once, not twice", async () => {
+    newConv();
+    S.afterAutomation = baseConv({ assignedAgentId: "matan", isHandedOver: true, handledBy: "human" });
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(1);
+    expect(inbound()[0].data.data.assignedAgentId).toBe("matan");
+  });
+
+  it("already announced before routing (a person answered from the queue, nobody claimed it): told once, not twice", async () => {
+    S.conv = baseConv({ handledBy: "human" });
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: null }) as any);
+    await dispatch(JOB);
+    await flush();
+    expect(inbound()).toHaveLength(1);
+  });
+
+  it("NEGATIVE: a sandbox or imported conversation is never announced", async () => {
+    S.messageCount = 1;
+    S.conv = baseConv({ customerExternalId: "sandbox:x" });
+    mocks.routeConversation.mockImplementation(async () => ({ handledByAI: false, departmentId: null }) as any);
     await dispatch(JOB);
     await flush();
     expect(inbound()).toHaveLength(0);
