@@ -8,6 +8,7 @@
  */
 import { selectSkill, renderSkill } from "../skills";
 import { loadSkillContext, type SkillCandidate } from "../skill-runtime.service";
+import { starterStoreSkills } from "../starter-skills";
 
 export interface EngineSkill {
   /** Stable name the model passes to read_skill. */
@@ -44,15 +45,12 @@ export function renderBusinessSkill(s: { name: string; situation?: string | null
 
 async function starterSkills(platform: "shopify" | "woocommerce", locale: "he" | "en"): Promise<EngineSkill[]> {
   try {
-    // Lands from the store-search branch; absent until then (the engine runs without it).
-    const path = "../starter-skills";
-    const mod: any = await import(path).catch(() => null);
-    const list: Array<{ key: string; skill: any }> = mod?.starterStoreSkills?.(platform, locale) ?? [];
+    const list = starterStoreSkills(platform, locale);
     return list.map(({ key, skill }) => ({
       name: clip(key || skill?.name, 60),
       whenToUse: clip(skill?.whenToUse ?? skill?.situation ?? skill?.name, 160),
       source: "starter" as const,
-      render: () => renderBusinessSkill(skill),
+      render: () => renderBusinessSkill(skill as any),
     }));
   } catch {
     return [];
