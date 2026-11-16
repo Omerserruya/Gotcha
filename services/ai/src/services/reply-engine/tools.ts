@@ -23,7 +23,7 @@ import { TurnOutcomeLedger } from "../turn-outcome-ledger";
 import { redactCardDetailsInArgs } from "../card-details-guard";
 import { isProductSearchTool, groundProductSearchResult } from "../discovery-integration.service";
 import { buildKeyedModelSummary, type ProductSearchEnvelope } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge } from "../knowledge.service";
 import type { ToolRunRecord, ToolGateDecision, StateLane } from "./contract";
 import { findSkill, type EngineSkill } from "./skills";
 import { runMcpTool } from "../mcp-servers.service";
@@ -130,7 +130,11 @@ export function mergeEnvelope(turn: TurnTools, env: ProductSearchEnvelope, local
 }
 
 async function defaultKnowledge(tenantId: string, query: string, aiAgentId: string): Promise<string> {
-  const chunks = await retrieveRelevantChunks(tenantId, query, 5, aiAgentId);
+  const [vector, lexical] = await Promise.all([
+    retrieveRelevantChunks(tenantId, query, 5, aiAgentId),
+    lexicalKnowledge(tenantId, query, 5, aiAgentId).catch(() => []),
+  ]);
+  const chunks = mergeKnowledge(vector, lexical, 5);
   return buildKnowledgeContext(chunks, { dropWhenAllWeak: true }) || "";
 }
 

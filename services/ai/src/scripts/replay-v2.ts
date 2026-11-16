@@ -151,7 +151,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; rewriteRounds: Record<string, number>; rewriteP95: Record<string, number>; fallbackKinds: Record<string, number>; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -177,8 +177,9 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
+    const byRounds: Record<string, number[]> = {};
     md.push(`## Tenant ${tenantId}`, "");
     let lastConv = "";
     for (const t of turns) {
@@ -206,6 +207,11 @@ async function main() {
         if (r.trace?.gate3?.rewrite === "rewritten") s.rewrites++;
         if (r.trace?.gate3?.rewrite === "cleaned") s.cleaned++;
         if (r.trace?.priceStripped) s.priceStripped++;
+        // Where the time goes: turns by the number of model calls the rewrite took, and the p95 of each group.
+        const rr = String(r.trace?.rewriteRounds ?? 0);
+        s.rewriteRounds[rr] = (s.rewriteRounds[rr] ?? 0) + 1;
+        (byRounds[rr] ??= []).push(took);
+        for (const k of (r.trace?.fallbackKinds ?? []) as string[]) s.fallbackKinds[k] = (s.fallbackKinds[k] ?? 0) + 1;
         if (r.trace?.gate3?.rewrite === "silent") s.silent++;
         if (isCannedTeamLine(r.reply)) s.cannedLines++;
         const tools = (r.trace?.tools ?? []) as any[];
@@ -240,6 +246,7 @@ async function main() {
     }
     s.p50 = pct(ms, 50);
     s.p95 = pct(ms, 95);
+    for (const [k, v] of Object.entries(byRounds)) s.rewriteP95[k] = pct(v, 95);
     summaries.push(s);
   }
 

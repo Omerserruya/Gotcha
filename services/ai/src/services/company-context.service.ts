@@ -27,6 +27,8 @@ export interface CompanyContext {
    * back to a generic description of a friendly brand.
    */
   observedVoice?: string | null;
+  /** The business's own address (BusinessProfile.address), when the owner gave one. */
+  address?: string | null;
 }
 
 /**
@@ -44,6 +46,7 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
         industry: true,
         websiteDomain: true,
         observedVoice: true,
+        address: true,
       },
     });
     if (bp && bp.organizationName && String(bp.organizationName).trim()) {
@@ -53,6 +56,7 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
         industry: bp.industry ? String(bp.industry).trim() : null,
         websiteDomain: bp.websiteDomain ? String(bp.websiteDomain).trim() : null,
         observedVoice: bp.observedVoice ? String(bp.observedVoice).trim() : null,
+        address: bp.address ? String(bp.address).trim() : null,
       };
     }
 

@@ -618,3 +618,114 @@ describe("prod replay 4 (2026-11-16)", () => {
     expect(chat[3]).toEqual({ role: "assistant", content: "בשמחה!" });
   });
 });
+
+describe("prod replay 5 (2026-11-16)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+  const STORE = ["woocommerce.list_products", "search_knowledge"];
+
+  it("★ \"we can't call you\" is an absence claim: only the business's own words ground it", async () => {
+    const { ungroundedAbsence } = await import("../services/reply-engine/gates");
+    const claim = "אנחנו לא יכולים לקבוע שיחת טלפון.";
+    expect(ungroundedAbsence(claim, [], "")).toHaveLength(1);
+    expect(ungroundedAbsence(claim, [], "השירות שלנו בוואטסאפ בלבד, אין מענה טלפוני.")).toEqual([]);
+    expect(ungroundedAbsence("We can't arrange a phone call.", [], "")).toHaveLength(1);
+    // A bare "not possible" with nothing named is not a claim to check.
+    expect(ungroundedAbsence("לצערנו אי אפשר.", [], "")).toEqual([]);
+    expect(kinds(await g3(claim))).toContain("ungrounded_absence");
+  });
+
+  it("★ a photo asked for instead of a search -> no_search; asked again -> repeated_ask", async () => {
+    const { photoInsteadOfSearch, repeatedAsk } = await import("../services/reply-engine/gates");
+    expect(photoInsteadOfSearch("אפשר לשלוח תמונה של מה שמחפשים?", "מחפשת משטח בצבע אפור", [], STORE)).toBe(true);
+    expect(photoInsteadOfSearch("אפשר לשלוח תמונה?", "מחפשת משטח בצבע אפור", [{ tool: "woocommerce.list_products" } as any], STORE)).toBe(false);
+    expect(photoInsteadOfSearch("אפשר לשלוח תמונה?", "הגיע שבור", [], STORE)).toBe(false);
+    expect(repeatedAsk("אפשר לשלוח תמונה?", ["היי! אפשר תמונה של המכשיר?"])).toBe(true);
+    expect(repeatedAsk("אפשר לשלוח תמונה?", ["היי! מה מחפשים?"])).toBe(false);
+    expect(repeatedAsk("לאיזה מכשיר זה מיועד?", ["תודה. לאיזה מכשיר זה מיועד?"])).toBe(true);
+    expect(styleCodes(await g3("אפשר תמונה?", { previousBotReplies: ["אפשר תמונה של המכשיר?"] }))).toContain("repeated_ask");
+    expect(kinds(await g3("אפשר לשלוח תמונה?", { incomingMessage: "מחפשת משטח בצבע אפור", toolsOffered: STORE }))).toContain("no_search");
+  });
+
+  it("★ \"yes\" to the employee's own offer of a person, not acted on -> ignored_yes", async () => {
+    const { ignoredYes } = await import("../services/reply-engine/gates");
+    const offer = "זה דחוף? אם כן אעביר לנציג שימשיך כאן.";
+    expect(ignoredYes("כן", offer, false, false)).toBe(true);
+    expect(ignoredYes("כן דחוף", offer, false, false)).toBe(true);
+    expect(ignoredYes("כן", offer, true, false)).toBe(false);
+    expect(ignoredYes("כן", "רוצה לראות עוד צבעים?", false, false)).toBe(false);
+    expect(ignoredYes("לא, תודה", offer, false, false)).toBe(false);
+    expect(kinds(await g3("בסדר.", { incomingMessage: "כן", previousBotReplies: [offer] }))).toContain("ignored_yes");
+  });
+
+  it("★ another alphabet inside a word, and internal jargon, are style problems; the script is stripped", async () => {
+    const { stripForeignScript, cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("כשמ折לים את המשטח"))).toContain("foreign_script");
+    expect(styleCodes(await g3("שמחים לעזור 🙂 במחיר ₪120, 30×40 ס\"מ!"))).not.toContain("foreign_script");
+    expect(stripForeignScript("כשמ折לים")).toBe("כשמלים");
+    expect(styleCodes(await g3("המספר מקושר לפרטי הקשר שלך."))).toContain("internal_jargon");
+    expect(cleanStyle("יש לנו את ההזמנה. המספר מקושר לפרטי הקשר שלך.", ["internal_jargon"])).toBe("יש לנו את ההזמנה.");
+  });
+
+  it("★ a FACT problem loses its sentence, the rest stays", async () => {
+    const { stripFactProblems } = await import("../services/reply-engine/gates");
+    expect(stripFactProblems("יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים.", [{ kind: "ungrounded_absence", claims: ["במבוק אנחנו לא מוכרים."] }] as any)).toBe("יש לנו משטחים בכמה גדלים.");
+    expect(stripFactProblems("נעדכן אותך כשזה יגיע. המשלוח יוצא מחר.", [{ kind: "unsupported_action", claims: ["נעדכן"] }] as any)).toBe("המשלוח יוצא מחר.");
+    expect(stripFactProblems("התיק עולה ₪120, מתאים?", [{ kind: "ungrounded_price", prices: ["120"] }] as any)).not.toMatch(/120/);
+  });
+
+  it("★ the engine's own lookups for a rewrite: the customer's words, two at most, none it cannot make", async () => {
+    const { autoLookups } = await import("../services/reply-engine/gates");
+    const a = autoLookups([{ kind: "ungrounded_absence", claims: ["x"] }, { kind: "unread_knowledge" }] as any, "יש משטחי במבוק?", STORE, []);
+    expect(a.map((c) => [c.function.name, JSON.parse(c.function.arguments).query])).toEqual([["woocommerce.list_products", "יש משטחי במבוק?"], ["search_knowledge", "יש משטחי במבוק?"]]);
+    const narrow = autoLookups([{ kind: "gave_up_search" }] as any, "תיקים", STORE, [{ tool: "woocommerce.list_products", outcome: "timeout", args: { query: "תיקי בד לחוף קיץ" } } as any]);
+    expect(JSON.parse(narrow[0].function.arguments)).toEqual({ query: "תיקי בד", per_page: 5 });
+    expect(autoLookups([{ kind: "unread_product" }, { kind: "unread_order" }] as any, "x", STORE, [])).toEqual([]);
+    expect(autoLookups([{ kind: "no_search" }] as any, "x", ["search_knowledge"], [])).toEqual([]);
+  });
+
+  it("★ the keyword fallback finds the chunk that says it, by the ask's own words first", async () => {
+    const { lexicalTerms, lexicalKnowledge, mergeKnowledge, KNOWLEDGE_GAP_SCORE } = await import("../services/knowledge.service");
+    expect(lexicalTerms("איסוף מנשר").own).toEqual(expect.arrayContaining(["איסוף", "מנשר", "נשר"]));
+    expect(lexicalTerms("איפה הסטודיו").expanded).toEqual(expect.arrayContaining(["כתובת", "רחוב"]));
+    const rows = [
+      { content: "משלוחים לכל הארץ תוך 3 ימים", chunkIndex: 0, documentId: "d1", document: { title: "משלוח" } },
+      { content: "נקודת איסוף בנשר: רחוב הארזים 4", chunkIndex: 1, documentId: "d1", document: { title: "משלוח" } },
+    ];
+    let where: any;
+    const db = { knowledgeChunk: { findMany: async (a: any) => { where = a.where; return rows; } } };
+    const hits = await lexicalKnowledge("t1", "איסוף מנשר", 5, null, { db, kbIds: ["kb1"] });
+    expect(hits[0].content).toMatch(/נשר/);
+    expect(hits[0].score).toBeGreaterThanOrEqual(KNOWLEDGE_GAP_SCORE);
+    expect(where).toMatchObject({ tenantId: "t1", document: { knowledgeBaseId: { in: ["kb1"] } } });
+    // No readable base: nothing, and no query.
+    expect(await lexicalKnowledge("t1", "איסוף", 5, null, { db: { knowledgeChunk: { findMany: async () => { throw new Error("must not query"); } } }, kbIds: [] })).toEqual([]);
+    const strong = { content: "s", score: 0.6, documentTitle: "a", chunkIndex: 0, documentId: "x" };
+    const weak = { content: "w", score: 0.1, documentTitle: "b", chunkIndex: 0, documentId: "y" };
+    expect(mergeKnowledge([weak, strong], hits, 5).map((c) => c.content)).toEqual(["s", hits[0].content, ...hits.slice(1).map((h) => h.content), "w"].slice(0, 5));
+  });
+
+  it("★ every store search carries the customer's sizes, one per appliance, from their last messages", async () => {
+    const { withCustomerSearchFacts } = await import("../services/reply-engine/engine");
+    const history = [
+      { direction: "INBOUND", body: "יש לי מג'ימיקס 21x24 ס\"מ" },
+      { direction: "OUTBOUND", body: "ומה עוד?" },
+      { direction: "INBOUND", body: "וגם מיקסר 22 על 35" },
+    ];
+    const out = withCustomerSearchFacts({ query: "משטח" }, history, "מה מתאים לשניהם?");
+    expect(out.fits_cm_all).toEqual([[21, 24], [22, 35]]);
+    expect(out.fits_cm).toEqual([21, 24]);
+    // The model's own sizes stand.
+    expect(withCustomerSearchFacts({ query: "משטח", fits_cm: [10, 10] }, history, "x").fits_cm_all).toBeUndefined();
+  });
+
+  it("★ my orders: a phone or an email the model passes is dropped, the guard supplies the customer's own", async () => {
+    const { scrubOrderSelectors } = await import("../services/reply-engine/engine");
+    expect(scrubOrderSelectors("woocommerce.list_customer_orders", { phone: "0501234567", email: "a@b.c", per_page: 5 })).toEqual({ per_page: 5 });
+    expect(scrubOrderSelectors("woocommerce.get_order", { order_id: "123" })).toEqual({ order_id: "123" });
+  });
+});

@@ -233,6 +233,84 @@ export function withTeamOffer(reply: string, locale: "he" | "en"): string {
   return `${t}\n${locale === "he" ? "רוצים שאעביר את השאלה לצוות שיחזור אליכם?" : "Would you like me to pass your question to the team so they can get back to you?"}`;
 }
 
+// ── Keyword fallback (prod replay 5) ──────────────────────────────────────
+// "איפה הסטודיו" and "איסוף מנשר" missed in the vector search (short Hebrew
+// asks score under the gap line) while the documents say it outright. These
+// words find the chunk that SAYS it; a short ask also brings the words such a
+// chunk is written in (an address is written "רחוב", not "איפה").
+const LEXICAL_STOP = new Set(["איפה", "יש", "לכם", "לך", "אתם", "מה", "את", "של", "עם", "על", "זה", "זו", "אני", "אפשר", "האם", "כמה", "מתי", "איך", "למה", "גם", "רק", "כן", "לא", "שלכם", "שלך", "עוד", "היי", "שלום", "תודה", "בבקשה", "the", "and", "you", "your", "what", "where", "how", "can", "have", "with", "for", "are", "is"]);
+const LEXICAL_EXPANSIONS: Array<[RegExp, string[]]> = [
+  [/איפה|כתובת|מיקום|נמצאים|ממוקמים|סטודיו|סניף|חנות פיזית|address|location|where are you|located/iu, ["כתובת", "רחוב", "סטודיו", "סניף", "נמצאים", "ממוקמים", "איסוף"]],
+  [/איסוף|לאסוף|pick ?up/iu, ["איסוף", "לאסוף", "עצמי", "נקודת", "נקודות"]],
+  [/שעות|פתוח|פתוחים|סגור|hours|open/iu, ["שעות", "פתוחים", "פתיחה"]],
+  [/משלוח|שליח|shipping|delivery/iu, ["משלוח", "משלוחים", "שליח"]],
+  [/החזר|החלפ|return|exchange/iu, ["החזרה", "החזרות", "החלפה", "זיכוי"]],
+  [/טלפון|וואטסאפ|מייל|ליצור קשר|contact|phone|email/iu, ["טלפון", "וואטסאפ", "מייל"]],
+];
+
+/** The ask's own words (with and without a one-letter prefix: "מנשר" is "from Nesher") and the words an answer to it is written in. */
+export function lexicalTerms(query: string): { own: string[]; expanded: string[] } {
+  const own = new Set<string>();
+  for (const w of String(query ?? "").match(/[\u0590-\u05FFA-Za-z]{3,}/g) ?? []) {
+    const lw = w.toLowerCase();
+    if (LEXICAL_STOP.has(lw)) continue;
+    own.add(lw);
+    if (lw.length > 3 && /^[הובלמשכ]/.test(lw)) own.add(lw.slice(1));
+    // A final letter becomes plain inside a longer word ("טלפון" in "טלפוני"): the word without it matches both.
+    if (lw.length >= 4 && /[ךםןףץ]$/.test(lw)) own.add(lw.slice(0, -1));
+  }
+  const expanded = new Set<string>();
+  for (const [re, words] of LEXICAL_EXPANSIONS) if (re.test(query)) for (const w of words) if (!own.has(w)) expanded.add(w);
+  return { own: [...own].slice(0, 10), expanded: [...expanded].slice(0, 12) };
+}
+
+/**
+ * The chunks that contain the ask's words, ranked by its own words first, then
+ * by the answer words. A hit is scored AT the gap line (not "weak"); only a chunk
+ * with one of the ask's own words, or two answer words, counts.
+ */
+export async function lexicalKnowledge(
+  tenantId: string, query: string, limit = 5, aiAgentId?: string | null,
+  deps: { db?: any; kbIds?: string[] } = {},
+): Promise<SearchResult[]> {
+  const db = deps.db ?? prisma;
+  const { own, expanded } = lexicalTerms(query);
+  if (!own.length && !expanded.length) return [];
+  const kb = deps.kbIds ?? await readableKnowledgeBaseIds(tenantId, aiAgentId);
+  if (!kb.length) return [];
+  const rows: any[] = await db.knowledgeChunk.findMany({
+    where: { tenantId, document: { knowledgeBaseId: { in: kb } }, OR: [...own, ...expanded].map((t) => ({ content: { contains: t, mode: "insensitive" } })) },
+    select: { content: true, chunkIndex: true, documentId: true, document: { select: { title: true } } },
+    take: 200,
+  });
+  const scored = rows.map((r) => {
+    const text = String(r.content ?? "").toLowerCase();
+    const ownHits = own.filter((t) => text.includes(t)).length;
+    const expHits = expanded.filter((t) => text.includes(t)).length;
+    return { r, ownHits, expHits };
+  }).filter((x) => x.ownHits > 0 || x.expHits >= 2)
+    .sort((a, b) => b.ownHits - a.ownHits || b.expHits - a.expHits);
+  return scored.slice(0, limit).map(({ r, ownHits, expHits }) => ({
+    content: r.content,
+    // At the gap line plus a little per hit: kept, ranked, never above a strong vector match.
+    score: Math.min(KNOWLEDGE_GAP_SCORE + 0.01 * (2 * ownHits + expHits), 0.45),
+    documentTitle: r.document?.title ?? "",
+    chunkIndex: r.chunkIndex,
+    documentId: r.documentId,
+  }));
+}
+
+/** Vector hits that clear the gap line first, then keyword hits not already there, then the weak vector hits. */
+export function mergeKnowledge(vector: SearchResult[], lexical: SearchResult[], limit = 5): SearchResult[] {
+  const key = (c: SearchResult) => `${c.documentId ?? c.documentTitle}#${c.chunkIndex}`;
+  const strong = vector.filter((c) => (c.score ?? 0) >= KNOWLEDGE_GAP_SCORE);
+  const weak = vector.filter((c) => (c.score ?? 0) < KNOWLEDGE_GAP_SCORE);
+  const seen = new Set(strong.map(key));
+  const out = [...strong];
+  for (const c of [...lexical, ...weak]) if (!seen.has(key(c))) { seen.add(key(c)); out.push(c); }
+  return out.slice(0, limit);
+}
+
 export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean } = {}): string {
   if (chunks.length === 0) return "";
   if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return NO_KNOWLEDGE_MATCH_BLOCK;
@@ -260,7 +338,7 @@ Rules:
 4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently.
 5. When you use a fact from a specific source, you may reference it by its title or number; never invent sources.
 6. Information NOT present here is treated as unknown for this turn.
-7. A source about a NEIGHBOURING topic is not an answer. A shipping or pickup policy does not say where the products are sold in shops (points of sale, נקודות מכירה, חנויות); opening hours of one place are not the hours of another. When the exact thing asked is not stated, say you do not have that information and offer to have the team answer; do not answer with the nearest policy instead.
+7. A source about a NEIGHBOURING topic is not an answer. A shipping or pickup policy does not say where the products are sold in shops (points of sale, נקודות מכירה, חנויות); opening hours of one place are not the hours of another. When the exact thing asked is not stated, say you do not have that information and offer to have the team answer; do not answer with the nearest policy instead. An address or a pickup place stated anywhere (a shipping or pickup text too) DOES answer "where are you" or "what is the address".
 
 ${allWeak}---BEGIN KNOWLEDGE---
 

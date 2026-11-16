@@ -5,17 +5,18 @@
 import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
 import { generateResponse, platformPaidScope } from "../ai.service";
 import { resolveAgentModel } from "../../lib/agent-model";
-import { loadRecentHistory, historyChatMessages, earlierNote } from "../conversation-history.service";
+import { loadRecentHistory, historyChatMessages, earlierNote, isPersonOutbound } from "../conversation-history.service";
 import { getCompanyContext } from "../company-context.service";
 import { prepareShopifyTurn } from "../shopify-chat-turn.service";
-import { prepareWebchatCommerceTurn, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, claimCrossSell, releaseCrossSell } from "../woo-chat-turn.service";
+import { prepareWebchatCommerceTurn, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, claimCrossSell, releaseCrossSell, customerSearchQuery, baseSizesAsked, conversationAudience, carriedColour } from "../woo-chat-turn.service";
+import { genericStoreQuery } from "../connectors/woocommerce.adapter";
 import { computeCalendarCapability } from "../calendar-capability.service";
 import { makeScheduleMeetingHandler, makeCheckAvailabilityHandler, makeRescheduleMeetingHandler, makeCancelMeetingHandler, resolveActiveBooking } from "../schedule-handler.service";
 import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
 import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "../discovery-integration.service";
 import { resolveProductRef } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
 import { takeShowLine, ungroundedPrices, stripPrices } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
@@ -29,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -59,6 +60,56 @@ export function conversationLocale(inbound: string[], outbound: string[] = []): 
   if (HEB.test(words)) return "he";
   if (LATIN_WORD.test(words.replace(/\bok\b/gi, ""))) return "en";
   return [...inbound, ...outbound].some((m) => HEB.test(String(m ?? ""))) ? "he" : "en";
+}
+
+/**
+ * What legacy adds to every store search and v2 did not (prod replay 5: a pad
+ * narrower than the appliance, a second appliance's size ignored):
+ *   - every base size the customer gave, one per appliance (fits_cm_all); the
+ *     store then returns, per size, what fits it, or the largest marked too_small;
+ *   - the customer's own Hebrew words when the model searched in Latin or vaguely;
+ *   - who they are shopping for, and a colour a refinement left unsaid.
+ * Sizes are read from this message and the customer's last few (a size given
+ * three messages ago still holds).
+ */
+export function withCustomerSearchFacts(args: Record<string, any>, history: any[], incoming: string): Record<string, any> {
+  let out = { ...args };
+  const inbound = history.filter((m: any) => m?.direction === "INBOUND");
+  if (!/[\u0590-\u05FF]/.test(String(out.query ?? "")) || genericStoreQuery(out.query)) {
+    const own = customerSearchQuery(history, incoming, out.query);
+    if (own && /[\u0590-\u05FF]/.test(own)) out.customer_query = own;
+  }
+  if (out.fits_cm == null && out.fits_cm_all == null) {
+    const seen = new Set<string>();
+    const sizes: Array<[number, number]> = [];
+    const recent = [...inbound.slice(-6).map((m: any) => String(m.body ?? "")), incoming];
+    for (const text of recent) for (const s of baseSizesAsked([], text)) {
+      const k = s.join("x");
+      if (!seen.has(k)) { seen.add(k); sizes.push(s); }
+    }
+    if (sizes.length) out = { ...out, fits_cm: sizes[0], fits_cm_all: sizes.slice(-4) };
+  }
+  if (out.audience == null) {
+    const audience = conversationAudience(history, incoming);
+    if (audience) out.audience = audience;
+  }
+  if (typeof out.query === "string") {
+    const colour = carriedColour(history, incoming, out.query);
+    if (colour) out.query = `${colour} ${out.query}`;
+  }
+  return out;
+}
+
+/**
+ * "My orders" are the ones the channel proves: a phone or an email the customer
+ * typed is not proof, and the guard refused every such lookup (prod replay 5, 9
+ * refusals). Without them the guard supplies the customer's own; with none the
+ * adapter refuses (phone_email_or_customer_id_required), never lists all orders.
+ */
+export function scrubOrderSelectors(toolFunctionName: string, args: Record<string, any>): Record<string, any> {
+  if (toolFunctionName !== "woocommerce.list_customer_orders") return args;
+  const { phone: _p, email: _e, customer_id: _c, ...rest } = args ?? {};
+  return rest;
 }
 
 /** Parse the model's `respond` arguments, tolerantly. */
@@ -239,10 +290,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       where: { tenantId: opts.tenantId, status: "CONNECTED", integration: { slug: { in: ["shopify", "woocommerce"] } } },
       select: { integration: { select: { slug: true } } },
     }).catch(() => [] as any[])),
-    timed("knowledge", retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id, {
-      record: lane === "live" && shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
-      askerKey: opts.conversationId,
-    }).catch(() => [] as any[])),
+    // The vector search and the keyword fallback together (prod replay 5: the address and a pickup city missed).
+    timed("knowledge", Promise.all([
+      retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id, {
+        record: lane === "live" && shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+        askerKey: opts.conversationId,
+      }).catch(() => [] as any[]),
+      lexicalKnowledge(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[]),
+    ]).then(([v, l]) => mergeKnowledge(v as any, l as any, 5))),
     // Both store turns in parallel; a Shopify chat wins when both answer.
     timed("woo", prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
   ]);
@@ -382,6 +437,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       }
       let effective = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: toolFunctionName, args: args as any });
       if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName)) effective = { ...effective, lang: locale };
+      if (toolFunctionName === "woocommerce.list_products") effective = withCustomerSearchFacts(effective, history, opts.incomingMessage ?? "");
+      // "My orders" are the ones the channel proves: a phone or an email the customer
+      // typed is not proof, and the guard refused every such lookup (prod replay 5).
+      // Without them the guard supplies the customer's own; with none, the adapter refuses.
+      effective = scrubOrderSelectors(toolFunctionName, effective);
       return executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
@@ -512,10 +572,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   mark("model");
 
   // ── Gate 3 ──
-  const candidates = turnTools.envelope?.candidates ?? [];
-  const grounding = [
+  let candidates = turnTools.envelope?.candidates ?? [];
+  // Recomputed: what the rewrite's lookups return is grounding too.
+  const groundingNow = () => [
     ...turnTools.records.map((r) => r.content),
-    JSON.stringify(candidates.map((c: any) => ({ title: c.title, price: c.price, currency: c.currency }))),
+    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency }))),
     renderState(state),
     knowledge ?? "",
     ...turnTools.knowledgeText,
@@ -527,13 +588,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const openTeam = openTeamQuestions(state);
   const teamAlreadyOpen = openTeam.length > 0;
   const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q));
+  // The employee's own earlier replies (never a person's): repeated asks, a "yes" to its own offer.
+  const previousBotReplies = history
+    .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")))
+    .map((m: any) => String(m.body)).slice(-6);
   const g3Input = (o: ModelTurnOutput) => ({
     reply: resolveKeysInText(o.reply, candidates),
     claims: o.claims,
     cards: o.cards ?? [],
     candidateCount: candidates.length,
     tools: turnTools.records,
-    grounding,
+    grounding: groundingNow(),
     locale,
     incomingMessage: opts.incomingMessage ?? "",
     isFirstReply: !history.some((m: any) => m.direction === "OUTBOUND"),
@@ -550,6 +615,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
     recentInbound: inbound,
     toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
+    knowledge: [knowledge ?? "", ...turnTools.knowledgeText].join("\n"),
+    previousBotReplies,
   });
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
@@ -558,27 +625,31 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // it replaced real answers turn after turn). Ours in the history, or the state's mark.
   const cannedSent = !!state.facts?.[CANNED_SENT_FACT] || history.some((m: any) => m.direction === "OUTBOUND" && isCannedTeamLine(m.body));
   let cannedNow = false;
+  (trace as any).rewriteRounds = 0;
   if (!verdict.ok) {
-    // ONE targeted rewrite.
+    // ONE targeted rewrite, at most TWO more model calls (prod replay 5: p95 17s).
     if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correctionNote(verdict.problems, locale) });
     else messages.push({ role: "system", content: correctionNote(verdict.problems, locale) });
     const first = verdict;
     const original = output;
     let second: ModelTurnOutput | null = null;
+    const rewriteCall = async (choice: any) => { (trace as any).rewriteRounds++; return call(choice); };
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
-      // An unread product, order or policy gets ONE tool round to read it before the rewrite.
-      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence");
-      let r = await call(mayRead ? "required" : forceRespond);
-      if (mayRead) {
-        let calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
-        // It answered again without reading: the read is the point of this round, so it is asked once more.
-        if (!calls.some((c) => c.function?.name !== "respond") && calls.length) {
-          messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-          for (const c of calls) messages.push({ role: "tool", tool_call_id: c.id, content: "Not sent: call the lookup tool first (product, order or knowledge; a narrower search after a timeout), then respond from what it returns." });
-          r = await call("required");
-          calls = (r.toolCalls ?? []) as any;
-        }
+      // The lookups the engine can make itself run first, with no model round:
+      // the customer's own words in the store, or in the knowledge.
+      const auto = autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records);
+      if (auto.length) {
+        messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
+        await runToolRound(env, auto);
+        for (const c of auto) messages.push({ role: "tool", tool_call_id: c.id, content: turnTools.records.find((x) => x.callId === c.id)?.content ?? "" });
+        candidates = turnTools.envelope?.candidates ?? [];
+      }
+      // A lookup only the model can make (which product, which order) gets one tool round.
+      const modelRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
+      let r = await rewriteCall(modelRead ? "required" : forceRespond);
+      if (modelRead) {
+        const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
         const work = calls.filter((c) => c.function?.name !== "respond");
         if (work.length) {
           messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
@@ -587,7 +658,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
             const rec = turnTools.records.find((x) => x.callId === c.id);
             messages.push({ role: "tool", tool_call_id: c.id, content: rec?.content ?? "Not sent: read the results first." });
           }
-          r = await call(forceRespond);
+          candidates = turnTools.envelope?.candidates ?? [];
+          r = await rewriteCall(forceRespond);
         }
       }
       const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
@@ -600,15 +672,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (second && v2?.ok) {
       output = second; verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
     } else {
-      // Not clean: what is left is cleaned and sent unless it is a FACT problem
-      // (a price, a product or an action no tool backs). The rewrite first, else the original.
+      // Not clean: what is left is cleaned and sent. A FACT problem (a price, a
+      // product, an absence or an action no tool backs) loses its sentence; the
+      // rest goes out if it still answers. The rewrite first, else the original.
       const salvage = (o: ModelTurnOutput | null) => {
         if (!o) return null;
         const v = gate3(g3Input(o));
         const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
-        const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null : o.handoff;
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(o.reply, codes), handoff };
-        // Nothing, or too little, left to answer a question with: the other candidate, else the fallback.
+        const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null
+          : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
+          : o.handoff;
+        const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        // Nothing, or too little, left to answer with: the other candidate, else the fallback.
         if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) })) return null;
         const after = gate3(g3Input(cleaned));
         return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
@@ -619,6 +695,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
+        (trace as any).fallbackKinds = factualProblems((v2 ?? first).problems).map((p) => p.kind);
         // A product turn is answered from what the tools returned, never handed to a person.
         const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
@@ -644,14 +721,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     trace.gate3 = { ...verdict, rewrite: "none" };
   }
   mark("gate3");
-  // Last line of defence (prod replay 4): a price nothing grounds is never sent,
-  // whatever path produced the reply. The sentence keeps the rest.
+  // Last line of defence, on every path: a price nothing grounds (prod replay 4),
+  // and a character from another alphabet (prod replay 5: "כשמ折לים").
   if (output?.reply) {
-    const leftover = ungroundedPrices(resolveKeysInText(output.reply, candidates), grounding);
-    if (leftover.length) {
-      output = { ...output, reply: stripPrices(resolveKeysInText(output.reply, candidates), leftover).trim() };
-      (trace as any).priceStripped = leftover.length;
-    }
+    const text = stripForeignScript(resolveKeysInText(output.reply, candidates));
+    const leftover = ungroundedPrices(text, groundingNow());
+    if (leftover.length) (trace as any).priceStripped = leftover.length;
+    output = { ...output, reply: (leftover.length ? stripPrices(text, leftover) : text).trim() };
   }
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
 

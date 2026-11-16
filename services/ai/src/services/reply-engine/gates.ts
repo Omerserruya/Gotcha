@@ -9,7 +9,7 @@
  * budget allows a turn.
  */
 import { checkAiAllowed } from "@chatcenter/shared";
-import { ungroundedPrices, checkReplyStyle, type StyleViolationKind } from "../reply-style-check.service";
+import { ungroundedPrices, stripPrices, checkReplyStyle, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
 
@@ -173,7 +173,12 @@ export function unbackedPromises(reply: string, o: { teamQuestion: boolean; hand
 // bamboo. "We don't have / don't sell / no match / doesn't exist" is a fact.
 const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו))(?![\u0590-\u05FF])|\b(?:we (?:don'?t|do not) (?:sell|carry|have|stock)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such))\b/iu;
 const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for"]);
-const stem = (w: string) => (w.length > 3 && /^[הובלמשכ]/.test(w) ? w.slice(1) : w).toLowerCase();
+const CAPABILITY_ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|באפשרותנו\s+)?אפשרות|אין\s+באפשרותנו|אנחנו\s+לא\s+(?:יכולים|יכולות|עושים)|לא\s+(?:ניתן|נוכל)|אי\s+אפשר)(?![\u0590-\u05FF])|\b(?:we (?:can'?t|cannot|are unable to|don'?t do)|it'?s not possible|not possible to)\b/iu;
+const CAPABILITY_WORDS = new Set(["אפשרות", "באפשרותנו", "יכולים", "יכולות", "עושים", "ניתן", "נוכל", "אפשר", "לצערנו", "לצערי", "כרגע", "can't", "cannot", "unable", "possible", "don't"].map((w) => w.toLowerCase()));
+// Final letters (ך ם ן ף ץ) as their plain forms: "טלפון" is in "טלפוני".
+const unfinal = (w: string) => w.replace(/ך/g, "כ").replace(/ם/g, "מ").replace(/ן/g, "נ").replace(/ף/g, "פ").replace(/ץ/g, "צ");
+const stem = (w: string) => unfinal((w.length > 3 && /^[הובלמשכ]/.test(w) ? w.slice(1) : w).toLowerCase());
+const CAPABILITY_STEMS = new Set([...CAPABILITY_WORDS].flatMap((w) => [w, stem(w)]));
 const termsOf = (sentence: string) => [...new Set((sentence.match(/[\u0590-\u05FFA-Za-z]{3,}/g) ?? []).filter((w) => !ABSENCE_WORDS.has(w.toLowerCase())).map(stem))];
 const SEARCH_TOOL = /list_products|search_products|get_product|variation|search_knowledge|categor/i;
 const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
@@ -182,10 +187,20 @@ const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
  * covers the claim's words and that did not return them. Without such words
  * ("אין לנו כזה"), any product search that ran this turn grounds it.
  */
-export function ungroundedAbsence(reply: string, tools: ToolRunRecord[]): string[] {
+export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowledge = ""): string[] {
   const sentences = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
   const searches = tools.filter((t) => SEARCH_TOOL.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
   const out: string[] = [];
+  // What the business itself says it cannot do (prod replay 5: "we can't arrange a
+  // phone call", twice, to upset customers). Grounded only by the business's own
+  // words: the knowledge or a tool result naming the same thing.
+  const said = unfinal([knowledge, ...tools.map((t) => String(t.content ?? ""))].join("\n").toLowerCase());
+  for (const sentence of sentences) {
+    if (!CAPABILITY_ABSENCE.test(sentence) || ABSENCE.test(sentence)) continue;
+    const clause = sentence.split(/,|;|\s+(?:אבל|אך|but)\s+/iu).filter((c) => CAPABILITY_ABSENCE.test(c)).join(" ");
+    const terms = termsOf(clause).filter((w) => !CAPABILITY_STEMS.has(w));
+    if (terms.length && !terms.some((w) => said.includes(w))) out.push(sentence.trim().slice(0, 120));
+  }
   for (const sentence of sentences) {
     if (!ABSENCE.test(sentence)) continue;
     // Only the clause that says it ("אין לנו כזה, אבל יש דומה": not "דומה").
@@ -199,7 +214,7 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[]): string
       const need = terms.length <= 2 ? terms.length : terms.length - 1;
       const ranFor = searches.filter((t) => { const q = query(t); return terms.filter((w) => q.some((x) => x.includes(w) || w.includes(x))).length >= need; });
       // A product search that returned the very thing contradicts the claim.
-      const returned = ranFor.some((t) => PRODUCT_TOOL.test(t.tool) && terms.some((w) => String(t.content ?? "").includes(w)) && t.outcome === "ok");
+      const returned = ranFor.some((t) => PRODUCT_TOOL.test(t.tool) && terms.some((w) => unfinal(String(t.content ?? "").toLowerCase()).includes(w)) && t.outcome === "ok");
       grounded = ranFor.length > 0 && !returned;
     }
     if (!grounded) out.push(sentence.trim().slice(0, 120));
@@ -224,6 +239,45 @@ export function unknownProductKeys(claims: Claim[], cards: string[], candidateCo
     return !(n >= 1 && n <= candidateCount);
   });
 }
+
+// Prod replay 5: a category and a colour were given, the customer said the site was
+// hard, and the reply asked for a photo three times and showed nothing.
+const PHOTO_ASK = /(?<![\u0590-\u05FF])(?:תמונה|תמונות|צילום|לצלם|תצלמו|תצלמי|תצלם|צלמו)(?![\u0590-\u05FF])|\b(?:photo|picture|pic)s?\b/iu;
+const PRODUCT_WANT = /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|יש לכם|רוצה|רוצים|צריך|צריכה|בצבע|בגוון|צבע|גוון|מתאים|מתאימה|דגם|מידה)(?![\u0590-\u05FF])|\b(?:looking for|do you have|i want|i need|colou?r)\b/iu;
+/** A product ask met with a request for a photo, while the store search was there and did not run. */
+export function photoInsteadOfSearch(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
+  if (!PHOTO_ASK.test(reply ?? "") || !PRODUCT_WANT.test(incoming ?? "")) return false;
+  const canSearch = toolsOffered.some((n) => /list_products|search_products/i.test(n));
+  return canSearch && !tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
+}
+
+const qWords = (s: string) => new Set((String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9]{2,}/g) ?? []).map((w) => w.toLowerCase()));
+/** A question (or a photo request) the employee already asked in this conversation. */
+export function repeatedAsk(reply: string, previousBotReplies: string[]): boolean {
+  if (!previousBotReplies.length) return false;
+  if (PHOTO_ASK.test(reply ?? "") && previousBotReplies.some((p) => PHOTO_ASK.test(p) && /\?/.test(p))) return true;
+  const questions = (String(reply ?? "").match(/[^.!?\n]+\?/g) ?? []).map(qWords).filter((q) => q.size >= 3);
+  const before = previousBotReplies.flatMap((p) => String(p).match(/[^.!?\n]+\?/g) ?? []).map(qWords);
+  return questions.some((q) => before.some((b) => { let n = 0; for (const w of q) if (b.has(w)) n++; return n / Math.max(q.size, b.size) >= 0.7; }));
+}
+
+// The employee offered a person, or asked if it is urgent, and the customer said yes (prod replay 5).
+const OFFERED_PERSON = /(?<![\u0590-\u05FF])(?:דחוף|דחופה|להעביר\s+(?:אותך|את\s+זה|את\s+הפנייה|לנציג|לצוות)|שאעביר|שנעביר|נציג|נציגה|שמישהו\s+מהצוות|לדבר\s+עם\s+(?:מישהו|נציג))(?![\u0590-\u05FF])|\b(?:urgent|connect you|pass (?:this|you) (?:on|to)|talk to (?:someone|a person))\b/iu;
+const YES = /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|ברור|בטח|אשמח|בהחלט|yes|yeah|yep|please|sure)(?:[\s,.!]|$)/iu;
+/** The customer accepted the employee's own offer of a person, and the reply does neither hand over nor record it. */
+export function ignoredYes(incoming: string, lastBotReply: string | null | undefined, handedOff: boolean, teamQuestion: boolean): boolean {
+  if (handedOff || teamQuestion || !lastBotReply) return false;
+  return /\?/.test(lastBotReply) && OFFERED_PERSON.test(lastBotReply) && YES.test(incoming ?? "");
+}
+
+// A character from another script inside a Hebrew or English reply (prod replay 5: "כשמ折לים").
+const FOREIGN_SCRIPT = /[^\p{Script=Hebrew}\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}\s]/gu;
+export const foreignScript = (reply: string) => (String(reply ?? "").match(FOREIGN_SCRIPT) ?? []).length > 0;
+export const stripForeignScript = (reply: string) => String(reply ?? "").replace(FOREIGN_SCRIPT, "");
+
+// How the system works is not the customer's business (prod replay 5: "the number is linked to your contact details").
+const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b/iu;
+export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "");
 
 export interface Gate3Input {
   reply: string;
@@ -254,6 +308,10 @@ export interface Gate3Input {
   teamAlreadyOpen?: boolean;
   /** This turn's team question is a NEW issue (not a repeat of the open one). */
   newTeamQuestion?: boolean;
+  /** The business's own words this turn: the knowledge shown and search_knowledge results. */
+  knowledge?: string;
+  /** The employee's own earlier replies in this conversation, oldest first (never a person's). */
+  previousBotReplies?: string[];
 }
 
 export function gate3(i: Gate3Input): Gate3Verdict {
@@ -279,7 +337,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
     ...unbackedPromises(reply, { teamQuestion: !!i.teamQuestion, handedOff: i.handedOff, teamAlreadyOpen: !!i.teamAlreadyOpen, approvalPending: i.approvalPending }),
   ];
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
-  const absent = ungroundedAbsence(reply, i.tools);
+  const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
   if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
 
   if (gaveUpSearch(reply, i.tools)) problems.push({ kind: "gave_up_search" });
@@ -288,6 +346,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   else if (unreadOrder(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_order" });
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
+  if (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered)) problems.push({ kind: "no_search" });
+  if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
 
@@ -310,6 +370,9 @@ export function gate3(i: Gate3Input): Gate3Verdict {
     .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price") as string[];
   if (i.locale === "he") for (const [code, re] of V2_BANS_HE) if (re.test(reply)) style.push(code);
   if (simulationLeak(reply)) style.push("simulation_leak");
+  if (foreignScript(reply)) style.push("foreign_script");
+  if (internalJargon(reply)) style.push("internal_jargon");
+  if (repeatedAsk(reply, i.previousBotReplies ?? [])) style.push("repeated_ask");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
@@ -346,6 +409,49 @@ export function neutralFirstPerson(s: string): string {
 }
 
 /**
+ * A FACT problem loses its sentence (prod replay 5: 3 canned lines, each where one
+ * sentence, an absence or a promise, failed and the rest of the reply was fine).
+ * A made-up price loses the price. What is left is judged again by the caller.
+ */
+export function stripFactProblems(reply: string, problems: ClaimProblem[]): string {
+  let s = String(reply ?? "");
+  for (const p of problems) {
+    if (p.kind === "ungrounded_price") s = stripPrices(s, p.prices);
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action") {
+      const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
+      if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
+    }
+  }
+  return s.trim();
+}
+
+/**
+ * The lookups a rewrite needs that the engine can make itself, with no model
+ * round: the customer's own words in the store (an absence, a photo asked
+ * instead of a search, a search that gave up), or in the knowledge (a business
+ * fact). Two at most. Product and order reads need the model (which product,
+ * which order) and are not here.
+ */
+export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOffered: string[], done: ToolRunRecord[]): Array<{ id: string; function: { name: string; arguments: string } }> {
+  const out: Array<{ id: string; function: { name: string; arguments: string } }> = [];
+  const words = String(incoming ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!words) return out;
+  const store = toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
+  const has = (k: ClaimProblem["kind"]) => problems.some((p) => p.kind === k);
+  if (store && (has("ungrounded_absence") || has("no_search"))) {
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: words, per_page: 5 }) } });
+  } else if (store && has("gave_up_search")) {
+    const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
+    const narrow = String((last?.args as any)?.query ?? words).split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: narrow, per_page: 5 }) } });
+  }
+  if (has("unread_knowledge") && toolsOffered.includes("search_knowledge")) {
+    out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
+  }
+  return out.slice(0, 2);
+}
+
+/**
  * Deterministic cleanup of a reply whose remaining problems are style only: what
  * code can fix safely is fixed, the rest is sent as written. An empty result means
  * nothing is left to say.
@@ -358,6 +464,9 @@ export function cleanStyle(reply: string, codes: string[]): string {
   // "מצאתי כמה אפשרויות" -> "יש כמה אפשרויות"; "לא מצאתי" is left alone (the ban skips it too).
   if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
+  if (c.has("foreign_script")) s = stripForeignScript(s);
+  if (c.has("internal_jargon")) s = dropSentences(s, INTERNAL_JARGON);
+  if (c.has("repeated_ask")) s = dropSentences(s, PHOTO_ASK);
   if (c.has("help_grammar")) s = s.replace(/(?<![\u0590-\u05FF])מה(\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור)/gu, "במה$1");
   if (c.has("mixed_person")) s = s.replace(/(?<![\u0590-\u05FF])(?:ביקשתם)(?=\s+ממך)/gu, "ביקשנו").replace(/(?<![\u0590-\u05FF])(?:שלחתם)(?=\s+לך)/gu, "שלחנו").replace(/(?<![\u0590-\u05FF])(?:אמרתם)(?=\s+לך)/gu, "אמרנו");
   return s.replace(/\s*[\u2013\u2014]\s*/g, ", ").replace(/[ \t]{2,}/g, " ").trim();
@@ -388,6 +497,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell say the team will check.");
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
     if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search for those words ran this turn, or it returned them. Search for it now (the customer's own words), and answer from what comes back; if nothing does, say you did not find it by that name and ask.`);
+    if (p.kind === "no_search") lines.push("- The customer told you what they want (a category, a colour, a size). Search the store with their words now and show what fits; ask at most one short question, never for a photo you already asked for.");
+    if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Call it once more with a narrower query (the category, or one or two words, per_page 5). If you still have nothing, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never say you could not check.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, colours, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
@@ -398,6 +509,9 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
       if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
+      if (c.has("foreign_script")) lines.push("- A character from another alphabet slipped into a word: rewrite the reply in the customer's language only.");
+      if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access): say what the customer can do, plainly.");
+      if (c.has("repeated_ask")) lines.push("- You already asked that in this conversation: do not ask it again. Use what you have, or move on.");
       if (c.has("help_grammar")) lines.push("- \"במה אפשר לעזור\", not \"מה אפשר לעזור\".");
       if (c.has("mixed_person")) lines.push("- One person per sentence: we asked you (\"ביקשנו ממך\"), not \"ביקשתם ממך\".");
       if (c.has("self_gendered")) lines.push("- Speak of yourself neutrally (\"כדאי\", \"ממליצים\", \"הכי מתאים לך\"), never a gendered first person.");

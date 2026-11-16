@@ -24,6 +24,8 @@ const h = vi.hoisted(() => ({
   failReads: 0,
   slowReads: 0,
   history: null as any[] | null,
+  lexical: [] as any[],
+  groundTitle: "Canvas Tote",
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -80,7 +82,8 @@ vi.mock("../services/conversation-history.service", async (orig) => ({
 }));
 vi.mock("../services/company-context.service", () => ({ getCompanyContext: async () => ({ organizationName: "Demo Store", industry: "fashion" }) }));
 vi.mock("../services/shopify-chat-turn.service", () => ({ prepareShopifyTurn: async () => null }));
-vi.mock("../services/woo-chat-turn.service", () => ({
+vi.mock("../services/woo-chat-turn.service", async (orig) => ({
+  ...(await orig<any>()),
   WOO_COMPLEMENTARY_TOOL: { type: "function", function: { name: "woocommerce.complementary_products", description: "", parameters: {} } },
   prepareWebchatCommerceTurn: async () => ({
     provider: "woocommerce", productMessagingEnabled: true, suggestComplementary: false, carouselSize: 3, shown: [],
@@ -95,7 +98,7 @@ vi.mock("../services/schedule-handler.service", () => ({
   makeScheduleMeetingHandler: vi.fn(), makeCheckAvailabilityHandler: vi.fn(), makeRescheduleMeetingHandler: vi.fn(), makeCancelMeetingHandler: vi.fn(), resolveActiveBooking: async () => null,
 }));
 vi.mock("../services/connectors/custom-api.service", () => ({ executeCustomApiTool: vi.fn() }));
-vi.mock("../services/connectors/integration-framework", () => ({ executeAdapterTool: vi.fn() }));
+vi.mock("../services/connectors/integration-framework", () => ({ executeAdapterTool: vi.fn(), registerAdapter: vi.fn() }));
 vi.mock("../services/discovery-integration.service", () => ({
   enrichProductSearchArgs: async ({ args }: any) => args,
   isComplementaryTool: () => false,
@@ -103,11 +106,14 @@ vi.mock("../services/discovery-integration.service", () => ({
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: "ok",
-    candidates: [{ title: "Canvas Tote", productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] }],
-    appliedFilters: [], unavailableFilters: [], safeModelSummary: "",
+    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] }],
+    appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
   }),
 }));
-vi.mock("../services/knowledge.service", () => ({ retrieveRelevantChunks: async () => [], buildKnowledgeContext: () => "", shouldRecordKnowledgeGap: () => false }));
+vi.mock("../services/knowledge.service", () => ({
+  retrieveRelevantChunks: async () => [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
+  lexicalKnowledge: async () => h.lexical, mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
+}));
 vi.mock("../services/skill-runtime.service", () => ({ loadSkillContext: async () => ({ candidates: [] }), skillApprovalReason: () => null }));
 vi.mock("../services/connectors/crm-adapter-resolver", () => ({ getCrmAdapter: vi.fn() }));
 vi.mock("../services/crm-prefetch.service", () => ({ invalidateCrmPrefetch: vi.fn() }));
@@ -137,6 +143,8 @@ beforeEach(() => {
   h.failReads = 0;
   h.slowReads = 0;
   h.history = null;
+  h.lexical = [];
+  h.groundTitle = "Canvas Tote";
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -520,20 +528,32 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
     expect(r.reply).toBe("אפשר לשלם בתשלומים בקופה באתר.");
   });
 
-  it("★ unread product: an answer without the read is sent back once, the read runs, the answer comes from it", async () => {
+  it("★ unread product: the rewrite round reads the product (one tool round), then answers; two model calls at most", async () => {
     h.responses.push(
       { toolCalls: [respond("u1", { reply: "אין לי כאן מידע על זה, אבדוק מול הצוות." })] },
-      { toolCalls: [respond("u2", { reply: "אין לי מידע, אבדוק מול הצוות." })] },
       { toolCalls: [tc("u3", "woocommerce.get_product", { product_id: "55" })] },
       { toolCalls: [respond("u4", { reply: "הוא מכותנה אורגנית, נעים ולא מגרד." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הסוודר מגרד?" }, "autonomous");
-    expect(h.calls.map((c) => c.toolChoice)).toEqual(["required", "required", "required", { type: "function", function: { name: "respond" } }]);
-    expect(h.calls[2].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "u2")?.content).toMatch(/call the lookup tool first/);
+    expect(h.calls.map((c) => c.toolChoice)).toEqual(["required", "required", { type: "function", function: { name: "respond" } }]);
     expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.get_product");
+    expect((r.trace as any).rewriteRounds).toBe(2);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toMatch(/כותנה/);
   });
+
+  it("★ the rewrite never takes more than two model calls (prod replay 5: p95 17s)", async () => {
+    h.responses.push(
+      { toolCalls: [respond("v1", { reply: "אין לי כאן מידע על זה, אבדוק מול הצוות." })] },
+      { toolCalls: [respond("v2", { reply: "אין לי מידע על זה." })] },
+      { toolCalls: [respond("v3", { reply: "never asked for" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הסוודר מגרד?" }, "autonomous");
+    expect(h.calls).toHaveLength(2);
+    expect((r.trace as any).rewriteRounds).toBe(1);
+    expect(r.reply).not.toBe("never asked for");
+  });
+;
 
   it("★ the canned line goes out once: it is marked in the state (hidden from the model)", async () => {
     h.responses.push(
@@ -594,7 +614,6 @@ describe("prod replay 3 (2026-11-16), through a whole turn", () => {
     h.responses.push(
       { toolCalls: [tc("w1", "woocommerce.list_products", { query: "תיקי בד לחוף" })] },
       { toolCalls: [respond("w2", { reply: "לא הצלחתי לבדוק את זה כרגע." })] },
-      { toolCalls: [tc("w3", "woocommerce.list_products", { query: "תיק בד", per_page: 5 })] },
       { toolCalls: [respond("w4", { reply: "יש לנו תיק בד קנבס, לאיזה שימוש?" })] },
     );
     let r: any;
@@ -603,7 +622,10 @@ describe("prod replay 3 (2026-11-16), through a whole turn", () => {
     expect(note).toMatch(/narrower query/);
     expect(note).not.toMatch(/say you could not check/);
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("gave_up_search");
-    expect(h.calls[2].toolChoice).toBe("required");
+    // The engine searched again itself, narrower, and the model answered in ONE more call.
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => d.args.query)).toEqual(["תיקי בד לחוף", "תיקי בד"]);
+    expect(h.calls[2].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
+    expect(h.calls).toHaveLength(3);
     expect(r.trace.tools.map((t: any) => t.outcome)).toEqual(["timeout", "ok"]);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toBe("יש לנו תיק בד קנבס, לאיזה שימוש?");
@@ -612,12 +634,15 @@ describe("prod replay 3 (2026-11-16), through a whole turn", () => {
   it("★ \"the address is not available\" without searching: search_knowledge runs, the answer comes from it", async () => {
     h.responses.push(
       { toolCalls: [respond("k1", { reply: "הכתובת המדויקת לא זמינה כרגע." })] },
-      { toolCalls: [tc("k2", "search_knowledge", { query: "כתובת הסטודיו" })] },
       { toolCalls: [respond("k3", { reply: "הסטודיו ברחוב הרצל 5 בתל אביב." })] },
     );
+    // The vector search misses it; the keyword fallback finds the chunk that says it.
+    h.lexical = [{ content: "איסוף עצמי מהסטודיו ברחוב הרצל 5 בתל אביב", score: 0.33, documentTitle: "משלוחים", chunkIndex: 0 }];
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסטודיו?" }, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unread_knowledge");
     expect(r.trace.tools.map((t: any) => t.tool)).toContain("search_knowledge");
+    expect(h.calls).toHaveLength(2);
+    expect(h.calls[1].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "auto_knowledge_1")?.content).toMatch(/הרצל 5/);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toBe("הסטודיו ברחוב הרצל 5 בתל אביב.");
   });
@@ -658,23 +683,62 @@ describe("prod replay 4 (2026-11-16), through a whole turn", () => {
   it("★ \"we don't sell it\" with no search: the search runs before the answer", async () => {
     h.responses.push(
       { toolCalls: [respond("b1", { reply: "משטחי במבוק אנחנו לא מוכרים." })] },
-      { toolCalls: [tc("b2", "woocommerce.list_products", { query: "משטח במבוק" })] },
       { toolCalls: [respond("b3", { reply: "יש לנו תיק בד קנבס, לאיזה שימוש?" })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_absence");
-    expect(h.calls[1].toolChoice).toBe("required");
-    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.list_products");
+    // The engine searched the customer's own words itself; one model call for the answer.
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("יש משטחי במבוק?");
+    expect(h.calls).toHaveLength(2);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
   });
 
-  it("★ an absence claim the rewrite keeps is never sent (a fact problem)", async () => {
+  it("★ an absence claim the search contradicts is never sent: its sentence goes, else the products found", async () => {
+    h.groundTitle = "משטח במבוק כהה";
     h.responses.push(
       { toolCalls: [respond("b4", { reply: "משטחי במבוק אנחנו לא מוכרים." })] },
       { toolCalls: [respond("b5", { reply: "במבוק אנחנו לא מוכרים, מצטערים." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/לא מוכרים/);
+    // Nothing else was in the reply: the products the search returned, not a canned line.
     expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(r.reply).toBe("הנה מה שיש לנו שמתאים.");
+  });
+});
+
+describe("prod replay 5 (2026-11-16), through a whole turn", () => {
+  it("★ an absence sentence the search contradicts is cut; the rest of the reply goes out, no canned line", async () => {
+    h.groundTitle = "משטח במבוק כהה";
+    h.responses.push(
+      { toolCalls: [respond("f1", { reply: "יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים." })] },
+      { toolCalls: [respond("f2", { reply: "יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect(r.reply).toBe("יש לנו משטחים בכמה גדלים.");
+  });
+
+  it("★ \"yes\" to its own offer of a person: the handoff happens even if the rewrite forgets it", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "חייבו אותי פעמיים ואין הזמנה", metadata: null },
+      { direction: "OUTBOUND", body: "מצטערים לשמוע. זה דחוף? אם כן אעביר לנציג שימשיך כאן.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "כן", metadata: null },
+    ];
+    h.responses.push(
+      { toolCalls: [respond("y1", { reply: "בסדר, מה עוד אפשר לבדוק?" })] },
+      { toolCalls: [respond("y2", { reply: "בסדר, מה עוד אפשר לבדוק?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ignored_yes");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:the customer accepted/);
+  });
+
+  it("★ the business address from the profile is in the prompt", async () => {
+    const cc = await import("../services/company-context.service");
+    const spy = vi.spyOn(cc, "getCompanyContext").mockResolvedValue({ organizationName: "Tehila", address: "הרצל 5, נהריה" } as any);
+    h.responses.push({ toolCalls: [respond("a1", { reply: "בטח." })] });
+    try { await runReplyEngineTurn(opts, "autonomous"); } finally { spy.mockRestore(); }
+    expect(h.calls[0].messages[0].content).toContain("Address: הרצל 5, נהריה");
   });
 });
