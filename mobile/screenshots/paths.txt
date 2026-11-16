@@ -1,0 +1,8 @@
+# App Store screenshots: one screen per line, "<file name> <path>", in store order.
+# Ids come from the prod org "GOTCHA App Review" (Apple's reviewer account).
+1-inbox /he/m/inbox
+2-conversation /he/m/inbox/cmvwytgfb00hj146c9f3juzr7
+3-approvals /he/m/approvals
+4-customer /he/m/customers/cmvwyf63u0017r7lyohdhcqo6
+5-home /he/m/home
+6-outreach /he/m/outreach

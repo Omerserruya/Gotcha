@@ -1,0 +1,95 @@
+# App Store screenshots (Mobile-Team, 2026-11-16).
+#
+# Builds the iPhone app for the simulator with the compile condition
+# SCREENSHOTS, which adds one user script (MainViewController.screenshotScript):
+# it signs in as Apple's reviewer account (secrets GOTCHA_DEMO_EMAIL and
+# GOTCHA_DEMO_PASSWORD, prod org "GOTCHA App Review") and opens the screen
+# named by GOTCHA_SHOT_PATH. Store builds never carry it: the condition is
+# set only on this workflow's xcodebuild line.
+#
+# Screens: mobile/screenshots/paths.txt. Device: the newest iPhone Pro Max
+# (6.9", 1320x2868). Status bar 9:41, full battery. Run with a tag "shots-*"
+# and download the "store-shots" artifact.
+name: iOS store screenshots
+
+on:
+  push:
+    tags: ['shots-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: GOTCHA_ENV=prod npx cap sync ios
+
+      - name: Build for the simulator, with the screenshot sign-in
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='DEBUG SCREENSHOTS' build | tail -5
+
+      - name: Boot the newest iPhone Pro Max
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Pro Max' in x['name']]
+          print(c[-1]['udid'])")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices | grep "$UDID"
+          xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+          xcrun simctl install "$UDID" "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+
+      - name: Sign in once
+        env:
+          SIMCTL_CHILD_GOTCHA_DEMO_EMAIL: ${{ secrets.GOTCHA_DEMO_EMAIL }}
+          SIMCTL_CHILD_GOTCHA_DEMO_PASSWORD: ${{ secrets.GOTCHA_DEMO_PASSWORD }}
+          SIMCTL_CHILD_GOTCHA_SHOT_PATH: /he/m/home
+        run: |
+          mkdir -p "$RUNNER_TEMP/shots"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 35
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/0-after-sign-in.png"
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+
+      - name: The screens
+        env:
+          SIMCTL_CHILD_GOTCHA_DEMO_EMAIL: ${{ secrets.GOTCHA_DEMO_EMAIL }}
+          SIMCTL_CHILD_GOTCHA_DEMO_PASSWORD: ${{ secrets.GOTCHA_DEMO_PASSWORD }}
+        run: |
+          grep -v '^#' screenshots/paths.txt | while read -r name path; do
+            [ -n "$name" ] || continue
+            SIMCTL_CHILD_GOTCHA_SHOT_PATH="$path" xcrun simctl launch "$UDID" il.co.gotcha.app < /dev/null
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$name.png" < /dev/null
+            xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+            sleep 2
+          done
+          ls -la "$RUNNER_TEMP/shots"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-shots
+          path: ${{ runner.temp }}/shots
+          retention-days: 3

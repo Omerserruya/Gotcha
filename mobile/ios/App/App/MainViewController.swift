@@ -28,7 +28,61 @@ class MainViewController: CAPBridgeViewController {
             WKUserScript(source: Self.edgeColorScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         )
         content?.add(EdgeColorHandler(owner: self), name: Self.edgeColorMessage)
+        #if SCREENSHOTS
+        if let script = Self.screenshotScript() {
+            content?.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        #endif
     }
+
+    #if SCREENSHOTS
+    /// ★ Store screenshots only (.github/workflows/ios-screenshots.yml). Never in
+    /// a store build: the condition is set on the xcodebuild command line of
+    /// that workflow alone.
+    ///
+    /// The simulator passes `SIMCTL_CHILD_GOTCHA_DEMO_EMAIL`, `..._PASSWORD`
+    /// and `..._SHOT_PATH`. On the sign-in page the script signs in; anywhere
+    /// else it goes once per launch to the screen to photograph.
+    static func screenshotScript() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        guard let email = env["GOTCHA_DEMO_EMAIL"], let password = env["GOTCHA_DEMO_PASSWORD"] else { return nil }
+        let path = env["GOTCHA_SHOT_PATH"] ?? ""
+        guard let data = try? JSONSerialization.data(withJSONObject: [email, password, path]),
+              let args = String(data: data, encoding: .utf8) else { return nil }
+        return """
+        (function () {
+          var c = \(args), email = c[0], password = c[1], path = c[2];
+          function set(el, v) {
+            var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            setter.call(el, v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (/\\/sign-in(?:[\\/?#]|$)/.test(location.pathname)) {
+            var tries = 0;
+            var t = setInterval(function () {
+              var e = document.querySelector('input[type="email"], input[name="email"]');
+              var p = document.querySelector('input[type="password"]');
+              var b = document.querySelector('button[type="submit"]');
+              if (++tries > 40) clearInterval(t);
+              if (!e || !p || !b) return;
+              clearInterval(t);
+              set(e, email); set(p, password);
+              if (document.activeElement) document.activeElement.blur();
+              setTimeout(function () { b.click(); }, 300);
+            }, 250);
+            return;
+          }
+          if (path && location.pathname !== path && !sessionStorage.getItem('gotchaShot')) {
+            sessionStorage.setItem('gotchaShot', '1');
+            location.href = path;
+            return;
+          }
+          setTimeout(function () { if (document.activeElement) document.activeElement.blur(); }, 1500);
+        })();
+        """
+    }
+    #endif
 
     /// ★ The app, not the page, keeps clear of the iPhone's edges (Omer, 2026-11-15).
     ///
