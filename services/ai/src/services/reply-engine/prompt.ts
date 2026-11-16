@@ -119,6 +119,8 @@ export function buildStablePrefix(p: PrefixInput): string {
     if (p.company.businessDescription) biz.push(clip(p.company.businessDescription, 600));
     // Prod replay 5: "where is the studio" got "the address is not available" twice.
     if (p.company.address) biz.push(`Address: ${clip(p.company.address, 200)}`);
+    // Prod replay 6: Tehila's address is only in "send returns to ...". Named for what the documents say it is.
+    else if (p.company.documentAddress) biz.push(`Address given in the business's documents for returns and pickup coordination: ${clip(p.company.documentAddress, 120)}. Asked where the business is, give it as that address, not as a shop or a branch.`);
     if (p.company.observedVoice) biz.push(`Voice (how this business really writes, follow it): ${clip(p.company.observedVoice, 600)}`);
   } else {
     biz.push("(no business profile)");

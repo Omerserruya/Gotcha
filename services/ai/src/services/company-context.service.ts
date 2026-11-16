@@ -29,6 +29,8 @@ export interface CompanyContext {
   observedVoice?: string | null;
   /** The business's own address (BusinessProfile.address), when the owner gave one. */
   address?: string | null;
+  /** v2 only: an address the business's documents give, when the profile has none (knowledge.service documentAddress). */
+  documentAddress?: string | null;
 }
 
 /**

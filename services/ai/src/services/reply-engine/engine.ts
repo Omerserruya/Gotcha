@@ -16,7 +16,7 @@ import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
 import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "../discovery-integration.service";
 import { resolveProductRef } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
 import { takeShowLine, ungroundedPrices, stripPrices } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -297,7 +297,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         askerKey: opts.conversationId,
       }).catch(() => [] as any[]),
       lexicalKnowledge(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[]),
-    ]).then(([v, l]) => mergeKnowledge(v as any, l as any, 5))),
+    ]).then(([v, l]) => mergeKnowledge(v as any, l as any, knowledgeLimit(String(opts.incomingMessage ?? ""))))),
+    // An address the documents give, for a profile with none (cached per tenant).
+    timed("docAddress", documentAddress(opts.tenantId, config.id).catch(() => null)),
     // Both store turns in parallel; a Shopify chat wins when both answer.
     timed("woo", prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
   ]);
@@ -319,7 +321,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   mark("gate1");
 
-  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, wooRaw] = await loadAll;
+  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw] = await loadAll;
   const wooTurn = shopifyTurn ? null : wooRaw;
   Object.assign(stageMs, Object.fromEntries(Object.entries(loadMs).map(([k, v]) => [`load_${k}`, v])));
   const productTurn: any = shopifyTurn ?? wooTurn;
@@ -475,7 +477,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // ── Prompt ──
   const prefix = buildStablePrefix({
     agent: { name: config.name, role: config.role, roleMission: skills.find((k) => k.source === "role")?.whenToUse ?? null, persona: (config as any).persona, goal: (config as any).goal, successCriteria: (config as any).successCriteria, salesContext: (config as any).salesContext, escalationMessage: config.escalationMessage },
-    company,
+    company: company ? { ...company, documentAddress: company.address ? null : docAddress } : company,
     locale,
     skills,
     channel: String(conversation.channel),
@@ -617,6 +619,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
     knowledge: [knowledge ?? "", ...turnTools.knowledgeText].join("\n"),
     previousBotReplies,
+    candidateTitles: candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean),
   });
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
@@ -633,27 +636,42 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const first = verdict;
     const original = output;
     let second: ModelTurnOutput | null = null;
-    const rewriteCall = async (choice: any) => { (trace as any).rewriteRounds++; return call(choice); };
+    // The customer is waiting (prod replay 6: a one-round rewrite at p95 27s). The
+    // rewrite fits in what is left of the turn's budget, or is skipped and the
+    // reply is cleaned in code instead.
+    const left = () => cfg.turnBudgetMs - (Date.now() - t0);
+    const rewriteCall = async (choice: any) => {
+      (trace as any).rewriteRounds++;
+      const deadline = Math.max(3000, left());
+      let timer: NodeJS.Timeout | undefined;
+      const late = new Promise<null>((res) => { timer = setTimeout(() => res(null), deadline); });
+      const r = await Promise.race([call(choice), late]).finally(() => clearTimeout(timer));
+      if (!r) { (trace as any).rewriteCut = "deadline"; throw Object.assign(new Error("rewrite past the turn budget"), { name: "RewriteDeadline" }); }
+      return r;
+    };
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
+      if (left() < 4000) { (trace as any).rewriteCut = "budget"; throw Object.assign(new Error("no time left for a rewrite"), { name: "RewriteDeadline" }); }
       // The lookups the engine can make itself run first, with no model round:
-      // the customer's own words in the store, or in the knowledge.
-      const auto = autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records);
+      // the customer's own words in the store, or in the knowledge. Short, and only with time for an answer after.
+      const auto = left() > 8000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records) : [];
       if (auto.length) {
+        const ta = Date.now();
         messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-        await runToolRound(env, auto);
+        await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs) }, auto);
         for (const c of auto) messages.push({ role: "tool", tool_call_id: c.id, content: turnTools.records.find((x) => x.callId === c.id)?.content ?? "" });
         candidates = turnTools.envelope?.candidates ?? [];
+        (trace as any).autoLookupMs = Date.now() - ta;
       }
-      // A lookup only the model can make (which product, which order) gets one tool round.
-      const modelRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
+      // A lookup only the model can make (which product, which order) gets one tool round, if there is time for two calls.
+      const modelRead = left() > 9000 && first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
       let r = await rewriteCall(modelRead ? "required" : forceRespond);
       if (modelRead) {
         const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
         const work = calls.filter((c) => c.function?.name !== "respond");
         if (work.length) {
           messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-          await runToolRound(env, work);
+          await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs) }, work);
           for (const c of calls) {
             const rec = turnTools.records.find((x) => x.callId === c.id);
             messages.push({ role: "tool", tool_call_id: c.id, content: rec?.content ?? "Not sent: read the results first." });
@@ -668,6 +686,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if ((err as any)?.name === "AbortError") throw err;
       second = null;
     }
+    (trace as any).rewriteMs = Date.now() - t0 - (stageMs.model ?? 0);
     const v2 = second ? gate3(g3Input(second)) : null;
     if (second && v2?.ok) {
       output = second; verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
@@ -685,6 +704,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
         const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // Nothing, or too little, left to answer with: the other candidate, else the fallback.
+        // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
+        if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) })) return null;
         const after = gate3(g3Input(cleaned));
         return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
@@ -695,11 +716,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
-        (trace as any).fallbackKinds = factualProblems((v2 ?? first).problems).map((p) => p.kind);
+        const factLeft = factualProblems((v2 ?? first).problems).map((p) => p.kind);
+        (trace as any).fallbackKinds = factLeft.length ? factLeft : ["thin_or_empty"];
         // A product turn is answered from what the tools returned, never handed to a person.
         const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
-        if (grounded) {
+        const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
+        const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
+        if (onlyRepeat) {
+          // Nothing new to say: say nothing rather than the same paragraph or a canned line.
+          output = { reply: "", stateUpdate: {}, claims: [], handoff: null, cards: [] };
+          trace.gate3 = { ...first, rewrite: "silent" };
+        } else if (!grounded && searched && first.problems.some((p) => p.kind === "ungrounded_absence") && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
+          output = { reply: notFoundReply(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
+        } else if (grounded) {
           output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (!needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // The customer's words call for a person (asked for one, damage, a late order).
@@ -724,12 +754,27 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Last line of defence, on every path: a price nothing grounds (prod replay 4),
   // and a character from another alphabet (prod replay 5: "כשמ折לים").
   if (output?.reply) {
-    const text = stripForeignScript(resolveKeysInText(output.reply, candidates));
+    const text = normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates)));
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
     output = { ...output, reply: (leftover.length ? stripPrices(text, leftover) : text).trim() };
   }
+  // Never a promise of a person without the handoff (prod replay 6): a reply that says
+  // a person will continue, or a "yes" to the employee's own offer of one, hands over.
+  if (output && !output.handoff && !turnTools.escalation) {
+    const accepted = ignoredYes(opts.incomingMessage ?? "", previousBotReplies.at(-1), false, false);
+    if (promisesPerson(output.reply) || accepted) {
+      output = {
+        ...output,
+        handoff: accepted ? "the customer accepted the offer of a person" : "the reply says a person will continue",
+        // The canned team line is not what a handoff says.
+        reply: isCannedTeamLine(output.reply) || !output.reply ? (locale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.") : output.reply,
+      };
+      (trace as any).handoffSetInCode = true;
+    }
+  }
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+  (trace as any).cards = final.cards ?? [];
 
   // ── Send shape ──
   // A semicolon reads as a document; legacy banned it (eval I05). Fixed, not rewritten.

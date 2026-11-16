@@ -16,7 +16,7 @@
  */
 import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import { initAIService, platformPaidScope } from "../services/ai.service";
-import { retrieveRelevantChunks, lexicalKnowledge, lexicalTerms, mergeKnowledge, KNOWLEDGE_GAP_SCORE } from "../services/knowledge.service";
+import { retrieveRelevantChunks, lexicalKnowledge, lexicalTerms, mergeKnowledge, knowledgeLimit, documentAddress, KNOWLEDGE_GAP_SCORE } from "../services/knowledge.service";
 
 export function parseProbeArgs(argv: string[]): { tenant: string; agent: string | null; k: number; queries: string[] } {
   const all = (k: string) => argv.flatMap((a, i) => (a === k && argv[i + 1] != null ? [argv[i + 1]] : []));
@@ -35,13 +35,14 @@ async function main() {
   initAIService({ apiKey: process.env.OPENAI_API_KEY, baseURL: process.env.OPENAI_BASE_URL || undefined, defaultEmbeddingModel: process.env.EMBEDDING_MODEL || undefined });
   await withCrossTenantAccess(async () => {
     const bp: any = await (prisma as any).businessProfile.findUnique({ where: { tenantId: a.tenant }, select: { address: true } }).catch(() => null);
-    console.log(`[probe] tenant=${a.tenant} agent=${a.agent ?? "(tenant-wide)"} businessProfile.address=${bp?.address ? "set" : "empty"} gap=${KNOWLEDGE_GAP_SCORE}`);
+    const docAddr = await documentAddress(a.tenant, a.agent).catch(() => null);
+    console.log(`[probe] tenant=${a.tenant} agent=${a.agent ?? "(tenant-wide)"} businessProfile.address=${bp?.address ? "set" : "empty"} documentAddress=${docAddr ? JSON.stringify(docAddr) : "none"} gap=${KNOWLEDGE_GAP_SCORE}`);
     for (const q of a.queries) {
       const [vector, lexical] = await platformPaidScope.run({ reason: "knowledge_probe" }, () => Promise.all([
         retrieveRelevantChunks(a.tenant, q, a.k, a.agent),
         lexicalKnowledge(a.tenant, q, a.k, a.agent),
       ]));
-      const merged = mergeKnowledge(vector, lexical, a.k);
+      const merged = mergeKnowledge(vector, lexical, Math.max(a.k, knowledgeLimit(q)));
       const t = lexicalTerms(q);
       console.log(`\n[probe] q="${q}"`);
       console.log(` vector (${vector.length})${vector.length && vector.every((c) => (c.score ?? 0) < KNOWLEDGE_GAP_SCORE) ? "  ALL WEAK: the old path dropped these" : ""}`);

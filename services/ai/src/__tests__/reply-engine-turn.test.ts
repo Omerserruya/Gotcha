@@ -26,6 +26,7 @@ const h = vi.hoisted(() => ({
   history: null as any[] | null,
   lexical: [] as any[],
   groundTitle: "Canvas Tote",
+  docAddress: null as string | null,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -113,6 +114,7 @@ vi.mock("../services/discovery-integration.service", () => ({
 vi.mock("../services/knowledge.service", () => ({
   retrieveRelevantChunks: async () => [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
   lexicalKnowledge: async () => h.lexical, mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
+  knowledgeLimit: () => 5, documentAddress: async () => h.docAddress,
 }));
 vi.mock("../services/skill-runtime.service", () => ({ loadSkillContext: async () => ({ candidates: [] }), skillApprovalReason: () => null }));
 vi.mock("../services/connectors/crm-adapter-resolver", () => ({ getCrmAdapter: vi.fn() }));
@@ -145,6 +147,7 @@ beforeEach(() => {
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
+  h.docAddress = null;
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -176,7 +179,8 @@ describe("one v2 turn, live", () => {
     expect(toolMsg.content).toContain("PRODUCT_1");
     expect(toolMsg.content).not.toContain('"id":101');
 
-    expect(r.reply).toBe("יש! Canvas Tote ב‑₪79, מתאים לך?");
+    // U+2011 (a non-breaking hyphen) goes out as a plain "-" (prod replay 6).
+    expect(r.reply).toBe("יש! Canvas Tote ב-₪79, מתאים לך?");
     expect(r.trace.gate3.rewrite).toBe("none");
     expect(h.submitted).toEqual(["woocommerce.list_products"]);
     expect(h.staged).toEqual([{ products: [{ productId: "101", variantId: undefined }] }]);
@@ -740,5 +744,59 @@ describe("prod replay 5 (2026-11-16), through a whole turn", () => {
     h.responses.push({ toolCalls: [respond("a1", { reply: "בטח." })] });
     try { await runReplyEngineTurn(opts, "autonomous"); } finally { spy.mockRestore(); }
     expect(h.calls[0].messages[0].content).toContain("Address: הרצל 5, נהריה");
+  });
+});
+
+describe("prod replay 6 (2026-11-16), through a whole turn", () => {
+  it("★ \"a person will continue\" with no handoff: the handoff is set in code", async () => {
+    h.responses.push({ toolCalls: [respond("p1", { reply: "נציג מהצוות ימשיך איתך כאן." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אוקיי" }, "autonomous");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:the reply says a person will continue/);
+    expect((r.trace as any).handoffSetInCode).toBe(true);
+  });
+
+  it("★ a yes to its own offer answered with the canned team line: a handoff, and a handoff's words", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "חייבו אותי פעמיים", metadata: null },
+      { direction: "OUTBOUND", body: "זה דחוף? אם כן אעביר לנציג שימשיך כאן.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "כן", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("q1", { reply: "זה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט.", team_question: "חיוב כפול" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:the customer accepted/);
+    expect(r.reply).toBe("מעבירים לנציג מהצוות שימשיך איתך כאן.");
+  });
+
+  it("★ the same paragraph twice: rewritten, else nothing is sent", async () => {
+    const para = "כדי לבדוק את ההזמנה צריך את מספר ההזמנה, והטלפון ששמור עליה לא תואם למספר שממנו כותבים.";
+    h.history = [
+      { direction: "INBOUND", body: "איפה ההזמנה?", metadata: null },
+      { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "נו?", metadata: null },
+    ];
+    h.responses.push(
+      { toolCalls: [respond("d1", { reply: para })] },
+      { toolCalls: [respond("d2", { reply: para })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "נו?" }, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("silent");
+    expect(r.reply).toBeNull();
+  });
+
+  it("★ the rewrite respects the turn budget: none when the turn is already late", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "5000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    h.responses.push({ toolCalls: [respond("l1", { reply: "מצאתי תיק בד, מתאים לך?" })] });
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    (generateResponse as any).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 4500; return out; });
+    let r: any;
+    try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(h.calls).toHaveLength(1);
+    expect(r.trace.rewriteCut).toBe("budget");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect(r.reply).toBe("יש תיק בד, מתאים לך?");
   });
 });

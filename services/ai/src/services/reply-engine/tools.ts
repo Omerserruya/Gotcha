@@ -23,7 +23,7 @@ import { TurnOutcomeLedger } from "../turn-outcome-ledger";
 import { redactCardDetailsInArgs } from "../card-details-guard";
 import { isProductSearchTool, groundProductSearchResult } from "../discovery-integration.service";
 import { buildKeyedModelSummary, type ProductSearchEnvelope } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge, knowledgeLimit } from "../knowledge.service";
 import type { ToolRunRecord, ToolGateDecision, StateLane } from "./contract";
 import { findSkill, type EngineSkill } from "./skills";
 import { runMcpTool } from "../mcp-servers.service";
@@ -134,7 +134,7 @@ async function defaultKnowledge(tenantId: string, query: string, aiAgentId: stri
     retrieveRelevantChunks(tenantId, query, 5, aiAgentId),
     lexicalKnowledge(tenantId, query, 5, aiAgentId).catch(() => []),
   ]);
-  const chunks = mergeKnowledge(vector, lexical, 5);
+  const chunks = mergeKnowledge(vector, lexical, knowledgeLimit(query));
   return buildKnowledgeContext(chunks, { dropWhenAllWeak: true }) || "";
 }
 

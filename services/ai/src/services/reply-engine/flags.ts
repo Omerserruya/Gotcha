@@ -28,5 +28,9 @@ export function engineConfig() {
     maxRounds: intEnv("REPLY_ENGINE_MAX_ROUNDS", 5, 2, 10),
     /** Messages in the turn window; older ones live in the rolling summary. */
     windowMessages: intEnv("REPLY_ENGINE_WINDOW", 16, 4, 60),
+    /** A rewrite (and its lookups) fits in what is left of this, from the turn's start; past it the reply is cleaned in code. */
+    turnBudgetMs: intEnv("REPLY_ENGINE_TURN_BUDGET_MS", 15000, 5000, 120000),
+    /** The timeout of a lookup made for a rewrite (shorter than a normal tool's). */
+    rewriteLookupMs: intEnv("REPLY_ENGINE_REWRITE_LOOKUP_MS", 4000, 500, 60000),
   };
 }

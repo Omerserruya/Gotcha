@@ -147,6 +147,7 @@ export type ClaimProblem =
   | { kind: "ungrounded_absence"; claims: string[] }
   | { kind: "no_search" }
   | { kind: "ignored_yes" }
+  | { kind: "nameless_products" }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 

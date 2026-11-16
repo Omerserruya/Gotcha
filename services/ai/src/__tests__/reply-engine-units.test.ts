@@ -186,7 +186,8 @@ describe("Gate 3", () => {
     expect(text).not.toContain("Old Bag");
     expect(groundedProductFallback(c, "he", true)).toBe("הנה מה שיש לנו שמתאים.");
     expect(groundedProductFallback([], "he", false)).toBeNull();
-    expect(gate3({ ...baseG3, reply: groundedProductFallback(c, "he", true)!, grounding: "" }).ok).toBe(true);
+    // The card form goes out WITH its cards; without them it would name nothing (nameless_products).
+    expect(gate3({ ...baseG3, reply: groundedProductFallback(c, "he", true)!, grounding: "", cards: ["PRODUCT_1"], candidateCount: 1 }).ok).toBe(true);
   });
   it("the correction names each problem; the fallback is neutral and dashless", () => {
     const note = correctionNote([{ kind: "ungrounded_price", prices: ["120"] }, { kind: "unknown_product", names: ["PRODUCT_7"] }], "he");
@@ -727,5 +728,68 @@ describe("prod replay 5 (2026-11-16)", () => {
     const { scrubOrderSelectors } = await import("../services/reply-engine/engine");
     expect(scrubOrderSelectors("woocommerce.list_customer_orders", { phone: "0501234567", email: "a@b.c", per_page: 5 })).toEqual({ per_page: 5 });
     expect(scrubOrderSelectors("woocommerce.get_order", { order_id: "123" })).toEqual({ order_id: "123" });
+  });
+});
+
+describe("prod replay 6 (2026-11-16)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ a reply that says a person will continue is a promise of a handoff", async () => {
+    const { promisesPerson } = await import("../services/reply-engine/gates");
+    for (const r of ["נציג מהצוות ימשיך איתך כאן.", "מעבירים אותך לנציג.", "הצוות יחזור אליך בהקדם.", "A team member will take over here."]) expect(promisesPerson(r), r).toBe(true);
+    for (const r of ["אפשר לבחור צבע.", "הנציגים שלנו עובדים א עד ה.", "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט."]) expect(promisesPerson(r), r).toBe(false);
+  });
+
+  it("★ a search that timed out never grounds \"not found\"", async () => {
+    const { ungroundedAbsence } = await import("../services/reply-engine/gates");
+    const claim = "לא מצאתי פריט בשם בנדנה מרובעת.";
+    const rec = (outcome: string) => ({ tool: "woocommerce.list_products", args: { query: "בנדנה מרובעת" }, decision: "allow", outcome, content: "" } as any);
+    expect(ungroundedAbsence(claim, [rec("timeout")])).toHaveLength(1);
+    expect(ungroundedAbsence(claim, [rec("error")])).toHaveLength(1);
+    expect(ungroundedAbsence(claim, [rec("empty")])).toEqual([]);
+    expect(ungroundedAbsence("I didn't find a square bandana.", [])).toHaveLength(1);
+  });
+
+  it("★ products presented with no name, price or card -> nameless_products", async () => {
+    const { namelessProducts } = await import("../services/reply-engine/gates");
+    const ask = "מחפשת בנדנה מרובעת";
+    expect(namelessProducts("הנה בנדנות מרובעות.", ask, [], [])).toBe(true);
+    expect(namelessProducts("הנה בנדנות מרובעות.", ask, ["PRODUCT_1"], [])).toBe(false);
+    expect(namelessProducts("הנה בנדנה אנה, ₪89.", ask, [], [])).toBe(false);
+    expect(namelessProducts("יש לנו את בנדנה אנה.", ask, [], ["בנדנה אנה"])).toBe(false);
+    expect(namelessProducts("יש לנו כמה, באיזה צבע?", ask, [], [])).toBe(false);
+    expect(kinds(await g3("הנה בנדנות מרובעות.", { incomingMessage: ask }))).toContain("nameless_products");
+  });
+
+  it("★ the same paragraph as one of the last five replies -> near_duplicate", async () => {
+    const { nearDuplicate } = await import("../services/reply-engine/gates");
+    const para = "כדי לבדוק את ההזמנה צריך את מספר ההזמנה, והטלפון ששמור עליה לא תואם למספר שממנו כותבים.";
+    expect(nearDuplicate(para, ["שלום", para])).toBe(true);
+    expect(nearDuplicate("כדי לבדוק את ההזמנה צריך את מספר ההזמנה, והטלפון השמור עליה לא תואם למספר שממנו כותבים כרגע.", [para])).toBe(true);
+    expect(nearDuplicate("יש לנו משטחי במבוק בשני גוונים, בהיר וכהה.", [para])).toBe(false);
+    expect(nearDuplicate(para, [para, "1", "2", "3", "4", "5"])).toBe(false);
+    expect(styleCodes(await g3(para, { previousBotReplies: [para] }))).toContain("near_duplicate");
+  });
+
+  it("★ a colour or occasion ask sent to the team without a search -> no_search", async () => {
+    const { photoInsteadOfSearch } = await import("../services/reply-engine/gates");
+    const offered = ["woocommerce.list_products"];
+    expect(photoInsteadOfSearch("העברתי לצוות.", "יש משהו חגיגי לחתונה?", [], offered, true)).toBe(true);
+    expect(photoInsteadOfSearch("העברתי לצוות.", "יש בצבע תכלת?", [], offered, true)).toBe(true);
+    expect(photoInsteadOfSearch("העברתי לצוות.", "מתי אתם פתוחים?", [], offered, true)).toBe(false);
+  });
+
+  it("★ every dash variant: a hyphen in a word becomes \"-\", a dash between words a comma", async () => {
+    const { normalizeDashes, cleanStyle } = await import("../services/reply-engine/gates");
+    expect(normalizeDashes("ב\u2011₪79")).toBe("ב-₪79");
+    expect(normalizeDashes("\u22125")).toBe("-5");
+    expect(normalizeDashes("יש \u2015 במלאי")).toBe("יש, במלאי");
+    expect(normalizeDashes("א\u2012ב")).toBe("א, ב");
+    expect(cleanStyle("יש \u2014 במלאי", [])).toBe("יש, במלאי");
   });
 });

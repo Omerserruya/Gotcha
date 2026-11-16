@@ -248,6 +248,16 @@ const LEXICAL_EXPANSIONS: Array<[RegExp, string[]]> = [
   [/טלפון|וואטסאפ|מייל|ליצור קשר|contact|phone|email/iu, ["טלפון", "וואטסאפ", "מייל"]],
 ];
 
+// A location ask, and the shape an address takes in a document: a street word and
+// a number, or an address cue ("לכתובת", "איסוף", "סטודיו") followed shortly by a
+// name and a number ("לכתובת תהילה רוזנבאום, יוסף לוי 8/2 נהריה"; "נקודת איסוף
+// ... מסילה 23 נשר"). Prod replay 6: Tehila's street address is only in the
+// returns-by-mail text, and lost to generic chunks at a flat score.
+export const LOCATION_ASK = /(?<![\u0590-\u05FF])(?:איפה|כתובת|הכתובת|מיקום|נמצאים|ממוקמים|סטודיו|הסטודיו|סניף|חנות פיזית|לאסוף|איסוף)(?![\u0590-\u05FF])|\b(?:address|location|where are you|located|pick ?up)\b/iu;
+const STREET = /(?<![\u0590-\u05FF])(?:רח['׳"]?|רחוב|ברחוב|שד['׳]|שדרות|דרך)\s+[\u0590-\u05FF"'׳ ]{2,25}?\s*\d{1,4}(?:\/\d{1,3})?/u;
+const CUED = /(?<![\u0590-\u05FF])(?:כתובת|לכתובת|בכתובת|איסוף|נמצאים|ממוקמים|סטודיו|הסטודיו|מהסטודיו)(?![\u0590-\u05FF])[^.\n]{0,40}?((?:[\u0590-\u05FF"'׳]{2,}\s+){1,3}\d{1,4}(?:\/\d{1,3})?(?:\s*,?\s*[\u0590-\u05FF]{3,})?)/u;
+export const hasAddress = (text: string) => STREET.test(text ?? "") || CUED.test(text ?? "");
+
 /** The ask's own words (with and without a one-letter prefix: "מנשר" is "from Nesher") and the words an answer to it is written in. */
 export function lexicalTerms(query: string): { own: string[]; expanded: string[] } {
   const own = new Set<string>();
@@ -283,17 +293,20 @@ export async function lexicalKnowledge(
     select: { content: true, chunkIndex: true, documentId: true, document: { select: { title: true } } },
     take: 200,
   });
+  const location = LOCATION_ASK.test(query);
   const scored = rows.map((r) => {
     const text = String(r.content ?? "").toLowerCase();
     const ownHits = own.filter((t) => text.includes(t)).length;
     const expHits = expanded.filter((t) => text.includes(t)).length;
-    return { r, ownHits, expHits };
+    // Distinct terms: the ask's own words count double; an address in the chunk wins a location ask.
+    const points = 2 * ownHits + expHits + (location && hasAddress(String(r.content ?? "")) ? 6 : 0);
+    return { r, ownHits, expHits, points };
   }).filter((x) => x.ownHits > 0 || x.expHits >= 2)
-    .sort((a, b) => b.ownHits - a.ownHits || b.expHits - a.expHits);
-  return scored.slice(0, limit).map(({ r, ownHits, expHits }) => ({
+    .sort((a, b) => b.points - a.points);
+  return scored.slice(0, location ? Math.max(limit, 8) : limit).map(({ r, points }) => ({
     content: r.content,
-    // At the gap line plus a little per hit: kept, ranked, never above a strong vector match.
-    score: Math.min(KNOWLEDGE_GAP_SCORE + 0.01 * (2 * ownHits + expHits), 0.45),
+    // From the gap line up by points: an address chunk for a location ask ranks with a strong vector match.
+    score: Math.min(KNOWLEDGE_GAP_SCORE + 0.02 * points, 0.55),
     documentTitle: r.document?.title ?? "",
     chunkIndex: r.chunkIndex,
     documentId: r.documentId,
@@ -303,12 +316,49 @@ export async function lexicalKnowledge(
 /** Vector hits that clear the gap line first, then keyword hits not already there, then the weak vector hits. */
 export function mergeKnowledge(vector: SearchResult[], lexical: SearchResult[], limit = 5): SearchResult[] {
   const key = (c: SearchResult) => `${c.documentId ?? c.documentTitle}#${c.chunkIndex}`;
-  const strong = vector.filter((c) => (c.score ?? 0) >= KNOWLEDGE_GAP_SCORE);
   const weak = vector.filter((c) => (c.score ?? 0) < KNOWLEDGE_GAP_SCORE);
-  const seen = new Set(strong.map(key));
-  const out = [...strong];
-  for (const c of [...lexical, ...weak]) if (!seen.has(key(c))) { seen.add(key(c)); out.push(c); }
+  // Strong vector hits and keyword hits together, by score; then the weak vector hits.
+  const ranked = [...vector.filter((c) => (c.score ?? 0) >= KNOWLEDGE_GAP_SCORE), ...lexical].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const seen = new Set<string>();
+  const out: SearchResult[] = [];
+  for (const c of [...ranked, ...weak]) if (!seen.has(key(c))) { seen.add(key(c)); out.push(c); }
   return out.slice(0, limit);
+}
+
+/** How many chunks a question gets: a location ask keeps more (the address may sit in a returns text). */
+export const knowledgeLimit = (query: string) => (LOCATION_ASK.test(query ?? "") ? 8 : 5);
+
+const addressCache = new Map<string, { at: number; value: string | null }>();
+/**
+ * An address the business's own documents give, for a business whose profile has
+ * none (prod replay 6: Tehila's is only in "send returns to ..."): the most
+ * frequent one, ten minutes per tenant and employee. The prompt calls it what it
+ * is, the address the documents give for returns and pickup, never a shop.
+ */
+export async function documentAddress(tenantId: string, aiAgentId?: string | null, deps: { db?: any; kbIds?: string[] } = {}): Promise<string | null> {
+  const k = `${tenantId}|${aiAgentId ?? ""}`;
+  const hit = addressCache.get(k);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.value;
+  const db = deps.db ?? prisma;
+  const kb = deps.kbIds ?? await readableKnowledgeBaseIds(tenantId, aiAgentId);
+  let value: string | null = null;
+  if (kb.length) {
+    const rows: any[] = await db.knowledgeChunk.findMany({
+      where: { tenantId, document: { knowledgeBaseId: { in: kb } }, OR: ["כתובת", "רחוב", "רח'", "איסוף", "סטודיו"].map((t) => ({ content: { contains: t } })) },
+      select: { content: true },
+      take: 200,
+    });
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const text = String(r.content ?? "");
+      const m = CUED.exec(text)?.[1] ?? STREET.exec(text)?.[0];
+      const a = m?.replace(/\s+/g, " ").trim();
+      if (a && a.length <= 80) counts.set(a, (counts.get(a) ?? 0) + 1);
+    }
+    value = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+  }
+  addressCache.set(k, { at: Date.now(), value });
+  return value;
 }
 
 export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean } = {}): string {

@@ -151,7 +151,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; rewriteRounds: Record<string, number>; rewriteP95: Record<string, number>; fallbackKinds: Record<string, number>; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; rewriteRounds: Record<string, number>; rewriteP95: Record<string, number>; fallbackKinds: Record<string, number>; toolP95: Record<string, number>; rewriteMsP95: number; autoLookupMsP95: number; rewriteCut: Record<string, number>; cannedFrom: Record<string, number>; handoffSetInCode: number; withCards: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -177,9 +177,12 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, toolP95: {}, rewriteMsP95: 0, autoLookupMsP95: 0, rewriteCut: {}, cannedFrom: {}, handoffSetInCode: 0, withCards: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
     const byRounds: Record<string, number[]> = {};
+    const toolMs: Record<string, number[]> = {};
+    const rewriteMs: number[] = [];
+    const autoMs: number[] = [];
     md.push(`## Tenant ${tenantId}`, "");
     let lastConv = "";
     for (const t of turns) {
@@ -213,7 +216,18 @@ async function main() {
         (byRounds[rr] ??= []).push(took);
         for (const k of (r.trace?.fallbackKinds ?? []) as string[]) s.fallbackKinds[k] = (s.fallbackKinds[k] ?? 0) + 1;
         if (r.trace?.gate3?.rewrite === "silent") s.silent++;
-        if (isCannedTeamLine(r.reply)) s.cannedLines++;
+        if (isCannedTeamLine(r.reply)) {
+          s.cannedLines++;
+          // The engine's fallback, or the model writing the same words itself (with a real team question).
+          const from = r.trace?.gate3?.rewrite === "fallback" ? "fallback" : "model";
+          s.cannedFrom[from] = (s.cannedFrom[from] ?? 0) + 1;
+        }
+        for (const x of (r.trace?.tools ?? []) as any[]) (toolMs[x.tool] ??= []).push(Number(x.ms) || 0);
+        if (r.trace?.rewriteMs != null && (r.trace?.rewriteRounds ?? 0) > 0) rewriteMs.push(r.trace.rewriteMs);
+        if (r.trace?.autoLookupMs != null) autoMs.push(r.trace.autoLookupMs);
+        if (r.trace?.handoffSetInCode) s.handoffSetInCode++;
+        if ((r.trace?.cards ?? []).length) s.withCards++;
+        if (r.trace?.rewriteCut) s.rewriteCut[r.trace.rewriteCut] = (s.rewriteCut[r.trace.rewriteCut] ?? 0) + 1;
         const tools = (r.trace?.tools ?? []) as any[];
         const errored = tools.filter((x) => x.outcome === "error" || x.outcome === "timeout");
         s.toolErrors += errored.length;
@@ -234,6 +248,7 @@ async function main() {
           `**v2:** ${oneLine(r.reply ?? "(no reply)")}`,
           "",
           `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""}`).join("; ") : "none"}`,
+          `- cards: ${(r.trace?.cards ?? []).length ? `[${r.trace.cards.join(", ")}]` : "none"}${r.trace?.handoffSetInCode ? "; handoff set in code" : ""}`,
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
@@ -247,6 +262,9 @@ async function main() {
     s.p50 = pct(ms, 50);
     s.p95 = pct(ms, 95);
     for (const [k, v] of Object.entries(byRounds)) s.rewriteP95[k] = pct(v, 95);
+    for (const [k, v] of Object.entries(toolMs)) s.toolP95[k] = pct(v, 95);
+    s.rewriteMsP95 = pct(rewriteMs, 95);
+    s.autoLookupMsP95 = pct(autoMs, 95);
     summaries.push(s);
   }
 

@@ -171,8 +171,8 @@ export function unbackedPromises(reply: string, o: { teamQuestion: boolean; hand
 
 // Prod replay 4: "wood/bamboo pads are not sold" four times while the store sells
 // bamboo. "We don't have / don't sell / no match / doesn't exist" is a fact.
-const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו))(?![\u0590-\u05FF])|\b(?:we (?:don'?t|do not) (?:sell|carry|have|stock)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such))\b/iu;
-const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for"]);
+const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו)|לא\s+(?:מצאתי|מצאנו|מוצאת|מוצא|מוצאים))(?![\u0590-\u05FF])|\b(?:(?:i|we) (?:didn'?t|did not|couldn'?t|could not) find|no results|we (?:don'?t|do not) (?:sell|carry|have|stock)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such))\b/iu;
+const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "מצאתי", "מוצאת", "מוצא", "מוצאים", "פריט", "פריטים", "בשם", "הזה", "הזו", "find", "didn't", "couldn't", "results", "item", "called", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for"]);
 const CAPABILITY_ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|באפשרותנו\s+)?אפשרות|אין\s+באפשרותנו|אנחנו\s+לא\s+(?:יכולים|יכולות|עושים)|לא\s+(?:ניתן|נוכל)|אי\s+אפשר)(?![\u0590-\u05FF])|\b(?:we (?:can'?t|cannot|are unable to|don'?t do)|it'?s not possible|not possible to)\b/iu;
 const CAPABILITY_WORDS = new Set(["אפשרות", "באפשרותנו", "יכולים", "יכולות", "עושים", "ניתן", "נוכל", "אפשר", "לצערנו", "לצערי", "כרגע", "can't", "cannot", "unable", "possible", "don't"].map((w) => w.toLowerCase()));
 // Final letters (ך ם ן ף ץ) as their plain forms: "טלפון" is in "טלפוני".
@@ -244,9 +244,10 @@ export function unknownProductKeys(claims: Claim[], cards: string[], candidateCo
 // hard, and the reply asked for a photo three times and showed nothing.
 const PHOTO_ASK = /(?<![\u0590-\u05FF])(?:תמונה|תמונות|צילום|לצלם|תצלמו|תצלמי|תצלם|צלמו)(?![\u0590-\u05FF])|\b(?:photo|picture|pic)s?\b/iu;
 const PRODUCT_WANT = /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|יש לכם|רוצה|רוצים|צריך|צריכה|בצבע|בגוון|צבע|גוון|מתאים|מתאימה|דגם|מידה)(?![\u0590-\u05FF])|\b(?:looking for|do you have|i want|i need|colou?r)\b/iu;
-/** A product ask met with a request for a photo, while the store search was there and did not run. */
-export function photoInsteadOfSearch(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
-  if (!PHOTO_ASK.test(reply ?? "") || !PRODUCT_WANT.test(incoming ?? "")) return false;
+const OCCASION = /(?<![\u0590-\u05FF])(?:לחתונה|לאירוע|אירוע|חגיגי|חגיגית|חגיגיים|מתנה|למתנה|ליום\s+הולדת|לחג|לבר\s+מצווה|לבת\s+מצווה|ערב|יומיומי|יומיומית)(?![\u0590-\u05FF])|\b(?:wedding|occasion|gift|party|festive|everyday)\b/iu;
+/** A product ask (a category, colour, size or occasion) met with a photo request or a team question, while the store search was there and did not run. */
+export function photoInsteadOfSearch(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
+  if (!(PHOTO_ASK.test(reply ?? "") || teamQuestion) || !(PRODUCT_WANT.test(incoming ?? "") || OCCASION.test(incoming ?? ""))) return false;
   const canSearch = toolsOffered.some((n) => /list_products|search_products/i.test(n));
   return canSearch && !tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
 }
@@ -268,6 +269,33 @@ const YES = /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|ברור|ב�
 export function ignoredYes(incoming: string, lastBotReply: string | null | undefined, handedOff: boolean, teamQuestion: boolean): boolean {
   if (handedOff || teamQuestion || !lastBotReply) return false;
   return /\?/.test(lastBotReply) && OFFERED_PERSON.test(lastBotReply) && YES.test(incoming ?? "");
+}
+
+// The reply tells the customer a person will continue (prod replay 6: three
+// "נציג מהצוות ימשיך איתך" with no handoff). Never a promise without the action.
+const PERSON_CONTINUES = /(?<![\u0590-\u05FF])(?:(?:נציג|נציגה|מישהו|מישהי|אחד\s+מהצוות)\s+(?:מהצוות\s+)?(?:ימשיך|תמשיך|יחזור|תחזור|יטפל|תטפל|יענה|תענה|ייצור\s+קשר|תיצור\s+קשר|יצור\s+קשר)|(?:מעביר|מעבירה|מעבירים)\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה|צוות)|העברתי\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה)|הצוות\s+(?:יחזור|ימשיך|ייצור\s+קשר)(?:\s+אלי(?:ך|כם))?)(?![\u0590-\u05FF])|\b(?:a (?:person|team member|representative|human) (?:will|is going to) (?:continue|take over|get back)|(?:i'?m|we'?re) (?:transferring|passing) you)\b/iu;
+export const promisesPerson = (reply: string) => PERSON_CONTINUES.test(reply ?? "");
+
+// "הנה בנדנות מרובעות" with no name, price or card (prod replay 6, Tehila).
+const PRESENTS = /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|דגמים|כמה\s+סוגים|שני\s+סוגים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options)\b/iu;
+/** A product ask answered as if products were shown, with none named, priced or carded. */
+export function namelessProducts(reply: string, incoming: string, cards: string[], titles: string[]): boolean {
+  if (!PRODUCT_WANT.test(incoming ?? "") || !PRESENTS.test(reply ?? "") || cards.length) return false;
+  if (titles.some((t) => t && reply.includes(t))) return false;
+  return !/₪|ש["״']ח|\d+\s?(?:NIS|ILS)|https?:\/\//.test(reply ?? "") && !/\?/.test(reply ?? "");
+}
+
+// The same paragraph again (prod replay 6: one paragraph sent 7 times in one conversation).
+/** A reply that mostly repeats one of the employee's last five. */
+export function nearDuplicate(reply: string, previousBotReplies: string[]): boolean {
+  const mine = qWords(reply);
+  if (mine.size < 6) return false;
+  return previousBotReplies.slice(-5).some((p) => {
+    const theirs = qWords(p);
+    let n = 0;
+    for (const w of mine) if (theirs.has(w)) n++;
+    return n / Math.max(mine.size, theirs.size) > 0.7;
+  });
 }
 
 // A character from another script inside a Hebrew or English reply (prod replay 5: "כשמ折לים").
@@ -312,6 +340,8 @@ export interface Gate3Input {
   knowledge?: string;
   /** The employee's own earlier replies in this conversation, oldest first (never a person's). */
   previousBotReplies?: string[];
+  /** The titles of the products this turn's tools returned. */
+  candidateTitles?: string[];
 }
 
 export function gate3(i: Gate3Input): Gate3Verdict {
@@ -346,7 +376,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   else if (unreadOrder(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_order" });
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
-  if (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered)) problems.push({ kind: "no_search" });
+  if (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "no_search" });
+  if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [])) problems.push({ kind: "nameless_products" });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
@@ -373,6 +404,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (foreignScript(reply)) style.push("foreign_script");
   if (internalJargon(reply)) style.push("internal_jargon");
   if (repeatedAsk(reply, i.previousBotReplies ?? [])) style.push("repeated_ask");
+  if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
@@ -420,6 +452,8 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
     if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
+      // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
+      if (p.kind === "unsupported_action") s = dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE);
     }
   }
   return s.trim();
@@ -469,7 +503,7 @@ export function cleanStyle(reply: string, codes: string[]): string {
   if (c.has("repeated_ask")) s = dropSentences(s, PHOTO_ASK);
   if (c.has("help_grammar")) s = s.replace(/(?<![\u0590-\u05FF])מה(\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור)/gu, "במה$1");
   if (c.has("mixed_person")) s = s.replace(/(?<![\u0590-\u05FF])(?:ביקשתם)(?=\s+ממך)/gu, "ביקשנו").replace(/(?<![\u0590-\u05FF])(?:שלחתם)(?=\s+לך)/gu, "שלחנו").replace(/(?<![\u0590-\u05FF])(?:אמרתם)(?=\s+לך)/gu, "אמרנו");
-  return s.replace(/\s*[\u2013\u2014]\s*/g, ", ").replace(/[ \t]{2,}/g, " ").trim();
+  return normalizeDashes(s).replace(/[ \t]{2,}/g, " ").trim();
 }
 
 const words = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9]+/g) ?? []).length;
@@ -487,6 +521,11 @@ export function tooThin(cleaned: string, original: string, incoming: string, sho
   return !hasProduct && !/\?/.test(cleaned);
 }
 
+/** Hyphens inside a word become "-"; a dash between words becomes a comma (U+2010 to U+2015, U+2212; prod replay 6: U+2011). */
+export function normalizeDashes(s: string): string {
+  return String(s ?? "").replace(/[\u2010\u2011\u2212]/g, "-").replace(/\s*[\u2012-\u2015]\s*/g, ", ");
+}
+
 /** The ONE targeted correction note for the rewrite round. */
 export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): string {
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
@@ -498,6 +537,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
     if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search for those words ran this turn, or it returned them. Search for it now (the customer's own words), and answer from what comes back; if nothing does, say you did not find it by that name and ask.`);
     if (p.kind === "no_search") lines.push("- The customer told you what they want (a category, a colour, a size). Search the store with their words now and show what fits; ask at most one short question, never for a photo you already asked for.");
+    if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Call it once more with a narrower query (the category, or one or two words, per_page 5). If you still have nothing, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never say you could not check.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, colours, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
@@ -511,6 +551,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
       if (c.has("foreign_script")) lines.push("- A character from another alphabet slipped into a word: rewrite the reply in the customer's language only.");
       if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access): say what the customer can do, plainly.");
+      if (c.has("near_duplicate")) lines.push("- That reply repeats one you already sent in this conversation. Answer the new message itself, briefly, or only what is new.");
       if (c.has("repeated_ask")) lines.push("- You already asked that in this conversation: do not ask it again. Use what you have, or move on.");
       if (c.has("help_grammar")) lines.push("- \"במה אפשר לעזור\", not \"מה אפשר לעזור\".");
       if (c.has("mixed_person")) lines.push("- One person per sentence: we asked you (\"ביקשנו ממך\"), not \"ביקשתם ממך\".");
@@ -525,6 +566,11 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     }
   }
   return lines.join("\n");
+}
+
+/** An absence the search could not back, and nothing found: say what is true, not a hand-off (prod replay 6). */
+export function notFoundReply(locale: "he" | "en"): string {
+  return locale === "he" ? "לא מצאתי את זה בשם הזה. אפשר לתאר את זה במילים אחרות?" : "I didn't find that by that name. Could you describe it another way?";
 }
 
 /** The canned team lines (both forms), to know one was already sent. */
