@@ -61,7 +61,10 @@ const V2_BANS_HE: Array<[string, RegExp]> = [
   ["callback_promise", /(?<![\u0590-\u05FF])[וש]?(?:נחזור|יחזרו|יחזור|תחזור|נתקשר|יתקשרו|יתקשר|ניצור קשר|ייצרו קשר|יצרו איתך קשר)(?:\s+אלי(?:ך|כם))?(?![\u0590-\u05FF])/u],
   // The employee speaking of itself in a gendered form (eval K02 "הייתי הולכת על"): always neutral.
   // Prod replay 3: "שמחה שהסתדרת", the employee as female. Feelings in the first person too.
-  ["self_gendered", /(?<![\u0590-\u05FF])(?:(?:הייתי\s+(?:הולכת|הולך|לוקחת|לוקח|בוחרת|בוחר|ממליצה|ממליץ)|אני\s+(?:ממליצה|ממליץ|מציעה|מציע|חושבת|חושב|בודקת|בודק|מעבירה|מעביר|יודעת|יודע|שמחה|שמח|מצטערת|מצטער|בטוחה|בטוח|זמינה|זמין|מבינה|מבין))(?![\u0590-\u05FF])|(?<!(?:חג|יום|שבוע)\s)(?:שמחה|שמח)(?=\s+[של][\u0590-\u05FF])|(?:מצטערת|מצטער)(?=\s+(?:ש|על|לשמוע|מאוד|באמת)|\s*[,.!]))/u],
+  ["self_gendered", /(?<![\u0590-\u05FF])(?:(?:הייתי\s+(?:הולכת|הולך|לוקחת|לוקח|בוחרת|בוחר|ממליצה|ממליץ|צריכה|צריך|בטוחה|בטוח|שמחה|שמח|מציעה|מציע)|אני\s+(?:ממליצה|ממליץ|מציעה|מציע|חושבת|חושב|בודקת|בודק|מעבירה|מעביר|יודעת|יודע|שמחה|שמח|מצטערת|מצטער|בטוחה|בטוח|זמינה|זמין|מבינה|מבין))(?![\u0590-\u05FF])|(?<!(?:חג|יום|שבוע)\s)(?:שמחה|שמח)(?=\s+[של][\u0590-\u05FF])|(?:מצטערת|מצטער)(?=\s+(?:ש|על|לשמוע|מאוד|באמת)|\s*[,.!])|(?<!(?:את|אתה|אתם|אתן|הוא|היא)\s)(?:מבינה|מבין)(?=\s*[,.!]|\s+(?:את|ש|לגמרי|אותך|אותכם|לחלוטין)(?![\u0590-\u05FF])))/u],
+  // Prod replay 4: "מה אפשר לעזור" (במה), "ביקשתם ממך" (one customer, two persons).
+  ["help_grammar", /(?<![\u0590-\u05FF])מה\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור/u],
+  ["mixed_person", /(?<![\u0590-\u05FF])(?:ביקשתם\s+ממך|ביקשת\s+מכם|שלחתם\s+לך|אמרתם\s+לך)(?![\u0590-\u05FF])/u],
 ];
 
 const ATTRIBUTE_ASK = /(?<![\u0590-\u05FF])(?:מגרד|מגרדת|נעים|נעימה|רך|רכה|עבה|דק|דקה|חומר|בד|מאיזה|עשוי|עשויה|כותנה|צמר|מרינו|פשתן|גזרה|גזרת|מידות|מידה|קטן|גדול|לכבס|כביסה|מכונה|ייבוש|מיוצר|תוצרת|איפה מייצרים|שקוף|נמתח|נמתחת|מחמם|חם|צבע|צבעים|בצבע|באיזה צבע|באילו צבעים|גוון|גוונים)(?![\u0590-\u05FF])|\b(?:colou?rs?|shades?|itch(?:y)?|soft|material|fabric|made of|fit|sizing|runs (?:small|large)|wash|care|origin|made in|warm|stretch)\b/iu;
@@ -76,7 +79,7 @@ const ASKS_FOR_PERSON = /(?<![\u0590-\u05FF])(?:נציג|נציגה|נציגים
 // Damage, prod replay 2026-11-16: "לא מחוברים", "מפורק", "חסר" (a missing part) and
 // "הגיע הרוס" were missed, so a damaged delivery was argued out of its handoff
 // three times and became team questions. "חסר במלאי" is stock, not damage.
-const STRONG_CASE = /(?<![\u0590-\u05FF])(?:[וש]?(?:פגום|פגומה|פגומים|פגומות|שבור|שבורה|שבורים|שבורות|נשבר|נשברה|נשברו|סדוק|סדוקה|נסדק|קרוע|קרועה|נקרע|נקרעה|מפורק|מפורקת|מפורקים|מפורקות|התפרק|התפרקה|התפרקו|לא מחובר|לא מחוברת|לא מחוברים|לא מחוברות|התנתק|התנתקה|התנתקו|לא תקין|לא תקינה|לא עובד|לא עובדת|לא נדלק|חסר(?!\s+(?:במלאי|לכם|לך))|חסרה|חסרים|חסרות|הגיע הרוס|הגיעה הרוסה|הגיעו הרוסים|הגיע פגום|הגיעה פגומה)|נזק|הרוס|הרוסה|לא הגיע|לא הגיעה|עדיין לא קיבלתי|לא קיבלתי|באיחור|איחור|מאחר|תקוע|תקועה|לא מקובל|מחפיר|שערורייה|עורך דין|תביעה|הונאה|נוכלים|רמאים|החזר כספי|כסף בחזרה)(?![\u0590-\u05FF])|\b(?:damaged|broken|torn|defective|cracked|came apart|missing (?:a |the )?(?:part|piece|item)|doesn'?t work|not working|never arrived|hasn'?t arrived|didn'?t arrive|late|lawyer|scam|fraud|chargeback|refund)\b/iu;
+const STRONG_CASE = /(?<![\u0590-\u05FF])(?:[וש]?(?:פגום|פגומה|פגומים|פגומות|שבור|שבורה|שבורים|שבורות|נשבר|נשברה|נשברו|סדוק|סדוקה|נסדק|קרוע|קרועה|נקרע|נקרעה|מפורק|מפורקת|מפורקים|מפורקות|התפרק|התפרקה|התפרקו|לא מחובר|לא מחוברת|לא מחוברים|לא מחוברות|התנתק|התנתקה|התנתקו|לא תקין|לא תקינה|לא עובד|לא עובדת|לא נדלק|חסר(?!\s+(?:במלאי|לכם|לך))|חסרה|חסרים|חסרות|הגיע הרוס|הגיעה הרוסה|הגיעו הרוסים|הגיע פגום|הגיעה פגומה)|נזק|הרוס|הרוסה|לא הגיע|לא הגיעה|עדיין לא קיבלתי|לא קיבלתי|באיחור|איחור|מאחר|תקוע|תקועה|לא מקובל|מחפיר|שערורייה|עורך דין|תביעה|הונאה|נוכלים|רמאים|החזר כספי|כסף בחזרה|כבר שבוע|שבוע שלם|כבר שבועיים|כבר חודש|לא התקדמתם|לא מתקדם|לא מתקדמים|אין התקדמות|אין שום התקדמות|אף אחד לא (?:עונה|חוזר|עונים|מתייחס)|לא עונים לי|נמאס|נמאס לי|מתסכל|מאוכזב|מאוכזבת|מאוכזבים|לא רציני|לא רציניים|זלזול)(?![\u0590-\u05FF])|\b(?:damaged|broken|torn|defective|cracked|came apart|missing (?:a |the )?(?:part|piece|item)|doesn'?t work|not working|never arrived|hasn'?t arrived|didn'?t arrive|late|lawyer|scam|fraud|chargeback|refund|a week (?:already|and nothing)|no progress|nobody (?:answers|replies|gets back)|fed up|frustrat\w*|disappointed)\b/iu;
 
 const MEDIA_PLACEHOLDER = /^(?:\[(?:Image|Photo|Video|Voice message|Audio|Document|Sticker|File|תמונה|סרטון|הודעה קולית|מסמך)[^\]]*\]|)$/i;
 
@@ -144,12 +147,64 @@ const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניס�
 export const simulationLeak = (reply: string) => SIMULATION_LEAK.test(reply ?? "");
 
 // "I passed it to the team", said again while the team already has it open.
-const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה)(?:\s+(?:את\s+)?(?:השאלה|הבקשה|הפנייה|זה|הנושא|הפרטים))?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:יבדוק|בודק|יחזור|יעדכן|יענה)|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:check|look|get back))\b/iu;
+const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו)(?:\s+(?:את\s+)?(?:השאלה|הבקשה|הפנייה|זה|הנושא|הפרטים))?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:יבדוק|בודק|יחזור|יעדכן|יענה)|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:check|look|get back))\b/iu;
 const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם זה|נשמע)|יש (?:חדש|חדשות|עדכון|תשובה)|עדכון|עדכנו|נו|כמה זמן|עוד כמה|מתי תהיה תשובה|ענו|הצוות)(?![\u0590-\u05FF])|\b(?:any (?:update|news)|still waiting|heard back)\b/iu;
 /** The reply announces the team hand-off again although it is already open and the customer did not ask about it. */
 export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean): boolean {
   if (!teamAlreadyOpen || newTeamQuestion) return false;
   return TEAM_LINE.test(reply ?? "") && !STATUS_ASK.test(incoming ?? "");
+}
+
+// Prod replay 4: "the measurements were passed to the team" with no team question,
+// and "we will not ship before we update you": a promise nothing carries out.
+const FUTURE_PROMISE = /(?<![\u0590-\u05FF])(?:[וש]?(?:נעדכן|אעדכן|נודיע|אודיע|נדאג|אדאג|נעכב|נשמור\s+(?:לך|לכם)|אשמור\s+(?:לך|לכם))|לא\s+(?:נשלח|נשלחים|נשלחת|נוציא)\s+(?:לפני|עד|בלי))(?![\u0590-\u05FF])|\b(?:we(?:'ll| will) (?:update you|let you know|hold it|keep it for you)|(?:won'?t|will not) ship (?:before|until))\b/iu;
+/** "Passed to the team" or a promise of a later action, with nothing in this turn carrying it (no team question, no handoff, nothing open). */
+export function unbackedPromises(reply: string, o: { teamQuestion: boolean; handedOff: boolean; teamAlreadyOpen: boolean; approvalPending: boolean }): string[] {
+  if (o.teamQuestion || o.handedOff || o.approvalPending) return [];
+  const out: string[] = [];
+  const team = TEAM_LINE.exec(reply ?? "");
+  if (team && !o.teamAlreadyOpen) out.push(team[0]);
+  const promise = FUTURE_PROMISE.exec(reply ?? "");
+  if (promise && !o.teamAlreadyOpen) out.push(promise[0]);
+  return out;
+}
+
+// Prod replay 4: "wood/bamboo pads are not sold" four times while the store sells
+// bamboo. "We don't have / don't sell / no match / doesn't exist" is a fact.
+const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו))(?![\u0590-\u05FF])|\b(?:we (?:don'?t|do not) (?:sell|carry|have|stock)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such))\b/iu;
+const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for"]);
+const stem = (w: string) => (w.length > 3 && /^[הובלמשכ]/.test(w) ? w.slice(1) : w).toLowerCase();
+const termsOf = (sentence: string) => [...new Set((sentence.match(/[\u0590-\u05FFA-Za-z]{3,}/g) ?? []).filter((w) => !ABSENCE_WORDS.has(w.toLowerCase())).map(stem))];
+const SEARCH_TOOL = /list_products|search_products|get_product|variation|search_knowledge|categor/i;
+const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
+/**
+ * Absence claims no search backs: grounded only by a search this turn whose query
+ * covers the claim's words and that did not return them. Without such words
+ * ("אין לנו כזה"), any product search that ran this turn grounds it.
+ */
+export function ungroundedAbsence(reply: string, tools: ToolRunRecord[]): string[] {
+  const sentences = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
+  const searches = tools.filter((t) => SEARCH_TOOL.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
+  const out: string[] = [];
+  for (const sentence of sentences) {
+    if (!ABSENCE.test(sentence)) continue;
+    // Only the clause that says it ("אין לנו כזה, אבל יש דומה": not "דומה").
+    const clause = sentence.split(/,|;|\s+(?:אבל|אך|רק|but)\s+/iu).filter((c) => ABSENCE.test(c)).join(" ");
+    const terms = termsOf(clause);
+    let grounded: boolean;
+    if (!terms.length) grounded = searches.some((t) => PRODUCT_TOOL.test(t.tool));
+    else {
+      const query = (t: ToolRunRecord) => termsOf(Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" "));
+      // The search must cover the claim's words (all of two, all but one of more): "pads" alone is not "bamboo pads".
+      const need = terms.length <= 2 ? terms.length : terms.length - 1;
+      const ranFor = searches.filter((t) => { const q = query(t); return terms.filter((w) => q.some((x) => x.includes(w) || w.includes(x))).length >= need; });
+      // A product search that returned the very thing contradicts the claim.
+      const returned = ranFor.some((t) => PRODUCT_TOOL.test(t.tool) && terms.some((w) => String(t.content ?? "").includes(w)) && t.outcome === "ok");
+      grounded = ranFor.length > 0 && !returned;
+    }
+    if (!grounded) out.push(sentence.trim().slice(0, 120));
+  }
+  return out;
 }
 
 /**
@@ -219,7 +274,13 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   // A handoff, or a question recorded for the team, is evidence for "I passed it to the team".
   if (i.handedOff || i.teamQuestion) log.push({ tool: "escalate_to_human", decision: "executed", sideEffect: "escalate" });
   const honesty = validateActionHonesty(reply, log as any, { hasBackgroundJob: i.approvalPending });
-  if (!honesty.ok) problems.push({ kind: "unsupported_action", claims: honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u)) });
+  const unbacked = [
+    ...(honesty.ok ? [] : honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u))),
+    ...unbackedPromises(reply, { teamQuestion: !!i.teamQuestion, handedOff: i.handedOff, teamAlreadyOpen: !!i.teamAlreadyOpen, approvalPending: i.approvalPending }),
+  ];
+  if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
+  const absent = ungroundedAbsence(reply, i.tools);
+  if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
 
   if (gaveUpSearch(reply, i.tools)) problems.push({ kind: "gave_up_search" });
   else if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_product" });
@@ -261,7 +322,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -279,7 +340,9 @@ export function neutralFirstPerson(s: string): string {
   return s
     .replace(new RegExp(`(?<![\\u0590-\\u05FF])אני\\s+(${FIRST_PERSON_WORDS})(?![\\u0590-\\u05FF])`, "gu"), (_m, w) => `אנחנו ${FIRST_PERSON_PLURAL[w]}`)
     .replace(/(?<![\u0590-\u05FF])(?<!(?:חג|יום|שבוע)\s)(שמחה|שמח)(?=\s+[של][\u0590-\u05FF])/gu, "שמחים")
-    .replace(/(?<![\u0590-\u05FF])(מצטערת|מצטער)(?=\s+(?:ש|על|לשמוע|מאוד|באמת)|\s*[,.!])/gu, "מצטערים");
+    .replace(/(?<![\u0590-\u05FF])(מצטערת|מצטער)(?=\s+(?:ש|על|לשמוע|מאוד|באמת)|\s*[,.!])/gu, "מצטערים")
+    .replace(/(?<![\u0590-\u05FF])הייתי\s+(?:צריכה|צריך)(?![\u0590-\u05FF])/gu, "היה צריך")
+    .replace(/(?<![\u0590-\u05FF])(?<!(?:את|אתה|אתם|אתן|הוא|היא)\s)(?:מבינה|מבין)(?=\s*[,.!]|\s+(?:את|ש|לגמרי|אותך|אותכם|לחלוטין)(?![\u0590-\u05FF]))/gu, "מבינים");
 }
 
 /**
@@ -295,14 +358,24 @@ export function cleanStyle(reply: string, codes: string[]): string {
   // "מצאתי כמה אפשרויות" -> "יש כמה אפשרויות"; "לא מצאתי" is left alone (the ban skips it too).
   if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
+  if (c.has("help_grammar")) s = s.replace(/(?<![\u0590-\u05FF])מה(\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור)/gu, "במה$1");
+  if (c.has("mixed_person")) s = s.replace(/(?<![\u0590-\u05FF])(?:ביקשתם)(?=\s+ממך)/gu, "ביקשנו").replace(/(?<![\u0590-\u05FF])(?:שלחתם)(?=\s+לך)/gu, "שלחנו").replace(/(?<![\u0590-\u05FF])(?:אמרתם)(?=\s+לך)/gu, "אמרנו");
   return s.replace(/\s*[\u2013\u2014]\s*/g, ", ").replace(/[ \t]{2,}/g, " ").trim();
 }
 
 const words = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9]+/g) ?? []).length;
 const QUESTION = /\?|(?<![\u0590-\u05FF])(?:מה|איך|איפה|מתי|כמה|למה|האם|יש|אפשר|מאיזה|איזה|אילו)(?![\u0590-\u05FF])|\b(?:what|how|where|when|which|do you|can i|is there)\b/iu;
-/** A cleanup that cut a reply down to a word or two while the customer asked something. */
-export function tooThin(cleaned: string, original: string, incoming: string): boolean {
-  return cleaned.trim() !== String(original ?? "").trim() && words(cleaned) < 3 && QUESTION.test(incoming ?? "");
+const PRODUCT_ASK = /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|יש לכם|יש לך|אפשר לקבל|ממליצים|תמליצו|המלצה|צריך|צריכה|רוצה|רוצים|בא לי|מעוניין|מעוניינת|מה יש|מה מתאים|איזה|אילו|בגוון|בצבע)(?![\u0590-\u05FF])|\b(?:looking for|do you have|recommend|i need|i want|something (?:in|for))\b/iu;
+/**
+ * A reply that does not answer: cut to a word or two by the cleanup while the
+ * customer asked something, or (prod replay 4, Tehila: "ברור, דווקא חגיגית ובגווני
+ * כחול.") a product ask met with no product, no price and no question.
+ */
+export function tooThin(cleaned: string, original: string, incoming: string, shown: { cards?: string[]; titles?: string[] } = {}): boolean {
+  if (cleaned.trim() !== String(original ?? "").trim() && words(cleaned) < 3 && QUESTION.test(incoming ?? "")) return true;
+  if (!PRODUCT_ASK.test(incoming ?? "")) return false;
+  const hasProduct = (shown.cards ?? []).length > 0 || (shown.titles ?? []).some((t) => t && cleaned.includes(t)) || /PRODUCT_\d+|₪|ש["״']ח|\d+\s?(?:NIS|ILS)/.test(cleaned);
+  return !hasProduct && !/\?/.test(cleaned);
 }
 
 /** The ONE targeted correction note for the rewrite round. */
@@ -314,6 +387,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now.");
     if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell say the team will check.");
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
+    if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search for those words ran this turn, or it returned them. Search for it now (the customer's own words), and answer from what comes back; if nothing does, say you did not find it by that name and ask.`);
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Call it once more with a narrower query (the category, or one or two words, per_page 5). If you still have nothing, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never say you could not check.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, colours, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
@@ -324,6 +398,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
       if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
+      if (c.has("help_grammar")) lines.push("- \"במה אפשר לעזור\", not \"מה אפשר לעזור\".");
+      if (c.has("mixed_person")) lines.push("- One person per sentence: we asked you (\"ביקשנו ממך\"), not \"ביקשתם ממך\".");
       if (c.has("self_gendered")) lines.push("- Speak of yourself neutrally (\"כדאי\", \"ממליצים\", \"הכי מתאים לך\"), never a gendered first person.");
       if (c.has("found_narration")) lines.push("- Do not narrate the search (\"מצאתי\"); just say what there is.");
       if (c.has("imperative_notice") || c.has("gendered_prefers") || c.has("mixed_address")) lines.push("- No \"שים לב\" or \"מעדיף/ה\": rephrase neutrally.");

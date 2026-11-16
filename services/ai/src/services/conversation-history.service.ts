@@ -36,6 +36,8 @@ export interface HistoryRow {
   messageType?: string | null;
   senderName?: string | null;
   createdAt?: Date | string | null;
+  metadata?: unknown;
+  origin?: string | null;
 }
 
 type ChatTurn = { role: "user" | "assistant" | "system"; content: string };
@@ -62,6 +64,19 @@ export async function loadRecentHistory<T = any>(
 export function isHumanAgent(row: HistoryRow): boolean {
   return row.direction === "OUTBOUND" && typeof row.senderName === "string" && row.senderName.includes("@");
 }
+
+/**
+ * The owner writing from the WhatsApp Business app: an echo (Coexistence) or
+ * imported history (before the connection every business-side message was the
+ * app). Same rule as the worker's owner-recent check.
+ */
+export function isOwnerFromPhone(row: HistoryRow): boolean {
+  if (row.direction !== "OUTBOUND") return false;
+  return row.origin === "HISTORICAL_IMPORT" || (row.metadata as any)?.source === "whatsapp_business_app";
+}
+
+/** A person on the business side wrote it: the inbox (an email) or the phone. */
+export const isPersonOutbound = (row: HistoryRow) => isHumanAgent(row) || isOwnerFromPhone(row);
 
 function humanName(senderName: string): string {
   const local = senderName.split("@")[0].split(/[._+-]/)[0] ?? "";
@@ -116,9 +131,9 @@ function render(row: HistoryRow): ChatTurn | null {
   }
 
   // Outbound: a human colleague, or the employee itself.
-  if (isHumanAgent(row)) {
-    const name = humanName(row.senderName!);
-    const who = name ? `Human team member ${name}` : "Human team member";
+  if (isPersonOutbound(row)) {
+    const name = isHumanAgent(row) ? humanName(row.senderName!) : "";
+    const who = name ? `Human team member ${name}` : isOwnerFromPhone(row) ? "The business owner (from the phone)" : "Human team member";
     const kind = MEDIA_KIND[type];
     const text = kind ? `(sent ${kind})${body && !PLACEHOLDER_BODY.test(body) ? ` ${body}` : ""}` : body;
     return text ? { role: "user", content: `[${who}, not you, wrote to the customer]: ${text}` } : null;

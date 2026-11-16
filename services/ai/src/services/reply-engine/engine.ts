@@ -5,7 +5,7 @@
 import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
 import { generateResponse, platformPaidScope } from "../ai.service";
 import { resolveAgentModel } from "../../lib/agent-model";
-import { loadRecentHistory } from "../conversation-history.service";
+import { loadRecentHistory, historyChatMessages, earlierNote } from "../conversation-history.service";
 import { getCompanyContext } from "../company-context.service";
 import { prepareShopifyTurn } from "../shopify-chat-turn.service";
 import { prepareWebchatCommerceTurn, webchatStorefrontBlock, WOO_COMPLEMENTARY_TOOL, wooComplementaryProducts, claimCrossSell, releaseCrossSell } from "../woo-chat-turn.service";
@@ -17,6 +17,7 @@ import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowe
 import { resolveProductRef } from "../product-search.service";
 import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
+import { takeShowLine, ungroundedPrices, stripPrices } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
 import { getCrmAdapter } from "../connectors/crm-adapter-resolver";
 import { invalidateCrmPrefetch } from "../crm-prefetch.service";
@@ -90,13 +91,17 @@ export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
   const claims: Claim[] = Array.isArray(v.claims)
     ? v.claims.filter((c: any) => c && typeof c.text === "string").map((c: any) => ({ kind: ["price", "product", "action", "fact"].includes(c.kind) ? c.kind : "fact", text: c.text, source: c.source }))
     : [];
+  // The product summary asks for a "SHOW: PRODUCT_1" line (legacy's card protocol):
+  // its keys are cards, and the line never reaches the customer (prod replay 4, Tehila).
+  const show = takeShowLine(v.reply);
+  const cards: string[] = Array.isArray(v.cards) ? v.cards.filter((k: any) => typeof k === "string") : [];
   return {
-    reply: v.reply,
+    reply: show.text,
     stateUpdate: { stage: su.stage, intent: su.intent, facts: su.facts, pending: Array.isArray(su.pending) ? su.pending : undefined },
     claims,
     handoff: typeof v.handoff === "string" && v.handoff.trim() ? v.handoff.trim() : null,
     teamQuestion: typeof v.team_question === "string" && v.team_question.trim() ? v.team_question.trim().slice(0, 500) : null,
-    cards: Array.isArray(v.cards) ? v.cards.filter((k: any) => typeof k === "string") : [],
+    cards: [...new Set([...cards, ...show.keys])],
   };
 }
 
@@ -151,17 +156,18 @@ export function stripLaterOpener(text: string, notFirst: boolean): string {
   return rest.length >= 2 ? rest : text;
 }
 
-function historyToChat(history: any[]): any[] {
-  const out: any[] = [];
-  for (const m of history) {
-    const body = String(m?.body ?? "").trim();
-    if (!body) continue;
-    const kind = (m?.metadata as any)?.kind;
-    if (kind === "interim_ack" || kind === "holding") continue;
-    if (m.direction === "INBOUND") out.push({ role: "user", content: body });
-    else if (m.direction === "OUTBOUND") out.push({ role: "assistant", content: body });
-  }
-  return out;
+/**
+ * The history as the model reads it: legacy's renderer, so a person's message is
+ * marked as a person's ("[Human team member X, not you, wrote to the customer]")
+ * and never read as the employee's own (prod replay 4: v2 contradicted, or said
+ * "the team is still checking" after, what a person had just answered), media are
+ * described, product cards are a line, a long silence is a note.
+ */
+export function historyToChat(history: any[]): any[] {
+  return historyChatMessages(
+    history.filter((m: any) => { const kind = (m?.metadata as any)?.kind; return kind !== "interim_ack" && kind !== "holding"; }),
+    { window: history.length + 1 },
+  );
 }
 
 function closedHoursText(c: EngineTurnOpts["closedHours"], locale: "he" | "en"): string | null {
@@ -416,10 +422,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardsChannel: cardChannel,
   });
   const chat = historyToChat(history);
-  if (opts.incomingMessage && (chat.at(-1)?.role !== "user" || chat.at(-1)?.content !== opts.incomingMessage.trim())) {
+  const lastRow: any = history.at(-1);
+  if (opts.incomingMessage && !(lastRow?.direction === "INBOUND" && String(lastRow.body ?? "").trim() === opts.incomingMessage.trim())) {
     chat.push({ role: "user", content: opts.incomingMessage });
   }
   const windowed = chat.slice(-cfg.windowMessages);
+  // What slid out of the window, kept as facts (products shown, the customer's short answers).
+  if (chat.length > windowed.length) {
+    const earlier = earlierNote(history.slice(0, Math.max(0, history.length - cfg.windowMessages)));
+    if (earlier) windowed.unshift({ role: "system", content: earlier });
+  }
   const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true }) || null;
   const customerName = String((conversation as any).customerName ?? "").trim();
   const customerLine = customerName ? `Name: ${customerName.slice(0, 60)}` : null;
@@ -474,7 +486,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
     if (!calls.length) {
       // A plain-text answer (a model that ignored tool_choice): take it as the reply.
-      if (r.content?.trim()) output = { reply: r.content.trim(), stateUpdate: {}, claims: [], handoff: null, cards: [] };
+      if (r.content?.trim()) { const show = takeShowLine(r.content.trim()); output = { reply: show.text, stateUpdate: {}, claims: [], handoff: null, cards: show.keys }; }
       break;
     }
     messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
@@ -556,7 +568,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       // An unread product, order or policy gets ONE tool round to read it before the rewrite.
-      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge" || p.kind === "gave_up_search");
+      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence");
       let r = await call(mayRead ? "required" : forceRespond);
       if (mayRead) {
         let calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
@@ -597,7 +609,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null : o.handoff;
         const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(o.reply, codes), handoff };
         // Nothing, or too little, left to answer a question with: the other candidate, else the fallback.
-        if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "")) return null;
+        if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) })) return null;
         const after = gate3(g3Input(cleaned));
         return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
       };
@@ -632,6 +644,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     trace.gate3 = { ...verdict, rewrite: "none" };
   }
   mark("gate3");
+  // Last line of defence (prod replay 4): a price nothing grounds is never sent,
+  // whatever path produced the reply. The sentence keeps the rest.
+  if (output?.reply) {
+    const leftover = ungroundedPrices(resolveKeysInText(output.reply, candidates), grounding);
+    if (leftover.length) {
+      output = { ...output, reply: stripPrices(resolveKeysInText(output.reply, candidates), leftover).trim() };
+      (trace as any).priceStripped = leftover.length;
+    }
+  }
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
 
   // ── Send shape ──
@@ -719,7 +740,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // Rolling summary of what slid out of the window, after the reply (off the critical path).
   if (chat.length > cfg.windowMessages && !signal?.aborted) {
-    const older = chat.slice(0, chat.length - cfg.windowMessages);
+    const older = chat.slice(0, chat.length - cfg.windowMessages).filter((m: any) => m.role !== "system");
     void refreshSummary(opts.tenantId, opts.conversationId, config.id, lane, state.summary, older, model).catch(() => {});
   }
 

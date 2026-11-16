@@ -444,7 +444,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["ungrounded_price", "unknown_product", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -525,5 +525,96 @@ describe("prod replay 3 (2026-11-16)", () => {
     expect(gaveUpSearch("לא הצלחתי לבדוק.", [t("woocommerce.get_order", "timeout")])).toBe(false);
     expect(gaveUpSearch("יש לנו משטחים בכמה גדלים, לאיזה מכשיר?", [t("woocommerce.list_products", "timeout")])).toBe(false);
     expect((await g3("לא הצלחתי לבדוק את זה כרגע.", { tools: [t("woocommerce.list_products", "timeout")] })).map((p) => p.kind)).toContain("gave_up_search");
+  });
+});
+
+describe("prod replay 4 (2026-11-16)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+  const search = (query: string, outcome: string, content = "") => ({ tool: "woocommerce.list_products", args: { query }, decision: "allow", outcome, content } as any);
+
+  it("★ \"we don't sell X\" needs a search for X this turn that did not return it", async () => {
+    const { ungroundedAbsence } = await import("../services/reply-engine/gates");
+    const claim = "משטחי במבוק אנחנו לא מוכרים.";
+    expect(ungroundedAbsence(claim, [])).toHaveLength(1);
+    expect(ungroundedAbsence(claim, [search("משטח עץ", "empty")])).toHaveLength(1);
+    expect(ungroundedAbsence(claim, [search("משטח במבוק", "empty")])).toEqual([]);
+    // The search returned bamboo: the claim is contradicted.
+    expect(ungroundedAbsence(claim, [search("במבוק", "ok", "PRODUCT_1: משטח במבוק כהה")])).toHaveLength(1);
+    // No words to check: any product search this turn grounds it.
+    expect(ungroundedAbsence("אין לנו כזה, אבל יש דומה.", [search("x", "ok")])).toEqual([]);
+    expect(ungroundedAbsence("We don't sell bamboo pads.", [])).toHaveLength(1);
+    // "No info" is not an absence claim, and a plain answer is not one either.
+    expect(ungroundedAbsence("אין לנו מידע על זה כרגע.", [])).toEqual([]);
+    expect(ungroundedAbsence("יש משטח במבוק בשני גוונים.", [])).toEqual([]);
+    expect(kinds(await g3(claim))).toContain("ungrounded_absence");
+  });
+
+  it("★ \"passed to the team\" or \"we'll update you\" with nothing carrying it is unsupported", async () => {
+    const { unbackedPromises } = await import("../services/reply-engine/gates");
+    const none = { teamQuestion: false, handedOff: false, teamAlreadyOpen: false, approvalPending: false };
+    expect(unbackedPromises("המידות הועברו לצוות.", none)).toHaveLength(1);
+    expect(unbackedPromises("לא נשלח לפני שנעדכן אותך.", none).length).toBeGreaterThan(0);
+    expect(unbackedPromises("נעדכן אותך כשזה יגיע.", none)).toHaveLength(1);
+    expect(unbackedPromises("המידות הועברו לצוות.", { ...none, teamQuestion: true })).toEqual([]);
+    expect(unbackedPromises("נעדכן אותך כאן.", { ...none, teamAlreadyOpen: true })).toEqual([]);
+    expect(unbackedPromises("המשלוח יוצא מחר.", none)).toEqual([]);
+    expect(kinds(await g3("המידות הועברו לצוות."))).toContain("unsupported_action");
+    // A promise the legacy honesty check does not know, through gate3.
+    expect(kinds(await g3("נעדכן אותך כשזה יגיע."))).toContain("unsupported_action");
+  });
+
+  it("★ more of the employee's gendered first person, and two grammar slips, caught and cleaned", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    for (const r of ["מבינה, זה מתסכל.", "לא הייתי צריכה לשלוח את זה.", "מבינה את התסכול"]) expect(styleCodes(await g3(r)), r).toContain("self_gendered");
+    for (const r of ["את מבינה?", "מבינים לגמרי.", "אם הוא מבין את ההוראות"]) expect(styleCodes(await g3(r)), r).not.toContain("self_gendered");
+    expect(styleCodes(await g3("מה אפשר לעזור?"))).toContain("help_grammar");
+    expect(styleCodes(await g3("ביקשתם ממך את המידות"))).toContain("mixed_person");
+    expect(cleanStyle("מבינה, זה מתסכל.", ["self_gendered"])).toBe("מבינים, זה מתסכל.");
+    expect(cleanStyle("לא הייתי צריכה לשלוח.", ["self_gendered"])).toBe("לא היה צריך לשלוח.");
+    expect(cleanStyle("מה אפשר לעזור?", ["help_grammar"])).toBe("במה אפשר לעזור?");
+    expect(cleanStyle("ביקשתם ממך את המידות.", ["mixed_person"])).toBe("ביקשנו ממך את המידות.");
+  });
+
+  it("★ strong frustration after a long wait keeps its handoff", async () => {
+    const { needlessHandoff } = await import("../services/reply-engine/gates");
+    expect(needlessHandoff("frustrated", ["כבר שבוע שאתם לא מתקדמים עם זה"], false)).toBe(false);
+    expect(needlessHandoff("frustrated", ["אף אחד לא עונה לי"], false)).toBe(false);
+    expect(needlessHandoff("frustrated", ["כבר שבוע ואין כלום"], false)).toBe(false);
+    expect(needlessHandoff("x", ["אפשר לשלם בתשלומים?"], false)).toBe(true);
+  });
+
+  it("★ a product ask answered with no product and no question is thin", async () => {
+    const { tooThin } = await import("../services/reply-engine/gates");
+    const ask = "מחפשת צעיף חגיגי בגוון כחול";
+    expect(tooThin("ברור, דווקא חגיגית ובגווני כחול.", "ברור, דווקא חגיגית ובגווני כחול.", ask)).toBe(true);
+    expect(tooThin("יש כמה חגיגיים בכחול.", "x", ask, { cards: ["PRODUCT_1"] })).toBe(false);
+    expect(tooThin("יש את צעיף אנה בכחול.", "x", ask, { titles: ["צעיף אנה"] })).toBe(false);
+    expect(tooThin("ברור, לאיזה אירוע?", "x", ask)).toBe(false);
+    expect(tooThin("אנחנו פתוחים עד 18:00.", "אנחנו פתוחים עד 18:00.", "מה שעות הפתיחה?")).toBe(false);
+  });
+
+  it("★ a SHOW line is never in the reply: its keys become cards", async () => {
+    const o = parseRespond(JSON.stringify({ reply: "יש שני צעיפים כחולים שיתאימו.\nSHOW: PRODUCT_1, PRODUCT_2", cards: ["PRODUCT_1"] }))!;
+    expect(o.reply).toBe("יש שני צעיפים כחולים שיתאימו.");
+    expect(o.cards).toEqual(["PRODUCT_1", "PRODUCT_2"]);
+    expect(parseRespond(JSON.stringify({ reply: "זה יתאים לך. SHOW: PRODUCT_3" }))!.reply).toBe("זה יתאים לך.");
+  });
+
+  it("★ a person's message is marked as a person's, from the inbox or the phone", async () => {
+    const { historyToChat } = await import("../services/reply-engine/engine");
+    const chat = historyToChat([
+      { direction: "INBOUND", body: "יש במבוק?" },
+      { direction: "OUTBOUND", body: "כן, בהיר וכהה.", senderName: "dana@shop.co.il" },
+      { direction: "OUTBOUND", body: "שלחתי תמונות", senderName: "Smoovee", metadata: { source: "whatsapp_business_app" } },
+      { direction: "OUTBOUND", body: "בשמחה!", senderName: "AI Bot" },
+    ]);
+    expect(chat[1]).toEqual({ role: "user", content: "[Human team member Dana, not you, wrote to the customer]: כן, בהיר וכהה." });
+    expect(chat[2].content).toMatch(/^\[The business owner \(from the phone\), not you, wrote to the customer\]/);
+    expect(chat[3]).toEqual({ role: "assistant", content: "בשמחה!" });
   });
 });

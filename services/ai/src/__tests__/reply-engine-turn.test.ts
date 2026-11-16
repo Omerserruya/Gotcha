@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   historyQueries: [] as any[],
   failReads: 0,
   slowReads: 0,
+  history: null as any[] | null,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -73,8 +74,9 @@ vi.mock("../services/ai.service", () => ({
   }),
 }));
 vi.mock("../lib/agent-model", () => ({ resolveAgentModel: () => "gpt-6-luna" }));
-vi.mock("../services/conversation-history.service", () => ({
-  loadRecentHistory: async () => [{ direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null }],
+vi.mock("../services/conversation-history.service", async (orig) => ({
+  ...(await orig<any>()),
+  loadRecentHistory: async () => h.history ?? [{ direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null }],
 }));
 vi.mock("../services/company-context.service", () => ({ getCompanyContext: async () => ({ organizationName: "Demo Store", industry: "fashion" }) }));
 vi.mock("../services/shopify-chat-turn.service", () => ({ prepareShopifyTurn: async () => null }));
@@ -134,6 +136,7 @@ beforeEach(() => {
   for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
   h.slowReads = 0;
+  h.history = null;
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -633,5 +636,45 @@ describe("prod replay 3 (2026-11-16), through a whole turn", () => {
     expect(r.trace.gate3.rewrite).not.toBe("cleaned");
     expect(r.reply).not.toBe("בשמחה!");
     expect(r.reply).not.toBe("תודה!");
+  });
+});
+
+describe("prod replay 4 (2026-11-16), through a whole turn", () => {
+  it("★ the model reads a person's reply as a person's, not its own", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "יש לכם משטח במבוק?", metadata: null },
+      { direction: "OUTBOUND", body: "כן, יש בהיר וכהה.", senderName: "dana@shop.co.il", metadata: null },
+      { direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("p1", { reply: "בטח, לאיזה שימוש?" })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    const sent = JSON.stringify(h.calls[0].messages);
+    expect(sent).toContain("[Human team member Dana, not you, wrote to the customer]: כן, יש בהיר וכהה.");
+    expect(h.calls[0].messages.filter((m: any) => m.role === "assistant" && /בהיר וכהה/.test(m.content))).toHaveLength(0);
+    // The customer's latest message is not sent twice.
+    expect(h.calls[0].messages.filter((m: any) => m.content === "יש לכם תיק בד?")).toHaveLength(1);
+  });
+
+  it("★ \"we don't sell it\" with no search: the search runs before the answer", async () => {
+    h.responses.push(
+      { toolCalls: [respond("b1", { reply: "משטחי במבוק אנחנו לא מוכרים." })] },
+      { toolCalls: [tc("b2", "woocommerce.list_products", { query: "משטח במבוק" })] },
+      { toolCalls: [respond("b3", { reply: "יש לנו תיק בד קנבס, לאיזה שימוש?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_absence");
+    expect(h.calls[1].toolChoice).toBe("required");
+    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.list_products");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+  });
+
+  it("★ an absence claim the rewrite keeps is never sent (a fact problem)", async () => {
+    h.responses.push(
+      { toolCalls: [respond("b4", { reply: "משטחי במבוק אנחנו לא מוכרים." })] },
+      { toolCalls: [respond("b5", { reply: "במבוק אנחנו לא מוכרים, מצטערים." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/לא מוכרים/);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
   });
 });

@@ -21,7 +21,8 @@
  * the replay is for. The console prints the numeric summary only.
  */
 import fs from "fs";
-import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
+import { prisma, withCrossTenantAccess, withHistoricalRecords } from "@chatcenter/shared";
+import { isPersonOutbound } from "../services/conversation-history.service";
 import { initAIService } from "../services/ai.service";
 import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
@@ -44,7 +45,37 @@ export function parseArgs(argv: string[]): Args {
   };
 }
 
-export interface PlannedTurn { conversationId: string; messageId: string; asOf: Date; body: string; sentAfter: string[]; aiAgentId: string }
+export interface PlannedTurn { conversationId: string; messageId: string; asOf: Date; body: string; sentAfter: string[]; aiAgentId: string; skip?: ReplaySkip }
+
+/** Why live would not have called the AI for this message (the worker's Gate 1, as of it). */
+export type ReplaySkip = "handed_over" | "human_owned" | "owner_recent";
+const HANDOVER_EVENTS = new Set(["ai_bot_escalation", "visitor_requested_human", "whatsapp_app_takeover", "flow_ended_handoff", "agent_transferred"]);
+const OWNER_RECENT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The worker's Gate 1 rebuilt as of message i (prod replay 4: the replay ran v2
+ * on turns a person owned, which live never would). From the handover history
+ * and the messages before it:
+ *   - the last handover before it went to a person, or a handover event since the
+ *     last hand-back to the AI -> handed_over;
+ *   - a person wrote (inbox or phone) since the last hand-back -> human_owned
+ *     (a takeover lasts until someone hands it back);
+ *   - nothing sent yet in this conversation and the owner wrote to this customer
+ *     from the phone in the 24h before -> owner_recent.
+ * Not rebuilt: business hours, the autonomy budget, an inactive routing flow.
+ */
+export function gateAsOf(msgs: any[], i: number, handovers: Array<{ toHandler: string; at: Date }>, ownerRecent: boolean): ReplaySkip | null {
+  const asOf = new Date(msgs[i].createdAt).getTime();
+  const before = handovers.filter((h) => new Date(h.at).getTime() < asOf);
+  const last = before.at(-1);
+  if (last?.toHandler === "human") return "handed_over";
+  const since = last ? new Date(last.at).getTime() : -Infinity;
+  const earlier = msgs.slice(0, i).filter((m) => new Date(m.createdAt).getTime() >= since);
+  if (earlier.some((m) => HANDOVER_EVENTS.has((m.metadata as any)?.systemEvent))) return "handed_over";
+  if (earlier.some((m) => isPersonOutbound(m))) return "human_owned";
+  if (ownerRecent && !msgs.slice(0, i).some((m) => m.direction === "OUTBOUND")) return "owner_recent";
+  return null;
+}
 
 /** The turns to replay: per tenant, newest conversations first, each one's customer messages in order; capped. */
 export async function planReplay(args: Args, db: any = prisma): Promise<Map<string, PlannedTurn[]>> {
@@ -60,7 +91,7 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
       },
       orderBy: { lastMessageAt: "desc" },
       take: args.perTenant,
-      select: { id: true, assignedAiAgentId: true },
+      select: { id: true, assignedAiAgentId: true, channel: true, customerExternalId: true },
     });
     const turns: PlannedTurn[] = [];
     for (const c of convs) {
@@ -69,21 +100,44 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
       const msgs = await db.message.findMany({
         where: { tenantId, conversationId: c.id, origin: "LIVE" },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, direction: true, body: true, createdAt: true, senderName: true, metadata: true },
+        select: { id: true, direction: true, body: true, createdAt: true, senderName: true, metadata: true, origin: true, messageType: true },
       });
-      msgs.forEach((m: any, i: number) => {
-        if (m.direction !== "INBOUND" || !String(m.body ?? "").trim()) return;
-        if (total >= args.cap) return;
+      const handovers: any[] = await db.conversationHandover?.findMany({
+        where: { tenantId, conversationId: c.id }, orderBy: { at: "asc" }, select: { toHandler: true, at: true },
+      }).catch(() => []) ?? [];
+      // The owner on the phone in the 24h before (same rule as the worker's owner-recent).
+      const ownerRecentAt = async (asOf: Date): Promise<boolean> => {
+        if (c.channel !== "WHATSAPP" || !c.customerExternalId) return false;
+        try {
+          const hit = await withHistoricalRecords(() => db.message.findFirst({
+            where: {
+              tenantId, channel: "WHATSAPP", direction: "OUTBOUND",
+              createdAt: { gte: new Date(asOf.getTime() - OWNER_RECENT_MS), lt: asOf },
+              conversation: { customerExternalId: c.customerExternalId },
+              OR: [{ origin: "HISTORICAL_IMPORT" }, { metadata: { path: ["source"], equals: "whatsapp_business_app" } }],
+            },
+            select: { id: true },
+          }));
+          return !!hit;
+        } catch { return false; }
+      };
+      for (let i = 0; i < msgs.length; i++) {
+        const m: any = msgs[i];
+        if (m.direction !== "INBOUND" || !String(m.body ?? "").trim() || (m.messageType ?? "text") === "system") continue;
+        if (total >= args.cap) continue;
+        const firstOfConv = !msgs.slice(0, i).some((x: any) => x.direction === "OUTBOUND");
+        const skip = gateAsOf(msgs, i, handovers, firstOfConv ? await ownerRecentAt(new Date(m.createdAt)) : false);
         // What actually went out after this message, until the customer's next one.
         const sentAfter: string[] = [];
         for (let j = i + 1; j < msgs.length && msgs[j].direction !== "INBOUND"; j++) {
           const kind = (msgs[j].metadata as any)?.kind;
-          if (kind === "interim_ack" || kind === "holding") continue;
+          if (kind === "interim_ack" || kind === "holding" || msgs[j].messageType === "system") continue;
           sentAfter.push(`${msgs[j].senderName ?? "?"}: ${String(msgs[j].body ?? "").trim()}`);
         }
-        turns.push({ conversationId: c.id, messageId: m.id, asOf: m.createdAt, body: String(m.body), sentAfter, aiAgentId });
-        total++;
-      });
+        turns.push({ conversationId: c.id, messageId: m.id, asOf: m.createdAt, body: String(m.body), sentAfter, aiAgentId, ...(skip ? { skip } : {}) });
+        // A skipped turn costs no model call: only the ones that run count against the cap.
+        if (!skip) total++;
+      }
     }
     plan.set(tenantId, turns);
   }
@@ -97,7 +151,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -112,8 +166,8 @@ async function main() {
   const plan = await withCrossTenantAccess(() => planReplay(args));
   if (args.dry) {
     for (const [t, turns] of plan) {
-      console.log(`[replay][dry] tenant=${t} conversations=${new Set(turns.map((x) => x.conversationId)).size} turns=${turns.length}`);
-      for (const x of turns) console.log(`  conv=${x.conversationId} msg=${x.messageId} at=${x.asOf.toISOString()} agent=${x.aiAgentId}`);
+      console.log(`[replay][dry] tenant=${t} conversations=${new Set(turns.map((x) => x.conversationId)).size} turns=${turns.filter((x) => !x.skip).length} skipped=${turns.filter((x) => x.skip).length}`);
+      for (const x of turns) console.log(`  conv=${x.conversationId} msg=${x.messageId} at=${x.asOf.toISOString()} agent=${x.aiAgentId}${x.skip ? ` SKIP:${x.skip}` : ""}`);
     }
     return;
   }
@@ -123,13 +177,20 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
     md.push(`## Tenant ${tenantId}`, "");
     let lastConv = "";
     for (const t of turns) {
       replayed.add(t.conversationId);
       if (t.conversationId !== lastConv) { md.push(`### Conversation ${t.conversationId}`, ""); lastConv = t.conversationId; }
+      if (t.skip) {
+        // Live would not have called the AI here: not run, not rated.
+        s.skipped++;
+        s.skippedReasons[t.skip] = (s.skippedReasons[t.skip] ?? 0) + 1;
+        md.push(`**Customer:** ${oneLine(t.body)}`, "", `- skipped: ${t.skip} (live would not have called the AI)`, "");
+        continue;
+      }
       const t0 = Date.now();
       try {
         const r: any = await withCrossTenantAccess(() => runReplyEngineTurn(
@@ -144,6 +205,7 @@ async function main() {
         if (r.trace?.gate3?.rewrite === "fallback") s.fallbacks++;
         if (r.trace?.gate3?.rewrite === "rewritten") s.rewrites++;
         if (r.trace?.gate3?.rewrite === "cleaned") s.cleaned++;
+        if (r.trace?.priceStripped) s.priceStripped++;
         if (r.trace?.gate3?.rewrite === "silent") s.silent++;
         if (isCannedTeamLine(r.reply)) s.cannedLines++;
         const tools = (r.trace?.tools ?? []) as any[];

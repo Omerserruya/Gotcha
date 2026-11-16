@@ -2,16 +2,17 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/connectors", () => ({}));
 vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn() }));
-import { parseArgs, planReplay } from "../scripts/replay-v2";
+import { parseArgs, planReplay, gateAsOf } from "../scripts/replay-v2";
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
-function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }) {
+function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }, opts: { ownerRecent?: boolean; handovers?: Record<string, any[]> } = {}) {
   const calls: any = { conv: [] };
   return {
     calls,
     aIAgent: { findFirst: async () => agent },
     conversation: { findMany: async (a: any) => { calls.conv.push(a); return convs.slice(0, a.take); } },
-    message: { findMany: async ({ where }: any) => msgs[where.conversationId] ?? [] },
+    message: { findMany: async ({ where }: any) => msgs[where.conversationId] ?? [], findFirst: async () => opts.ownerRecent ? { id: "x" } : null },
+    conversationHandover: { findMany: async ({ where }: any) => opts.handovers?.[where.conversationId] ?? [] },
   };
 }
 
@@ -54,5 +55,46 @@ describe("replay-v2 plan", () => {
   it("no employee anywhere: the conversation is skipped", async () => {
     const plan = await planReplay(parseArgs(["--tenants", "t1"]), db([{ id: "c1", assignedAiAgentId: null }], { c1: [{ id: "m1", direction: "INBOUND", body: "x", createdAt: at(1) }] }, null));
     expect(plan.get("t1")).toEqual([]);
+  });
+});
+
+describe("replay-v2: the worker's Gate 1, as of each message (prod replay 4)", () => {
+  const inb = (id: string, m: number, body = "שאלה") => ({ id, direction: "INBOUND", body, createdAt: at(m) });
+  const bot = (id: string, m: number) => ({ id, direction: "OUTBOUND", body: "תשובה", createdAt: at(m), senderName: "AI Bot" });
+  const person = (id: string, m: number) => ({ id, direction: "OUTBOUND", body: "עניתי", createdAt: at(m), senderName: "dana@shop.co.il" });
+  const phone = (id: string, m: number) => ({ id, direction: "OUTBOUND", body: "מהטלפון", createdAt: at(m), senderName: "Shop", metadata: { source: "whatsapp_business_app" } });
+  const escalation = (id: string, m: number) => ({ id, direction: "INBOUND", body: "", messageType: "system", createdAt: at(m), metadata: { systemEvent: "ai_bot_escalation" } });
+
+  it("★ a person replied (inbox or phone) before the message -> human_owned; the bot's own replies do not count", () => {
+    expect(gateAsOf([inb("a", 1), person("b", 2), inb("c", 3)], 2, [], false)).toBe("human_owned");
+    expect(gateAsOf([inb("a", 1), phone("b", 2), inb("c", 3)], 2, [], false)).toBe("human_owned");
+    expect(gateAsOf([inb("a", 1), bot("b", 2), inb("c", 3)], 2, [], false)).toBeNull();
+    // Only what came BEFORE the message.
+    expect(gateAsOf([inb("a", 1), person("b", 2)], 0, [], false)).toBeNull();
+  });
+  it("★ handed over: the history says a person, or an escalation event; a hand-back to the AI clears both", () => {
+    expect(gateAsOf([inb("a", 1), inb("c", 3)], 1, [{ toHandler: "human", at: at(2) }], false)).toBe("handed_over");
+    expect(gateAsOf([inb("a", 1), escalation("e", 2), inb("c", 3)], 2, [], false)).toBe("handed_over");
+    const handedBack = [{ toHandler: "human", at: at(2) }, { toHandler: "ai_agent", at: at(4) }];
+    expect(gateAsOf([inb("a", 1), person("b", 3), inb("c", 5)], 2, handedBack, false)).toBeNull();
+    // A handover after the message does not reach back.
+    expect(gateAsOf([inb("a", 1)], 0, [{ toHandler: "human", at: at(2) }], false)).toBeNull();
+  });
+  it("★ owner_recent only for a conversation's first messages (nothing sent yet)", () => {
+    expect(gateAsOf([inb("a", 1)], 0, [], true)).toBe("owner_recent");
+    expect(gateAsOf([inb("a", 1), bot("b", 2), inb("c", 3)], 2, [], true)).toBeNull();
+  });
+  it("★ the plan marks skipped turns with the reason, and they do not count against the cap", async () => {
+    const d = db([{ id: "c1", assignedAiAgentId: "maya", channel: "WEBCHAT" }], {
+      c1: [inb("m1", 1), bot("m2", 2), inb("m3", 3), person("m4", 4), inb("m5", 5), inb("m6", 6)],
+    });
+    // Cap 3: m5 and m6 are both listed, so the two skips did not use it up.
+    const plan = (await planReplay(parseArgs(["--tenants", "t1", "--cap", "3"]), d)).get("t1")!;
+    expect(plan.map((p) => [p.messageId, p.skip ?? null])).toEqual([["m1", null], ["m3", null], ["m5", "human_owned"], ["m6", "human_owned"]]);
+  });
+  it("★ the owner on the phone in the 24h before a WhatsApp conversation's first message", async () => {
+    const d = db([{ id: "c1", assignedAiAgentId: "maya", channel: "WHATSAPP", customerExternalId: "972" }], { c1: [inb("m1", 1)] }, { id: "noa" }, { ownerRecent: true });
+    const plan = (await planReplay(parseArgs(["--tenants", "t1"]), d)).get("t1")!;
+    expect(plan[0].skip).toBe("owner_recent");
   });
 });
