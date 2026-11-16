@@ -11,7 +11,8 @@ import styles from '@/features/console/Console.module.css';
 
 /** Console · Coupons - legacy `/system/coupons`. */
 export default async function Page() {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const [t, coupons] = await Promise.all([getTranslations('console.coupons'), loadCoupons()]);
   return (
     <SettingsSection title={t('title')} description={t('description')}>

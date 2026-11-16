@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { Logo } from '@/design-system/brand/Logo';
 
+import { BackoffRetry } from './BackoffRetry';
 import { usePurchaseLinksAllowed } from './mobile/web-only';
 import styles from './WorkspaceGate.module.css';
 
@@ -13,8 +14,9 @@ import styles from './WorkspaceGate.module.css';
  * rail, no ⌘K, one sentence and, where there is one, the way on.
  *
  *   waiting      a member of a workspace an admin is still setting up
- *   unavailable  the workspace's status could not be read: Retry - never
- *                the product, and never a lock-out that outlives a reload
+ *   unavailable  the workspace's status could not be read: Retry, pressed by
+ *                a person and resting longer after each try (`BackoffRetry`) -
+ *                never the product, and never a lock-out that outlives a try
  *   payment      the checkout's payment page (`paymentPath`), in this
  *                language: the open checkout's, else the entry page
  */
@@ -60,14 +62,7 @@ export function WorkspaceGate({
               : t(`${route}.lead`)}
         </p>
         {route === 'unavailable' ? (
-          <button
-            type="button"
-            className={styles.primary}
-            onClick={() => window.location.reload()}
-            data-testid="gate-retry"
-          >
-            {t('unavailable.retry')}
-          </button>
+          <BackoffRetry className={styles.primary} label={t('unavailable.retry')} testid="gate-retry" />
         ) : route === 'payment' && paymentPath && mayPay ? (
           <a href={paymentPath} className={styles.primary} data-testid="gate-pay">
             {t('payment.go')}

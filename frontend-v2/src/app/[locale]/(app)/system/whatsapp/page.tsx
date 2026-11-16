@@ -22,7 +22,8 @@ import pageStyles from '@/features/console/platform-whatsapp/PlatformWhatsApp.mo
  * failed read is never drawn as "nothing connected".
  */
 export default async function Page() {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const [t, sender, templates] = await Promise.all([
     getTranslations('console.platformWhatsApp'),
     loadPlatformSender(),

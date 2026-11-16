@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-/** ★★ The console's door, on the server: SYSTEM_ADMIN, or "not found". */
+/**
+ * ★★ The console's door, on the server: SYSTEM_ADMIN, or "not found" - and
+ * "unread" when the role could not be read (prod, 2026-11-16; door.test.tsx
+ * drives it with permissions/me answering 429).
+ */
 const held = vi.hoisted(() => ({
   value: { roleKey: undefined as string | undefined, status: 'loaded' as string },
 }));
@@ -27,7 +31,7 @@ beforeEach(() => {
 
 describe('★★ requireConsole', () => {
   it('★ a system admin passes', async () => {
-    await expect(asRole('system_admin')).resolves.toBeUndefined();
+    await expect(asRole('system_admin')).resolves.toBe('open');
     expect(notFound).not.toHaveBeenCalled();
   });
 
@@ -37,7 +41,16 @@ describe('★★ requireConsole', () => {
     expect(notFound).toHaveBeenCalledTimes(2);
   });
 
-  it('★★ an unread role is a closed door, not an open one', async () => {
-    await expect(asRole(undefined, 'unavailable')).rejects.toThrow('NEXT_NOT_FOUND');
+  it('★★ an unread role is "unread": not the console, and not "not found" either', async () => {
+    await expect(asRole(undefined, 'unavailable')).resolves.toBe('unread');
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
+  it('★★ an unread read never opens the door, whatever role came with it', async () => {
+    await expect(asRole('owner', 'unavailable')).resolves.toBe('unread');
+  });
+
+  it('★ a read that worked and named no role: not found', async () => {
+    await expect(asRole(undefined, 'loaded')).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

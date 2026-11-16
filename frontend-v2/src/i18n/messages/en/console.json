@@ -782,5 +782,9 @@
     "rejectYes": "Reject",
     "rejected": "Rejected.",
     "unknownWorkspace": "A workspace we couldn't name"
+  },
+  "unread": {
+    "title": "Couldn't open the console",
+    "body": "We couldn't check your access just now, so nothing is shown. Nothing was changed. Try again in a moment."
   }
 }

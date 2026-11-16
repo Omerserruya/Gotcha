@@ -1,10 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import common from '@/i18n/messages/en/common.json';
 import onboardingMessages from '@/i18n/messages/en/onboarding.json';
 
 import { WorkspaceGate } from './WorkspaceGate';
+
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
 const show = (setupAdmin: string | null) =>
   render(
@@ -81,5 +85,30 @@ describe('★★ the payment gate inside the app: no way to the checkout (App St
     pay(false);
     expect(screen.getByTestId('gate-pay')).toBeInTheDocument();
     expect(replace).toHaveBeenCalled();
+  });
+});
+
+describe('★★ unread: Try again is a person’s, and rests after each try (prod, 2026-11-16)', () => {
+  it('a press re-renders on the server once; it never reloads the page', () => {
+    router.refresh.mockReset();
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    try {
+      render(
+        <NextIntlClientProvider locale="en" messages={{ onboarding: onboardingMessages, common }}>
+          <WorkspaceGate route="unavailable" />
+        </NextIntlClientProvider>,
+      );
+      const retry = screen.getByTestId('gate-retry');
+      expect(retry).toHaveTextContent('Try again');
+      expect(router.refresh).not.toHaveBeenCalled();
+      fireEvent.click(retry);
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+      expect(retry).toBeDisabled();
+      expect(retry).toHaveTextContent('Try again in 5s');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

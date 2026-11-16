@@ -9,7 +9,8 @@ import { SettingsSection } from '@/shell/SettingsSection';
 
 /** Console · Security: the admin's own two-step sign-in (Omer, 2026-11-09). */
 export default async function Page() {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const [t, security] = await Promise.all([getTranslations('console.security'), loadMySecurity()]);
   return (
     <SettingsSection title={t('title')} description={t('description')}>

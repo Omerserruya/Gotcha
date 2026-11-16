@@ -11,7 +11,8 @@ import { SettingsSection } from '@/shell/SettingsSection';
  * (`/api/system/stats`) is not here yet.
  */
 export default async function Page() {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const t = await getTranslations('console.home');
   return (
     <SettingsSection title={t('title')} description={t('description')}>

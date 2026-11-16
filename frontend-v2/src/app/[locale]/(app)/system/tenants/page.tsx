@@ -19,7 +19,8 @@ export default async function Page({
 }: {
   readonly searchParams: Promise<{ readonly q?: string | string[] }>;
 }) {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const { q } = await searchParams;
   const search = (Array.isArray(q) ? q[0] : q)?.trim() ?? '';
   const [t, list, options] = await Promise.all([
