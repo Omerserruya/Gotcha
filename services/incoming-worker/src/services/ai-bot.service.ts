@@ -1,4 +1,5 @@
 import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
+import { routingWithdrawn, releaseWithdrawnRouting } from "./routing-withdrawn.service";
 import { localizedFallback } from "./escalation-language";
 import { emitEscalated } from "./notifications-emit";
 import { getInternalServiceKey, readDurableSetting, recordHandover, assignSoleMemberOnHandoff } from "@chatcenter/shared";
@@ -91,6 +92,17 @@ export async function processAIBot(
   });
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
+
+  // The routing automation that gave this conversation to the AI was turned
+  // off: the AI stops here, for either reply engine (routing-withdrawn.service).
+  {
+    const withdrawn = await routingWithdrawn(conversation as any);
+    if (withdrawn) {
+      await releaseWithdrawnRouting(tenantId, conversationId, withdrawn);
+      console.log(`[AI-Bot] routing flow ${withdrawn.flowId} is off: conv=${conversationId} released to the inbox, no AI reply`);
+      return false;
+    }
+  }
 
   // Resolution order (graph is source of truth):
   //   1. Explicit `aiAgentId` argument (graph dispatched this call).
