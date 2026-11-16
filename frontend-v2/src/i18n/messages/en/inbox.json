@@ -120,7 +120,8 @@
     },
     "tag": {
       "you": "You",
-      "flow": "Flow"
+      "flow": "Flow",
+      "approval": "Waiting for approval"
     },
     "heading": "Waiting in queue",
     "filter": {

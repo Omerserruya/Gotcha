@@ -790,6 +790,23 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
     expect(screen.queryByTestId('tag-flow-c2')).toBeNull();
     expect(screen.queryByTestId('tag-flow-c3')).toBeNull();
   });
+
+  it('★★ prod 2026-11-16: the AI paused on an approval says so; a sandbox chat renders without a tag', async () => {
+    render(
+      await ConversationList({
+        rows: [
+          row({ id: 'c1', handledBy: 'awaiting_approval' }),
+          row({ id: 'c2', handledBy: 'sandbox' }),
+        ],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    expect(screen.getByTestId('tag-approval-c1')).toHaveTextContent('Waiting for approval');
+    expect(screen.queryByTestId('tag-approval-c2')).toBeNull();
+    expect(screen.queryByTestId('tag-flow-c2')).toBeNull();
+  });
 });
 
 describe('★★ the cap caption found the home the design gave it', () => {

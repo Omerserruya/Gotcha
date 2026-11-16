@@ -68,15 +68,38 @@ export type ConversationStatus = (typeof CONVERSATION_STATUSES)[number];
  * Who is carrying it. Richer than the design needs, and `null` is a real
  * value: an unrouted conversation is held by nobody, which is different from
  * being held by a person who has not replied.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ FIVE WORDS, AND THE COLUMN IS FREE TEXT (prod, 2026-11-16)
+ * ════════════════════════════════════════════════════════════════════════════
+ * `Conversation.handledBy` is a `String?`, not a Prisma enum. The backend also
+ * writes `awaiting_approval` (the AI paused on an approval, approvals.ts) and
+ * `sandbox` (an employee's test chat, sandbox-conversation.service.ts) -
+ * "a pause in what the current handler is doing, not somebody else taking the
+ * wheel" (conversation-handover.ts). This list had three, `z.enum` rejected the
+ * row, and the row rejected the PAGE: "we couldn't load the conversations" on
+ * prod for every tenant with an open sandbox chat.
+ *
+ * So: the five known words, and anything else reads as `null` (held by nobody
+ * we can name) - never a failed read ([[enum-domains-from-the-type]]).
  */
-export const HANDLED_BY = ['ai_agent', 'flow', 'human'] as const;
+export const HANDLED_BY = ['ai_agent', 'flow', 'human', 'awaiting_approval', 'sandbox'] as const;
 export type HandledBy = (typeof HANDLED_BY)[number];
+
+/**
+ * The AI is carrying it: answering (`ai_agent`), paused on an approval
+ * (`awaiting_approval`), or a test chat with an employee (`sandbox`). The two
+ * pauses are the AI's, not a person's or a flow's.
+ */
+export function aiCarries(handledBy: string | null | undefined): boolean {
+  return handledBy === 'ai_agent' || handledBy === 'awaiting_approval' || handledBy === 'sandbox';
+}
 
 export const conversationRowSchema = z.object({
   id: z.string(),
   status: z.enum(CONVERSATION_STATUSES),
   channel: z.string().nullable().default(null),
-  handledBy: z.enum(HANDLED_BY).nullable().default(null),
+  handledBy: z.enum(HANDLED_BY).nullable().catch(null).default(null),
   assignedAgentId: z.string().nullable().default(null),
   assignedAiAgentId: z.string().nullable().default(null),
   isHandedOver: z.boolean().default(false),
@@ -138,7 +161,7 @@ export const conversationRowSchema = z.object({
    * It is not "you have not read this". Two people looking at the same queue
    * see the same value, and that is correct for what it claims.
    */
-  lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().default(null),
+  lastMessageDirection: z.enum(['INBOUND', 'OUTBOUND']).nullable().catch(null).default(null),
   /**
    * The response target's two other inputs (W2): which department's target
    * applies, and when the conversation started - the clock's start when no
@@ -209,6 +232,22 @@ export const conversationRowSchema = z.object({
     .catch(null),
 });
 export type ConversationRow = z.infer<typeof conversationRowSchema>;
+
+/**
+ * ★★ A LIST OF ROWS, EACH PARSED ON ITS OWN (prod, 2026-11-16).
+ *
+ * One row the contract did not expect used to fail the WHOLE page - the queue
+ * read "we couldn't load the conversations" over one sandbox chat. A row that
+ * does not parse is left out; the rest of the queue is the screen's answer.
+ * `handledBy` and `lastMessageDirection` no longer fail a row at all; this is
+ * the net for the next field nobody has thought of yet.
+ */
+export const conversationRowsSchema = z.array(z.unknown()).transform((rows) =>
+  rows.flatMap((row): ConversationRow[] => {
+    const parsed = conversationRowSchema.safeParse(row);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 /* ── The customer-service window (B7) ────────────────────────────────────── */
 

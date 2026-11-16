@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from 'next-intl/server';
 import { Suspense } from 'react';
 
-import { channelName, openReadState } from '@/api/contracts/inbox';
+import { aiCarries, channelName, openReadState } from '@/api/contracts/inbox';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { PersonName } from '@/features/customers/PersonName';
 import { Composer } from '@/features/inbox/Composer';
@@ -75,9 +75,11 @@ export default async function Page({
       ? mine
         ? t('inbox.owner.mine')
         : t('inbox.owner.waiting')
-      : open.handledBy === 'ai_agent'
-        ? t('inbox.owner.gotcha')
-        : null;
+      : open.handledBy === 'awaiting_approval'
+        ? t('inbox.owner.approval')
+        : aiCarries(open.handledBy)
+          ? t('inbox.owner.gotcha')
+          : null;
 
   return (
     <div className={ui.screen} data-testid="mobile-thread">

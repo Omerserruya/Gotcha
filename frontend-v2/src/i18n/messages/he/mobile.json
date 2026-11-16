@@ -52,7 +52,8 @@
       "waitingYou": "ממתין לכם",
       "gotcha": "GOTCHA",
       "flow": "תהליך",
-      "resolved": "טופל"
+      "resolved": "טופל",
+      "approval": "ממתין לאישור"
     },
     "filter": {
       "open": "סינון לפי ערוץ",

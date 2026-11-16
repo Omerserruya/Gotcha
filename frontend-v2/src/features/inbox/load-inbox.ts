@@ -14,6 +14,7 @@ import {
   autoGreetingSchema,
   colleagueListSchema,
   conversationRowSchema,
+  conversationRowsSchema,
   messageSchema,
   transferableTo,
   type Colleague,
@@ -66,7 +67,7 @@ export const QUEUE_CAP = 50;
  * the queue rather than about the page. See `ConversationList`.
  */
 const queuePageSchema = z.object({
-  data: z.array(conversationRowSchema),
+  data: conversationRowsSchema,
   page: z.object({
     limit: z.number().default(0),
     hasMore: z.boolean(),

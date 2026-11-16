@@ -1,4 +1,4 @@
-import { rowIsUnread } from '@/api/contracts/inbox';
+import { aiCarries, rowIsUnread } from '@/api/contracts/inbox';
 
 /**
  * Which of the queue menu's actions apply, and to which conversations.
@@ -92,7 +92,7 @@ export function menuPlan(targets: readonly MenuRow[], viewer: MenuViewer): MenuP
   const aiDriving = (row: MenuRow) =>
     open(row) &&
     row.isHandedOver !== true &&
-    (row.handledBy === 'ai_agent' || (row.assignedAiAgentId ?? null) !== null);
+    (aiCarries(row.handledBy) || (row.assignedAiAgentId ?? null) !== null);
 
   return {
     assignToMe: viewer.meId === null ? [] : ids((row) => !mine(row) && !aiDriving(row)),
