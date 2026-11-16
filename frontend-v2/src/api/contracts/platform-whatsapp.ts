@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { knownOrUnknown } from './known-or-unknown';
 import { embeddedSignupLaunchSchema } from './whatsapp-connect';
 
 /**
@@ -43,17 +44,6 @@ export const TEMPLATE_LANGUAGES = ['he', 'en'] as const;
 export type TemplateLanguage = (typeof TEMPLATE_LANGUAGES)[number];
 
 const nullableText = z.string().nullish().default(null);
-
-/** A value from `list`, or UNKNOWN: one new state never rejects the read. */
-function knownOrUnknown<const T extends readonly string[]>(list: T) {
-  return z
-    .unknown()
-    .transform((value): T[number] | 'UNKNOWN' =>
-      typeof value === 'string' && (list as readonly string[]).includes(value)
-        ? (value as T[number])
-        : 'UNKNOWN',
-    );
-}
 
 export const platformNumberSchema = z.object({
   display: nullableText,

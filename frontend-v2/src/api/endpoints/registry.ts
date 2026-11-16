@@ -2261,5 +2261,41 @@ export const couponEndpoints = {
     endpoint('/api/admin/coupons/assignments/{assignmentId}', { assignmentId }),
 } as const;
 
+/**
+ * A business's own MCP servers - DRAFT paths until Backend's contract
+ * (AI engine rewrite). Tenant ADMIN; the queue is SYSTEM_ADMIN.
+ */
+export const mcpServerEndpoints = {
+  /** GET → servers with their tools; POST `{ name, url, auth, secret? }` → PENDING_APPROVAL. */
+  list: () => endpoint('/api/mcp-servers'),
+  /** PATCH `{ name?, url?, auth?, secret? }`; a new URL or auth → PENDING_APPROVAL. DELETE removes it. */
+  server: (serverId: string) => endpoint('/api/mcp-servers/{serverId}', { serverId }),
+  /** POST → read the server's tools again (async: DISCOVERING). */
+  discover: (serverId: string) => endpoint('/api/mcp-servers/{serverId}/rediscover', { serverId }),
+  /** PUT `{ level }` for one tool. */
+  tool: (serverId: string, toolName: string) =>
+    endpoint('/api/mcp-servers/{serverId}/tools/{toolName}', { serverId, toolName }),
+  /** GET → servers waiting for GOTCHA, every tenant. SYSTEM_ADMIN. */
+  queue: () => endpoint('/api/system/mcp-servers/pending'),
+  /** POST → approved; the server's tools are read next. SYSTEM_ADMIN. */
+  approve: (serverId: string) =>
+    endpoint('/api/system/mcp-servers/{serverId}/approve', { serverId }),
+  /** POST `{ reason }` → rejected; the business reads the reason. SYSTEM_ADMIN. */
+  reject: (serverId: string) => endpoint('/api/system/mcp-servers/{serverId}/reject', { serverId }),
+} as const;
+
+/**
+ * Custom API tools - the ai service's `routes/custom-api-admin.ts`, kept as
+ * it is (Supervisior (g)). ADMIN. `{ data }` envelopes; errors `{ error }`.
+ */
+export const customApiToolEndpoints = {
+  /** GET → `{ data: tools }`; POST a new one → 201 `{ data }` (409 on a taken slug). */
+  list: () => endpoint('/api/custom-api-tools'),
+  /** PATCH (slug is fixed) or DELETE. */
+  tool: (toolId: string) => endpoint('/api/custom-api-tools/{toolId}', { toolId }),
+  /** POST `{ args }` → `{ ok, result?, reason?, meta? }`. Fires the real request. */
+  test: (toolId: string) => endpoint('/api/custom-api-tools/{toolId}/test', { toolId }),
+} as const;
+
 export type { Endpoint as ApiEndpoint };
 export { endpoint as defineEndpoint };

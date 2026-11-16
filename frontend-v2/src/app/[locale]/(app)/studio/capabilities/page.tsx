@@ -24,6 +24,12 @@ import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
 import { pageMetadata } from '@/shell/page-metadata';
 import { SupportRefused } from '@/features/support/SupportRefused';
+import { CustomApiTools } from '@/features/agent-tools/CustomApiTools';
+import { loadCustomApiTools, loadMcpServers } from '@/features/agent-tools/load-agent-tools';
+import { McpIntro } from '@/features/agent-tools/McpIntro';
+import { McpServerDetail } from '@/features/agent-tools/McpServerDetail';
+import { OwnToolsRail } from '@/features/agent-tools/OwnToolsRail';
+import { ownToolsView } from '@/features/agent-tools/own-tools-view';
 
 /**
  * Studio · Capabilities - screen 10.
@@ -68,16 +74,31 @@ export default async function Page({
     /** A disconnect done here, and whether Shopify's storefront chat went off with it. */
     readonly disconnected?: string;
     readonly chat?: string;
+    /** An MCP server just sent to GOTCHA's queue. */
+    readonly sent?: string;
   }>;
 } = {}) {
   const t = await getTranslations('capabilities');
-  const { capabilities, usage, integrations } = await loadCapabilities();
+  const [{ capabilities, usage, integrations }, mcpServers, customTools] = await Promise.all([
+    loadCapabilities(),
+    loadMcpServers(),
+    loadCustomApiTools(),
+  ]);
   const params = (await searchParams) ?? {};
-  const { integration, actions, selected } = selectSystem(
-    params.system,
+  /*
+    The business's own tools (MCP servers, Custom API) have their own rail
+    section and detail; `custom_api` leaves the catalogue for it.
+  */
+  const own = ownToolsView(params.system, mcpServers);
+  const catalogue = integrations?.filter((entry) => entry.slug !== 'custom_api') ?? null;
+  const picked = selectSystem(
+    own === null ? params.system : undefined,
     capabilities ?? [],
-    integrations ?? [],
+    catalogue ?? [],
   );
+  const { integration: chosen, actions } = picked;
+  const integration = own === null ? chosen : null;
+  const selected = own === null ? picked.selected : (params.system ?? null);
   const onShopify = integration?.slug === 'shopify';
   /*
     The Shopify Connector's verdict - the Billing page's, from the same read -
@@ -119,13 +140,33 @@ export default async function Page({
         detailPad="wide"
         list={
           <IntegrationRail
-            integrations={integrations}
+            integrations={catalogue}
             capabilities={capabilities}
             selected={selected}
             shopify={shopifyVerdict}
+            ownTools={
+              <OwnToolsRail servers={mcpServers} customTools={customTools} selected={selected} />
+            }
           />
         }
         detail={
+          own !== null ? (
+            own.kind === 'intro' ? (
+              <McpIntro sent={params.sent === '1'} />
+            ) : own.kind === 'server' ? (
+              <McpServerDetail server={own.server} />
+            ) : own.kind === 'custom' ? (
+              customTools === null ? (
+                <p data-testid="custom-api-unavailable">{t('ownTools.custom.unread')}</p>
+              ) : (
+                <CustomApiTools tools={customTools} />
+              )
+            ) : (
+              <p data-testid="mcp-unavailable">
+                {t(own.kind === 'unread' ? 'ownTools.mcp.unread' : 'ownTools.mcp.notFound')}
+              </p>
+            )
+          ) : (
           <>
             {/* Always rendered, keyed by system: it holds the sentence after the URL is tidied. */}
             {integration ? (
@@ -221,6 +262,7 @@ export default async function Page({
               </SupportRefused>
             ) : null}
           </>
+          )
         }
       />
     </PageContainer>

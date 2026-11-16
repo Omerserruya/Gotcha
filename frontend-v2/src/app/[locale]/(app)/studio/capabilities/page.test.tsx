@@ -9,6 +9,12 @@ import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
 import { SystemHead } from '@/features/capabilities/SystemHead';
+import { CustomApiTools } from '@/features/agent-tools/CustomApiTools';
+import { customTool, server } from '@/features/agent-tools/fixtures';
+import { McpIntro } from '@/features/agent-tools/McpIntro';
+import { McpServerDetail } from '@/features/agent-tools/McpServerDetail';
+import { OwnToolsRail } from '@/features/agent-tools/OwnToolsRail';
+import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 
 const loadCapabilities = vi.hoisted(() => vi.fn());
 vi.mock('@/features/capabilities/load-capabilities', () => ({
@@ -19,6 +25,9 @@ vi.mock('@/features/capabilities/load-capabilities', () => ({
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a', useRouter: () => ({}) }));
+/* The business's own tools: MCP servers and Custom API, per test. */
+const own = vi.hoisted(() => ({ loadMcpServers: vi.fn(), loadCustomApiTools: vi.fn() }));
+vi.mock('@/features/agent-tools/load-agent-tools', () => own);
 /* The Shopify Connector's snapshot - the Billing page's read - per test. */
 const loadShopifyConnector = vi.hoisted(() => vi.fn());
 vi.mock('@/features/billing/load-connector', () => ({ loadShopifyConnector }));
@@ -55,6 +64,10 @@ const shopify = integrationSchema.parse({
 const woo = integrationSchema.parse({ id: 'i2', slug: 'woocommerce', name: 'WooCommerce' });
 
 beforeEach(() => {
+  own.loadMcpServers.mockReset();
+  own.loadMcpServers.mockResolvedValue([]);
+  own.loadCustomApiTools.mockReset();
+  own.loadCustomApiTools.mockResolvedValue([]);
   loadShopifyConnector.mockReset();
   loadShopifyConnector.mockResolvedValue(null);
   loadCapabilities.mockReset();
@@ -291,5 +304,54 @@ describe("★★ split billing (132211) - Shopify reads its Connector, the Billi
     expect(find<{ connector: { kind: string } }>(tree, SystemHead)?.connector.kind).toBe(
       'uninstall_pending',
     );
+  });
+});
+
+describe('★★ the business\'s own tools (MCP servers, Custom API)', () => {
+  const customApi = integrationSchema.parse({ id: 'i3', slug: 'custom_api', name: 'Custom API' });
+
+  it('★ custom_api leaves the catalogue for its own rail row; the rail carries the own tools', async () => {
+    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [shopify, woo, customApi] });
+    own.loadMcpServers.mockResolvedValue([server()]);
+    const tree = await page();
+    const rail = find<{ integrations: { slug: string }[]; ownTools: ReactNode }>(tree, IntegrationRail);
+    expect(rail?.integrations.map((entry) => entry.slug)).toEqual(['shopify', 'woocommerce']);
+    expect(find<{ servers: unknown[] }>(rail?.ownTools, OwnToolsRail)?.servers).toHaveLength(1);
+  });
+
+  it('?system=mcp is the connect screen; sent=1 says it reached GOTCHA', async () => {
+    const tree = await page({ system: 'mcp', sent: '1' });
+    expect(find<{ sent: boolean }>(tree, McpIntro)?.sent).toBe(true);
+    expect(find(tree, CapabilityScreen)).toBeNull();
+    expect(find(tree, AvailableSystem)).toBeNull();
+  });
+
+  it('?system=mcp:<id> is that server', async () => {
+    own.loadMcpServers.mockResolvedValue([server()]);
+    const tree = await page({ system: 'mcp:srv_1' });
+    expect(find<{ server: { id: string } }>(tree, McpServerDetail)?.server.id).toBe('srv_1');
+  });
+
+  it('★ a failed read of the servers is never "not found"', async () => {
+    own.loadMcpServers.mockResolvedValue(null);
+    const tree = await page({ system: 'mcp:srv_1' });
+    expect(find(tree, McpServerDetail)).toBeNull();
+    expect(JSON.stringify(tree)).toContain('ownTools.mcp.unread');
+    expect(JSON.stringify(tree)).not.toContain('ownTools.mcp.notFound');
+  });
+
+  it('?system=custom_api is the custom API tools, not the catalogue tile', async () => {
+    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [customApi] });
+    own.loadCustomApiTools.mockResolvedValue([customTool()]);
+    const tree = await page({ system: 'custom_api' });
+    expect(find<{ tools: unknown[] }>(tree, CustomApiTools)?.tools).toHaveLength(1);
+    expect(find(tree, AvailableSystem)).toBeNull();
+  });
+
+  it('★ a failed custom API read says so, never an empty list', async () => {
+    own.loadCustomApiTools.mockResolvedValue(null);
+    const tree = await page({ system: 'custom_api' });
+    expect(find(tree, CustomApiTools)).toBeNull();
+    expect(JSON.stringify(tree)).toContain('ownTools.custom.unread');
   });
 });
