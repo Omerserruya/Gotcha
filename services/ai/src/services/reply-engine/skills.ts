@@ -34,7 +34,8 @@ export function renderBusinessSkill(s: { name: string; situation?: string | null
   if (steps.length) {
     lines.push("Steps:");
     steps.forEach((st: any, i: number) => {
-      const tools = Array.isArray(st?.tools) && st.tools.length ? ` [tools: ${st.tools.join(", ")}]` : "";
+      const native: Record<string, string> = { escalate_to_human: "respond.handoff", send_product_card: "respond.cards", send_product_carousel: "respond.cards" };
+      const tools = Array.isArray(st?.tools) && st.tools.length ? ` [tools: ${[...new Set(st.tools.map((t: string) => native[t] ?? t))].join(", ")}]` : "";
       const over = st?.approvalOverAmount != null ? ` [over ${st.approvalOverAmount} needs a person's approval]` : "";
       lines.push(`${i + 1}. ${st?.title ?? st?.kind ?? "step"}${tools}${over}${st?.guidance ? ` - ${st.guidance}` : ""}${st?.elseNote ? ` (otherwise: ${st.elseNote})` : ""}`);
     });
@@ -86,4 +87,16 @@ export function renderSkillList(skills: EngineSkill[]): string {
 export function findSkill(skills: EngineSkill[], name: unknown): EngineSkill | null {
   const n = clip(name, 80).toLowerCase();
   return skills.find((s) => s.name.toLowerCase() === n) ?? skills.find((s) => s.name.toLowerCase().includes(n) && n.length >= 3) ?? null;
+}
+
+/** Playbooks small enough to sit in the cached prefix are inlined there: no read_skill round at all. */
+export function inlineBudgetChars(): number {
+  const n = Number(process.env.REPLY_ENGINE_INLINE_SKILLS_CHARS);
+  return Number.isFinite(n) && n >= 0 ? n : 7000;
+}
+
+export function splitInline(skills: EngineSkill[], budget = inlineBudgetChars()): { inline: EngineSkill[]; listed: EngineSkill[] } {
+  const readable = skills.filter((s) => s.source !== "role");
+  const total = readable.reduce((n, s) => n + s.render().length, 0);
+  return total <= budget ? { inline: readable, listed: [] } : { inline: [], listed: readable };
 }

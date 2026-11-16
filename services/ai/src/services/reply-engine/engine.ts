@@ -25,7 +25,7 @@ import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
 import { loadState, mergeState, saveState, saveSummary, renderState } from "./state";
-import { loadEngineSkills } from "./skills";
+import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback } from "./gates";
@@ -69,6 +69,19 @@ export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
 /** PRODUCT_n keys never reach the customer: each becomes the product's title. */
 export function resolveKeysInText(text: string, candidates: Array<{ title: string }>): string {
   return text.replace(/PRODUCT_(\d{1,3})/gi, (m, n) => candidates[Number(n) - 1]?.title ?? m);
+}
+
+/**
+ * After our first reply, a reply does not open with a greeting or a filler
+ * ("כן,", "בטח,", "מעולה,"): fixed in code, as legacy did (greeting_after_first).
+ * The rest of the sentence stands; a reply that is only the filler is kept.
+ */
+export function stripLaterOpener(text: string, notFirst: boolean): string {
+  if (!notFirst) return text;
+  const m = /^\s*(?:היי|הי|שלום|אהלן|כן|בטח|מעולה|hi|hey|hello|sure|great)[,!.]\s+/iu.exec(text);
+  if (!m) return text;
+  const rest = text.slice(m[0].length).trim();
+  return rest.length >= 2 ? rest : text;
 }
 
 function historyToChat(history: any[]): any[] {
@@ -121,6 +134,35 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     reply: null, escalation: null, awaitingApproval: null, toolCallLog: [], modelUsed: model, totalTokens: 0, ...extra, trace,
   } as any);
 
+  // ── One parallel load ──
+  // Started before Gate 1 resolves (reads only; discarded when Gate 1 stops the turn). Each part is timed.
+  const loadMs: Record<string, number> = {};
+  const timed = <T>(k: string, p: Promise<T>): Promise<T> => { const s0 = Date.now(); return p.finally(() => { loadMs[k] = Date.now() - s0; }); };
+  const loadAll = Promise.all([
+    timed("state", loadState(opts.tenantId, opts.conversationId, lane)),
+    timed("history", loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60)),
+    timed("contact", prisma.contact.findFirst({
+      where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
+      select: { id: true, email: true, phone: true },
+    }).catch(() => null) as Promise<any>),
+    timed("company", getCompanyContext(opts.tenantId)),
+    timed("shopify", prepareShopifyTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
+    timed("calendar", computeCalendarCapability(opts.tenantId, config.id).catch(() => ({ bookable: false } as any))),
+    timed("approvals", prisma.approvalRequest.findMany({
+      where: { tenantId: opts.tenantId, conversationId: opts.conversationId, status: "PENDING" },
+      select: { id: true, tool: true, summary: true },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }).catch(() => [] as any[])),
+    timed("stores", prisma.tenantIntegration.findMany({
+      where: { tenantId: opts.tenantId, status: "CONNECTED", integration: { slug: { in: ["shopify", "woocommerce"] } } },
+      select: { integration: { select: { slug: true } } },
+    }).catch(() => [] as any[])),
+    timed("knowledge", retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[])),
+    // Both store turns in parallel; a Shopify chat wins when both answer.
+    timed("woo", prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
+  ]);
+  loadAll.catch(() => {}); // a Gate 1 stop never leaves it unhandled
   // ── Gate 1 ──
   const g1 = await gate1({
     tenantId: opts.tenantId,
@@ -138,30 +180,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   mark("gate1");
 
-  // ── One parallel load ──
-  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks] = await Promise.all([
-    loadState(opts.tenantId, opts.conversationId, lane),
-    loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60),
-    prisma.contact.findFirst({
-      where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
-      select: { id: true, email: true, phone: true },
-    }).catch(() => null) as Promise<any>,
-    getCompanyContext(opts.tenantId),
-    prepareShopifyTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null),
-    computeCalendarCapability(opts.tenantId, config.id).catch(() => ({ bookable: false } as any)),
-    prisma.approvalRequest.findMany({
-      where: { tenantId: opts.tenantId, conversationId: opts.conversationId, status: "PENDING" },
-      select: { id: true, tool: true, summary: true },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }).catch(() => [] as any[]),
-    prisma.tenantIntegration.findMany({
-      where: { tenantId: opts.tenantId, status: "CONNECTED", integration: { slug: { in: ["shopify", "woocommerce"] } } },
-      select: { integration: { select: { slug: true } } },
-    }).catch(() => [] as any[]),
-    retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[]),
-  ]);
-  const wooTurn = shopifyTurn ? null : await prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null);
+  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, wooRaw] = await loadAll;
+  const wooTurn = shopifyTurn ? null : wooRaw;
+  Object.assign(stageMs, Object.fromEntries(Object.entries(loadMs).map(([k, v]) => [`load_${k}`, v])));
   const productTurn: any = shopifyTurn ?? wooTurn;
   mark("load");
 
@@ -192,6 +213,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       ? Promise.resolve(shopifyTurn.storefrontBlock as string)
       : wooTurn ? webchatStorefrontBlock(opts.tenantId, opts.conversationId).catch(() => undefined) : Promise.resolve(undefined),
   ]);
+  // Every playbook inlined in the prefix: no read_skill to offer.
+  if (!splitInline(skills).listed.length) {
+    surface.tools = surface.tools.filter((t: any) => t?.function?.name !== "read_skill");
+    surface.names = surface.names.filter((n) => n !== "read_skill");
+  }
   trace.toolsOffered = surface.names.length;
   mark("surface");
 
@@ -312,7 +338,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     pendingApprovals: (pendingApprovals as any[]).map((a) => `${a.tool}${a.summary ? `: ${String(a.summary).slice(0, 120)}` : ""}`),
     customer: customerLine,
     activeSkill: (() => {
-      const k = skills.find((x) => x.name === state.activeSkill && x.source !== "role");
+      const listed = splitInline(skills).listed;
+      const k = listed.find((x) => x.name === state.activeSkill);
       return k ? k.render() : null;
     })(),
     nowIso: new Date().toISOString().slice(0, 16),
@@ -457,7 +484,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // ── Send shape ──
   // A semicolon reads as a document; legacy banned it (eval I05). Fixed, not rewritten.
-  const reply = (humanizeReply(resolveKeysInText(final.reply, candidates)) ?? "").replace(/\s*;\s*/g, ", ");
+  const reply = stripLaterOpener(
+    (humanizeReply(resolveKeysInText(final.reply, candidates)) ?? "").replace(/\s*;\s*/g, ", "),
+    history.some((m: any) => m.direction === "OUTBOUND"),
+  );
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
   const cardKeys = (final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length);

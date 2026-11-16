@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import type { CompanyContext } from "../company-context.service";
 import type { EngineSkill } from "./skills";
-import { renderSkillList } from "./skills";
+import { renderSkillList, splitInline } from "./skills";
 import { BANNED_HE, BANNED_EN } from "../reply-style-check.service";
 
 function readPrompt(name: string): string {
@@ -29,7 +29,8 @@ You are a member of this business's team, answering customers in a chat. Think l
 ## Every turn
 - Read the conversation, the state and the knowledge below. Decide what the customer needs now.
 - If a tool can answer or do it, call the tool (several in parallel when they are independent). Never guess a price, stock, order status, a product's attributes or a store policy you could check.
-- A playbook in "Skills" fits and is not already open below? Call read_skill IN THE SAME ROUND as the tools you need (parallel calls), never alone in a round of its own. Most turns need no playbook.
+- A playbook fits? Follow it. If it is only listed under "Skills" (not written out), call read_skill IN THE SAME ROUND as the tools you need (parallel calls), never alone in a round of its own. Most turns need no playbook.
+- Cards go in respond.cards and a handoff in respond.handoff: there is no separate tool for either.
 - Finish EVERY turn by calling respond. Its reply is exactly what the customer receives.
 
 ## Truth (never broken)
@@ -51,7 +52,10 @@ You are a member of this business's team, answering customers in a chat. Think l
 - A complaint: acknowledge it first, then the fix; no product suggestions in that reply.
 
 ## Handing over
-Set respond.handoff (a short reason) when the customer asks for a person, is upset and the fix is not in your tools, or the case needs a human decision. The reply then tells them a person from the team will continue here.
+A handoff ends your part in this conversation: a person takes it over and you stop answering. So set respond.handoff (a short reason) ONLY when:
+- the customer explicitly asks for a person, a human, a representative or the team;
+- or the case needs a decision or an action no tool of yours can do (an exception to policy, a refund you cannot make), and you have said so.
+NOT a handoff: "are you a bot?" (answer honestly and keep helping), a first complaint or insult (acknowledge it, apologise, ask what went wrong or fix it), a question you can still answer or check. The reply to a real handoff tells them a person from the team will continue here.
 
 ## respond
 - reply: the message to the customer.
@@ -104,8 +108,9 @@ export function buildStablePrefix(p: PrefixInput): string {
   biz.push(`Channel: ${p.channel}${p.cardsChannel ? " (shows product cards)" : " (text only, no cards)"}.`);
   parts.push(biz.join("\n"));
 
-  const readable = p.skills.filter((s) => s.source !== "role");
-  if (readable.length) parts.push(`# Skills (call read_skill with a name to open its playbook)\n${renderSkillList(readable)}`);
+  const { inline, listed } = splitInline(p.skills);
+  if (inline.length) parts.push(`# Playbooks (follow the one that fits the situation; most turns need none)\n\n${inline.map((k) => k.render()).join("\n\n")}`);
+  if (listed.length) parts.push(`# Skills (call read_skill with a name to open its playbook)\n${renderSkillList(listed)}`);
   return parts.join("\n\n");
 }
 

@@ -85,6 +85,14 @@ export const SEARCH_KNOWLEDGE_TOOL = {
 
 export const ENGINE_TOOL_NAMES = new Set(["respond", "read_skill", "search_knowledge"]);
 
+/**
+ * Tools v2 does natively through `respond`, so offering them only costs a model
+ * round (eval 2026-11-16: send_product_card / carousel and escalate_to_human each
+ * added a round on ~40% of turns). Cards are respond.cards, a handoff is
+ * respond.handoff.
+ */
+export const NATIVE_IN_RESPOND = new Set(["send_product_card", "send_product_carousel", "escalate_to_human"]);
+
 const fnName = (t: any): string => String(t?.function?.name ?? t?.name ?? "");
 
 function shorten(t: any): any {
@@ -109,7 +117,7 @@ export interface Surface {
   dropped: { policy: string[]; cap: string[] };
 }
 
-export async function buildSurface(i: SurfaceInput, deps: { evaluate?: typeof evaluatePolicies } = {}): Promise<Surface> {
+export async function buildSurface(i: SurfaceInput & { readSkill?: boolean }, deps: { evaluate?: typeof evaluatePolicies } = {}): Promise<Surface> {
   const evaluate = deps.evaluate ?? evaluatePolicies;
   const [base, custom, adapters] = await Promise.all([
     buildAgentToolsForAIAgent(i.tenantId, i.aiAgentId, {
@@ -132,7 +140,7 @@ export async function buildSurface(i: SurfaceInput, deps: { evaluate?: typeof ev
   const byName = new Map<string, any>();
   for (const t of all) {
     const n = fnName(t);
-    if (n && !ENGINE_TOOL_NAMES.has(n) && !byName.has(n)) byName.set(n, t);
+    if (n && !ENGINE_TOOL_NAMES.has(n) && !NATIVE_IN_RESPOND.has(n) && !byName.has(n)) byName.set(n, t);
   }
 
   // Offered == dispatchable: drop exactly what the gate denies for THIS employee.
@@ -152,6 +160,6 @@ export async function buildSurface(i: SurfaceInput, deps: { evaluate?: typeof ev
     console.error(`[reply-engine] tenant=${i.tenantId} has ${tools.length} tools, over the ${room} cap: merge this system's tools (dropped ${dropped.cap.join(", ")})`);
     tools = tools.slice(0, room);
   }
-  tools = [...tools, READ_SKILL_TOOL, RESPOND_TOOL, SEARCH_KNOWLEDGE_TOOL];
+  tools = [...tools, ...(i.readSkill === false ? [] : [READ_SKILL_TOOL]), RESPOND_TOOL, SEARCH_KNOWLEDGE_TOOL];
   return { tools, names: tools.map(fnName), dropped };
 }

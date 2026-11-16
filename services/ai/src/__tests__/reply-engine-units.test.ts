@@ -3,7 +3,7 @@
  * turn envelope's key numbering, the switch).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRespond, resolveKeysInText, conversationLocale } from "../services/reply-engine/engine";
+import { parseRespond, resolveKeysInText, conversationLocale, stripLaterOpener } from "../services/reply-engine/engine";
 import { mergeState, emptyState, renderState } from "../services/reply-engine/state";
 import { gate3, unknownProductKeys, correctionNote, safeFallback, groundedProductFallback, unreadProduct } from "../services/reply-engine/gates";
 import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
@@ -58,6 +58,16 @@ describe("keys and language", () => {
   it("follows the customer's own recent words", () => {
     expect(conversationLocale(["hi", "יש לכם?"])).toBe("he");
     expect(conversationLocale(["שלום", "a", "b", "c", "do you ship?"])).toBe("en");
+  });
+});
+
+describe("later openers (eval lint: \"כן, ...\" after the first reply)", () => {
+  it("strips a filler opener after our first reply, keeps it on the first", () => {
+    expect(stripLaterOpener("כן, יש במלאי במידה M.", true)).toBe("יש במלאי במידה M.");
+    expect(stripLaterOpener("בטח! מה מספר ההזמנה?", true)).toBe("מה מספר ההזמנה?");
+    expect(stripLaterOpener("היי! מה מחפשים?", false)).toBe("היי! מה מחפשים?");
+    expect(stripLaterOpener("כן.", true)).toBe("כן.");
+    expect(stripLaterOpener("כנראה שכן", true)).toBe("כנראה שכן");
   });
 });
 

@@ -139,7 +139,13 @@ describe("one v2 turn, live", () => {
     expect(offered).not.toContain("woocommerce.delete_everything");
     const tenantTools = offered.filter((n: string) => !["read_skill", "respond", "search_knowledge"].includes(n));
     expect(tenantTools).toEqual([...tenantTools].sort());
-    expect(offered).toEqual(expect.arrayContaining(["respond", "read_skill", "search_knowledge", "woocommerce.create_coupon", "escalate_to_human"]));
+    expect(offered).toEqual(expect.arrayContaining(["respond", "search_knowledge", "woocommerce.create_coupon"]));
+    // Done natively through respond (cards, handoff), so never a round of their own.
+    expect(offered).not.toContain("escalate_to_human");
+    expect(offered).not.toContain("send_product_card");
+    // The starter library fits the cached prefix: inlined, so no read_skill round.
+    expect(offered).not.toContain("read_skill");
+    expect(h.calls[0].messages[0].content).toMatch(/# Playbooks/);
     expect(h.calls[0].toolChoice).toBe("required");
     expect(h.calls[0].model).toBe("gpt-6-luna");
 
@@ -209,14 +215,21 @@ describe("one v2 turn, live", () => {
     expect(r.escalation).toBeNull();
   });
 
-  it("an opened playbook is inlined on later turns, not read again", async () => {
+  it("a library over the inline budget is listed: read_skill offered, an opened playbook inlined on later turns", async () => {
+    process.env.REPLY_ENGINE_INLINE_SKILLS_CHARS = "0";
     const { prisma } = await import("@chatcenter/shared");
     const { starterStoreSkills } = await import("../services/starter-skills");
     const key = starterStoreSkills("woocommerce", "he")[0].key;
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", activeSkill: key, facts: {}, offeredItems: [], pending: [], turnCount: 1 });
     h.responses.push({ toolCalls: [respond("i1", { reply: "בטח, מה מספר ההזמנה?" })] });
-    await runReplyEngineTurn(opts, "autonomous");
-    (prisma as any).conversationState.findUnique = async () => null;
+    try {
+      await runReplyEngineTurn(opts, "autonomous");
+    } finally {
+      (prisma as any).conversationState.findUnique = async () => null;
+      delete process.env.REPLY_ENGINE_INLINE_SKILLS_CHARS;
+    }
+    expect(h.calls[0].tools.map((t: any) => t.function.name)).toContain("read_skill");
+    expect(h.calls[0].messages[0].content).not.toMatch(/# Playbooks/);
     const turnPart = h.calls[0].messages.find((m: any, i: number) => i > 0 && m.role === "system")?.content ?? "";
     expect(turnPart).toMatch(/Playbook in use/);
     expect(turnPart).toMatch(/# Playbook:/);
