@@ -45,7 +45,7 @@ export function McpQueue({
               <div>
                 <dt>{t('workspace')}</dt>
                 <dd>
-                  <bdi>{server.tenant.name ?? server.tenant.id}</bdi>
+                  <bdi>{server.tenant?.name ?? server.tenant?.id ?? t('unknownWorkspace')}</bdi>
                 </dd>
               </div>
               {server.submittedBy ? (

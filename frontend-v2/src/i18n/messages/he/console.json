@@ -780,6 +780,7 @@
     "rejectFirst": "לדחות את {name}? העסק יראה את הסיבה שלכם במסך שלו.",
     "rejectReason": "סיבה, עבור העסק",
     "rejectYes": "דחייה",
-    "rejected": "נדחה."
+    "rejected": "נדחה.",
+    "unknownWorkspace": "סביבת עבודה שלא הצלחנו לזהות"
   }
 }

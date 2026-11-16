@@ -46,8 +46,17 @@ export function McpServerForm({
   const [problem, setProblem] = useState<ToolsRefusal | null>(null);
 
   const urlOk = isSendableUrl(url);
+  /*
+    The stored secret is kept only for the same kind - and, for a header, the
+    same header name: a new name needs its value (v1 refuses it as
+    invalid_auth otherwise).
+  */
   const secretNeeded =
-    authKind !== 'none' && (server === null || !server.hasSecret || authKind !== server.auth.kind);
+    authKind !== 'none' &&
+    (server === null ||
+      !server.hasSecret ||
+      authKind !== server.auth.kind ||
+      (authKind === 'header' && headerName.trim() !== (server.auth.headerName ?? '')));
   const ready =
     name.trim() !== '' &&
     urlOk &&

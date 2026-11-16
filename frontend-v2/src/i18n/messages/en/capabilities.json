@@ -362,15 +362,20 @@
     "level": {
       "lockedUnknown": "We can't tell what this tool does, so it can ask first or stay off, not run on its own.",
       "lockedMoney": "This tool moves money, so it can ask first or stay off, not run on its own.",
-      "lockedIrreversible": "This tool does something that can't be undone, so it can ask first or stay off, not run on its own."
+      "lockedIrreversible": "This tool does something that can't be undone, so it can ask first or stay off, not run on its own.",
+      "lockedCeiling": "GOTCHA caps this tool at asking first, so it can ask first or stay off, not run on its own."
     },
     "refusal": {
-      "url_invalid": "That address isn't a web address we can use.",
-      "url_not_https": "The address has to start with https://.",
-      "url_private_host": "That address points inside a private network. Use one that can be reached from the internet.",
-      "duplicate_server": "This server is already connected to your workspace.",
+      "invalid_url": "Use an https address with no username or password in it.",
+      "invalid_auth": "The sign-in details are missing or incomplete.",
+      "invalid_name": "Give it a name.",
+      "invalid_level": "That level isn't one this tool can have.",
+      "level_above_ceiling": "This tool can't run on its own. It can ask first or stay off.",
+      "reason_required": "Write a reason for the business.",
       "not_found": "We couldn't find it. It may have just been removed.",
+      "unknown_tool": "The server no longer offers this tool. Check for new tools.",
       "not_pending": "This server isn't waiting for approval any more.",
+      "not_approved": "This server isn't approved yet, so we can't read its tools.",
       "slug_taken": "Another tool already uses this short name. Choose a different one.",
       "invalid": "Some of the details weren't accepted. Check the fields and try again.",
       "forbidden": "You don't have permission to change this.",

@@ -101,8 +101,9 @@ describe('★★ MCP servers at the wire', () => {
   });
 
   it.each([
-    [refused(422, 'url_private_host', 'validation'), 'url_private_host'],
-    [refused(409, 'duplicate_server'), 'duplicate_server'],
+    [refused(400, 'invalid_url', 'validation'), 'invalid_url'],
+    [refused(400, 'level_above_ceiling', 'validation'), 'level_above_ceiling'],
+    [refused(409, 'not_pending'), 'not_pending'],
     [refused(403, 'nope', 'authorization'), 'forbidden'],
     [refused(500, 'boom', 'server'), 'failed'],
   ])('a refusal reads in its own words', async (error, reason) => {

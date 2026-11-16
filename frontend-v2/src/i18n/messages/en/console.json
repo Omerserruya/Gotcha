@@ -780,6 +780,7 @@
     "rejectFirst": "Reject {name}? The business sees your reason on its screen.",
     "rejectReason": "Reason, for the business",
     "rejectYes": "Reject",
-    "rejected": "Rejected."
+    "rejected": "Rejected.",
+    "unknownWorkspace": "A workspace we couldn't name"
   }
 }

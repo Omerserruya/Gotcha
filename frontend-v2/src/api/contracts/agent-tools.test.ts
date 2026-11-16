@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   customApiRisk,
+  mcpServerListSchema,
+  pendingServerListSchema,
   customApiToolSchema,
   editNeedsApproval,
   firstLevelFor,
@@ -150,5 +152,72 @@ describe('★ an absent field degrades like an unknown one', () => {
     expect(
       customApiToolSchema.parse({ id: 'c', slug: 's', name: 'n', urlTemplate: 'https://a.example' }).riskLevel,
     ).toBe('UNKNOWN');
+  });
+});
+
+describe('★★ contract v1, as the route serialises it (mcp-servers.service.ts toView)', () => {
+  const view = {
+    id: 'm1',
+    slug: 'orders',
+    name: 'Orders',
+    url: 'https://mcp.example.com/mcp',
+    status: 'READY',
+    rejectReason: null,
+    lastError: null,
+    auth: { kind: 'header', headerName: 'X-Key', hasSecret: true },
+    tools: [
+      {
+        name: 'refund',
+        wireName: 'mcp.orders.refund',
+        description: 'Refund a payment',
+        effect: 'money',
+        risk: 'money',
+        level: 'never',
+        maxLevel: 'ask',
+        changedSinceLastDiscovery: null,
+      },
+    ],
+    discoveredAt: '2026-11-16T10:00:00.000Z',
+    approvedAt: '2026-11-16T09:00:00.000Z',
+    createdAt: '2026-11-16T08:00:00.000Z',
+    updatedAt: '2026-11-16T10:00:00.000Z',
+  };
+
+  it('reads every field the screen draws, under v1 names', () => {
+    const [server] = mcpServerListSchema.parse([view]);
+    expect(server).toMatchObject({
+      submittedAt: '2026-11-16T08:00:00.000Z',
+      decidedAt: '2026-11-16T09:00:00.000Z',
+      lastCheckedAt: '2026-11-16T10:00:00.000Z',
+      hasSecret: true,
+      auth: { kind: 'header', headerName: 'X-Key' },
+    });
+    expect(server!.tools[0]).toMatchObject({
+      name: 'refund',
+      wireName: 'mcp.orders.refund',
+      risk: 'money',
+      maxLevel: 'ask',
+      isNew: false,
+      gone: false,
+    });
+  });
+
+  it('★ the server’s ceiling wins over ours', () => {
+    expect(levelsFor('read', 'ask')).toEqual(['ask', 'never']);
+    expect(levelsFor('read', 'execute')).toEqual(['execute', 'ask', 'never']);
+    expect(levelsFor('money', 'execute')).toEqual(['ask', 'never']);
+  });
+
+  it('★★ a queue row whose tenant is gone still shows; one odd row never empties a list', () => {
+    const queue = pendingServerListSchema.parse([
+      { ...view, status: 'PENDING_APPROVAL', tenant: null },
+      { ...view, id: 'm2', tenant: { id: 't2', name: 'Shop' } },
+      { id: 42 },
+    ]);
+    expect(queue.map((s) => [s.id, s.tenant?.name ?? null])).toEqual([
+      ['m1', null],
+      ['m2', 'Shop'],
+    ]);
+    expect(mcpServerListSchema.parse([view, { nope: true }]).map((s) => s.id)).toEqual(['m1']);
   });
 });

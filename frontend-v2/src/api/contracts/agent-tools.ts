@@ -46,7 +46,12 @@ export type ToolLevel = (typeof TOOL_LEVELS)[number] | 'UNKNOWN';
  * whose risk we could not read: the safe answer to "is this dangerous" when
  * we do not know is yes ([[safe-default-for-unknown-is-true]]).
  */
-export function levelsFor(risk: ToolRisk): readonly (typeof TOOL_LEVELS)[number][] {
+export function levelsFor(
+  risk: ToolRisk,
+  maxLevel: 'execute' | 'ask' | null = null,
+): readonly (typeof TOOL_LEVELS)[number][] {
+  // The server's ceiling when it sends one (v1 `maxLevel`); never looser than ours.
+  if (maxLevel === 'ask') return ['ask', 'never'];
   return risk === 'read' || risk === 'change' ? TOOL_LEVELS : ['ask', 'never'];
 }
 
@@ -97,6 +102,10 @@ export const mcpToolSchema = z.preprocess(
     risk: knownOrUnknown(TOOL_RISKS),
     /** Every tool arrives `never` (OFF) until an admin turns it on. */
     level: knownOrUnknown(TOOL_LEVELS),
+    /** The highest level its effect allows (v1): `execute` or `ask`. The server's word, read, never recomputed. */
+    maxLevel: z.enum(['execute', 'ask']).nullish().catch(null).default(null),
+    /** As the AI calls it: `mcp.<serverSlug>.<tool>`. */
+    wireName: nullableText,
     /** Appeared since the previous read of the server's tools. */
     isNew: z.boolean().catch(false).default(false),
     /** The server no longer offers it; kept so its level is not silently lost. */
@@ -143,6 +152,10 @@ function withLastError(raw: unknown): unknown {
     ...row,
     lastErrorCode: row.lastErrorCode ?? row.lastError,
     rejectionReason: row.rejectionReason ?? row.rejectReason,
+    /* v1 dates: sent = createdAt, decided = approvedAt, tools read = discoveredAt. */
+    submittedAt: row.submittedAt ?? row.createdAt,
+    decidedAt: row.decidedAt ?? row.approvedAt,
+    lastCheckedAt: row.lastCheckedAt ?? row.discoveredAt,
     /* Backend reads `auth.hasSecret`. */
     hasSecret: row.hasSecret ?? auth?.hasSecret,
   };
@@ -151,7 +164,13 @@ function withLastError(raw: unknown): unknown {
 export const mcpServerSchema = z.preprocess(withLastError, mcpServerShape);
 export type McpServer = z.infer<typeof mcpServerShape>;
 
-export const mcpServerListSchema = z.array(mcpServerSchema);
+/** Each server parsed on its own: one odd row never hides the others. */
+export const mcpServerListSchema = z.array(z.unknown()).transform((rows) =>
+  rows.flatMap((row): McpServer[] => {
+    const parsed = mcpServerSchema.safeParse(row);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 /** Why a server failed to connect, each its own sentence; anything else reads generic. */
 export const MCP_FAILURES = [
@@ -170,14 +189,18 @@ export function mcpFailureOf(code: string | null): McpFailure {
     : 'unknown';
 }
 
-/** The route's refusals on a write, each its own sentence. */
+/** The route's refusals (contract v1 `{ error, message }`), each its own sentence. */
 export const MCP_REFUSALS = [
-  'url_invalid',
-  'url_not_https',
-  'url_private_host',
-  'duplicate_server',
+  'invalid_url',
+  'invalid_auth',
+  'invalid_name',
+  'invalid_level',
+  'level_above_ceiling',
+  'reason_required',
   'not_found',
+  'unknown_tool',
   'not_pending',
+  'not_approved',
 ] as const;
 export type McpRefusal = (typeof MCP_REFUSALS)[number];
 
@@ -215,12 +238,19 @@ export function isSendableUrl(value: string): boolean {
 /* ── The console's queue (SYSTEM_ADMIN) ── */
 
 const pendingServerShape = mcpServerShape.extend({
-  tenant: z.object({ id: z.string(), name: nullableText }),
+  /** v1 sends null when the tenant row is gone: the request still shows, unnamed. */
+  tenant: z.object({ id: z.string(), name: nullableText }).nullish().catch(null).default(null),
   submittedBy: z.object({ id: z.string(), name: nullableText }).nullish().catch(null).default(null),
 });
 export const pendingServerSchema = z.preprocess(withLastError, pendingServerShape);
 export type PendingServer = z.infer<typeof pendingServerShape>;
-export const pendingServerListSchema = z.array(pendingServerSchema);
+/** Each request parsed on its own: one odd row never empties the queue. */
+export const pendingServerListSchema = z.array(z.unknown()).transform((rows) =>
+  rows.flatMap((row): PendingServer[] => {
+    const parsed = pendingServerSchema.safeParse(row);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 /* ── Custom API tools: the existing route, as it answers today ── */
 

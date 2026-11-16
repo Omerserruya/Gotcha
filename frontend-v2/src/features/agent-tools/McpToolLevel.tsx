@@ -36,7 +36,7 @@ export function McpToolLevel({
   const [isPending, startTransition] = useTransition();
   const [shown, setShown] = useState(tool.level);
   const [problem, setProblem] = useState<ToolsRefusal | null>(null);
-  const allowed = levelsFor(tool.risk);
+  const allowed = levelsFor(tool.risk, tool.maxLevel);
   const id = `level-why-${tool.name}`;
   const locked = blocked === undefined && !allowed.includes('execute');
   const why = locked
@@ -45,7 +45,10 @@ export function McpToolLevel({
           ? 'ownTools.level.lockedUnknown'
           : tool.risk === 'money'
             ? 'ownTools.level.lockedMoney'
-            : 'ownTools.level.lockedIrreversible',
+            : tool.risk === 'irreversible'
+              ? 'ownTools.level.lockedIrreversible'
+              : // A read or change tool the server itself caps at ask (v1 maxLevel).
+                'ownTools.level.lockedCeiling',
       )
     : undefined;
 

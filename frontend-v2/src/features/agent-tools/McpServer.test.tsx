@@ -155,6 +155,12 @@ describe('★★ Do it · Ask me · Never per tool', () => {
     expect(screen.getByTestId('level-problem-get_order')).toHaveTextContent(o.refusal.forbidden);
   });
 
+  it('★★ v1: the server’s maxLevel caps a read tool at ask, with its own reason', () => {
+    level({ risk: 'read', maxLevel: 'ask' });
+    expect(screen.getByTestId('level-get_order-execute')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTestId('level-why-get_order')).toHaveTextContent(o.level.lockedCeiling);
+  });
+
   it('★ a stored "execute" the ceiling forbids is still shown as current', () => {
     level({ risk: 'money', level: 'execute' });
     expect(screen.getByTestId('level-get_order-execute')).toHaveAttribute('aria-pressed', 'true');
@@ -224,13 +230,24 @@ describe('★★ connecting a server', () => {
     expect(actions.editMcpServer).toHaveBeenCalledWith('srv_1', expect.objectContaining({ secret: '' }), false);
   });
 
+  it('★ v1: a new header name needs its value; the stored one belongs to the old name', async () => {
+    render(wrap(<McpServerForm server={server({ auth: { kind: 'header', headerName: 'X-Key', hasSecret: true } })} onCancel={() => {}} />));
+    type('mcp-header-name', 'X-Other');
+    await act(async () => fireEvent.click(screen.getByTestId('mcp-send')));
+    expect(actions.editMcpServer).not.toHaveBeenCalled();
+    expect(screen.getByText(o.form.secretMissing)).toBeInTheDocument();
+    type('mcp-secret', 'v2');
+    await act(async () => fireEvent.click(screen.getByTestId('mcp-send')));
+    expect(actions.editMcpServer).toHaveBeenCalledTimes(1);
+  });
+
   it('a refusal is said in its own words', async () => {
-    actions.sendMcpServer.mockResolvedValue({ ok: false, reason: 'url_private_host' });
+    actions.sendMcpServer.mockResolvedValue({ ok: false, reason: 'invalid_url' });
     render(wrap(<McpServerForm />));
     type('mcp-name', 'Orders');
     type('mcp-url', 'https://10.0.0.5/mcp');
     await act(async () => fireEvent.click(screen.getByTestId('mcp-send')));
-    expect(screen.getByTestId('mcp-problem')).toHaveTextContent(o.refusal.url_private_host);
+    expect(screen.getByTestId('mcp-problem')).toHaveTextContent(o.refusal.invalid_url);
     expect(router.replace).not.toHaveBeenCalled();
   });
 
