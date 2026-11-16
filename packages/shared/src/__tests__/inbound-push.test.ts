@@ -107,3 +107,23 @@ describe("★ the event", () => {
   });
 });
 
+
+describe("noBotAnswers: routing ran and no bot answers (the first message of a new conversation)", () => {
+  const fresh = { assignedAgentId: null, handledBy: null, isHandedOver: false, origin: "LIVE" };
+  it("announces an unowned conversation only when the caller says no bot answers", () => {
+    expect(shouldEmitInbound(fresh)).toBe(false);
+    expect(shouldEmitInbound(fresh, { noBotAnswers: true })).toBe(true);
+  });
+  it("never while a bot or a parked flow holds it, whatever the caller says", () => {
+    expect(shouldEmitInbound({ ...fresh, handledBy: "ai_agent" }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, handledBy: "awaiting_approval" }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, chatbotNodeId: "n1" }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, automationRunId: "r1" }, { noBotAnswers: true })).toBe(false);
+  });
+  it("never real-traffic exceptions: sandbox, test, imported", () => {
+    expect(shouldEmitInbound({ ...fresh, handledBy: "sandbox" }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, isTest: true }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, customerExternalId: "sandbox:1" }, { noBotAnswers: true })).toBe(false);
+    expect(shouldEmitInbound({ ...fresh, origin: "IMPORTED" }, { noBotAnswers: true })).toBe(false);
+  });
+});

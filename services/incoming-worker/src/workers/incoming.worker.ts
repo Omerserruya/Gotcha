@@ -850,7 +850,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // purpose: a "STOP" is still the customer writing to them. Never while the
   // bot handles it - the same test as the bot branch below (no assignee, or
   // handledBy is the bot's) - and fire-and-forget like the analytics above.
-  emitInboundMessage({
+  let announced = emitInboundMessage({
     tenantId,
     conversation: conversation as any,
     messageId: message.id,
@@ -859,6 +859,27 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     channel,
     customerName: conversation.customerName || displayName || senderDisplayName || null,
   });
+  // The same message once routing has run and NO bot answers it (no AI
+  // employee, no flow, routing ended with a person or the team): a brand-new
+  // conversation is not person-owned yet at the emit above, so without this its
+  // FIRST message never reached a phone (prod GOTCHA App Review, 2026-11-16).
+  // Once per message; never while a bot or a parked flow holds it.
+  const announceConvId = conversation.id;
+  const announceFallback = conversation;
+  const announceNoBotAnswers = async () => {
+    if (announced) return;
+    const fresh = (await prisma.conversation.findFirst({ where: { id: announceConvId, tenantId } }).catch(() => null)) ?? announceFallback;
+    announced = emitInboundMessage({
+      tenantId,
+      conversation: fresh as any,
+      messageId: message.id,
+      body,
+      messageType,
+      channel,
+      customerName: (fresh as any).customerName || displayName || senderDisplayName || null,
+      noBotAnswers: true,
+    });
+  };
 
   // A "הסר" / "STOP" reply opts the customer out of marketing on this channel
   // (marketing works by opt-out: the customer's one control, so it is checked
@@ -916,7 +937,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       // An automation may have moved ownership while it ran (hand to AI,
       // assign); the branches below read the current row.
       conversation = (await prisma.conversation.findFirst({ where: { id: conversation.id, tenantId } })) ?? conversation;
-      if (conversation.assignedAgentId || conversation.isHandedOver) return;
+      if (conversation.assignedAgentId || conversation.isHandedOver) {
+        // An automation gave it to a person or the team: they hear this message.
+        await announceNoBotAnswers();
+        return;
+      }
 
       // Department / role picker override (deterministic safety net).
       // When the customer taps a department-picker button ("מכירה" / "שירות"),
@@ -943,7 +968,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         });
         if (picked.handled && picked.assignedAiAgentId) {
           const { processAIBot } = await import("../services/ai-bot.service");
-          await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId);
+          const took = await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId);
+          if (!took) await announceNoBotAnswers();
           return;
         }
       }
@@ -965,6 +991,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         }
         if (routing.departmentId) {
           // Routed to department, conversation is WAITING for human
+          await announceNoBotAnswers();
           return;
         }
         // No rule matched - conversation stays in inbox for manual pickup
@@ -980,7 +1007,10 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         // duplicate ApprovalRequest rows. Dedupe in the dispatcher is the
         // belt-and-suspenders second line of defense.
         const { processAIBot } = await import("../services/ai-bot.service");
-        await processAIBot(tenantId, conversation.id, body);
+        const took = await processAIBot(tenantId, conversation.id, body);
+        // The AI did not take it (its routing automation was turned off, the
+        // employee is gone): the message waits for a person, who hears it.
+        if (!took) await announceNoBotAnswers();
         return;
       } else if ((conversation as any).chatbotNodeId) {
         // Main FlowCanvas paused at Collect Input / Quick Reply.
@@ -1042,6 +1072,9 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         });
         return;
       }
+      // Nothing answers this message (no rule matched, routing ended with a
+      // person, or a later message in a conversation nobody has taken).
+      await announceNoBotAnswers();
     } catch (err) {
       console.error("Bot processing error:", err);
     }
