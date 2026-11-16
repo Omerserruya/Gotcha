@@ -1,6 +1,6 @@
-# Your own tools: MCP servers and the Custom API (contract v0, 2026-11-16)
+# Your own tools: MCP servers and the Custom API (contract v1, 2026-11-16)
 
-This contract was agreed with Frontend while the screen was being built. The backend is not built yet.
+This contract was agreed with Frontend while the screen was being built. The backend is built on feat/reply-engine-v2 (services/ai routes/mcp-servers.ts, services/mcp-servers.service.ts; the gate branch in packages/shared lib/tool-gate.ts).
 
 **Where it lives in the app:** Studio · Capabilities, in the rail group "Your own tools".
 
@@ -59,6 +59,8 @@ Reads return `auth: {kind, headerName?, hasSecret}`. The token or header value i
 **Wire name:** `mcp.<serverSlug>.<tool>`.
 
 **Fields on each tool:**
+- `name` and `wireName` (`mcp.<serverSlug>.<tool>`);
+- `maxLevel`: the highest level its effect allows (`execute` or `ask`);
 - `effect`: `read`, `change`, `irreversible` or `money` (also exposed as `risk`);
 - `level`;
 - `changedSinceLastDiscovery`: `added` or `removed`.
@@ -87,4 +89,20 @@ Reads return `auth: {kind, headerName?, hasSecret}`. The token or header value i
 |---|---|
 | READ, not HIGH | `read` |
 | other READ, or WRITE | `change` |
+| ACTION | `change` (`irreversible` when HIGH) |
 | HIGH on a write, or DELETE (category or method) | `irreversible` |
+
+## Errors
+
+Errors come back as `{error, message}`:
+
+| HTTP | `error` |
+|---|---|
+| 400 | `invalid_url` (https only, no credentials in the URL), `invalid_auth`, `invalid_name`, `invalid_level`, `level_above_ceiling`, `reason_required` |
+| 404 | `not_found`, `unknown_tool` |
+| 409 | `not_pending` (approve or reject on a server that is not waiting), `not_approved` (rediscover before approval) |
+
+## Safety
+
+- Every MCP request goes to a public address only. Private, loopback and cloud-metadata addresses are refused, and redirects are never followed.
+- A server's slug is derived from its name and is unique per tenant.

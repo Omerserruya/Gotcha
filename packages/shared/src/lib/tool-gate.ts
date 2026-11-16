@@ -166,6 +166,30 @@ export async function evaluatePolicies(opts: {
       return denyResult(`integration "woocommerce" not allowed for agent "${opts.aiAgentId}"`, {});
     }
     catalog = { mode: "never" };
+  } else if (opts.toolName.startsWith("mcp.")) {
+    // A tool of a tenant's MCP server (docs/api/mcp-and-api-tools-contract.md).
+    // Runs only on a server a SYSTEM_ADMIN approved and that discovered it
+    // (READY), at the level the workspace set on it: never -> denied, ask ->
+    // a person approves, execute -> auto. An irreversible, money or unknown
+    // tool never auto-runs, whatever the stored level. The employee must have
+    // the server on its allowlist (mcp:<serverId>).
+    const rest = opts.toolName.slice("mcp.".length);
+    const dot = rest.indexOf(".");
+    const slug = dot > 0 ? rest.slice(0, dot) : "";
+    const toolName = dot > 0 ? rest.slice(dot + 1) : "";
+    const server = slug
+      ? await (prisma as any).mcpServer?.findUnique?.({ where: { tenantId_slug: { tenantId: opts.tenantId, slug } } }).catch(() => null)
+      : null;
+    if (!server || server.status !== "READY") return denyResult(`MCP server "${slug}" is not approved and ready`, {});
+    const tool = (Array.isArray(server.tools) ? server.tools : []).find((t: any) => t?.name === toolName && t?.changedSinceLastDiscovery !== "removed");
+    if (!tool) return denyResult(`MCP tool "${toolName}" is not on server "${slug}"`, {});
+    if (opts.aiAgentId && !(await loadIntegrationAccess(opts.tenantId, opts.aiAgentId)).has(`mcp:${server.id}`)) {
+      return denyResult(`MCP server "${slug}" not allowed for agent "${opts.aiAgentId}"`, {});
+    }
+    const level = tool.level === "execute" || tool.level === "ask" ? tool.level : "never";
+    if (level === "never") return denyResult(`MCP tool "${toolName}" is set to Never`, {});
+    const capped = !["read", "change"].includes(String(tool.effect));
+    catalog = level === "execute" && !capped ? { mode: "never" } : { mode: "always" };
   } else if (opts.toolName.startsWith("custom.") || opts.toolName.startsWith("custom_db.")) {
     // Tenant-defined custom HTTP / DB-query tools. Their definition lives in
     // CustomApiTool / CustomDbQueryTool, NOT CatalogTool, so the dynamic branch

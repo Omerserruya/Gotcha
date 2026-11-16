@@ -9,6 +9,7 @@ import { buildAgentToolsForAIAgent, evaluatePolicies } from "@chatcenter/shared"
 import { customToolDefinitions } from "../ai-bot.service";
 import { buildAdapterToolSurface } from "../tool-surface-adapters";
 import { WOO_COMPLEMENTARY_TOOL } from "../woo-chat-turn.service";
+import { mcpToolDefinitions } from "../mcp-servers.service";
 
 /** OpenAI's function-count ceiling. A tenant near it gets its tools merged per system, never hidden by stage. */
 export const MAX_TOOLS = 128;
@@ -119,7 +120,7 @@ export interface Surface {
 
 export async function buildSurface(i: SurfaceInput & { readSkill?: boolean }, deps: { evaluate?: typeof evaluatePolicies } = {}): Promise<Surface> {
   const evaluate = deps.evaluate ?? evaluatePolicies;
-  const [base, custom, adapters] = await Promise.all([
+  const [base, custom, adapters, mcp] = await Promise.all([
     buildAgentToolsForAIAgent(i.tenantId, i.aiAgentId, {
       identityLinking: i.hasContact,
       escalation: true,
@@ -132,8 +133,9 @@ export async function buildSurface(i: SurfaceInput & { readSkill?: boolean }, de
     }).catch((e: any) => { console.warn("[reply-engine] base tools failed:", e?.message); return [] as any[]; }),
     customToolDefinitions(i.tenantId, i.aiAgentId).catch(() => [] as any[]),
     buildAdapterToolSurface(i.tenantId, i.aiAgentId).catch(() => [] as any[]),
+    mcpToolDefinitions(i.tenantId, i.aiAgentId).catch(() => [] as any[]),
   ]);
-  const all: any[] = [...base, ...custom, ...adapters];
+  const all: any[] = [...base, ...custom, ...adapters, ...mcp];
   if (i.wooComplementary) all.push(WOO_COMPLEMENTARY_TOOL as any);
 
   // One per name.

@@ -26,6 +26,7 @@ import { buildKeyedModelSummary, type ProductSearchEnvelope } from "../product-s
 import { retrieveRelevantChunks, buildKnowledgeContext } from "../knowledge.service";
 import type { ToolRunRecord, ToolGateDecision, StateLane } from "./contract";
 import { findSkill, type EngineSkill } from "./skills";
+import { runMcpTool } from "../mcp-servers.service";
 
 export interface ModelToolCall {
   id: string;
@@ -51,6 +52,7 @@ export interface RunnerEnv {
 
 export interface RunnerDeps {
   dispatch: typeof dispatchToolCall;
+  mcp: typeof runMcpTool;
   evaluate: typeof evaluatePolicies;
   submit: (proposal: any, exec: () => Promise<AgentToolDispatchResult>, opts: any) => Promise<ExecutionResult>;
   ground: typeof groundProductSearchResult;
@@ -138,6 +140,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   const args = redactCardDetailsInArgs(parseArgs(call.function?.arguments));
   const deps: RunnerDeps = {
     dispatch: dispatchToolCall,
+    mcp: runMcpTool,
     evaluate: evaluatePolicies,
     submit: (p, e, o) => getActionOrchestrator().submit(p, e, o),
     ground: groundProductSearchResult,
@@ -166,6 +169,17 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   // ── Gate 2 + execution ──
   const isRead = classifyToolEffect(tool) === "read";
   const timeoutMs = isRead ? env.toolTimeoutMs : Math.max(env.toolTimeoutMs * 3, 20000);
+  // MCP tools run on the tenant's server; everything else through the shared dispatcher.
+  const run = async (ctx: AgentToolContext): Promise<AgentToolDispatchResult> => {
+    if (tool.startsWith("mcp.")) {
+      if (ctx.sandbox?.enabled && ctx.sandbox.writes === "safe" && !isRead) {
+        return { toolCallId: call.id, content: JSON.stringify({ ok: true, simulated: true, note: "Simulated: nothing was changed." }), sideEffect: { simulated: true } as any };
+      }
+      const r = await deps.mcp(env.tenantId, tool, args);
+      return { toolCallId: call.id, content: r.content };
+    }
+    return deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, ctx);
+  };
   const exec = async (): Promise<{ decision: ToolGateDecision | "simulated"; r: AgentToolDispatchResult }> => {
     if (env.lane === "shadow") {
       const v = await deps.evaluate({ tenantId: env.tenantId, toolName: tool, aiAgentId: env.aiAgentId, args });
@@ -173,7 +187,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
       if (v.decision === "REQUIRE_APPROVAL" || (!isRead && env.tightenApproval?.({ tool, args }))) {
         return { decision: "simulated", r: { toolCallId: call.id, content: JSON.stringify({ ok: false, status: "awaiting_approval", simulated: true, note: "A person on the team must approve this first." }) } };
       }
-      const r = await deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, { ...env.ctx, sandbox: { enabled: true, writes: "safe" } });
+      const r = await run({ ...env.ctx, sandbox: { enabled: true, writes: "safe" } });
       return { decision: isRead ? "allow" : "simulated", r };
     }
     const result = await deps.submit(
@@ -189,7 +203,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
         rationale: "reply engine v2 tool call",
         urgency: "low",
       },
-      () => deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, env.ctx),
+      () => run(env.ctx),
       { ledger: env.turn.ledger, ctx: { contactId: env.ctx.contactId }, idempotency: true, tightenApproval: env.tightenApproval },
     );
     const r = unwrap(call.id, tool, result);
