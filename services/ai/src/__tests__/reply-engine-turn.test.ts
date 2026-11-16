@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   staged: [] as any[],
   agentStatus: "ACTIVE",
   policy: {} as Record<string, string>,
+  teamQuestions: [] as any[],
+  failReads: 0,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -39,6 +41,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
       auditLog: { create: async (a: any) => { h.audits.push(a); return {}; } },
     },
     checkAiAllowed: async () => ({ allowed: true }),
+    recordUnansweredQuestion: async (q: any) => { h.teamQuestions.push(q); },
     buildAgentToolsForAIAgent: async () => [
       { type: "function", function: { name: "escalate_to_human", description: "hand over", parameters: { type: "object", properties: {} } } },
       { type: "function", function: { name: "send_product_card", description: "card", parameters: { type: "object", properties: {} } } },
@@ -46,6 +49,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
     dispatchToolCall: async (tc: any, ctx: any) => {
       h.dispatched.push({ name: tc.function.name, args: JSON.parse(tc.function.arguments), sandbox: ctx.sandbox ?? null });
+      if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
       return { toolCallId: tc.id, content: JSON.stringify({ ok: true, simulated: !!ctx.sandbox }) };
     },
@@ -96,7 +100,7 @@ vi.mock("../services/discovery-integration.service", () => ({
     appliedFilters: [], unavailableFilters: [], safeModelSummary: "",
   }),
 }));
-vi.mock("../services/knowledge.service", () => ({ retrieveRelevantChunks: async () => [], buildKnowledgeContext: () => "" }));
+vi.mock("../services/knowledge.service", () => ({ retrieveRelevantChunks: async () => [], buildKnowledgeContext: () => "", shouldRecordKnowledgeGap: () => false }));
 vi.mock("../services/skill-runtime.service", () => ({ loadSkillContext: async () => ({ candidates: [] }), skillApprovalReason: () => null }));
 vi.mock("../services/connectors/crm-adapter-resolver", () => ({ getCrmAdapter: vi.fn() }));
 vi.mock("../services/crm-prefetch.service", () => ({ invalidateCrmPrefetch: vi.fn() }));
@@ -122,7 +126,8 @@ const tc = (id: string, name: string, args: any) => ({ id, function: { name, arg
 const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stage: "choosing", intent: "תיק בד", facts: {}, pending: [] }, claims: [], handoff: null, cards: [], ...a });
 
 beforeEach(() => {
-  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged"] as const) (h as any)[k].length = 0;
+  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions"] as const) (h as any)[k].length = 0;
+  h.failReads = 0;
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -178,7 +183,7 @@ describe("one v2 turn, live", () => {
     expect(r.trace.rounds).toBe(2);
   });
 
-  it("Gate 3: one targeted rewrite, then the safe reply with a handoff", async () => {
+  it("Gate 3: one targeted rewrite, then the safe reply; nothing asked for a person, so a team question, not a handoff", async () => {
     h.responses.push(
       { toolCalls: [respond("r1", { reply: "התיק עולה ₪120." })] },
       { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד." })] },
@@ -189,7 +194,46 @@ describe("one v2 turn, live", () => {
     expect(h.calls[1].messages.at(-1).content).toMatch(/120/);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.reply).not.toMatch(/₪/);
+    expect(r.escalation).toBeNull();
+    expect(h.teamQuestions).toHaveLength(1);
+  });
+
+  it("the safe reply still hands over when the customer asked for a person", async () => {
+    const q = { ...opts, incomingMessage: "אני רוצה לדבר עם נציג" };
+    h.responses.push(
+      { toolCalls: [respond("r1", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד." })] },
+    );
+    const r = await runReplyEngineTurn(q, "autonomous");
     expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
+  });
+
+  it("a handoff nobody asked for is rewritten into an answer plus a team question (eval: discount, instalments)", async () => {
+    const q = { ...opts, incomingMessage: "אפשר לשלם בתשלומים?" };
+    h.responses.push(
+      { toolCalls: [respond("h1", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "instalments question" })] },
+      { toolCalls: [respond("h2", { reply: "אבדוק את זה עם הצוות ונחזור אליך כאן.", team_question: "האם אפשר לשלם בתשלומים?" })] },
+    );
+    const r = await runReplyEngineTurn(q, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(r.escalation).toBeNull();
+    expect(h.teamQuestions[0]).toMatchObject({ question: "האם אפשר לשלם בתשלומים?", askerKey: "c1" });
+    const saved = h.upserts[0].create;
+    expect(saved.pending.map((p: any) => p.kind)).toContain("promise");
+  });
+
+  it("a failed store read is retried once and logged with its outcome", async () => {
+    h.failReads = 1;
+    h.responses.push(
+      { toolCalls: [tc("f1", "woocommerce.list_products", { query: "tote" })] },
+      { toolCalls: [respond("f2", { reply: "יש Canvas Tote במלאי." })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    const rec = r.trace.tools.find((t: any) => t.tool === "woocommerce.list_products");
+    expect(rec).toMatchObject({ retried: true, outcome: "ok", resultCount: 1 });
+    const audit = h.audits.find((a) => a.data.action === "ai.bot_turn");
+    expect(audit.data.metadata.toolCalls[0]).toMatchObject({ tool: "woocommerce.list_products", outcome: "ok", resultCount: 1, retried: true });
   });
 
   it("Gate 3 fails twice on a PRODUCT turn: the turn's own products, never a handoff", async () => {

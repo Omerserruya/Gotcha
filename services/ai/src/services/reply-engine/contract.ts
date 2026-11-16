@@ -90,6 +90,8 @@ export interface ModelTurnOutput {
   handoff?: string | null;
   /** Product keys (PRODUCT_n) to show as cards, when the channel renders cards. */
   cards?: string[];
+  /** A question the team must answer later; the AI keeps the conversation (no handoff). */
+  teamQuestion?: string | null;
 }
 
 // ── Tools: ONE contract for ours, custom API and (later) MCP ──
@@ -117,6 +119,12 @@ export interface ToolRunRecord {
   /** What the model was given back (already summarised for store reads). */
   content: string;
   ms: number;
+  /** What the call came back with, for the trace. */
+  outcome?: "ok" | "empty" | "error" | "timeout" | "denied" | "approval" | "simulated";
+  /** Store results grounded this call. */
+  resultCount?: number;
+  /** A read retried once after an error or a timeout. */
+  retried?: boolean;
 }
 
 // ── Gate 3 ──
@@ -127,7 +135,9 @@ export type ClaimProblem =
   | { kind: "unknown_product"; names: string[] }
   | { kind: "style"; codes: string[] }
   /** An attribute question answered "no info" without reading the product. */
-  | { kind: "unread_product" };
+  | { kind: "unread_product" }
+  /** A handoff the customer's words do not call for (it would silence the AI). */
+  | { kind: "needless_handoff" };
 
 export interface Gate3Verdict {
   ok: boolean;

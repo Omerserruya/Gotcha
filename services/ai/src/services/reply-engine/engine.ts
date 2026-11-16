@@ -2,7 +2,7 @@
  * Reply engine v2: one turn, end to end. See contract.ts and
  * docs/architecture/reply-engine-v2.md.
  */
-import { prisma } from "@chatcenter/shared";
+import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
 import { generateResponse, platformPaidScope } from "../ai.service";
 import { resolveAgentModel } from "../../lib/agent-model";
 import { loadRecentHistory } from "../conversation-history.service";
@@ -15,7 +15,7 @@ import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
 import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "../discovery-integration.service";
 import { resolveProductRef } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
 import { skillApprovalReason } from "../skill-runtime.service";
 import { getCrmAdapter } from "../connectors/crm-adapter-resolver";
@@ -28,7 +28,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState } from "./st
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -62,8 +62,42 @@ export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
     stateUpdate: { stage: su.stage, intent: su.intent, facts: su.facts, pending: Array.isArray(su.pending) ? su.pending : undefined },
     claims,
     handoff: typeof v.handoff === "string" && v.handoff.trim() ? v.handoff.trim() : null,
+    teamQuestion: typeof v.team_question === "string" && v.team_question.trim() ? v.team_question.trim().slice(0, 500) : null,
     cards: Array.isArray(v.cards) ? v.cards.filter((k: any) => typeof k === "string") : [],
   };
+}
+
+const normTitle = (t: unknown) => String(t ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/**
+ * The store's id for whatever the model put in product_id (eval 2026-11-16: it
+ * passed titles, "Zip Hoodie", and keys from an EARLIER turn, "PRODUCT_2"; the
+ * store answered 404 and the model told the customer the catalogue was down).
+ * In order: a store id as is; this turn's key; a title of this turn's results;
+ * a title or id already shown in this conversation (newest first). Null when
+ * none: the caller searches by name.
+ */
+export function resolveProductId(
+  value: unknown,
+  envelope: { candidates: Array<{ title: string; productId?: string | null }> } | null,
+  offered: Array<{ title: string; productId?: string | null }>,
+): string | null {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  if (/^\d{1,15}$/.test(v)) return v;
+  const key = /^PRODUCT_(\d{1,3})$/i.exec(v);
+  if (key) {
+    const c = envelope?.candidates[Number(key[1]) - 1];
+    if (c?.productId) return String(c.productId);
+  }
+  const want = normTitle(v);
+  const fromTurn = envelope?.candidates.find((c) => normTitle(c.title) === want);
+  if (fromTurn?.productId) return String(fromTurn.productId);
+  for (let i = offered.length - 1; i >= 0; i--) {
+    const o = offered[i];
+    if (o.productId && (normTitle(o.title) === want || String(o.productId) === v)) return String(o.productId);
+  }
+  return null;
 }
 
 /** PRODUCT_n keys never reach the customer: each becomes the product's title. */
@@ -158,7 +192,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       where: { tenantId: opts.tenantId, status: "CONNECTED", integration: { slug: { in: ["shopify", "woocommerce"] } } },
       select: { integration: { select: { slug: true } } },
     }).catch(() => [] as any[])),
-    timed("knowledge", retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[])),
+    timed("knowledge", retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id, {
+      record: lane === "live" && shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+      askerKey: opts.conversationId,
+    }).catch(() => [] as any[])),
     // Both store turns in parallel; a Shopify chat wins when both answer.
     timed("woo", prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
   ]);
@@ -258,9 +295,25 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       }
     },
     runAdapterTool: async ({ toolFunctionName, args: rawArgs }: any) => {
-      const args: Record<string, unknown> = rawArgs && typeof rawArgs.product_id === "string"
-        ? { ...rawArgs, product_id: resolveProductRef(turnTools.envelope, rawArgs.product_id) }
-        : rawArgs ?? {};
+      let args: Record<string, unknown> = rawArgs ?? {};
+      if (rawArgs && rawArgs.product_id != null && rawArgs.product_id !== "") {
+        let id = resolveProductId(rawArgs.product_id, turnTools.envelope as any, state.offeredItems);
+        // A name nothing here knows: find it in the store by that name, once, and take an exact title match.
+        if (!id && /^woocommerce\./.test(toolFunctionName) && !/^PRODUCT_\d+$/i.test(String(rawArgs.product_id))) {
+          const found: any = await executeAdapterTool({
+            tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: contactRow?.id,
+            toolFunctionName: "woocommerce.list_products", args: { query: String(rawArgs.product_id).slice(0, 80), per_page: 5, lang: locale }, accessScope: "customer",
+          }).catch(() => null);
+          const list: any[] = found?.ok && Array.isArray(found.result) ? found.result : [];
+          const want = normTitle(rawArgs.product_id);
+          const hit = list.find((p) => normTitle(p?.name) === want) ?? (list.length === 1 ? list[0] : null);
+          if (hit?.id != null) id = String(hit.id);
+        }
+        if (!id) {
+          return { ok: false as const, reason: "unknown_product: product_id must be a PRODUCT_n key from THIS turn's results or a store id; search the store by name first. This is not a catalogue failure." };
+        }
+        args = { ...rawArgs, product_id: id };
+      }
       // A state-changing order tool may only touch the order the customer's latest message allows.
       if (isOrderStateChangingTool(toolFunctionName)) {
         const v = assertOrderTargetMatchesTurn({ message: opts.incomingMessage ?? "", args, isStateChanging: true });
@@ -431,7 +484,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     toolsOffered: surface.names,
     shopFloor: !!storePlatform,
     handedOff: !!o.handoff || !!turnTools.escalation,
-    approvalPending,
+    // A team question is real follow-up work: "we'll check with the team" is then true.
+    approvalPending: approvalPending || !!o.teamQuestion,
+    handoff: o.handoff ?? null,
+    recentInbound: inbound,
+    toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
   });
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
@@ -474,7 +531,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
       output = grounded
         ? { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) }
-        : { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+        : needlessHandoff("reply_failed_checks", inbound, approvalPending)
+          // Nothing calls for a person: a question for the team, and the AI keeps the chat.
+          ? { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) || null, cards: [] }
+          : { reply: safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
     }
   } else {
     trace.gate3 = { ...verdict, rewrite: "none" };
@@ -515,11 +575,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ? { approvalRequestId: firstApproval.approvalRequestId, tool: firstApproval.tool, reason: "requires_approval" }
     : null;
 
+  // A question for the team: on the owner's unanswered list, and an open promise in the state. No handoff.
+  const teamPromise = final.teamQuestion
+    ? [{ kind: "promise" as const, text: `checking with the team: ${final.teamQuestion.slice(0, 200)}`, at: now }]
+    : [];
+  if (final.teamQuestion && lane === "live") {
+    void recordUnansweredQuestion({ tenantId: opts.tenantId, question: final.teamQuestion, reason: "no_knowledge", askerKey: opts.conversationId });
+  }
+
   // ── Save ──
   const next = mergeState(state, final.stateUpdate, {
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
-    approvals: turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })),
+    approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
@@ -543,7 +611,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         targetId: opts.conversationId,
         metadata: {
           engine: "v2", promptVersion: ENGINE_PROMPT_VERSION, aiAgentId: config.id, model, stageMs, rounds: trace.rounds,
-          tokens: trace.tokens, toolCalls: toolCallLog.map((t) => ({ tool: t.tool, decision: t.decision })), gate3: trace.gate3,
+          tokens: trace.tokens,
+          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined })),
+          gate3: trace.gate3, teamQuestion: final.teamQuestion ?? undefined,
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
         } as any,
       },

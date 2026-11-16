@@ -62,6 +62,22 @@ const V2_BANS_HE: Array<[string, RegExp]> = [
 const ATTRIBUTE_ASK = /(?<![\u0590-\u05FF])(?:מגרד|מגרדת|נעים|נעימה|רך|רכה|עבה|דק|דקה|חומר|בד|מאיזה|עשוי|עשויה|כותנה|צמר|מרינו|פשתן|גזרה|גזרת|מידות|מידה|קטן|גדול|לכבס|כביסה|מכונה|ייבוש|מיוצר|תוצרת|איפה מייצרים|שקוף|נמתח|נמתחת|מחמם|חם)(?![\u0590-\u05FF])|\b(?:itch(?:y)?|soft|material|fabric|made of|fit|sizing|runs (?:small|large)|wash|care|origin|made in|warm|stretch)\b/iu;
 const NO_INFO = /אין (?:לי|לנו)(?: כאן)? (?:מידע|פרטים)|לא (?:בטוח|בטוחה|יודע|יודעת|ידוע)|(?:לבדוק|אבדוק|נבדוק|בודקים)(?: את זה)? (?:מול|עם) הצוות|\b(?:I don'?t have (?:that |the )?(?:info|information|details)|not sure|check with the team)\b/iu;
 
+// A handoff silences the AI for the rest of the conversation, so it is kept for
+// these only (Omer via the Supervisor, 2026-11-16): an explicit ask for a person,
+// a strong complaint, a damaged item, a late order. Not for a tool that failed,
+// a discount, instalments or care details: those are answered, or checked with
+// the team as a question (respond.team_question) while the AI keeps the chat.
+const ASKS_FOR_PERSON = /(?<![\u0590-\u05FF])(?:נציג|נציגה|נציגים|בן אדם|בנאדם|אדם אמיתי|מישהו אמיתי|אנושי|אנושית|לדבר עם (?:מישהו|מישהי|מנהל|מנהלת|אחראי)|תעבירו אותי|להעביר אותי|מנהל|מנהלת)(?![\u0590-\u05FF])|\b(?:human|real person|representative|agent|someone real|talk to (?:a|someone)|manager|speak to)\b/iu;
+const STRONG_CASE = /(?<![\u0590-\u05FF])(?:פגום|פגומה|שבור|שבורה|קרוע|קרועה|נזק|הרוס|הרוסה|לא הגיע|לא הגיעה|עדיין לא קיבלתי|לא קיבלתי|באיחור|איחור|מאחר|תקוע|תקועה|לא מקובל|מחפיר|שערורייה|עורך דין|תביעה|הונאה|נוכלים|רמאים|החזר כספי|כסף בחזרה)(?![\u0590-\u05FF])|\b(?:damaged|broken|torn|defective|never arrived|hasn'?t arrived|didn'?t arrive|late|lawyer|scam|fraud|chargeback|refund)\b/iu;
+
+/** A handoff the customer's own words do not call for. */
+export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean): boolean {
+  if (!handoff) return false;
+  if (toolsAskedPerson) return false;
+  const recent = recentInbound.slice(-3).join("\n");
+  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent);
+}
+
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
   if (!ATTRIBUTE_ASK.test(incoming ?? "") || !NO_INFO.test(reply ?? "")) return false;
@@ -107,6 +123,11 @@ export interface Gate3Input {
   shopFloor: boolean;
   handedOff: boolean;
   approvalPending: boolean;
+  /** The reply's handoff and the customer's last messages (the handoff check). */
+  handoff?: string | null;
+  recentInbound?: string[];
+  /** A tool this turn needs a person (an approval, a denied action): a handoff may follow. */
+  toolsNeedPerson?: boolean;
 }
 
 export function gate3(i: Gate3Input): Gate3Verdict {
@@ -127,6 +148,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (!honesty.ok) problems.push({ kind: "unsupported_action", claims: honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u)) });
 
   if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered)) problems.push({ kind: "unread_product" });
+  if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
 
@@ -159,6 +181,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
   for (const p of problems) {
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
     if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn (${p.claims.join("; ")}). Say only what really happened; offer a person if needed.`);
+    if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {

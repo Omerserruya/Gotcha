@@ -3,7 +3,9 @@
  * turn envelope's key numbering, the switch).
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRespond, resolveKeysInText, conversationLocale, stripLaterOpener } from "../services/reply-engine/engine";
+import { parseRespond, resolveKeysInText, conversationLocale, stripLaterOpener, resolveProductId } from "../services/reply-engine/engine";
+import { needlessHandoff } from "../services/reply-engine/gates";
+import { readErrored, outcomeOf } from "../services/reply-engine/tools";
 import { mergeState, emptyState, renderState } from "../services/reply-engine/state";
 import { gate3, unknownProductKeys, correctionNote, safeFallback, groundedProductFallback, unreadProduct } from "../services/reply-engine/gates";
 import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
@@ -68,6 +70,48 @@ describe("later openers (eval lint: \"כן, ...\" after the first reply)", () =>
     expect(stripLaterOpener("היי! מה מחפשים?", false)).toBe("היי! מה מחפשים?");
     expect(stripLaterOpener("כן.", true)).toBe("כן.");
     expect(stripLaterOpener("כנראה שכן", true)).toBe("כנראה שכן");
+  });
+});
+
+describe("product_id resolution (eval: titles and stale keys reached the store as 404s)", () => {
+  const env = { candidates: [{ title: "Canvas Tote", productId: "101" }, { title: "Zip Hoodie", productId: "102" }] };
+  const offered = [{ title: "Chunky Cardigan", productId: "77" }, { title: "Linen Midi Dress", productId: "88" }];
+  it("ids pass, this turn's keys and titles resolve, earlier products resolve by title", () => {
+    expect(resolveProductId("555", env, offered)).toBe("555");
+    expect(resolveProductId("PRODUCT_2", env, offered)).toBe("102");
+    expect(resolveProductId("zip hoodie", env, offered)).toBe("102");
+    expect(resolveProductId("Linen Midi Dress", null, offered)).toBe("88");
+  });
+  it("a stale key or an unknown name is null (the caller searches; never sent to the store as an id)", () => {
+    expect(resolveProductId("PRODUCT_7", env, offered)).toBeNull();
+    expect(resolveProductId("Merino Crew Knit", env, offered)).toBeNull();
+  });
+});
+
+describe("handoffs only when called for", () => {
+  it("an explicit ask, a damaged item, a late order or a strong complaint allow one", () => {
+    expect(needlessHandoff("x", ["אפשר לדבר עם נציג?"], false)).toBe(false);
+    expect(needlessHandoff("x", ["המעיל הגיע קרוע"], false)).toBe(false);
+    expect(needlessHandoff("x", ["ההזמנה עדיין לא הגיעה"], false)).toBe(false);
+    expect(needlessHandoff("x", ["I want to talk to a human"], false)).toBe(false);
+  });
+  it("a discount, instalments, care, \"are you a bot\" or a failed tool do not", () => {
+    expect(needlessHandoff("x", ["יש הנחה?"], false)).toBe(true);
+    expect(needlessHandoff("x", ["אפשר לשלם בתשלומים?"], false)).toBe(true);
+    expect(needlessHandoff("x", ["את בוט?"], false)).toBe(true);
+    expect(needlessHandoff(null, ["יש הנחה?"], false)).toBe(false);
+    expect(needlessHandoff("x", ["יש הנחה?"], true)).toBe(false);
+  });
+});
+
+describe("tool outcomes", () => {
+  it("errors, empties and plain results", () => {
+    expect(readErrored("PRODUCT_SEARCH_FAILED: the live catalog could not be read")).toBe(true);
+    expect(readErrored('{"ok":false,"failure":"errored","reason":"woocommerce_404"}')).toBe(true);
+    expect(readErrored("PRODUCT_SEARCH_RESULTS: 0 products matched.")).toBe(false);
+    expect(outcomeOf("allow", "PRODUCT_SEARCH_RESULTS: 0 products matched.", 0)).toBe("empty");
+    expect(outcomeOf("allow", "PRODUCT_1 ...", 3)).toBe("ok");
+    expect(outcomeOf("deny", "")).toBe("denied");
   });
 });
 

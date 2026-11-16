@@ -58,10 +58,11 @@ export const RESPOND_TOOL = {
             required: ["kind", "text", "source"],
           },
         },
-        handoff: { type: ["string", "null"], description: "A short reason when a person should take over; otherwise null." },
+        handoff: { type: ["string", "null"], description: "ONLY for an explicit ask for a person, a strong complaint, a damaged item or a late order: a short reason. It silences you for the rest of the chat. Otherwise null." },
+        team_question: { type: ["string", "null"], description: "A question the team must answer later (a discount, instalments, a detail you could not find). You keep the conversation. Otherwise null." },
         cards: { type: "array", items: { type: "string" }, description: "PRODUCT_n keys to show as cards (card channels only)." },
       },
-      required: ["reply", "state_update", "claims", "handoff", "cards"],
+      required: ["reply", "state_update", "claims", "handoff", "team_question", "cards"],
     },
   },
 } as const;

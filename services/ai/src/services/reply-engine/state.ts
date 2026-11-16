@@ -150,7 +150,7 @@ export function renderState(s: ConversationStateRecord): string {
   if (s.offeredItems.length) {
     lines.push(
       "already shown: " +
-        s.offeredItems.slice(-8).map((o) => `${o.title}${o.price != null ? ` (${o.price}${o.currency ? " " + o.currency : ""})` : ""}`).join("; "),
+        s.offeredItems.slice(-8).map((o) => `${o.title}${o.productId ? ` [id ${o.productId}]` : ""}${o.price != null ? ` (${o.price}${o.currency ? " " + o.currency : ""})` : ""}`).join("; "),
     );
   }
   if (s.pending.length) lines.push(`open: ${s.pending.map((p) => `[${p.kind}] ${p.text}`).join("; ")}`);

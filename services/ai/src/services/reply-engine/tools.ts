@@ -212,25 +212,53 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   };
 
   let outcome: Awaited<ReturnType<typeof exec>> | typeof TIMEOUT;
-  try {
-    outcome = await withTimeout(exec(), timeoutMs);
-  } catch (err: any) {
-    return rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(err?.message ?? err).slice(0, 200) }));
+  let retried = false;
+  const attempt = async () => {
+    try { return await withTimeout(exec(), timeoutMs); } catch (err: any) { return { thrown: err } as const; }
+  };
+  let first: any = await attempt();
+  // A read that timed out, threw or came back errored is retried once (a write never is).
+  if (isRead && (first === TIMEOUT || "thrown" in first || readErrored(first.r?.content))) {
+    retried = true;
+    first = await attempt();
   }
+  if (first !== TIMEOUT && "thrown" in first) {
+    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", retried };
+  }
+  outcome = first;
   if (outcome === TIMEOUT) {
     console.warn(`[reply-engine] tool ${tool} timed out after ${timeoutMs}ms conv=${env.conversationId}`);
-    return rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? "The lookup did not answer in time. Do not guess; say you could not check it right now." : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." }));
+    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over." : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", retried };
   }
 
   let content = outcome.r.content;
+  let resultCount: number | undefined;
   if (isProductSearchTool(tool) && outcome.decision === "allow") {
     const envlp = await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: content }).catch(() => null);
-    if (envlp) content = mergeEnvelope(env.turn, envlp, env.locale, env.cardChannel);
+    if (envlp) {
+      content = mergeEnvelope(env.turn, envlp, env.locale, env.cardChannel);
+      resultCount = envlp.status === "ok" ? envlp.candidates.length : 0;
+    }
   }
   const side = outcome.r.sideEffect;
   if (side?.awaitingApproval) env.turn.approvals.push({ tool, approvalRequestId: String((side.awaitingApproval as any).approvalRequestId ?? call.id) });
   if (side?.escalate) env.turn.escalation = side.escalate as any;
-  return rec(outcome.decision, content, side);
+  return { ...rec(outcome.decision, content, side), outcome: outcomeOf(outcome.decision, content, resultCount), resultCount, retried };
+}
+
+/** A read whose result is a failure (not an empty result). */
+export function readErrored(content: unknown): boolean {
+  const c = String(content ?? "");
+  return /^PRODUCT_SEARCH_FAILED/.test(c) || /"ok"\s*:\s*false[^}]*"failure"\s*:\s*"errored"/.test(c) || /"reason"\s*:\s*"(?:timeout|tool_error)"/.test(c);
+}
+
+export function outcomeOf(decision: string, content: string, resultCount?: number): NonNullable<ToolRunRecord["outcome"]> {
+  if (decision === "deny") return "denied";
+  if (decision === "approval") return "approval";
+  if (decision === "simulated") return "simulated";
+  if (readErrored(content) || /"ok"\s*:\s*false/.test(content)) return "error";
+  if (resultCount === 0 || /0 products matched/.test(content)) return "empty";
+  return "ok";
 }
 
 /** Run one round's calls in parallel; records land on env.turn in call order. */
