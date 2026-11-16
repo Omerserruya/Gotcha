@@ -143,6 +143,7 @@ export type ClaimProblem =
   | { kind: "unread_order" }
   /** A coupon or policy question sent to the team without searching the knowledge. */
   | { kind: "unread_knowledge" }
+  | { kind: "gave_up_search" }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 

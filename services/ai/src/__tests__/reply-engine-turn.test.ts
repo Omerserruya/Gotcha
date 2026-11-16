@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   teamQuestions: [] as any[],
   historyQueries: [] as any[],
   failReads: 0,
+  slowReads: 0,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -51,6 +52,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
     dispatchToolCall: async (tc: any, ctx: any) => {
       h.dispatched.push({ name: tc.function.name, args: JSON.parse(tc.function.arguments), sandbox: ctx.sandbox ?? null });
+      if (tc.function.name === "woocommerce.list_products" && h.slowReads > 0) { h.slowReads--; await new Promise((r) => setTimeout(r, 900)); }
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
       if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "denied") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
@@ -131,6 +133,7 @@ const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stag
 beforeEach(() => {
   for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
+  h.slowReads = 0;
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -578,5 +581,57 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
     expect(toolMsg.content).toMatch(/ask for it/);
     expect(toolMsg.content).toMatch(/do not retry with a phone number or an email/);
     expect(r.trace.tools[0]).toMatchObject({ outcome: "error", errorKind: "access_denied_cross_customer" });
+  });
+});
+
+describe("prod replay 3 (2026-11-16), through a whole turn", () => {
+  it("★ a store search times out: the model is told to search narrower, never to say it could not check; a give-up reply gets that search", async () => {
+    process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
+    h.slowReads = 1;
+    h.responses.push(
+      { toolCalls: [tc("w1", "woocommerce.list_products", { query: "תיקי בד לחוף" })] },
+      { toolCalls: [respond("w2", { reply: "לא הצלחתי לבדוק את זה כרגע." })] },
+      { toolCalls: [tc("w3", "woocommerce.list_products", { query: "תיק בד", per_page: 5 })] },
+      { toolCalls: [respond("w4", { reply: "יש לנו תיק בד קנבס, לאיזה שימוש?" })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { delete process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS; }
+    const note = h.calls[1].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "w1")?.content;
+    expect(note).toMatch(/narrower query/);
+    expect(note).not.toMatch(/say you could not check/);
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("gave_up_search");
+    expect(h.calls[2].toolChoice).toBe("required");
+    expect(r.trace.tools.map((t: any) => t.outcome)).toEqual(["timeout", "ok"]);
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(r.reply).toBe("יש לנו תיק בד קנבס, לאיזה שימוש?");
+  });
+
+  it("★ \"the address is not available\" without searching: search_knowledge runs, the answer comes from it", async () => {
+    h.responses.push(
+      { toolCalls: [respond("k1", { reply: "הכתובת המדויקת לא זמינה כרגע." })] },
+      { toolCalls: [tc("k2", "search_knowledge", { query: "כתובת הסטודיו" })] },
+      { toolCalls: [respond("k3", { reply: "הסטודיו ברחוב הרצל 5 בתל אביב." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסטודיו?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unread_knowledge");
+    expect(r.trace.tools.map((t: any) => t.tool)).toContain("search_knowledge");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(r.reply).toBe("הסטודיו ברחוב הרצל 5 בתל אביב.");
+  });
+
+  it("★ a cleanup that leaves a word or two for a question is not sent as the answer", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const OPEN = { kind: "promise", text: "checking with the team: הכיסא הגיע פגום", at: new Date().toISOString() };
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
+    h.responses.push(
+      { toolCalls: [respond("x1", { reply: "העברתי את השאלה לצוות. תודה!" })] },
+      { toolCalls: [respond("x2", { reply: "העברתי את השאלה לצוות. בשמחה!" })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ויש לכם גם בצבע שחור?" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.trace.gate3.rewrite).not.toBe("cleaned");
+    expect(r.reply).not.toBe("בשמחה!");
+    expect(r.reply).not.toBe("תודה!");
   });
 });

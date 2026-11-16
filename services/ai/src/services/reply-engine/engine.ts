@@ -28,7 +28,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -556,14 +556,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       // An unread product, order or policy gets ONE tool round to read it before the rewrite.
-      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge");
+      const mayRead = first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || p.kind === "unread_knowledge" || p.kind === "gave_up_search");
       let r = await call(mayRead ? "required" : forceRespond);
       if (mayRead) {
         let calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
         // It answered again without reading: the read is the point of this round, so it is asked once more.
         if (!calls.some((c) => c.function?.name !== "respond") && calls.length) {
           messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-          for (const c of calls) messages.push({ role: "tool", tool_call_id: c.id, content: "Not sent: call the lookup tool first (product, order or knowledge), then respond from what it returns." });
+          for (const c of calls) messages.push({ role: "tool", tool_call_id: c.id, content: "Not sent: call the lookup tool first (product, order or knowledge; a narrower search after a timeout), then respond from what it returns." });
           r = await call("required");
           calls = (r.toolCalls ?? []) as any;
         }
@@ -596,7 +596,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
         const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null : o.handoff;
         const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(o.reply, codes), handoff };
-        if (!cleaned.reply) return null;
+        // Nothing, or too little, left to answer a question with: the other candidate, else the fallback.
+        if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "")) return null;
         const after = gate3(g3Input(cleaned));
         return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
       };

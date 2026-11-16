@@ -472,3 +472,58 @@ describe("prod replay 2: what may stop a reply, and the cleanup", () => {
     expect(mergeState(emptyState(), {}, { engineFacts: { _cannedTeamLineAt: "n" } }).facts._cannedTeamLineAt).toBe("n");
   });
 });
+
+describe("prod replay 3 (2026-11-16)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ the employee's gendered first person is caught, feelings included", async () => {
+    for (const r of ["שמחה שהסתדרת!", "אני שמחה לעזור", "מצטערת על העיכוב", "שמח לשמוע", "מצטער, אין במלאי.", "אני בטוחה שזה יתאים"]) {
+      expect(styleCodes(await g3(r)), r).toContain("self_gendered");
+    }
+    for (const r of ["חג שמח לכולם", "בשמחה!", "שמחים שהסתדר", "מצטערים על העיכוב", "לשמחתנו זה במלאי"]) {
+      expect(styleCodes(await g3(r)), r).not.toContain("self_gendered");
+    }
+  });
+
+  it("★ and cleaned into the team's plural", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(cleanStyle("שמחה שהסתדרת!", ["self_gendered"])).toBe("שמחים שהסתדרת!");
+    expect(cleanStyle("אני שמחה לעזור", ["self_gendered"])).toBe("אנחנו שמחים לעזור");
+    expect(cleanStyle("מצטערת על העיכוב.", ["self_gendered"])).toBe("מצטערים על העיכוב.");
+    expect(cleanStyle("חג שמח לכולם", ["self_gendered"])).toBe("חג שמח לכולם");
+  });
+
+  it("★ a business fact said to be unavailable without searching the knowledge -> unread_knowledge", async () => {
+    const { unreadBusinessInfo } = await import("../services/reply-engine/gates");
+    const offered = ["search_knowledge", "woocommerce.get_order"];
+    const rec = (tool: string) => ({ tool, decision: "allow" } as any);
+    expect(unreadBusinessInfo("הכתובת המדויקת לא זמינה כרגע.", "איפה הסטודיו?", [], offered)).toBe(true);
+    expect(unreadBusinessInfo("אין לי את הכתובת.", "מה הכתובת שלכם?", [], offered)).toBe(true);
+    expect(unreadBusinessInfo("שאלה טובה", "יש איסוף עצמי?", [], offered, true)).toBe(true);
+    expect(unreadBusinessInfo("כמה עולה המשלוח לא מופיע אצלי.", "כמה עולה משלוח?", [], offered)).toBe(true);
+    expect(unreadBusinessInfo("אין לי מידע על זה.", "מה שעות הפתיחה?", [], offered)).toBe(true);
+    expect(unreadBusinessInfo("אין לי מידע על זה.", "מה שעות פתיחה?", [], offered)).toBe(true);
+    // Searched, answered, not offered, or about one order of theirs: not this check.
+    expect(unreadBusinessInfo("הכתובת לא זמינה.", "איפה הסטודיו?", [rec("search_knowledge")], offered)).toBe(false);
+    expect(unreadBusinessInfo("אנחנו ברחוב הרצל 5.", "איפה הסטודיו?", [], offered)).toBe(false);
+    expect(unreadBusinessInfo("הכתובת לא זמינה.", "איפה הסטודיו?", [], ["woocommerce.get_order"])).toBe(false);
+    expect(unreadBusinessInfo("לא זמין.", "מתי תגיע ההזמנה שלי?", [], offered)).toBe(false);
+    // Through gate3, before the order check.
+    expect((await g3("הכתובת המדויקת לא זמינה כרגע.", { incomingMessage: "איפה הסטודיו?", toolsOffered: offered })).map((p) => p.kind)).toContain("unread_knowledge");
+  });
+
+  it("★ a product search timed out and the reply gives up -> gave_up_search; not when something else was found", async () => {
+    const { gaveUpSearch } = await import("../services/reply-engine/gates");
+    const t = (tool: string, outcome: string) => ({ tool, decision: "allow", outcome } as any);
+    expect(gaveUpSearch("לא הצלחתי לבדוק את זה כרגע.", [t("woocommerce.list_products", "timeout")])).toBe(true);
+    expect(gaveUpSearch("I couldn't check the store right now.", [t("woocommerce.list_products", "timeout")])).toBe(true);
+    expect(gaveUpSearch("לא הצלחתי לבדוק.", [t("woocommerce.list_products", "timeout"), t("woocommerce.list_products", "ok")])).toBe(false);
+    expect(gaveUpSearch("לא הצלחתי לבדוק.", [t("woocommerce.get_order", "timeout")])).toBe(false);
+    expect(gaveUpSearch("יש לנו משטחים בכמה גדלים, לאיזה מכשיר?", [t("woocommerce.list_products", "timeout")])).toBe(false);
+    expect((await g3("לא הצלחתי לבדוק את זה כרגע.", { tools: [t("woocommerce.list_products", "timeout")] })).map((p) => p.kind)).toContain("gave_up_search");
+  });
+});

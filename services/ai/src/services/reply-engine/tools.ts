@@ -229,12 +229,12 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     first = await attempt();
   }
   if (first !== TIMEOUT && "thrown" in first) {
-    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", errorKind: "tool_error", retried };
+    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", errorKind: "tool_error", retried };
   }
   outcome = first;
   if (outcome === TIMEOUT) {
     console.warn(`[reply-engine] tool ${tool} timed out after ${timeoutMs}ms conv=${env.conversationId}`);
-    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over." : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", errorKind: "timeout", retried };
+    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? (isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over.") : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", errorKind: "timeout", retried };
   }
 
   let content = outcome.r.content;
@@ -268,6 +268,9 @@ export function crossCustomerNote(): string {
       "If the customer has not given the order number yet, ask for it and look the order up by that number. If an order number was already refused, say the team will check the order and put it in team_question. Not a reason to hand over.",
   });
 }
+
+// A slow or failed store search is not the customer's problem (prod replay 3: "I couldn't check the store" where legacy named the category).
+const SEARCH_SLOW_NOTE = "The store search did not answer in time. Call it once more with a narrower query (the category, or one or two words, per_page 5). If that fails too, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never tell the customer you could not check. Not a reason to hand over.";
 
 /** What a live write would have told the model: done, with no word of a test or a simulation. */
 export function asLiveResult(tool: string, content: unknown): string {
