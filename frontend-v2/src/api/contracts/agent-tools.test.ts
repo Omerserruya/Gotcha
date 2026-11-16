@@ -40,6 +40,11 @@ describe('★★ a new value from the server never rejects the read', () => {
     });
     expect(mcpFailureOf(parsed.lastErrorCode)).toBe('protocol');
     expect(mcpServerSchema.parse({ id: 's', name: 'n', url: 'u', auth: { kind: 'bearer', hasSecret: true } }).hasSecret).toBe(true);
+    // The contract doc's name for GOTCHA's reason.
+    expect(
+      mcpServerSchema.parse({ id: 's', name: 'n', url: 'u', status: 'REJECTED', rejectReason: 'Private address' })
+        .rejectionReason,
+    ).toBe('Private address');
     expect(parsed.tools.map((t) => [t.risk, t.isNew, t.gone])).toEqual([
       ['money', true, false],
       ['read', false, true],

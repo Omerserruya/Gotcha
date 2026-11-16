@@ -130,7 +130,11 @@ const mcpServerShape = z.object({
   tools: z.array(mcpToolSchema).catch([]).default([]),
 });
 
-/** Backend's names: the failure `lastError` (f), the secret flag on `auth.hasSecret`; either reads. */
+/**
+ * Backend's names (docs/api/mcp-and-api-tools-contract.md, 7fe08506): the
+ * failure `lastError`, the reason `rejectReason`, the secret flag on
+ * `auth.hasSecret`. Either name reads.
+ */
 function withLastError(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const row = raw as Record<string, unknown>;
@@ -138,6 +142,7 @@ function withLastError(raw: unknown): unknown {
   return {
     ...row,
     lastErrorCode: row.lastErrorCode ?? row.lastError,
+    rejectionReason: row.rejectionReason ?? row.rejectReason,
     /* Backend reads `auth.hasSecret`. */
     hasSecret: row.hasSecret ?? auth?.hasSecret,
   };
