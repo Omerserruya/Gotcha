@@ -29,6 +29,9 @@ class MainViewController: CAPBridgeViewController {
         )
         content?.add(EdgeColorHandler(owner: self), name: Self.edgeColorMessage)
         #if SCREENSHOTS
+        content?.addUserScript(
+            WKUserScript(source: Self.screenshotNoPushScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        )
         if let script = Self.screenshotScript() {
             content?.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
@@ -43,6 +46,35 @@ class MainViewController: CAPBridgeViewController {
     /// The simulator passes `SIMCTL_CHILD_GOTCHA_DEMO_EMAIL`, `..._PASSWORD`
     /// and `..._SHOT_PATH`. On the sign-in page the script signs in; anywhere
     /// else it goes once per launch to the screen to photograph.
+    /// The page asks for push permission on start, and iOS's alert would cover
+    /// every shot. Here the page's push plugin answers "denied" without asking
+    /// iOS. Read at call time by the page (`pushPlugin()` in native.ts), so
+    /// replacing it before the page's code runs is enough.
+    static let screenshotNoPushScript = """
+    (function () {
+      var none = { remove: function () {} };
+      var stub = {
+        addListener: function () { return Promise.resolve(none); },
+        checkPermissions: function () { return Promise.resolve({ receive: 'denied' }); },
+        requestPermissions: function () { return Promise.resolve({ receive: 'denied' }); },
+        register: function () { return Promise.resolve(); }
+      };
+      function put() {
+        var c = window.Capacitor;
+        if (!c || !c.Plugins) return false;
+        try {
+          Object.defineProperty(c.Plugins, 'PushNotifications', { configurable: true, get: function () { return stub; } });
+        } catch (e) {
+          c.Plugins.PushNotifications = stub;
+        }
+        return true;
+      }
+      if (!put()) {
+        var n = 0, t = setInterval(function () { if (put() || ++n > 200) clearInterval(t); }, 10);
+      }
+    })();
+    """
+
     static func screenshotScript() -> String? {
         let env = ProcessInfo.processInfo.environment
         guard let email = env["GOTCHA_DEMO_EMAIL"], let password = env["GOTCHA_DEMO_PASSWORD"] else { return nil }

@@ -8,7 +8,8 @@
 # set only on this workflow's xcodebuild line.
 #
 # Screens: mobile/screenshots/paths.txt. Device: the newest iPhone Pro Max
-# (6.9", 1320x2868). Status bar 9:41, full battery. Run with a tag "shots-*"
+# (6.9", 1320x2868). Status bar 9:41, full battery. The push permission
+# alert is kept off by the same condition (screenshotNoPushScript). Run with a tag "shots-*"
 # and download the "store-shots" artifact.
 name: iOS store screenshots
 
@@ -59,11 +60,6 @@ jobs:
           xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
             --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
           xcrun simctl install "$UDID" "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
-
-      - name: Allow notifications up front (no permission alert in the shots)
-        run: |
-          brew tap wix/brew >/dev/null && brew install applesimutils >/dev/null
-          applesimutils --byId "$UDID" --bundle il.co.gotcha.app --setPermissions notifications=YES
 
       - name: Sign in once
         env:
