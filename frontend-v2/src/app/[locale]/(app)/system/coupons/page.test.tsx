@@ -14,6 +14,7 @@ const { door, writes, loadCoupons } = vi.hoisted(() => ({
 vi.mock('@/shell/require-console', () => ({
   requireConsole: async () => {
     if (!door.open) throw new Error('NEXT_NOT_FOUND');
+    return 'open' as const;
   },
 }));
 vi.mock('@/api/client/billing-writes', () => ({ billingWritesEnabled: () => writes.on }));

@@ -33,7 +33,8 @@ export default async function Page({
   readonly params: Promise<{ readonly id: string }>;
   readonly searchParams: Promise<{ readonly support?: string | string[] }>;
 }) {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const { id } = await params;
   const { support } = await searchParams;
   const [t, nav, data, options] = await Promise.all([

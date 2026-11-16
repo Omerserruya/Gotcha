@@ -46,5 +46,6 @@
     "voice_number_not_found": "המספר הזה לא נמצא בחשבון ה‑Twilio.",
     "voice_webhook_not_updated": "Twilio לא קיבל את כתובת השיחות של GOTCHA למספר הזה, אז ייתכן ששיחות לא מגיעות אליה.",
     "voice_public_url_missing": "עוד אי אפשר להעביר שיחות ל‑GOTCHA: כתובת הקול של השרת לא הוגדרה. אין מה לתקן מהצד שלכם."
-  }
+  },
+  "retryIn": "אפשר לנסות שוב בעוד {seconds} שניות"
 }

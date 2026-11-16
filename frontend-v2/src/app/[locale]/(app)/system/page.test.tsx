@@ -12,6 +12,7 @@ const door = vi.hoisted(() => ({ open: true }));
 vi.mock('@/shell/require-console', () => ({
   requireConsole: async () => {
     if (!door.open) throw new Error('NEXT_NOT_FOUND');
+    return 'open' as const;
   },
 }));
 vi.mock('next-intl/server', () => ({

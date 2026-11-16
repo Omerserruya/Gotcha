@@ -14,7 +14,8 @@ import styles from '@/features/console/Console.module.css';
  * business reads. A failed read is never drawn as an empty queue.
  */
 export default async function Page() {
-  await requireConsole();
+  // The layout draws the unread state; the page reads nothing behind it.
+  if ((await requireConsole()) !== 'open') return null;
   const [t, format, pending] = await Promise.all([
     getTranslations('console.toolsQueue'),
     getFormatter(),
