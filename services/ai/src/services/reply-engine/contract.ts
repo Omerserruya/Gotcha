@@ -17,7 +17,8 @@
 export type ReplyEngineMode = "off" | "shadow" | "autonomous";
 
 /** Which ConversationState row a run reads and writes. A shadow run never touches the live row. */
-export type StateLane = "live" | "shadow";
+/** replay: a past turn re-run "as of" its message (scripts/replay-v2.ts); writes nothing, like shadow. */
+export type StateLane = "live" | "shadow" | "replay";
 
 // ── ConversationState (table conversation_states, one row per conversation per lane) ──
 
@@ -158,4 +159,6 @@ export interface EngineTurnTrace {
   gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "fallback" };
   tokens: { input: number; output: number; cached: number };
   toolsOffered: number;
+  /** The question recorded for the team this turn (live) or that would have been (shadow, replay). */
+  teamQuestion?: string | null;
 }

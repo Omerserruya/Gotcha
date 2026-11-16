@@ -38,6 +38,8 @@ export interface EngineTurnOpts {
   incomingMessage: string;
   closedHours?: { nextOpeningIso: string | null; timezone: string; nextOpeningText?: { en?: string; he?: string } | null };
   sandbox?: { enabled: true; writes: "safe" | "real" };
+  /** Replay a past turn: history is cut at this message (nothing after it is visible); lane "replay". */
+  replay?: { asOf: Date; messageId: string };
 }
 
 const HEB = /[֐-׿]/;
@@ -138,10 +140,10 @@ function closedHoursText(c: EngineTurnOpts["closedHours"], locale: "he" | "en"):
 }
 
 export async function runReplyEngineTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, signal?: AbortSignal): Promise<AIBotReplyResult & { trace: EngineTurnTrace }> {
-  const lane: StateLane = mode === "shadow" ? "shadow" : "live";
-  if (lane === "shadow") {
-    // Shadow is paid by the platform: every call is logged billedTo "platform" and nothing is debited.
-    return platformPaidScope.run({ reason: "reply_engine_shadow" }, () => runTurn(opts, mode, lane, signal));
+  const lane: StateLane = opts.replay ? "replay" : mode === "shadow" ? "shadow" : "live";
+  if (lane !== "live") {
+    // Shadow and replay are paid by the platform: every call is logged billedTo "platform" and nothing is debited.
+    return platformPaidScope.run({ reason: `reply_engine_${lane}` }, () => runTurn(opts, mode, lane, signal));
   }
   return runTurn(opts, mode, lane, signal);
 }
@@ -175,7 +177,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const timed = <T>(k: string, p: Promise<T>): Promise<T> => { const s0 = Date.now(); return p.finally(() => { loadMs[k] = Date.now() - s0; }); };
   const loadAll = Promise.all([
     timed("state", loadState(opts.tenantId, opts.conversationId, lane)),
-    timed("history", loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60)),
+    timed("history", opts.replay
+      // As of the replayed message: it and what came before, never after.
+      ? prisma.message.findMany({
+          where: { tenantId: opts.tenantId, conversationId: opts.conversationId, createdAt: { lte: opts.replay.asOf } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 60,
+        }).then((rows: any[]) => rows.reverse())
+      : loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60)),
     timed("contact", prisma.contact.findFirst({
       where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
       select: { id: true, email: true, phone: true },
@@ -205,7 +214,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const g1 = await gate1({
     tenantId: opts.tenantId,
     agentStatus: String((config as any).status),
-    platformPaid: lane === "shadow",
+    platformPaid: lane !== "live",
     billingSummary: (a) => {
       // Lazy: avoids an import cycle at module load.
       const { billingPauseSummary } = require("../ai-bot.service");
@@ -418,7 +427,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       signal,
       reasoningEffort: effort,
       maxTokens: 1500,
-      metadata: { type: lane === "shadow" ? "ai_bot_shadow" : "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, engine: "v2" } as any,
+      metadata: { type: lane === "live" ? "ai_bot" : `ai_bot_${lane}`, conversationId: opts.conversationId, aiAgentId: config.id, engine: "v2" } as any,
     });
     trace.rounds++;
     trace.tokens.input += r.usage?.input_tokens ?? 0;
@@ -577,6 +586,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ? { approvalRequestId: firstApproval.approvalRequestId, tool: firstApproval.tool, reason: "requires_approval" }
     : null;
 
+  trace.teamQuestion = final.teamQuestion ?? null;
   // A question for the team: on the owner's unanswered list, and an open promise in the state. No handoff.
   const teamPromise = final.teamQuestion
     ? [{ kind: "promise" as const, text: `checking with the team: ${final.teamQuestion.slice(0, 200)}`, at: now }]

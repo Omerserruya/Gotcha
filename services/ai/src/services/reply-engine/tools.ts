@@ -181,7 +181,8 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     return deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, ctx);
   };
   const exec = async (): Promise<{ decision: ToolGateDecision | "simulated"; r: AgentToolDispatchResult }> => {
-    if (env.lane === "shadow") {
+    // Shadow and replay: nothing is written, nothing is proposed.
+    if (env.lane !== "live") {
       const v = await deps.evaluate({ tenantId: env.tenantId, toolName: tool, aiAgentId: env.aiAgentId, args });
       if (v.decision === "DENY") return { decision: "deny", r: unwrap(call.id, tool, { status: "denied", error: v.reason, attempts: 0 } as any) };
       if (v.decision === "REQUIRE_APPROVAL" || (!isRead && env.tightenApproval?.({ tool, args }))) {

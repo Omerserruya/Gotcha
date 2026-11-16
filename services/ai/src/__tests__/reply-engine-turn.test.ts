@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   agentStatus: "ACTIVE",
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
+  historyQueries: [] as any[],
   failReads: 0,
 }));
 
@@ -31,6 +32,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
       aIAgent: { findUnique: async () => ({ id: "ag1", tenantId: "t1", name: "נועה", role: "customer_support", status: h.agentStatus, model: "gpt-6-luna", persona: { gender: "female" }, escalationMessage: "x" }) },
       conversation: { findFirst: async () => ({ id: "c1", tenantId: "t1", channel: "WEBCHAT", customerExternalId: "v1" }) },
       contact: { findFirst: async () => null },
+      message: { findMany: async (a: any) => { h.historyQueries.push(a); return [{ direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null }]; } },
       approvalRequest: { findMany: async () => [] },
       tenantIntegration: { findMany: async () => [{ integration: { slug: "woocommerce" } }] },
       conversationState: {
@@ -126,7 +128,7 @@ const tc = (id: string, name: string, args: any) => ({ id, function: { name, arg
 const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stage: "choosing", intent: "תיק בד", facts: {}, pending: [] }, claims: [], handoff: null, cards: [], ...a });
 
 beforeEach(() => {
-  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions"] as const) (h as any)[k].length = 0;
+  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
@@ -371,6 +373,28 @@ describe("the model", () => {
     h.responses.push({ toolCalls: [respond("m1", { reply: "בטח." })] });
     try { await runReplyEngineTurn(opts, "autonomous"); } finally { delete process.env.REPLY_ENGINE_MODEL; }
     expect(h.calls[0].model).toBe("gpt-6-luna-test");
+  });
+});
+
+describe("one v2 turn, replay (scripts/replay-v2.ts)", () => {
+  it("history is cut at the replayed message; platform-paid; nothing written but its own lane", async () => {
+    const asOf = new Date("2026-11-10T10:00:00Z");
+    h.policy["woocommerce.create_coupon"] = "ALLOW";
+    h.responses.push(
+      { toolCalls: [tc("x1", "woocommerce.create_coupon", { amount: 10 }), tc("x2", "woocommerce.list_products", { query: "tote" })] },
+      { toolCalls: [respond("x3", { reply: "יש Canvas Tote.", cards: ["PRODUCT_1"], team_question: "יש הנחה?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, replay: { asOf, messageId: "m9" } }, "autonomous");
+    expect(h.historyQueries[0].where.createdAt).toEqual({ lte: asOf });
+    expect(h.scopeSeen.every((s) => s === "reply_engine_replay")).toBe(true);
+    expect(h.calls[0].metadata.type).toBe("ai_bot_replay");
+    expect(h.submitted).toEqual([]);
+    expect(h.dispatched.find((d) => d.name === "woocommerce.create_coupon").sandbox).toEqual({ enabled: true, writes: "safe" });
+    expect(h.staged).toEqual([]);
+    expect(h.teamQuestions).toEqual([]);
+    expect(h.audits).toEqual([]);
+    expect(h.upserts[0].where.conversationId_lane.lane).toBe("replay");
+    expect(r.trace.teamQuestion).toBe("יש הנחה?");
   });
 });
 
