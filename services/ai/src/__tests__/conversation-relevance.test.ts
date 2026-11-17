@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/ai.service", async (orig) => ({ ...(await orig<any>()), getDefaultModel: () => "test-model" }));
-import { classifyConversation, fastRelevance, parseRelevance, relevancePrompt, shouldReclassify, SILENCING, type RelevanceInput } from "../services/conversation-relevance.service";
+import { classifyConversation, fastRelevance, parseRelevance, relevancePrompt, shouldReclassify, SILENCING, teamIdentityOf, autoReply, firstMover, type RelevanceInput } from "../services/conversation-relevance.service";
 import { platformPaidScope, laneFeature } from "../services/ai.service";
 import { dryRunReport, parseDryArgs, type DryRow } from "../scripts/classify-dry-run";
 
@@ -74,7 +74,8 @@ describe("conversation relevance", () => {
     expect(shouldReclassify({ classifiedAt: at, confidence: 0.5 }, new Date("2026-11-17T10:00:00Z"), now)).toBe(false);
     expect(shouldReclassify({ classifiedAt: "2026-11-16T00:00:00Z", confidence: 0.95 }, later, now)).toBe(true);
     expect(shouldReclassify({ classifiedAt: at, confidence: 0.1, overriddenBy: "u1" }, later, now)).toBe(false);
-    expect([...SILENCING].sort()).toEqual(["marketing", "notice", "personal"]);
+    // Unclear never silences: the AI answers as today.
+    expect([...SILENCING].sort()).toEqual(["auto_reply", "internal", "marketing", "notice", "personal"]);
   });
 
   it("★ the dry-run report: counts, samples capped at 15, and the low-confidence silencing list", () => {
@@ -96,5 +97,48 @@ describe("conversation relevance", () => {
     expect(parseDryArgs(["--tenant", "t1"])).toEqual({ tenant: "t1", days: 60, out: "/tmp/classify-t1.md", limit: 2000 });
     expect(parseDryArgs(["--tenant", "t1", "--days", "900", "--out", "/x.md"]).days).toBe(365);
     expect(() => parseDryArgs([])).toThrow(/usage/);
+  });
+
+  describe("dry run 2026-11-17 fixes", () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 10, 17, 10, 0, s));
+    it("★ an auto-reply to the business's message: auto_reply, no model call", async () => {
+      const gen = vi.fn();
+      const c: RelevanceInput = { channel: "WHATSAPP", customerExternalId: "972500000001", firstDirection: "OUTBOUND", messages: [
+        { direction: "OUTBOUND", body: "היי, רציתי להציע לכם שירות", createdAt: at(0) },
+        { direction: "INBOUND", body: "תודה שפנית אלינו! שעות הפעילות שלנו א-ה 9:00-17:00", createdAt: at(4) },
+      ] };
+      expect(await classifyConversation("t1", biz, c, { generate: gen as any })).toMatchObject({ category: "auto_reply", source: "fast" });
+      expect(gen).not.toHaveBeenCalled();
+      expect(autoReply({ ...c, messages: [c.messages[0], { direction: "INBOUND", body: "הגעתם לסטודיו, כרגע אנחנו לא פנויים", createdAt: at(3) }] })).toBe(true);
+      expect(autoReply({ ...c, firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: "Thanks for reaching out! We'll get back to you.", createdAt: at(1) }] })).toBe(false);
+      // A person who wrote after the greeting is not an auto-reply.
+      expect(autoReply({ ...c, messages: [...c.messages, { direction: "INBOUND", body: "אני בעלת העסק, ספר לי עוד", createdAt: at(300) }] })).toBe(false);
+      // A customer's own words are not the shape.
+      expect(autoReply({ ...c, messages: [c.messages[0], { direction: "INBOUND", body: "כמה עולה עוגה?", createdAt: at(4) }] })).toBe(false);
+    });
+
+    it("★ a member of the team: internal (phone, email, company domain; never a free mail domain)", () => {
+      const team = teamIdentityOf([{ email: "dana@gotcha.co.il", phoneNumber: "+972-50-111-2222" }, { email: "cofounder@gmail.com", phoneNumber: null }]);
+      expect(team.domains).toEqual(["gotcha.co.il"]);
+      const wa = (id: string): RelevanceInput => ({ channel: "WHATSAPP", customerExternalId: id, firstDirection: "INBOUND", team, messages: [{ direction: "INBOUND", body: "hi" }] });
+      expect(fastRelevance(wa("972501112222"))?.category).toBe("internal");
+      expect(fastRelevance(wa("972509999999"))).toBeNull();
+      const mail = (from: string): RelevanceInput => ({ channel: "GMAIL", customerExternalId: from, firstDirection: "INBOUND", team, messages: [{ direction: "INBOUND", body: "a pitch draft" }] });
+      expect(fastRelevance(mail("cofounder@gmail.com"))?.category).toBe("internal");
+      expect(fastRelevance(mail("someone@gotcha.co.il"))?.category).toBe("internal");
+      expect(fastRelevance(mail("stranger@gmail.com"))).toBeNull();
+      // The From of an inbound email counts too.
+      expect(fastRelevance({ ...mail("thread@x.example"), messages: [{ direction: "INBOUND", body: "draft", metadata: { email: { from: "Dana <dana@gotcha.co.il>" } } }] })?.category).toBe("internal");
+    });
+
+    it("★ the first-mover rule: the business wrote first and the model is unsure: reply_to_outbound", async () => {
+      expect(firstMover({ category: "business", confidence: 0.8, reason: "r" }, wa([["INBOUND", "x"]], "OUTBOUND")).category).toBe("reply_to_outbound");
+      expect(firstMover({ category: "business", confidence: 0.95, reason: "r" }, wa([["INBOUND", "x"]], "OUTBOUND")).category).toBe("business");
+      expect(firstMover({ category: "business", confidence: 0.5, reason: "r" }, wa([["INBOUND", "x"]], "INBOUND")).category).toBe("business");
+      const gen = vi.fn(async () => ({ content: '{"category":"business","confidence":0.7,"reason":"store answer"}' } as any));
+      const r = await classifyConversation("t1", biz, wa([["OUTBOUND", "do you sell clips?"], ["INBOUND", "אין צורך לרכוש את התופסן"]], "OUTBOUND"), { generate: gen as any });
+      expect(r.category).toBe("reply_to_outbound");
+      expect(relevancePrompt(biz, wa([["INBOUND", "x"]]))[0].content).toMatch(/HARD RULE: when the business wrote first/);
+    });
   });
 });

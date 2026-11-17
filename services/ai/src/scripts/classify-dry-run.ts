@@ -16,7 +16,7 @@ import fs from "fs";
 import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import { initAIService } from "../services/ai.service";
 import { getCompanyContext } from "../services/company-context.service";
-import { classifyConversation, SILENCING, RELEVANCE_CATEGORIES, type Relevance, type RelevanceInput, type RelevanceProfile } from "../services/conversation-relevance.service";
+import { classifyConversation, SILENCING, RELEVANCE_CATEGORIES, teamIdentityOf, type Relevance, type RelevanceInput, type RelevanceProfile } from "../services/conversation-relevance.service";
 
 export interface DryArgs { tenant: string; days: number; out: string; limit: number }
 export function parseDryArgs(argv: string[]): DryArgs {
@@ -63,8 +63,12 @@ export function dryRunReport(tenant: string, days: number, rows: DryRow[]): stri
     for (const r of of) md.push(`| ${r.conversationId} | ${r.channel} | ${r.firstWriter} | ${cell(clip(r.line, 80))} | ${r.label.confidence.toFixed(2)} | ${cell(clip(r.label.reason, 100))} |`);
   }
   const review = rows.filter((r) => SILENCING.has(r.label.category) && r.label.confidence < 0.85);
+  // Every business label where the business wrote first: the loop risk the first-mover rule guards.
+  const firstBiz = rows.filter((r) => r.label.category === "business" && r.firstWriter === "business");
   md.push("", `## Would silence the AI, confidence < 0.85 (${review.length}): review these`, "", "| conversation | channel | first | subject / first line | label | confidence | reason |", "|---|---|---|---|---|---|---|");
   for (const r of review) md.push(`| ${r.conversationId} | ${r.channel} | ${r.firstWriter} | ${cell(clip(r.line, 80))} | ${r.label.category} | ${r.label.confidence.toFixed(2)} | ${cell(clip(r.label.reason, 100))} |`);
+  md.push("", `## Business although the business wrote first (${firstBiz.length}): review these`, "", "| conversation | channel | subject / first line | confidence | reason |", "|---|---|---|---|---|");
+  for (const r of firstBiz) md.push(`| ${r.conversationId} | ${r.channel} | ${cell(clip(r.line, 80))} | ${r.label.confidence.toFixed(2)} | ${cell(clip(r.label.reason, 100))} |`);
   return md.join("\n") + "\n";
 }
 
@@ -86,6 +90,9 @@ async function main() {
     const cc = await getCompanyContext(a.tenant).catch(() => null);
     const agent: any = await (prisma as any).aIAgent.findFirst({ where: { tenantId: a.tenant, status: "ACTIVE" }, select: { salesContext: true } }).catch(() => null);
     const profile: RelevanceProfile | null = cc ? { ...cc, whatWeSell: agent?.salesContext?.whatWeSell ?? null } : null;
+    // The team, for the internal label (phones and emails only; nothing printed).
+    const users: any[] = await (prisma as any).user.findMany({ where: { tenantId: a.tenant }, select: { email: true, phoneNumber: true }, take: 500 }).catch(() => []);
+    const team = teamIdentityOf(users);
     const convs: any[] = await (prisma as any).conversation.findMany({
       where: { tenantId: a.tenant, lastMessageAt: { gte: since }, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
       orderBy: { lastMessageAt: "desc" },
@@ -102,7 +109,7 @@ async function main() {
       const messages = (last as any[]).reverse();
       const lastIn = [...messages].reverse().find((m) => m.direction === "INBOUND");
       const subject = (lastIn?.metadata as any)?.email?.subject ?? null;
-      const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, firstDirection: first?.direction ?? null, messages, subject };
+      const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, firstDirection: first?.direction ?? null, messages, subject, team };
       const label = await classifyConversation(a.tenant, profile, input).catch((err: any) => ({ category: "unclear" as const, confidence: 0, reason: `error: ${clip(err?.message ?? err, 60)}`, source: "model" as const, classifiedAt: new Date().toISOString() }));
       if (++done % 25 === 0) console.log(`[classify] ${done}/${convs.length}`);
       const firstIn = messages.find((m: any) => m.direction === "INBOUND" && clip(m.body, 1));

@@ -9,6 +9,8 @@
  *   notice            invoices and receipts from vendors, system notices, resets, login alerts, the
  *                     business's OWN purchase shipping notices
  *   marketing         newsletters, promotions, ads, cold sales pitches TO the business
+ *   auto_reply        another business's automated greeting or away message (bot-to-bot loops otherwise)
+ *   internal          the tenant's own team (a user's phone or email, the team's email domain)
  *   unclear           the model's real uncertainty
  *
  * A cheap deterministic fast path first (bulk headers, no-reply senders, our own notification senders:
@@ -18,10 +20,10 @@
 import { automatedInbound } from "./reply-engine/gates";
 import { generateResponse, getDefaultModel, platformPaidScope } from "./ai.service";
 
-export type RelevanceCategory = "business" | "reply_to_outbound" | "personal" | "notice" | "marketing" | "unclear";
-export const RELEVANCE_CATEGORIES: readonly RelevanceCategory[] = ["business", "reply_to_outbound", "personal", "notice", "marketing", "unclear"];
-/** The labels that keep the AI out of a conversation. */
-export const SILENCING: ReadonlySet<RelevanceCategory> = new Set<RelevanceCategory>(["personal", "notice", "marketing"]);
+export type RelevanceCategory = "business" | "reply_to_outbound" | "personal" | "notice" | "marketing" | "auto_reply" | "internal" | "unclear";
+export const RELEVANCE_CATEGORIES: readonly RelevanceCategory[] = ["business", "reply_to_outbound", "personal", "notice", "marketing", "auto_reply", "internal", "unclear"];
+/** The labels that keep the AI out of a conversation (unclear never does: it answers as today). */
+export const SILENCING: ReadonlySet<RelevanceCategory> = new Set<RelevanceCategory>(["personal", "notice", "marketing", "auto_reply", "internal"]);
 
 export interface Relevance {
   category: RelevanceCategory;
@@ -48,8 +50,12 @@ export interface RelevanceMessage {
   metadata?: any;
 }
 
+/** The tenant's own team, for the internal label: users' phones (last 9 digits), emails and company email domains. */
+export interface TeamIdentity { phones: string[]; emails: string[]; domains: string[] }
+
 export interface RelevanceInput {
   channel: string;
+  team?: TeamIdentity | null;
   customerExternalId?: string | null;
   /** Who wrote first in the whole conversation. */
   firstDirection: "INBOUND" | "OUTBOUND" | null;
@@ -62,8 +68,58 @@ export interface RelevanceInput {
 const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const realMessages = (m: RelevanceMessage[]) => m.filter((x) => x.messageType !== "system" && clip(x.body, 1).length > 0);
 
+// Free mail providers: a shared domain says nothing about who someone works for.
+const PUBLIC_MAIL = /^(?:gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|proton|protonmail|pm|gmx|mail|yandex|zoho|walla|bezeqint|012|netvision|inter)\./i;
+const emailOf = (v: unknown) => /[^\s<>@]+@[^\s<>@]+\.[a-z]{2,}/i.exec(String(v ?? ""))?.[0]?.toLowerCase() ?? null;
+
+/** The tenant's team from its users (phones and emails; a company domain only when it is not a free mail provider). */
+export function teamIdentityOf(users: Array<{ email?: string | null; phoneNumber?: string | null }>): TeamIdentity {
+  const emails = [...new Set(users.map((u) => emailOf(u.email)).filter((e): e is string => !!e))];
+  const domains = [...new Set(emails.map((e) => e.split("@")[1]).filter((d) => d && !PUBLIC_MAIL.test(d)))];
+  const phones = [...new Set(users.map((u) => String(u.phoneNumber ?? "").replace(/\D/g, "")).filter((d) => d.length >= 9).map((d) => d.slice(-9)))];
+  return { phones, emails, domains };
+}
+
+/** Is this sender one of the team: the conversation's contact, or the From of an inbound email. */
+export function teamSender(c: RelevanceInput): boolean {
+  const t = c.team;
+  if (!t) return false;
+  const senders = [c.customerExternalId, ...c.messages.filter((m) => m.direction === "INBOUND").map((m) => m.metadata?.email?.from ?? m.metadata?.from)];
+  return senders.some((raw) => {
+    const email = emailOf(raw);
+    if (email) return t.emails.includes(email) || t.domains.includes(email.split("@")[1]);
+    const digits = String(raw ?? "").replace(/\D/g, "");
+    return digits.length >= 9 && t.phones.includes(digits.slice(-9));
+  });
+}
+
+/**
+ * Another business's automated greeting or away message (dry run 2026-11-17: four auto-replies to GOTCHA's
+ * outreach were labelled business). Generic, from its shape: a thanks-for-contacting greeting, opening hours,
+ * "not available now", "we will get back to you", out of office.
+ */
+const AUTO_REPLY_SHAPE = /(?<![\u0590-\u05FF])(?:תודה(?:\s+רבה)?\s+(?:ש|על\s+)(?:פנית|פניתם|פנייתך|פנייתכם|יצרת|יצרתם|כתבת|כתבתם|הפנייה|ההודעה|ההודעה\s+שלך)|הגעתם\s+ל|הגעת\s+ל|שעות\s+(?:ה)?פעילות|(?:כרגע|כעת|ברגע\s+זה)\s+(?:אנחנו\s+|אנו\s+)?(?:לא|אינם|איננו)\s+(?:פנויים|זמינים|זמינה|זמין)|נחזור\s+(?:אליך|אלייך|אליכם)|(?:נציג|נציגה)\s+(?:יחזור|תחזור|יחזרו)|הודעה\s+אוטומטית|מענה\s+אוטומטי)|\b(?:thank(?:s| you) for (?:contacting|reaching out|your (?:message|email|inquiry))|out of (?:the )?office|(?:we|i)(?:'ll| will) get back to you|business hours|currently (?:unavailable|away|closed)|auto(?:matic|mated)?[- ]reply|this is an automated)\b/iu;
+/** An inbound that came within this long of our own message reads as a machine's answer. */
+const AUTO_REPLY_WINDOW_MS = 2 * 60_000;
+export function autoReply(c: RelevanceInput): boolean {
+  const msgs = c.messages;
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i];
+    if (m.direction !== "INBOUND" || !AUTO_REPLY_SHAPE.test(String(m.body ?? ""))) continue;
+    // Every later inbound must also be a machine's (a person who wrote after it is not an auto-reply).
+    if (msgs.slice(i + 1).some((x) => x.direction === "INBOUND" && clip(x.body, 1) && !AUTO_REPLY_SHAPE.test(String(x.body ?? "")))) return false;
+    const prevOut = [...msgs.slice(0, i)].reverse().find((x) => x.direction === "OUTBOUND");
+    const fast = prevOut?.createdAt && m.createdAt ? new Date(m.createdAt).getTime() - new Date(prevOut.createdAt).getTime() <= AUTO_REPLY_WINDOW_MS : false;
+    if (fast || c.firstDirection === "OUTBOUND") return true;
+  }
+  return false;
+}
+
 /** The fast path: mail no person wrote, decided with no model call. Null when it does not apply. */
 export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | null {
+  const at = now.toISOString();
+  if (teamSender(c)) return { category: "internal", confidence: 0.95, reason: "a member of the team", source: "fast", classifiedAt: at };
+  if (autoReply(c)) return { category: "auto_reply", confidence: 0.9, reason: "an automated greeting or away message", source: "fast", classifiedAt: at };
   const lastIn = [...c.messages].reverse().find((m) => m.direction === "INBOUND");
   if (!lastIn) return null;
   const why = automatedInbound({ channel: c.channel, sender: c.customerExternalId, body: lastIn.body, metadata: lastIn.metadata });
@@ -80,7 +136,9 @@ const RUBRIC = `You label ONE conversation of a business's inbox. Decide who it 
 - personal: a private chat (a friend, a partner, family) that is not about the business.
 - notice: an automatic or vendor message to the business: an invoice or receipt, a system notification, a password reset, a login alert, shipping of something the business itself bought.
 - marketing: a newsletter, a promotion, an ad, or a cold sales pitch TO the business.
+- auto_reply: another business's automated message: a thanks-for-contacting greeting, opening hours, an away or out-of-office notice.
 - unclear: you truly cannot tell.
+HARD RULE: when the business wrote first, the answer is reply_to_outbound (or auto_reply), unless a later message from the contact raises a NEW request about what this business sells or does (a price question, buying, support for its product); only then is it business.
 A message that asks about the business's products or services, its orders, prices or opening hours is business, even when it is short or informal. Do not guess from the language or the name alone.
 Answer with JSON only: {"category": "...", "confidence": 0.0-1.0, "reason": "at most 15 words"}.`;
 
@@ -115,6 +173,17 @@ export interface ClassifyDeps {
   now?: () => Date;
 }
 
+/**
+ * The first-mover rule, checked after the model (dry run 2026-11-17): the business wrote first and the model is
+ * not sure the contact raised a new request of their own, so it is a reply to the business's message.
+ */
+export function firstMover(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput) {
+  if (c.firstDirection === "OUTBOUND" && p.category === "business" && p.confidence < 0.9) {
+    return { category: "reply_to_outbound" as const, confidence: p.confidence, reason: `the business wrote first (${p.reason})`.slice(0, 120) };
+  }
+  return p;
+}
+
 /** One conversation's relevance: the fast path, else one small platform-paid model call. */
 export async function classifyConversation(tenantId: string, profile: RelevanceProfile | null, c: RelevanceInput, deps: ClassifyDeps = {}): Promise<Relevance> {
   const now = deps.now?.() ?? new Date();
@@ -133,7 +202,7 @@ export async function classifyConversation(tenantId: string, profile: RelevanceP
     reasoningEffort: "minimal",
     metadata: { type: "conversation_relevance" },
   }));
-  const parsed = parseRelevance((r as any)?.content ?? (r as any)?.text ?? "");
+  const parsed = firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c);
   return { ...parsed, source: "model", classifiedAt: now.toISOString() };
 }
 
