@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_number", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -946,7 +946,7 @@ describe("prod replay 7 (Smoovee)", () => {
     const asOf = new Date("2026-11-10T10:00:00Z");
     const list = { ok: true, result: [{ id: 1, date_created_gmt: "2026-11-09T08:00:00" }, { id: 2, date_created_gmt: "2026-11-12T08:00:00" }] };
     expect(ordersAsOf("woocommerce.list_customer_orders", list, asOf).result.map((o: any) => o.id)).toEqual([1]);
-    expect(ordersAsOf("woocommerce.get_order", { ok: true, result: { id: 2, date_created_gmt: "2026-11-12T08:00:00" } }, asOf)).toMatchObject({ ok: false, reason: expect.stringMatching(/^woocommerce_404/) });
+    expect(ordersAsOf("woocommerce.get_order", { ok: true, result: { id: 2, date_created_gmt: "2026-11-12T08:00:00" } }, asOf)).toMatchObject({ ok: false, reason: expect.stringMatching(/^order_not_found/) });
     expect(ordersAsOf("woocommerce.get_order", { ok: true, result: { id: 1, date_created_gmt: "2026-11-09T08:00:00" } }, asOf).ok).toBe(true);
     expect(ordersAsOf("woocommerce.list_products", list, asOf)).toBe(list);
   });
@@ -1094,7 +1094,7 @@ describe("prod replay 10 (2026-11-17)", () => {
     const { businessBlock } = await import("../services/reply-engine/prompt");
     const b = businessBlock({ organizationName: "תהילה", address: "יוסף לוי 8/2, נהריה" } as any);
     expect(b).toMatch(/^# The business/);
-    expect(b).toContain("Address: יוסף לוי 8/2, נהריה. Asked where the business or the studio is");
+    expect(b).toContain("Address: יוסף לוי 8/2, נהריה. Asked where the business is");
     expect(businessBlock(null)).toMatch(/^# The business/);
   });
 
@@ -1120,10 +1120,11 @@ describe("prod replay 10 (2026-11-17)", () => {
     expect(kinds(await g3("המשטח מגיע במשלוח.", { incomingMessage: "אני רוצה להזמין", toolsOffered: offered, tools: [{ tool: "woocommerce.list_products", outcome: "ok" }] }))).not.toContain("no_search");
   });
 
-  it("★ more safety words: rolling, sliding, unstable, the stopper not stopping it", async () => {
+  it("★ GENERIC safety: harm that happened, in any product; a topic alone is not harm", async () => {
     const { safetyCase } = await import("../services/reply-engine/gates");
-    for (const t of ["המכשיר מתגלגל אחורה", "המיקסר מחליק מהמשטח", "זה לא יציב", "המעצור לא מונע את זה", "הוא נופל אחורה", "it keeps sliding"]) expect(safetyCase([t]), t).toBe(true);
-    expect(safetyCase(["איזה צבע יש?"])).toBe(false);
+    for (const t of ["זה לא יציב", "הוא נופל אחורה", "הילד נחתך מהקצה", "המטען התחמם מאוד ויצא עשן", "קיבלתי פריחה אחרי השימוש בקרם", "the lamp caught fire", "my son got an electric shock", "it tipped over"]) expect(safetyCase([t]), t).toBe(true);
+    // A question before buying, or a product word, is not a safety case (2026-11-17: no product words).
+    for (const t of ["איזה צבע יש?", "זה מתאים לילדים?", "יש לי אלרגיה לניקל, זה בלי ניקל?", "המכשיר מתגלגל אחורה", "is it safe for kids?", "מחליק שיער במבצע?"]) expect(safetyCase([t]), t).toBe(false);
   });
 
   it("★ a sentence sent before is cut; new failure and jargon phrases are caught", async () => {
@@ -1158,9 +1159,21 @@ describe("prod replay 11 rating (2026-11-17)", () => {
   const kinds = (ps: any[]) => ps.map((p) => p.kind);
   const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
 
-  it("★ safety stems with misspellings", async () => {
-    const { safetyCase } = await import("../services/reply-engine/gates");
-    for (const t of ["זה לא מונע כלכול לאחור של הנינג׳ה", "המכשיר נהפך", "הוא מתרומם מאחור", "התגלגל מהשיש"]) expect(safetyCase([t]), t).toBe(true);
+  it("★ a product's own hazards come from the business's knowledge (a warning), never from a word list", async () => {
+    const { safetyCase, knowledgeHazard } = await import("../services/reply-engine/gates");
+    const k = "אזהרה: ללא המעצור המכשיר עלול להתגלגל ולהחליק מהשיש.";
+    expect(safetyCase(["המעצור לא מחזיק והמכשיר מחליק מהשיש"], k)).toBe(true);
+    // The same words with no warning in the knowledge, or a question before buying: no.
+    expect(safetyCase(["המעצור לא מחזיק והמכשיר מחליק מהשיש"], "המעצור נמכר בנפרד.")).toBe(false);
+    expect(knowledgeHazard("האם המעצור מתאים למכשיר שלי?", k)).toBe(false);
+    // A store policy is not a warning ("אין להחזיר"), whatever words it shares.
+    expect(knowledgeHazard("לא קיבלתי החזר על המוצר", "אין להחזיר מוצר לאחר שימוש.")).toBe(false);
+    // Shared words in a sentence that does not warn: not a hazard ("normal use" is not a warning).
+    expect(knowledgeHazard("הכבל לא מחובר טוב ומתחמם", "יש לחבר את הכבל לפני הפעלה, הכבל מתחמם בשימוש רגיל.")).toBe(false);
+    expect(knowledgeHazard("הכבל לא מחובר טוב ומתחמם", "אזהרה: אם הכבל מתחמם, יש לנתק מיד.")).toBe(true);
+    // English knowledge, English customer.
+    expect(knowledgeHazard("the heater still smells and the cord is not cool", "Warning: if the cord smells or is hot, unplug the heater.")).toBe(true);
+    expect(safetyCase(["המכשיר נהפך"])).toBe(true);
   });
 
   it("★ a usage tip in a safety conversation that the knowledge does not give is a FACT problem; stop-use advice is fine", async () => {
@@ -1244,11 +1257,12 @@ describe("prod replay 12 (2026-11-17)", () => {
     expect(hasStopUse("מומלץ להימנע משימוש עד הבדיקה.")).toBe(true);
   });
 
-  it("★ the product in use vs an unrelated ask", async () => {
-    const { aboutProductInUse, safetyWord } = await import("../services/reply-engine/gates");
-    expect(aboutProductInUse(["ומה עם המעצור?"])).toBe(true);
-    expect(aboutProductInUse(["30 על 40"])).toBe(true);
-    expect(aboutProductInUse(["אשמח לשיתוף פעולה עם תוכן UGC לעמוד שלכם"])).toBe(false);
+  it("★ the product in use vs an unrelated ask (generic words, no product parts)", async () => {
+    const { customerDescribesUse, safetyWord } = await import("../services/reply-engine/gates");
+    expect(customerDescribesUse("כשאני משתמש בזה זה זז כל הזמן")).toBe(true);
+    expect(customerDescribesUse("זה לא מחזיק, המגהץ נשמט")).toBe(true);
+    expect(customerDescribesUse("אשמח לשיתוף פעולה עם תוכן UGC לעמוד שלכם")).toBe(false);
+    expect(customerDescribesUse("When I use it, it keeps moving")).toBe(true);
     expect(safetyWord(["המכשיר נהפך על המשטח"])).toBe("נהפך");
   });
 
@@ -1331,5 +1345,101 @@ describe("prod replay 13 (Smoovee)", () => {
     expect(kinds(await g3("מזינים את הקוד בשדה קוד קופון בעמוד התשלום.", { incomingMessage: "איפה אני מוצאת את הקוד עצמו?" }))).toContain("coupon_source");
     expect(kinds(await g3("קודים נשלחים בניוזלטר ובמבצעים.", { incomingMessage: "איפה אני מוצאת את הקוד עצמו?" }))).not.toContain("coupon_source");
     expect(kinds(await g3("מזינים את הקוד בשדה קוד קופון.", { incomingMessage: "איפה מזינים את הקוד?" }))).not.toContain("coupon_source");
+  });
+});
+
+/**
+ * The generic pass (2026-11-17, Omer via the Supervisor): the checks hold for any
+ * business, any store platform and any language, never tuned to one tenant's words.
+ * Every example below is from a store the engine was never tuned on.
+ */
+describe("generic pass: held-out stores, English, other alphabets, Shopify", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "en", incomingMessage: "thanks", isFirstReply: false, employeeGender: null, employeeName: "Sam", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ ONE number rule: a time, quantity, measure or percentage needs evidence this turn", async () => {
+    const { ungroundedNumbers } = await import("../services/reply-engine/gates");
+    expect(ungroundedNumbers("Delivery takes 5 business days.", "")).toHaveLength(1);
+    expect(ungroundedNumbers("Delivery takes 5 business days.", "Shipping: 3-5 business days")).toEqual([]);
+    expect(ungroundedNumbers("המשלוח מגיע תוך 2 ימים.", "משלוח עד 5 ימי עסקים")).toHaveLength(1);
+    expect(ungroundedNumbers("המשלוח מגיע תוך 3–5 ימי עסקים.", "משלוח 3-5 ימי עסקים")).toEqual([]);
+    expect(ungroundedNumbers("You get 10% off today.", "")).toHaveLength(1);
+    expect(ungroundedNumbers("Only 2 units left.", '{"stock_quantity": 2}')).toEqual([]);
+    // A number without a unit (an order number, a phone) is not this rule's.
+    expect(ungroundedNumbers("Your order 48213 is on its way.", "")).toEqual([]);
+    expect(kinds(await g3("Delivery takes 5 business days."))).toContain("ungrounded_number");
+    expect(kinds(await g3("Delivery takes 5 business days.", { knowledge: "Delivery: 5 business days." }))).not.toContain("ungrounded_number");
+  });
+
+  it("★ English is covered by the same claim rules (actions, absence, callbacks, hedges)", async () => {
+    expect(kinds(await g3("I've passed your question to the team."))).toContain("unsupported_action");
+    expect(kinds(await g3("We don't sell desk lamps.", { toolsOffered: ["shopify.search_products"] }))).toContain("ungrounded_absence");
+    expect(styleCodes(await g3("We'll call you back tomorrow."))).toContain("callback_promise");
+    expect(styleCodes(await g3("It might slip a little on glass."))).toContain("odd_hedge");
+    expect(styleCodes(await g3("Yes, it's really unsafe."))).toContain("affirms_unsafe");
+    // The business's own warning, quoted, is not the AI affirming it.
+    expect(styleCodes(await g3("Yes, it's really unsafe near water.", { knowledge: "Warning: unsafe near water." }))).not.toContain("affirms_unsafe");
+  });
+
+  it("★ a Russian or Arabic chat keeps its alphabet; a stray one in a Hebrew chat is cut", async () => {
+    const { foreignScript, stripForeignScript, nearDuplicate } = await import("../services/reply-engine/gates");
+    expect(foreignScript("Доставка занимает три дня.", "Сколько идет доставка?")).toBe(false);
+    expect(foreignScript("التوصيل خلال ثلاثة أيام", "كم يستغرق التوصيل؟")).toBe(false);
+    expect(foreignScript("כשמ折לים", "מתי זה מגיע?")).toBe(true);
+    expect(stripForeignScript("Доставка", "Привет")).toBe("Доставка");
+    expect(stripForeignScript("אבגДа", "שלום")).toBe("אבג");
+    // The repeat checks read any alphabet.
+    const ru = "Доставка занимает три рабочих дня по всей стране курьером";
+    expect(nearDuplicate(ru, [ru])).toBe(true);
+    expect(styleCodes(await g3("Доставка занимает три дня.", { incomingMessage: "Сколько?", customerText: "Сколько?" }))).not.toContain("foreign_script");
+  });
+
+  it("★ a size echoed as a product's: the store's own titles name the product (no product word list)", async () => {
+    const { echoedSizes } = await import("../services/reply-engine/gates");
+    const echo = "The Oak Desk Pad comes in 90x90.";
+    expect(echoedSizes(echo, "I need 90x90", "Oak Desk Pad 70x70", ["Oak Desk Pad 70x70"])).toHaveLength(1);
+    expect(echoedSizes(echo, "I need 90x90", "Oak Desk Pad 70x70", [])).toEqual([]);
+    expect(echoedSizes("For your 90x90 desk, the 70x70 pad is the closest.", "my desk is 90x90", "Oak Desk Pad 70x70", ["Oak Desk Pad 70x70"])).toEqual([]);
+  });
+
+  it("★ get vs use, for anything obtainable (a gift card, an invoice), in English too", async () => {
+    const { couponSourceMissed } = await import("../services/reply-engine/gates");
+    expect(couponSourceMissed("where do I get a gift card?", "Enter it at checkout.")).toBe(true);
+    expect(couponSourceMissed("where do I get a gift card?", "Gift cards are sent by email after purchase.")).toBe(false);
+    expect(couponSourceMissed("where do I get a gift card?", "Gift cards are sent by email, and you enter them at checkout.")).toBe(false);
+    expect(couponSourceMissed("איפה אני מוצאת את הקוד עצמו?", "קודים נשלחים בניוזלטר, ומזינים אותם בעמוד התשלום.")).toBe(false);
+    expect(couponSourceMissed("מאיפה החשבונית?", "לוחצים על הקישור בעמוד התשלום.")).toBe(true);
+    expect(couponSourceMissed("how do I enter the code?", "Enter it at checkout.")).toBe(false);
+  });
+
+  it("★ a brand or category every title shares is not a distinctive product word", async () => {
+    const { commonTitleWords, namesTitle } = await import("../services/reply-engine/engine");
+    const titles = ["Lumo Lamp Desk", "Lumo Lamp Floor", "Lumo Shade"];
+    const common = commonTitleWords(titles);
+    expect([...common].sort()).toEqual(["lamp", "lumo"]);
+    expect(namesTitle("The Lumo Lamp is lovely", "Lumo Lamp Desk", common)).toBe(false);
+    expect(namesTitle("The desk one by Lumo", "Lumo Lamp Desk", common)).toBe(false);
+    expect(namesTitle("Desk or floor? The desk lamp from Lumo", "Lumo Lamp Desk", new Set())).toBe(true);
+  });
+
+  it("★ Shopify parity: orders, the product named by name, the engine's own lookup", async () => {
+    const { labelInactiveOrders, ownOrderNote, ordersAsOf, storeSearchByName, withCustomerQueryWords } = await import("../services/reply-engine/engine");
+    const { autoLookups } = await import("../services/reply-engine/gates");
+    const cancelled = labelInactiveOrders("shopify.get_orders", { ok: true, result: [{ id: 1, cancelled_at: "2026-11-01T00:00:00Z" }, { id: 2, financial_status: "paid" }] });
+    expect(cancelled.result[0].inactive).toMatch(/^cancelled/);
+    expect(cancelled.result[1].inactive).toBeUndefined();
+    expect(labelInactiveOrders("shopify.order_lookup", { ok: true, result: { id: 3, financial_status: "refunded" } }).result.inactive).toMatch(/^refunded/);
+    expect(ownOrderNote("shopify.order_lookup", { ok: true, result: { id: 3 } }).note).toMatch(/customer's own/);
+    expect(ordersAsOf("shopify.get_orders", { ok: true, result: [{ id: 1, created_at: "2026-11-12T08:00:00Z" }, { id: 2, created_at: "2026-11-01T08:00:00Z" }] }, new Date("2026-11-10T00:00:00Z")).result.map((o: any) => o.id)).toEqual([2]);
+    expect(storeSearchByName("shopify.get_product", "Oak Desk Pad", "en")).toEqual({ tool: "shopify.search_products", args: { query: "Oak Desk Pad", limit: 5 } });
+    expect(storeSearchByName("woocommerce.get_product", "x", "he")?.tool).toBe("woocommerce.list_products");
+    expect(storeSearchByName("custom.get_thing", "x", "he")).toBeNull();
+    const auto = autoLookups([{ kind: "no_search" }] as any, "desk lamp", ["shopify.search_products"], []);
+    expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "desk lamp", limit: 5 });
+    expect(withCustomerQueryWords({ query: "תיק" }, [], "יש לכם ארנק?").query).toMatch(/^ארנק/);
   });
 });

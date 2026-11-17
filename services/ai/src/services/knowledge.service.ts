@@ -246,6 +246,13 @@ const LEXICAL_EXPANSIONS: Array<[RegExp, string[]]> = [
   [/משלוח|שליח|shipping|delivery/iu, ["משלוח", "משלוחים", "שליח"]],
   [/החזר|החלפ|return|exchange/iu, ["החזרה", "החזרות", "החלפה", "זיכוי"]],
   [/טלפון|וואטסאפ|מייל|ליצור קשר|contact|phone|email/iu, ["טלפון", "וואטסאפ", "מייל"]],
+  // The same asks in English, answered in English documents (the held-out check, 2026-11-17).
+  [/\b(?:where are you|address|location|located|store|shop|branch)\b/iu, ["address", "street", "located", "location", "store"]],
+  [/\b(?:pick ?up|collect)\b/iu, ["pickup", "pick-up", "collect", "collection"]],
+  [/\b(?:hours|open|close[ds]?)\b/iu, ["hours", "open", "opening"]],
+  [/\b(?:shipping|delivery|deliver|ship)\b/iu, ["shipping", "delivery", "business days"]],
+  [/\b(?:return|exchange|refund)\b/iu, ["return", "returns", "exchange", "refund"]],
+  [/\b(?:contact|phone|email|whatsapp|call)\b/iu, ["phone", "email", "whatsapp", "contact"]],
 ];
 
 // A location ask, and the shape an address takes in a document: a street word and
@@ -264,6 +271,8 @@ const STREET = new RegExp(String.raw`(?<![\u0590-\u05FF])(?:רח['׳"]?|רחוב
 const CUED = new RegExp(String.raw`(?<![\u0590-\u05FF])(?:כתובת|לכתובת|בכתובת|איסוף|נמצאים|ממוקמים|סטודיו|הסטודיו|מהסטודיו)(?![\u0590-\u05FF])[^.\n]{0,40}?(${HOUSE}\s*,?\s+${CITY})`, "u");
 // Words that make "x 15" a price or a time, never a street.
 const NOT_A_STREET = /(?<![\u0590-\u05FF])(?:בעלות|עלות|במחיר|מחיר|תוך|עד|מעל|בסך|מינימום|החל|רשום|כ-?)(?![\u0590-\u05FF])/u;
+// An English street address: a number, one to four capitalised words and a street type ("12 Harbour Road, Haifa").
+const STREET_EN = /\b(\d{1,5}[A-Za-z]?\s+(?:[A-Z][A-Za-z'.-]+\s+){1,4}(?:Street|St\.?|Road|Rd\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Lane|Ln\.?|Drive|Dr\.?|Way|Square|Sq\.?)(?:,\s*[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+)?)?)(?![A-Za-z])/;
 /** The address a text states, or null when it is not clearly one. */
 export function extractAddress(text: string): string | null {
   for (const re of [STREET, CUED]) {
@@ -273,14 +282,16 @@ export function extractAddress(text: string): string | null {
       .replace(/^.*?(?<![\u0590-\u05FF])ב?(?:רח['׳"]?|רחוב)\s+/u, "רחוב ");
     if (a && a.length <= 80 && !NOT_A_STREET.test(a)) return a;
   }
-  return null;
+  // No Hebrew street: an English one stands for an English document.
+  const en = STREET_EN.exec(String(text ?? ""))?.[1]?.replace(/\s+/g, " ").trim();
+  return en && en.length <= 80 ? en : null;
 }
 export const hasAddress = (text: string) => extractAddress(text) !== null;
 
 /** The ask's own words (with and without a one-letter prefix: "מנשר" is "from Nesher") and the words an answer to it is written in. */
 export function lexicalTerms(query: string): { own: string[]; expanded: string[] } {
   const own = new Set<string>();
-  for (const w of String(query ?? "").match(/[\u0590-\u05FFA-Za-z]{3,}/g) ?? []) {
+  for (const w of String(query ?? "").match(/\p{L}{3,}/gu) ?? []) {
     const lw = w.toLowerCase();
     if (LEXICAL_STOP.has(lw)) continue;
     own.add(lw);

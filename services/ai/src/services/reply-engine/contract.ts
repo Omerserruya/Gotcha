@@ -151,6 +151,7 @@ export type ClaimProblem =
   | { kind: "card_reference"; claims: string[] }
   | { kind: "echoed_size"; claims: string[] }
   | { kind: "unsafe_tip"; claims: string[] }
+  | { kind: "ungrounded_number"; claims: string[] }
   | { kind: "knowledge_has_it" }
   | { kind: "coupon_source" }
   /** A handoff the customer's words do not call for (it would silence the AI). */

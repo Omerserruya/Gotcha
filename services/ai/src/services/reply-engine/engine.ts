@@ -118,6 +118,24 @@ export function withCustomerSearchFacts(args: Record<string, any>, history: any[
   return out;
 }
 
+/** The query-side facts of withCustomerSearchFacts (the named item, a carried colour), for a store whose search takes a query only. */
+export function withCustomerQueryWords(args: Record<string, any>, history: any[], incoming: string): Record<string, any> {
+  let out = { ...args };
+  if (typeof out.query !== "string" || !out.query.trim()) return out;
+  if (namesOtherItem(incoming, out.query)) out.query = `${namedItem(incoming)} ${out.query}`.slice(0, 120);
+  const colour = carriedColour(history, incoming, out.query);
+  if (colour) out = { ...out, query: `${colour} ${out.query}` };
+  return out;
+}
+
+/** A product named instead of keyed: the same store's own search, by that name. */
+export function storeSearchByName(toolFunctionName: string, name: string, locale: string): { tool: string; args: Record<string, unknown> } | null {
+  const q = String(name ?? "").slice(0, 80);
+  if (/^woocommerce\./.test(toolFunctionName)) return { tool: "woocommerce.list_products", args: { query: q, per_page: 5, lang: locale } };
+  if (/^shopify\./.test(toolFunctionName)) return { tool: "shopify.search_products", args: { query: q, limit: 5 } };
+  return null;
+}
+
 /**
  * "My orders" are the ones the channel proves: a phone or an email the customer
  * typed is not proof, and the guard refused every such lookup (prod replay 5, 9
@@ -143,12 +161,16 @@ export function scrubOrderSelectors(toolFunctionName: string, args: Record<strin
  * found" for one order. An order's status is still today's (Woo keeps no
  * history of it); the replay report should not rate order-status turns.
  */
+// The order reads of both stores (Shopify parity, 2026-11-17).
+const ORDER_READ = /^(?:woocommerce\.(?:get_order|list_customer_orders|list_orders)|shopify\.(?:get_order|order_lookup|get_orders|search_orders|get_customer_orders|find_latest_order))$/;
+const SINGLE_ORDER = /^(?:woocommerce\.get_order|shopify\.(?:get_order|order_lookup|find_latest_order))$/;
 export function ordersAsOf(toolFunctionName: string, result: any, asOf: Date): any {
-  if (!/^woocommerce\.(?:get_order|list_customer_orders|list_orders)$/.test(toolFunctionName) || !result?.ok) return result;
-  const created = (o: any) => Date.parse(String(o?.date_created_gmt ?? o?.date_created ?? "").replace(/(\d{2}:\d{2}:\d{2})$/, "$1Z"));
+  if (!ORDER_READ.test(toolFunctionName) || !result?.ok) return result;
+  // Woo's local time without a zone is UTC in _gmt; Shopify's created_at carries its zone.
+  const created = (o: any) => Date.parse(String(o?.date_created_gmt ?? o?.date_created ?? o?.created_at ?? o?.createdAt ?? "").replace(/(\d{2}:\d{2}:\d{2})$/, "$1Z"));
   const later = (o: any) => { const t = created(o); return Number.isFinite(t) && t > asOf.getTime(); };
   if (Array.isArray(result.result)) return { ...result, result: result.result.filter((o: any) => !later(o)) };
-  if (result.result && typeof result.result === "object" && later(result.result)) return { ok: false, failure: "refused", reason: "woocommerce_404: no such order" };
+  if (result.result && typeof result.result === "object" && later(result.result)) return { ok: false, failure: "refused", reason: "order_not_found: no such order" };
   return result;
 }
 
@@ -157,10 +179,18 @@ export function ordersAsOf(toolFunctionName: string, result: any, asOf: Date): a
  * if it were live (prod replay 9: a cancelled order given as "your order number").
  * Each such order is marked, and the result says how to speak of it.
  */
-const INACTIVE = new Set(["cancelled", "failed", "refunded", "trash"]);
+const INACTIVE = new Set(["cancelled", "canceled", "failed", "refunded", "voided", "trash"]);
+// Woo's status; Shopify's cancelled_at and financial status.
+const inactiveWhy = (o: any): string | null => {
+  if (!o || typeof o !== "object") return null;
+  if (INACTIVE.has(String(o.status ?? "").toLowerCase())) return String(o.status);
+  if (o.cancelled_at || o.cancelledAt) return "cancelled";
+  const fin = String(o.financial_status ?? o.displayFinancialStatus ?? "").toLowerCase();
+  return fin === "refunded" || fin === "voided" ? fin : null;
+};
 export function labelInactiveOrders(toolFunctionName: string, result: any): any {
-  if (!/^woocommerce\.(?:get_order|list_customer_orders|list_orders)$/.test(toolFunctionName) || !result?.ok) return result;
-  const mark = (o: any) => (o && INACTIVE.has(String(o.status ?? "").toLowerCase()) ? { ...o, inactive: `${o.status}: not an active order` } : o);
+  if (!ORDER_READ.test(toolFunctionName) || !result?.ok) return result;
+  const mark = (o: any) => { const why = inactiveWhy(o); return why ? { ...o, inactive: `${why}: not an active order` } : o; };
   const list = Array.isArray(result.result) ? result.result.map(mark) : mark(result.result);
   const any = Array.isArray(list) ? list.some((o: any) => o?.inactive) : !!list?.inactive;
   return any
@@ -174,7 +204,7 @@ export function labelInactiveOrders(toolFunctionName: string, result: any): any 
  * numbers differ" after the customer had typed another one.
  */
 export function ownOrderNote(toolFunctionName: string, result: any): any {
-  if (toolFunctionName !== "woocommerce.get_order" || !result?.ok || !result.result || Array.isArray(result.result)) return result;
+  if (!SINGLE_ORDER.test(toolFunctionName) || !result?.ok || !result.result || Array.isArray(result.result)) return result;
   return { ...result, note: [result.note, "This order is confirmed as this customer's own (it matches the number or email they are writing from). Never tell them a number differs or does not match; a number they typed elsewhere does not matter."].filter(Boolean).join(" ") };
 }
 
@@ -199,21 +229,31 @@ export function withOwnNumberNote(result: any): any {
  * title it names; else, when it presents products ("הנה", "יש לנו"), the first
  * three in stock. Exact store fields only; one the reply already links is skipped.
  */
-const TITLE_STOP = new Set(["משטח", "משטחים", "סמובי", "smoovee", "של", "עם", "for", "the", "and"]);
-const titleWords = (t: string) => (String(t ?? "").toLowerCase().match(/[\u0590-\u05FFa-z]{3,}|\d+(?:[*x×]\d+)?/g) ?? []).filter((w) => !TITLE_STOP.has(w));
+// Function words only. What is NOT distinctive in a store's titles (its brand, the word
+// every product shares) is computed from this turn's titles (commonTitleWords), never listed.
+const TITLE_STOP = new Set(["של", "עם", "על", "או", "for", "the", "and", "with", "of"]);
+const titleWords = (t: string, common: Set<string> = new Set()) => (String(t ?? "").toLowerCase().match(/\p{L}{3,}|\d+(?:[*x×]\d+)?/gu) ?? []).filter((w) => !TITLE_STOP.has(w) && !common.has(w));
+/** Words in at least half of the titles (two or more): a brand or the category, shared by all. */
+export function commonTitleWords(titles: string[]): Set<string> {
+  const list = titles.filter(Boolean);
+  if (list.length < 2) return new Set();
+  const n = new Map<string, number>();
+  for (const t of list) for (const w of new Set(titleWords(t))) n.set(w, (n.get(w) ?? 0) + 1);
+  return new Set([...n].filter(([w, k]) => k >= 2 && k >= list.length / 2 && !/^\d/.test(w)).map(([w]) => w));
+}
 /** The text names this product: its whole title, two of its distinctive words, or its size. */
-export function namesTitle(prose: string, title: string): boolean {
+export function namesTitle(prose: string, title: string, common: Set<string> = new Set()): boolean {
   if (prose.includes(title)) return true;
   const text = String(prose ?? "").toLowerCase();
-  const words = titleWords(title);
+  const words = titleWords(title, common);
   const size = words.find((w) => /\d+[*x×]\d+/.test(w));
   if (size && new RegExp(size.replace(/[*x×]/, "\\s*[*x×]\\s*")).test(text)) return true;
   return words.filter((w) => !/^\d+$/.test(w) && text.includes(w)).length >= 2;
 }
 /** The text speaks of specific products (a distinctive title word) even if none matches fully: no generic list then. */
-function namesAnyProductWord(prose: string, candidates: any[]): boolean {
+function namesAnyProductWord(prose: string, candidates: any[], common: Set<string> = new Set()): boolean {
   const text = String(prose ?? "").toLowerCase();
-  return candidates.some((c) => titleWords(c?.title).some((w) => w.length >= 4 && !/^\d+$/.test(w) && text.includes(w)));
+  return candidates.some((c) => titleWords(c?.title, common).some((w) => w.length >= 4 && !/^\d+$/.test(w) && text.includes(w)));
 }
 
 export function textProductList(o: ModelTurnOutput, prose: string, candidates: any[], locale: "he" | "en"): { text: string; keys: string[] } | null {
@@ -225,8 +265,9 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
   }
   // A title named exactly, or by its distinctive words (two of them, or a size like "34*38"):
   // the list is exactly the products the text names (prod replay 8: the text named A and B, the list added C).
-  candidates.forEach((c, i) => { if (c?.title && namesTitle(prose, c.title)) n.add(i + 1); });
-  if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose) && !namesAnyProductWord(prose, candidates)) {
+  const common = commonTitleWords(candidates.map((c) => String(c?.title ?? "")));
+  candidates.forEach((c, i) => { if (c?.title && namesTitle(prose, c.title, common)) n.add(i + 1); });
+  if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose) && !namesAnyProductWord(prose, candidates, common)) {
     candidates.forEach((c, i) => { if (n.size < 3 && c?.title && c.inventoryState !== "out_of_stock") n.add(i + 1); });
   }
   const chosen = [...n].slice(0, 3).map((i) => ({ i, c: candidates[i - 1] })).filter((x) => x.c?.title && !(x.c.url && prose.includes(x.c.url)));
@@ -588,14 +629,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (rawArgs && rawArgs.product_id != null && rawArgs.product_id !== "") {
         let id = resolveProductId(rawArgs.product_id, turnTools.envelope as any, state.offeredItems);
         // A name nothing here knows: find it in the store by that name, once, and take an exact title match.
-        if (!id && /^woocommerce\./.test(toolFunctionName) && !/^PRODUCT_\d+$/i.test(String(rawArgs.product_id))) {
+        const byName = storeSearchByName(toolFunctionName, String(rawArgs.product_id), locale);
+        if (!id && byName && !/^PRODUCT_\d+$/i.test(String(rawArgs.product_id))) {
           const found: any = await executeAdapterTool({
             tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: contactRow?.id,
-            toolFunctionName: "woocommerce.list_products", args: { query: String(rawArgs.product_id).slice(0, 80), per_page: 5, lang: locale }, accessScope: "customer",
+            toolFunctionName: byName.tool, args: byName.args, accessScope: "customer",
           }).catch(() => null);
           const list: any[] = found?.ok && Array.isArray(found.result) ? found.result : [];
           const want = normTitle(rawArgs.product_id);
-          const hit = list.find((p) => normTitle(p?.name) === want) ?? (list.length === 1 ? list[0] : null);
+          const hit = list.find((p) => normTitle(p?.name ?? p?.title) === want) ?? (list.length === 1 ? list[0] : null);
           if (hit?.id != null) id = String(hit.id);
         }
         if (!id) {
@@ -625,6 +667,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       let effective = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: toolFunctionName, args: args as any });
       if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName)) effective = { ...effective, lang: locale };
       if (toolFunctionName === "woocommerce.list_products") effective = withCustomerSearchFacts(effective, history, opts.incomingMessage ?? "");
+      // Shopify parity: the item the customer named and a colour they gave go into its query too
+      // (its search takes a query only: sizes, audience and the Hebrew fallback are Woo adapter features).
+      if (toolFunctionName === "shopify.search_products") effective = withCustomerQueryWords(effective, history, opts.incomingMessage ?? "");
       // "My orders" are the ones the channel proves: a phone or an email the customer
       // typed is not proof, and the guard refused every such lookup (prod replay 5).
       // Without them the guard supplies the customer's own; with none, the adapter refuses.
@@ -790,7 +835,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Once a safety or damage complaint is seen, the conversation stays one (prod replay 11:
   // the tipping complaint had left the window when "it doesn't stop it rolling back" came).
   const safetySince = Date.parse(String(state.facts?.[SAFETY_FACT] ?? ""));
-  const safetyConversation = (Number.isFinite(safetySince) && Date.now() - safetySince < TEAM_OPEN_MS) || safetyCase(inbound.slice(-10));
+  const safetyConversation = (Number.isFinite(safetySince) && Date.now() - safetySince < TEAM_OPEN_MS) || safetyCase(inbound.slice(-10), [knowledge ?? "", ...turnTools.knowledgeText].join("\n"));
   const previousBotReplies = history
     .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")) && !["interim_ack", "holding"].includes((m.metadata as any)?.kind))
     .map((m: any) => String(m.body)).slice(-6);
@@ -915,9 +960,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
           : o.handoff;
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n")), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
-        if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
+        if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply) return null;
         const after = gate3(g3Input(cleaned));
         if (factualProblems(after.problems).length) return null;
@@ -994,7 +1039,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Last line of defence, on every path: a price nothing grounds (prod replay 4),
   // and a character from another alphabet (prod replay 5: "כשמ折לים").
   if (output?.reply) {
-    const text = normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates)));
+    const text = normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n")));
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
     output = { ...output, reply: (leftover.length ? stripPrices(text, leftover) : text).trim() };
@@ -1025,7 +1070,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The stop-use advice only when THIS turn is about the product in use (prod replay 12: added to
   // a collaboration inquiry). A sticky safety conversation still hands over (above).
   (trace as any).safetyWord = safetyWord(inbound.slice(-10));
-  if (output?.reply && safetyConversation && !hasStopUse(output.reply) && customerDescribesUse(String(opts.incomingMessage ?? "")) && !hasStopUse(previousBotReplies.at(-1) ?? "")) {
+  if (output?.reply && safetyConversation && !hasStopUse(output.reply) && customerDescribesUse(String(opts.incomingMessage ?? ""), [knowledge ?? "", ...turnTools.knowledgeText].join("\n")) && !hasStopUse(previousBotReplies.at(-1) ?? "")) {
     output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
     (trace as any).stopUseAdded = true;
   }
