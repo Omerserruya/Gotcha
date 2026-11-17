@@ -84,3 +84,44 @@ describe("★ the email webhook drops it", () => {
     expect(ok[0]).toMatchObject({ senderId: "dana@x.test" });
   });
 });
+
+describe("bulkMailHint (kept in the inbox, not answered by the AI)", () => {
+  it("★ a list header or a no-reply sender; a person's address is not", async () => {
+    const { bulkMailHint } = await import("../auto-mail");
+    expect(bulkMailHint({ headers: { "List-Unsubscribe": "<mailto:u@x.com>" }, from: "news@brand.com" })).toBe("list");
+    expect(bulkMailHint({ headers: { "list-id": "<offers.brand.com>" }, from: "team@brand.com" })).toBe("list");
+    expect(bulkMailHint({ headers: {}, from: "No Reply <noreply@accounts.example.com>" })).toBe("no_reply");
+    expect(bulkMailHint({ headers: {}, from: "security-noreply@facebookmail.com" })).toBe("no_reply");
+    expect(bulkMailHint({ headers: {}, from: "notifications@saas.com" })).toBe("no_reply");
+    expect(bulkMailHint({ headers: {}, from: "Dana <dana@gmail.com>" })).toBeNull();
+    expect(bulkMailHint({ headers: {}, from: "info@shop.co.il" })).toBeNull();
+  });
+});
+
+describe("★ Gmail asks for the headers the checks read (format=metadata returns only those named)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const creds = { accessToken: "at_1", fromAddress: "support@acme.test" } as unknown as ChannelCredentials;
+  const all: Record<string, any[]> = {
+    human: [{ name: "From", value: "Dana <dana@x.test>" }, { name: "Subject", value: "Order" }],
+    bulk: [{ name: "From", value: "Brand <hello@brand.test>" }, { name: "Precedence", value: "bulk" }],
+    auto: [{ name: "From", value: "Ron <ron@x.test>" }, { name: "Auto-Submitted", value: "auto-generated" }],
+    list: [{ name: "From", value: "Brand <team@brand.test>" }, { name: "List-Unsubscribe", value: "<mailto:u@brand.test>" }],
+    noreply: [{ name: "From", value: "Accounts <noreply@accounts.test>" }],
+  };
+  it("a bulk or auto-submitted mail is dropped; a list or no-reply mail is kept and marked", async () => {
+    vi.stubGlobal("fetch", async (url: any) => {
+      const u = String(url);
+      if (u.includes("/history?")) return new Response(JSON.stringify({ historyId: "2", history: [{ messagesAdded: Object.keys(all).map((id) => ({ message: { id, labelIds: ["INBOX"] } })) }] }), { status: 200 });
+      const id = u.split("/messages/")[1]!.split("?")[0]!;
+      // Like Gmail: only the headers the request names.
+      const asked = new Set([...u.matchAll(/metadataHeaders=([^&]+)/g)].map((m) => decodeURIComponent(m[1]!).toLowerCase()));
+      return new Response(JSON.stringify({ id, threadId: "t", snippet: "x", payload: { headers: all[id]!.filter((h) => asked.has(h.name.toLowerCase())) } }), { status: 200 });
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { messages } = await fetchNewMessages(creds, "1", "support@acme.test");
+    expect(messages.map((m) => m.messageId).sort()).toEqual(["human", "list", "noreply"]);
+    const bulk = Object.fromEntries(messages.map((m: any) => [m.messageId, m.email?.bulk ?? null]));
+    expect(bulk).toEqual({ human: null, list: "list", noreply: "no_reply" });
+    log.mockRestore();
+  });
+});

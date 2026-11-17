@@ -33,6 +33,8 @@ export interface EmailMessageMeta {
   threadId?: string;
   /** The provider's id for the message itself, which Graph's reply API needs. */
   providerMessageId?: string;
+  /** Mail to a list or from a no-reply address (bulkMailHint): kept in the inbox, not answered by the AI. */
+  bulk?: string;
 }
 
 /** Everything an adapter needs to make one send join an existing thread. */
@@ -151,6 +153,7 @@ export function readEmailMeta(metadata: unknown): EmailMessageMeta | null {
     subject: typeof email.subject === "string" ? email.subject : undefined,
     threadId: typeof email.threadId === "string" ? email.threadId : undefined,
     providerMessageId: typeof email.providerMessageId === "string" ? email.providerMessageId : undefined,
+    bulk: typeof email.bulk === "string" ? email.bulk : undefined,
   };
 }
 

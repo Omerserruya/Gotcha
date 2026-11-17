@@ -7,7 +7,7 @@ import type {
   ChannelCredentials,
 } from "./types";
 import { type EmailThreadContext, outgoingSubject, parseMessageIdList, type EmailMessageMeta } from "./email-thread";
-import { autoMailReason } from "./auto-mail";
+import { autoMailReason, bulkMailHint } from "./auto-mail";
 
 // ─── Outlook Inbound Adapter ───────────────────────────────
 
@@ -335,6 +335,7 @@ export async function fetchOutlookMessage(
         subject,
         threadId: typeof m.conversationId === "string" ? m.conversationId : undefined,
         providerMessageId: String(m.id ?? messageId),
+        ...(bulkMailHint({ headers, from: fromAddr }) ? { bulk: bulkMailHint({ headers, from: fromAddr })! } : {}),
       },
     },
   };

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { autoMailReason } from "./auto-mail";
+import { autoMailReason, bulkMailHint } from "./auto-mail";
 import type {
   InboundAdapter,
   OutboundAdapter,
@@ -269,7 +269,11 @@ export async function fetchNewMessages(
         // else: they are the only way a later reply can rejoin this thread.
         `${GMAIL_API_URL}/users/me/messages/${msgId}?format=metadata` +
           "&metadataHeaders=From&metadataHeaders=Subject" +
-          "&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=In-Reply-To",
+          "&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=In-Reply-To" +
+          // What autoMailReason and bulkMailHint read (2026-11-17: without them Gmail's bulk
+          // and auto-submitted mail passed as a customer's, since only these five were asked for).
+          "&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence&metadataHeaders=X-Autoreply" +
+          "&metadataHeaders=X-Autorespond&metadataHeaders=Content-Type&metadataHeaders=List-Unsubscribe&metadataHeaders=List-Id",
         { headers }
       );
       if (!msgRes.ok) continue;
@@ -302,6 +306,7 @@ export async function fetchNewMessages(
         continue;
       }
 
+      const bulkHint = bulkMailHint({ headers: Object.fromEntries(headersArr.map((h) => [h.name, h.value])), from: email });
       const messageIdHeader = parseMessageIdList(header("Message-ID"))[0];
       // The chain to inherit: what this email referenced, plus what it was a
       // direct reply to, in case a sender set only In-Reply-To.
@@ -322,6 +327,7 @@ export async function fetchNewMessages(
           subject,
           threadId: typeof msgData.threadId === "string" ? msgData.threadId : undefined,
           providerMessageId: msgId,
+          ...(bulkHint ? { bulk: bulkHint } : {}),
         },
       });
     } catch (err) {
