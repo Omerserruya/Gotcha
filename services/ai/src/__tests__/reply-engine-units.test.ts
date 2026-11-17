@@ -2185,3 +2185,74 @@ describe("1f510cc4 rating fixes", () => {
     expect(kinds(await g3("סמובי גפן מתאימה לנינג'ה סלושי.", { incomingMessage: "יש משטח לנינג'ה קריספי?" }))).toContain("device_mismatch");
   });
 });
+
+/** Rating on 2c57725b (2026-11-17): worse than live; the seven fixes. */
+describe("2c57725b rating fixes", () => {
+  it("★ the card protocol never reaches the customer", async () => {
+    const { sanitizeReply, assembleOnce } = await import("../services/reply-engine/engine");
+    expect(sanitizeReply("יש לנו שני בובונים מתאימים.\nSHOW: בובון שטוח, בובון חצי שטוח")).toBe("יש לנו שני בובונים מתאימים.");
+    expect(sanitizeReply("הנה.\nCARDS: PRODUCT_1\nPRODUCT_2")).toBe("הנה.");
+    expect(assembleOnce("יש.\nSHOW: PRODUCT_1", null, [])).toBe("יש.");
+  });
+
+  it("★ orders are read only on a turn about them", async () => {
+    const { orderTurn } = await import("../services/reply-engine/gates");
+    expect(orderTurn("תודה רבה!")).toBe(false);
+    expect(orderTurn("תודה, יום טוב")).toBe(false);
+    expect(orderTurn("איפה ההזמנה שלי?")).toBe(true);
+    expect(orderTurn("חויבתי פעמיים")).toBe(true);
+    expect(orderTurn("רוצה להחזיר את הצעיף")).toBe(true);
+    expect(orderTurn("9664")).toBe(true);
+    expect(orderTurn("זה", "מה מספר ההזמנה?")).toBe(true);
+    expect(orderTurn("thanks!")).toBe(false);
+  });
+
+  it("★ the order read is refused on a thanks turn, allowed after our ask for the number", async () => {
+    const { refuseOrderRead } = await import("../services/reply-engine/engine");
+    expect(refuseOrderRead("woocommerce.list_customer_orders", "תודה רבה!", [])).toMatch(/^not_asked/);
+    expect(refuseOrderRead("shopify.find_latest_order", "thanks", [])).toMatch(/^not_asked/);
+    expect(refuseOrderRead("woocommerce.list_customer_orders", "זה", [{ direction: "OUTBOUND", body: "מה מספר ההזמנה?" }])).toBeNull();
+    expect(refuseOrderRead("woocommerce.list_products", "תודה", [])).toBeNull();
+  });
+
+  it("★ a different order number than the one typed is not asserted as theirs", async () => {
+    const { orderNumberDiffers } = await import("../services/reply-engine/gates");
+    expect(orderNumberDiffers("ההזמנה הקודמת שלך היא 96664, הושלמה ושולמה.", "ההזמנה 9664")).toHaveLength(1);
+    expect(orderNumberDiffers("מצאתי הזמנה 96664, זו ההזמנה שהתכוונת אליה?", "ההזמנה 9664")).toEqual([]);
+    expect(orderNumberDiffers("הזמנה 9664 נשלחה אתמול.", "ההזמנה 9664")).toEqual([]);
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const g = gate3({ reply: "ההזמנה הקודמת שלך היא 96664, הושלמה ושולמה.", claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "מה עם ההזמנה 9664?", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    expect(g.problems.some((p: any) => p.kind === "style" && p.codes.includes("order_number_differs"))).toBe(true);
+  });
+
+  it("★ should/shouldn't payment speculation is cut", async () => {
+    const { ungroundedPayment } = await import("../services/reply-engine/gates");
+    expect(ungroundedPayment("לא אמורה להיות כפילות בהזמנה החדשה.", [])).toHaveLength(1);
+    expect(ungroundedPayment("לא אמור להיות חיוב כפול.", [])).toHaveLength(1);
+    expect(ungroundedPayment("There shouldn't be a double charge.", [])).toHaveLength(1);
+  });
+
+  it("★ a product named in prose with its price is not listed again", async () => {
+    const { assembleOnce } = await import("../services/reply-engine/engine");
+    const out = assembleOnce("קיט פודרה מתאים לך, הוא עולה ₪165.06.", "קיט פודרה מינרלית 30 גרם\n₪165.06\nבמלאי\nhttps://x/k", ["קיט פודרה מינרלית 30 גרם"]);
+    expect(out).not.toMatch(/https:\/\/x\/k/);
+    // A different price is a different fact: the block stays.
+    expect(assembleOnce("קיט פודרה מתאים לך.", "קיט פודרה מינרלית 30 גרם\n₪165.06\nhttps://x/k", ["קיט פודרה מינרלית 30 גרם"])).toMatch(/https:\/\/x\/k/);
+  });
+
+  it("★ a price sentence left without its product is dropped", async () => {
+    const { dropDanglingPrice } = await import("../services/reply-engine/gates");
+    expect(dropDanglingPrice("הוא במבצע ב-₪165.06. רוצה שאשלח קישור?", ["קיט פודרה מינרלית"])).toBe("רוצה שאשלח קישור?");
+    expect(dropDanglingPrice("קיט פודרה מינרלית מעולה לעור יבש. הוא במבצע ב-₪165.06.", ["קיט פודרה מינרלית"])).toMatch(/165\.06/);
+  });
+
+  it("★ a bent word inside a known title is restored", async () => {
+    const { fixNearTitles } = await import("../services/reply-engine/gates");
+    expect(fixNearTitles("הקיטור פודרה מינרלית מתאים לך.", ["קיט פודרה מינרלית"])).toBe("הקיט פודרה מינרלית מתאים לך.");
+    expect(fixNearTitles("קיט פודרה מינרלית מתאים לך.", ["קיט פודרה מינרלית"])).toBe("קיט פודרה מינרלית מתאים לך.");
+    expect(fixNearTitles("יש לנו קיטים ופודרות.", ["קיט פודרה מינרלית"])).toBe("יש לנו קיטים ופודרות.");
+    // Every word bent is another phrase, not the title.
+    expect(fixNearTitles("We sell Canvases Totes.", ["Canvas Tote"])).toBe("We sell Canvases Totes.");
+    expect(fixNearTitles("We sell Canvass Tote.", ["Canvas Tote"])).toBe("We sell Canvas Tote.");
+  });
+});

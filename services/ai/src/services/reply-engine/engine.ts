@@ -18,7 +18,7 @@ import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowe
 import { resolveProductRef } from "../product-search.service";
 import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
-import { takeShowLine, ungroundedPrices, stripPrices } from "../reply-style-check.service";
+import { takeShowLine, ungroundedPrices, stripPrices, asksSomething } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
 import { getCrmAdapter } from "../connectors/crm-adapter-resolver";
 import { invalidateCrmPrefetch } from "../crm-prefetch.service";
@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -164,6 +164,12 @@ export function scrubOrderSelectors(toolFunctionName: string, args: Record<strin
 // The order reads of both stores (Shopify parity, 2026-11-17).
 const ORDER_READ = /^(?:woocommerce\.(?:get_order|list_customer_orders|list_orders)|shopify\.(?:get_order|order_lookup|get_orders|search_orders|get_customer_orders|find_latest_order))$/;
 const SINGLE_ORDER = /^(?:woocommerce\.get_order|shopify\.(?:get_order|order_lookup|find_latest_order))$/;
+/** Why an order read is refused on this turn, or null (prod rating 2026-11-17: orders volunteered on a "thanks"). */
+export function refuseOrderRead(toolFunctionName: string, incoming: string, history: any[]): string | null {
+  if (!ORDER_READ.test(toolFunctionName)) return null;
+  const lastOut = [...(history ?? [])].reverse().find((m: any) => m?.direction === "OUTBOUND")?.body ?? null;
+  return orderTurn(incoming, lastOut) ? null : "not_asked: the customer's message is not about an order or a payment; do not look up or mention orders";
+}
 export function ordersAsOf(toolFunctionName: string, result: any, asOf: Date): any {
   if (!ORDER_READ.test(toolFunctionName) || !result?.ok) return result;
   // Woo's local time without a zone is UTC in _gmt; Shopify's created_at carries its zone.
@@ -321,7 +327,8 @@ export function stripUnmatchedEdges(text: string): string {
 }
 
 export function sanitizeReply(text: string): string {
-  return stripUnmatchedEdges(String(text ?? "")
+  // The card protocol never reaches the customer, on any path (prod rating 2026-11-17, Tehila: a "SHOW:" line).
+  return stripUnmatchedEdges(stripDirectives(String(text ?? ""))
     // A sarcastic or awkward face is not a warm sign-off (prod replay 2026-11-17: 🙃).
     .replace(/\s*(?:\u{1F643}|\u{1F605}|\u{1F644}|\u{1F612}|\u{1F611})\uFE0F?/gu, "")
     .replace(/```[a-z]*\n?/gi, "")
@@ -446,8 +453,16 @@ export function assembleOnce(prose: string, list: string | null, titles: string[
   let blocks = list ? list.split(/\n\n+/) : [];
   const proseLines = String(prose ?? "").split("\n");
   const priced = (t: string) => proseLines.some((l) => l.toLowerCase().includes(t.toLowerCase()) && /₪|ש["״']?ח|\d+\s?(?:NIS|ILS)|https?:\/\/|המחיר באתר|price on the site/i.test(l));
-  blocks = blocks.filter((b) => { const t = titles.find((x) => b.split("\n")[0].trim() === x.trim()); return !t || !priced(t); });
-  const all = [String(prose ?? "").trim(), ...blocks].filter(Boolean).join("\n\n");
+  // The prose names it by a shorter name with the block's own price (prod rating 2026-11-17, Tami 4).
+  const proseText = String(prose ?? "").toLowerCase();
+  const pricedShort = (t: string, block: string) => {
+    const price = /(\d+(?:\.\d+)?)/.exec(block.split("\n").slice(1).join(" "))?.[1];
+    if (!price || !proseText.includes(price)) return false;
+    const words = t.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+    return words.length >= 2 ? proseText.includes(words.slice(0, 2).join(" ")) : proseText.includes(t.toLowerCase());
+  };
+  blocks = blocks.filter((b) => { const t = titles.find((x) => b.split("\n")[0].trim() === x.trim()); return !t || (!priced(t) && !pricedShort(t, b)); });
+  const all = [stripDirectives(String(prose ?? "")).trim(), ...blocks].filter(Boolean).join("\n\n");
   // No line twice (a header, a bullet), blank lines kept as separators.
   const seen = new Set<string>();
   // A line's ending punctuation does not make it new ("…שמתאים." and "…שמתאים:" are one header).
@@ -866,6 +881,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // "My orders" are the ones the channel proves: a phone or an email the customer
       // typed is not proof, and the guard refused every such lookup (prod replay 5).
       // Without them the guard supplies the customer's own; with none, the adapter refuses.
+      // Orders are read only on a turn about them (prod rating 2026-11-17, Tehila: a "thanks" turn
+      // looked up her orders and the reply volunteered one).
+      const notAsked = refuseOrderRead(toolFunctionName, opts.incomingMessage ?? "", history);
+      if (notAsked) return { ok: false as const, failure: "refused", reason: notAsked } as any;
       const dropped = droppedOrderSelectors(toolFunctionName, effective);
       effective = scrubOrderSelectors(toolFunctionName, effective);
       const out: any = await executeAdapterTool({
@@ -1004,7 +1023,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (respond) {
       output = parseRespond(respond.function.arguments);
       // One spelling of apostrophes and quotes for every check that follows (prod replay 2026-11-17).
-      if (output) output = { ...output, reply: normalizeQuotes(output.reply) };
+      // A product title as the store writes it, before the checks read the reply (prod rating 2026-11-17).
+      if (output) output = { ...output, reply: fixNearTitles(normalizeQuotes(output.reply), (turnTools.envelope?.candidates ?? []).map((c: any) => String(c?.title ?? "")).filter(Boolean)) };
       respondCallId = respond.id;
       if (!output) messages.push({ role: "tool", tool_call_id: respond.id, content: "respond needs a reply string; call it again." });
     }
@@ -1149,7 +1169,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       }
       const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
       second = rc ? parseRespond(rc.function.arguments) : null;
-      if (second) second = { ...second, reply: normalizeQuotes(second.reply) };
+      if (second) second = { ...second, reply: fixNearTitles(normalizeQuotes(second.reply), (turnTools.envelope?.candidates ?? []).map((c: any) => String(c?.title ?? "")).filter(Boolean)) };
     } catch (err: any) {
       if ((err as any)?.name === "AbortError") throw err;
       second = null;
@@ -1238,7 +1258,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
-        if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "")) {
+        // A question is never answered with silence (prod rating 2026-11-17, Smoovee A: a coupon question):
+        // the team line once, then one holding line, then nothing more.
+        const asked = asksSomething(opts.incomingMessage ?? "");
+        const holding = stillCheckingLine(opts.incomingMessage ?? "", locale === "en" ? "en" : "he");
+        const lastOutBody = String([...history].reverse().find((m: any) => m?.direction === "OUTBOUND")?.body ?? "").trim();
+        const questionLine = (): { reply: string; teamQuestion: string | null } =>
+          !cannedSent ? { reply: safeFallback(locale, teamAlreadyOpen), teamQuestion: teamAlreadyOpen ? null : question }
+            : { reply: lastOutBody === holding ? "" : holding, teamQuestion: question };
+        if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "") && asked) {
+          const q = questionLine();
+          output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
+          if (!cannedSent) cannedNow = true;
+          if (!q.reply) trace.gate3 = { ...first, rewrite: "silent" };
+        } else if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "")) {
           // Nothing new to say: say nothing rather than the same paragraph or a canned line.
           // Never on a product ask (prod replay 2026-11-17, Tehila): that one gets the products or a question.
           output = { reply: "", stateUpdate: {}, claims: [], handoff: null, cards: [] };
@@ -1266,6 +1299,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // Never silent on a product ask (prod replay 2026-11-17, Tehila): one question that moves the
           // choice on, and the question still reaches the team.
           output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
+        } else if (asked) {
+          // The canned line already went out: a question still gets one holding line (not twice in a row).
+          const q = questionLine();
+          output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
+          if (!q.reply) trace.gate3 = { ...first, rewrite: "silent" };
         } else {
           // The canned line already went out once: nothing new to say. The question
           // still reaches the team (once per issue) so the owner sees it.
@@ -1281,7 +1319,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Last line of defence, on every path: a price nothing grounds (prod replay 4),
   // and a character from another alphabet (prod replay 5: "כשמ折לים").
   if (output?.reply) {
-    const text = normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n")));
+    const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
+    // No price sentence left without its product (prod rating 2026-11-17).
+    const text = dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles);
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
     output = { ...output, reply: (leftover.length ? stripPrices(text, leftover) : text).trim() };

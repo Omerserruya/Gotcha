@@ -191,7 +191,7 @@ export function unreadProduct(reply: string, incoming: string, tools: ToolRunRec
 }
 
 
-const ORDER_ASK = /(?<![\u0590-\u05FF])(?:משלוח|המשלוח|מתי (?:יגיע|תגיע|זה מגיע|זה יגיע|אקבל)|הזמנה|ההזמנה|הזמנתי|מעקב|מספר מעקב|החבילה|איפה החבילה|נשלח|נשלחה|יצא|יצאה)(?![\u0590-\u05FF])|\b(?:delivery|shipping|shipped|tracking|my order|order status|where is my)\b/iu;
+export const ORDER_ASK = /(?<![\u0590-\u05FF])(?:משלוח|המשלוח|מתי (?:יגיע|תגיע|זה מגיע|זה יגיע|אקבל)|הזמנה|ההזמנה|הזמנתי|מעקב|מספר מעקב|החבילה|איפה החבילה|נשלח|נשלחה|יצא|יצאה)(?![\u0590-\u05FF])|\b(?:delivery|shipping|shipped|tracking|my order|order status|where is my)\b/iu;
 const COUPON_ASK = /(?<![\u0590-\u05FF])(?:קופון|הקופון|קוד הנחה|קוד קופון|קוד הטבה|להזין (?:את )?(?:הקוד|הקופון)|איפה (?:מזינים|שמים) (?:את )?(?:הקוד|הקופון)|מדיניות|החזרות|החלפה|החלפות)(?![\u0590-\u05FF])|\b(?:coupon|promo code|discount code|return policy|exchange)\b/iu;
 
 /** A delivery or order question sent to the team (or "no info") while order/tracking tools were there and none was called. */
@@ -750,13 +750,26 @@ const PAYMENT_EVIDENCE = /refund|financial_status|date_paid|payment_status|trans
 /** Payment or charge sentences that no tool result this turn backs. */
 // Speculation about what happened to a payment ("maybe the approval did not become a charge"): never a
 // fact, whatever a tool returned (prod replay 2026-11-17, Smoovee severe).
-const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
+const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])(?:לא\s+)?(?:אמור|אמורה|אמורים)\s+(?:לא\s+)?להיות\s+(?:(?:ה)?כפילות|(?:ה)?חיוב(?:\s+כפול)?|(?:ה)?תשלום\s+כפול)|\b(?:there\s+)?(?:should(?:n'?t| not)?|is(?:n'?t)? (?:supposed|meant) to)\s+(?:not\s+)?be\s+(?:a\s+)?(?:double|duplicate|second)\s+(?:charge|payment)|(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
 export function ungroundedPayment(reply: string, tools: ToolRunRecord[]): string[] {
   const sentences = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
   const speculation = sentences.filter((x) => PAYMENT_SPECULATION.test(x)).map((x) => x.trim().slice(0, 120));
   if (tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return speculation;
   return [...new Set([...sentences.filter((x) => PAYMENT_CLAIM.test(x)).map((x) => x.trim().slice(0, 120)), ...speculation])];
 }
+/**
+ * A turn that may read orders (prod rating 2026-11-17, Tehila: on a "thanks" turn the engine looked up her
+ * orders and volunteered one). The message asks about an order, a delivery, a payment, a return or a
+ * cancellation; or it carries a number that can be an order's; or it answers our own ask for an order number.
+ */
+const ORDER_TURN_WORDS = /(?<![\u0590-\u05FF])[והשב]?(?:החזרה|להחזיר|החלפה|להחליף|ביטול|לבטל|חשבונית|קבלה|חיוב|חויב|חויבתי|תשלום|שילמתי|זיכוי|החזר)(?![\u0590-\u05FF])|\b(?:return|exchange|cancel|invoice|receipt|charge[ds]?|payment|paid|refund)\b/iu;
+const ASKED_ORDER_NUMBER = /(?<![\u0590-\u05FF])(?:מספר\s+(?:ה)?הזמנה|מספר\s+ההזמנה)|\border\s+(?:number|#)/iu;
+export function orderTurn(incoming: string, lastOutbound?: string | null): boolean {
+  const t = String(incoming ?? "");
+  if (ORDER_ASK.test(t) || ORDER_TURN_WORDS.test(t) || /(?<!\d)\d{4,8}(?!\d)/.test(t)) return true;
+  return ASKED_ORDER_NUMBER.test(String(lastOutbound ?? ""));
+}
+
 export const PAYMENT_WORDS = /(?<![֐-׿])[וש]?(?:חיוב|חויב|חויבתי|תשלום|שילמתי|כסף|זיכוי|החזר|כרטיס\s+אשראי)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|money|credit card)\b/iu;
 
 // A cancelled, failed or refunded order given as the customer's without its status (prod replay
@@ -1162,6 +1175,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
+  if (orderNumberDiffers(reply, i.incomingMessage).length) style.push("order_number_differs");
   if (i.employeeName && NAMELESS_SELF.test(reply)) style.push("nameless_self");
   if (returnsWork(reply)) style.push("returns_work");
   if (termsRefusal(reply)) style.push("terms_refusal");
@@ -1305,6 +1319,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     .replace(/(^|[.!?]\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)\s*,\s*/gu, "$1");
   if (c.has("nameless_self") && employeeName) s = s.replace(NAMELESS_SELF_G, (_m, lead) => `${lead} ${employeeName} מ-`).replace(/\b(this is|i'?m|i am)\s+(?:the\s+|your\s+)?(?:ai\s+|virtual\s+|digital\s+)?assistant\s+(?:of|from|at)\s+/giu, (_m, lead) => `${lead} ${employeeName} from `);
   if (c.has("asks_known")) { const known = new Set(asksKnown(s, incoming)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !known.has(x.trim())).join("").trim(); }
+  if (c.has("order_number_differs")) { const bad = new Set(orderNumberDiffers(s, incoming)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !bad.has(x.trim().slice(0, 120))).join("").trim(); }
   if (c.has("returns_work")) s = dropSentences(s, RETURNS_WORK);
   if (c.has("terms_refusal")) s = dropSentences(s, TERMS_REFUSAL);
   if (c.has("simulation_leak")) s = dropSentences(s, SIMULATION_LEAK);
@@ -1415,6 +1430,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("terms_refusal")) lines.push("- Never give the terms as the reason not to help: look it up (the customer's own order lookup, the knowledge) or say what the team will do.");
       if (c.has("nameless_self")) lines.push("- When you introduce yourself, use your own name (Name above), not \"the assistant\".");
       if (c.has("asks_known")) lines.push("- Do not ask about a detail the customer already gave in their message; use it.");
+      if (c.has("order_number_differs")) lines.push("- The order you found has another number than the one the customer typed. Say which order you found (its number and date) and ask whether that is the one they mean; never call it their order or their previous order.");
       if (c.has("returns_work")) lines.push("- Never hand the work back to the customer (\"try another name\", \"check the website\"): search again yourself, narrower, or answer from what the business's knowledge lists, and ask at most one question about what they need.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");
@@ -1487,4 +1503,77 @@ export function groundedProductFallback(
   const cur = (c: string | null | undefined) => (c === "ILS" || !c ? "₪" : `${c} `);
   const line = (c: (typeof shown)[number]) => (c.price != null && !c.priceOnSite ? `${c.title}, ${cur(c.currency)}${c.price}` : c.title);
   return (locale === "he" ? "הנה מה שיש לנו שמתאים:\n" : "Here is what we have that fits:\n") + shown.map((c) => `• ${line(c)}`).join("\n");
+}
+
+
+/**
+ * The customer typed one order number and the reply states another as theirs (prod rating 2026-11-17:
+ * "9664" asked, "ההזמנה הקודמת שלך היא 96664"). Sentences that assert a different number as the order.
+ */
+export function orderNumberDiffers(reply: string, incoming: string): string[] {
+  const typed: string[] = [...(String(incoming ?? "").match(/(?<!\d)\d{4,8}(?!\d)/g) ?? [])];
+  if (!typed.length) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => {
+    if (/\?\s*$/.test(x)) return false;
+    if (!/(?<![֐-׿])[והשב]?(?:הזמנה|ההזמנה|הזמנתך)|\border\b/iu.test(x)) return false;
+    const nums = x.match(/(?<!\d)\d{4,8}(?!\d)/g) ?? [];
+    return nums.length > 0 && nums.every((n) => !typed.includes(n));
+  }).map((x) => x.trim().slice(0, 120));
+}
+
+/** The card protocol's lines, never for the customer (prod rating 2026-11-17, Tehila: "SHOW: בובון שטוח"). */
+export function stripDirectives(text: string): string {
+  return String(text ?? "")
+    .replace(/^[ \t]*(?:SHOW|CARDS?)[ \t]*:.*$/gim, "")
+    .replace(/[ \t]*\b(?:SHOW|CARDS?)[ \t]*:[ \t]*PRODUCT_\d+(?:[ \t]*,[ \t]*PRODUCT_\d+)*[ \t]*/g, " ")
+    .replace(/^[ \t]*PRODUCT_\d+(?:[ \t]*,[ \t]*PRODUCT_\d+)*[ \t]*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * A price sentence left with a bare pronoun for its subject after a cleanup took the product out (prod rating
+ * 2026-11-17: "הוא במבצע ב-₪165.06"). Dropped when nothing before it names one of the products.
+ */
+const PRONOUN_LEAD = /^\s*(?:[וש]?(?:הוא|היא|הם|הן|זה|זו|זאת)|it|this|they|these)(?=[\s,]|$)/iu;
+const HAS_PRICE = /₪|ש["״']?ח|\d+(?:\.\d+)?\s?(?:NIS|ILS)|\$\s?\d/i;
+export function dropDanglingPrice(text: string, titles: string[]): string {
+  // A decimal point is not a sentence end ("₪165.06").
+  const parts = String(text ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [String(text ?? "")];
+  const names = titles.map((t) => String(t ?? "").trim().toLowerCase()).filter((t) => t.length >= 3);
+  const firstWords = names.map((t) => t.split(/\s+/).slice(0, 2).join(" "));
+  let before = "";
+  const out: string[] = [];
+  for (const x of parts) {
+    if (PRONOUN_LEAD.test(x) && HAS_PRICE.test(x)) {
+      const low = before.toLowerCase();
+      if (!firstWords.some((w) => w && low.includes(w))) continue;
+    }
+    out.push(x);
+    before += x;
+  }
+  return out.join("").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
+ * A product's title as the store writes it, when the reply bends one of its words (prod rating 2026-11-17:
+ * "קיטור פודרה" for "קיט פודרה"). Only a run that matches the title's first two or more words, each exactly
+ * or as the word plus up to two letters, with at least one word exact; a prefix letter (ה, ב, ל, ו, ש, מ) stays.
+ */
+export function fixNearTitles(text: string, titles: string[]): string {
+  let s = String(text ?? "");
+  for (const title of titles) {
+    const words = String(title ?? "").trim().split(/\s+/).filter(Boolean);
+    if (words.length < 2) continue;
+    const head = words.slice(0, Math.min(3, words.length));
+    if (s.includes(head.join(" "))) continue;
+    const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(^|[^\\p{L}])([הבלושמ]?)(${head.map((w) => `(${esc(w)})(\\p{L}{0,2})`).join("\\s+")})(?![\\p{L}])`, "gu");
+    s = s.replace(re, (m, lead, prefix, _run, ...g) => {
+      const extras = head.map((_, i) => String(g[i * 2 + 1] ?? ""));
+      if (!extras.some((e) => e === "") || extras.every((e) => e === "")) return m;
+      return `${lead}${prefix}${head.join(" ")}`;
+    });
+  }
+  return s;
 }

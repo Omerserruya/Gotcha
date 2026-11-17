@@ -585,8 +585,8 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
         { toolCalls: [respond("c3", { reply: "התיק עולה ₪120." })] },
         { toolCalls: [respond("c4", { reply: "בטח, ₪150 בלבד." })] },
       );
-      // Not a product ask: silence is allowed here (a product ask never is, below).
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה זה עולה?" }, "autonomous");
+      // Not a product ask and not a question: silence is allowed (a question gets a holding line, below).
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "טוב" }, "autonomous");
       expect(r.trace.gate3.rewrite).toBe("silent");
       expect(r.reply).toBeNull();
       expect(r.escalation).toBeNull();
@@ -806,9 +806,58 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
       { toolCalls: [respond("d1", { reply: para })] },
       { toolCalls: [respond("d2", { reply: para })] },
     );
+    // A question is never met with silence: the team line once (2c57725b rating).
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "נו?" }, "autonomous");
+    expect(r.trace.gate3.rewrite).not.toBe("silent");
+    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
+  });
+
+  it("★ the same paragraph twice on a plain nudge: nothing is sent", async () => {
+    const para = "כדי לבדוק את ההזמנה צריך את מספר ההזמנה, והטלפון ששמור עליה לא תואם למספר שממנו כותבים.";
+    h.history = [
+      { direction: "INBOUND", body: "איפה ההזמנה?", metadata: null },
+      { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "נו", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("d3", { reply: para })] }, { toolCalls: [respond("d4", { reply: para })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "נו" }, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("silent");
     expect(r.reply).toBeNull();
+  });
+
+  it("★ the final cleanup: a bent title is restored, a price without its product is dropped", async () => {
+    h.responses.push(
+      { toolCalls: [tc("fx1", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("fx2", { reply: "יש לנו את Canvass Tote במלאי." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(r.reply).toMatch(/Canvas Tote/);
+    expect(r.reply).not.toMatch(/Canvass/);
+    h.responses.push(
+      { toolCalls: [tc("fx3", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("fx4", { reply: "יש לנו תיק בד יפה מאוד. הוא במבצע ב-₪79." })] },
+    );
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(r2.reply).not.toMatch(/הוא במבצע/);
+  });
+
+  it("★ a question after the canned line: one holding line, then silence", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    const holding = stillCheckingLine("איפה מזינים את הקופון?", "he");
+    const { prisma } = await import("@chatcenter/shared");
+    const withState = async (row: any, fn: () => Promise<void>) => {
+      (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [], turnCount: 3, ...row });
+      try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+    };
+    await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() } }, async () => {
+      h.responses.push({ toolCalls: [respond("h1", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h2", { reply: "בטח, ₪150 בלבד." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה מזינים את הקופון?" }, "autonomous");
+      expect(r.reply).toBe(holding);
+      h.history = [{ direction: "INBOUND", body: "איפה מזינים את הקופון?", metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("h3", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h4", { reply: "בטח, ₪150 בלבד." })] });
+      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה מזינים את הקופון?" }, "autonomous");
+      expect(r2.reply ?? null).toBeNull();
+    });
   });
 
   it("★ the rewrite respects the turn budget: none when the turn is already late", async () => {
