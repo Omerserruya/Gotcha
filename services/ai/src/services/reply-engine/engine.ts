@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { automatedInbound, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -536,6 +536,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   mark("gate1");
   // A template, an unsupported message or an empty placeholder is no customer text (prod replay 12:
   // "only a template attachment was received"): a short neutral opener at the start, else nothing.
+  // Mail no customer wrote (a newsletter, an account notice, our own alert): no reply, no
+  // handoff, no team question, and nothing inside it is acted on (prod replay 2026-11-17).
+  {
+    const hist0: any[] = ((await loadAll.catch(() => null)) as any)?.[1] ?? [];
+    const lastIn = [...hist0].reverse().find((m: any) => m.direction === "INBOUND");
+    const platformSender = /<([^>]+)>/.exec(String(process.env.SMTP_FROM ?? ""))?.[1] ?? process.env.SMTP_FROM ?? null;
+    const automated = automatedInbound({ channel: String(conversation.channel ?? ""), sender: conversation.customerExternalId, body: opts.incomingMessage ?? lastIn?.body, metadata: lastIn?.metadata, platformSender });
+    if (automated) {
+      trace.gate1 = `automated:${automated}`;
+      (trace as any).automated = automated;
+      trace.gate3 = { ok: true, problems: [], rewrite: "none" };
+      return empty({ reply: null });
+    }
+  }
   if (placeholderOnly(opts.incomingMessage)) {
     const hist: any[] = ((await loadAll.catch(() => null)) as any)?.[1] ?? [];
     const spoke = hist.some((m: any) => m.direction === "OUTBOUND");
@@ -960,7 +974,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
           : o.handoff;
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n")), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? ""), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
         if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply) return null;

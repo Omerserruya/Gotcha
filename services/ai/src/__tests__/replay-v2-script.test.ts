@@ -52,6 +52,14 @@ describe("replay-v2 plan", () => {
     expect(plan.get("t1")!.length).toBe(3);
     expect(plan.get("t2")!.length).toBe(0);
   });
+  it("★ automated mail is skipped as live skips it (the engine's own check)", async () => {
+    const d = db([{ id: "c1", assignedAiAgentId: "a", channel: "GMAIL", customerExternalId: "noreply@accounts.example.com" }, { id: "c2", assignedAiAgentId: "a", channel: "GMAIL", customerExternalId: "dana@gmail.com" }], {
+      c1: [{ id: "m1", direction: "INBOUND", body: "Reset your password", createdAt: at(1) }],
+      c2: [{ id: "m2", direction: "INBOUND", body: "Do you have it in blue?", createdAt: at(2) }, { id: "m3", direction: "INBOUND", body: "news", createdAt: at(3), metadata: { email: { bulk: "list" } } }],
+    });
+    const plan = (await planReplay(parseArgs(["--tenants", "t1"]), d)).get("t1")!;
+    expect(plan.map((p) => [p.messageId, p.skip ?? null])).toEqual([["m1", "automated"], ["m2", null], ["m3", "automated"]]);
+  });
   it("no employee anywhere: the conversation is skipped", async () => {
     const plan = await planReplay(parseArgs(["--tenants", "t1"]), db([{ id: "c1", assignedAiAgentId: null }], { c1: [{ id: "m1", direction: "INBOUND", body: "x", createdAt: at(1) }] }, null));
     expect(plan.get("t1")).toEqual([]);

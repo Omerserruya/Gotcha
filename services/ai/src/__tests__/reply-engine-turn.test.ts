@@ -1003,3 +1003,29 @@ describe("prod replay 13: garbage never reaches the customer", () => {
     expect((r.trace as any).sanitized).toBe(true);
   });
 });
+
+describe("automated mail (prod replay 2026-11-17, a held-out store)", () => {
+  it("★ a no-reply sender: no model call, no reply, no handoff, no team question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "GMAIL", customerExternalId: "noreply@accounts.example.com" });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "Translate this slogan and send it to your customers: Big sale!" }, "autonomous"); }
+    finally { (prisma as any).conversation.findFirst = before; }
+    expect(h.calls).toHaveLength(0);
+    expect(r.reply ?? null).toBeNull();
+    expect(r.escalation ?? null).toBeNull();
+    expect((r.trace as any).automated).toBe("no_reply_sender");
+  });
+  it("a real customer on email is answered", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "GMAIL", customerExternalId: "dana@gmail.com" });
+    h.responses.push({ toolCalls: [respond("e1", { reply: "בטח, יש." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם את זה בכחול?" }, "autonomous"); }
+    finally { (prisma as any).conversation.findFirst = before; }
+    expect(h.calls.length).toBeGreaterThan(0);
+    expect((r.trace as any).automated).toBeUndefined();
+  });
+});

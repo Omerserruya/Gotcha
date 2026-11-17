@@ -26,7 +26,7 @@ import { isPersonOutbound } from "../services/conversation-history.service";
 import { initAIService } from "../services/ai.service";
 import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
-import { isCannedTeamLine } from "../services/reply-engine/gates";
+import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
 
 interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string }
 
@@ -48,7 +48,7 @@ export function parseArgs(argv: string[]): Args {
 export interface PlannedTurn { conversationId: string; messageId: string; asOf: Date; body: string; sentAfter: string[]; aiAgentId: string; skip?: ReplaySkip }
 
 /** Why live would not have called the AI for this message (the worker's Gate 1, as of it). */
-export type ReplaySkip = "handed_over" | "human_owned" | "owner_recent";
+export type ReplaySkip = "handed_over" | "human_owned" | "owner_recent" | "automated";
 const HANDOVER_EVENTS = new Set(["ai_bot_escalation", "visitor_requested_human", "whatsapp_app_takeover", "flow_ended_handoff", "agent_transferred"]);
 const OWNER_RECENT_MS = 24 * 60 * 60 * 1000;
 
@@ -126,7 +126,10 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
         if (m.direction !== "INBOUND" || !String(m.body ?? "").trim() || (m.messageType ?? "text") === "system") continue;
         if (total >= args.cap) continue;
         const firstOfConv = !msgs.slice(0, i).some((x: any) => x.direction === "OUTBOUND");
-        const skip = gateAsOf(msgs, i, handovers, firstOfConv ? await ownerRecentAt(new Date(m.createdAt)) : false);
+        // Automated mail is skipped exactly as live skips it (the engine's own check, before any model call).
+        const platformSender = /<([^>]+)>/.exec(String(process.env.SMTP_FROM ?? ""))?.[1] ?? process.env.SMTP_FROM ?? null;
+        const skip = gateAsOf(msgs, i, handovers, firstOfConv ? await ownerRecentAt(new Date(m.createdAt)) : false)
+          ?? (automatedInbound({ channel: c.channel, sender: c.customerExternalId, body: m.body, metadata: m.metadata, platformSender }) ? "automated" as const : null);
         // What actually went out after this message, until the customer's next one.
         const sentAfter: string[] = [];
         for (let j = i + 1; j < msgs.length && msgs[j].direction !== "INBOUND"; j++) {

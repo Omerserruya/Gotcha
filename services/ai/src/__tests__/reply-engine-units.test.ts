@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_number", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "ungrounded_absence", "ungrounded_number", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1441,5 +1441,83 @@ describe("generic pass: held-out stores, English, other alphabets, Shopify", () 
     const auto = autoLookups([{ kind: "no_search" }] as any, "desk lamp", ["shopify.search_products"], []);
     expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "desk lamp", limit: 5 });
     expect(withCustomerQueryWords({ query: "תיק" }, [], "יש לכם ארנק?").query).toMatch(/^ארנק/);
+  });
+});
+
+/** Prod replay 2026-11-17 on fc618f4f, held-out stores included. Every rule generic. */
+describe("fc618f4f validation fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "en", incomingMessage: "hi", isFirstReply: false, employeeGender: null, employeeName: "Sam", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ automated mail is no customer: the ingest hint, no-reply senders, our own sender, a bulk footer on email only", async () => {
+    const { automatedInbound } = await import("../services/reply-engine/gates");
+    expect(automatedInbound({ channel: "GMAIL", sender: "news@openai.com", body: "x", metadata: { email: { bulk: "list" } } })).toBe("ingest_list");
+    expect(automatedInbound({ channel: "GMAIL", sender: "noreply@accounts.example.com", body: "Reset" })).toBe("no_reply_sender");
+    expect(automatedInbound({ channel: "EMAIL", sender: "security-noreply@facebookmail.com", body: "x" })).toBe("no_reply_sender");
+    expect(automatedInbound({ channel: "GMAIL", sender: "hello@em.brand.com", body: "Big sale" })).toBe("bulk_domain");
+    expect(automatedInbound({ channel: "GMAIL", sender: "alerts-team@gotcha.co.il", body: "שיחה הועברה לנציג", platformSender: "alerts-team@gotcha.co.il" })).toBe("platform_sender");
+    expect(automatedInbound({ channel: "OUTLOOK", sender: "team@saas.com", body: "New features! Click here to unsubscribe." })).toBe("bulk_footer");
+    expect(automatedInbound({ channel: "GMAIL", sender: "dana@gmail.com", body: "אין להשיב להודעה זו" })).toBe("bulk_footer");
+    // A real customer: on email, and on WhatsApp asking how to unsubscribe.
+    expect(automatedInbound({ channel: "GMAIL", sender: "dana@gmail.com", body: "Do you have the board in 154cm?" })).toBeNull();
+    expect(automatedInbound({ channel: "WHATSAPP", sender: "972501234567", body: "how do I unsubscribe from your newsletter?" })).toBeNull();
+  });
+
+  it("★ an empty search narrower than the claim proves nothing; the engine searches the category alone", async () => {
+    const { ungroundedAbsence, autoLookups } = await import("../services/reply-engine/gates");
+    const narrow = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard beginner" } }] as any;
+    expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", narrow)).toHaveLength(1);
+    const broad = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard" } }] as any;
+    expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", broad)).toEqual([]);
+    // As broad as the claim: "red snowboard" searched, "no red snowboard" said.
+    expect(ungroundedAbsence("We don't have a red snowboard.", [{ tool: "shopify.search_products", outcome: "empty", args: { query: "red snowboard" } }] as any)).toEqual([]);
+    const auto = autoLookups([{ kind: "ungrounded_absence", claims: ["I didn't find a snowboard in the catalogue."] }] as any, "which snowboard for a beginner under $650?", ["shopify.search_products"], narrow);
+    expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "snowboard", limit: 5 });
+  });
+
+  it("★ a pointer at a list or cards that the message does not carry", async () => {
+    const { danglingReferences } = await import("../services/reply-engine/gates");
+    expect(danglingReferences("You can pay with one of these methods.", false)).toHaveLength(1);
+    expect(danglingReferences("אפשר לשלם באחד מאמצעי התשלום האלה.", false)).toHaveLength(1);
+    expect(danglingReferences("השרשראות שמופיעות כאן הן מכסף.", false)).toHaveLength(1);
+    expect(danglingReferences("You can pay with one of these methods.", true)).toEqual([]);
+    expect(danglingReferences("Pay with one of these:\n- Visa\n- PayPal", false)).toEqual([]);
+    expect(kinds(await g3("Pick one of the following."))).toContain("dangling_reference");
+    expect(kinds(await g3("Pick one of the following.", { listAppended: true }))).not.toContain("dangling_reference");
+  });
+
+  it("★ the same advice in other words is cut, unless the customer asks about it again", async () => {
+    const { repeatedAdvice, cleanStyle } = await import("../services/reply-engine/gates");
+    const prev = ["Thanks! Important: always wax the board base before the first ride, it protects the base."];
+    const again = "Sure. Remember it is important to wax the base of the board before riding the first time.";
+    expect(repeatedAdvice(again, prev)).toHaveLength(1);
+    expect(repeatedAdvice(again, prev, "how do I wax the board base?")).toEqual([]);
+    expect(repeatedAdvice("Important: the bindings come pre-mounted.", prev)).toEqual([]);
+    expect(styleCodes(await g3(again, { previousBotReplies: prev }))).toContain("repeated_advice");
+    expect(cleanStyle(again, ["repeated_advice"], prev)).toBe("Sure.");
+  });
+
+  it("★ asked to recommend: a pick with a reason, or one question, never neither", async () => {
+    const { noRecommendation } = await import("../services/reply-engine/gates");
+    const ask = "which board under $650 would you recommend?";
+    expect(noRecommendation("We have the Drift 154 at $599 and the Ridge 150 at $640.", ask, 2)).toBe(true);
+    expect(noRecommendation("The Drift 154 at $599 is the best fit for a beginner, because it is soft and forgiving.", ask, 2)).toBe(false);
+    expect(noRecommendation("We have the Drift and the Ridge. Do you ride mostly park or piste?", ask, 2)).toBe(false);
+    expect(noRecommendation("We have the Drift 154 at $599.", "do you have boards?", 2)).toBe(false);
+    expect(noRecommendation("We have the Drift.", ask, 0)).toBe(false);
+    expect(kinds(await g3("We have the Drift 154 and the Ridge 150.", { incomingMessage: ask, candidateCount: 2 }))).toContain("no_recommendation");
+  });
+
+  it("★ a gendered form the rewrite kept becomes the plural", async () => {
+    const { neutralSecondPerson, cleanStyle } = await import("../services/reply-engine/gates");
+    expect(neutralSecondPerson("אפשר להיכנס לאתר ותבחרי את המידה.")).toBe("אפשר להיכנס לאתר ותבחרו את המידה.");
+    expect(neutralSecondPerson("את מחפשת משהו חגיגי?")).toBe("מחפשים משהו חגיגי?");
+    expect(neutralSecondPerson("מחפשת משהו חגיגי?")).toBe("מחפשים משהו חגיגי?");
+    expect(neutralSecondPerson("היא מחפשת מתנה.")).toBe("היא מחפשת מתנה.");
+    expect(cleanStyle("שלחי לנו את מספר ההזמנה.", ["gendered_address"])).toBe("שלחו לנו את מספר ההזמנה.");
   });
 });

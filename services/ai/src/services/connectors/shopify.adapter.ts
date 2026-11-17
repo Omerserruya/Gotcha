@@ -1627,6 +1627,23 @@ const ShopifyAdapter: ProviderAdapter = {
         // ranked by embedding; the same price, stock and option narrowing then
         // applies, and each hit is marked "related" so it is never offered as
         // the exact item.
+        // Every word must match in Shopify's search, so "snowboard beginner" finds nothing in a
+        // snowboard store (prod replay 2026-11-17). Any of the words next, singular too, best first.
+        if (!found.length && q && /\s/.test(q) && !args._anyWord) {
+          const words = [...new Set(q.split(/\s+/).filter((w) => w.length >= 3).flatMap((w) => [w, w.replace(/(?:es|s)$/i, "")]).filter((w) => w.length >= 3))].slice(0, 8);
+          if (words.length > 1) {
+            const any = await shopifyGraphQL(ctx, PRODUCT_SEARCH_QUERY, {
+              q: [`(${words.map((w) => escapeAnyWord(w)).join(" OR ")})`, facets, activeOnly ? "status:active" : ""].filter(Boolean).join(" ").trim(),
+              n: Math.min(wide, 50),
+              sort: "RELEVANCE",
+            }).catch(() => null);
+            const anyFound = sortProducts(filterByOption(narrowProducts((any?.products?.nodes || []).map(mapGraphQLProduct), bounds, inStockOnly), option), args.sort, inStockOnly).slice(0, limit);
+            if (anyFound.length) {
+              console.log(`[shopify-search] any-word fallback words=${words.length} results=${anyFound.length}`);
+              return anyFound;
+            }
+          }
+        }
         if (found.length || !q || !callCtx?.tenantId || args._semantic) return found;
         const all = await activeCatalog(ctx, shop).catch(() => null);
         if (!all?.length) return found;
@@ -3646,6 +3663,11 @@ const PRODUCT_CATALOG_QUERY = `
       pageInfo { hasNextPage endCursor }
     }
   }`;
+
+/** One word for Shopify's search grammar: its own syntax characters out, so a word is a word. */
+export function escapeAnyWord(w: string): string {
+  return String(w ?? "").replace(/[():"'\\*<>=!-]/g, " ").trim().split(/\s+/)[0] ?? "";
+}
 
 const activeCatalogCache = new Map<string, { at: number; list: any[] | null }>();
 /** Up to 250 active products, cached 10 minutes per shop. Null when the store has more (too big to rank in a turn). */
