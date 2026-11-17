@@ -283,7 +283,7 @@ http {
     # for itself only, before any render or API call. The real client after realip;
     # our own egress is never limited (the same key as the api zone). Static
     # assets (/_next/) are not counted: a page load fetches dozens of them.
-    limit_req_zone $api_limit_key zone=pages:10m rate=5r/s;
+    limit_req_zone $api_limit_key zone=pages:10m rate=10r/s;
 
     # ── Application: app.gotcha.co.il ─────────────────────────
     # The authenticated frontend, the public application API, every OAuth
@@ -2289,8 +2289,8 @@ http {
             # Relative Location: $scheme is http behind Cloudflare.
             absolute_redirect off;
             if ($v2_go != "") { return 302 $v2_go; }
-            # Pages and RSC navigations: 5 a second per client, bursts of 60 (zone above).
-            limit_req zone=pages burst=60 nodelay;
+            # Pages and RSC navigations: 10 a second per client, bursts of 150 (zone above): Next prefetches every visible link.
+            limit_req zone=pages burst=150 nodelay;
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
