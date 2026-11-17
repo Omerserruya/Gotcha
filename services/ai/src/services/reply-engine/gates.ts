@@ -131,9 +131,11 @@ export const safetyWord = (inbound: string[]) => SAFETY.exec(inbound.join("\n"))
 // only: the ingest's hint (a list or a no-reply sender), the sender's address, and on an email
 // channel the footer every bulk mail carries. A customer on WhatsApp asking how to unsubscribe is a customer.
 const EMAIL_CHANNEL = /^(?:EMAIL|GMAIL|OUTLOOK)$/i;
-const NO_REPLY_SENDER = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|noreply[-_.].*|.*[-_.]noreply|notifications?|notify|alerts?|mailer|bounces?|newsletters?|marketing|promotions?|digest)@/i;
-const BULK_DOMAIN = /@(?:em\d*|email|mailer|news|newsletter|marketing|bounces?|notify|notifications|alerts)\.[^@\s]+$/i;
-const AUTOMATED_TEXT = /\b(?:unsubscribe|manage (?:your )?(?:email |notification )?(?:preferences|settings)|this is an automated (?:message|email|notification)|do not reply to this (?:e-?mail|message)|please do not reply|you(?:'re| are) receiving this (?:e-?mail|message|because)|view (?:this )?(?:e-?mail )?in (?:your )?browser|reset your password|your (?:verification|security|login) code is)\b|(?:להסרה מרשימת|הסרה מרשימת התפוצה|להסרת המנוי|הודעה זו נשלחה (?:באופן )?אוטומטית|אין להשיב להודעה זו|נא לא להשיב להודעה|לאיפוס הסיסמה|קוד האימות שלך הוא)/iu;
+const NO_REPLY_SENDER = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|noreply[-_.].*|.*[-_.]noreply|notifications?|notification[-_.].*|notify|alerts?|mailer|bounces?|newsletters?|marketing|promotions?|digest|security|security[-_.].*|accounts?|account[-_.].*|verify|verification|password|login|signin|auth|reply[-_.][a-z0-9]+|mailer-daemon|automated|robot|bot)@/i;
+// A sending subdomain of a larger domain ("mail.instagram.com", "em.brand.com"); "mail.ru" itself is a mailbox.
+const BULK_DOMAIN = /@(?:em\d*|email|mail|mailer|mailing|news|newsletter|marketing|bounces?|notify|notification|notifications|alerts?|accounts?|security)\.[^@\s.]+\.[^@\s]+$/i;
+// The structure automated mail has, in the languages seen here (the body is often only its first lines).
+const AUTOMATED_TEXT = /\b(?:unsubscribe|manage (?:your )?(?:email |notification )?(?:preferences|settings)|this is an automated (?:message|email|notification)|do not reply to this (?:e-?mail|message)|please do not reply|you(?:'re| are) receiving this (?:e-?mail|message|because)|you received this (?:e-?mail|message)|this (?:e-?mail|message) was sent (?:to|by|automatically)|view (?:this )?(?:e-?mail )?in (?:your )?browser|(?:we received a )?request to reset (?:your )?(?:\w+ )?password|reset your (?:\w+ )?password|password reset (?:request|code|link)|(?:we noticed a |unusual |new )(?:login|sign-?in)(?: attempt)?(?: (?:to|on|from))?|login attempt|sign-?in attempt|your (?:verification|security|login|confirmation|one-time) code is|\d{4,8} is your (?:\w+ )?code|(?:your )?subscription (?:is )?(?:about to )?(?:expir\w*|renew\w*|end\w*)|subscription (?:has )?expired|out of (?:the )?office|automatic reply|auto-?reply|i am (?:currently )?(?:away|out of)|thank you for (?:contacting|your (?:e-?mail|message))[^.]{0,40}(?:we will|we'll) (?:get back|respond|reply))\b|(?:להסרה מרשימת|הסרה מרשימת התפוצה|להסרת המנוי|הודעה זו נשלחה|אין להשיב להודעה זו|נא לא להשיב להודעה|לאיפוס הסיסמה|איפוס סיסמה|קוד האימות שלך|קוד האימות הוא|ניסיון התחברות|זיהינו התחברות|התחברות חדשה ל|המנוי שלך (?:עומד|יפוג|פג|הסתיים)|מחוץ למשרד|מענה אוטומטי|תשובה אוטומטית|رمز التحقق|إعادة تعيين كلمة المرور|رد تلقائي|код подтверждения|сброс пароля|автоответ|código de verificación|restablecer (?:tu )?contraseña|respuesta automática|código de verificação|redefinir (?:sua )?senha|code de vérification|réinitialiser (?:votre )?mot de passe|réponse automatique)/iu;
 /** Why this inbound message is automated mail (no reply, no handoff, no team question), or null. */
 export function automatedInbound(m: { channel?: string | null; sender?: string | null; body?: string | null; metadata?: any; platformSender?: string | null }): string | null {
   const bulk = m.metadata?.email?.bulk;
@@ -249,8 +251,8 @@ export function unbackedPromises(reply: string, o: { teamQuestion: boolean; hand
 
 // Prod replay 4: "wood/bamboo pads are not sold" four times while the store sells
 // bamboo. "We don't have / don't sell / no match / doesn't exist" is a fact.
-const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו)|לא\s+(?:מצאתי|מצאנו|מוצאת|מוצא|מוצאים))(?![\u0590-\u05FF])|\b(?:(?:i|we) (?:didn'?t|did not|couldn'?t|could not) find|no results|we (?:don'?t|do not) (?:sell|carry|have|stock)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such))\b/iu;
-const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "מצאתי", "מוצאת", "מוצא", "מוצאים", "פריט", "פריטים", "בשם", "הזה", "הזו", "find", "didn't", "couldn't", "results", "item", "called", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for", "won't", "can't", "isn't", "aren't", "doesn't", "couldn't", "didn't", "don't", "catalog", "catalogue", "store", "shop", "site", "website", "here", "קטלוג", "בקטלוג", "הקטלוג", "חנות", "בחנות", "אתר", "באתר", "האתר"]);
+const ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו|אצלנו)(?!\s+(?:כאן\s+)?(?:מידע|פרטים|גישה|אפשרות|תשובה))|(?:אנחנו\s+)?לא\s+(?:מוכרים|מחזיקים|משווקים|מייצרים)|לא\s+(?:קיים|קיימת|קיימים|קיימות)|אין\s+(?:התאמה|דגם|מוצר|כזה|כזו|כאלה|כאלו)|לא\s+(?:מצאנו|נמצא|נמצאה|נמצאו)\s+(?:התאמה|מוצר|דגם|כזה|כזו)|לא\s+(?:מצאתי|מצאנו|מוצאת|מוצא|מוצאים))(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין\s+(?:כרגע\s+)?(?:בקטלוג|באתר|בחנות)|לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות|נמצא|נמצאים|נמצאת)\s+(?:כרגע\s+)?(?:בקטלוג|באתר|בחנות))(?![\u0590-\u05FF])|\b(?:(?:i|we) (?:didn'?t|did not|couldn'?t|could not|can'?t|cannot) find|no results|we (?:don'?t|do not) (?:currently |actually |really )?(?:sell|carry|have|stock|offer)|(?:is|are) not (?:sold|available|in our (?:range|catalog(?:ue)?))|(?:doesn'?t|does not) exist|no (?:match|such)|there (?:are|is) no|(?:i'?m|we'?re|i am|we are) not (?:seeing|finding)|(?:doesn'?t|does not|don'?t|do not) (?:include|contain|list|carry)|(?:isn'?t|aren'?t|is not|are not) (?:in|part of) (?:our|the) (?:catalog(?:ue)?|store|range|collection|shop))\b/iu;
+const ABSENCE_WORDS = new Set(["אין", "לנו", "אצלנו", "אנחנו", "לא", "מוכרים", "מחזיקים", "משווקים", "מייצרים", "קיים", "קיימת", "קיימים", "קיימות", "התאמה", "דגם", "מוצר", "כזה", "כזו", "כאלה", "כאלו", "מצאנו", "נמצא", "נמצאה", "נמצאו", "כרגע", "בכלל", "במלאי", "שלנו", "רק", "גם", "את", "של", "עם", "על", "זה", "זו", "יש", "אבל", "מאוד", "לצערי", "מצאתי", "מוצאת", "מוצא", "מוצאים", "פריט", "פריטים", "בשם", "הזה", "הזו", "find", "didn't", "couldn't", "results", "item", "called", "we", "dont", "don't", "do", "not", "sell", "carry", "have", "stock", "is", "are", "sold", "available", "exist", "doesn't", "does", "match", "such", "the", "and", "any", "for", "won't", "can't", "isn't", "aren't", "doesn't", "couldn't", "didn't", "don't", "catalog", "catalogue", "store", "shop", "site", "website", "here", "קטלוג", "בקטלוג", "הקטלוג", "חנות", "בחנות", "אתר", "באתר", "האתר", "currently", "right", "now", "there", "seeing", "finding", "include", "contain", "list", "range", "collection", "offer", "part", "our", "בקטלוג"]);
 const CAPABILITY_ABSENCE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|באפשרותנו\s+)?אפשרות|אין\s+באפשרותנו|אנחנו\s+לא\s+(?:יכולים|יכולות|עושים)|לא\s+(?:ניתן|נוכל)|אי\s+אפשר)(?![\u0590-\u05FF])|\b(?:we (?:can'?t|cannot|are unable to|don'?t do)|it'?s not possible|not possible to)\b/iu;
 const CAPABILITY_WORDS = new Set(["אפשרות", "באפשרותנו", "יכולים", "יכולות", "עושים", "ניתן", "נוכל", "אפשר", "לצערנו", "לצערי", "כרגע", "can't", "cannot", "unable", "possible", "don't"].map((w) => w.toLowerCase()));
 // Final letters (ך ם ן ף ץ) as their plain forms: "טלפון" is in "טלפוני".
@@ -614,6 +616,79 @@ export function foreignLanguageSentences(reply: string, titles: string[] = []): 
   }).map((x) => x.trim());
 }
 
+// A payment or charge status stated with nothing behind it (prod replay 2026-11-17, Smoovee:
+// "the cancelled order was not charged, you can order again" while its own team question on the
+// charge was open). Backed only by a tool result this turn that carries payment data.
+const PAYMENT_CLAIM = /(?<![֐-׿])(?:לא\s+(?:חויב|חויבת|חויבתם|חויבה|חויבו|נגבה|נגבו|ירד(?:\s+(?:לך|לכם))?\s+(?:כסף|חיוב)|נלקח\s+כסף)|החיוב\s+(?:בוטל|יבוטל|הוחזר|לא\s+עבר|לא\s+בוצע)|הכסף\s+(?:יוחזר|הוחזר|חזר|יחזור|יזוכה)|(?:יוחזר|הוחזר|יזוכה|זוכה|זיכינו|נזכה)\s+(?:לך|לכם|לחשבון|לכרטיס|בחזרה)|קיבלת\s+זיכוי|(?:תקבל|תקבלי|תקבלו)\s+(?:זיכוי|החזר)|אפשר\s+(?:להזמין|לבצע\s+הזמנה)\s+(?:שוב|מחדש))(?![֐-׿])|\b(?:(?:were|was|have|has|haven'?t|hasn'?t|weren'?t|wasn'?t)\s+(?:not\s+)?(?:been\s+)?charged|not\s+(?:been\s+)?charged|(?:the\s+)?charge\s+(?:was|has been|will be|is)\s+(?:cancelled|canceled|reversed|refunded|voided)|you(?:'ll| will)\s+(?:get|receive)\s+(?:a\s+|your\s+)?(?:refund|money back)|(?:has|have|was|were)\s+(?:been\s+)?refunded|you can (?:order|place (?:the|a new|another) order) again)\b/iu;
+const PAYMENT_EVIDENCE = /refund|financial_status|date_paid|payment_status|transaction_id|chargeback|voided|"paid"|"total_refunded"|זיכוי|החזר כספי/i;
+/** Payment or charge sentences that no tool result this turn backs. */
+export function ungroundedPayment(reply: string, tools: ToolRunRecord[]): string[] {
+  if (tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => PAYMENT_CLAIM.test(x)).map((x) => x.trim().slice(0, 120));
+}
+export const PAYMENT_WORDS = /(?<![֐-׿])[וש]?(?:חיוב|חויב|חויבתי|תשלום|שילמתי|כסף|זיכוי|החזר|כרטיס\s+אשראי)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|money|credit card)\b/iu;
+
+// A cancelled, failed or refunded order given as the customer's without its status (prod replay
+// 2026-11-17): every number of an order marked inactive this turn must come with what it is.
+const INACTIVE_WORDS = /(?<![֐-׿])[וש]?(?:בוטל|בוטלה|מבוטל|מבוטלת|ביטול|הוחזר|הוחזרה|זוכה|נכשל|נכשלה|לא\s+פעיל|לא\s+פעילה)(?![֐-׿])|\b(?:cancel(?:l)?ed|refunded|failed|voided|inactive|not active)\b/iu;
+function inactiveOrderNumbers(tools: ToolRunRecord[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (v: any) => {
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (!v || typeof v !== "object") return;
+    if (v.inactive) for (const k of ["id", "number", "order_number", "name"]) { const d = String(v[k] ?? "").replace(/\D/g, ""); if (d.length >= 3) out.add(d); }
+    for (const x of Object.values(v)) if (x && typeof x === "object") walk(x);
+  };
+  for (const t of tools) { try { walk(JSON.parse(String(t.content ?? ""))); } catch { /* not JSON */ } }
+  return out;
+}
+/** Sentences naming an inactive order's number without saying it is cancelled, failed or refunded. */
+export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[]): string[] {
+  const nums = inactiveOrderNumbers(tools);
+  if (!nums.size) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => (x.match(/\d{3,}/g) ?? []).some((d) => nums.has(d)) && !INACTIVE_WORDS.test(x)).map((x) => x.trim().slice(0, 120));
+}
+
+// Presenting as a named person who is not this employee (prod replay 2026-11-17, GOTCHA: "מתן",
+// a real team member's name taken from the conversation). Only the configured name is the employee's.
+const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ[֐-׿]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות)/gu;
+const NOT_A_NAME = new Set(["here", "sorry", "happy", "glad", "back", "sure", "afraid", "available", "the", "your", "נכון", "בסדר", "מעולה", "בדיוק", "הכל", "טוב", "אני", "אנחנו"]);
+/** A name the reply gives itself that is not the employee's configured name. */
+export function wrongSelfName(reply: string, employeeName: string | null | undefined): string | null {
+  const mine = new Set(String(employeeName ?? "").toLowerCase().split(/\s+/).filter(Boolean));
+  for (const m of String(reply ?? "").matchAll(NAMED_SELF)) {
+    const name = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").trim();
+    if (!name || NOT_A_NAME.has(name.toLowerCase())) continue;
+    if (!mine.has(name.toLowerCase())) return name;
+  }
+  return null;
+}
+
+// A model the customer named, answered with a close name that is another model (prod replay
+// 2026-11-17: "קריספי" answered with "קרמי"). Their distinguishing word must be in the product's
+// title, or the reply must say it is a different, close option.
+const ALTERNATIVE = /(?<![֐-׿])(?:דומה|דומים|קרוב|קרובה|במקום|חלופה|חלופי|אחר|אחרת|לא\s+(?:מצאתי|מצאנו|מוצא|מוצאים|נמצא)|אין\s+(?:לנו|כרגע)|בשם\s+הזה)(?![֐-׿])|\b(?:similar|closest|close (?:option|match)|instead|alternative|different (?:model|one)|not (?:found|by that name)|didn'?t find)\b/iu;
+const ASK_STOP = new Set(["יש", "לכם", "לך", "אני", "מחפש", "מחפשת", "מחפשים", "רוצה", "רוצים", "צריך", "צריכה", "אפשר", "דגם", "דגמים", "מוצר", "מתאים", "מתאימה", "כמה", "עולה", "מחיר", "איזה", "איזו", "בבקשה", "תודה", "have", "want", "need", "looking", "model", "price", "does", "with", "please", "thanks"]);
+/** The customer's distinguishing word that the named product's title lacks while a title word is close to it. */
+export function nearNameAsExact(reply: string, incoming: string, titles: string[]): { asked: string; shown: string } | null {
+  if (!titles.length || ALTERNATIVE.test(reply ?? "")) return null;
+  const theirs = (String(incoming ?? "").match(/\p{L}{4,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase())).map((w) => stem(w));
+  const named = titles.filter((t) => t && String(reply ?? "").toLowerCase().includes(String(t).toLowerCase().split(/\s+/).find((w) => w.length >= 3) ?? "\u0000"));
+  for (const t of named) {
+    const words = (String(t).match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
+    for (const a of theirs) {
+      if (words.some((w) => w === a || w.includes(a) || a.includes(w))) continue;
+      const close = words.find((w) => w.length >= 3 && w.slice(0, 2) === a.slice(0, 2) && Math.abs(w.length - a.length) <= 3 && String(reply ?? "").toLowerCase().includes(w));
+      if (close) return { asked: a, shown: close };
+    }
+  }
+  return null;
+}
+
+// The model says the message is a forwarded or automated notification (prod replay 2026-11-17):
+// on an email channel that turn is automated mail, answered by no one.
+export const MODEL_SAYS_AUTOMATED = /(?:נראה\s+ש(?:זו|זאת|זה|הדבקת|העתקת|שיתפת|העברת|קיבלת)\s+(?:לנו\s+)?(?:הודעה|התראה|מייל|הודעת|דוא["״]ל)|הודעה\s+אוטומטית|הודעת\s+מערכת)|\b(?:(?:it|this)\s+(?:looks|seems)\s+like\s+(?:an?\s+)?(?:automated|automatic|system|forwarded)\s+(?:message|email|notification)|(?:(?:it|this)\s+(?:seems|looks)\s+(?:like\s+)?(?:that\s+)?you(?:'ve|\s+have)?|you\s+(?:seem|appear)\s+to\s+have)\s+(?:forwarded|pasted|shared|copied)\s+(?:a|an|the|us\s+a|us\s+an)\s+(?:\w+\s+)?(?:notification|email|message|alert))/iu;
+
 export interface Gate3Input {
   reply: string;
   claims: Claim[];
@@ -659,6 +734,8 @@ export interface Gate3Input {
   cardsChannel?: boolean;
   /** A text channel with products this turn: the engine appends them (name, price, link). */
   listAppended?: boolean;
+  /** The open team items' text (state.pending), for a payment question already being checked. */
+  openTeamText?: string;
   /** The customer's own messages, and everything else a fact may come from (tools, knowledge, a person, the state). */
   customerText?: string;
   sourceText?: string;
@@ -720,6 +797,12 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended).filter((x) => !pictures.includes(x));
   if (dangling.length) problems.push({ kind: "dangling_reference", claims: dangling });
   if (noRecommendation(reply, i.incomingMessage, i.candidateCount)) problems.push({ kind: "no_recommendation" });
+  const payment = ungroundedPayment(reply, i.tools);
+  if (payment.length) problems.push({ kind: "ungrounded_payment", claims: payment, teamOpen: !!i.openTeamText && PAYMENT_WORDS.test(i.openTeamText) });
+  const inactive = unlabelledInactiveOrders(reply, i.tools);
+  if (inactive.length) problems.push({ kind: "inactive_order_unlabelled", claims: inactive });
+  const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
+  if (near) problems.push({ kind: "near_name", asked: near.asked, shown: near.shown });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
@@ -756,6 +839,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
   else if (repeatedSentences(reply, i.previousBotReplies ?? []).length) style.push("repeated_sentence");
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
+  if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
@@ -769,7 +853,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -805,7 +889,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -835,14 +919,18 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   const broad = (() => {
     // Only after a store search came back empty (narrower than the claim): with none run yet,
     // the customer's own words are the search ("יש משטחי במבוק?" keeps the bamboo).
-    if (!absence || !done.some((t) => PRODUCT_TOOL.test(t.tool) && t.outcome === "empty")) return null;
+    if (!absence || !done.some((t) => PRODUCT_TOOL.test(t.tool) && (t.outcome === "empty" || t.outcome === "ok"))) return null;
     const claimTerms = absence.claims.flatMap((c) => termsOf(String(c ?? "").split(/,|;|\s+(?:אבל|אך|but)\s+/iu)[0] ?? ""));
     const asked = termsOf(incoming);
     const searched = done.filter((t) => PRODUCT_TOOL.test(t.tool)).flatMap((t) => termsOf(String((t.args as any)?.query ?? "")));
-    const pick = claimTerms.find((w) => searched.some((x) => x.includes(w) || w.includes(x))) ?? claimTerms.find((w) => asked.some((x) => x.includes(w) || w.includes(x))) ?? null;
+    const near = (w: string, l: string[]) => l.some((x) => x.includes(w) || w.includes(x));
+    // The claim's word the search used; else the search's word the customer used; else the claim's word they used.
+    const pick = claimTerms.find((w) => near(w, searched)) ?? searched.find((w) => near(w, asked)) ?? claimTerms.find((w) => near(w, asked)) ?? null;
     if (!pick) return null;
     // The word as the customer or the search wrote it (the stem drops a prefix letter).
-    return [...String(incoming ?? "").split(/\s+/), ...done.flatMap((t) => String((t.args as any)?.query ?? "").split(/\s+/))].find((w) => unfinal(w.toLowerCase()).includes(pick)) ?? pick;
+    // As the search or the customer wrote it (a stem drops a prefix letter; a claim may be plural).
+    const written = [...done.flatMap((t) => String((t.args as any)?.query ?? "").split(/\s+/)), ...String(incoming ?? "").split(/\s+/)].map((w) => w.replace(/[^\p{L}\p{N}'-]/gu, "")).filter(Boolean);
+    return written.find((w) => { const x = unfinal(w.toLowerCase()); return x.includes(pick) || (x.length >= 3 && pick.includes(x)); }) ?? pick;
   })();
   if (store && (has("ungrounded_absence") || has("no_search"))) {
     out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? words, ...few }) } });
@@ -862,7 +950,7 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
  * code can fix safely is fixed, the rest is sent as written. An empty result means
  * nothing is left to say.
  */
-export function cleanStyle(reply: string, codes: string[], previousBotReplies: string[] = [], allowedScripts = "", incoming = "", titles: string[] = []): string {
+export function cleanStyle(reply: string, codes: string[], previousBotReplies: string[] = [], allowedScripts = "", incoming = "", titles: string[] = [], employeeName: string | null = null): string {
   const c = new Set(codes);
   let s = String(reply ?? "");
   if (c.has("repeated_sentence")) {
@@ -874,6 +962,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     s = (s.match(SENTENCES) ?? [s]).filter((x) => !again.has(x.trim())).join("").trim();
   }
   if (c.has("gendered_address")) s = neutralSecondPerson(s);
+  if (c.has("wrong_identity")) { const bad = wrongSelfName(s, employeeName); if (bad) s = (s.match(SENTENCES) ?? [s]).filter((x) => wrongSelfName(x, employeeName) == null).join("").trim(); }
   if (c.has("mixed_language")) { const en = new Set(foreignLanguageSentences(s, titles)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !en.has(x.trim())).join("").trim(); }
   if (c.has("familiar_address")) s = s
     .replace(/(?<![֐-׿])((?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו))\s+(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "$1")
@@ -939,6 +1028,9 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "knowledge_has_it") lines.push("- The store search did not answer, but the business's knowledge above already answers this (a compatibility or size table): answer from it, and do not send it to the team.");
     if (p.kind === "echoed_size") lines.push(`- A product's size comes from the product data, never from the number the customer typed (${p.claims.join("; ")}). State the size the search returned, or that it is not listed.`);
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
+    if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
+    if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "near_name") lines.push(`- The customer named "${p.asked}"; the product you name ("${p.shown}") is another model with a similar name. Say you did not find "${p.asked}" by that name, and offer the other only as a different, close option.`);
     if (p.kind === "dangling_reference") lines.push(`- These sentences point at a list or cards that this message does not carry (${p.claims.join("; ")}). Name the items themselves in the text, or leave the pointer out.`);
     if (p.kind === "no_recommendation") lines.push("- The customer asked you to recommend. Pick one or two of the products the search returned and say why, from their own data (price, size, level, features); or, if you truly cannot choose, ask ONE question that decides it. Never neither.");
     if (p.kind === "card_reference") lines.push("- No picture or card goes out with this reply: do not refer to one (\"בתמונה\", \"מצורף\"). Name the product instead.");
@@ -964,6 +1056,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule and put the conflict in team_question.");
       if (c.has("mixed_language")) lines.push("- Write the whole reply in the customer's language: one sentence is in another language.");
       if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
+      if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");
       if (c.has("near_duplicate")) lines.push("- That reply repeats one you already sent in this conversation. Answer the new message itself, briefly, or only what is new.");

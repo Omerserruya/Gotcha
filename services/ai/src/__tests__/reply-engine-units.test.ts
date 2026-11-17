@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "ungrounded_absence", "ungrounded_number", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1554,5 +1554,101 @@ describe("eval follow-up: one language per reply, friendly not familiar", () => 
     expect(cleanStyle("כן אחי, יש במלאי.", ["familiar_address"])).toBe("כן, יש במלאי.");
     expect(cleanStyle("יש במלאי, מותק.", ["familiar_address"])).toBe("יש במלאי.");
     expect(cleanStyle("נשמה, יש במלאי.", ["familiar_address"])).toBe("יש במלאי.");
+  });
+});
+
+/** Final rating on e9a75ca5 (prod replay 2026-11-17): payment claims, inactive orders, automated mail, identity, close names. */
+describe("e9a75ca5 rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "מה עם ההזמנה?", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ a payment or charge status needs a tool result with payment data this turn", async () => {
+    const { ungroundedPayment, correctionNote } = await import("../services/reply-engine/gates");
+    const r = "ההזמנה בוטלה ולא חויבת, אפשר להזמין שוב.";
+    expect(ungroundedPayment(r, [])).toHaveLength(1);
+    expect(ungroundedPayment("You were not charged for it.", [])).toHaveLength(1);
+    expect(ungroundedPayment("You'll get a refund in 5 days.", [])).toHaveLength(1);
+    const order = [{ tool: "woocommerce.get_order", outcome: "ok", content: JSON.stringify({ ok: true, result: { id: 5512, status: "cancelled", date_paid: null } }) }] as any;
+    expect(ungroundedPayment(r, order)).toEqual([]);
+    expect(ungroundedPayment("ההזמנה בדרך אליך.", [])).toEqual([]);
+    const ps = await g3(r, { openTeamText: "האם חויבתי על ההזמנה שבוטלה" });
+    expect(kinds(ps)).toContain("ungrounded_payment");
+    expect((ps as any[]).find((p: any) => p.kind === "ungrounded_payment").teamOpen).toBe(true);
+    expect(correctionNote(ps, "he")).toMatch(/already checking the payment/);
+    const { stripFactProblems } = await import("../services/reply-engine/gates");
+    expect(stripFactProblems("מבינים. ההזמנה בוטלה ולא חויבת, אפשר להזמין שוב. נשמח לעזור.", ps)).toBe("מבינים. נשמח לעזור.");
+    expect(((await g3(r, { openTeamText: "צבע אחר" })) as any[]).find((p: any) => p.kind === "ungrounded_payment").teamOpen).toBe(false);
+  });
+
+  it("★ an inactive order's number always comes with its status", async () => {
+    const { unlabelledInactiveOrders } = await import("../services/reply-engine/gates");
+    const tools = [{ tool: "woocommerce.list_customer_orders", outcome: "ok", content: JSON.stringify({ ok: true, result: [{ id: 5512, number: "5512", status: "cancelled", inactive: "cancelled: not an active order" }, { id: 5600, status: "processing" }] }) }] as any;
+    expect(unlabelledInactiveOrders("מספר ההזמנה שלך הוא 5512.", tools)).toHaveLength(1);
+    expect(unlabelledInactiveOrders("ההזמנה 5512 בוטלה.", tools)).toEqual([]);
+    expect(unlabelledInactiveOrders("Order 5512 was cancelled.", tools)).toEqual([]);
+    expect(unlabelledInactiveOrders("ההזמנה שלך 5600 בטיפול.", tools)).toEqual([]);
+    expect(kinds(await g3("מספר ההזמנה שלך הוא 5512.", { tools }))).toContain("inactive_order_unlabelled");
+  });
+
+  it("★ automated mail, wider: security and account senders, sending subdomains, codes and resets, auto-replies, other languages", async () => {
+    const { automatedInbound } = await import("../services/reply-engine/gates");
+    const em = (sender: string, body: string) => automatedInbound({ channel: "GMAIL", sender, body });
+    expect(em("security@facebookmail.com", "x")).toBe("no_reply_sender");
+    expect(em("notification@service.capcut.com", "x")).toBe("no_reply_sender");
+    expect(em("hello@mail.instagram.com", "x")).toBe("bulk_domain");
+    expect(em("dana@mail.ru", "Do you ship to Haifa?")).toBeNull();
+    expect(em("team@insta.com", "We received a request to reset your Instagram password.")).toBe("bulk_footer");
+    expect(em("team@insta.com", "123456 is your Instagram code. Don't share it.")).toBe("bulk_footer");
+    expect(em("team@insta.com", "We got a request to reset the password for your account.")).toBe("bulk_footer");
+    expect(em("team@app.com", "We noticed a new login to your account from Chrome on Windows.")).toBe("bulk_footer");
+    expect(em("billing@app.com", "Your subscription is about to expire on Nov 30.")).toBe("bulk_footer");
+    expect(em("dana@hotel.com", "Automatic reply: I am currently out of the office.")).toBe("bulk_footer");
+    expect(em("x@shop.com", "המנוי שלך עומד להסתיים בעוד 3 ימים")).toBe("bulk_footer");
+    expect(em("x@shop.com", "código de verificación: 4412")).toBe("bulk_footer");
+    // A person asking about a code or a login is a customer.
+    expect(em("dana@gmail.com", "I didn't get the verification code for my order, can you help?")).toBeNull();
+    expect(em("dana@gmail.com", "I can't log in to my account on your site")).toBeNull();
+  });
+
+  it("★ the model calling the message a forwarded notification marks it automated", async () => {
+    const { MODEL_SAYS_AUTOMATED } = await import("../services/reply-engine/gates");
+    expect(MODEL_SAYS_AUTOMATED.test("נראה ששיתפת הודעה מאינסטגרם על איפוס סיסמה.")).toBe(true);
+    expect(MODEL_SAYS_AUTOMATED.test("It looks like an automated message from Instagram.")).toBe(true);
+    expect(MODEL_SAYS_AUTOMATED.test("It seems you forwarded a notification from your bank.")).toBe(true);
+    expect(MODEL_SAYS_AUTOMATED.test("נראה שהמידה הזו תתאים לך.")).toBe(false);
+  });
+
+  it("★ no other name than the configured one", async () => {
+    const { wrongSelfName, cleanStyle } = await import("../services/reply-engine/gates");
+    expect(wrongSelfName("היי, כאן מתן מהצוות. במה אפשר לעזור?", "נועה")).toBe("מתן");
+    expect(wrongSelfName("Hi, this is Matan from GOTCHA.", "Noa")).toBe("Matan");
+    expect(wrongSelfName("שמי מתן.", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי, כאן נועה. במה אפשר לעזור?", "נועה")).toBeNull();
+    expect(wrongSelfName("זה נכון, יש במלאי.", "נועה")).toBeNull();
+    expect(wrongSelfName("I'm sorry, it's sold out.", "Noa")).toBeNull();
+    expect(styleCodes(await g3("היי, כאן מתן מהצוות. במה אפשר לעזור?"))).toContain("wrong_identity");
+    expect(cleanStyle("היי, כאן מתן מהצוות. במה אפשר לעזור?", ["wrong_identity"], [], "", "", [], "נועה")).toBe("במה אפשר לעזור?");
+  });
+
+  it("★ a close name is another model: \"קריספי\" is not \"קרמי\"", async () => {
+    const { nearNameAsExact } = await import("../services/reply-engine/gates");
+    expect(nearNameAsExact("יש לנו את משטח קרמי ב-₪199.", "יש לכם משטח קריספי?", ["משטח קרמי"])).toEqual({ asked: "קריספי", shown: "קרמי" });
+    expect(nearNameAsExact("קריספי לא מצאנו בשם הזה; יש את משטח קרמי, דגם אחר.", "יש לכם משטח קריספי?", ["משטח קרמי"])).toBeNull();
+    expect(nearNameAsExact("יש לנו את משטח קריספי ב-₪199.", "יש לכם משטח קריספי?", ["משטח קריספי"])).toBeNull();
+    expect(kinds(await g3("יש לנו את משטח קרמי ב-₪199.", { incomingMessage: "יש לכם משטח קריספי?", candidateTitles: ["משטח קרמי"], candidateCount: 1, grounding: "₪199" }))).toContain("near_name");
+  });
+
+  it("★ \"no snowboard\" phrasings, and the category lookup after a search that returned others", async () => {
+    const { ungroundedAbsence, autoLookups } = await import("../services/reply-engine/gates");
+    const ran = [{ tool: "search_products", outcome: "ok", args: { query: "snowboard beginner" }, content: JSON.stringify([{ title: "Wax Kit" }]) }] as any;
+    for (const r of ["We don't currently have snowboards.", "There are no snowboards in our catalogue.", "I'm not seeing any snowboards right now.", "Snowboards aren't part of our collection.", "אין בקטלוג סנובורד כרגע."]) {
+      expect(ungroundedAbsence(r, ran), r).toHaveLength(1);
+    }
+    const auto = autoLookups([{ kind: "ungrounded_absence", claims: ["We don't currently have snowboards."] }] as any, "any snowboard for a beginner?", ["search_products"], ran);
+    expect(JSON.parse(auto[0].function.arguments).query).toBe("snowboard");
   });
 });

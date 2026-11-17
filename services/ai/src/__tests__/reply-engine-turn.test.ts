@@ -1043,3 +1043,23 @@ describe("eval follow-up: the lines the engine adds are in the reply's language"
     expect(r.reply).not.toMatch(/A person from the team/);
   });
 });
+
+describe("the model reads the email as a forwarded notification (prod replay 2026-11-17)", () => {
+  it("★ on an email channel: no reply, no handoff, no team question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "GMAIL", customerExternalId: "dana@gmail.com" });
+    h.responses.push({ toolCalls: [respond("m1", { reply: "It looks like an automated message from Instagram. Is there anything we can help with?", team_question: "check this" })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "Hi Dana, someone tried to log in to your account" }, "autonomous"); }
+    finally { (prisma as any).conversation.findFirst = before; }
+    expect(r.reply ?? null).toBeNull();
+    expect(r.escalation ?? null).toBeNull();
+    expect((r.trace as any).automated).toBe("model_framed");
+  });
+  it("on WhatsApp the same reply is an answer (a customer asking about a message they got)", async () => {
+    h.responses.push({ toolCalls: [respond("m2", { reply: "It looks like an automated message from Instagram, not from us." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "is this message from you?" }, "autonomous");
+    expect((r.trace as any).automated).toBeUndefined();
+  });
+});
