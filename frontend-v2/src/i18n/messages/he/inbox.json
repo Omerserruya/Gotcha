@@ -535,7 +535,9 @@
     "tag": {
       "personal": "אישי",
       "notice": "חשבונית או התראה",
-      "marketing": "דיוור או פרסומת"
+      "marketing": "דיוור או פרסומת",
+      "auto_reply": "מענה אוטומטי",
+      "internal": "צוות"
     },
     "markBusiness": "זו פנייה עסקית",
     "markIrrelevant": "סמן כלא רלוונטי",

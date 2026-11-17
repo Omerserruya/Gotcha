@@ -98,6 +98,8 @@ describe('Hebrew: Omer’s words, no English word and no dash', () => {
       personal: 'אישי',
       notice: 'חשבונית או התראה',
       marketing: 'דיוור או פרסומת',
+      auto_reply: 'מענה אוטומטי',
+      internal: 'צוות',
     });
     const words = JSON.stringify(he.relevance);
     expect(words.replace(/"[a-z_A-Z]+":/g, '')).not.toMatch(/[A-Za-z]/);

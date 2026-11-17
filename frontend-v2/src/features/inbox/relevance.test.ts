@@ -14,7 +14,12 @@ import {
   viewQuery,
   withRelevance,
 } from './inbox-views';
-import { relevanceCategory, relevanceOverride, relevanceTag } from './relevance';
+import {
+  IRRELEVANT_CATEGORIES,
+  relevanceCategory,
+  relevanceOverride,
+  relevanceTag,
+} from './relevance';
 
 /**
  * ★★ Personal and not relevant (Omer, 2026-11-17, `INBOX_RELEVANCE`): the
@@ -26,8 +31,8 @@ const row = (relevance: unknown) =>
   conversationRowSchema.parse({ id: 'c1', status: 'OPEN', relevance });
 
 describe('★★ the label, as the contract reads it', () => {
-  it('★★ personal, notice and marketing wear their tag and offer "business"', () => {
-    for (const category of ['personal', 'notice', 'marketing'] as const) {
+  it('★★ personal, notice, marketing and automatic replies wear their tag and offer "business"', () => {
+    for (const category of ['personal', 'notice', 'marketing', 'auto_reply'] as const) {
       const r = row({ category, confidence: 0.9 });
       expect(relevanceTag(r)).toBe(category);
       expect(relevanceOverride(r)).toBe('business');
@@ -40,6 +45,15 @@ describe('★★ the label, as the contract reads it', () => {
       expect(relevanceTag(r)).toBeNull();
       expect(relevanceOverride(r)).toBe('personal');
     }
+  });
+
+  it('★★ internal (our own team): stays a normal conversation, wears "Team", offers "business"', () => {
+    const r = row({ category: 'internal' });
+    expect(relevanceCategory(r)).toBe('internal');
+    expect(relevanceTag(r)).toBe('internal');
+    expect(relevanceOverride(r)).toBe('business');
+    expect(IRRELEVANT_CATEGORIES).not.toContain('internal');
+    expect(IRRELEVANT_CATEGORIES).toEqual(['personal', 'notice', 'marketing', 'auto_reply']);
   });
 
   it('★ not classified: null, absent or empty is no category and no tag', () => {

@@ -535,7 +535,9 @@
     "tag": {
       "personal": "Personal",
       "notice": "Invoice or notification",
-      "marketing": "Newsletter or ad"
+      "marketing": "Newsletter or ad",
+      "auto_reply": "Automatic reply",
+      "internal": "Team"
     },
     "markBusiness": "This is a business enquiry",
     "markIrrelevant": "Mark as not relevant",

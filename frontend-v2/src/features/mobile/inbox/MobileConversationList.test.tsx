@@ -139,6 +139,11 @@ describe('★★ not relevant on the phone row (INBOX_RELEVANCE, Omer 2026-11-17
     expect(screen.getByTestId('mobile-relevance-c1')).toHaveTextContent('חשבונית או התראה');
   });
 
+  it('★ our own team wears "צוות"', async () => {
+    await list('internal', true);
+    expect(screen.getByTestId('mobile-relevance-c1')).toHaveTextContent('צוות');
+  });
+
   it('★ a reply to our own message wears nothing', async () => {
     await list('reply_to_outbound', true);
     expect(screen.queryByTestId('mobile-relevance-c1')).toBeNull();

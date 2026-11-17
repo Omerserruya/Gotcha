@@ -67,7 +67,7 @@ export const SOLO_MERGED_VIEWS: readonly InboxView[] = ['queue', 'mine', 'active
  * ★★ PERSONAL AND NOT RELEVANT (Omer, 2026-11-17, `INBOX_RELEVANCE`)
  * ════════════════════════════════════════════════════════════════════════════
  * The platform labels each conversation (`relevance.ts`). What it, or a
- * person, says is personal, a notice or marketing has its own view,
+ * person, says is personal, a notice, marketing or an automatic reply has its own view,
  * `irrelevant` (the route's `view=irrelevant`), after "Handled by GOTCHA".
  * The main views ask the route to leave it out (`hideIrrelevant=true`), so
  * the lists and their counts no longer hold it. "Resolved" and "All" keep

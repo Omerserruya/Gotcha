@@ -7,7 +7,7 @@ import { useRouter } from '@/i18n/navigation';
 
 import { setConversationRelevance, type VerbResult } from './conversation-actions';
 import styles from './Inbox.module.css';
-import type { IrrelevantCategory, RelevanceOverride } from './relevance';
+import type { RelevanceOverride, RelevanceTag } from './relevance';
 
 export type RelevanceClasses = {
   readonly group?: string;
@@ -45,7 +45,7 @@ export function RelevanceControl({
 }: {
   readonly conversationId: string;
   /** The tag it wears (`relevanceTag`), or `null` for a normal conversation. */
-  readonly tag: IrrelevantCategory | null;
+  readonly tag: RelevanceTag | null;
   /** The override offered (`relevanceOverride`). */
   readonly override: RelevanceOverride;
   /** The phone's own look (`/m`); the website's verbs bar by default. */

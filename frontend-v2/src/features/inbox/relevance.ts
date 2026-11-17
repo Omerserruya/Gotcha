@@ -12,13 +12,17 @@ import type { ConversationRow } from '@/api/contracts/inbox';
  *   personal            a friend, family, a private matter
  *   notice              an invoice, a receipt, a delivery or system notice
  *   marketing           a newsletter, an advert
+ *   auto_reply          another business's automatic greeting or away message
+ *   internal            the workspace's own team (a member's phone or email,
+ *                       the company's email domain); the AI stays out
  *   unclear             the classifier could not tell
  *
- * Personal, notice and marketing are "not relevant": they leave the main
- * views and their counts (`HIDES_IRRELEVANT`), live in their own view, and
- * wear a tag with their type. Everything else is a normal conversation, with
- * NO tag - a reply to our own message most of all: it is the business's own
- * thread (Omer's rule 3).
+ * Personal, notice, marketing and automatic replies are "not relevant": they
+ * leave the main views and their counts (`HIDES_IRRELEVANT`), live in their
+ * own view, and wear a tag with their type. Internal stays in the main views
+ * and wears "Team" (Backend, 2026-11-17). Everything else is a normal
+ * conversation, with NO tag - a reply to our own message most of all: it is
+ * the business's own thread (Omer's rule 3).
  *
  * ★ A person decides last: "This is a business enquiry" moves a tagged one
  *   back, "Mark as not relevant" moves a normal one out. The platform keeps
@@ -30,13 +34,22 @@ export const RELEVANCE_CATEGORIES = [
   'personal',
   'notice',
   'marketing',
+  'auto_reply',
+  'internal',
   'unclear',
 ] as const;
 export type RelevanceCategory = (typeof RELEVANCE_CATEGORIES)[number];
 
-/** The three that leave the main views, each with its own tag. */
-export const IRRELEVANT_CATEGORIES = ['personal', 'notice', 'marketing'] as const;
+/** The ones that leave the main views, each with its own tag. */
+export const IRRELEVANT_CATEGORIES = ['personal', 'notice', 'marketing', 'auto_reply'] as const;
 export type IrrelevantCategory = (typeof IRRELEVANT_CATEGORIES)[number];
+
+/**
+ * The tags a row can wear: the not-relevant kinds, and "Team" for the
+ * workspace's own people, which stays in the main views.
+ */
+export const RELEVANCE_TAGS = [...IRRELEVANT_CATEGORIES, 'internal'] as const;
+export type RelevanceTag = (typeof RELEVANCE_TAGS)[number];
 
 /** What a person can set: back to business, or out as personal. */
 export type RelevanceOverride = 'business' | 'personal';
@@ -59,14 +72,20 @@ export function relevanceCategory(row: {
 /** The tag this conversation wears, or `null` for a normal one (no tag). */
 export function relevanceTag(row: {
   readonly relevance?: ConversationRow['relevance'];
-}): IrrelevantCategory | null {
+}): RelevanceTag | null {
   const category = relevanceCategory(row);
-  return (IRRELEVANT_CATEGORIES as readonly string[]).includes(category ?? '')
-    ? (category as IrrelevantCategory)
+  return (RELEVANCE_TAGS as readonly string[]).includes(category ?? '')
+    ? (category as RelevanceTag)
     : null;
 }
 
-/** The one override offered: back to business when tagged, out as personal when not. */
+/**
+ * The one override offered: back to business when tagged, out as personal
+ * when not.
+ *
+ * ★ "Team" offers business too: a customer read as one of our own is a
+ *   customer the AI does not answer, the costlier of its two mistakes.
+ */
 export function relevanceOverride(row: {
   readonly relevance?: ConversationRow['relevance'];
 }): RelevanceOverride {

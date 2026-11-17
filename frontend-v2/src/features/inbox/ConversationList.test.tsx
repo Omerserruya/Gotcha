@@ -1899,6 +1899,8 @@ describe('★★ not relevant, and which kind (INBOX_RELEVANCE, Omer 2026-11-17)
     ['personal', messages.relevance.tag.personal],
     ['notice', messages.relevance.tag.notice],
     ['marketing', messages.relevance.tag.marketing],
+    ['auto_reply', messages.relevance.tag.auto_reply],
+    ['internal', messages.relevance.tag.internal],
   ])('★★ %s wears its type on the row', async (category, words) => {
     render(await tagged(category, true));
     expect(screen.getByTestId('tag-relevance-c1')).toHaveTextContent(words);
