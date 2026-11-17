@@ -383,6 +383,23 @@ export async function internalSender(tenantId: string, channel: string, external
   return users.some((u) => String(u.phoneNumber ?? "").replace(/\D/g, "").slice(-9) === digits.slice(-9));
 }
 
+/** The conversation was handed back to the AI after `since`: a returned_to_ai event in the history, or a handover row to the AI. */
+export async function handedBackSince(tenantId: string, conversationId: string, since: Date, history: any[], asOf: Date | null = null, db: any = prisma): Promise<boolean> {
+  const t = since.getTime();
+  const until = asOf ? asOf.getTime() : Infinity;
+  const inHistory = history.some((m: any) => {
+    const at = new Date(m.createdAt ?? 0).getTime();
+    const ev = String((m.metadata as any)?.systemEvent ?? (m.metadata as any)?.event ?? "");
+    return at > t && at <= until && (ev === "returned_to_ai" || ev === "handed_back_to_ai");
+  });
+  if (inHistory) return true;
+  const row = await db.conversationHandover?.findFirst?.({
+    where: { tenantId, conversationId, toHandler: "ai_agent", at: { gt: since, ...(asOf ? { lte: asOf } : {}) } },
+    select: { id: true },
+  });
+  return !!row;
+}
+
 /** The inactive-orders fact after this turn: the known numbers plus this turn's, at most 20. */
 export function inactiveOrdersFact(prev: unknown, now: string[]): Record<string, string> {
   if (!now.length) return {};
@@ -612,8 +629,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   {
     const hist1: any[] = ((await loadAll.catch(() => null)) as any)?.[1] ?? [];
     const asOf = opts.replay?.asOf ? new Date(opts.replay.asOf).getTime() : Date.now();
-    const personRecent = hist1.some((m: any) => m.direction === "OUTBOUND" && isPersonOutbound(m) && asOf - new Date(m.createdAt ?? 0).getTime() < 24 * 60 * 60_000);
-    if (personRecent) {
+    const lastPerson = [...hist1].reverse().find((m: any) => m.direction === "OUTBOUND" && isPersonOutbound(m) && asOf - new Date(m.createdAt ?? 0).getTime() < 24 * 60 * 60_000);
+    // ...unless the conversation was handed back to the AI since that message (the inbox's "return to
+    // AI": a returned_to_ai system message and a handover row to ai_agent). Then the AI answers, as before.
+    const handedBack = lastPerson ? await handedBackSince(opts.tenantId, opts.conversationId, new Date(lastPerson.createdAt ?? 0), hist1, opts.replay?.asOf ? new Date(opts.replay.asOf) : null).catch(() => false) : false;
+    if (lastPerson && !handedBack) {
       trace.gate1 = "human_owned:person_recent";
       trace.gate3 = { ok: true, problems: [], rewrite: "none" };
       return empty({ reply: null });

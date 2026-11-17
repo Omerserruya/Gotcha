@@ -1209,3 +1209,37 @@ describe("[woo-perf] live search timing", () => {
     expect(flushWooPerf(Date.parse("2026-11-17T12:00:01Z"))).toHaveLength(1);
   });
 });
+
+describe("person_recent respects a hand-back to the AI", () => {
+  const person = { direction: "OUTBOUND", body: "היי, כאן עומר", senderName: "omer@example.com", metadata: { source: "inbox" }, createdAt: new Date(Date.now() - 2 * 3600_000) };
+  it("★ \"return to AI\" after the person's message: the AI answers", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "היי", metadata: null, createdAt: new Date(Date.now() - 3 * 3600_000) },
+      person,
+      { direction: "INBOUND", body: "", messageType: "system", senderName: "System", metadata: { systemEvent: "returned_to_ai" }, createdAt: new Date(Date.now() - 3600_000) },
+    ];
+    h.responses.push({ toolCalls: [respond("hb1", { reply: "בשמחה, במה אפשר לעזור?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(h.calls.length).toBeGreaterThan(0);
+    expect(String((r.trace as any).gate1 ?? "")).not.toMatch(/^human_owned/);
+  });
+  it("a hand-back BEFORE the person wrote does not count", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "", messageType: "system", senderName: "System", metadata: { systemEvent: "returned_to_ai" }, createdAt: new Date(Date.now() - 5 * 3600_000) },
+      person,
+    ];
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(h.calls).toHaveLength(0);
+    expect(String((r.trace as any).gate1)).toMatch(/^human_owned/);
+  });
+  it("★ a handover row to the AI after the person's message counts too", async () => {
+    const { handedBackSince } = await import("../services/reply-engine/engine");
+    const since = new Date(Date.now() - 2 * 3600_000);
+    const asked: any[] = [];
+    const db = { conversationHandover: { findFirst: async (a: any) => { asked.push(a); return a.where.toHandler === "ai_agent" ? { id: "h1" } : null; } } };
+    expect(await handedBackSince("t1", "c1", since, [], null, db)).toBe(true);
+    expect(asked[0].where).toMatchObject({ tenantId: "t1", conversationId: "c1", toHandler: "ai_agent", at: { gt: since } });
+    const none = { conversationHandover: { findFirst: async () => null } };
+    expect(await handedBackSince("t1", "c1", since, [], null, none)).toBe(false);
+  });
+});
