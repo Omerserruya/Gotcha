@@ -366,6 +366,21 @@ async function meterAndReact(
  */
 export const platformPaidScope = new AsyncLocalStorage<{ reason: string }>();
 
+/**
+ * A call made for a REPLAY (replay-v2 re-running a past conversation, prod 2026-11-17)
+ * is not the tenant's usage: 30.5M replay tokens on Smoovee filled its 24h cost cap and
+ * live replies were refused (budget_exceeded:tenant_day). Every usage row such a call
+ * writes gets the "_replay" feature suffix and metadata.lane "replay"; the cost caps and
+ * the tenant's usage figures leave those rows out (cost-budget.service NOT_REPLAY).
+ */
+export const REPLAY_FEATURE_SUFFIX = "_replay";
+export function inReplayLane(): boolean {
+  return platformPaidScope.getStore()?.reason === "reply_engine_replay";
+}
+export function laneFeature(feature: string): string {
+  return inReplayLane() && !feature.endsWith(REPLAY_FEATURE_SUFFIX) ? `${feature}${REPLAY_FEATURE_SUFFIX}` : feature;
+}
+
 export const PLATFORM_PAID_AI_TYPES: ReadonlySet<string> = new Set([
   "onboarding_discovery",
   "onboarding_extract_policies",
@@ -486,7 +501,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   // Track usage (fire-and-forget, never block the response)
   trackAIUsage({
     tenantId: params.tenantId,
-    feature: type,
+    feature: laneFeature(type),
     model,
     promptTokens: usage.input_tokens,
     completionTokens: usage.output_tokens,
@@ -515,6 +530,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       transport: (response as any).transport === "responses" ? "responses" : "chat",
       // Who pays: the audit trail says so on every row.
       billedTo: platformPaid ? "platform" : "tenant",
+      ...(inReplayLane() ? { lane: "replay" } : {}),
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
 
@@ -567,13 +583,14 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
   // Track usage (fire-and-forget)
   trackAIUsage({
     tenantId: params.tenantId,
-    feature: "embedding",
+    feature: laneFeature("embedding"),
     model,
     promptTokens: usage.input_tokens,
     completionTokens: 0,
     totalTokens: usage.total_tokens,
     metadata: {
       documentId: params.metadata?.documentId,
+      ...(inReplayLane() ? { lane: "replay" } : {}),
     },
   }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));
 
@@ -597,12 +614,12 @@ export async function generateEmbeddings(params: { tenantId: string; inputs: str
   });
   trackAIUsage({
     tenantId: params.tenantId,
-    feature: params.feature ?? "embedding",
+    feature: laneFeature(params.feature ?? "embedding"),
     model,
     promptTokens: response.usage?.prompt_tokens ?? 0,
     completionTokens: 0,
     totalTokens: response.usage?.total_tokens ?? 0,
-    metadata: { count: params.inputs.length },
+    metadata: { count: params.inputs.length, ...(inReplayLane() ? { lane: "replay" } : {}) },
   }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));
   return [...response.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
@@ -723,7 +740,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
 
   trackAIUsage({
     tenantId: params.tenantId,
-    feature: type,
+    feature: laneFeature(type),
     model,
     promptTokens: usage.input_tokens,
     completionTokens: usage.output_tokens,

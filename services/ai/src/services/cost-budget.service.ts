@@ -126,9 +126,16 @@ export function createTurnBudget(opts: CreateTurnBudgetOpts): TurnBudget {
  * drift - falls back to `0` on any unexpected error. The audit doc is
  * the source of truth; budget enforcement is best-effort.
  */
+/**
+ * Usage that is not the tenant's: a replay of a past conversation (prod 2026-11-17: replay
+ * tokens filled Smoovee's 24h cap and live replies were refused). A row with no feature
+ * counts (SQL: NOT on a NULL is NULL, so the null branch is explicit).
+ */
+export const NOT_REPLAY = { OR: [{ feature: null }, { NOT: { feature: { endsWith: "_replay" } } }] };
+
 async function sumUsage(scope: { tenantId?: string; conversationId?: string; since?: Date }): Promise<number> {
   try {
-    const where: any = {};
+    const where: any = { AND: [NOT_REPLAY] };
     if (scope.tenantId) where.tenantId = scope.tenantId;
     if (scope.conversationId) where.metadata = { path: ["conversationId"], equals: scope.conversationId };
     if (scope.since) where.createdAt = { gte: scope.since };

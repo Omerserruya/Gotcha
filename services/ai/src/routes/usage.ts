@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { NOT_REPLAY } from "../services/cost-budget.service";
 
 const router = Router();
 
@@ -14,7 +15,8 @@ router.get("/stats", authenticate, resolveTenant, requireActiveTenant(), require
     // Aggregate by type
     const byType = await prisma.usageLog.groupBy({
       by: ["type"],
-      where: { tenantId, createdAt: { gte: since } },
+      // A replay of a past conversation is not the tenant's usage (cost-budget NOT_REPLAY).
+      where: { tenantId, createdAt: { gte: since }, AND: [NOT_REPLAY] },
       _sum: { quantity: true },
       _count: { id: true },
     });
@@ -73,7 +75,7 @@ router.get("/logs", authenticate, resolveTenant, requireActiveTenant(), requireR
     const offset = parseInt(req.query.offset as string) || 0;
     const type = req.query.type as string;
 
-    const where: any = { tenantId };
+    const where: any = { tenantId, AND: [NOT_REPLAY] };
     if (type) where.type = type;
 
     const [logs, total] = await Promise.all([
