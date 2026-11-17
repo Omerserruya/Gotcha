@@ -1016,6 +1016,18 @@ model Conversation {
   /// archiving a closed conversation would remove it from the closed figure.
   archivedAt         DateTime?          @map("archived_at")
   aiSummary          String?            @map("ai_summary")
+  /// ── Relevance (2026-11-17, docs/architecture/conversation-relevance.md) ──
+  /// Is this the business's own work? business | reply_to_outbound | personal | notice |
+  /// marketing | unclear. Null = not classified. Written by the ai service's classifier
+  /// (through the conversation API) or by a person's override; an override is never relabelled.
+  relevanceCategory     String?   @map("relevance_category")
+  relevanceConfidence   Float?    @map("relevance_confidence") @db.Real
+  relevanceReason       String?   @map("relevance_reason")
+  /// fast | model | override
+  relevanceSource       String?   @map("relevance_source")
+  relevanceClassifiedAt DateTime? @map("relevance_classified_at")
+  relevanceOverriddenBy String?   @map("relevance_overridden_by")
+  relevanceOverriddenAt DateTime? @map("relevance_overridden_at")
   handovers          ConversationHandover[]
 
   // ── Where this conversation came from ──
@@ -1112,6 +1124,7 @@ model Conversation {
   @@index([tenantId, referralSourceId])
   @@index([historicalImportId])
   @@index([tenantId, status])
+  @@index([tenantId, relevanceCategory])
   @@index([tenantId, assignedAgentId])
   @@index([tenantId, assignedAiAgentId])
   @@index([tenantId, departmentId])
