@@ -163,6 +163,7 @@ export type ClaimProblem =
   | { kind: "price_against_store"; claims: string[] }
   | { kind: "order_state_unread"; claims: string[] }
   | { kind: "claims_attachment"; claims: string[] }
+  | { kind: "device_mismatch"; claims: string[] }
   | { kind: "unnamed_recommendation" }
   | { kind: "partial_return_policy" }
   | { kind: "knowledge_has_it" }

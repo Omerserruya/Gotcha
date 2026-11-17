@@ -334,6 +334,11 @@ export function sanitizeReply(text: string): string {
     .trim());
 }
 
+export const RESEND_HE = "ההודעה לא הגיעה אלינו, אפשר לשלוח שוב כטקסט?";
+export const RESEND_EN = "Your message didn't come through. Could you send it again as text?";
+/** An inbound the channel could not deliver as text (not a template, a reaction or an edit). */
+export const unsupportedInbound = (text: string | null | undefined) => /^\[(?:unsupported[^\]]*|unreadable[^\]]*|unknown[^\]]*|הודעה\s+לא\s+נתמכת[^\]]*)\]$/iu.test(String(text ?? "").trim());
+
 /** A message that is only a placeholder: a template, an unsupported message, an empty one. */
 export function placeholderOnly(text: string | null | undefined): boolean {
   const t = String(text ?? "").trim();
@@ -430,6 +435,23 @@ export function greetingName(raw: string | null | undefined): string | null {
 export function namedInResults(incoming: string, candidates: any[]): boolean {
   const words = (String(incoming ?? "").toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((w) => w.length >= 3);
   return candidates.some((c) => { const t = String(c?.title ?? "").toLowerCase(); return words.some((w) => w.length >= 4 && t.includes(w.replace(/^[הולבמש]/, ""))); });
+}
+
+/**
+ * The outgoing message: the prose, then the list, with no product title twice and no line twice.
+ * A list block whose title the prose already carries with a price or a link is dropped (prod replay
+ * 2026-11-17: the fallback's own bullets, then the same products listed again).
+ */
+export function assembleOnce(prose: string, list: string | null, titles: string[]): string {
+  let blocks = list ? list.split(/\n\n+/) : [];
+  const proseLines = String(prose ?? "").split("\n");
+  const priced = (t: string) => proseLines.some((l) => l.toLowerCase().includes(t.toLowerCase()) && /₪|ש["״']?ח|\d+\s?(?:NIS|ILS)|https?:\/\/|המחיר באתר|price on the site/i.test(l));
+  blocks = blocks.filter((b) => { const t = titles.find((x) => b.split("\n")[0].trim() === x.trim()); return !t || !priced(t); });
+  const all = [String(prose ?? "").trim(), ...blocks].filter(Boolean).join("\n\n");
+  // No line twice (a header, a bullet), blank lines kept as separators.
+  const seen = new Set<string>();
+  // A line's ending punctuation does not make it new ("…שמתאים." and "…שמתאים:" are one header).
+  return all.split("\n").filter((l) => { const k = l.trim().replace(/[\s.:!,]+$/u, ""); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */
@@ -708,6 +730,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The language from real words only: a placeholder's English is not the customer's.
     const words = hist.filter((m: any) => m.direction === "INBOUND" && !placeholderOnly(m.body)).map((m: any) => String(m.body ?? ""));
     const en = words.length > 0 && conversationLocale(words, []) === "en";
+    // A message the channel could not deliver as text (unsupported, unreadable): ask ONCE per conversation
+    // to resend it as text, as legacy did (prod replay 2026-11-17); then silence.
+    if (unsupportedInbound(opts.incomingMessage)) {
+      const asked = hist.some((m: any) => m.direction === "OUTBOUND" && (String(m.body ?? "") === RESEND_HE || String(m.body ?? "") === RESEND_EN));
+      (trace as any).unsupportedInbound = true;
+      return empty({ reply: asked ? null : en ? RESEND_EN : RESEND_HE });
+    }
     return empty({ reply: spoke ? null : en ? "Hi, how can we help?" : "היי, במה אפשר לעזור?" });
   }
 
@@ -1370,12 +1399,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // as text, name, price, stock and link, at most three (prod replay 7: Smoovee had
   // no card and no link on 56 turns; the product summary tells the model the
   // system attaches them, and legacy did).
-  const listed = !cardChannel && prose && !final.handoff && !payProblem ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  // Products are listed for a product ask only (prod replay 2026-11-17: a coupon question got a list).
+  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);
   if (clean !== prose) (trace as any).sanitized = true;
-  const reply = listed ? `${clean}\n\n${listed.text}` : clean;
+  // One message, no product twice and no line twice (prod replay 2026-11-17, both Smoovee runs).
+  const reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
   if (listed) (trace as any).listedProducts = listed.keys;
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();

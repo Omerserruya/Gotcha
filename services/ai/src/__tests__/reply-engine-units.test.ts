@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -2147,5 +2147,36 @@ describe("057d37db rating fixes", () => {
     expect(styleCodes(await g3("היי, זה העוזר של GOTCHA. במה אפשר לעזור?", { employeeName: "Daniel" }))).toContain("nameless_self");
     expect(cleanStyle("היי, זה העוזר של GOTCHA. במה אפשר לעזור?", ["nameless_self"], [], "", "", [], "Daniel")).toBe("היי, זה Daniel מ-GOTCHA. במה אפשר לעזור?");
     expect(cleanStyle("Hi, this is the AI assistant from GOTCHA.", ["nameless_self"], [], "", "", [], "Daniel")).toBe("Hi, this is Daniel from GOTCHA.");
+  });
+});
+
+/** Rating on 1f510cc4 (two Smoovee runs, 2026-11-17): what repeats in both. */
+describe("1f510cc4 rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+
+  it("★ no product twice and no line twice in one message", async () => {
+    const { assembleOnce } = await import("../services/reply-engine/engine");
+    const prose = "הנה מה שיש לנו שמתאים:\n• סמובי אלכסה, ₪199\n• סמובי כריסטינה, ₪229";
+    const list = "סמובי אלכסה\n₪199\nבמלאי\nhttps://x/a\n\nסמובי כריסטינה\n₪229\nבמלאי\nhttps://x/c";
+    const out = assembleOnce(prose, list, ["סמובי אלכסה", "סמובי כריסטינה"]);
+    expect((out.match(/סמובי אלכסה/g) ?? []).length).toBe(1);
+    expect((out.match(/סמובי כריסטינה/g) ?? []).length).toBe(1);
+    expect(assembleOnce("הנה מה שיש לנו שמתאים:\nהנה מה שיש לנו שמתאים:\nתודה", null, [])).toBe("הנה מה שיש לנו שמתאים:\nתודה");
+    expect(assembleOnce("הנה מה שיש לנו שמתאים.\nהנה מה שיש לנו שמתאים:\n• Canvas Tote, ₪79", null, [])).toBe("הנה מה שיש לנו שמתאים.\n• Canvas Tote, ₪79");
+    // A product the text only names (no price, no link) keeps its details in the list.
+    expect(assembleOnce("סמובי אלכסה מתאים לך.", "סמובי אלכסה\n₪199\nhttps://x/a", ["סמובי אלכסה"])).toMatch(/https:\/\/x\/a/);
+  });
+
+  it("★ a product said to fit another device than the customer's is cut", async () => {
+    const { deviceMismatch } = await import("../services/reply-engine/gates");
+    expect(deviceMismatch("סמובי גפן מתאימה לנינג'ה סלושי, הנה הקישור.", "יש משטח לנינג'ה קריספי?")).toHaveLength(1);
+    expect(deviceMismatch("The Gefen mat fits the Ninja Slushi.", "a mat for my Ninja Crispi?")).toHaveLength(1);
+    expect(deviceMismatch("סמובי גפן מתאימה לנינג'ה קריספי.", "יש משטח לנינג'ה קריספי?")).toEqual([]);
+    expect(deviceMismatch("סמובי גפן מתאימה לכל המכשירים.", "יש משטח לנינג'ה קריספי?")).toEqual([]);
+    expect(kinds(await g3("סמובי גפן מתאימה לנינג'ה סלושי.", { incomingMessage: "יש משטח לנינג'ה קריספי?" }))).toContain("device_mismatch");
   });
 });

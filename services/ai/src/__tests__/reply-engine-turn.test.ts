@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   audits: [] as any[],
   staged: [] as any[],
   agentStatus: "ACTIVE",
+  textChannel: false,
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
   historyQueries: [] as any[],
@@ -92,7 +93,8 @@ vi.mock("../services/woo-chat-turn.service", async (orig) => ({
   prepareWebchatCommerceTurn: async () => ({
     provider: "woocommerce", productMessagingEnabled: true, suggestComplementary: false, carouselSize: 3, shown: [],
     staged: h.staged,
-    sendShopifyProducts: async (a: any) => { h.staged.push({ products: a.products }); return { ok: true }; },
+    // A text channel (WhatsApp) has no card sender.
+    sendShopifyProducts: h.textChannel ? undefined : async (a: any) => { h.staged.push({ products: a.products }); return { ok: true }; },
   }),
   webchatStorefrontBlock: async () => undefined,
   wooComplementaryProducts: vi.fn(), claimCrossSell: vi.fn(), releaseCrossSell: vi.fn(),
@@ -147,6 +149,7 @@ beforeEach(() => {
   for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
   h.slowReads = 0;
+  h.textChannel = false;
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
@@ -970,9 +973,10 @@ describe("prod replay 12: placeholders and the stop-use line", () => {
     h.history = [
       { direction: "INBOUND", body: "היי", metadata: null },
       { direction: "OUTBOUND", body: "היי! במה אפשר לעזור?", senderName: "AI Bot", metadata: null },
-      { direction: "INBOUND", body: "[Unsupported message]", metadata: null },
+      { direction: "INBOUND", body: "[template attachment]", metadata: null },
     ];
-    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[Unsupported message]" }, "autonomous");
+    // A template is no message to answer (an unsupported one is asked to be resent once, below).
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[template attachment]" }, "autonomous");
     expect(h.calls).toHaveLength(0);
     expect(r.reply).toBeNull();
   });
@@ -1298,5 +1302,38 @@ describe("never silent on a product ask (prod replay 2026-11-17, Tehila)", () =>
     expect(r.reply ?? "").not.toBe("");
     expect(r.trace.gate3.rewrite).not.toBe("silent");
     expect(h.teamQuestions).toHaveLength(1);
+  });
+});
+
+describe("1f510cc4 rating: engine passes", () => {
+  it("★ an unsupported message: ask once to resend as text, then silence", async () => {
+    const { RESEND_HE } = await import("../services/reply-engine/engine");
+    h.history = [{ direction: "INBOUND", body: "היי", metadata: null }, { direction: "OUTBOUND", body: "היי, במה אפשר לעזור?", senderName: "AI Bot", metadata: null }];
+    const r1 = await runReplyEngineTurn({ ...opts, incomingMessage: "[Unsupported message]" }, "autonomous");
+    expect(r1.reply).toBe(RESEND_HE);
+    h.history = [...h.history, { direction: "INBOUND", body: "[Unsupported message]", metadata: null }, { direction: "OUTBOUND", body: RESEND_HE, senderName: "AI Bot", metadata: null }];
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "[Unsupported message]" }, "autonomous");
+    expect(r2.reply ?? null).toBeNull();
+  });
+  it("★ a non-product question never gets a product list appended", async () => {
+    h.responses.push(
+      { toolCalls: [tc("np1", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("np2", { reply: "הנה ההסבר: את הקוד מזינים בשדה קוד קופון בעמוד התשלום." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה מזינים את הקופון?" }, "autonomous");
+    expect(r.reply).toMatch(/קוד קופון/);
+    expect(r.reply).not.toMatch(/Canvas Tote/);
+  });
+  it("★ the grounded fallback's own bullets are not listed again", async () => {
+    h.responses.push(
+      { toolCalls: [tc("gf1", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("gf2", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("gf3", { reply: "התיק עולה ₪150." })] },
+      { toolCalls: [respond("gf4", { reply: "התיק עולה ₪150." })] },
+    );
+    h.textChannel = true;
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(r.reply).toMatch(/Canvas Tote/);
+    expect(((r.reply ?? "").match(/Canvas Tote/g) ?? []).length).toBe(1);
   });
 });
