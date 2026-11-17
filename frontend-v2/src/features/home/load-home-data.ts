@@ -224,6 +224,12 @@ function lastDays(days: number): { from: string; to: string } {
 export async function loadHomeData(): Promise<HomeData> {
   const api = serverApi();
   const range = today();
+  /*
+   * ★ INBOX_RELEVANCE: what is personal, a notice or marketing is not
+   *   waiting for anyone, so the waiting number and the card leave it out,
+   *   as the inbox's queue does (Backend's opt-in, analytics queue routes).
+   */
+  const hide = inboxRelevanceOn() ? { hideIrrelevant: 'true' } : null;
 
   let gate: TenantGate | null = null;
 
@@ -273,13 +279,17 @@ export async function loadHomeData(): Promise<HomeData> {
       })
       .catch(degrade('home.channels_failed', null)),
     api
-      .get({ endpoint: analyticsEndpoints.queue(), payload: analyticsQueueSchema })
+      .get({
+        endpoint: analyticsEndpoints.queue(),
+        ...(hide ? { query: hide } : {}),
+        payload: analyticsQueueSchema,
+      })
       .catch(degrade('home.queue_failed', null)),
     api
       .get({
         endpoint: analyticsEndpoints.queueItems(),
         // The design's card shows four rows and then "N more waiting".
-        query: { limit: 4 },
+        query: { limit: 4, ...hide },
         payload: queueItemsSchema,
         // `data` is a sibling of `nextCursor` and `totalWaiting`, not the payload.
         raw: true,

@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('server-only', () => ({}));
+const flag = vi.hoisted(() => ({ relevance: false }));
+vi.mock('@/api/client/inbox-relevance', () => ({ inboxRelevanceOn: () => flag.relevance }));
 
 import { loadHomeData } from './load-home-data';
 
@@ -59,6 +61,7 @@ const listCalls = () =>
 
 beforeEach(() => {
   get.mockReset();
+  flag.relevance = false;
 });
 
 describe("★★ one person: Home is the inbox's Open", () => {
@@ -159,5 +162,41 @@ describe("★★ a team - or an unread `me` - is today's Home", () => {
     expect(data.open).toBeNull();
     expect(data.isQuiet).toBe(true);
     expect(listCalls()).toHaveLength(0);
+  });
+});
+
+describe('★★ INBOX_RELEVANCE: what is not relevant is not waiting', () => {
+  const queryOf = (suffix: string) =>
+    (
+      get.mock.calls.find((c) =>
+        (c[0] as { endpoint: { path: string } }).endpoint.path.endsWith(suffix),
+      )?.[0] as { query?: Record<string, unknown> } | undefined
+    )?.query;
+
+  it('★★ on: the waiting number and the card ask without it; so does one person’s Open', async () => {
+    flag.relevance = true;
+    answer({
+      me: { workspace: { soleHuman: true } },
+      list: { data: [], page: { limit: 4, hasMore: false, nextCursor: null }, viewTotal: 0 },
+    });
+    await loadHomeData();
+    expect(queryOf('/analytics/queue')).toEqual({ hideIrrelevant: 'true' });
+    expect(queryOf('/analytics/queue/items')).toEqual({ limit: 4, hideIrrelevant: 'true' });
+    expect(listCalls().at(-1)?.[0]).toMatchObject({
+      query: { view: 'open', hideIrrelevant: 'true' },
+    });
+  });
+
+  it('★★ off: today’s requests, no parameter anywhere', async () => {
+    answer({
+      me: { workspace: { soleHuman: true } },
+      list: { data: [], page: { limit: 4, hasMore: false, nextCursor: null }, viewTotal: 0 },
+    });
+    await loadHomeData();
+    expect(queryOf('/analytics/queue')).toBeUndefined();
+    expect(queryOf('/analytics/queue/items')).toEqual({ limit: 4 });
+    expect((listCalls().at(-1)?.[0] as { query: object }).query).not.toHaveProperty(
+      'hideIrrelevant',
+    );
   });
 });
