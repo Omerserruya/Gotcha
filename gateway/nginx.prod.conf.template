@@ -272,6 +272,15 @@ http {
     # a burst of app traffic must never throttle someone's ability to log in.
     limit_req_zone $api_limit_key zone=authentik:10m rate=20r/s;
 
+    # The app's PAGES (HTML and RSC), per client (prod 2026-11-17: one console tab
+    # in a reload loop rendered /he/system 6,000 times; every render's server calls
+    # left from our egress IP, filled the services' shared limiter, and every user,
+    # Smoovee included, got 429 for 15 minutes). A looping tab now gets 429 here,
+    # for itself only, before any render or API call. The real client after realip;
+    # our own egress is never limited (the same key as the api zone). Static
+    # assets (/_next/) are not counted: a page load fetches dozens of them.
+    limit_req_zone $api_limit_key zone=pages:10m rate=5r/s;
+
     # ── Application: app.gotcha.co.il ─────────────────────────
     # The authenticated frontend, the public application API, every OAuth
     # callback except Authentik's own endpoints, and every provider webhook
@@ -2260,11 +2269,24 @@ http {
         location = /pricing/ { return 302 https://gotcha.co.il/pricing; }
         location ^~ /early-access { return 301 https://gotcha.co.il$request_uri; }
 
+        # The app's static assets and images: never counted against the page limit.
+        location ^~ /_next/ {
+            proxy_pass http://frontend_v2;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location / {
             # Old app paths 302 to their place in this one (the $v2_dest map).
             # Relative Location: $scheme is http behind Cloudflare.
             absolute_redirect off;
             if ($v2_go != "") { return 302 $v2_go; }
+            # Pages and RSC navigations: 5 a second per client, bursts of 60 (zone above).
+            limit_req zone=pages burst=60 nodelay;
             proxy_pass http://frontend_v2;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
