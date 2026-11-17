@@ -99,6 +99,7 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
 }
 
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
+export const statusAsk = (incoming: string) => STATUS_ASK.test(incoming ?? "");
 export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
 export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
 
@@ -308,6 +309,23 @@ export function cardReferences(reply: string, cardsShown: boolean): string[] {
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => PICTURE_REF.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
+// A size the customer typed, stated back as a product's own (prod replay 9: "90×90"
+// confirmed while the product data says 70×70). A size about their device is theirs to state.
+const SIZE = /(\d{1,3}(?:[.,]\d)?)\s*(?:ס["״']?מ\s*)?(?:[x×*]|על)\s*(\d{1,3}(?:[.,]\d)?)/gu;
+const PRODUCT_NOUN = /(?<![\u0590-\u05FF])(?:ה?משטח|ה?משטחים|ה?מוצר|ה?דגם|ה?מגש|ה?שטיח|ה?כיסוי|ה?פריט|בגודל|במידה|במידות|מידות)(?![\u0590-\u05FF])|\b(?:the (?:mat|pad|product|model|item)|size)\b/iu;
+const THEIR_DEVICE = /(?<![\u0590-\u05FF])(?:שלך|שלכם|שלכן|המכשיר|למכשיר|המיקסר|למיקסר|התנור|לתנור|המקרר|הבסיס|שציינת|שציינתם|שנתת|שנתתם)(?![\u0590-\u05FF])|\b(?:your|you gave|you mentioned)\b/iu;
+const sizeKeys = (text: string) => new Set([...String(text ?? "").matchAll(SIZE)].map((m) => [m[1], m[2]].map((x) => x.replace(",", ".")).sort().join("x")));
+/** Sentences stating a product's size that only the customer's own messages give. */
+export function echoedSizes(reply: string, customerText: string, sourceText: string): string[] {
+  const theirs = sizeKeys(customerText);
+  if (!theirs.size) return [];
+  const known = sizeKeys(sourceText);
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => {
+    const echoed = [...sizeKeys(x)].some((k) => theirs.has(k) && !known.has(k));
+    return echoed && PRODUCT_NOUN.test(x) && !THEIR_DEVICE.test(x);
+  }).map((x) => x.trim().slice(0, 120));
+}
+
 // The same paragraph again (prod replay 6: one paragraph sent 7 times in one conversation).
 /** A reply that mostly repeats one of the employee's last five. */
 export function nearDuplicate(reply: string, previousBotReplies: string[]): boolean {
@@ -327,7 +345,7 @@ export const foreignScript = (reply: string) => (String(reply ?? "").match(FOREI
 export const stripForeignScript = (reply: string) => String(reply ?? "").replace(FOREIGN_SCRIPT, "");
 
 // How the system works is not the customer's business (prod replay 5: "the number is linked to your contact details").
-const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
+const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
 export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "");
 
 // A tool failure told to the customer (prod replay 8: "the catalogue didn't open for me").
@@ -376,6 +394,9 @@ export interface Gate3Input {
   cardsChannel?: boolean;
   /** A text channel with products this turn: the engine appends them (name, price, link). */
   listAppended?: boolean;
+  /** The customer's own messages, and everything else a fact may come from (tools, knowledge, a person, the state). */
+  customerText?: string;
+  sourceText?: string;
 }
 
 export function gate3(i: Gate3Input): Gate3Verdict {
@@ -413,6 +434,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   // Products this turn mean a search ran.
   if (!i.candidateCount && photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "no_search" });
   if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
+  const echoed = i.customerText != null ? echoedSizes(reply, i.customerText, i.sourceText ?? "") : [];
+  if (echoed.length) problems.push({ kind: "echoed_size", claims: echoed });
   const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
@@ -456,7 +479,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -487,8 +510,12 @@ export function neutralFirstPerson(s: string): string {
 export function stripFactProblems(reply: string, problems: ClaimProblem[]): string {
   let s = String(reply ?? "");
   for (const p of problems) {
-    if (p.kind === "ungrounded_price") s = stripPrices(s, p.prices);
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference") {
+    // A made-up price loses its sentence ("התיק עולה ₪120." would leave "התיק עולה.").
+    if (p.kind === "ungrounded_price") {
+      const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
+      s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
+    }
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -582,6 +609,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
     if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search for those words ran this turn, or it returned them. Search for it now (the customer's own words), and answer from what comes back; if nothing does, say you did not find it by that name and ask.`);
     if (p.kind === "no_search") lines.push("- The customer told you what they want (a category, a colour, a size). Search the store with their words now and show what fits; ask at most one short question, never for a photo you already asked for.");
+    if (p.kind === "echoed_size") lines.push(`- A product's size comes from the product data, never from the number the customer typed (${p.claims.join("; ")}). State the size the search returned, or that it is not listed.`);
     if (p.kind === "card_reference") lines.push("- No picture or card goes out with this reply: do not refer to one (\"בתמונה\", \"מצורף\"). Name the product instead.");
     if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");

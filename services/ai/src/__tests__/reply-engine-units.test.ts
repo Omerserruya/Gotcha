@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -677,6 +677,8 @@ describe("prod replay 5 (2026-11-16)", () => {
     expect(stripFactProblems("יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים.", [{ kind: "ungrounded_absence", claims: ["במבוק אנחנו לא מוכרים."] }] as any)).toBe("יש לנו משטחים בכמה גדלים.");
     expect(stripFactProblems("נעדכן אותך כשזה יגיע. המשלוח יוצא מחר.", [{ kind: "unsupported_action", claims: ["נעדכן"] }] as any)).toBe("המשלוח יוצא מחר.");
     expect(stripFactProblems("התיק עולה ₪120, מתאים?", [{ kind: "ungrounded_price", prices: ["120"] }] as any)).not.toMatch(/120/);
+    // The whole sentence goes, never "התיק עולה." (prod replay 9).
+    expect(stripFactProblems("התיק עולה ₪120. מתאים לך?", [{ kind: "ungrounded_price", prices: ["120"] }] as any)).toBe("מתאים לך?");
   });
 
   it("★ the engine's own lookups for a rewrite: the customer's words, two at most, none it cannot make", async () => {
@@ -1039,5 +1041,43 @@ describe("prod replay 8 (2026-11-17)", () => {
   it("★ the address starts at the street word: \"המפעל ברח במסילה 23 נשר\"", async () => {
     const { extractAddress } = await import("../services/knowledge.service");
     expect(extractAddress("איסוף עצמי מהמפעל ברח במסילה 23 נשר")).toBe("רחוב במסילה 23 נשר");
+  });
+});
+
+describe("prod replay 9 (2026-11-17)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ a product size the customer typed is not a product fact; their device's size is theirs", async () => {
+    const { echoedSizes } = await import("../services/reply-engine/gates");
+    const customer = "יש לכם משטח 90×90?";
+    expect(echoedSizes("כן, המשטח בגודל 90×90 ס\"מ.", customer, "PRODUCT_1: משטח 70*70")).toHaveLength(1);
+    expect(echoedSizes("המשטח בגודל 70×70 ס\"מ.", customer, "PRODUCT_1: משטח 70*70")).toEqual([]);
+    expect(echoedSizes("כן, המשטח בגודל 90×90.", customer, "משטח 90*90")).toEqual([]);
+    expect(echoedSizes("למכשיר שלך בגודל 90×90 מתאים משטח 70×70.", customer, "משטח 70*70")).toEqual([]);
+    expect(kinds(await g3("כן, המשטח בגודל 90×90 ס\"מ.", { customerText: customer, sourceText: "משטח 70*70" }))).toContain("echoed_size");
+  });
+
+  it("★ \"the unsupported message\" is internal jargon", async () => {
+    expect(styleCodes(await g3("לא ראיתי את ההודעה שלא נתמכה, אפשר לכתוב שוב?"))).toContain("internal_jargon");
+  });
+
+  it("★ a cancelled order is marked and never presented as theirs", async () => {
+    const { labelInactiveOrders } = await import("../services/reply-engine/engine");
+    const list = labelInactiveOrders("woocommerce.list_customer_orders", { ok: true, result: [{ id: 1, status: "cancelled" }, { id: 2, status: "processing" }] });
+    expect(list.result[0].inactive).toMatch(/^cancelled/);
+    expect(list.result[1].inactive).toBeUndefined();
+    expect(list.note).toMatch(/never present it as the customer's order/);
+    expect(labelInactiveOrders("woocommerce.get_order", { ok: true, result: { id: 2, status: "completed" } }).note).toBeUndefined();
+    expect(labelInactiveOrders("woocommerce.get_order", { ok: true, result: { id: 3, status: "refunded" } }).result.inactive).toMatch(/^refunded/);
+  });
+
+  it("★ the sentences a cleanup cut are named exactly", async () => {
+    const { removedSentences } = await import("../services/reply-engine/engine");
+    expect(removedSentences("א ב. ג ד. ה ו.", "א ב. ה ו.")).toEqual(["ג ד."]);
   });
 });

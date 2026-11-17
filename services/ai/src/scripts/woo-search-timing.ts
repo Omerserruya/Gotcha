@@ -36,6 +36,8 @@ async function timed(tenantId: string, args: Record<string, unknown>) {
 
 async function main() {
   const a = parseTimingArgs(process.argv.slice(2));
+  // Every store request with its ms (path and parameter names only): where a warm search still spends its time.
+  process.env.WOO_REQUEST_TRACE = "1";
   await withCrossTenantAccess(async () => {
     for (const q of a.queries) {
       console.log(`\n[timing] q="${q}"`);

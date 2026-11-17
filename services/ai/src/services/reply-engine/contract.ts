@@ -149,6 +149,7 @@ export type ClaimProblem =
   | { kind: "ignored_yes" }
   | { kind: "nameless_products" }
   | { kind: "card_reference"; claims: string[] }
+  | { kind: "echoed_size"; claims: string[] }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 
@@ -168,7 +169,7 @@ export interface EngineTurnTrace {
   stageMs: Record<string, number>;
   rounds: number;
   tools: ToolRunRecord[];
-  gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "cleaned" | "fallback" | "silent" };
+  gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "cleaned" | "cleaned_partial" | "fallback" | "silent" };
   tokens: { input: number; output: number; cached: number };
   toolsOffered: number;
   /** The question recorded for the team this turn (live) or that would have been (shadow, replay). A repeat of an open one is not. */

@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -152,6 +152,22 @@ export function ordersAsOf(toolFunctionName: string, result: any, asOf: Date): a
   return result;
 }
 
+/**
+ * A cancelled, failed or refunded order is not the customer's order to talk about as
+ * if it were live (prod replay 9: a cancelled order given as "your order number").
+ * Each such order is marked, and the result says how to speak of it.
+ */
+const INACTIVE = new Set(["cancelled", "failed", "refunded", "trash"]);
+export function labelInactiveOrders(toolFunctionName: string, result: any): any {
+  if (!/^woocommerce\.(?:get_order|list_customer_orders|list_orders)$/.test(toolFunctionName) || !result?.ok) return result;
+  const mark = (o: any) => (o && INACTIVE.has(String(o.status ?? "").toLowerCase()) ? { ...o, inactive: `${o.status}: not an active order` } : o);
+  const list = Array.isArray(result.result) ? result.result.map(mark) : mark(result.result);
+  const any = Array.isArray(list) ? list.some((o: any) => o?.inactive) : !!list?.inactive;
+  return any
+    ? { ...result, result: list, note: "An order marked inactive (cancelled, failed or refunded) is not active: never present it as the customer's order or give its number as theirs; say it was cancelled (or failed, or refunded), and use an active order if there is one." }
+    : result;
+}
+
 /** The model passed a phone, email or customer id to "my orders", which the scrub drops. */
 export function droppedOrderSelectors(toolFunctionName: string, args: Record<string, any>): boolean {
   return toolFunctionName === "woocommerce.list_customer_orders" && ["phone", "email", "customer_id"].some((k) => args?.[k] != null && args[k] !== "");
@@ -217,6 +233,13 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
 
 /** The customer asks to be called (prod replay 8: "יכול להתקשר אלי?" ignored). */
 export const CALL_REQUEST = /(?<![\u0590-\u05FF])(?:תתקשרו|תתקשר|תתקשרי|להתקשר\s+אלי|יכול(?:ה|ים)?\s+להתקשר|אפשר\s+(?:להתקשר|שיחה|לדבר\s+בטלפון)|שיחה\s+טלפונית|שיחת\s+טלפון|תחזרו\s+אלי\s+(?:בטלפון|טלפונית)|תצלצלו|לצלצל\s+אלי|שמישהו\s+יתקשר)(?![\u0590-\u05FF])|\b(?:call me|give me a call|phone me|can (?:you|someone) call)\b/iu;
+
+const wordCount = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9]+/g) ?? []).length;
+/** The sentences of `before` that are not in `after` (what a cleanup cut). */
+export function removedSentences(before: string, after: string): string[] {
+  const keep = String(after ?? "");
+  return (String(before ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
+}
 
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
@@ -559,7 +582,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         args: effective,
         accessScope: "customer",
       });
-      const asOf = opts.replay ? ordersAsOf(toolFunctionName, out, opts.replay.asOf) : out;
+      const asOf = labelInactiveOrders(toolFunctionName, opts.replay ? ordersAsOf(toolFunctionName, out, opts.replay.asOf) : out);
       return dropped ? withOwnNumberNote(asOf) : asOf;
     },
   };
@@ -731,6 +754,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     candidateTitles: candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean),
     cardsChannel: cardChannel,
     listAppended: !cardChannel && candidates.length > 0,
+    customerText: inbound.join("\n"),
+    // Everything but the customer's own words: tools, products, state, knowledge, a person's lines.
+    sourceText: [
+      ...turnTools.records.map((r) => r.content),
+      JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => c.title)),
+      renderState(state), knowledge ?? "", ...turnTools.knowledgeText,
+      ...chat.filter((m) => m.role === "user" && /^\[(?:Human team member|The business owner)/.test(String(m.content))).map((m) => m.content),
+    ].join("\n"),
   });
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
@@ -814,16 +845,43 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           : o.handoff;
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
         const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
-        // Nothing, or too little, left to answer with: the other candidate, else the fallback.
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
         if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
-        if (!cleaned.reply || tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) })) return null;
+        if (!cleaned.reply) return null;
         const after = gate3(g3Input(cleaned));
-        return factualProblems(after.problems).length ? null : { o: cleaned, v: after };
+        if (factualProblems(after.problems).length) return null;
+        // A remnant that no longer answers (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on a safety
+        // complaint) is kept only as the last resort, never as the answer while the model can still give one.
+        const removed = removedSentences(resolveKeysInText(o.reply, candidates), cleaned.reply);
+        const thin = tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) });
+        // Hollow: thin, or most of the reply cut away (a style edit keeps its words).
+        const hollow = thin || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
+        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems };
       };
-      const kept = salvage(second) ?? salvage(original);
+      const fromSecond = salvage(second);
+      const fromOriginal = salvage(original);
+      let kept = [fromSecond, fromOriginal].find((x) => x && !x.hollow) ?? null;
+      if (!kept && (fromSecond || fromOriginal || second || original) && left() > 5000) {
+        // ONE targeted rewrite: what was cut and why, and answer the customer fully.
+        const cut = (fromSecond ?? fromOriginal);
+        const why = [...new Set((cut?.problems ?? v2?.problems ?? first.problems).map((p) => p.kind === "style" ? p.codes.join("/") : p.kind))].join(", ");
+        messages.push({ role: "system", content: `Your reply could not be sent as written${cut?.removed.length ? `: these sentences had to be cut (${why}): ${cut.removed.map((x) => `"${x.slice(0, 160)}"`).join(" ")}` : ` (${why})`}. What was left does not answer the customer's last message: "${String(opts.incomingMessage ?? "").slice(0, 300)}". Write the full answer to it now, without those claims, and call respond.` });
+        try {
+          const r3 = await rewriteCall({ type: "function", function: { name: "respond" } });
+          const rc3 = (r3.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
+          const third = rc3 ? parseRespond(rc3.function.arguments) : null;
+          const s3 = salvage(third);
+          if (s3 && !s3.hollow) { kept = s3; (trace as any).rewrite2 = true; }
+        } catch (err: any) {
+          if ((err as any)?.name === "AbortError") throw err;
+        }
+      }
+      // Else the original minus only its offending sentences, then the rewrite's remnant.
+      // (A product turn with products found keeps its grounded product fallback instead.)
+      // A thin remnant ("תודה!" for a question) is never the answer.
+      if (!kept && !groundedProductFallback(candidates as any, locale, cardChannel)) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin) ?? null;
       if (kept) {
-        output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: "cleaned" };
+        output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
@@ -885,6 +943,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       output = { ...output, handoff: "the reply says a person will continue", reply: isCannedTeamLine(output.reply) || !output.reply ? handoffLine : output.reply };
       (trace as any).handoffSetInCode = true;
     }
+  }
+  // A safety or damage complaint in the customer's last messages never ends without a
+  // person or the team (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on one).
+  if (output && !output.handoff && !output.teamQuestion && !turnTools.escalation && safetyCase(inbound.slice(-6))) {
+    output = { ...output, handoff: "safety or damage in the conversation", reply: promisesPerson(output.reply) ? output.reply : [output.reply?.trim(), handoffLine].filter(Boolean).join(" ") };
+    (trace as any).handoffSetInCode = true;
+    (trace as any).safetyHandoff = true;
+  }
+  // "Already with the team" only for the SAME subject as an open team item (prod replay 9: a
+  // colour ask told "זה כבר אצל הצוות" when the open item was a coupon): else this ask is recorded.
+  if (output?.reply && !output.handoff && !output.teamQuestion && teamAlreadyOpen && teamLineIn(output.reply) && !statusAsk(opts.incomingMessage ?? "")
+    && !openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? "")))) {
+    output = { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) || null, reply: isCannedTeamLine(output.reply) ? safeFallback(locale) : output.reply };
+    (trace as any).newSubjectToTeam = true;
   }
   // A call request is never ignored (prod replay 8): there is no call tool, so it goes to the team.
   if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && CALL_REQUEST.test(opts.incomingMessage ?? "")) {

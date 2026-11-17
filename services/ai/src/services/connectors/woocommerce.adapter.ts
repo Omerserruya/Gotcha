@@ -644,6 +644,19 @@ async function allowedProductIds(auth: string, base: string, cats: Set<string>):
   const key = `${base}|${[...cats].sort().join(",")}|${langs.join(",")}`;
   const hit = allowedIdsCache.get(key);
   if (hit && Date.now() - hit.at < (hit.failed ? 60_000 : 10 * 60_000)) return hit.ids;
+  // A good list past its ten minutes is served while it refreshes (up to 6h); a failed one is retried now.
+  if (hit && !hit.failed && Date.now() - hit.at < CATALOG_STALE_MS) {
+    if (!inflight.has(`allowed|${key}`)) {
+      const p = loadAllowedIds(auth, base, cats, langs, key).finally(() => inflight.delete(`allowed|${key}`));
+      inflight.set(`allowed|${key}`, p);
+      p.catch(() => {});
+    }
+    return hit.ids;
+  }
+  return loadAllowedIds(auth, base, cats, langs, key);
+}
+
+async function loadAllowedIds(auth: string, base: string, cats: Set<string>, langs: Array<string | null>, key: string): Promise<Set<string>> {
   const ids = new Set<string>();
   let failed = false;
   await Promise.all([...cats].flatMap((cat) => langs.map(async (lang) => {
@@ -775,7 +788,11 @@ export async function warmWooCatalog(credentials: Record<string, any>, config: R
     const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
     // The languages a turn reads in: none on a single-language store; he and en on a WPML one.
     const langs: Array<string | null> = productLanguage({}, config) ? [null, "he", "en"] : [null, "he"];
-    await Promise.all(langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l).catch(() => null)]));
+    const allowed = categoryAllowList(config);
+    await Promise.all([
+      ...langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l).catch(() => null)]),
+      ...(allowed ? [allowedProductIds(auth, base, allowed).catch(() => null)] : []),
+    ]);
     return { ms: Date.now() - t0, ok: true };
   } catch {
     return { ms: Date.now() - t0, ok: false };
@@ -1810,6 +1827,12 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
   const ms = Date.now() - startedAt;
   // One line per store request: which kind, how long (her host is slow only at moments).
   if (ms > 3000) console.warn(`[woo-request] slow ${method} ${new URL(url).pathname.replace(/^.*\/wc\/v3/, "")} ${ms}ms`);
+  // Step-by-step timing for the timing script (WOO_REQUEST_TRACE=1): the path and the
+  // parameter NAMES only, never their values (a search value is the customer's words).
+  if (process.env.WOO_REQUEST_TRACE === "1") {
+    const u = new URL(url);
+    console.log(`[woo-trace] ${method} ${u.pathname.replace(/^.*\/wc\/v3/, "")}?${[...u.searchParams.keys()].join(",")} ${ms}ms`);
+  }
   if (method === "GET") rememberListed(url, out);
   return out;
 }

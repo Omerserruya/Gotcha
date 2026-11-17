@@ -212,9 +212,10 @@ describe("one v2 turn, live", () => {
       { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד." })] },
     );
     const r = await runReplyEngineTurn(opts, "autonomous");
-    expect(h.calls).toHaveLength(2);
+    // Nothing of either draft survives: ONE more targeted rewrite is tried (prod replay 9), then the fallback.
+    expect(h.calls).toHaveLength(3);
     expect(h.calls[1].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
-    expect(h.calls[1].messages.at(-1).content).toMatch(/120/);
+    expect(h.calls[2].messages.find((m: any) => m.role === "system" && /could not be sent as written/.test(m.content))?.content).toMatch(/Write the full answer/);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.reply).not.toMatch(/₪/);
     expect(r.escalation).toBeNull();
@@ -715,16 +716,34 @@ describe("prod replay 4 (2026-11-16), through a whole turn", () => {
 });
 
 describe("prod replay 5 (2026-11-16), through a whole turn", () => {
-  it("★ an absence sentence the search contradicts is cut; the rest of the reply goes out, no canned line", async () => {
+  it("★ an absence sentence the search contradicts is cut; a remnant that no longer answers gets ONE targeted rewrite (prod replay 9)", async () => {
     h.groundTitle = "משטח במבוק כהה";
     h.responses.push(
       { toolCalls: [respond("f1", { reply: "יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים." })] },
       { toolCalls: [respond("f2", { reply: "יש לנו משטחים בכמה גדלים. במבוק אנחנו לא מוכרים." })] },
+      { toolCalls: [respond("f3", { reply: "כן, יש לנו משטח במבוק כהה, ואפשר לראות אותו כאן." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
+    const note = h.calls[2].messages.find((m: any) => m.role === "system" && /could not be sent as written/.test(m.content))?.content ?? "";
+    expect(note).toMatch(/במבוק אנחנו לא מוכרים/);
+    expect(note).toMatch(/יש משטחי במבוק\?/);
+    expect((r.trace as any).rewrite2).toBe(true);
     expect(r.trace.gate3.rewrite).toBe("cleaned");
-    expect(r.reply).toBe("יש לנו משטחים בכמה גדלים.");
+    expect(r.reply).toBe("כן, יש לנו משטח במבוק כהה, ואפשר לראות אותו כאן.");
   });
+
+  it("★ the targeted rewrite fails too: the original minus only its offending sentence", async () => {
+    h.responses.push(
+      { toolCalls: [respond("g1", { reply: "ההכוונה הקודמת לא הייתה נכונה, מצטערים. נעדכן אותך ברגע שההחזרה תגיע אלינו למחסן ונבדוק אותה." })] },
+      { toolCalls: [respond("g2", { reply: "נעדכן אותך כשזה יגיע." })] },
+      { toolCalls: [respond("g3", { reply: "נעדכן אותך." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "שלחתי את ההחזרה אתמול" }, "autonomous");
+    expect(h.calls).toHaveLength(3);
+    expect(r.trace.gate3.rewrite).toBe("cleaned_partial");
+    expect(r.reply).toBe("ההכוונה הקודמת לא הייתה נכונה, מצטערים.");
+  });
+;
 
   it("★ \"yes\" to its own offer of a person: the handoff happens even if the rewrite forgets it", async () => {
     h.history = [
@@ -848,5 +867,33 @@ describe("prod replay 8: a failed store search", () => {
     expect(note).toMatch(/^PRODUCT_SEARCH_FAILED: /);
     expect(note).toMatch(/narrower query/);
     expect(note).not.toMatch(/offer a human handoff|can't check the catalog/);
+  });
+});
+
+describe("prod replay 9 (2026-11-17), through a whole turn", () => {
+  it("★ a safety complaint never ends without a person: the handoff is set in code, the answer kept", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "המכשיר מתהפך על המשטח, זה מסוכן", metadata: null },
+      { direction: "OUTBOUND", body: "מצטערים מאוד. מה גודל המכשיר?", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "30 על 40", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("s1", { reply: "תודה על הפרטים, זה עוזר להבין." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "30 על 40" }, "autonomous");
+    expect((r.trace as any).safetyHandoff).toBe(true);
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:safety/);
+    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן.");
+  });
+
+  it("★ \"already with the team\" for another subject: this ask is recorded as a new team question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const OPEN = { kind: "promise", text: "checking with the team: הקופון WELCOME10 לא עובד בתשלום", at: new Date().toISOString() };
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
+    h.responses.push({ toolCalls: [respond("t1", { reply: "זה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ויש את התיק בצבע ירוק זית?" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect((r.trace as any).newSubjectToTeam).toBe(true);
+    expect(h.teamQuestions.map((q) => q.question)).toEqual(["ויש את התיק בצבע ירוק זית?"]);
+    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
   });
 });
