@@ -400,6 +400,37 @@ export async function handedBackSince(tenantId: string, conversationId: string, 
   return !!row;
 }
 
+// The subject of an open item as a fixed noun, never its text (prod replay 2026-11-17).
+const SUBJECT_NOUNS: Array<[RegExp, string, string]> = [
+  [/קופון|קוד\s*(?:הנחה|קופון)?|coupon|promo|discount code/iu, "הקופון", "the coupon"],
+  [/חיוב|חויב|תשלום|שילמ|כסף|זיכוי|החזר\s+כספי|charge|payment|refund/iu, "החיוב", "the charge"],
+  [/משלוח|חבילה|שליח|delivery|shipping|package|parcel/iu, "המשלוח", "the delivery"],
+  [/הזמנה|order/iu, "ההזמנה", "your order"],
+  [/החלפה|החזרה|exchange|return/iu, "ההחזרה", "the return"],
+];
+/** "<noun> is still being checked" when the subject maps to a fixed noun, else a neutral line. Never the item's own text. */
+export function stillCheckingLine(subjectText: string, locale: "he" | "en"): string {
+  const hit = SUBJECT_NOUNS.find(([re]) => re.test(String(subjectText ?? "")));
+  if (locale === "he") return hit ? `${hit[1]} עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.` : "זה עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.";
+  return hit ? `${hit[2].charAt(0).toUpperCase()}${hit[2].slice(1)} is still being checked by the team; the answer will come here in the chat.` : "This is still being checked by the team; the answer will come here in the chat.";
+}
+// The reply offers to ask the team instead of saying it did.
+const OFFERS_TO_ASK = /(?<![\u0590-\u05FF])(?:רוצה|תרצי|תרצה|תרצו|שאבדוק|שאשאל|שאעביר|שנבדוק|שנעביר)[^.!?\n]{0,40}\?|\b(?:would you like (?:me|us) to (?:ask|check|pass)|shall (?:i|we) (?:ask|check)|should (?:i|we) (?:ask|check))\b/iu;
+export const offersToAsk = (reply: string) => OFFERS_TO_ASK.test(reply ?? "");
+
+/** A first name the greeting may use: letters (a space between parts), not camelCase or a handle, no digits. */
+export function greetingName(raw: string | null | undefined): string | null {
+  const t = String(raw ?? "").trim();
+  if (!t || t.length > 40 || /[\d@_./\\]/.test(t) || /\p{Ll}\p{Lu}/u.test(t)) return null;
+  if (!/^\p{L}[\p{L}'\u05F3-]*(?:\s+\p{L}[\p{L}'\u05F3-]*){0,3}$/u.test(t)) return null;
+  return t.split(/\s+/)[0];
+}
+
+/** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */
+export function productQuestionLine(locale: "he" | "en"): string {
+  return locale === "he" ? "כדי למצוא את המתאים: לאיזה דגם או שימוש זה, ובאיזו מידה?" : "To find the right one: which model or use is it for, and what size?";
+}
+
 /** The inactive-orders fact after this turn: the known numbers plus this turn's, at most 20. */
 export function inactiveOrdersFact(prev: unknown, now: string[]): Record<string, string> {
   if (!now.length) return {};
@@ -859,7 +890,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true, conflicts: "team" }) || null;
   const customerName = String((conversation as any).customerName ?? "").trim();
-  const customerLine = customerName ? `Name: ${customerName.slice(0, 60)}` : null;
+  // A first name only when it reads as one (prod replay 2026-11-17: "היי SharonKampinski").
+  const firstName = greetingName(customerName);
+  const customerLine = firstName ? `Name: ${firstName}` : null;
   const turnPart = buildTurnPart({
     stateText: renderState(state),
     summary: chat.length > windowed.length ? state.summary : null,
@@ -1175,6 +1208,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           output = { reply: notFoundReply(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
         } else if (grounded) {
           output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+        } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
+          // A simple product ask with nothing grounded to show: one question that moves the choice on,
+          // never a question for the team (prod replay 2026-11-17: "רוצה לבן" sent to the team).
+          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
         } else if (!needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // The customer's words call for a person (asked for one, damage, a late order).
           output = { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
@@ -1276,16 +1313,18 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, teamQuestion: q };
   }
   // A question recorded for the team this turn is told to the customer, naming it (prod replay 2026-11-17).
-  if (output?.reply && output.teamQuestion && isNewTeamQuestion(output.teamQuestion) && !output.handoff && !teamLineIn(output.reply) && !/(?<![\u0590-\u05FF])(?:בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\bbeing checked\b/iu.test(output.reply)) {
-    const subject = output.teamQuestion.replace(/^call request:\s*/i, "").slice(0, 90);
-    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? `העברתי לצוות את השאלה: "${subject}". התשובה תגיע כאן בצ'אט.` : `I've passed your question to the team: "${subject}". The answer will come here in the chat.`}` };
+  // Not when the reply offers to ask instead ("Would you like me to ask?"): one or the other, never both.
+  if (output?.reply && output.teamQuestion && isNewTeamQuestion(output.teamQuestion) && !output.handoff && !teamLineIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\bbeing checked\b/iu.test(output.reply)) {
+    // A fixed line: the team question is internal text and is never quoted (prod replay 2026-11-17:
+    // a third-person, cut-off question was read to the customer).
+    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).teamQuestionTold = true;
   }
   // The customer is back on a subject the team already has (prod replay 2026-11-17, NE'A): say it is
   // with the team, naming it, when the reply does not.
   const openOnIt = openTeam.find((t) => sameIssue(t, String(opts.incomingMessage ?? "")));
-  if (output?.reply && openOnIt && !output.handoff && !teamLineIn(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
-    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? `ה${openOnIt.slice(0, 80).replace(/^ה/, "")} עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.` : `"${openOnIt.slice(0, 80)}" is still being checked by the team; the answer will come here in the chat.`}` };
+  if (output?.reply && openOnIt && !output.handoff && !teamLineIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
+    output = { ...output, reply: `${output.reply.trim()} ${stillCheckingLine(openOnIt, locale)}` };
     (trace as any).openItemMentioned = true;
   }
   // The engine's own team line at most once per conversation (prod replay 2026-11-17, Tehila: twice in a
@@ -1293,12 +1332,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const canned = output?.reply ? endsWithCannedTeamLine(output.reply) : null;
   const cannedBefore = cannedSent || history.some((m: any) => m.direction === "OUTBOUND" && !!endsWithCannedTeamLine(m.body));
   if (output?.reply && canned && cannedBefore) {
-    const subject = String(output.teamQuestion ?? openTeam.at(-1) ?? opts.incomingMessage ?? "").replace(/^call request:\s*/i, "").slice(0, 90);
-    const named = locale === "he" ? `הצוות בודק את זה: "${subject}". התשובה תגיע כאן בצ'אט.` : `The team is checking this: "${subject}". The answer will come here in the chat.`;
+    const named = stillCheckingLine(String(output.teamQuestion ?? openTeam.at(-1) ?? opts.incomingMessage ?? ""), locale);
     const head = output.reply.slice(0, output.reply.length - canned.length).trim();
     output = { ...output, reply: head ? `${head} ${named}` : named };
     (trace as any).cannedRenamed = true;
   } else if (output?.reply && canned) cannedNow = true;
+  // A raw handle or a full username in the greeting goes (the name line now carries only a first name).
+  if (output?.reply && customerName && !firstName && output.reply.includes(customerName)) {
+    output = { ...output, reply: output.reply.replace(new RegExp(`\\s*,?\\s*${customerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(?=[,!.]|$)`, "u"), "").replace(/^(\S+)\s*,\s*/u, "$1, ").trim() };
+  }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };

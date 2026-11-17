@@ -151,6 +151,8 @@ export function automatedInbound(m: { channel?: string | null; sender?: string |
 
 const MEDIA_PLACEHOLDER = /^(?:\[(?:Image|Photo|Video|Voice message|Audio|Document|Sticker|File|תמונה|סרטון|הודעה קולית|מסמך)[^\]]*\]|)$/i;
 
+const CANCEL_REQUEST = /(?<![\u0590-\u05FF])[וש]?(?:לבטל|לביטול|ביטול|בטלו|תבטלו|תבטלי|תבטל|מבטל|מבטלת|להחזיר\s+(?:את\s+)?(?:ה)?כסף|החזר\s+כספי|זיכוי)(?![\u0590-\u05FF])|\b(?:cancel(?:l?ation)?|refund|money back|chargeback)\b/iu;
+export const cancelRequest = (t: string) => CANCEL_REQUEST.test(normalizeQuotes(t ?? ""));
 /** A handoff the customer's own words do not call for. */
 export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean): boolean {
   if (!handoff) return false;
@@ -159,7 +161,8 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
   // Photos sent right after the words ("[Image]") must not push them out of the window.
   const recent = recentInbound.filter((m) => !MEDIA_PLACEHOLDER.test(String(m ?? "").trim())).slice(-3).join("\n");
   // A payment or checkout failure is a support case: a person may take it.
-  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent) && !PAY_PROBLEM.test(normalizeQuotes(recent));
+  // A cancel or refund request too (prod replay 2026-11-17, Urban: its handoff was removed).
+  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent) && !PAY_PROBLEM.test(normalizeQuotes(recent)) && !CANCEL_REQUEST.test(normalizeQuotes(recent));
 }
 
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
@@ -870,6 +873,15 @@ export function notNarrowed(reply: string, incoming: string, titles: string[]): 
   return named.filter((t) => !holds(t).length);
 }
 
+// "We got the photo" with no photo, video or file in the customer's last messages (prod replay 2026-11-17).
+const GOT_MEDIA = /(?<![\u0590-\u05FF])(?:קיבלנו|קיבלתי|ראינו|ראיתי|תודה\s+על)\s+(?:את\s+)?(?:ה)?(?:תמונה|תמונות|צילום|צילומים|סרטון|קובץ|מסמך)(?![\u0590-\u05FF])|\b(?:(?:we|i)(?:'ve| have)? (?:got|received|seen) (?:the|your) (?:photo|picture|image|video|file|document)s?|thanks for the (?:photo|picture|image|video|file)s?)\b/iu;
+const MEDIA_SENT = /\[(?:image|photo|video|voice|audio|document|file|sticker|תמונה|סרטון|הודעה קולית|מסמך|קובץ)[^\]]*\]|(?:^|\s)(?:IMG|VID|DOC)[-_]\d/iu;
+/** Sentences claiming a photo or file came when none of the customer's last three messages carried one. */
+export function claimsAttachment(reply: string, recentInbound: string[]): string[] {
+  if (recentInbound.slice(-3).some((m) => MEDIA_SENT.test(String(m ?? "")))) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => GOT_MEDIA.test(x)).map((x) => x.trim().slice(0, 120));
+}
+
 export interface Gate3Input {
   reply: string;
   claims: Claim[];
@@ -999,6 +1011,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (priceClash.length) problems.push({ kind: "price_against_store", claims: priceClash });
   const orderState = orderStateWithoutLookup(reply, i.tools);
   if (orderState.length) problems.push({ kind: "order_state_unread", claims: orderState });
+  const media = claimsAttachment(reply, i.recentInbound ?? [i.incomingMessage]);
+  if (media.length) problems.push({ kind: "claims_attachment", claims: media });
   const optionClaims = optionClaimsWithoutVariations(reply, i.incomingMessage, i.tools);
   if (optionClaims.length) problems.push({ kind: "option_without_variation", claims: optionClaims });
   const extra = notNarrowed(reply, i.incomingMessage, i.candidateTitles ?? []);
@@ -1057,7 +1071,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -1094,7 +1108,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -1253,6 +1267,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
     if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Say it is not known here and put the question in team_question; never guess a source.`);
     if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). Read the product (search or get_product) and give the store's price.`);
     if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);

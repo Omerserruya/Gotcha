@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1997,5 +1997,56 @@ describe("e78b114c rating fixes", () => {
     // The model's own summary stands as written.
     expect(teamQuestionText("Does the 30x40 mat fit a Kenwood Chef?", "does it fit?", st, [])).toBe("Does the 30x40 mat fit a Kenwood Chef?");
     expect(teamQuestionText("call request: תתקשרו", "תתקשרו", st, [])).toBe("call request: תתקשרו");
+  });
+});
+
+/** 39b65d68 regressed (prod replay 2026-11-17): the team question's text quoted to the customer. */
+describe("39b65d68 regression fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+
+  it("★ the \"still checking\" line is a fixed noun or neutral, never the item's text", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    expect(stillCheckingLine("איך הלקוחה מקבלת או מוצאת קוד קופון?", "he")).toBe("הקופון עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.");
+    expect(stillCheckingLine("חיוב כפול בביימי", "he")).toBe("החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.");
+    expect(stillCheckingLine("which suitable models are availabl", "en")).toBe("This is still being checked by the team; the answer will come here in the chat.");
+    expect(stillCheckingLine("משהו אחר לגמרי", "he")).toBe("זה עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.");
+  });
+
+  it("★ an offer to ask is not followed by \"I passed it\"", async () => {
+    const { offersToAsk } = await import("../services/reply-engine/engine");
+    expect(offersToAsk("Would you like me to ask the team about it?")).toBe(true);
+    expect(offersToAsk("רוצה שאבדוק את זה מול הצוות?")).toBe(true);
+    expect(offersToAsk("יש לנו את זה בשחור.")).toBe(false);
+  });
+
+  it("★ \"we got the photo\" with no media sent is a FACT problem", async () => {
+    const { claimsAttachment } = await import("../services/reply-engine/gates");
+    expect(claimsAttachment("קיבלנו את התמונה, תודה. נבדוק.", ["היי", "יש בעיה במשטח"])).toHaveLength(1);
+    expect(claimsAttachment("Thanks for the photo.", ["here"])).toHaveLength(1);
+    expect(claimsAttachment("קיבלנו את התמונה, תודה.", ["יש בעיה", "[Image]"])).toEqual([]);
+    expect(kinds(await g3("קיבלנו את התמונה, תודה.", { recentInbound: ["יש בעיה במשטח"] }))).toContain("claims_attachment");
+  });
+
+  it("★ a cancel or refund request keeps its handoff", async () => {
+    const { needlessHandoff, cancelRequest } = await import("../services/reply-engine/gates");
+    expect(cancelRequest("אני רוצה לבטל את ההזמנה")).toBe(true);
+    expect(cancelRequest("please cancel my order")).toBe(true);
+    expect(needlessHandoff("cancel", ["אני רוצה לבטל את ההזמנה"], false)).toBe(false);
+    expect(needlessHandoff("cancel", ["I want a refund"], false)).toBe(false);
+    expect(needlessHandoff("x", ["יש לכם בשחור?"], false)).toBe(true);
+  });
+
+  it("★ a greeting name only when it reads as a name", async () => {
+    const { greetingName } = await import("../services/reply-engine/engine");
+    expect(greetingName("SharonKampinski")).toBeNull();
+    expect(greetingName("sharon_k")).toBeNull();
+    expect(greetingName("user123")).toBeNull();
+    expect(greetingName("Sharon Kampinski")).toBe("Sharon");
+    expect(greetingName("שרון כהן")).toBe("שרון");
+    expect(greetingName("")).toBeNull();
   });
 });

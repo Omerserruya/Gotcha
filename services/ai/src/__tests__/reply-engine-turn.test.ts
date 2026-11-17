@@ -1160,8 +1160,10 @@ describe("4511b79c rating: engine passes", () => {
     // A call request: the engine adds its own team line, and one was already sent in this conversation.
     h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר שתתקשרו אליי לגבי משלוח לאילת?" }, "autonomous");
-    expect(r.reply ?? "").not.toMatch(/והתשובה תגיע כאן בצ'אט\.$/);
-    expect(r.reply ?? "").toMatch(/הצוות בודק את זה: ".*משלוח לאילת/);
+    // Not the same team line again: "<a fixed noun> is still being checked", never the question's own text.
+    expect(r.reply ?? "").not.toMatch(/העברתי לצוות את הבקשה לשיחה/);
+    expect(r.reply ?? "").toMatch(/עדיין בבדיקה אצל הצוות/);
+    expect(r.reply ?? "").not.toMatch(/"/);
   });
   it("★ back on an open team subject: the reply says it is with the team", async () => {
     const { prisma } = await import("@chatcenter/shared");
@@ -1188,8 +1190,9 @@ describe("e78b114c rating: engine passes", () => {
   it("★ a team question recorded this turn is told to the customer", async () => {
     h.responses.push({ toolCalls: [respond("q1", { reply: "מבינים.", team_question: "חיוב כפול בביימי" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים בביימי" }, "autonomous");
-    expect(r.reply).toMatch(/חיוב כפול בביימי/);
-    expect(r.reply).toMatch(/לצוות/);
+    // A fixed line: the team question's own text is never quoted to the customer.
+    expect(r.reply).toMatch(/העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט\./);
+    expect(r.reply).not.toMatch(/חיוב כפול בביימי/);
   });
 });
 
@@ -1241,5 +1244,41 @@ describe("person_recent respects a hand-back to the AI", () => {
     expect(asked[0].where).toMatchObject({ tenantId: "t1", conversationId: "c1", toHandler: "ai_agent", at: { gt: since } });
     const none = { conversationHandover: { findFirst: async () => null } };
     expect(await handedBackSince("t1", "c1", since, [], null, none)).toBe(false);
+  });
+});
+
+describe("39b65d68 regression: engine passes", () => {
+  it("★ a raw handle never reaches the greeting, and the model sees no name", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const conv = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "WEBCHAT", customerExternalId: "v1", customerName: "SharonKampinski" });
+    h.responses.push({ toolCalls: [respond("g1", { reply: "היי SharonKampinski, במה אפשר לעזור?" })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous"); }
+    finally { (prisma as any).conversation.findFirst = conv; }
+    expect(r.reply).not.toMatch(/SharonKampinski/);
+    expect(r.reply).toMatch(/במה אפשר לעזור/);
+    expect(JSON.stringify(h.calls[0].messages)).not.toMatch(/Name: SharonKampinski/);
+  });
+  it("★ a simple product ask, products shown before, the checks failed: a question, never the team", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [{ id: "101", title: "Canvas Tote", at: new Date().toISOString() }], pending: [], turnCount: 3 });
+    h.responses.push(
+      { toolCalls: [respond("f1", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("f2", { reply: "התיק עולה ₪120." })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה לבן" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+    expect(r.reply).toMatch(/דגם|מידה/);
+  });
+});
+
+describe("an offer to ask is not followed by \"I passed it\"", () => {
+  it("★ the reply offers to ask: no team line is appended", async () => {
+    h.responses.push({ toolCalls: [respond("oa1", { reply: "לא בטוחים בזה. רוצה שאבדוק את זה מול הצוות?", team_question: "התאמה למיקסר" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "זה מתאים למיקסר שלי?" }, "autonomous");
+    expect(r.reply).not.toMatch(/העברתי את זה לצוות/);
   });
 });
