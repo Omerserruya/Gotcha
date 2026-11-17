@@ -324,6 +324,10 @@ services:
       APP_ORIGIN: ${APP_ORIGIN}
       # The platform API the BFF calls, through this same gateway.
       API_BASE_URL: ${V2_API_BASE_URL:-https://app.gotcha.co.il}
+      # `on` only together with API_BASE_URL=http://gateway:80 (the internal
+      # gateway): server calls then carry the browser's address, so a looping
+      # tab fills only its own rate-limit bucket. Anything else means off.
+      API_FORWARD_CLIENT: ${V2_API_FORWARD_CLIENT:-off}
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${OIDC_CLIENT_ID:-gotcha-app}}
       # Encrypts the app's own session cookie. Minted by Omer; at least 32
