@@ -26,6 +26,7 @@
  *   EXCLUDED  test / merged / not attributable
  */
 import { prisma, withCrossTenantAccess } from "../prisma";
+import { NOT_REPLAY_USAGE } from "../ai-usage";
 
 /** Bumped when attribution rules change, so historical rows stay interpretable. */
 export const CALCULATION_VERSION = 1;
@@ -126,7 +127,8 @@ export async function aggregateConversation(
   const alreadyLinked = new Set((existing?.links ?? []).map((l) => l.usageLogId));
 
   const logs = await prisma.usageLog.findMany({
-    where: { tenantId: convo.tenantId, type: "ai_tokens" },
+    // A replay of this conversation is not its usage (replay rows carry its conversationId).
+    where: { tenantId: convo.tenantId, type: "ai_tokens", AND: [NOT_REPLAY_USAGE] },
     select: {
       id: true, feature: true, model: true, promptTokens: true, completionTokens: true,
       costUsd: true, unitsConsumed: true, metadata: true, createdAt: true,

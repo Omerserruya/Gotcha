@@ -10,7 +10,7 @@ import {
   toolSubject,
   isoWeekKey,
   visibilityClause, type Viewer,
-  buildQuietDayList, waitingForPersonWhere } from "@chatcenter/shared";
+  buildQuietDayList, waitingForPersonWhere, NOT_REPLAY_USAGE } from "@chatcenter/shared";
 import { intentLabel } from "@chatcenter/shared/src/lib/conversation-intents";
 import { bareTool, feedToolWhere, requestSelect, requestToExecutionLike, type RequestRow } from "../lib/action-requests";
 
@@ -808,7 +808,8 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
       select: { aiConfidence: true, resolutionOutcome: true },
     }),
     prisma.usageLog.aggregate({
-      where: { tenantId, type: "ai_tokens", createdAt: dateFilter },
+      // A replay of a past conversation is not the tenant's usage.
+      where: { tenantId, type: "ai_tokens", createdAt: dateFilter, AND: [NOT_REPLAY_USAGE] },
       _sum: { quantity: true, promptTokens: true, completionTokens: true },
     }),
     // HITL governance rows - the source for approval rate + override rate

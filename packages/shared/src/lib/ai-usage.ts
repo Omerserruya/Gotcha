@@ -81,6 +81,14 @@ export function computeAICostUsd(opts: {
   );
 }
 
+/**
+ * Usage that is not the tenant's: a replay of a past conversation (replay-v2, prod
+ * 2026-11-17). The ai service marks every row a replay writes with a "_replay" feature;
+ * every tenant-facing usage figure leaves those rows out. A row with no feature counts
+ * (SQL NOT on a NULL is NULL, so the null branch is explicit).
+ */
+export const NOT_REPLAY_USAGE = { OR: [{ feature: null }, { NOT: { feature: { endsWith: "_replay" } } }] };
+
 export interface AIUsageEvent {
   tenantId: string;
   /**
@@ -190,7 +198,7 @@ export async function getEmployeeUsageRollup(
   tenantId: string,
   opts: { since?: Date; until?: Date } = {},
 ): Promise<EmployeeUsageRollup[]> {
-  const where: Record<string, unknown> = { tenantId, type: "ai_tokens", aiAgentId: { not: null } };
+  const where: Record<string, unknown> = { tenantId, type: "ai_tokens", aiAgentId: { not: null }, AND: [NOT_REPLAY_USAGE] };
   if (opts.since || opts.until) {
     where.createdAt = { ...(opts.since ? { gte: opts.since } : {}), ...(opts.until ? { lte: opts.until } : {}) };
   }

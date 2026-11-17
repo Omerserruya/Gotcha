@@ -324,7 +324,7 @@ export {
   isCustomerScopedAction,
   isOrderScopedAction,
 } from "./lib/commerce-context.types";
-export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
+export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup, NOT_REPLAY_USAGE } from "./lib/ai-usage";
 export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";
 export {
   AI_FEATURE_CATEGORIES,

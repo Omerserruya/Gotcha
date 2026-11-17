@@ -65,7 +65,11 @@ vi.mock("../../prisma", () => ({
       findUnique: async ({ where }: any) => db.voiceSessions.find((v) => v.conversationId === where.conversationId) ?? null,
     },
     usageLog: {
-      findMany: async () => db.logs,
+      // Applies the replay exclusion the module sends (feature null, or not ending in "_replay").
+      findMany: async ({ where }: any = {}) => db.logs.filter((l) => {
+        const excl = (where?.AND ?? []).some((c: any) => Array.isArray(c?.OR) && c.OR.some((x: any) => x?.NOT?.feature?.endsWith));
+        return !excl || l.feature == null || !String(l.feature).endsWith("_replay");
+      }),
     },
     conversationUsageAggregate: {
       findUnique: async ({ where }: any) => {
@@ -226,6 +230,16 @@ describe("conversation usage - attribution", () => {
     expect(agg.summaryIncluded).toBe(true);
     expect(agg.totalInputTokens).toBe(5200);
     expect(agg.totalOutputTokens).toBe(620);
+  });
+
+  it("★ a replay of this conversation is not its usage (replay rows carry its conversationId)", async () => {
+    seedConversation();
+    seedLog({ id: "l1", unitsConsumed: 2, promptTokens: 1000, completionTokens: 100, costUsd: 0.002 });
+    seedLog({ id: "r1", feature: "ai_bot_replay", unitsConsumed: 0, promptTokens: 900000, completionTokens: 9000, costUsd: 0 });
+    seedLog({ id: "r2", feature: "embedding_replay", unitsConsumed: 0, promptTokens: 5000, completionTokens: 0, costUsd: 0 });
+    const r = await aggregateConversation(C, { now: NOW });
+    expect(r?.linkedEvents).toBe(1);
+    expect(db.aggregates[0].totalInputTokens).toBe(1000);
   });
 
   it("ignores usage belonging to a different conversation", async () => {
