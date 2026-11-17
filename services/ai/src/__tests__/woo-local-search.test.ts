@@ -10,7 +10,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return { ...actual, assertPublicUrl: vi.fn(async () => undefined) };
 });
 
-import Woo, { localProductList, primeCatalogCache, warmWooCatalog, LIVE_SEARCH_CAP, MAX_LOCAL_CATALOGUE } from "../services/connectors/woocommerce.adapter";
+import Woo, { localProductList, primeCatalogCache, primeCategoryIds, warmWooCatalog, LIVE_SEARCH_CAP, MAX_LOCAL_CATALOGUE } from "../services/connectors/woocommerce.adapter";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); delete process.env.WOO_LOCAL_SEARCH; });
 
@@ -117,5 +117,98 @@ describe("local product search on a small store", () => {
     await big.warm();
     expect(localProductList(`${big.base}/wp-json/wc/v3/products?search=x`)).toBeNull();
     expect(big.calls.some((u) => /[?&]page=6(?:&|$)/.test(u))).toBe(false);
+  });
+
+});
+
+describe("a category read from the store's own membership list (prod 2026-11-17: ?category= ~5s on Smoovee)", () => {
+  it("★ category=X is local only with that category's members cached, joined to the cached products", () => {
+    const base = "https://cat-unit.example.com/wp-json/wc/v3";
+    primeCatalogCache(base, "", CATALOG);
+    const ids = (u: string) => localProductList(`${base}/products?${u}`)?.map((p) => p.id) ?? null;
+    expect(ids("category=12&per_page=30")).toBeNull();
+    // The store's answer, not the products' own category lists (empty here).
+    primeCategoryIds(base, "", "12", ["2", "4"]);
+    expect(ids("category=12&per_page=30")).toEqual([2, 4]);
+    expect(ids("category=12&stock_status=instock")).toEqual([2, 4]);
+    expect(ids("category=12&search=oak")).toEqual([4]);
+    // Per language; a category over 500 (null) or a day old: the store's.
+    expect(ids("category=12&lang=he")).toBeNull();
+    // A Hebrew catalogue with no Hebrew membership: the store's (members are per language).
+    primeCatalogCache(base, "he", CATALOG);
+    expect(ids("lang=he&search=oak")).toEqual([4]);
+    expect(ids("category=12&lang=he")).toBeNull();
+    primeCategoryIds(base, "", "13", null);
+    expect(ids("category=13")).toBeNull();
+    primeCategoryIds(base, "", "12", ["2", "4"], Date.now() - 25 * 60 * 60_000);
+    expect(ids("category=12")).toBeNull();
+    expect(ids("category=x")).toBeNull();
+  });
+
+  function catStore() {
+    const base = `https://cats${++n}.example.com`;
+    const calls: string[] = [];
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      calls.push(decodeURIComponent(url));
+      const u = new URL(url);
+      let body: any = [];
+      if (u.pathname.endsWith("/products/categories")) body = [{ id: 12, name: "Desk Pads", slug: "desk-pads", count: 2, parent: 0 }];
+      else if (u.pathname.endsWith("/products")) {
+        const cat = u.searchParams.get("category");
+        const page = Number(u.searchParams.get("page") ?? 1), per = Number(u.searchParams.get("per_page") ?? 10);
+        const q = (u.searchParams.get("search") ?? "").toLowerCase();
+        const pool = cat === "12" ? CATALOG.filter((p) => p.id === 4 || p.id === 2) : CATALOG;
+        const hits = q ? pool.filter((p) => p.name.toLowerCase().includes(q)) : pool;
+        body = hits.slice((page - 1) * per, page * per).map((p) => (u.searchParams.get("_fields") === "id" ? { id: p.id } : p));
+      }
+      return { ok: true, status: 200, headers: new Headers({ "content-type": "application/json" }), json: async () => body, text: async () => JSON.stringify(body) } as any;
+    }));
+    const run = (args: Record<string, unknown>) => Woo.execute({ toolName: "list_products", args, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base } } as any) as Promise<any[]>;
+    const catReads = () => calls.filter((u) => /[?&]category=12/.test(u) && !/_fields=id/.test(u));
+    return { base, calls, run, catReads, warm: () => warmWooCatalog({ consumerKey: "ck", consumerSecret: "cs" }, { storeUrl: base }) };
+  }
+
+  it("★ the warmer reads every category's members; a search that reaches the category route then asks the store nothing", async () => {
+    const s = catStore();
+    await s.warm();
+    expect(s.calls.some((u) => /[?&]category=12/.test(u) && /_fields=id/.test(u))).toBe(true);
+    const found = await s.run({ query: "desk pads" });
+    expect(found.map((p) => p.id)).toContain(4);
+    expect(s.catReads()).toEqual([]);
+  });
+
+  it("★ cold: a live category read teaches the members, and the next one is local", async () => {
+    const s = catStore();
+    // The catalogue is warm, the category is not (as before the warmer's category pass).
+    primeCatalogCache(`${s.base}/wp-json/wc/v3`, "", CATALOG);
+    await s.run({ query: "desk pads" });
+    const first = s.catReads().length;
+    expect(first).toBeGreaterThan(0);
+    await new Promise((r) => setTimeout(r, 20)); // the background members read
+    await s.run({ query: "desk pads" });
+    expect(s.catReads().length).toBe(first);
+  });
+
+  it("★ the Latin route reads the category alongside the title search, not after it", async () => {
+    const started: Array<{ kind: string; at: number }> = [];
+    const t0 = Date.now();
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const base = `https://par${++n}.example.com`;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = new URL(url);
+      const kind = u.pathname.endsWith("/categories") ? "cats" : u.searchParams.get("category") ? "category" : u.searchParams.get("search") ? "search" : "list";
+      started.push({ kind, at: Date.now() - t0 });
+      if (kind === "search" || kind === "category") await new Promise((r) => setTimeout(r, 40));
+      const body = kind === "cats" ? [{ id: 12, name: "Desk Pads", slug: "desk-pads", count: 1, parent: 0 }] : kind === "category" ? [CATALOG[3]] : [];
+      return { ok: true, status: 200, headers: new Headers({ "content-type": "application/json" }), json: async () => body, text: async () => JSON.stringify(body) } as any;
+    }));
+    process.env.WOO_LOCAL_SEARCH = "off";
+    const found = await Woo.execute({ toolName: "list_products", args: { query: "desk pads" }, credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base } } as any) as any[];
+    expect(found.map((p) => p.id)).toEqual([4]);
+    const search = started.find((x) => x.kind === "search")!;
+    const category = started.find((x) => x.kind === "category")!;
+    expect(category.at).toBeLessThan(search.at + 30);
+    expect(search.at).toBeLessThan(category.at + 30);
   });
 });

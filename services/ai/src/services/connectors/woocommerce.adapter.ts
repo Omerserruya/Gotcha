@@ -766,6 +766,36 @@ const strip = (h: unknown) => String(h ?? "").replace(/<[^>]*>/g, " ").toLowerCa
 export function primeCatalogCache(base: string, lang: string, list: any[] | null, at = Date.now()): void {
   catalogCache.set(`catalog|${base}|${lang}`, { at, value: list });
 }
+/**
+ * A category's members as the store's OWN ?category= answer lists them (prod 2026-11-17:
+ * Smoovee answers ?category= in about 5s, and its products' own category lists carry
+ * other ids under WPML, so membership can only come from that answer). Ids only, per
+ * category and language; fresh an hour, served stale up to a day while it refreshes
+ * (membership changes rarely; price and stock come from the 10-minute catalogue it is
+ * joined to). Filled by the warmer, and after any live category read.
+ */
+const CATEGORY_IDS_FRESH_MS = 60 * 60_000;
+const categoryIdsCache = new Map<string, { at: number; value: string[] | null }>();
+const catIdsKey = (base: string, lang: string, cat: string) => `catids|${base}|${lang}|${cat}`;
+async function categoryMemberIds(auth: string, base: string, cat: string, lang: string | null): Promise<string[] | null> {
+  return swrCached(categoryIdsCache, catIdsKey(base, lang ?? "", cat), CATEGORY_IDS_FRESH_MS, CATEGORY_STALE_MS, () => searchScope.exit(async () => {
+    const ids: string[] = [];
+    for (let page = 1; page <= 5; page++) {
+      const p = new URLSearchParams({ category: cat, status: "publish", per_page: "100", page: String(page), _fields: "id" });
+      if (lang) p.set("lang", lang);
+      const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`);
+      if (!Array.isArray(l)) return null;
+      for (const x of l) if (/^\d{1,12}$/.test(String(x?.id ?? ""))) ids.push(String(x.id));
+      if (l.length < 100) return ids;
+    }
+    return null; // more than 500: the store's own query stays the answer (kept, so it is not re-read every pass)
+  }));
+}
+/** Tests only: a category's members as if read at `at`. */
+export function primeCategoryIds(base: string, lang: string, cat: string, ids: string[] | null, at = Date.now()): void {
+  categoryIdsCache.set(catIdsKey(base, lang, cat), { at, value: ids });
+}
+
 /** A GET /products?... answered from the fresh cached catalogue, or null when it cannot be. */
 export function localProductList(url: string, now = Date.now()): any[] | null {
   let u: URL;
@@ -773,9 +803,9 @@ export function localProductList(url: string, now = Date.now()): any[] | null {
   if (!/\/products$/.test(u.pathname)) return null;
   const q = u.searchParams;
   // Only the parameters this emulates; anything else goes to the store.
-  // Not "category": a WPML store's products list other ids than its own ?category= query
-  // returns (Smoovee), so a category read stays the store's.
-  const known = new Set(["per_page", "page", "search", "status", "lang", "min_price", "max_price", "stock_status", "include", "exclude", "_fields"]);
+  // "category" only through the store's own membership list (categoryMemberIds): a WPML
+  // store's products list other category ids than its ?category= query returns (Smoovee).
+  const known = new Set(["per_page", "page", "search", "status", "lang", "min_price", "max_price", "stock_status", "include", "exclude", "_fields", "category"]);
   if ([...q.keys()].some((k) => !known.has(k))) return null;
   const base = `${u.origin}${u.pathname.replace(/\/products$/, "")}`;
   const lang = q.get("lang") ?? "";
@@ -792,6 +822,14 @@ export function localProductList(url: string, now = Date.now()): any[] | null {
     });
   }
   const ids = (v: string | null) => new Set(String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean));
+  if (q.get("category")) {
+    const cat = String(q.get("category"));
+    if (!/^\d{1,12}$/.test(cat)) return null;
+    const members = categoryIdsCache.get(catIdsKey(base, lang, cat));
+    if (!members || !Array.isArray(members.value) || now - members.at >= CATEGORY_STALE_MS) return null;
+    const inCat = new Set(members.value);
+    list = list.filter((p: any) => inCat.has(String(p?.id)));
+  }
   if (q.get("include")) { const inc = ids(q.get("include")); list = list.filter((p: any) => inc.has(String(p?.id))); }
   if (q.get("exclude")) { const exc = ids(q.get("exclude")); list = list.filter((p: any) => !exc.has(String(p?.id))); }
   if (q.get("stock_status")) list = list.filter((p: any) => String(p?.stock_status ?? "") === q.get("stock_status"));
@@ -872,6 +910,12 @@ export async function warmWooCatalog(credentials: Record<string, any>, config: R
       ...langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l).catch(() => null)]),
       ...(allowed ? [allowedProductIds(auth, base, allowed).catch(() => null)] : []),
     ]);
+    // Each category's members as the store lists them (only those past their hour are read again).
+    await Promise.all(langs.map(async (l) => {
+      const cats = (await storeCategories(auth, base, l).catch(() => null))?.list ?? [];
+      await Promise.all(cats.filter((c: any) => /^\d{1,12}$/.test(String(c?.id ?? "")) && Number(c?.count ?? 1) > 0).slice(0, 60)
+        .map((c: any) => categoryMemberIds(auth, base, String(c.id), l).catch(() => null)));
+    }));
     return { ms: Date.now() - t0, ok: true };
   } catch {
     return { ms: Date.now() - t0, ok: false };
@@ -1578,6 +1622,20 @@ const WooCommerceAdapter: ProviderAdapter = {
         const perAsked = Number(params.get("per_page") ?? 10);
         const read = new URLSearchParams(params);
         if (wooStoreHasAllowList(storeUrl)) read.set("per_page", "100");
+        // The category the words name is read ALONGSIDE the title search, not after it
+        // (prod 2026-11-17: a cold ?category= takes ~5s on a slow store). Used only when
+        // the title search finds nothing by title; local when its members are cached.
+        const catFor = args.query && !params.has("category") && !params.has("include")
+          ? categoryForQuery(auth, base, args.query, params.get("lang")).catch(() => null)
+          : Promise.resolve(null);
+        const byCatEarly: Promise<any[] | null> = catFor.then(async (cat) => {
+          if (!cat?.id) return null;
+          const byCat = new URLSearchParams(params);
+          byCat.delete("search");
+          byCat.set("category", String(cat.id));
+          const l: any = visible(await wooRequest(auth, "GET", `${base}/products?${byCat}`));
+          return Array.isArray(l) ? l : [];
+        }).catch(() => null);
         const listed: any = visible(await wooRequest(auth, "GET", `${base}/products?${read}`));
         const list: any = Array.isArray(listed) ? listed.slice(0, perAsked) : listed;
         // Woo matches the whole phrase as a substring of the title: "black tank
@@ -1600,12 +1658,9 @@ const WooCommerceAdapter: ProviderAdapter = {
         if (Array.isArray(list) && (list.length === 0 || (titleHits && !titleHits.length)) && words.length) {
           const seen = new Map<string, any>();
           const add = (l: any) => { if (Array.isArray(l)) for (const p of l) if (!seen.has(String(p?.id))) seen.set(String(p?.id), p); };
-          const cat = await categoryForQuery(auth, base, args.query, params.get("lang"));
-          if (cat?.id) {
-            const byCat = new URLSearchParams(params);
-            byCat.delete("search");
-            byCat.set("category", String(cat.id));
-            add(visible(await wooRequest(auth, "GET", `${base}/products?${byCat}`)));
+          const inCat = await byCatEarly;
+          if (inCat) {
+            add(inCat);
             // The category's products, those whose title holds a query word first ("cotton shirts").
             if (seen.size) {
               const all = Array.from(seen.values());
@@ -1901,6 +1956,12 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
     if (local) { scope.local++; searchRequestCounts.local++; rememberListed(url, local); return local; }
     if (scope.live >= LIVE_SEARCH_CAP) { scope.capped++; searchRequestCounts.capped++; return []; }
     scope.live++; searchRequestCounts.live++;
+    // A category read the catalogue could not answer: learn its members for the next one.
+    try {
+      const u = new URL(url);
+      const cat = u.searchParams.get("category");
+      if (cat && /^\d{1,12}$/.test(cat)) void categoryMemberIds(authHeader, `${u.origin}${u.pathname.replace(/\/products$/, "")}`, cat, u.searchParams.get("lang")).catch(() => null);
+    } catch { /* not a URL */ }
   }
   if (requestSeam) {
     const out = await requestSeam(method, url, body);
