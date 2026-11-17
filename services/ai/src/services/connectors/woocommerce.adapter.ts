@@ -1625,8 +1625,11 @@ const WooCommerceAdapter: ProviderAdapter = {
         // The category the words name is read ALONGSIDE the title search, not after it
         // (prod 2026-11-17: a cold ?category= takes ~5s on a slow store). Used only when
         // the title search finds nothing by title; local when its members are cached.
+        // The title search is sent first; the category lookup (cached categories) follows it.
+        const listedP: Promise<any> = wooRequest(auth, "GET", `${base}/products?${read}`);
+        listedP.catch(() => {});
         const catFor = args.query && !params.has("category") && !params.has("include")
-          ? categoryForQuery(auth, base, args.query, params.get("lang")).catch(() => null)
+          ? Promise.resolve().then(() => categoryForQuery(auth, base, args.query, params.get("lang"))).catch(() => null)
           : Promise.resolve(null);
         const byCatEarly: Promise<any[] | null> = catFor.then(async (cat) => {
           if (!cat?.id) return null;
@@ -1636,7 +1639,7 @@ const WooCommerceAdapter: ProviderAdapter = {
           const l: any = visible(await wooRequest(auth, "GET", `${base}/products?${byCat}`));
           return Array.isArray(l) ? l : [];
         }).catch(() => null);
-        const listed: any = visible(await wooRequest(auth, "GET", `${base}/products?${read}`));
+        const listed: any = visible(await listedP);
         const list: any = Array.isArray(listed) ? listed.slice(0, perAsked) : listed;
         // Woo matches the whole phrase as a substring of the title: "black tank
         // top" misses "Organic Rib Tank" (eval H02), and a plural or a category
@@ -1956,13 +1959,20 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
     if (local) { scope.local++; searchRequestCounts.local++; rememberListed(url, local); return local; }
     if (scope.live >= LIVE_SEARCH_CAP) { scope.capped++; searchRequestCounts.capped++; return []; }
     scope.live++; searchRequestCounts.live++;
-    // A category read the catalogue could not answer: learn its members for the next one.
+    // A category read the catalogue could not answer: learn its members for the next one,
+    // AFTER this read (the customer's request goes to the store first).
+    const out = await wooRequestLive(authHeader, method, url, body);
     try {
       const u = new URL(url);
       const cat = u.searchParams.get("category");
       if (cat && /^\d{1,12}$/.test(cat)) void categoryMemberIds(authHeader, `${u.origin}${u.pathname.replace(/\/products$/, "")}`, cat, u.searchParams.get("lang")).catch(() => null);
     } catch { /* not a URL */ }
+    return out;
   }
+  return wooRequestLive(authHeader, method, url, body);
+}
+
+async function wooRequestLive(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
   if (requestSeam) {
     const out = await requestSeam(method, url, body);
     if (method === "GET") rememberListed(url, out);
