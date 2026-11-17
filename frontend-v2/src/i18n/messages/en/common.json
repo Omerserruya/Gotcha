@@ -47,5 +47,9 @@
     "voice_webhook_not_updated": "Twilio didn't accept GOTCHA's call address for this number, so calls may not reach GOTCHA.",
     "voice_public_url_missing": "Calls can't be routed to GOTCHA yet: the server's voice address isn't set up. Nothing to fix on your side."
   },
-  "retryIn": "Try again in {seconds}s"
+  "retryIn": "Try again in {seconds}s",
+  "loopStopped": {
+    "body": "This page kept reloading on its own, so we stopped it before it slowed GOTCHA down.",
+    "retry": "Try again"
+  }
 }

@@ -19,6 +19,7 @@ import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
 import { isConsolePath } from '@/shell/workspace-gate';
 import { MfaWatch } from '@/shell/mfa/MfaWatch';
+import { RscLoopGuard } from '@/shell/RscLoopGuard';
 import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
@@ -149,8 +150,10 @@ export default async function AuthenticatedLayout({
         soleHuman={soleHuman}
       >
         <WithSupportBanner>
-          <MfaWatch />
-          <MobileShell meId={meId}>{children}</MobileShell>
+          <RscLoopGuard>
+            <MfaWatch />
+            <MobileShell meId={meId}>{children}</MobileShell>
+          </RscLoopGuard>
         </WithSupportBanner>
       </AppProviders>
     </NextIntlClientProvider>
