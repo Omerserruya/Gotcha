@@ -881,8 +881,8 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "30 על 40" }, "autonomous");
     expect((r.trace as any).safetyHandoff).toBe(true);
     expect(r.escalation?.reason).toMatch(/^ai_handoff:safety/);
-    // Replay 11: a safety reply always keeps the stop-use advice too.
-    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן. עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה.");
+    // Replay 13: the stop-use line only when the customer's own message describes the issue ("30 על 40" does not).
+    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן.");
   });
 
   it("★ \"already with the team\" for another subject: this ask is recorded as a new team question", async () => {
@@ -928,7 +928,26 @@ describe("prod replay 11 rating: safety sticks", () => {
     try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה עם המעצור?" }, "autonomous"); }
     finally { (prisma as any).conversationState.findUnique = async () => null; }
     expect(r.trace.safetyHandoff).toBe(true);
-    expect(r.reply).toMatch(/להפסיק להשתמש/);
+    // "ומה עם המעצור?" names a part but describes nothing: the handoff, not the stop-use line (replay 13).
+    expect(r.reply).not.toMatch(/להפסיק להשתמש/);
+  });
+  it("★ the customer describes the issue: the stop-use line, once, and not again on the next reply", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _safetyAt: new Date().toISOString() }, offeredItems: [], pending: [], turnCount: 5 });
+    h.responses.push({ toolCalls: [respond("z3", { reply: "מבינים, מצטערים." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "המעצור לא מונע את זה" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect((r.reply.match(/להפסיק להשתמש/g) ?? [])).toHaveLength(1);
+    // The previous reply already had it: not again.
+    h.history = [
+      { direction: "INBOUND", body: "המכשיר מתהפך", metadata: null },
+      { direction: "OUTBOUND", body: "מצטערים. עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "המעצור לא מונע את זה", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("z4", { reply: "מבינים." })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "המעצור לא מונע את זה" }, "autonomous");
+    expect(r2.reply).not.toMatch(/להפסיק להשתמש/);
   });
   it("★ the first sight of a safety word saves the fact", async () => {
     h.responses.push({ toolCalls: [respond("z2", { reply: "מצטערים לשמוע, מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "tipping" })] });

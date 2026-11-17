@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, aboutProductInUse } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -1025,7 +1025,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The stop-use advice only when THIS turn is about the product in use (prod replay 12: added to
   // a collaboration inquiry). A sticky safety conversation still hands over (above).
   (trace as any).safetyWord = safetyWord(inbound.slice(-10));
-  if (output?.reply && safetyConversation && !hasStopUse(output.reply) && aboutProductInUse([String(opts.incomingMessage ?? ""), output.reply])) {
+  if (output?.reply && safetyConversation && !hasStopUse(output.reply) && customerDescribesUse(String(opts.incomingMessage ?? "")) && !hasStopUse(previousBotReplies.at(-1) ?? "")) {
     output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
     (trace as any).stopUseAdded = true;
   }

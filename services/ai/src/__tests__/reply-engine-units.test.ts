@@ -1289,3 +1289,47 @@ describe("prod replay 13: the final sanitizer", () => {
     expect(sanitizeReply("נתראה --")).toBe("נתראה");
   });
 });
+
+describe("prod replay 13 (Smoovee)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ the customer's own message decides the stop-use line", async () => {
+    const { customerDescribesUse } = await import("../services/reply-engine/gates");
+    expect(customerDescribesUse("המעצור לא מונע את זה")).toBe(true);
+    expect(customerDescribesUse("המכשיר נהפך")).toBe(true);
+    expect(customerDescribesUse("אשמח לשיתוף פעולה, איך תרצו להשתמש בתוכן?")).toBe(false);
+    expect(customerDescribesUse("יש נציג אנושי?")).toBe(false);
+    expect(customerDescribesUse("יש לכם משטח למיקסר?")).toBe(false);
+  });
+
+  it("★ \"והנה תמונה\" with no card or media is a picture claim", async () => {
+    expect(kinds(await g3("והנה תמונה עם המשטח.", { cardsChannel: false }))).toContain("card_reference");
+    expect(kinds(await g3("שלחתי לך תמונה של הדגם.", { cardsChannel: false }))).toContain("card_reference");
+    expect(kinds(await g3("אפשר לשלוח תמונה של המכשיר?", { cardsChannel: false }))).not.toContain("card_reference");
+  });
+
+  it("★ exposure and a photo that \"did not arrive as text\"", async () => {
+    expect(styleCodes(await g3("הפרטים לא מפורטים כאן."))).toContain("internal_jargon");
+    expect(styleCodes(await g3("אין במידע פרטים על זה."))).toContain("internal_jargon");
+    expect(styleCodes(await g3("הצילום לא הגיע אלינו כטקסט שאפשר לקרוא."))).toContain("failure_narration");
+  });
+
+  it("★ never affirm the product is unsafe; \"צודק\" becomes neutral", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("מצטערים, זה באמת לא בטיחותי."))).toContain("affirms_unsafe");
+    expect(cleanStyle("מצטערים מאוד. זה באמת לא בטיחותי.", ["affirms_unsafe"])).toBe("מצטערים מאוד.");
+    expect(styleCodes(await g3("את צודקת, זה לא תקין."))).toContain("gendered_agree");
+    expect(cleanStyle("את צודקת, זה לא תקין.", ["gendered_agree"])).toBe("נכון, זה לא תקין.");
+  });
+
+  it("★ where to GET a code answered with where to enter it -> coupon_source", async () => {
+    expect(kinds(await g3("מזינים את הקוד בשדה קוד קופון בעמוד התשלום.", { incomingMessage: "איפה אני מוצאת את הקוד עצמו?" }))).toContain("coupon_source");
+    expect(kinds(await g3("קודים נשלחים בניוזלטר ובמבצעים.", { incomingMessage: "איפה אני מוצאת את הקוד עצמו?" }))).not.toContain("coupon_source");
+    expect(kinds(await g3("מזינים את הקוד בשדה קוד קופון.", { incomingMessage: "איפה מזינים את הקוד?" }))).not.toContain("coupon_source");
+  });
+});
