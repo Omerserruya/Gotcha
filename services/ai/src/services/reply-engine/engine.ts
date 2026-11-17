@@ -26,11 +26,11 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT } from "./state";
+import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT, INACTIVE_ORDERS_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -383,6 +383,24 @@ export async function internalSender(tenantId: string, channel: string, external
   return users.some((u) => String(u.phoneNumber ?? "").replace(/\D/g, "").slice(-9) === digits.slice(-9));
 }
 
+/** The inactive-orders fact after this turn: the known numbers plus this turn's, at most 20. */
+export function inactiveOrdersFact(prev: unknown, now: string[]): Record<string, string> {
+  if (!now.length) return {};
+  const all = [...new Set([...String(prev ?? "").split(",").filter(Boolean), ...now])].slice(-20);
+  return { [INACTIVE_ORDERS_FACT]: all.join(",") };
+}
+
+/** A team question as the team reads it: the subject (the case, the product) and the customer's ask; null for a status ask on an open item. */
+export function teamQuestionText(q: string, incoming: string, state: { intent?: string | null; offeredItems?: Array<{ title?: string }> } | null, openItems: string[]): string | null {
+  const text = String(q ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (openItems.length && statusAsk(incoming) && String(incoming ?? "").replace(/\s+/g, " ").trim().length < 40) return null;
+  const raw = text === String(incoming ?? "").replace(/\s+/g, " ").trim();
+  if (!raw || /^call request:/i.test(text)) return text.slice(0, 300);
+  const subject = String(state?.intent ?? "").trim() || String(state?.offeredItems?.at(-1)?.title ?? "").trim();
+  return (subject && !text.includes(subject) ? `${subject.slice(0, 80)}: ${text}` : text).slice(0, 300);
+}
+
 /** The customer's subjects (clauses joined by a comma, "and", "או", "וגם" or a "וה" noun) that no open team item covers. */
 export function uncoveredSubjects(incoming: string, openItems: string[]): string[] {
   const clauses = String(incoming ?? "").split(/\s*[,;]\s*|\s+(?:and|or|או|וגם|גם)\s+|\s+(?=וה[\u0590-\u05FF]{2,})/iu).map((c) => c.replace(/^ו(?=ה)/u, "").trim()).filter((c) => words(c).size >= 1);
@@ -588,6 +606,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   mark("gate1");
   // A template, an unsupported message or an empty placeholder is no customer text (prod replay 12:
   // "only a template attachment was received"): a short neutral opener at the start, else nothing.
+  // A person on the team wrote in this conversation in the last 24h (the business app, the phone, an
+  // import): it is theirs, the AI stays out (prod replay 2026-11-17, GOTCHA; the worker's owner-recent
+  // rule covers WhatsApp only, this covers every channel and the replay alike).
+  {
+    const hist1: any[] = ((await loadAll.catch(() => null)) as any)?.[1] ?? [];
+    const asOf = opts.replay?.asOf ? new Date(opts.replay.asOf).getTime() : Date.now();
+    const personRecent = hist1.some((m: any) => m.direction === "OUTBOUND" && isPersonOutbound(m) && asOf - new Date(m.createdAt ?? 0).getTime() < 24 * 60 * 60_000);
+    if (personRecent) {
+      trace.gate1 = "human_owned:person_recent";
+      trace.gate3 = { ok: true, problems: [], rewrite: "none" };
+      return empty({ reply: null });
+    }
+  }
   // The tenant's own team member writing from their phone (prod replay 2026-11-17, GOTCHA): not a customer.
   {
     const internal = await internalSender(opts.tenantId, String(conversation.channel ?? ""), conversation.customerExternalId).catch(() => false);
@@ -955,6 +986,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
     openTeamText: openTeam.join("\n"),
+    knownInactiveOrders: String(state.facts?.[INACTIVE_ORDERS_FACT] ?? "").split(",").filter(Boolean),
     candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? Number(c.price) : null })).filter((c: any) => c.title),
     onOpenItem: openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? ""))),
     safety: safetyConversation,
@@ -1078,7 +1110,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       };
       const fromSecond = salvage(second);
       const fromOriginal = salvage(original);
-      let kept = [fromSecond, fromOriginal].find((x) => x && !x.hollow) ?? null;
+      // A recommendation ask: the version that picks a product is kept over one that does not
+      // (prod replay 2026-11-17, Urban: the rewrite dropped the pick).
+      const wantsPick = first.problems.some((p) => p.kind === "no_recommendation");
+      const order = wantsPick ? [fromSecond, fromOriginal].sort((a, b) => Number(!!b && picksProduct(b.o.reply)) - Number(!!a && picksProduct(a.o.reply))) : [fromSecond, fromOriginal];
+      let kept = order.find((x) => x && !x.hollow) ?? null;
       if (!kept && (fromSecond || fromOriginal || second || original) && left() > 5000) {
         // ONE targeted rewrite: what was cut and why, and answer the customer fully.
         const cut = (fromSecond ?? fromOriginal);
@@ -1213,6 +1249,18 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, teamQuestion: `product search failed twice: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).searchFailTwiceToTeam = true;
   }
+  // A team question is a short subject plus the ask, never the raw message alone, and a status ask
+  // ("יש חדש?") on an open item is no new question (prod replay 2026-11-17).
+  if (output?.teamQuestion) {
+    const q = teamQuestionText(output.teamQuestion, String(opts.incomingMessage ?? ""), state, openTeam);
+    output = { ...output, teamQuestion: q };
+  }
+  // A question recorded for the team this turn is told to the customer, naming it (prod replay 2026-11-17).
+  if (output?.reply && output.teamQuestion && isNewTeamQuestion(output.teamQuestion) && !output.handoff && !teamLineIn(output.reply) && !/(?<![\u0590-\u05FF])(?:בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\bbeing checked\b/iu.test(output.reply)) {
+    const subject = output.teamQuestion.replace(/^call request:\s*/i, "").slice(0, 90);
+    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? `העברתי לצוות את השאלה: "${subject}". התשובה תגיע כאן בצ'אט.` : `I've passed your question to the team: "${subject}". The answer will come here in the chat.`}` };
+    (trace as any).teamQuestionTold = true;
+  }
   // The customer is back on a subject the team already has (prod replay 2026-11-17, NE'A): say it is
   // with the team, naming it, when the reply does not.
   const openOnIt = openTeam.find((t) => sameIssue(t, String(opts.incomingMessage ?? "")));
@@ -1308,7 +1356,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}) },
+    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");

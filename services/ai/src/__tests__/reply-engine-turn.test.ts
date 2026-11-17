@@ -1173,3 +1173,39 @@ describe("4511b79c rating: engine passes", () => {
     expect(r.reply).toMatch(/בבדיקה אצל הצוות/);
   });
 });
+
+describe("e78b114c rating: engine passes", () => {
+  it("★ a person on the team wrote in the last 24h: the AI stays out", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "היי", metadata: null, createdAt: new Date(Date.now() - 3 * 3600_000) },
+      { direction: "OUTBOUND", body: "היי, כאן עומר", senderName: "omer@example.com", metadata: { source: "inbox" }, createdAt: new Date(Date.now() - 2 * 3600_000) },
+    ];
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה המצב?" }, "autonomous");
+    expect(h.calls).toHaveLength(0);
+    expect(r.reply ?? null).toBeNull();
+    expect(String((r.trace as any).gate1)).toMatch(/^human_owned/);
+  });
+  it("★ a team question recorded this turn is told to the customer", async () => {
+    h.responses.push({ toolCalls: [respond("q1", { reply: "מבינים.", team_question: "חיוב כפול בביימי" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים בביימי" }, "autonomous");
+    expect(r.reply).toMatch(/חיוב כפול בביימי/);
+    expect(r.reply).toMatch(/לצוות/);
+  });
+});
+
+describe("[woo-perf] live search timing", () => {
+  it("★ one line per tenant and hour: calls, p50, p95, timeouts, requests by kind", async () => {
+    const { recordWooPerf, flushWooPerf } = await import("../services/connectors/woocommerce.adapter");
+    const t = Date.parse("2026-11-17T10:15:00Z");
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    recordWooPerf("tenantA", 900, { local: 3, live: 1, capped: 0, kinds: { category: 1 }, timeouts: 0 } as any, t);
+    recordWooPerf("tenantA", 8100, { local: 0, live: 2, capped: 0, kinds: { search: 2 }, timeouts: 1 } as any, t + 60_000);
+    const lines = flushWooPerf(Date.parse("2026-11-17T11:01:00Z"));
+    expect(lines).toEqual(["[woo-perf] tenant=tenantA hour=2026-11-17T10 calls=2 p50=8100 p95=8100 timeouts=1 local=3 live=3 capped=0 live_by_kind=category=1,search=2"]);
+    expect(flushWooPerf(Date.parse("2026-11-17T11:02:00Z"))).toEqual([]);
+    // The current hour's bucket is kept until it is over.
+    recordWooPerf("tenantA", 500, { local: 1, live: 0, capped: 0, kinds: {}, timeouts: 0 } as any, Date.parse("2026-11-17T11:30:00Z"));
+    expect(flushWooPerf(Date.parse("2026-11-17T11:40:00Z"))).toEqual([]);
+    expect(flushWooPerf(Date.parse("2026-11-17T12:00:01Z"))).toHaveLength(1);
+  });
+});

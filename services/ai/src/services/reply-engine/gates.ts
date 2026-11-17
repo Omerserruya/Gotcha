@@ -665,6 +665,8 @@ export function repeatedAdvice(reply: string, previousBotReplies: string[], inco
 // Asked to recommend among products, and the reply neither picks nor asks (prod replay 2026-11-17).
 const ASKS_RECOMMEND = /(?<![\u0590-\u05FF])(?:ממליצים|תמליצו|תמליץ|תמליצי|המלצה|מה\s+(?:הכי\s+)?(?:כדאי|מומלץ|עדיף)|איזה\s+(?:[\u0590-\u05FF]+\s+){0,2}(?:הכי\s+)?(?:כדאי|מומלץ|עדיף|מתאים|מתאימה)|איזו\s+(?:[\u0590-\u05FF]+\s+){0,2}(?:הכי\s+)?(?:כדאי|מומלצת|עדיפה|מתאימה)|מה\s+(?:אתם\s+)?ממליצים)(?![\u0590-\u05FF])|\b(?:recommend|suggest|which (?:one|board|model|is better|should i)|what would you (?:pick|choose|suggest)|best (?:one|option|for me))\b/iu;
 const PICKS = new RegExp([RECOMMENDS_SRC, String.raw`(?<![֐-׿])(?:הייתי\s+הולך|הייתי\s+בוחר|הבחירה|הכי\s+טוב|עדיף|בגלל\s+ש|כי\s+(?:הוא|היא|זה))(?![֐-׿])|\b(?:best|go with|pick|because|great (?:choice|fit)|ideal)\b`].join("|"), "iu");
+/** The reply picks a product (a recommendation with a reason). */
+export const picksProduct = (reply: string) => PICKS.test(reply ?? "");
 /**
  * Products came back for a recommendation ask, and the reply has no pick and no question. Once the
  * employee asked its qualifying question and the customer answered it, a question is no longer
@@ -737,9 +739,11 @@ function inactiveOrderNumbers(tools: ToolRunRecord[]): Set<string> {
   for (const t of tools) { try { walk(JSON.parse(String(t.content ?? ""))); } catch { /* not JSON */ } }
   return out;
 }
-/** Sentences naming an inactive order's number without saying it is cancelled, failed or refunded. */
-export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[]): string[] {
-  const nums = inactiveOrderNumbers(tools);
+/** The inactive order numbers this turn's tools returned (kept in the state for later turns). */
+export const inactiveOrdersIn = (tools: ToolRunRecord[]) => [...inactiveOrderNumbers(tools)];
+/** Sentences naming an inactive order's number (this turn's tools, or one known from an earlier turn) without saying it is cancelled, failed or refunded. */
+export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[], known: string[] = []): string[] {
+  const nums = new Set([...inactiveOrderNumbers(tools), ...known]);
   if (!nums.size) return [];
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => (x.match(/\d{3,}/g) ?? []).some((d) => nums.has(d)) && !INACTIVE_WORDS.test(x)).map((x) => x.trim().slice(0, 120));
 }
@@ -911,6 +915,8 @@ export interface Gate3Input {
   cardsChannel?: boolean;
   /** A text channel with products this turn: the engine appends them (name, price, link). */
   listAppended?: boolean;
+  /** Inactive (cancelled, failed, refunded) order numbers seen in earlier turns of this conversation. */
+  knownInactiveOrders?: string[];
   /** This turn's products with their store prices (the store wins over a document's price). */
   candidatePrices?: Array<{ title: string; price?: number | null }>;
   /** The customer came back on the subject of an open team item. */
@@ -965,7 +971,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
   // Products this turn mean a search ran.
-  if (!i.candidateCount && (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion) || purchaseWithoutSearch(i.incomingMessage, i.tools, i.toolsOffered)
+  const recommendUnsearched = ASKS_RECOMMEND.test(i.incomingMessage ?? "") && i.toolsOffered.some((n) => /list_products|search_products/i.test(n)) && !i.tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
+  if (!i.candidateCount && (recommendUnsearched || photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion) || purchaseWithoutSearch(i.incomingMessage, i.tools, i.toolsOffered)
     // A text channel: products named from the knowledge alone get no name, price or link (prod replay 11).
     || (!i.cardsChannel && namesProductsUnsearched(reply, i.incomingMessage, i.tools, i.toolsOffered)))) problems.push({ kind: "no_search" });
   if (i.searchFailed && i.teamQuestion && knowledgeHasIt(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
@@ -984,7 +991,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (noRecommendation(reply, i.incomingMessage, i.candidateCount, i.recentInbound ?? [], (i.previousBotReplies ?? []).at(-1) ?? "")) problems.push({ kind: "no_recommendation" });
   const payment = ungroundedPayment(reply, i.tools);
   if (payment.length) problems.push({ kind: "ungrounded_payment", claims: payment, teamOpen: !!i.openTeamText && PAYMENT_WORDS.test(i.openTeamText) });
-  const inactive = unlabelledInactiveOrders(reply, i.tools);
+  const inactive = unlabelledInactiveOrders(reply, i.tools, i.knownInactiveOrders ?? []);
   if (inactive.length) problems.push({ kind: "inactive_order_unlabelled", claims: inactive });
   const source = ungroundedSource(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"), i.knowledge ?? "");
   if (source.length) problems.push({ kind: "ungrounded_source", claims: source });
@@ -1204,7 +1211,13 @@ const PRODUCT_ASK = /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|י�
  * customer asked something, or (prod replay 4, Tehila: "ברור, דווקא חגיגית ובגווני
  * כחול.") a product ask met with no product, no price and no question.
  */
+// Only an apology or an acknowledgement (prod replay 2026-11-17: "מצטערים על הבלבול." alone to a
+// customer charged with no order): on a support case that answers nothing.
+const ACK_ONLY = /^(?:\s*(?:מצטערים|מצטערת|מצטער|סליחה|מתנצלים|מבינים|אנחנו\s+מבינים|תודה|תודה\s+רבה|sorry|we(?:'re| are) sorry|apologies|we understand|thanks|thank you)[^.!?\n]*[.!?]*\s*)+$/iu;
+export const ackOnly = (reply: string) => ACK_ONLY.test(String(reply ?? "").trim());
 export function tooThin(cleaned: string, original: string, incoming: string, shown: { cards?: string[]; titles?: string[] } = {}): boolean {
+  const supportCase = PAY_PROBLEM.test(normalizeQuotes(incoming ?? "")) || STRONG_CASE.test(incoming ?? "") || MY_ORDER.test(incoming ?? "");
+  if (supportCase && ackOnly(cleaned)) return true;
   if (cleaned.trim() !== String(original ?? "").trim() && words(cleaned) < 3 && QUESTION.test(incoming ?? "")) return true;
   if (!PRODUCT_ASK.test(incoming ?? "")) return false;
   const hasProduct = (shown.cards ?? []).length > 0 || (shown.titles ?? []).some((t) => t && cleaned.includes(t)) || /PRODUCT_\d+|₪|ש["״']ח|\d+\s?(?:NIS|ILS)/.test(cleaned);

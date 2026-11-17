@@ -62,6 +62,8 @@ export const CANNED_SENT_FACT = "_cannedTeamLineAt";
 export const SAFETY_FACT = "_safetyAt";
 /** The last turn whose product search failed (timed out or errored) and found nothing: two in a row go to the team. */
 export const SEARCH_FAIL_FACT = "_searchFailedAt";
+/** Order numbers a tool marked inactive (cancelled, failed, refunded) in any turn: later replies must label them. */
+export const INACTIVE_ORDERS_FACT = "_inactiveOrders";
 const engineFact = (k: string) => k.startsWith("_");
 
 export function mergeState(

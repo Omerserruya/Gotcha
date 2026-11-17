@@ -756,7 +756,38 @@ const catalogCache = new Map<string, { at: number; value: any[] | null }>();
  */
 export const MAX_LOCAL_CATALOGUE = 500;
 export const LIVE_SEARCH_CAP = 4;
-interface SearchScope { local: number; live: number; capped: number }
+interface SearchScope { local: number; live: number; capped: number; kinds: Record<string, number>; timeouts: number }
+
+/**
+ * Live search timing per tenant per hour (2026-11-17: timeouts still drove most of Tehila's and NE'A's
+ * misses in the replay; is live slow too after warm-up, and what still goes to the network?). One
+ * "[woo-perf]" line per tenant and hour: calls, ms p50/p95, timeouts, local/live/capped requests, and
+ * the live requests by kind (search, category, list, include). Numbers only.
+ */
+interface PerfBucket { hour: string; ms: number[]; timeouts: number; local: number; live: number; capped: number; kinds: Record<string, number> }
+const perf = new Map<string, PerfBucket>();
+const hourOf = (t: number) => new Date(t).toISOString().slice(0, 13);
+const pct = (a: number[], q: number) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor((q / 100) * s.length))]; };
+export function wooPerfLine(tenant: string, b: PerfBucket): string {
+  const kinds = Object.entries(b.kinds).map(([k, n]) => `${k}=${n}`).join(",") || "-";
+  return `[woo-perf] tenant=${tenant} hour=${b.hour} calls=${b.ms.length} p50=${pct(b.ms, 50)} p95=${pct(b.ms, 95)} timeouts=${b.timeouts} local=${b.local} live=${b.live} capped=${b.capped} live_by_kind=${kinds}`;
+}
+export function recordWooPerf(tenant: string, ms: number, scope: SearchScope, now = Date.now()): void {
+  const hour = hourOf(now);
+  let b = perf.get(tenant);
+  if (b && b.hour !== hour) { console.log(wooPerfLine(tenant, b)); b = undefined; }
+  if (!b) { b = { hour, ms: [], timeouts: 0, local: 0, live: 0, capped: 0, kinds: {} }; perf.set(tenant, b); }
+  b.ms.push(ms); b.timeouts += scope.timeouts; b.local += scope.local; b.live += scope.live; b.capped += scope.capped;
+  for (const [k, n] of Object.entries(scope.kinds)) b.kinds[k] = (b.kinds[k] ?? 0) + n;
+}
+/** Every tenant's bucket for a past hour, logged and dropped (called hourly; tests call it directly). */
+export function flushWooPerf(now = Date.now()): string[] {
+  const out: string[] = [];
+  for (const [t, b] of perf) if (b.hour !== hourOf(now)) { const l = wooPerfLine(t, b); console.log(l); out.push(l); perf.delete(t); }
+  return out;
+}
+const perfTimer = setInterval(() => flushWooPerf(), 10 * 60_000);
+perfTimer.unref?.();
 const searchScope = new AsyncLocalStorage<SearchScope>();
 /** Local answers, live requests and capped ones, for the timing script. */
 export const searchRequestCounts = { local: 0, live: 0, capped: 0 };
@@ -1438,10 +1469,15 @@ const WooCommerceAdapter: ProviderAdapter = {
       case "list_products": {
         // One scope per tool call: local answers on a small fresh catalogue, a live cap otherwise.
         if (!searchScope.getStore() && process.env.WOO_LOCAL_SEARCH !== "off") {
-          const scope: SearchScope = { local: 0, live: 0, capped: 0 };
-          const out = await searchScope.run(scope, () => WooCommerceAdapter.execute({ toolName, args, credentials, config, ctx } as any));
-          console.log(`[woo-search] requests local=${scope.local} live=${scope.live} capped=${scope.capped}`);
-          return out;
+          const scope: SearchScope = { local: 0, live: 0, capped: 0, kinds: {}, timeouts: 0 };
+          const t0 = Date.now();
+          try {
+            const out = await searchScope.run(scope, () => WooCommerceAdapter.execute({ toolName, args, credentials, config, ctx } as any));
+            console.log(`[woo-search] requests local=${scope.local} live=${scope.live} capped=${scope.capped}`);
+            return out;
+          } finally {
+            if (ctx?.tenantId) recordWooPerf(String(ctx.tenantId), Date.now() - t0, scope);
+          }
         }
         // By meaning, when the store's own search found nothing (2026-11-16,
         // catalog-semantic.service): the whole search below runs first, with
@@ -1959,9 +1995,14 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
     if (local) { scope.local++; searchRequestCounts.local++; rememberListed(url, local); return local; }
     if (scope.live >= LIVE_SEARCH_CAP) { scope.capped++; searchRequestCounts.capped++; return []; }
     scope.live++; searchRequestCounts.live++;
+    const kind = /[?&]category=/.test(url) ? "category" : /[?&]search=/.test(url) ? "search" : /[?&]include=/.test(url) ? "include" : "list";
+    scope.kinds[kind] = (scope.kinds[kind] ?? 0) + 1;
     // A category read the catalogue could not answer: learn its members for the next one,
     // AFTER this read (the customer's request goes to the store first).
-    const out = await wooRequestLive(authHeader, method, url, body);
+    const out = await wooRequestLive(authHeader, method, url, body).catch((err: any) => {
+      if (/woocommerce_timeout/.test(String(err?.message ?? ""))) scope.timeouts++;
+      throw err;
+    });
     try {
       const u = new URL(url);
       const cat = u.searchParams.get("category");

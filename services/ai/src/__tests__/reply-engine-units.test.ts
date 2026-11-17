@@ -1953,3 +1953,49 @@ describe("4511b79c rating fixes", () => {
     expect(repeatedTeamLine("זה כבר אצל הצוות.", "ומה עם הגוון?", true, false, true)).toBe(false);
   });
 });
+
+/** Rating on e78b114c (prod 2026-11-17, six tenants live). */
+describe("e78b114c rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+
+  it("★ an inactive order known from an earlier turn still needs its status", async () => {
+    const { unlabelledInactiveOrders } = await import("../services/reply-engine/gates");
+    expect(unlabelledInactiveOrders("מספר ההזמנה הוא 97858.", [], ["97858"])).toHaveLength(1);
+    expect(unlabelledInactiveOrders("ההזמנה 97858 בוטלה.", [], ["97858"])).toEqual([]);
+    expect(kinds(await g3("מספר ההזמנה הוא 97858.", { knownInactiveOrders: ["97858"] }))).toContain("inactive_order_unlabelled");
+    const { inactiveOrdersFact } = await import("../services/reply-engine/engine");
+    expect(inactiveOrdersFact("111,222", ["333", "111"])).toEqual({ _inactiveOrders: "111,222,333" });
+    expect(inactiveOrdersFact("111", [])).toEqual({});
+  });
+
+  it("★ an apology alone on a support case is hollow", async () => {
+    const { tooThin, ackOnly } = await import("../services/reply-engine/gates");
+    expect(ackOnly("מצטערים על הבלבול.")).toBe(true);
+    expect(ackOnly("מצטערים על הבלבול. ההזמנה בדרך.")).toBe(false);
+    expect(tooThin("מצטערים על הבלבול.", "מצטערים על הבלבול.", "חויבתי ואין הזמנה")).toBe(true);
+    expect(tooThin("We understand, sorry about that.", "We understand, sorry about that.", "my payment failed")).toBe(true);
+    expect(tooThin("תודה!", "תודה!", "תודה רבה")).toBe(false);
+  });
+
+  it("★ a recommend ask with no store search is no_search; a pick is a pick", async () => {
+    const { picksProduct } = await import("../services/reply-engine/gates");
+    expect(kinds(await g3("כל הלוחות שלנו מעולים.", { incomingMessage: "which board would you recommend for a beginner?", locale: "en", toolsOffered: ["shopify.search_products"] }))).toContain("no_search");
+    expect(kinds(await g3("כל הלוחות שלנו מעולים.", { incomingMessage: "which board would you recommend for a beginner?", locale: "en", toolsOffered: ["shopify.search_products"], tools: [{ tool: "shopify.search_products", outcome: "ok" }] }))).not.toContain("no_search");
+    expect(picksProduct("The Drift 154 is the best fit for a beginner, because it is soft.")).toBe(true);
+    expect(picksProduct("We have the Drift and the Ridge.")).toBe(false);
+  });
+
+  it("★ a team question is the subject plus the ask; a status ask on an open item is none", async () => {
+    const { teamQuestionText } = await import("../services/reply-engine/engine");
+    const st = { intent: "משטח למיקסר קנווד", offeredItems: [] };
+    expect(teamQuestionText("אני רוצה עם מעצור 1", "אני רוצה עם מעצור 1", st, [])).toBe("משטח למיקסר קנווד: אני רוצה עם מעצור 1");
+    expect(teamQuestionText("יש חדש?", "יש חדש?", st, ["משטח למיקסר"])).toBeNull();
+    // The model's own summary stands as written.
+    expect(teamQuestionText("Does the 30x40 mat fit a Kenwood Chef?", "does it fit?", st, [])).toBe("Does the 30x40 mat fit a Kenwood Chef?");
+    expect(teamQuestionText("call request: תתקשרו", "תתקשרו", st, [])).toBe("call request: תתקשרו");
+  });
+});
