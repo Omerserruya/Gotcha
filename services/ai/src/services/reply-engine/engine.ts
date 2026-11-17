@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { automatedInbound, MODEL_SAYS_AUTOMATED, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { automatedInbound, MODEL_SAYS_AUTOMATED, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -822,6 +822,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     }
     if (respond) {
       output = parseRespond(respond.function.arguments);
+      // One spelling of apostrophes and quotes for every check that follows (prod replay 2026-11-17).
+      if (output) output = { ...output, reply: normalizeQuotes(output.reply) };
       respondCallId = respond.id;
       if (!output) messages.push({ role: "tool", tool_call_id: respond.id, content: "respond needs a reply string; call it again." });
     }
@@ -963,6 +965,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       }
       const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
       second = rc ? parseRespond(rc.function.arguments) : null;
+      if (second) second = { ...second, reply: normalizeQuotes(second.reply) };
     } catch (err: any) {
       if ((err as any)?.name === "AbortError") throw err;
       second = null;
@@ -979,11 +982,23 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         if (!o) return null;
         const v = gate3(g3Input(o));
         const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
-        const handoff = v.problems.some((p) => p.kind === "needless_handoff") ? null
+        const needless = v.problems.some((p) => p.kind === "needless_handoff");
+        const handoff = needless ? null
           : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
           : o.handoff;
-        const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? "", candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean), config.name ?? null), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        let facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
+        // A handoff removed as needless takes its words with it (prod replay 2026-11-17, Smoovee: "העברנו
+        // את הבדיקה לצוות ונמשיך כאן" went out with neither): "a person continues" is cut, and "passed to
+        // the team" becomes true by recording the question for the team (or is cut when one is open).
+        let teamQ = o.teamQuestion ?? null;
+        if (needless && o.handoff) {
+          facts = dropPersonPromises(facts);
+          if (teamLineIn(facts) && !teamQ) {
+            if (!teamAlreadyOpen) teamQ = String(opts.incomingMessage ?? "").slice(0, 300) || o.handoff;
+            else facts = removeTeamLines(facts);
+          }
+        }
+        const cleaned: ModelTurnOutput = { ...o, teamQuestion: teamQ, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? "", candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean), config.name ?? null), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
         if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply) return null;

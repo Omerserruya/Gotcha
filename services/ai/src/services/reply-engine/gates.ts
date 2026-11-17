@@ -135,7 +135,7 @@ const NO_REPLY_SENDER = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|nor
 // A sending subdomain of a larger domain ("mail.instagram.com", "em.brand.com"); "mail.ru" itself is a mailbox.
 const BULK_DOMAIN = /@(?:em\d*|email|mail|mailer|mailing|news|newsletter|marketing|bounces?|notify|notification|notifications|alerts?|accounts?|security)\.[^@\s.]+\.[^@\s]+$/i;
 // The structure automated mail has, in the languages seen here (the body is often only its first lines).
-const AUTOMATED_TEXT = /\b(?:unsubscribe|manage (?:your )?(?:email |notification )?(?:preferences|settings)|this is an automated (?:message|email|notification)|do not reply to this (?:e-?mail|message)|please do not reply|you(?:'re| are) receiving this (?:e-?mail|message|because)|you received this (?:e-?mail|message)|this (?:e-?mail|message) was sent (?:to|by|automatically)|view (?:this )?(?:e-?mail )?in (?:your )?browser|(?:we received a )?request to reset (?:your )?(?:\w+ )?password|reset your (?:\w+ )?password|password reset (?:request|code|link)|(?:we noticed a |unusual |new )(?:login|sign-?in)(?: attempt)?(?: (?:to|on|from))?|login attempt|sign-?in attempt|your (?:verification|security|login|confirmation|one-time) code is|\d{4,8} is your (?:\w+ )?code|(?:your )?subscription (?:is )?(?:about to )?(?:expir\w*|renew\w*|end\w*)|subscription (?:has )?expired|out of (?:the )?office|automatic reply|auto-?reply|i am (?:currently )?(?:away|out of)|thank you for (?:contacting|your (?:e-?mail|message))[^.]{0,40}(?:we will|we'll) (?:get back|respond|reply))\b|(?:להסרה מרשימת|הסרה מרשימת התפוצה|להסרת המנוי|הודעה זו נשלחה|אין להשיב להודעה זו|נא לא להשיב להודעה|לאיפוס הסיסמה|איפוס סיסמה|קוד האימות שלך|קוד האימות הוא|ניסיון התחברות|זיהינו התחברות|התחברות חדשה ל|המנוי שלך (?:עומד|יפוג|פג|הסתיים)|מחוץ למשרד|מענה אוטומטי|תשובה אוטומטית|رمز التحقق|إعادة تعيين كلمة المرور|رد تلقائي|код подтверждения|сброс пароля|автоответ|código de verificación|restablecer (?:tu )?contraseña|respuesta automática|código de verificação|redefinir (?:sua )?senha|code de vérification|réinitialiser (?:votre )?mot de passe|réponse automatique)/iu;
+const AUTOMATED_TEXT = /\b(?:unsubscribe|manage (?:your )?(?:email |notification )?(?:preferences|settings)|this is an automated (?:message|email|notification)|do not reply to this (?:e-?mail|message)|please do not reply|you(?:'re| are) receiving this (?:e-?mail|message|because)|you received this (?:e-?mail|message)|this (?:e-?mail|message) was sent (?:to|by|automatically)|view (?:this )?(?:e-?mail )?in (?:your )?browser|(?:we received a )?request to reset (?:your )?(?:\w+ )?password|reset your (?:\w+ )?password|password reset (?:request|code|link)|(?:we noticed a |unusual |new )(?:login|sign-?in)(?: attempt)?(?: (?:to|on|from))?|login attempt|sign-?in attempt|your (?:verification|security|login|confirmation|one-time) code is|\d{4,8} is your (?:\w+ )?code|(?:your )?subscription (?:is )?(?:about to )?(?:expir\w*|renew\w*|end\w*)|subscription (?:has )?expired|out of (?:the )?office|automatic reply|auto-?reply|automated response|auto-?response|our (?:office|business|working) hours (?:are|is)|(?:we|our team|the team) will (?:respond|reply|get back to you) within|department operates|this (?:mailbox|inbox|e-?mail address) is (?:not monitored|unattended|no longer|only)|i am (?:currently )?(?:away|out of)|thank you for (?:contacting|your (?:e-?mail|message))[^.]{0,40}(?:we will|we'll) (?:get back|respond|reply))\b|(?:להסרה מרשימת|הסרה מרשימת התפוצה|להסרת המנוי|הודעה זו נשלחה|אין להשיב להודעה זו|נא לא להשיב להודעה|לאיפוס הסיסמה|איפוס סיסמה|קוד האימות שלך|קוד האימות הוא|ניסיון התחברות|זיהינו התחברות|התחברות חדשה ל|המנוי שלך (?:עומד|יפוג|פג|הסתיים)|מחוץ למשרד|מענה אוטומטי|תשובה אוטומטית|שעות הפעילות (?:של )?(?:המשרד|המחלקה)|נחזור אליך תוך|תיבה זו אינה|رمز التحقق|إعادة تعيين كلمة المرور|رد تلقائي|код подтверждения|сброс пароля|автоответ|código de verificación|restablecer (?:tu )?contraseña|respuesta automática|código de verificação|redefinir (?:sua )?senha|code de vérification|réinitialiser (?:votre )?mot de passe|réponse automatique)/iu;
 /** Why this inbound message is automated mail (no reply, no handoff, no team question), or null. */
 export function automatedInbound(m: { channel?: string | null; sender?: string | null; body?: string | null; metadata?: any; platformSender?: string | null }): string | null {
   const bulk = m.metadata?.email?.bulk;
@@ -165,6 +165,7 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
 export const statusAsk = (incoming: string) => STATUS_ASK.test(incoming ?? "");
 export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
 export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
+export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).join("").trim();
 
 // A material answered from the business description without reading the product (prod replay 12:
 // "stainless steel" from the product data in one conversation, something else from the description in another).
@@ -227,7 +228,7 @@ const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניס�
 export const simulationLeak = (reply: string) => SIMULATION_LEAK.test(reply ?? "");
 
 // "I passed it to the team", said again while the team already has it open.
-const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו)(?:\s+(?:את\s+)?(?:השאלה|הבקשה|הפנייה|זה|הנושא|הפרטים))?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
+const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו|מעבירים|מעבירה|מעביר)(?:\s+(?:את\s+)?[\u0590-\u05FF"'׳״-]+){0,3}?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
 const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם זה|נשמע)|יש (?:חדש|חדשות|עדכון|תשובה)|עדכון|עדכנו|נו|כמה זמן|עוד כמה|מתי תהיה תשובה|ענו|הצוות)(?![\u0590-\u05FF])|\b(?:any (?:update|news)|still waiting|heard back)\b/iu;
 /** The reply announces the team hand-off again although it is already open and the customer did not ask about it. */
 export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean): boolean {
@@ -238,6 +239,19 @@ export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpe
 // Prod replay 4: "the measurements were passed to the team" with no team question,
 // and "we will not ship before we update you": a promise nothing carries out.
 const FUTURE_PROMISE = /(?<![\u0590-\u05FF])(?:[וש]?(?:נעדכן|אעדכן|נודיע|אודיע|נדאג|אדאג|נעכב|נשמור\s+(?:לך|לכם)|אשמור\s+(?:לך|לכם))|לא\s+(?:נשלח|נשלחים|נשלחת|נוציא)\s+(?:לפני|עד|בלי))(?![\u0590-\u05FF])|\b(?:we(?:'ll| will) (?:update you|let you know|hold it|keep it for you)|(?:won'?t|will not) ship (?:before|until))\b/iu;
+// "We recorded / saved / updated it" (prod replay 2026-11-17, Tehila: "תודה, רשמנו את סכום ההזמנה"
+// with no tool call): a record is claimed only when a write tool returned ok this turn.
+const RECORDED = /(?<![\u0590-\u05FF])[וש]?(?:רשמנו|רשמתי|רשמתם|שמרנו|שמרתי|עדכנו|עדכנתי|הוספנו|הוספתי|תיעדנו|נרשם|נרשמה|נרשמו|נשמר|נשמרה|נשמרו|עודכן|עודכנה|עודכנו|תועד|תועדה)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ve| have)? (?:saved|noted|updated|recorded|registered|logged|added)|(?:it|this|that|your \w+)(?:'s| is| has been| was) (?:saved|noted|updated|recorded|registered|logged))\b/iu;
+const READ_TOOL = /^(?:get|list|search|read|find|check|track|lookup|order_lookup|fetch|validate|summarize)(?:_|$)/i;
+/** Sentences claiming something was recorded, saved or updated with no write this turn. */
+export function unbackedRecords(reply: string, tools: ToolRunRecord[]): string[] {
+  // A write tool that returned ok this turn; the bot's own state facts are its memory, not a record
+  // the business made (the Supervisor, 2026-11-17).
+  const wrote = tools.some((t) => t.decision === "allow" && t.outcome === "ok" && !READ_TOOL.test(String(t.tool).split(".").pop() ?? "") && t.tool !== "search_knowledge" && t.tool !== "read_skill");
+  if (wrote) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => RECORDED.test(x)).map((x) => x.trim().slice(0, 120));
+}
+
 /** "Passed to the team" or a promise of a later action, with nothing in this turn carrying it (no team question, no handoff, nothing open). */
 export function unbackedPromises(reply: string, o: { teamQuestion: boolean; handedOff: boolean; teamAlreadyOpen: boolean; approvalPending: boolean }): string[] {
   if (o.teamQuestion || o.handedOff || o.approvalPending) return [];
@@ -261,6 +275,13 @@ const stem = (w: string) => unfinal((w.length > 3 && /^[הובלמשכ]/.test(w)
 const CAPABILITY_STEMS = new Set([...CAPABILITY_WORDS].flatMap((w) => [w, stem(w)]));
 const termsOf = (sentence: string) => [...new Set((sentence.match(/\p{L}+(?:['’]\p{L}+)*/gu) ?? []).map((w) => w.replace(/’/g, "'")).filter((w) => w.length >= 3).filter((w) => !ABSENCE_WORDS.has(w.toLowerCase())).map(stem))];
 const SEARCH_TOOL = /list_products|search_products|get_product|variation|search_knowledge|categor/i;
+const NARROWING = ["price_min", "price_max", "min_price", "max_price", "in_stock", "stock_status", "product_type", "vendor", "tag", "category", "option", "options", "size", "color", "colour", "fits_cm", "fits_cm_all", "audience"];
+/** A product search narrowed by a filter, or a Shopify one that is in stock only by default. */
+export function filteredSearch(t: ToolRunRecord): boolean {
+  const a: any = t.args ?? {};
+  if (NARROWING.some((k) => a[k] != null && a[k] !== "" && a[k] !== false && a[k] !== 0 && !(Array.isArray(a[k]) && !a[k].length))) return true;
+  return /(?:^|\.)search_products$/.test(String(t.tool)) && !/^woocommerce\./.test(String(t.tool)) && a.in_stock_only !== false;
+}
 const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
 /**
  * Absence claims no search backs: grounded only by a search this turn whose query
@@ -298,7 +319,9 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
       // An empty search NARROWER than the claim proves nothing about it (prod replay 2026-11-17, a
       // snowboard store: "snowboard beginner" came back empty and the reply said there is no
       // snowboard). Only a search whose words are all in the claim backs it.
-      const asBroad = ranFor.filter((t) => query(t).every((x) => terms.some((w) => x.includes(w) || w.includes(x))));
+      // A filtered search (a price, stock, a type or an option) proves nothing about the item itself
+      // (Shopify's search is in stock only unless told otherwise).
+      const asBroad = ranFor.filter((t) => !filteredSearch(t) && query(t).every((x) => terms.some((w) => x.includes(w) || w.includes(x))));
       grounded = asBroad.length > 0 && !returned;
     }
     if (!grounded) out.push(sentence.trim().slice(0, 120));
@@ -440,6 +463,8 @@ export function ignoredYes(incoming: string, lastBotReply: string | null | undef
 // "נציג מהצוות ימשיך איתך" with no handoff). Never a promise without the action.
 const PERSON_CONTINUES = /(?<![\u0590-\u05FF])(?:(?:נציג|נציגה|מישהו|מישהי|אחד\s+מהצוות)\s+(?:מהצוות\s+)?(?:ימשיך|תמשיך|יחזור|תחזור|יטפל|תטפל|יענה|תענה|ייצור\s+קשר|תיצור\s+קשר|יצור\s+קשר)|(?:מעביר|מעבירה|מעבירים)\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה|צוות)|העברתי\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה)|הצוות\s+(?:יחזור|ימשיך|ייצור\s+קשר)(?:\s+אלי(?:ך|כם))?)(?![\u0590-\u05FF])|\b(?:a (?:person|team member|representative|human) (?:will|is going to) (?:continue|take over|get back)|(?:i'?m|we'?re) (?:transferring|passing) you)\b/iu;
 export const promisesPerson = (reply: string) => PERSON_CONTINUES.test(reply ?? "");
+/** The reply without its sentences that say a person continues (used when a needless handoff is removed). */
+export const dropPersonPromises = (reply: string) => (String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !PERSON_CONTINUES.test(x)).join("").trim();
 
 // "הנה בנדנות מרובעות" with no name, price or card (prod replay 6, Tehila).
 const PRESENTS = /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|דגמים|כמה\s+סוגים|שני\s+סוגים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options)\b/iu;
@@ -651,7 +676,7 @@ export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[]):
 
 // Presenting as a named person who is not this employee (prod replay 2026-11-17, GOTCHA: "מתן",
 // a real team member's name taken from the conversation). Only the configured name is the employee's.
-const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ[֐-׿]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות)/gu;
+const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ-?\s*[֐-׿A-Za-z]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות|\s*מ-\s*[֐-׿A-Za-z]{2,})/gu;
 const NOT_A_NAME = new Set(["here", "sorry", "happy", "glad", "back", "sure", "afraid", "available", "the", "your", "נכון", "בסדר", "מעולה", "בדיוק", "הכל", "טוב", "אני", "אנחנו"]);
 /** A name the reply gives itself that is not the employee's configured name. */
 export function wrongSelfName(reply: string, employeeName: string | null | undefined): string | null {
@@ -688,6 +713,15 @@ export function nearNameAsExact(reply: string, incoming: string, titles: string[
 // The model says the message is a forwarded or automated notification (prod replay 2026-11-17):
 // on an email channel that turn is automated mail, answered by no one.
 export const MODEL_SAYS_AUTOMATED = /(?:נראה\s+ש(?:זו|זאת|זה|הדבקת|העתקת|שיתפת|העברת|קיבלת)\s+(?:לנו\s+)?(?:הודעה|התראה|מייל|הודעת|דוא["״]ל)|הודעה\s+אוטומטית|הודעת\s+מערכת)|\b(?:(?:it|this)\s+(?:looks|seems)\s+like\s+(?:an?\s+)?(?:automated|automatic|system|forwarded)\s+(?:message|email|notification)|(?:(?:it|this)\s+(?:seems|looks)\s+(?:like\s+)?(?:that\s+)?you(?:'ve|\s+have)?|you\s+(?:seem|appear)\s+to\s+have)\s+(?:forwarded|pasted|shared|copied)\s+(?:a|an|the|us\s+a|us\s+an)\s+(?:\w+\s+)?(?:notification|email|message|alert))/iu;
+
+/**
+ * Apostrophes and quotes as the patterns spell them (prod replay 2026-11-17: "I didn’t find a
+ * snowboard" with a curly apostrophe matched no English pattern, so the absence went out
+ * unchecked). Every check reads the text through this; the Hebrew geresh and gershayim too.
+ */
+export function normalizeQuotes(t: string): string {
+  return String(t ?? "").replace(/[\u2018\u2019\u201A\u201B\u02BC\u2032\uFF07\u05F3`\u00B4]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033\uFF02\u05F4]/g, '"');
+}
 
 export interface Gate3Input {
   reply: string;
@@ -741,8 +775,10 @@ export interface Gate3Input {
   sourceText?: string;
 }
 
-export function gate3(i: Gate3Input): Gate3Verdict {
+export function gate3(input: Gate3Input): Gate3Verdict {
   const problems: ClaimProblem[] = [];
+  // Every pattern reads ASCII quotes: the reply, the customer's words, what the business said.
+  const i: Gate3Input = { ...input, reply: normalizeQuotes(input.reply), incomingMessage: normalizeQuotes(input.incomingMessage), recentInbound: input.recentInbound?.map(normalizeQuotes), previousBotReplies: input.previousBotReplies?.map(normalizeQuotes), customerText: input.customerText == null ? input.customerText : normalizeQuotes(input.customerText) };
   const reply = String(i.reply ?? "").trim();
   if (!reply) return { ok: false, problems: [{ kind: "style", codes: ["empty"] }] };
 
@@ -762,6 +798,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   const unbacked = [
     ...(honesty.ok ? [] : honesty.unsupported.map((u: any) => String(u?.match ?? u?.kind ?? u))),
     ...unbackedPromises(reply, { teamQuestion: !!i.teamQuestion, handedOff: i.handedOff, teamAlreadyOpen: !!i.teamAlreadyOpen, approvalPending: i.approvalPending }),
+    ...unbackedRecords(reply, i.tools),
   ];
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
@@ -882,7 +919,8 @@ export function neutralFirstPerson(s: string): string {
  * A made-up price loses the price. What is left is judged again by the caller.
  */
 export function stripFactProblems(reply: string, problems: ClaimProblem[]): string {
-  let s = String(reply ?? "");
+  // The same text the claims were cut from (gate3 reads it through normalizeQuotes).
+  let s = normalizeQuotes(String(reply ?? ""));
   for (const p of problems) {
     // A made-up price loses its sentence ("התיק עולה ₪120." would leave "התיק עולה.").
     if (p.kind === "ungrounded_price") {
@@ -893,7 +931,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
-      if (p.kind === "unsupported_action") s = dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE);
+      if (p.kind === "unsupported_action") s = dropSentences(dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE), RECORDED);
     }
   }
   return s.trim();
@@ -913,7 +951,10 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   const store = toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
   const has = (k: ClaimProblem["kind"]) => problems.some((p) => p.kind === k);
   // Each store's own page-size argument (Shopify parity: its search takes "limit").
-  const few = store && /^shopify\./.test(store) ? { limit: 5 } : { per_page: 5 };
+  // Each store's own page-size argument; Shopify's search is in stock only unless told otherwise,
+  // and an absence is checked against everything the store sells.
+  const shopifyLike = !!store && /(?:^|\.)search_products$/.test(store) && !/^woocommerce\./.test(store);
+  const few = shopifyLike ? { limit: 5 } : { per_page: 5 };
   const absence = problems.find((p) => p.kind === "ungrounded_absence") as { claims: string[] } | undefined;
   // The category alone: a word of the absence claim that the customer's words or an empty search used.
   const broad = (() => {
@@ -933,7 +974,7 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
     return written.find((w) => { const x = unfinal(w.toLowerCase()); return x.includes(pick) || (x.length >= 3 && pick.includes(x)); }) ?? pick;
   })();
   if (store && (has("ungrounded_absence") || has("no_search"))) {
-    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? words, ...few }) } });
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? words, ...few, ...(shopifyLike && has("ungrounded_absence") ? { in_stock_only: false } : {}) }) } });
   } else if (store && has("gave_up_search")) {
     const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
     const narrow = String((last?.args as any)?.query ?? words).split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
@@ -952,7 +993,7 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
  */
 export function cleanStyle(reply: string, codes: string[], previousBotReplies: string[] = [], allowedScripts = "", incoming = "", titles: string[] = [], employeeName: string | null = null): string {
   const c = new Set(codes);
-  let s = String(reply ?? "");
+  let s = normalizeQuotes(String(reply ?? ""));
   if (c.has("repeated_sentence")) {
     const again = new Set(repeatedSentences(s, previousBotReplies));
     s = (s.match(SENTENCES) ?? [s]).filter((x) => !again.has(x.trim())).join("").trim();

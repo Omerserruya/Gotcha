@@ -1471,12 +1471,13 @@ describe("fc618f4f validation fixes", () => {
     const { ungroundedAbsence, autoLookups } = await import("../services/reply-engine/gates");
     const narrow = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard beginner" } }] as any;
     expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", narrow)).toHaveLength(1);
-    const broad = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard" } }] as any;
+    // As broad as the claim, and not limited to what is in stock (Shopify's default).
+    const broad = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard", in_stock_only: false } }] as any;
     expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", broad)).toEqual([]);
     // As broad as the claim: "red snowboard" searched, "no red snowboard" said.
-    expect(ungroundedAbsence("We don't have a red snowboard.", [{ tool: "shopify.search_products", outcome: "empty", args: { query: "red snowboard" } }] as any)).toEqual([]);
+    expect(ungroundedAbsence("We don't have a red snowboard.", [{ tool: "shopify.search_products", outcome: "empty", args: { query: "red snowboard", in_stock_only: false } }] as any)).toEqual([]);
     const auto = autoLookups([{ kind: "ungrounded_absence", claims: ["I didn't find a snowboard in the catalogue."] }] as any, "which snowboard for a beginner under $650?", ["shopify.search_products"], narrow);
-    expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "snowboard", limit: 5 });
+    expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "snowboard", limit: 5, in_stock_only: false });
   });
 
   it("★ a pointer at a list or cards that the message does not carry", async () => {
@@ -1650,5 +1651,87 @@ describe("e9a75ca5 rating fixes", () => {
     }
     const auto = autoLookups([{ kind: "ungrounded_absence", claims: ["We don't currently have snowboards."] }] as any, "any snowboard for a beginner?", ["search_products"], ran);
     expect(JSON.parse(auto[0].function.arguments).query).toBe("snowboard");
+  });
+});
+
+/** Rating on 6a383fcb (prod replay 2026-11-17). */
+describe("6a383fcb rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ \"passed to the team\" with any object, and \"a person continues\", are claims", async () => {
+    const { teamLineIn, removeTeamLines, dropPersonPromises } = await import("../services/reply-engine/gates");
+    expect(teamLineIn("העברנו את הבדיקה לצוות ונמשיך כאן בצ׳אט.")).toBe(true);
+    expect(teamLineIn("העברתי את פרטי ההזמנה שלך לצוות.")).toBe(true);
+    expect(teamLineIn("הצבע הזה מגיע גם בכחול.")).toBe(false);
+    expect(kinds(await g3("העברנו את הבדיקה לצוות ונמשיך כאן בצ׳אט."))).toContain("unsupported_action");
+    expect(removeTeamLines("מבינים. העברנו את הבדיקה לצוות. נשמח לעזור.")).toBe("מבינים. נשמח לעזור.");
+    expect(dropPersonPromises("מבינים. נציג מהצוות ימשיך איתך כאן. נשמח לעזור.")).toBe("מבינים. נשמח לעזור.");
+  });
+
+  it("★ \"we recorded it\" needs a write this turn (a tool, or the state)", async () => {
+    const { unbackedRecords } = await import("../services/reply-engine/gates");
+    expect(unbackedRecords("תודה, רשמנו את סכום ההזמנה.", [])).toHaveLength(1);
+    expect(unbackedRecords("Thanks, I've noted your address.", [])).toHaveLength(1);
+    expect(unbackedRecords("Your address has been updated.", [])).toHaveLength(1);
+    expect(unbackedRecords("עדכנו את הכתובת.", [{ tool: "woocommerce.update_shipping_address", decision: "allow", outcome: "ok" }] as any)).toEqual([]);
+    // A read is not a write; a write that failed or awaits approval is not one either.
+    expect(unbackedRecords("עדכנו את הכתובת.", [{ tool: "woocommerce.get_order", decision: "allow", outcome: "ok" }] as any)).toHaveLength(1);
+    expect(unbackedRecords("עדכנו את הכתובת.", [{ tool: "woocommerce.update_shipping_address", decision: "allow", outcome: "error" }] as any)).toHaveLength(1);
+    expect(kinds(await g3("תודה, רשמנו את סכום ההזמנה."))).toContain("unsupported_action");
+    // A verb the shared honesty check does not know: only this rule catches it.
+    expect(kinds(await g3("תודה, תיעדנו את הבקשה שלך."))).toContain("unsupported_action");
+    expect(kinds(await g3("Thanks, your preference has been recorded.", { locale: "en" }))).toContain("unsupported_action");
+    const { stripFactProblems } = await import("../services/reply-engine/gates");
+    expect(stripFactProblems("תודה, תיעדנו את הבקשה שלך. מה עוד?", await g3("תודה, תיעדנו את הבקשה שלך. מה עוד?"))).toBe("מה עוד?");
+    expect(stripFactProblems("תודה, רשמנו את סכום ההזמנה. מה עוד?", await g3("תודה, רשמנו את סכום ההזמנה. מה עוד?"))).toBe("מה עוד?");
+  });
+
+  it("★ \"זה מתן מ-GOTCHA\" is a self-name", async () => {
+    const { wrongSelfName } = await import("../services/reply-engine/gates");
+    expect(wrongSelfName("היי זיו, זה מתן מ-GOTCHA.", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי מתן, זה מתן מ-GOTCHA", "נועה")).toBe("מתן");
+    expect(wrongSelfName("אני מתן מ-GOTCHA, במה אפשר לעזור?", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי זיו, זה מתן מ-GOTCHA.", "מתן")).toBeNull();
+    expect(styleCodes(await g3("היי זיו, זה מתן מ-GOTCHA."))).toContain("wrong_identity");
+  });
+
+  it("★ auto-replies and office-hours notices", async () => {
+    const { automatedInbound } = await import("../services/reply-engine/gates");
+    const em = (body: string) => automatedInbound({ channel: "GMAIL", sender: "reservations@hotel.com", body });
+    expect(em("Thank you for your email. Our reservations department operates Sunday to Thursday, 9:00-17:00.")).toBe("bulk_footer");
+    expect(em("Our office hours are 9-17. We will respond within 24 hours.")).toBe("bulk_footer");
+    expect(em("This mailbox is not monitored.")).toBe("bulk_footer");
+    expect(em("Automated response: we got your message.")).toBe("bulk_footer");
+    expect(em("Hi, what are your office hours on Friday?")).toBeNull();
+  });
+
+  it("★ a filtered or in-stock-only search proves nothing about the item; the engine looks again without the filter", async () => {
+    const { ungroundedAbsence, filteredSearch, autoLookups } = await import("../services/reply-engine/gates");
+    const shopify = [{ tool: "search_products", outcome: "empty", args: { query: "snowboard" } }] as any;
+    expect(filteredSearch(shopify[0])).toBe(true);
+    expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", shopify)).toHaveLength(1);
+    const all = [{ tool: "search_products", outcome: "empty", args: { query: "snowboard", in_stock_only: false } }] as any;
+    expect(ungroundedAbsence("I didn't find a snowboard in the catalogue.", all)).toEqual([]);
+    const priced = [{ tool: "woocommerce.list_products", outcome: "empty", args: { query: "snowboard", price_max: 650 } }] as any;
+    expect(ungroundedAbsence("We don't have a snowboard.", priced)).toHaveLength(1);
+    expect(filteredSearch({ tool: "woocommerce.list_products", args: { query: "x" } } as any)).toBe(false);
+    const auto = autoLookups([{ kind: "ungrounded_absence", claims: ["I didn't find a snowboard in the catalogue."] }] as any, "a snowboard under $650?", ["search_products"], shopify);
+    expect(JSON.parse(auto[0].function.arguments)).toEqual({ query: "snowboard", limit: 5, in_stock_only: false });
+  });
+
+  it("★ curly apostrophes and quotes read like ASCII ones, in every check", async () => {
+    const { normalizeQuotes, stripFactProblems } = await import("../services/reply-engine/gates");
+    expect(normalizeQuotes("didn\u2019t \u201Cx\u201D צ\u05F3אט")).toBe(`didn't "x" צ'אט`);
+    const shopify = [{ tool: "shopify.search_products", outcome: "empty", args: { query: "snowboard" } }, { tool: "search_products", outcome: "empty", args: { query: "snowboard" } }];
+    const curly = "I didn\u2019t find a snowboard in the catalogue. Want something else?";
+    const ps = await g3(curly, { tools: shopify, locale: "en", toolsOffered: ["search_products"] });
+    expect(kinds(ps)).toContain("ungrounded_absence");
+    expect(stripFactProblems(curly, ps)).toBe("Want something else?");
+    expect(kinds(await g3("We don\u2019t sell desk lamps.", { locale: "en", toolsOffered: ["search_products"] }))).toContain("ungrounded_absence");
   });
 });

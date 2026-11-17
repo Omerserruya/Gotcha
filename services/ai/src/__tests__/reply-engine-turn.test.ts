@@ -1063,3 +1063,19 @@ describe("the model reads the email as a forwarded notification (prod replay 202
     expect((r.trace as any).automated).toBeUndefined();
   });
 });
+
+describe("a needless handoff takes its words with it (prod replay 2026-11-17, Smoovee)", () => {
+  it("★ \"passed to the team\" left behind becomes a real team question; \"a person continues\" is cut", async () => {
+    h.responses.push(
+      { toolCalls: [respond("n1", { reply: "מבינים. העברנו את הבדיקה לצוות. נציג מהצוות ימשיך איתך כאן.", handoff: "check" })] },
+      { toolCalls: [respond("n2", { reply: "מבינים. העברנו את הבדיקה לצוות. נציג מהצוות ימשיך איתך כאן.", handoff: "check" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי זה יגיע?" }, "autonomous");
+    expect(r.escalation ?? null).toBeNull();
+    expect(r.reply).not.toMatch(/ימשיך איתך/);
+    // "Passed to the team" is kept only together with a real team question.
+    // The model's own sentence (not a canned team line), now true.
+    expect(r.reply).toMatch(/העברנו את הבדיקה לצוות/);
+    expect((r.trace as any).teamQuestion).toBeTruthy();
+  });
+});

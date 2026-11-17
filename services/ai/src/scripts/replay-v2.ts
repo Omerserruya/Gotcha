@@ -84,7 +84,8 @@ export function gateAsOf(msgs: any[], i: number, handovers: Array<{ toHandler: s
 export function stagesLine(trace: any): string {
   const st = trace?.stageMs ?? {};
   const marks = Object.entries(st).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => `${k}=${Number(v)}`).join(" ");
-  const tools = ((trace?.tools ?? []) as any[]).map((x) => `${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}`).join(" ");
+  // Argument NAMES only (never values: a search value is the customer's words).
+  const tools = ((trace?.tools ?? []) as any[]).map((x) => `${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}${x.args && Object.keys(x.args).length ? `:{${Object.keys(x.args).join(",")}}` : ""}`).join(" ");
   return `- stages: ${marks || "-"} | rounds=${trace?.rounds ?? "?"} rewriteRounds=${trace?.rewriteRounds ?? 0} autoLookupMs=${trace?.autoLookupMs ?? 0} rewriteMs=${trace?.rewriteMs ?? 0} | tools: ${tools || "-"}`;
 }
 
@@ -271,7 +272,7 @@ async function main() {
           "",
           `**v2:** ${oneLine(r.reply ?? "(no reply)")}`,
           "",
-          `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""}`).join("; ") : "none"}`,
+          `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""} args[${Object.keys(x.args ?? {}).join(",")}]`).join("; ") : "none"}`,
           `- cards: ${(r.trace?.cards ?? []).length ? `[${r.trace.cards.join(", ")}]` : "none"}; text list: ${(r.trace?.listedProducts ?? []).length ? `[${r.trace.listedProducts.join(", ")}] (part of the reply above, as live)` : "none"}${r.trace?.handoffSetInCode ? "; handoff set in code" : ""}`,
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
@@ -291,6 +292,9 @@ async function main() {
     s.rewriteMsP95 = pct(rewriteMs, 95);
     s.autoLookupMsP95 = pct(autoMs, 95);
     summaries.push(s);
+    // As each tenant finishes (a cut run kept only the tenants written before it, 2026-11-17).
+    console.log(`[replay] ${JSON.stringify(s)}`);
+    try { fs.writeFileSync(args.out, [...md, "", "(partial: written as each tenant finished)"].join("\n")); } catch { /* the final write still runs */ }
   }
 
   md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | cleaned | gate3 fallbacks | silent | canned lines | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
@@ -309,7 +313,7 @@ async function main() {
     console.log(`[replay] store cache ${JSON.stringify(cacheCounts)}`);
   } catch { /* no Woo */ }
   // The console carries numbers only; the markdown (customer messages) is in the file.
-  for (const s of summaries) console.log(`[replay] ${JSON.stringify(s)}`);
+  // Each tenant's summary was logged as it finished.
   console.log(`[replay] report written to ${args.out}`);
 }
 

@@ -112,5 +112,9 @@ describe("the stages line (numbers and tool names only)", () => {
     const line = stagesLine({ stageMs: { load: 410, surface: 520, tools_r1: 3900, model: 7400, gate3: 9100 }, rounds: 2, rewriteRounds: 1, autoLookupMs: 1200, rewriteMs: 1700, tools: [{ tool: "woocommerce.list_products", outcome: "ok", ms: 3880, retried: true }, { tool: "search_knowledge", outcome: "empty", ms: 300 }] });
     expect(line).toBe("- stages: load=410 surface=520 tools_r1=3900 model=7400 gate3=9100 | rounds=2 rewriteRounds=1 autoLookupMs=1200 rewriteMs=1700 | tools: woocommerce.list_products:ok:3880ms:retried search_knowledge:empty:300ms");
     expect(stagesLine({})).toBe("- stages: - | rounds=? rewriteRounds=0 autoLookupMs=0 rewriteMs=0 | tools: -");
+    // Argument names only, never their values.
+    const withArgs = stagesLine({ tools: [{ tool: "search_products", outcome: "empty", ms: 636, args: { query: "a customer's words", in_stock_only: true } }] });
+    expect(withArgs).toContain("search_products:empty:636ms:{query,in_stock_only}");
+    expect(withArgs).not.toContain("customer");
   });
 });
