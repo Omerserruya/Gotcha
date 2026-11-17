@@ -150,6 +150,8 @@ export type ClaimProblem =
   | { kind: "nameless_products" }
   | { kind: "card_reference"; claims: string[] }
   | { kind: "echoed_size"; claims: string[] }
+  | { kind: "unsafe_tip"; claims: string[] }
+  | { kind: "knowledge_has_it" }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 

@@ -26,11 +26,11 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT } from "./state";
+import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -733,6 +733,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const teamAlreadyOpen = openTeam.length > 0;
   const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q));
   // The employee's own earlier replies (never a person's): repeated asks, a "yes" to its own offer.
+  // Once a safety or damage complaint is seen, the conversation stays one (prod replay 11:
+  // the tipping complaint had left the window when "it doesn't stop it rolling back" came).
+  const safetySince = Date.parse(String(state.facts?.[SAFETY_FACT] ?? ""));
+  const safetyConversation = (Number.isFinite(safetySince) && Date.now() - safetySince < TEAM_OPEN_MS) || safetyCase(inbound.slice(-10));
   const previousBotReplies = history
     .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")) && !["interim_ack", "holding"].includes((m.metadata as any)?.kind))
     .map((m: any) => String(m.body)).slice(-6);
@@ -765,6 +769,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardsChannel: cardChannel,
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
+    safety: safetyConversation,
+    searchFailed: turnTools.records.some((r) => /list_products|search_products/.test(r.tool) && (r.outcome === "timeout" || r.outcome === "error")),
     businessAddress: [company?.address, profileHasStreet(company?.address) ? null : docAddress].filter(Boolean).join("; ") || null,
     // Everything but the customer's own words: tools, products, state, knowledge, a person's lines.
     sourceText: [
@@ -957,10 +963,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A safety or damage complaint in the customer's last 10 messages never ends without a
   // person or the team (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on one).
-  if (output && !output.handoff && !output.teamQuestion && !turnTools.escalation && safetyCase(inbound.slice(-10))) {
+  if (output && !output.handoff && !output.teamQuestion && !turnTools.escalation && safetyConversation) {
     output = { ...output, handoff: "safety or damage in the conversation", reply: promisesPerson(output.reply) ? output.reply : [output.reply?.trim(), handoffLine].filter(Boolean).join(" ") };
     (trace as any).handoffSetInCode = true;
     (trace as any).safetyHandoff = true;
+  }
+  // A safety reply always keeps the stop-use advice (prod replay 11).
+  if (output?.reply && safetyConversation && !hasStopUse(output.reply)) {
+    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
+    (trace as any).stopUseAdded = true;
   }
   // "Already with the team" only for the SAME subject as an open team item (prod replay 9: a
   // colour ask told "זה כבר אצל הצוות" when the open item was a coupon): else this ask is recorded.
@@ -1041,7 +1052,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: cannedNow ? { [CANNED_SENT_FACT]: now } : undefined,
+    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");

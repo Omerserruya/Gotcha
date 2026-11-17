@@ -58,6 +58,8 @@ export const isTeamPromise = (p: { kind?: string; text?: string } | null | undef
 export const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
 /** Engine-owned facts start with "_": the model neither sees nor writes them. */
 export const CANNED_SENT_FACT = "_cannedTeamLineAt";
+/** Set once a safety or damage complaint is seen: the conversation stays a safety one. */
+export const SAFETY_FACT = "_safetyAt";
 const engineFact = (k: string) => k.startsWith("_");
 
 export function mergeState(

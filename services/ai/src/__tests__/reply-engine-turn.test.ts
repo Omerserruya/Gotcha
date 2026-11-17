@@ -881,7 +881,8 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "30 על 40" }, "autonomous");
     expect((r.trace as any).safetyHandoff).toBe(true);
     expect(r.escalation?.reason).toMatch(/^ai_handoff:safety/);
-    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן.");
+    // Replay 11: a safety reply always keeps the stop-use advice too.
+    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן. עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה.");
   });
 
   it("★ \"already with the team\" for another subject: this ask is recorded as a new team question", async () => {
@@ -915,5 +916,23 @@ describe("prod replay 11: the whole turn answers inside the budget", () => {
     try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
     expect(h.calls[1].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
     expect(r.trace.roundsCut).toBe(1);
+  });
+});
+
+describe("prod replay 11 rating: safety sticks", () => {
+  it("★ once seen, a safety conversation stays one (the fact is saved; a later turn without the words still hands over)", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    h.responses.push({ toolCalls: [respond("z1", { reply: "מבינים, נבדוק." })] });
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _safetyAt: new Date().toISOString() }, offeredItems: [], pending: [], turnCount: 5 });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה עם המעצור?" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.trace.safetyHandoff).toBe(true);
+    expect(r.reply).toMatch(/להפסיק להשתמש/);
+  });
+  it("★ the first sight of a safety word saves the fact", async () => {
+    h.responses.push({ toolCalls: [respond("z2", { reply: "מצטערים לשמוע, מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "tipping" })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "המכשיר נהפך על המשטח" }, "autonomous");
+    expect(h.upserts[0].create.facts._safetyAt).toBeTruthy();
   });
 });

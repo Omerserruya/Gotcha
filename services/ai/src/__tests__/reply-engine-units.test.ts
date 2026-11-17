@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "echoed_size", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1012,7 +1012,7 @@ describe("prod replay 8 (2026-11-17)", () => {
     const offered = ["woocommerce.list_products"];
     expect(kinds(await g3("מה הגודל של המכשיר?", { incomingMessage: "יש לי מיקסר 22 על 35", toolsOffered: offered }))).toContain("no_search");
     expect(kinds(await g3("לא רוצה לנחש, תשלחו פרטים.", { incomingMessage: "מחפשת משטח למיקסר", toolsOffered: offered }))).toContain("no_search");
-    expect(kinds(await g3("יש משטח 34*38 ב-₪149, מתאים?", { incomingMessage: "מחפשת משטח למיקסר", toolsOffered: offered }))).not.toContain("no_search");
+    expect(kinds(await g3("יש משטח 34*38 ב-₪149, מתאים?", { incomingMessage: "מחפשת משטח למיקסר", toolsOffered: offered, tools: [{ tool: "woocommerce.list_products", outcome: "ok" }] }))).not.toContain("no_search");
   });
 
   it("★ the appended list is exactly what the text names; first three only when it names none", async () => {
@@ -1147,5 +1147,62 @@ describe("prod replay 11 (2026-11-17)", () => {
     const b = businessBlock({ organizationName: "תהילה", address: "הסטודיו נמצא בנהריה", documentAddress: "יוסף לוי 8/2 נהריה" } as any);
     expect(b).toContain("Address: הסטודיו נמצא בנהריה.");
     expect(b).toContain("Address given in the business's documents for returns and pickup coordination: רחוב יוסף לוי 8/2, נהריה");
+  });
+});
+
+describe("prod replay 11 rating (2026-11-17)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ safety stems with misspellings", async () => {
+    const { safetyCase } = await import("../services/reply-engine/gates");
+    for (const t of ["זה לא מונע כלכול לאחור של הנינג׳ה", "המכשיר נהפך", "הוא מתרומם מאחור", "התגלגל מהשיש"]) expect(safetyCase([t]), t).toBe(true);
+  });
+
+  it("★ a usage tip in a safety conversation that the knowledge does not give is a FACT problem; stop-use advice is fine", async () => {
+    const { unsafeTips } = await import("../services/reply-engine/gates");
+    const tip = "כדאי לוודא שהמעצור נוגע בגלגלים.";
+    expect(unsafeTips(tip, "", true)).toHaveLength(1);
+    expect(unsafeTips(tip, "", false)).toEqual([]);
+    expect(unsafeTips(tip, "חשוב: המעצור צריך לגעת בגלגלים של המכשיר", true)).toEqual([]);
+    expect(unsafeTips("עד הבדיקה, מומלץ להפסיק להשתמש במשטח.", "", true)).toEqual([]);
+    expect(kinds(await g3(tip, { safety: true }))).toContain("unsafe_tip");
+  });
+
+  it("★ a text channel: products named with no store search -> no_search", async () => {
+    const offered = ["woocommerce.list_products"];
+    expect(kinds(await g3("מתאים לך משטח אלכסה או כריסטינה.", { incomingMessage: "איזה משטח מתאים למיקסר?", toolsOffered: offered, cardsChannel: false }))).toContain("no_search");
+    expect(kinds(await g3("מתאים לך משטח אלכסה או כריסטינה.", { incomingMessage: "איזה משטח מתאים למיקסר?", toolsOffered: offered, cardsChannel: false, tools: [{ tool: "woocommerce.list_products", outcome: "ok" }] }))).not.toContain("no_search");
+  });
+
+  it("★ a failed store search sent to the team while the knowledge has the device -> knowledge_has_it", async () => {
+    const knowledge = "טבלת התאמה: מיקסר קנווד - משטח כריסטינה 30*40";
+    expect(kinds(await g3("העברתי לצוות.", { incomingMessage: "איזה משטח מתאים למיקסר קנווד?", teamQuestion: true, searchFailed: true, knowledge }))).toContain("knowledge_has_it");
+    expect(kinds(await g3("העברתי לצוות.", { incomingMessage: "איזה משטח מתאים למיקסר קנווד?", teamQuestion: true, searchFailed: false, knowledge }))).not.toContain("knowledge_has_it");
+  });
+
+  it("★ \"still with the team\" on a coupon: search the knowledge for the general answer", async () => {
+    expect(kinds(await g3("זה עדיין אצל הצוות.", { incomingMessage: "איפה מזינים את הקופון?", teamAlreadyOpen: true, toolsOffered: ["search_knowledge"] }))).toContain("unread_knowledge");
+  });
+
+  it("★ Hebrew: \"לא מצוין התאמה\", and a statement written as a question", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("לא מצוין התאמה למכשיר הזה."))).toContain("broken_hebrew");
+    expect(cleanStyle("לא מצוין התאמה למכשיר הזה.", ["broken_hebrew"])).toBe("לא מצוינת התאמה למכשיר הזה.");
+    expect(styleCodes(await g3("יש כמה מטפחות חגיגיות בגווני כחול?", { candidateCount: 2 }))).toContain("statement_question");
+    expect(cleanStyle("יש כמה מטפחות חגיגיות בגווני כחול?", ["statement_question"])).toBe("יש כמה מטפחות חגיגיות בגווני כחול.");
+    expect(styleCodes(await g3("יש לנו תיק בד קנבס, לאיזה שימוש?", { candidateCount: 1 }))).not.toContain("statement_question");
+    expect(styleCodes(await g3("יש כמה מטפחות חגיגיות בגווני כחול?", { candidateCount: 0 }))).not.toContain("statement_question");
+  });
+
+  it("★ a size written with a slash (90/90) is a size; a house number (8/2) is not", async () => {
+    const { echoedSizes } = await import("../services/reply-engine/gates");
+    expect(echoedSizes("הבנדנה סוליקה בגודל 90/90.", "יש לכם בנדנה 90/90?", "סוליקה 70*70")).toHaveLength(1);
+    expect(echoedSizes("הבנדנה סוליקה בגודל 70/70.", "יש לכם בנדנה 90/90?", "סוליקה 70*70")).toEqual([]);
+    expect(echoedSizes("המשטח ברחוב יוסף לוי 8/2.", "יוסף לוי 8/2", "")).toEqual([]);
   });
 });
