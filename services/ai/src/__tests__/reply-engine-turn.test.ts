@@ -1116,3 +1116,30 @@ describe("2f6ff7e3 rating: engine passes", () => {
     expect(textProductList({ reply: "x", cards: [] } as any, "יש לנו את Canvas Tote.", c as any, "he")?.text).toMatch(/Canvas Tote/);
   });
 });
+
+describe("2f6ff7e3 rating: whole turns", () => {
+  it("★ a repeat team question with new digits updates the open item", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: התשלום בביימי לא עבר", at: new Date().toISOString() }], turnCount: 3 });
+    h.responses.push({ toolCalls: [respond("d1", { reply: "תודה על הפרטים.", team_question: "התשלום בביימי לא עבר" })] });
+    let rr: any;
+    try { rr = await runReplyEngineTurn({ ...opts, incomingMessage: "הכרטיס נגמר ב-4155, התשלום בביימי לא עבר" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    const saved = h.upserts.at(-1);
+    const pending = (saved?.update?.pending ?? saved?.create?.pending ?? []) as any[];
+    expect(rr?.trace?.teamQuestionRepeat).toBe(true);
+    expect(pending.some((p) => /customer gave: 4155/.test(String(p.text)))).toBe(true);
+  });
+  it("★ the tenant's own team member on WhatsApp: no model call, no reply", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const conv = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "WHATSAPP", customerExternalId: "972501234567" });
+    (prisma as any).user = { findMany: async () => [{ phoneNumber: "+972 50-123-4567" }] };
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי, מה המצב?" }, "autonomous"); }
+    finally { (prisma as any).conversation.findFirst = conv; delete (prisma as any).user; }
+    expect(h.calls).toHaveLength(0);
+    expect(r.reply ?? null).toBeNull();
+    expect((r.trace as any).internal).toBe(true);
+  });
+});

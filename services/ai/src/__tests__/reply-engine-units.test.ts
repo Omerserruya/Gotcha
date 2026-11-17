@@ -1824,6 +1824,8 @@ describe("2f6ff7e3 rating fixes", () => {
     expect(uncoveredSubjects("מה עם הקופון?", ["הקופון שלא עבד בקופה"])).toEqual([]);
     expect(uncoveredSubjects("the white one, and the coupon?", ["coupon did not work"])).toEqual(["the white one"]);
     expect(uncoveredSubjects("מה עם הצבע?", ["הקופון שלא עבד"])).toEqual(["מה עם הצבע?"]);
+    // A number is a detail of the open item, not a subject of its own.
+    expect(uncoveredSubjects("התשלום בביימי לא עבר, הכרטיס נגמר ב-4155", ["התשלום בביימי לא עבר"])).toEqual([]);
   });
 
   it("★ a repeat with new digits updates the open item", async () => {
@@ -1834,6 +1836,11 @@ describe("2f6ff7e3 rating fixes", () => {
     expect(u?.pending[0].text).toMatch(/customer gave: 4155/);
     expect(withNewDetails(u!.pending, "התשלום בביימי לא עבר", "4155")).toBeNull();
     expect(withNewDetails(pending, "התשלום בביימי לא עבר", "עדיין לא עובד")).toBeNull();
+    // The matching TEAM item, not whatever comes first.
+    const mixed = [{ kind: "pending", text: "checking with the team: התשלום בביימי לא עבר", at: "x" }, ...pending];
+    const m = withNewDetails(mixed, "התשלום בביימי לא עבר", "4155");
+    expect(m?.pending[0].text).toBe("checking with the team: התשלום בביימי לא עבר");
+    expect(m?.pending[1].text).toMatch(/customer gave: 4155/);
   });
 
   it("★ no order, or it cannot be located, only after the customer's own order lookup; never \"per the terms\"", async () => {
@@ -1843,6 +1850,8 @@ describe("2f6ff7e3 rating fixes", () => {
     expect(ungroundedOrderAbsence("We can't find an order under that name.", [])).toHaveLength(1);
     expect(ungroundedOrderAbsence(r, [{ tool: "woocommerce.list_customer_orders", outcome: "empty" }] as any)).toEqual([]);
     expect(kinds(await g3(r))).toContain("ungrounded_absence");
+    // A phrasing only the order rule knows.
+    expect(kinds(await g3("There's no order under this number.", { locale: "en" }))).toContain("ungrounded_absence");
     const auto = autoLookups([{ kind: "ungrounded_absence", claims: [r] }] as any, "מה עם ההזמנה שלי?", ["woocommerce.list_customer_orders", "woocommerce.list_products"], []);
     expect(auto.map((a) => a.function.name)).toEqual(["woocommerce.list_customer_orders"]);
     expect(JSON.parse(auto[0].function.arguments)).toEqual({});
@@ -1860,6 +1869,8 @@ describe("2f6ff7e3 rating fixes", () => {
     expect(productAskNow("מה מדיניות ההחזרות?")).toBe(false);
     expect(productAskNow("איך מזינים את הקופון?")).toBe(false);
     expect(productAskNow("איך מנקים את המשטח?")).toBe(false);
+    // A how-to that names what fits is still a how-to.
+    expect(productAskNow("איך מנקים משטח? אני מחפשת משהו קל לניקוי")).toBe(false);
     expect(productAskNow("יש עדכון?")).toBe(false);
     expect(productAskNow("how do I clean it?")).toBe(false);
     expect(productAskNow("how do I order?")).toBe(true);

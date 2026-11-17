@@ -385,7 +385,9 @@ export async function internalSender(tenantId: string, channel: string, external
 export function uncoveredSubjects(incoming: string, openItems: string[]): string[] {
   const clauses = String(incoming ?? "").split(/\s*[,;]\s*|\s+(?:and|or|או|וגם|גם)\s+|\s+(?=וה[\u0590-\u05FF]{2,})/iu).map((c) => c.replace(/^ו(?=ה)/u, "").trim()).filter((c) => words(c).size >= 1);
   if (clauses.length <= 1) return openItems.some((t) => sameIssue(t, incoming)) ? [] : [String(incoming ?? "").trim()].filter(Boolean);
-  return clauses.filter((c) => !openItems.some((t) => sameIssue(t, c)));
+  // A clause that carries a number (a card's last four, an order number) is a detail of an open item,
+  // added to it (withNewDetails), never a subject of its own.
+  return clauses.filter((c) => !openItems.some((t) => sameIssue(t, c)) && !(openItems.length && /\d{4,}/.test(c)));
 }
 
 export function sameIssue(a: string, b: string): boolean {
