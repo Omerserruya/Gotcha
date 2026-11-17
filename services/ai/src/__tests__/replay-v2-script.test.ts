@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/connectors", () => ({}));
 vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn() }));
-import { parseArgs, planReplay, gateAsOf } from "../scripts/replay-v2";
+import { parseArgs, planReplay, gateAsOf, stagesLine } from "../scripts/replay-v2";
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
 function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }, opts: { ownerRecent?: boolean; handovers?: Record<string, any[]> } = {}) {
@@ -104,5 +104,13 @@ describe("replay-v2: the worker's Gate 1, as of each message (prod replay 4)", (
     const d = db([{ id: "c1", assignedAiAgentId: "maya", channel: "WHATSAPP", customerExternalId: "972" }], { c1: [inb("m1", 1)] }, { id: "noa" }, { ownerRecent: true });
     const plan = (await planReplay(parseArgs(["--tenants", "t1"]), d)).get("t1")!;
     expect(plan[0].skip).toBe("owner_recent");
+  });
+});
+
+describe("the stages line (numbers and tool names only)", () => {
+  it("★ marks, rounds, the rewrite and each tool", () => {
+    const line = stagesLine({ stageMs: { load: 410, surface: 520, tools_r1: 3900, model: 7400, gate3: 9100 }, rounds: 2, rewriteRounds: 1, autoLookupMs: 1200, rewriteMs: 1700, tools: [{ tool: "woocommerce.list_products", outcome: "ok", ms: 3880, retried: true }, { tool: "search_knowledge", outcome: "empty", ms: 300 }] });
+    expect(line).toBe("- stages: load=410 surface=520 tools_r1=3900 model=7400 gate3=9100 | rounds=2 rewriteRounds=1 autoLookupMs=1200 rewriteMs=1700 | tools: woocommerce.list_products:ok:3880ms:retried search_knowledge:empty:300ms");
+    expect(stagesLine({})).toBe("- stages: - | rounds=? rewriteRounds=0 autoLookupMs=0 rewriteMs=0 | tools: -");
   });
 });

@@ -77,6 +77,17 @@ export function gateAsOf(msgs: any[], i: number, handovers: Array<{ toHandler: s
   return null;
 }
 
+/**
+ * Where one turn's time went, numbers and tool names only (no customer text): the
+ * engine's cumulative stage marks, rounds, the rewrite and its own lookups, and each tool.
+ */
+export function stagesLine(trace: any): string {
+  const st = trace?.stageMs ?? {};
+  const marks = Object.entries(st).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => `${k}=${Number(v)}`).join(" ");
+  const tools = ((trace?.tools ?? []) as any[]).map((x) => `${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}`).join(" ");
+  return `- stages: ${marks || "-"} | rounds=${trace?.rounds ?? "?"} rewriteRounds=${trace?.rewriteRounds ?? 0} autoLookupMs=${trace?.autoLookupMs ?? 0} rewriteMs=${trace?.rewriteMs ?? 0} | tools: ${tools || "-"}`;
+}
+
 /** The turns to replay: per tenant, newest conversations first, each one's customer messages in order; capped. */
 export async function planReplay(args: Args, db: any = prisma): Promise<Map<string, PlannedTurn[]>> {
   const plan = new Map<string, PlannedTurn[]>();
@@ -265,6 +276,7 @@ async function main() {
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
+          stagesLine(r.trace),
           "",
         );
       } catch (err: any) {

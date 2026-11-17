@@ -18,6 +18,7 @@
  * API: WC REST v3 - /wp-json/wc/v3/
  */
 
+import { AsyncLocalStorage } from "async_hooks";
 import { assertPublicUrl, getRedis } from "@chatcenter/shared";
 import { orderPhoneSearchTerms } from "../../lib/order-phone-search";
 import { rememberListed, setStoreAllowedProducts, wooProductAllowed, wooStoreHasAllowList } from "./woo-listed-products";
@@ -671,7 +672,7 @@ async function loadAllowedIds(auth: string, base: string, cats: Set<string>, lan
     for (let page = 1; page <= 3; page++) {
       const p = new URLSearchParams({ category: cat, status: "publish", per_page: "100", page: String(page), _fields: "id" });
       if (lang) p.set("lang", lang);
-      const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`).catch(() => { failed = true; return []; });
+      const l: any = await searchScope.exit(() => wooRequest(auth, "GET", `${base}/products?${p}`)).catch(() => { failed = true; return []; });
       for (const x of Array.isArray(l) ? l : []) if (/^\d{1,12}$/.test(String(x?.id ?? ""))) ids.add(String(x.id));
       if (!Array.isArray(l) || l.length < 100) break;
     }
@@ -741,6 +742,68 @@ export function descriptionTokens(text: unknown): string[][] {
 const catalogCache = new Map<string, { at: number; value: any[] | null }>();
 
 /**
+ * A product search on a small store answered from its cached catalogue (2026-11-17,
+ * prod replay latency: one list_products call made up to 12 live ?search= requests to
+ * slow shared hosting, 10-14s, while the whole catalogue was already cached and fresh).
+ * Inside one list_products call, a GET /products?... is answered LOCALLY when that
+ * language's catalogue is fresh and has at most MAX_LOCAL_CATALOGUE products, applying
+ * the same filters the store's REST API applies (search words in the title, excerpt or
+ * content; include, exclude, stock, price, status, paging). A category read stays live.
+ * Every search layer above keeps its own logic and normalisation; only the
+ * network is gone. Otherwise the store is asked, at most LIVE_SEARCH_CAP times per call,
+ * in the layers' own order (the base search first). get_product stays live, so a price or
+ * stock the bot quotes for one item is current. WOO_LOCAL_SEARCH=off restores the old path.
+ */
+export const MAX_LOCAL_CATALOGUE = 500;
+export const LIVE_SEARCH_CAP = 4;
+interface SearchScope { local: number; live: number; capped: number }
+const searchScope = new AsyncLocalStorage<SearchScope>();
+/** Local answers, live requests and capped ones, for the timing script. */
+export const searchRequestCounts = { local: 0, live: 0, capped: 0 };
+
+const strip = (h: unknown) => String(h ?? "").replace(/<[^>]*>/g, " ").toLowerCase();
+/** Tests only: a store's catalogue as if read at `at`. */
+export function primeCatalogCache(base: string, lang: string, list: any[] | null, at = Date.now()): void {
+  catalogCache.set(`catalog|${base}|${lang}`, { at, value: list });
+}
+/** A GET /products?... answered from the fresh cached catalogue, or null when it cannot be. */
+export function localProductList(url: string, now = Date.now()): any[] | null {
+  let u: URL;
+  try { u = new URL(url); } catch { return null; }
+  if (!/\/products$/.test(u.pathname)) return null;
+  const q = u.searchParams;
+  // Only the parameters this emulates; anything else goes to the store.
+  // Not "category": a WPML store's products list other ids than its own ?category= query
+  // returns (Smoovee), so a category read stays the store's.
+  const known = new Set(["per_page", "page", "search", "status", "lang", "min_price", "max_price", "stock_status", "include", "exclude", "_fields"]);
+  if ([...q.keys()].some((k) => !known.has(k))) return null;
+  const base = `${u.origin}${u.pathname.replace(/\/products$/, "")}`;
+  const lang = q.get("lang") ?? "";
+  const hit = catalogCache.get(`catalog|${base}|${lang}`);
+  if (!hit || !Array.isArray(hit.value) || now - hit.at >= CATALOG_FRESH_MS || hit.value.length > MAX_LOCAL_CATALOGUE) return null;
+  let list = hit.value.filter((p: any) => (p?.status ?? "publish") === (q.get("status") ?? "publish") || !q.get("status"));
+  const search = String(q.get("search") ?? "").trim().toLowerCase();
+  if (search) {
+    // WordPress: every word, each in the title, the excerpt or the content.
+    const terms = search.split(/\s+/).filter(Boolean);
+    list = list.filter((p: any) => {
+      const hay = `${String(p?.name ?? "").toLowerCase()} ${strip(p?.short_description)} ${strip(p?.description)}`;
+      return terms.every((t) => hay.includes(t));
+    });
+  }
+  const ids = (v: string | null) => new Set(String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean));
+  if (q.get("include")) { const inc = ids(q.get("include")); list = list.filter((p: any) => inc.has(String(p?.id))); }
+  if (q.get("exclude")) { const exc = ids(q.get("exclude")); list = list.filter((p: any) => !exc.has(String(p?.id))); }
+  if (q.get("stock_status")) list = list.filter((p: any) => String(p?.stock_status ?? "") === q.get("stock_status"));
+  const minP = Number(q.get("min_price") ?? NaN), maxP = Number(q.get("max_price") ?? NaN);
+  if (Number.isFinite(minP)) list = list.filter((p: any) => Number(p?.price) >= minP);
+  if (Number.isFinite(maxP)) list = list.filter((p: any) => Number(p?.price) <= maxP);
+  const per = Math.max(1, Math.min(100, Number(q.get("per_page") ?? 10) || 10));
+  const page = Math.max(1, Number(q.get("page") ?? 1) || 1);
+  return list.slice((page - 1) * per, page * per);
+}
+
+/**
  * Stores whose products are sold by size (most of them name a footprint:
  * Smoovee's "משטח הזזה 34*38 ס\"מ"). For such a store a device the search
  * does not know is a question of its base size, not "not found".
@@ -766,15 +829,23 @@ export function storeSellsBySize(storeUrl: string): boolean {
 async function wholeCatalog(auth: string, base: string, lang: string | null): Promise<any[] | null> {
   const key = `catalog|${base}|${lang ?? ""}`;
   return swrCached(catalogCache, key, CATALOG_FRESH_MS, CATALOG_STALE_MS, async () => {
-    const page = async (n: number) => {
+    // The loader always reads the store itself, never the local answers below (a
+    // background refresh started inside a search must reach the store).
+    const page = (n: number) => searchScope.exit(async () => {
       const p = new URLSearchParams({ per_page: "100", page: String(n), status: "publish" });
       if (lang) p.set("lang", lang);
       const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`);
       return Array.isArray(l) ? l : [];
-    };
-    // Both pages at once, not one after the other (a small store answers page 2 empty).
+    });
+    // Two pages at once (a small store answers page 2 empty); up to MAX_LOCAL_CATALOGUE.
     const [first, second] = await Promise.all([page(1), page(2).catch(() => [] as any[])]);
-    const list: any[] | null = first.length < 100 ? first : second.length >= 100 ? null : [...first, ...second];
+    let list: any[] | null = first.length < 100 ? first : second.length < 100 ? [...first, ...second] : null;
+    if (!list) {
+      const more = await Promise.all([3, 4, 5].map((n) => page(n).catch(() => [] as any[])));
+      const pages = [first, second, ...more];
+      const end = pages.findIndex((l) => l.length < 100);
+      list = end < 0 ? null : pages.slice(0, end + 1).flat();
+    }
     if (list) rememberSizedStore(base, list);
     return list;
   });
@@ -1321,6 +1392,13 @@ const WooCommerceAdapter: ProviderAdapter = {
         return await wooRequest(auth, "GET", `${base}/customers?${params}`);
       }
       case "list_products": {
+        // One scope per tool call: local answers on a small fresh catalogue, a live cap otherwise.
+        if (!searchScope.getStore() && process.env.WOO_LOCAL_SEARCH !== "off") {
+          const scope: SearchScope = { local: 0, live: 0, capped: 0 };
+          const out = await searchScope.run(scope, () => WooCommerceAdapter.execute({ toolName, args, credentials, config, ctx } as any));
+          console.log(`[woo-search] requests local=${scope.local} live=${scope.live} capped=${scope.capped}`);
+          return out;
+        }
         // By meaning, when the store's own search found nothing (2026-11-16,
         // catalog-semantic.service): the whole search below runs first, with
         // every retry it has; only an empty answer reaches the catalogue's
@@ -1817,6 +1895,13 @@ export async function withStoreSlot<T>(url: string, fn: () => Promise<T>): Promi
 }
 
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
+  const scope = method === "GET" ? searchScope.getStore() : undefined;
+  if (scope && /\/products\?/.test(url)) {
+    const local = localProductList(url);
+    if (local) { scope.local++; searchRequestCounts.local++; rememberListed(url, local); return local; }
+    if (scope.live >= LIVE_SEARCH_CAP) { scope.capped++; searchRequestCounts.capped++; return []; }
+    scope.live++; searchRequestCounts.live++;
+  }
   if (requestSeam) {
     const out = await requestSeam(method, url, body);
     if (method === "GET") rememberListed(url, out);

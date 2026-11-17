@@ -127,11 +127,11 @@ describe("Smoovee: what a product fits is in its description", () => {
     expect(got.length).toBeGreaterThan(0);
     expect(got.every((p) => /אלכסה/.test(p.name))).toBe(true);
   });
-  it("a catalogue over 200 products is not read whole", async () => {
-    const many = Array.from({ length: 300 }, (_, i) => ({ id: i + 1, name: `Item ${i}`, status: "publish", catalog_visibility: "visible", stock_status: "instock", short_description: "Suitable for: Tami 4", description: "" }));
+  it("a catalogue over 500 products is not read whole (the local-search limit)", async () => {
+    const many = Array.from({ length: 600 }, (_, i) => ({ id: i + 1, name: `Item ${i}`, status: "publish", catalog_visibility: "visible", stock_status: "instock", short_description: "Suitable for: Tami 4", description: "" }));
     const s = store({ he: many, en: many });
     expect(await s.run({ query: "Tami 4" })).toEqual([]);
-    expect(s.calls.some((u) => /page=3/.test(u))).toBe(false);
+    expect(s.calls.some((u) => /page=6/.test(u))).toBe(false);
   });
   it("sold out after in stock", async () => {
     const he = CATALOG.he.map((p) => (p.id === 1433 ? { ...p, stock_status: "outofstock" } : p));

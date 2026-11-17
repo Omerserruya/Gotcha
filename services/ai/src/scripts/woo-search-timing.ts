@@ -2,7 +2,8 @@
  * Read-only: how long a store search takes, and where (prod replay 6: Tehila's
  * list_products timed out at 8s twice per run). Runs INSIDE the ai container:
  *
- *   npx tsx src/scripts/woo-search-timing.ts --tenant <id> --q "בנדנה" [--q ...] [--lang he] [--runs 2] [--warm]
+ *   npx tsx src/scripts/woo-search-timing.ts --tenant <id> --q "בנדנה" [--q ...] [--lang he] [--runs 2] [--warm] [--compare]
+ *   (--compare: each query live first, WOO_LOCAL_SEARCH=off, then from the cached catalogue; request counts per run)
  *
  * For each query it times, through the same adapter path v2 uses (GETs only, no
  * conversation, so no customer guard is involved):
@@ -27,11 +28,14 @@ export function parseTimingArgs(argv: string[]): { tenant: string; queries: stri
 }
 
 async function timed(tenantId: string, args: Record<string, unknown>) {
+  const { searchRequestCounts } = await import("../services/connectors/woocommerce.adapter");
+  const before = { ...searchRequestCounts };
   const t0 = Date.now();
   const r: any = await executeAdapterTool({ tenantId, toolFunctionName: "woocommerce.list_products", args } as any).catch((err: any) => ({ ok: false, reason: String(err?.message ?? err).slice(0, 120) }));
   const ms = Date.now() - t0;
   const n = r?.ok && Array.isArray(r.result) ? r.result.length : null;
-  return { ms, ok: !!r?.ok, n, reason: r?.ok ? null : String(r?.reason ?? "").slice(0, 80) };
+  const req = `local=${searchRequestCounts.local - before.local} live=${searchRequestCounts.live - before.live} capped=${searchRequestCounts.capped - before.capped}`;
+  return { ms, ok: !!r?.ok, n, reason: r?.ok ? null : String(r?.reason ?? "").slice(0, 80), req };
 }
 
 async function main() {
@@ -45,12 +49,18 @@ async function main() {
       const w = await warmWooCachesOnce({ tenants: async () => [a.tenant], scope: "all" });
       console.log(`[timing] warmed first: ${w.map((x) => `${x.ok ? `${x.ms}ms` : "failed"}`).join(" ") || "no Woo store"}`);
     }
+    // --compare: each query with the store asked live (WOO_LOCAL_SEARCH=off), then from the cached catalogue.
+    const modes = process.argv.includes("--compare") ? ["off", "on"] : [process.env.WOO_LOCAL_SEARCH === "off" ? "off" : "on"];
     for (const q of a.queries) {
       console.log(`\n[timing] q="${q}"`);
-      for (let i = 0; i < a.runs; i++) {
-        const r = await timed(a.tenant, { query: q });
-        console.log(`  full search run ${i + 1}: ${r.ms}ms ok=${r.ok} products=${r.n ?? "-"}${r.reason ? ` reason=${r.reason}` : ""}`);
+      for (const mode of modes) {
+        process.env.WOO_LOCAL_SEARCH = mode;
+        for (let i = 0; i < a.runs; i++) {
+          const r = await timed(a.tenant, { query: q });
+          console.log(`  local-search=${mode} run ${i + 1}: ${r.ms}ms ok=${r.ok} products=${r.n ?? "-"} requests ${r.req}${r.reason ? ` reason=${r.reason}` : ""}`);
+        }
       }
+      process.env.WOO_LOCAL_SEARCH = "on";
       const small = await timed(a.tenant, { query: q, per_page: 5, ...(a.lang ? { lang: a.lang } : {}) });
       console.log(`  per_page 5${a.lang ? ` lang=${a.lang}` : ""}: ${small.ms}ms ok=${small.ok} products=${small.n ?? "-"}${small.reason ? ` reason=${small.reason}` : ""}`);
     }
