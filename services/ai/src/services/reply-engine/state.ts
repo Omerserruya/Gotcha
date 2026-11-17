@@ -60,6 +60,8 @@ export const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
 export const CANNED_SENT_FACT = "_cannedTeamLineAt";
 /** Set once a safety or damage complaint is seen: the conversation stays a safety one. */
 export const SAFETY_FACT = "_safetyAt";
+/** The last turn whose product search failed (timed out or errored) and found nothing: two in a row go to the team. */
+export const SEARCH_FAIL_FACT = "_searchFailedAt";
 const engineFact = (k: string) => k.startsWith("_");
 
 export function mergeState(

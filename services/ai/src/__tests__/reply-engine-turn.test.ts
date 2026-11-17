@@ -1079,3 +1079,24 @@ describe("a needless handoff takes its words with it (prod replay 2026-11-17, Sm
     expect((r.trace as any).teamQuestion).toBeTruthy();
   });
 });
+
+describe("3ca1dabe rating: engine passes", () => {
+  it("★ a platform event is no customer text", async () => {
+    const { placeholderOnly, stripUnmatchedEdges, sanitizeReply } = await import("../services/reply-engine/engine");
+    for (const t of ["[edit message]", "[Message deleted]", "[deleted message]", "[הודעה נערכה]", "[poll]"]) expect(placeholderOnly(t), t).toBe(true);
+    expect(placeholderOnly("[edit] the price?")).toBe(false);
+    expect(sanitizeReply('" I can check that for you.')).toBe("I can check that for you.");
+    expect(stripUnmatchedEdges("(see the sizes")).toBe("see the sizes");
+    expect(stripUnmatchedEdges('"Oak" is in stock.')).toBe('"Oak" is in stock.');
+    expect(stripUnmatchedEdges("Yes (in black).")).toBe("Yes (in black).");
+  });
+  it("★ a payment problem gets no cards and no product list", async () => {
+    h.responses.push(
+      { toolCalls: [tc("p0", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("p1", { reply: "מצטערים על זה. אפשר לשלם גם בכרטיס אשראי או בביט. הנה מה שיש לנו:", cards: ["PRODUCT_1"] })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא מצליח לשלם עם ביימי" }, "autonomous");
+    expect((r.trace as any).cards ?? []).toEqual([]);
+    expect(r.reply).not.toMatch(/Canvas Tote/);
+  });
+});

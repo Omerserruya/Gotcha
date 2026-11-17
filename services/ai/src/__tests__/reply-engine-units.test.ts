@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1733,5 +1733,78 @@ describe("6a383fcb rating fixes", () => {
     expect(kinds(ps)).toContain("ungrounded_absence");
     expect(stripFactProblems(curly, ps)).toBe("Want something else?");
     expect(kinds(await g3("We don\u2019t sell desk lamps.", { locale: "en", toolsOffered: ["search_products"] }))).toContain("ungrounded_absence");
+  });
+});
+
+/** Rating on 3ca1dabe (prod 2026-11-17, six tenants): the Smoovee blocker and the generic fixes. */
+describe("3ca1dabe rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ stock for one option needs that option's own data (a variation or variant read)", async () => {
+    const { optionClaimsWithoutVariations } = await import("../services/reply-engine/gates");
+    const parent = [{ tool: "woocommerce.get_product", outcome: "ok", content: JSON.stringify({ id: 9, name: "משטח", stock_status: "instock" }) }] as any;
+    expect(optionClaimsWithoutVariations("השחור במלאי עכשיו.", "מתי השחור יחזור למלאי?", parent)).toHaveLength(1);
+    expect(optionClaimsWithoutVariations("Black is in stock now.", "when will black be back in stock?", parent)).toHaveLength(1);
+    const vars = [...parent, { tool: "woocommerce.list_product_variations", outcome: "ok", content: JSON.stringify([{ id: 91, attributes: [{ option: "שחור" }], stock_status: "outofstock" }]) }] as any;
+    expect(optionClaimsWithoutVariations("השחור אזל כרגע.", "מתי השחור יחזור למלאי?", vars)).toEqual([]);
+    const shopify = [{ tool: "shopify.get_product", outcome: "ok", content: JSON.stringify({ title: "Tee", variants: [{ title: "Black", available: false }] }) }] as any;
+    expect(optionClaimsWithoutVariations("Black is sold out.", "is the black one in stock?", shopify)).toEqual([]);
+    // No option asked: the parent's stock is the answer, a simple product's own colour included.
+    expect(optionClaimsWithoutVariations("המשטח במלאי.", "יש במלאי?", parent)).toEqual([]);
+    expect(optionClaimsWithoutVariations("המשטח השחור במלאי.", "המשטח במלאי?", parent)).toEqual([]);
+    expect(kinds(await g3("השחור במלאי עכשיו.", { incomingMessage: "מתי השחור יחזור למלאי?", tools: parent }))).toContain("option_without_variation");
+  });
+
+  it("★ a failed search never hands the work back, never ends in an empty \"we'll check\"", async () => {
+    const { gaveUpSearch, returnsWork, cleanStyle, unbackedPromises } = await import("../services/reply-engine/gates");
+    const failed = [{ tool: "woocommerce.list_products", outcome: "timeout" }] as any;
+    expect(returnsWork("לא מצאתי, נסי שם אחר.")).toBe(true);
+    expect(returnsWork("כדאי לבדוק באתר.")).toBe(true);
+    expect(returnsWork("Try another name, or check our website.")).toBe(true);
+    expect(returnsWork("באתר יש את כל הדגמים.")).toBe(false);
+    expect(gaveUpSearch("נסי שם אחר.", failed)).toBe(true);
+    expect(gaveUpSearch("מעולה, העברתי לצוות.", failed, "מחפשת משטח למיקסר", true)).toBe(true);
+    expect(gaveUpSearch("מעולה, העברתי לצוות.", failed, "מה עם ההזמנה שלי?", true)).toBe(false);
+    expect(styleCodes(await g3("יש כמה דגמים. כדאי לבדוק באתר."))).toContain("returns_work");
+    expect(cleanStyle("יש כמה דגמים. כדאי לבדוק באתר.", ["returns_work"])).toBe("יש כמה דגמים.");
+    expect(unbackedPromises("נבדוק את זה ונחזור.", { teamQuestion: false, handedOff: false, teamAlreadyOpen: false, approvalPending: false })).not.toEqual([]);
+    expect(unbackedPromises("We'll check it and get back to you.", { teamQuestion: false, handedOff: false, teamAlreadyOpen: false, approvalPending: false })).not.toEqual([]);
+  });
+
+  it("★ a payment problem is a support case: a handoff may stand, and it is no product ask", async () => {
+    const { paymentProblem, productAskNow, needlessHandoff } = await import("../services/reply-engine/gates");
+    expect(paymentProblem("לא מצליח לשלם עם ביימי")).toBe(true);
+    expect(paymentProblem("התשלום לא עובר")).toBe(true);
+    expect(paymentProblem("my card was declined at checkout")).toBe(true);
+    expect(paymentProblem("אפשר לשלם בביט?")).toBe(false);
+    expect(productAskNow("לא מצליח לשלם עם ביימי")).toBe(false);
+    expect(productAskNow("יש לכם משטח במבוק?")).toBe(true);
+    expect(productAskNow("יש משטחי במבוק?")).toBe(true);
+    expect(productAskNow("ההזמנה שלי 5512 לא הגיעה")).toBe(false);
+    expect(needlessHandoff("payment", ["לא מצליח לשלם עם ביימי"], false)).toBe(false);
+  });
+
+  it("★ recommend after the qualifying question was answered: pick, a question is not enough", async () => {
+    const { noRecommendation } = await import("../services/reply-engine/gates");
+    const inbound = ["איזה גוון מתאים לי?", "חם, עור בהיר"];
+    const lastBot = "יש לך גוון עור חם או קר?";
+    expect(noRecommendation("יש לנו כמה גוונים. איזה מרקם מעדיפים?", "חם, עור בהיר", 3, inbound, lastBot)).toBe(true);
+    expect(noRecommendation("הגוון Warm Beige הכי מתאים לך, כי הוא מיועד לעור בהיר עם גוון חם.", "חם, עור בהיר", 3, inbound, lastBot)).toBe(false);
+    // Asked now: one question is still fine.
+    expect(noRecommendation("איזה גוון עור יש לך?", "איזה גוון מתאים לי?", 3, [], "")).toBe(false);
+  });
+
+  it("★ the configured name in the other alphabet is the employee's; another name is not", async () => {
+    const { wrongSelfName, nameSkeleton } = await import("../services/reply-engine/gates");
+    expect(nameSkeleton("דניאל")).toBe(nameSkeleton("Daniel"));
+    expect(wrongSelfName("היי, זה דניאל מ-GOTCHA.", "Daniel")).toBeNull();
+    expect(wrongSelfName("היי מתן, זה מתן מ-GOTCHA", "Daniel")).toBe("מתן");
+    expect(wrongSelfName("היי מתן זה מתן מ־GOTCHA", "Daniel")).toBe("מתן");
+    expect(wrongSelfName("זה נכון מאוד.", "Daniel")).toBeNull();
   });
 });

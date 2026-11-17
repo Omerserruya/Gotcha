@@ -158,7 +158,8 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
   if (safetyCase(recentInbound)) return false;
   // Photos sent right after the words ("[Image]") must not push them out of the window.
   const recent = recentInbound.filter((m) => !MEDIA_PLACEHOLDER.test(String(m ?? "").trim())).slice(-3).join("\n");
-  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent);
+  // A payment or checkout failure is a support case: a person may take it.
+  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent) && !PAY_PROBLEM.test(normalizeQuotes(recent));
 }
 
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
@@ -209,12 +210,19 @@ export function unreadBusinessInfo(reply: string, incoming: string, tools: ToolR
 // "I couldn't check" after a store search timed out (prod replay 3: a category ask
 // got that where legacy named the category).
 const GAVE_UP = /(?:הקטלוג\s+לא\s+(?:נפתח|נטען)|לא\s+נפתח\s+לי|תקלה|לא (?:הצלחתי|הצלחנו|יכולתי|יכולנו|מצליח|מצליחה) (?:לבדוק|לגשת|לראות|לחפש)|(?:אין|אין לי) (?:גישה|אפשרות לבדוק)|כרגע (?:לא ניתן|אי אפשר) לבדוק|לבדוק (?:את זה )?כרגע)|\b(?:could(?:n'?t| not) (?:check|look|access|search)|unable to (?:check|look|access))\b/iu;
-/** A product search timed out, nothing else was found this turn, and the reply gives up on the customer. */
-export function gaveUpSearch(reply: string, tools: ToolRunRecord[]): boolean {
+// The work handed back to the customer (prod replay 2026-11-17, Smoovee: "נסי שם אחר", "כדאי לבדוק באתר").
+const RETURNS_WORK = /(?<![\u0590-\u05FF])(?:(?:נסי|נסה|נסו|תנסי|תנסה|תנסו)\s+(?:שם|מילה|ניסוח|לחפש)|(?:כדאי|אפשר|מומלץ)\s+(?:לבדוק|לחפש|להיכנס|לראות)\s+(?:ב|את\s+ה)?אתר|(?:תבדקי|תבדוק|תבדקו|תחפשי|תחפש|תחפשו)\s+(?:ב|את\s+ה)?אתר|(?:אפשר|כדאי)\s+לחפש\s+בעצמ)(?![\u0590-\u05FF])|\b(?:try (?:another|a different) (?:name|word|search)|search (?:for it )?(?:on|in) (?:our|the) (?:website|site|store)|check (?:on |at )?(?:our|the) (?:website|site))\b/iu;
+export const returnsWork = (reply: string) => RETURNS_WORK.test(reply ?? "");
+/**
+ * A product search timed out or failed, nothing else was found this turn, and the reply gives
+ * up: says it could not check, hands the work back to the customer, or sends a simple browse to
+ * the team (prod replay 2026-11-17).
+ */
+export function gaveUpSearch(reply: string, tools: ToolRunRecord[], incoming = "", teamQuestion = false): boolean {
   const search = (t: ToolRunRecord) => /list_products|search_products|get_product|variation/i.test(t.tool);
   if (!tools.some((t) => search(t) && (t.outcome === "timeout" || t.outcome === "error"))) return false;
   if (tools.some((t) => search(t) && (t.outcome === "ok" || t.outcome === "empty"))) return false;
-  return GAVE_UP.test(reply ?? "");
+  return GAVE_UP.test(reply ?? "") || RETURNS_WORK.test(reply ?? "") || (teamQuestion && PRODUCT_WANT.test(incoming ?? ""));
 }
 
 /** A coupon or policy question sent to the team without searching the knowledge. */
@@ -238,7 +246,7 @@ export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpe
 
 // Prod replay 4: "the measurements were passed to the team" with no team question,
 // and "we will not ship before we update you": a promise nothing carries out.
-const FUTURE_PROMISE = /(?<![\u0590-\u05FF])(?:[וש]?(?:נעדכן|אעדכן|נודיע|אודיע|נדאג|אדאג|נעכב|נשמור\s+(?:לך|לכם)|אשמור\s+(?:לך|לכם))|לא\s+(?:נשלח|נשלחים|נשלחת|נוציא)\s+(?:לפני|עד|בלי))(?![\u0590-\u05FF])|\b(?:we(?:'ll| will) (?:update you|let you know|hold it|keep it for you)|(?:won'?t|will not) ship (?:before|until))\b/iu;
+const FUTURE_PROMISE = /(?<![\u0590-\u05FF])(?:[וש]?(?:נעדכן|אעדכן|נודיע|אודיע|נדאג|אדאג|נעכב|נבדוק\s+(?:את\s+זה|ונחזור|ונעדכן|ונודיע|ונשלח)|אבדוק\s+(?:את\s+זה|ואחזור|ואעדכן)|נשמור\s+(?:לך|לכם)|אשמור\s+(?:לך|לכם))|לא\s+(?:נשלח|נשלחים|נשלחת|נוציא)\s+(?:לפני|עד|בלי))(?![\u0590-\u05FF])|\b(?:we(?:'ll| will) (?:update you|let you know|hold it|keep it for you|check (?:it|this|that|on it)(?: and get back)?)|i(?:'ll| will) (?:check (?:it|this|that) and (?:get back|let you know)|look into it and get back)|(?:won'?t|will not) ship (?:before|until))\b/iu;
 // "We recorded / saved / updated it" (prod replay 2026-11-17, Tehila: "תודה, רשמנו את סכום ההזמנה"
 // with no tool call): a record is claimed only when a write tool returned ok this turn.
 const RECORDED = /(?<![\u0590-\u05FF])[וש]?(?:רשמנו|רשמתי|רשמתם|שמרנו|שמרתי|עדכנו|עדכנתי|הוספנו|הוספתי|תיעדנו|נרשם|נרשמה|נרשמו|נשמר|נשמרה|נשמרו|עודכן|עודכנה|עודכנו|תועד|תועדה)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ve| have)? (?:saved|noted|updated|recorded|registered|logged|added)|(?:it|this|that|your \w+)(?:'s| is| has been| was) (?:saved|noted|updated|recorded|registered|logged))\b/iu;
@@ -601,12 +609,20 @@ export function repeatedAdvice(reply: string, previousBotReplies: string[], inco
 }
 
 // Asked to recommend among products, and the reply neither picks nor asks (prod replay 2026-11-17).
-const ASKS_RECOMMEND = /(?<![\u0590-\u05FF])(?:ממליצים|תמליצו|תמליץ|תמליצי|המלצה|מה\s+(?:הכי\s+)?(?:כדאי|מומלץ|עדיף)|איזה\s+(?:הכי\s+)?(?:כדאי|מומלץ|עדיף|מתאים)|איזו\s+(?:הכי\s+)?(?:כדאי|מומלצת|עדיפה|מתאימה)|מה\s+(?:אתם\s+)?ממליצים)(?![\u0590-\u05FF])|\b(?:recommend|suggest|which (?:one|board|model|is better|should i)|what would you (?:pick|choose|suggest)|best (?:one|option|for me))\b/iu;
+const ASKS_RECOMMEND = /(?<![\u0590-\u05FF])(?:ממליצים|תמליצו|תמליץ|תמליצי|המלצה|מה\s+(?:הכי\s+)?(?:כדאי|מומלץ|עדיף)|איזה\s+(?:[\u0590-\u05FF]+\s+){0,2}(?:הכי\s+)?(?:כדאי|מומלץ|עדיף|מתאים|מתאימה)|איזו\s+(?:[\u0590-\u05FF]+\s+){0,2}(?:הכי\s+)?(?:כדאי|מומלצת|עדיפה|מתאימה)|מה\s+(?:אתם\s+)?ממליצים)(?![\u0590-\u05FF])|\b(?:recommend|suggest|which (?:one|board|model|is better|should i)|what would you (?:pick|choose|suggest)|best (?:one|option|for me))\b/iu;
 const PICKS = new RegExp([RECOMMENDS_SRC, String.raw`(?<![֐-׿])(?:הייתי\s+הולך|הייתי\s+בוחר|הבחירה|הכי\s+טוב|עדיף|בגלל\s+ש|כי\s+(?:הוא|היא|זה))(?![֐-׿])|\b(?:best|go with|pick|because|great (?:choice|fit)|ideal)\b`].join("|"), "iu");
-/** Products came back for a recommendation ask, and the reply has no pick and no question. */
-export function noRecommendation(reply: string, incoming: string, candidateCount: number): boolean {
-  if (!candidateCount || !ASKS_RECOMMEND.test(incoming ?? "")) return false;
-  return !PICKS.test(reply ?? "") && !/\?/.test(reply ?? "");
+/**
+ * Products came back for a recommendation ask, and the reply has no pick and no question. Once the
+ * employee asked its qualifying question and the customer answered it, a question is no longer
+ * enough: the reply picks (prod replay 2026-11-17, NE'A: a shade refused after the answer).
+ */
+export function noRecommendation(reply: string, incoming: string, candidateCount: number, recentInbound: string[] = [], lastBotReply = ""): boolean {
+  if (!candidateCount) return false;
+  const askedNow = ASKS_RECOMMEND.test(incoming ?? "");
+  const answeredQualifier = !askedNow && /\?\s*$/.test(String(lastBotReply ?? "").trim()) && recentInbound.slice(-4, -1).some((m) => ASKS_RECOMMEND.test(m ?? "")) && !/\?/.test(incoming ?? "");
+  if (!askedNow && !answeredQualifier) return false;
+  if (PICKS.test(reply ?? "")) return false;
+  return answeredQualifier || !/\?/.test(reply ?? "");
 }
 
 // Gendered forms to a customer whose gender is not known become the plural (prod replay 2026-11-17).
@@ -676,15 +692,26 @@ export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[]):
 
 // Presenting as a named person who is not this employee (prod replay 2026-11-17, GOTCHA: "מתן",
 // a real team member's name taken from the conversation). Only the configured name is the employee's.
-const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ-?\s*[֐-׿A-Za-z]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות|\s*מ-\s*[֐-׿A-Za-z]{2,})/gu;
+const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ-?\s*[֐-׿A-Za-z]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות|\s*מ-\s*[֐-׿A-Za-z]{2,})|(?<![֐-׿])(?:זה|כאן)\s+([֐-׿]{2,12})(?=\s*(?:מ(?:ה)?צוות|מ-\s*[֐-׿A-Za-z]{2,}))/gu;
 const NOT_A_NAME = new Set(["here", "sorry", "happy", "glad", "back", "sure", "afraid", "available", "the", "your", "נכון", "בסדר", "מעולה", "בדיוק", "הכל", "טוב", "אני", "אנחנו"]);
-/** A name the reply gives itself that is not the employee's configured name. */
+// A name's consonant skeleton across Hebrew and Latin ("דניאל" is "Daniel": d-n-l), so the
+// configured name written in the other alphabet is still the employee's own.
+const HE_SKELETON: Record<string, string> = { ב: "b", ג: "g", ד: "d", ז: "z", ח: "h", ט: "t", כ: "k", ך: "k", ל: "l", מ: "m", ם: "m", נ: "n", ן: "n", ס: "s", פ: "p", ף: "p", צ: "c", ץ: "c", ק: "k", ר: "r", ש: "s", ת: "t" };
+export function nameSkeleton(name: string): string {
+  const t = String(name ?? "").toLowerCase();
+  if (/[\u0590-\u05FF]/.test(t)) return [...t].map((ch) => HE_SKELETON[ch] ?? "").join("");
+  return t.replace(/ph/g, "p").replace(/ch|kh/g, "h").replace(/sh/g, "s").replace(/ts|tz/g, "c").replace(/[aeiouyhw]/g, "").replace(/f/g, "p").replace(/v/g, "b").replace(/[cq]/g, "k").replace(/x/g, "ks").replace(/[^a-z]/g, "").replace(/(.)\1+/g, "$1");
+}
+/** A name the reply gives itself that is not the employee's configured name (in either alphabet). */
 export function wrongSelfName(reply: string, employeeName: string | null | undefined): string | null {
-  const mine = new Set(String(employeeName ?? "").toLowerCase().split(/\s+/).filter(Boolean));
-  for (const m of String(reply ?? "").matchAll(NAMED_SELF)) {
-    const name = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").trim();
+  const parts = String(employeeName ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+  const mine = new Set(parts);
+  const skeletons = new Set(parts.map(nameSkeleton).filter((x) => x.length >= 2));
+  for (const m of normalizeQuotes(String(reply ?? "")).matchAll(NAMED_SELF)) {
+    const name = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? "").trim();
     if (!name || NOT_A_NAME.has(name.toLowerCase())) continue;
-    if (!mine.has(name.toLowerCase())) return name;
+    if (mine.has(name.toLowerCase()) || skeletons.has(nameSkeleton(name).replace(/(.)\1+/g, "$1"))) continue;
+    return name;
   }
   return null;
 }
@@ -720,7 +747,37 @@ export const MODEL_SAYS_AUTOMATED = /(?:נראה\s+ש(?:זו|זאת|זה|הדב�
  * unchecked). Every check reads the text through this; the Hebrew geresh and gershayim too.
  */
 export function normalizeQuotes(t: string): string {
-  return String(t ?? "").replace(/[\u2018\u2019\u201A\u201B\u02BC\u2032\uFF07\u05F3`\u00B4]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033\uFF02\u05F4]/g, '"');
+  return String(t ?? "").replace(/[\u2018\u2019\u201A\u201B\u02BC\u2032\uFF07\u05F3`\u00B4]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033\uFF02\u05F4]/g, '"')
+    // A hyphen in any of its forms, the Hebrew maqaf too ("מ־GOTCHA").
+    .replace(/[\u05BE\u2010\u2011\u2212\uFE63\uFF0D]/g, "-");
+}
+
+// A stock or price claim about one option (a colour, a size, a model) backed only by the parent
+// product (prod replay 2026-11-17, Smoovee: "black is in stock now", the parent read, black sold out).
+const STOCK_WORDS = /(?<![֐-׿])[וש]?(?:במלאי|אזל|אזלה|אזלו|זמין|זמינה|זמינים|חזר\s+למלאי|חזרה\s+למלאי|יחזור\s+למלאי|יש\s+(?:לנו\s+)?(?:את\s+)?(?:ה)?)(?![֐-׿])|\b(?:in stock|out of stock|sold out|available|back in stock|restock\w*)\b/iu;
+const OPTION_HE = /(?<![֐-׿])[וש]?ב?ה?(?:שחור|שחורה|לבן|לבנה|אדום|אדומה|כחול|כחולה|ירוק|ירוקה|צהוב|צהובה|ורוד|ורודה|סגול|סגולה|אפור|אפורה|חום|חומה|בז'|כתום|כתומה|זהב|זהוב|כסף|כסוף|תכלת|בורדו|נייבי|קרם|שמנת|מידה|מידת|צבע)(?![֐-׿])/u;
+const OPTION_EN = /\b(?:black|white|red|blue|green|yellow|pink|purple|gr[ae]y|brown|beige|orange|gold|silver|navy|cream|size|colou?r)\b/i;
+const OPTION_SIZE = /\b(?:XS|S|M|L|XL|XXL|\d{2}(?:\.\d)?\s?(?:cm|eu|us|EU|US))\b/;
+const OPTION_WORDS = { test: (t: string) => OPTION_HE.test(t) || OPTION_EN.test(t) || OPTION_SIZE.test(t) };
+const VARIATION_TOOL = /variation|variant/i;
+/** Sentences claiming stock or a price for one option when no variation data was read this turn. */
+export function optionClaimsWithoutVariations(reply: string, incoming: string, tools: ToolRunRecord[]): string[] {
+  if (!OPTION_WORDS.test(incoming ?? "")) return [];
+  // Variation data this turn: a variation read, or a product read that carries its variants with stock.
+  const read = tools.some((t) => t.outcome === "ok" && (VARIATION_TOOL.test(t.tool) || /"variants?"\s*:\s*\[\s*\{[^\]]*(?:available|inventory|stock)/i.test(String(t.content ?? ""))));
+  if (read) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => STOCK_WORDS.test(x) && OPTION_WORDS.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
+}
+
+// A payment or checkout failure is a support case, never a product list (prod replay 2026-11-17:
+// "לא מצליח לשלם עם ביימי" answered with product cards).
+const PAY_PROBLEM = /(?<![֐-׿])(?:לא\s+(?:מצליח|מצליחה|מצליחים|הצלחתי|הצלחנו|עובר|עובד|עבר|עבד)\s+(?:לשלם|התשלום|לבצע\s+(?:את\s+ה)?תשלום|להזמין|לסיים\s+(?:את\s+ה)?הזמנה)|התשלום\s+(?:לא\s+(?:עובר|עבר|עובד|מצליח)|נכשל|נדחה)|(?:ה)?כרטיס\s+(?:נדחה|לא\s+עובר)|נדחה\s+בתשלום|שגיאה\s+ב(?:תשלום|קופה))(?![֐-׿])|\b(?:can'?t (?:pay|check ?out|complete (?:the |my )?(?:order|payment|purchase))|payment (?:failed|declined|(?:is|was) declined|doesn'?t go through|won'?t go through|error)|card (?:was )?declined|checkout (?:error|fails|failed|isn'?t working))\b/iu;
+export const paymentProblem = (incoming: string) => PAY_PROBLEM.test(normalizeQuotes(incoming ?? ""));
+/** Products may answer this message: it is no support case (a payment problem, an order, a complaint). */
+export function productAskNow(incoming: string): boolean {
+  // Not a support case: a payment problem, an order of theirs, a complaint or damage.
+  const t = normalizeQuotes(incoming ?? "");
+  return !PAY_PROBLEM.test(t) && !MY_ORDER.test(t) && !STRONG_CASE.test(t);
 }
 
 export interface Gate3Input {
@@ -808,7 +865,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (i.businessAddress) absent.push(...addressDenied(reply));
   if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
 
-  if (gaveUpSearch(reply, i.tools)) problems.push({ kind: "gave_up_search" });
+  if (gaveUpSearch(reply, i.tools, i.incomingMessage, !!i.teamQuestion)) problems.push({ kind: "gave_up_search" });
   else if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_product" });
   else if (unreadBusinessInfo(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   // "Still with the team" about a coupon or policy: the general answer is in the knowledge (prod replay 11: 3 times).
@@ -833,11 +890,13 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
   const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended).filter((x) => !pictures.includes(x));
   if (dangling.length) problems.push({ kind: "dangling_reference", claims: dangling });
-  if (noRecommendation(reply, i.incomingMessage, i.candidateCount)) problems.push({ kind: "no_recommendation" });
+  if (noRecommendation(reply, i.incomingMessage, i.candidateCount, i.recentInbound ?? [], (i.previousBotReplies ?? []).at(-1) ?? "")) problems.push({ kind: "no_recommendation" });
   const payment = ungroundedPayment(reply, i.tools);
   if (payment.length) problems.push({ kind: "ungrounded_payment", claims: payment, teamOpen: !!i.openTeamText && PAYMENT_WORDS.test(i.openTeamText) });
   const inactive = unlabelledInactiveOrders(reply, i.tools);
   if (inactive.length) problems.push({ kind: "inactive_order_unlabelled", claims: inactive });
+  const optionClaims = optionClaimsWithoutVariations(reply, i.incomingMessage, i.tools);
+  if (optionClaims.length) problems.push({ kind: "option_without_variation", claims: optionClaims });
   const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (near) problems.push({ kind: "near_name", asked: near.asked, shown: near.shown });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
@@ -877,6 +936,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   else if (repeatedSentences(reply, i.previousBotReplies ?? []).length) style.push("repeated_sentence");
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
+  if (returnsWork(reply)) style.push("returns_work");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
@@ -890,7 +950,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -927,7 +987,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -1009,6 +1069,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     .replace(/(?<![֐-׿])((?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו))\s+(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "$1")
     .replace(/,\s*(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "")
     .replace(/(^|[.!?]\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)\s*,\s*/gu, "$1");
+  if (c.has("returns_work")) s = dropSentences(s, RETURNS_WORK);
   if (c.has("simulation_leak")) s = dropSentences(s, SIMULATION_LEAK);
   if (c.has("repeated_team_line")) s = dropSentences(s, TEAM_LINE);
   // "מצאתי כמה אפשרויות" -> "יש כמה אפשרויות"; "לא מצאתי" is left alone (the ban skips it too).
@@ -1071,6 +1132,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "near_name") lines.push(`- The customer named "${p.asked}"; the product you name ("${p.shown}") is another model with a similar name. Say you did not find "${p.asked}" by that name, and offer the other only as a different, close option.`);
     if (p.kind === "dangling_reference") lines.push(`- These sentences point at a list or cards that this message does not carry (${p.claims.join("; ")}). Name the items themselves in the text, or leave the pointer out.`);
     if (p.kind === "no_recommendation") lines.push("- The customer asked you to recommend. Pick one or two of the products the search returned and say why, from their own data (price, size, level, features); or, if you truly cannot choose, ask ONE question that decides it. Never neither.");
@@ -1098,6 +1160,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("mixed_language")) lines.push("- Write the whole reply in the customer's language: one sentence is in another language.");
       if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
+      if (c.has("returns_work")) lines.push("- Never hand the work back to the customer (\"try another name\", \"check the website\"): search again yourself, narrower, or answer from what the business's knowledge lists, and ask at most one question about what they need.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");
       if (c.has("near_duplicate")) lines.push("- That reply repeats one you already sent in this conversation. Answer the new message itself, briefly, or only what is new.");
@@ -1119,7 +1182,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
 
 /** An absence the search could not back, and nothing found: say what is true, not a hand-off (prod replay 6). */
 export function notFoundReply(locale: "he" | "en"): string {
-  return locale === "he" ? "לא מצאתי את זה בשם הזה. אפשר לתאר את זה במילים אחרות?" : "I didn't find that by that name. Could you describe it another way?";
+  // Asks what the customer needs, never hands the search back to them (prod replay 2026-11-17).
+  return locale === "he" ? "לא מצאתי דגם בשם הזה. בשביל מה זה נחוץ לך? כך נוכל להציע את המתאים." : "I didn't find a model by that name. What do you need it for? Then we can suggest what fits.";
 }
 
 /** The canned team lines (both forms), to know one was already sent. */

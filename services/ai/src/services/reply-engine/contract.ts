@@ -157,6 +157,7 @@ export type ClaimProblem =
   | { kind: "ungrounded_payment"; claims: string[]; teamOpen?: boolean }
   | { kind: "inactive_order_unlabelled"; claims: string[] }
   | { kind: "near_name"; asked: string; shown: string }
+  | { kind: "option_without_variation"; claims: string[] }
   | { kind: "knowledge_has_it" }
   | { kind: "coupon_source" }
   /** A handoff the customer's words do not call for (it would silence the AI). */

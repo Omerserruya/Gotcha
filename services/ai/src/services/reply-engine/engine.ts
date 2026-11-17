@@ -26,11 +26,11 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT } from "./state";
+import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { automatedInbound, MODEL_SAYS_AUTOMATED, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { automatedInbound, MODEL_SAYS_AUTOMATED, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -301,8 +301,25 @@ export const profileHasStreet = (address: string | null | undefined) => /[\u0590
  * zero-width character (the emoji joiner stays), no tail of symbols after the last
  * sentence.
  */
+/** A quote or bracket at the start or end with no partner in the text (prod replay 2026-11-17: `" I can check...`). */
+export function stripUnmatchedEdges(text: string): string {
+  let s = String(text ?? "").trim();
+  const pairs: Array<[string, string]> = [['"', '"'], ["'", "'"], ["\u201C", "\u201D"], ["\u00AB", "\u00BB"], ["(", ")"], ["[", "]"], ["{", "}"]];
+  for (let k = 0; k < 3; k++) {
+    let changed = false;
+    for (const [open, close] of pairs) {
+      const count = (ch: string) => s.split(ch).length - 1;
+      const balanced = open === close ? count(open) % 2 === 0 : count(open) === count(close);
+      if (!balanced && s.startsWith(open) && (open === close || count(open) > count(close))) { s = s.slice(open.length).trim(); changed = true; }
+      else if (!balanced && s.endsWith(close) && (open === close || count(close) > count(open))) { s = s.slice(0, -close.length).trim(); changed = true; }
+    }
+    if (!changed) break;
+  }
+  return s;
+}
+
 export function sanitizeReply(text: string): string {
-  return String(text ?? "")
+  return stripUnmatchedEdges(String(text ?? "")
     .replace(/```[a-z]*\n?/gi, "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B\u200C\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "")
     .replace(/[#+*=~_|](?:[ \t]*[#+*=~_|]){2,}/g, "")
@@ -310,13 +327,14 @@ export function sanitizeReply(text: string): string {
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim());
 }
 
 /** A message that is only a placeholder: a template, an unsupported message, an empty one. */
 export function placeholderOnly(text: string | null | undefined): boolean {
   const t = String(text ?? "").trim();
-  return !t || /^\[(?:template[^\]]*|unsupported[^\]]*|interactive[^\]]*|button[^\]]*|reaction[^\]]*|empty[^\]]*|הודעה\s+לא\s+נתמכת[^\]]*|תבנית[^\]]*)\]$/iu.test(t);
+  // Platform events are no customer text either (prod replay 2026-11-17: "[edit message]").
+  return !t || /^\[(?:template[^\]]*|unsupported[^\]]*|interactive[^\]]*|button[^\]]*|reaction[^\]]*|empty[^\]]*|edit(?:ed)?\s+message[^\]]*|message\s+(?:edited|deleted|revoked|unsent|removed)[^\]]*|deleted\s+message[^\]]*|revoked[^\]]*|system[^\]]*|ephemeral[^\]]*|poll[^\]]*|הודעה\s+(?:לא\s+נתמכת|נערכה|נמחקה|בוטלה)[^\]]*|תבנית[^\]]*)\]$/iu.test(t);
 }
 
 /** Drops a sentence that repeats one already in the same reply. */
@@ -1033,7 +1051,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // Else the original minus only its offending sentences, then the rewrite's remnant.
       // (A product turn with products found keeps its grounded product fallback instead.)
       // A thin remnant ("תודה!" for a question) is never the answer.
-      if (!kept && !groundedProductFallback(candidates as any, locale, cardChannel)) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin) ?? null;
+      if (!kept && !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
       } else {
@@ -1042,7 +1060,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const factLeft = factualProblems((v2 ?? first).problems).map((p) => p.kind);
         (trace as any).fallbackKinds = factLeft.length ? factLeft : ["thin_or_empty"];
         // A product turn is answered from what the tools returned, never handed to a person.
-        const grounded = groundedProductFallback(candidates as any, locale, cardChannel);
+        // Products as the fallback only for a product ask (prod replay 2026-11-17: a payment problem got cards).
+        const grounded = productAskNow(opts.incomingMessage ?? "") ? groundedProductFallback(candidates as any, locale, cardChannel) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
@@ -1134,6 +1153,18 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).deadEndToTeam = true;
   }
+  // A payment or checkout failure is a support case: no cards, no product list (prod replay 2026-11-17).
+  const payProblem = paymentProblem(opts.incomingMessage ?? "");
+  if (output && payProblem && (output.cards ?? []).length) output = { ...output, cards: [] };
+  // A product search that failed with nothing found, two turns in a row: the team takes the question
+  // (prod replay 2026-11-17: empty promises and "try another name" instead).
+  const searchFailedNow = turnTools.records.some((r) => /list_products|search_products/.test(r.tool) && (r.outcome === "timeout" || r.outcome === "error"))
+    && !turnTools.records.some((r) => /list_products|search_products|get_product/.test(r.tool) && (r.outcome === "ok" || r.outcome === "empty"));
+  const lastFail = Date.parse(String(state.facts?.[SEARCH_FAIL_FACT] ?? ""));
+  if (output?.reply && searchFailedNow && Number.isFinite(lastFail) && Date.now() - lastFail < 30 * 60_000 && !output.handoff && !output.teamQuestion && !turnTools.escalation) {
+    output = { ...output, teamQuestion: `product search failed twice: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
+    (trace as any).searchFailTwiceToTeam = true;
+  }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
@@ -1149,7 +1180,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // as text, name, price, stock and link, at most three (prod replay 7: Smoovee had
   // no card and no link on 56 turns; the product summary tells the model the
   // system attaches them, and legacy did).
-  const listed = !cardChannel && prose && !final.handoff ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  const listed = !cardChannel && prose && !final.handoff && !payProblem ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);
@@ -1200,7 +1231,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}) },
+    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
