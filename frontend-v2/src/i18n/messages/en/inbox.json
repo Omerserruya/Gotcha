@@ -46,6 +46,11 @@
       "toEarlier": "They reacted {emoji} to an earlier message",
       "removed": "They took their reaction back"
     },
+    "undelivered": {
+      "phoneOnly": "This message shows only in the WhatsApp app on the phone.",
+      "notForwarded": "The customer sent a kind of message WhatsApp doesn't pass on to GOTCHA (a poll or a view-once photo, for example). You can see it on the phone.",
+      "notArrived": "This message didn't reach GOTCHA. You can see it in the WhatsApp app."
+    },
     "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”.",
     "pending": "Still sending",
     "sent": "Handed to the channel, not confirmed delivered",
@@ -216,7 +221,6 @@
       "CLOSED": "Closed"
     },
     "waitingUnknown": "No last-message time, so we can’t say how long they have waited.",
-    "noName": "No name yet",
     "waitingUnknownShort": "wait unknown",
     "orders": {
       "returning": "Returning · {count} orders",

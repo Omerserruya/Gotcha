@@ -94,3 +94,27 @@ describe('★★ which number on the phone row (Omer, 2026-11-16)', () => {
     expect(screen.queryByTestId('mobile-account-c1')).toBeNull();
   });
 });
+
+describe('★★ no name: the number, never "Someone" (prod 2026-11-17)', () => {
+  const list = async (over: Record<string, unknown>) =>
+    render(
+      await MobileConversationList({
+        rows: [{ ...handoff, ...over } as never],
+        now: new Date('2026-11-15T10:00:00Z'),
+        meId: 'u1',
+        colleagues: [],
+        filtered: false,
+      }),
+    );
+
+  it('★★ the handle, as a person reads it', async () => {
+    await list({ customerName: null });
+    expect(screen.getByTestId('customer-handle')).toHaveTextContent('054-123-4567');
+    expect(screen.queryByText(inbox.queue.unnamed)).toBeNull();
+  });
+
+  it('★ neither: "Someone"', async () => {
+    await list({ customerName: null, customerExternalId: null });
+    expect(screen.getByText(inbox.queue.unnamed)).toBeInTheDocument();
+  });
+});

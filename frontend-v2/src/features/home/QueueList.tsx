@@ -7,7 +7,7 @@ import styles from './Home.module.css';
 import { initials, TONE_BY_INTENT, waitLabel } from './queue-row';
 import { channelName } from '@/api/contracts/inbox';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 
 /**
  * "Needs you now" - the ranked queue on Home.
@@ -111,11 +111,14 @@ export async function QueueList({
                    * No name means no contact record. The channel identifier is
                    * shown as itself rather than dressed up as a name.
                    */}
-                  {item.customer.name ? (
-                    <PersonName name={item.customer.name} />
-                  ) : (
-                    item.customer.id || inbox('queue.unnamed')
-                  )}
+                  <CustomerWho
+                    row={{
+                      customerName: item.customer.name,
+                      customerExternalId: item.customer.id,
+                      channel: item.channel,
+                    }}
+                    unnamed={inbox('queue.unnamed')}
+                  />
                 </span>
                 {/*
                   ★★ THE CHANNEL'S NAME, ON EVERY ROW OF THE FIRST SCREEN.

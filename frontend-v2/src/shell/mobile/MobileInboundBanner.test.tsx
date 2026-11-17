@@ -63,6 +63,19 @@ describe('MobileInboundBanner', () => {
     expect(push).toHaveBeenCalledWith('/m/inbox/c1');
   });
 
+  it('★ no name: the number, as the inbox list says it (prod 2026-11-17)', async () => {
+    row.mockResolvedValue({
+      customerName: null,
+      customerExternalId: '972521234567',
+      channel: 'WHATSAPP',
+      assignedAgentId: null,
+    });
+    show();
+    act(() => handler.current!(message('c3', 'm3')));
+    const banner = await screen.findByTestId('mobile-inbound-banner');
+    expect(banner).toHaveTextContent('052-123-4567');
+  });
+
   it("★ a colleague's conversation: no banner", async () => {
     row.mockResolvedValue({
       customerName: 'Dana',

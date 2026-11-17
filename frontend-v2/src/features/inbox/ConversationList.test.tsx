@@ -240,6 +240,14 @@ describe('★★ what the row actually says about the customer', () => {
     expect(screen.queryByText(/someone/i)).toBeNull();
   });
 
+  it('★★ no name: the number the conversation is on, as a person reads it (prod 2026-11-17)', async () => {
+    await show([row({ customerName: null, customerExternalId: '972521234567', channel: 'WHATSAPP' })]);
+    const handle = screen.getByTestId('customer-handle');
+    expect(handle).toHaveTextContent('052-123-4567');
+    expect(handle).toHaveAttribute('dir', 'ltr');
+    expect(screen.queryByText(/someone/i)).toBeNull();
+  });
+
   it('★ still says "Someone" when the platform really sends no name', async () => {
     // `customerName` is nullable on the model. An unnamed customer is a real
     // state and the fallback is for that, not for a contract mistake.

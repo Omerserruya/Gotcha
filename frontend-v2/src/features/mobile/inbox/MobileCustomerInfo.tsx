@@ -6,7 +6,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { DirectionalIcon } from '@/design-system/patterns/DirectionalIcon';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 import { money } from '@/features/customers/row-facts';
 import { initials } from '@/features/inbox/initials';
 import { factLabel, ordersView } from '@/features/inbox/wall/wall-model';
@@ -64,11 +64,7 @@ export async function MobileCustomerInfo({ info }: { readonly info: CustomerInfo
         </span>
         <span className={styles.infoWho}>
           <span className={styles.infoName}>
-            {conversation.customerName === null ? (
-              inbox('queue.unnamed')
-            ) : (
-              <PersonName name={conversation.customerName} />
-            )}
+            <CustomerWho row={conversation} unnamed={inbox('queue.unnamed')} />
           </span>
           {channel === null ? null : <span className={ui.rowSub}>{channel}</span>}
         </span>

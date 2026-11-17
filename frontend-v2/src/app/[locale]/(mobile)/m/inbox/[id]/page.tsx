@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 
 import { aiCarries, channelAccountName, channelName, openReadState } from '@/api/contracts/inbox';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 import { Composer } from '@/features/inbox/Composer';
 import { ConversationStream } from '@/features/inbox/ConversationDetail';
 import { initials } from '@/features/inbox/initials';
@@ -107,11 +107,7 @@ export default async function Page({
         title={
           <span className={styles.barTitle}>
             <span className={styles.barName}>
-              {open.customerName === null ? (
-                inbox('queue.unnamed')
-              ) : (
-                <PersonName name={open.customerName} />
-              )}
+              <CustomerWho row={open} unnamed={inbox('queue.unnamed')} />
             </span>
             {channel === null && account === null && owner === null ? null : (
               <span className={styles.barMeta}>

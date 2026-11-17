@@ -14,7 +14,8 @@ import { ChannelMark } from './channel-marks';
 import { initials } from './initials';
 import styles from './Inbox.module.css';
 import { ltr } from '@/lib/bidi';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
+import { customerLabel } from '@/lib/customer-label';
 
 /**
  * How many orders this customer has, or `null` when we cannot say.
@@ -62,6 +63,7 @@ export async function ConversationHeader({
   readonly chip?: ReactNode;
 }) {
   const t = await getTranslations('inbox');
+  const label = customerLabel(conversation);
   const channels = await getTranslations('channels');
 
   const minutes = waitingMinutes(conversation, now);
@@ -81,16 +83,15 @@ export async function ConversationHeader({
             shipped on five other surfaces.
           */}
           <h2 className={styles.openName} data-testid="conversation-who">
-            {conversation.customerName?.trim() ? (
-              <PersonName name={conversation.customerName} />
+            {/*
+             * ★★ THE SAME CHAIN AS THE LIST (customer-label.ts, 2026-11-17):
+             * the name, else the handle ("052-123-4567"), else "Someone".
+             * Then the facts below do not say the handle a second time.
+             */}
+            {label === null ? (
+              <span className={styles.openUnnamed}>{t('queue.unnamed')}</span>
             ) : (
-              /*
-               * ★★ NOT `identity.unnamed`, WHICH IS THE STRING "Someone".
-               * No name is an ordinary state: a first message from a number
-               * nobody has met. The handle below identifies them, so the
-               * heading says there is no name instead of supplying a person.
-               */
-              <span className={styles.openUnnamed}>{t('open.noName')}</span>
+              <CustomerWho row={conversation} unnamed={t('queue.unnamed')} />
             )}
           </h2>
 
@@ -142,7 +143,7 @@ export async function ConversationHeader({
              * The handle, which is what makes two unnamed people tellable
              * apart. Already on screen 04's rows, so this is not new exposure.
              */
-            ltr(conversation.customerExternalId),
+            label?.kind === 'handle' ? null : ltr(conversation.customerExternalId),
             t(`open.status.${conversation.status}` as 'open.status.OPEN'),
           ]
             .filter(Boolean)

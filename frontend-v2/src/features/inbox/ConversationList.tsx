@@ -35,7 +35,7 @@ import {
   type InboxView,
   type QueueChannelFilter,
 } from './inbox-views';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 
 /**
  * Screen 02's queue.
@@ -325,12 +325,8 @@ export async function ConversationList({
                 defaulted to null.
               */}
               <span className={styles.who}>
-                {conversation.customerName === null ? (
-                  t('queue.unnamed')
-                ) : (
-                  /* A name is the data's direction, not the layout's. */
-                  <PersonName name={conversation.customerName} />
-                )}
+                {/* The name, else the handle, else "Someone" (customer-label.ts). */}
+                <CustomerWho row={conversation} unnamed={t('queue.unnamed')} />
               </span>
 
               {/*

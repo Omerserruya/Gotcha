@@ -201,6 +201,15 @@ describe('★ InboundAlerts, mounted', () => {
     ).toBe(false);
   });
 
+  it('★ no name: the number, as the inbox list says it (prod 2026-11-17)', async () => {
+    platform({
+      conversation: { customerName: null, customerExternalId: '972521234567', channel: 'WHATSAPP' },
+    });
+    await mount();
+    await arrive(inbound({ body: 'שלום', messageType: 'text' }));
+    expect(made[0]!.title).toBe('052-123-4567');
+  });
+
   it('no name and no handle: "someone" in the reader’s words, and the first line', async () => {
     platform({ conversation: { customerName: null, customerExternalId: null, channel: null } });
     await mount();

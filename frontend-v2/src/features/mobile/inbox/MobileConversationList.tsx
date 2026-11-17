@@ -11,6 +11,7 @@ import {
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 import { initials } from '@/features/inbox/initials';
 import { quoteOf } from '@/features/inbox/media';
 import { Link } from '@/i18n/navigation';
@@ -105,11 +106,7 @@ export async function MobileConversationList({
               <span className={styles.body}>
                 <span className={styles.top}>
                   <span className={styles.who}>
-                    {row.customerName === null ? (
-                      inbox('queue.unnamed')
-                    ) : (
-                      <PersonName name={row.customerName} />
-                    )}
+                    <CustomerWho row={row} unnamed={inbox('queue.unnamed')} />
                   </span>
                   {row.lastMessageAt === null ? null : (
                     <span className={styles.time}>

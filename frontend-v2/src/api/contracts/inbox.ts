@@ -676,6 +676,14 @@ export function deliveryOf(message: {
   return 'unknown';
 }
 
+/** Meta's `errors[]` on a message it could not represent: only the code is read. */
+const META_ERRORS = z
+  .array(
+    z.object({ code: z.union([z.number(), z.string()]).optional().catch(undefined) }).catch({}),
+  )
+  .optional()
+  .catch(undefined);
+
 export const messageSchema = z.object({
   id: z.string(),
   direction: z.enum(['INBOUND', 'OUTBOUND']),
@@ -875,8 +883,17 @@ export const messageSchema = z.object({
       unsupported: z
         .object({
           providerType: z.string().optional(),
+          /*
+           * Meta's reason, as the adapter reduced it (whatsapp.adapter.ts
+           * `unmodelled`). Read for one thing: which sentence to show for an
+           * `unsupported` message (`undeliveredReason`). Tolerant: a bad
+           * entry is no reason, never a rejected message.
+           */
+          errors: META_ERRORS,
           raw: z
             .object({
+              /** The same reason as Meta sent it, for a row written before `errors` was kept. */
+              errors: META_ERRORS,
               reaction: z
                 .object({
                   message_id: z.string().optional(),
@@ -1191,6 +1208,33 @@ export function reactionOf(message: InboxMessage): Reaction | null {
 export function unsupportedType(message: InboxMessage): string | null {
   const providerType = message.metadata?.unsupported?.providerType?.trim();
   return providerType ? providerType : null;
+}
+
+/**
+ * ★★ WHY A WHATSAPP MESSAGE NEVER REACHED US, IN WORDS A PERSON CAN USE.
+ *
+ * Meta sends `type: "unsupported"` with no content and an error code; the
+ * row's body is the placeholder `[unsupported message]`. The inbox said
+ * "WhatsApp calls it unsupported", an English word that explained nothing
+ * (Supervisior, 2026-11-17). The code says what happened:
+ *
+ *  - 131060 "This message is unavailable": shown only in the phone's app;
+ *  - 131051 "Message type unknown": a kind Meta does not forward (a poll,
+ *    a view-once photo);
+ *  - anything else, or no code: it did not arrive, and the phone has it.
+ *
+ * `null` for every other unmodelled type (revoke, edit, reaction…), which
+ * keeps its own rendering.
+ */
+export type UndeliveredReason = 'phoneOnly' | 'notForwarded' | 'notArrived';
+
+export function undeliveredReason(message: InboxMessage): UndeliveredReason | null {
+  const unsupported = message.metadata?.unsupported;
+  if (unsupported?.providerType?.trim().toLowerCase() !== 'unsupported') return null;
+  const code = String(unsupported.errors?.[0]?.code ?? unsupported.raw?.errors?.[0]?.code ?? '');
+  if (code === '131060') return 'phoneOnly';
+  if (code === '131051') return 'notForwarded';
+  return 'notArrived';
 }
 
 /** Our id for the message a reaction points at, if it is on this page. */

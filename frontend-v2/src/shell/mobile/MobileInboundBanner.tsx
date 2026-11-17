@@ -9,6 +9,7 @@ import { isApiError } from '@/api/client/api-error';
 import { browserApi } from '@/api/client/browser-api';
 import { quoteOf } from '@/api/contracts/message-kind';
 import { inboxEndpoints } from '@/api/endpoints/registry';
+import { customerLabelText } from '@/lib/customer-label';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { firstLine } from '@/lib/inbound-alerts/decide';
 import { personName } from '@/lib/shopper-name';
@@ -21,6 +22,8 @@ import styles from './MobileShell.module.css';
 const rowSchema = z.object({
   customerName: z.string().nullable().catch(null).default(null),
   customerExternalId: z.string().nullable().catch(null).default(null),
+  /** For the handle's format: a phone reads "052-123-4567" (customer-label.ts). */
+  channel: z.string().nullable().catch(null).default(null),
   assignedAgentId: z.string().nullable().catch(null).default(null),
 });
 
@@ -80,7 +83,7 @@ export function MobileInboundBanner({ meId }: { readonly meId: string | null }) 
               payload: rowSchema,
             });
             glance = { access: 'visible', assignedAgentId: row.assignedAgentId };
-            name = row.customerName?.trim() || row.customerExternalId?.trim() || null;
+            name = customerLabelText(row);
           } catch (cause) {
             if (isApiError(cause) && (cause.status === 403 || cause.status === 404)) {
               glance = { access: 'refused', assignedAgentId: null };
