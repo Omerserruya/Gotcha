@@ -997,6 +997,11 @@ async function hebrewProductSearch(
   // "בראון דגם SJ3100BK"): a title hit is one whose name holds the word.
   const named_ = (w: string) => (p: any) => nameHolds(p, w);
   const restSearch = async (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return (await get(p)).filter(named_(w)); };
+  // The words' other forms are searched AT THE SAME TIME as the first round, and used
+  // only if it finds nothing (prod timing, Tehila warm: ~1.2s per round in series, 2.5s).
+  const variants = words.filter((w) => /[א-ת]/.test(w)).flatMap(hebrewVariants).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+  const variantsP = Promise.all(variants.map((v) => restSearch(v).catch(() => [] as any[])));
+  variantsP.catch(() => {});
   const [inCat, whole, local, ...perWord] = await Promise.all([
     cat ? get(byCat) : Promise.resolve([] as any[]),
     get(params).then((l) => l.filter((p: any) => words.some((w) => nameHolds(p, w)))),
@@ -1038,9 +1043,8 @@ async function hebrewProductSearch(
     log("title", out.length);
     return inStockFirst(out).slice(0, per);
   }
-  // The other forms of each Hebrew word, in parallel; the first that finds anything.
-  const variants = words.filter((w) => /[א-ת]/.test(w)).flatMap(hebrewVariants).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
-  const found = await Promise.all(variants.map(restSearch));
+  // The other forms of each Hebrew word (already searched alongside the first round); the first that finds anything.
+  const found = await variantsP;
   const i = found.findIndex((l) => l.length);
   if (i >= 0) { log(`variant:${variants[i]}`, found[i].length); return inStockFirst(found[i]).slice(0, per); }
   // What a product fits is in its description (Smoovee: "מתאים ל: תמי 4").

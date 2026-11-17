@@ -164,6 +164,13 @@ async function main() {
   });
 
   const plan = await withCrossTenantAccess(() => planReplay(args));
+  // This is its own process: the server's warm store caches are not here. Warm the replayed
+  // tenants' stores first, so the replay measures what live (server + warmer) does.
+  if (!args.dry) {
+    const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
+    const warmed = await withCrossTenantAccess(() => warmWooCachesOnce({ tenants: async () => args.tenants, scope: "all" })).catch(() => []);
+    console.log(`[replay] warmed ${warmed.map((w: any) => `${w.tenantId}:${w.ok ? `${w.ms}ms` : "failed"}`).join(" ") || "no Woo stores"}`);
+  }
   if (args.dry) {
     for (const [t, turns] of plan) {
       console.log(`[replay][dry] tenant=${t} conversations=${new Set(turns.map((x) => x.conversationId)).size} turns=${turns.filter((x) => !x.skip).length} skipped=${turns.filter((x) => x.skip).length}`);

@@ -2,7 +2,7 @@
  * Read-only: how long a store search takes, and where (prod replay 6: Tehila's
  * list_products timed out at 8s twice per run). Runs INSIDE the ai container:
  *
- *   npx tsx src/scripts/woo-search-timing.ts --tenant <id> --q "בנדנה" [--q ...] [--lang he] [--runs 2]
+ *   npx tsx src/scripts/woo-search-timing.ts --tenant <id> --q "בנדנה" [--q ...] [--lang he] [--runs 2] [--warm]
  *
  * For each query it times, through the same adapter path v2 uses (GETs only, no
  * conversation, so no customer guard is involved):
@@ -39,6 +39,12 @@ async function main() {
   // Every store request with its ms (path and parameter names only): where a warm search still spends its time.
   process.env.WOO_REQUEST_TRACE = "1";
   await withCrossTenantAccess(async () => {
+    // --warm: fill the store caches first, as the server's warmer does (this script is its own process).
+    if (process.argv.includes("--warm")) {
+      const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
+      const w = await warmWooCachesOnce({ tenants: async () => [a.tenant], scope: "all" });
+      console.log(`[timing] warmed first: ${w.map((x) => `${x.ok ? `${x.ms}ms` : "failed"}`).join(" ") || "no Woo store"}`);
+    }
     for (const q of a.queries) {
       console.log(`\n[timing] q="${q}"`);
       for (let i = 0; i < a.runs; i++) {
