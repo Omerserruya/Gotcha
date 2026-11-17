@@ -254,9 +254,26 @@ const LEXICAL_EXPANSIONS: Array<[RegExp, string[]]> = [
 // ... מסילה 23 נשר"). Prod replay 6: Tehila's street address is only in the
 // returns-by-mail text, and lost to generic chunks at a flat score.
 export const LOCATION_ASK = /(?<![\u0590-\u05FF])(?:איפה|כתובת|הכתובת|מיקום|נמצאים|ממוקמים|סטודיו|הסטודיו|סניף|חנות פיזית|לאסוף|איסוף)(?![\u0590-\u05FF])|\b(?:address|location|where are you|located|pick ?up)\b/iu;
-const STREET = /(?<![\u0590-\u05FF])(?:רח['׳"]?|רחוב|ברחוב|שד['׳]|שדרות|דרך)\s+[\u0590-\u05FF"'׳ ]{2,25}?\s*\d{1,4}(?:\/\d{1,3})?/u;
-const CUED = /(?<![\u0590-\u05FF])(?:כתובת|לכתובת|בכתובת|איסוף|נמצאים|ממוקמים|סטודיו|הסטודיו|מהסטודיו)(?![\u0590-\u05FF])[^.\n]{0,40}?((?:[\u0590-\u05FF"'׳]{2,}\s+){1,3}\d{1,4}(?:\/\d{1,3})?(?:\s*,?\s*[\u0590-\u05FF]{3,})?)/u;
-export const hasAddress = (text: string) => STREET.test(text ?? "") || CUED.test(text ?? "");
+// A house number is not a price, a duration or a size ("בדואר רשום בעלות 15 ש"ח").
+const NOT_AFTER_NUMBER = String.raw`(?!\d|\s*(?:ש["״']?ח|₪|%|אחוז|שקל|ימי|ימים|יום|שעות|שעה|דקות|ס["״']?מ|מ["״']?מ|ק["״']?ג|ק["״']?מ|יח))`;
+const HOUSE = String.raw`(?:[\u0590-\u05FF"'׳]{2,}\s+){1,3}\d{1,4}(?:\/\d{1,3})?` + NOT_AFTER_NUMBER;
+const CITY = String.raw`[\u0590-\u05FF]{2,}(?:[\s-][\u0590-\u05FF]{2,})?`;
+// After a street word or "כתובת:" the street is certain; the city is optional.
+const STREET = new RegExp(String.raw`(?<![\u0590-\u05FF])(?:רח['׳"]?|רחוב|ברחוב|שד['׳]|שדרות|כתובת\s*:|כתובתנו\s*:?)\s*(${HOUSE}(?:\s*,?\s*${CITY})?)`, "u");
+// After a looser cue (לכתובת, איסוף, סטודיו...) a city must follow the number.
+const CUED = new RegExp(String.raw`(?<![\u0590-\u05FF])(?:כתובת|לכתובת|בכתובת|איסוף|נמצאים|ממוקמים|סטודיו|הסטודיו|מהסטודיו)(?![\u0590-\u05FF])[^.\n]{0,40}?(${HOUSE}\s*,?\s+${CITY})`, "u");
+// Words that make "x 15" a price or a time, never a street.
+const NOT_A_STREET = /(?<![\u0590-\u05FF])(?:בעלות|עלות|במחיר|מחיר|תוך|עד|מעל|בסך|מינימום|החל|רשום|כ-?)(?![\u0590-\u05FF])/u;
+/** The address a text states, or null when it is not clearly one. */
+export function extractAddress(text: string): string | null {
+  for (const re of [STREET, CUED]) {
+    const m = re.exec(String(text ?? ""));
+    const a = m?.[1]?.replace(/\s+/g, " ").replace(/[,\s]+$/, "").trim();
+    if (a && a.length <= 80 && !NOT_A_STREET.test(a)) return a;
+  }
+  return null;
+}
+export const hasAddress = (text: string) => extractAddress(text) !== null;
 
 /** The ask's own words (with and without a one-letter prefix: "מנשר" is "from Nesher") and the words an answer to it is written in. */
 export function lexicalTerms(query: string): { own: string[]; expanded: string[] } {
@@ -351,9 +368,8 @@ export async function documentAddress(tenantId: string, aiAgentId?: string | nul
     const counts = new Map<string, number>();
     for (const r of rows) {
       const text = String(r.content ?? "");
-      const m = CUED.exec(text)?.[1] ?? STREET.exec(text)?.[0];
-      const a = m?.replace(/\s+/g, " ").trim();
-      if (a && a.length <= 80) counts.set(a, (counts.get(a) ?? 0) + 1);
+      const a = extractAddress(text);
+      if (a) counts.set(a, (counts.get(a) ?? 0) + 1);
     }
     value = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
   }

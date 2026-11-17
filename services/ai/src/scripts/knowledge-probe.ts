@@ -16,6 +16,7 @@
  */
 import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import { initAIService, platformPaidScope } from "../services/ai.service";
+import { getCompanyContext } from "../services/company-context.service";
 import { retrieveRelevantChunks, lexicalKnowledge, lexicalTerms, mergeKnowledge, knowledgeLimit, documentAddress, KNOWLEDGE_GAP_SCORE } from "../services/knowledge.service";
 
 export function parseProbeArgs(argv: string[]): { tenant: string; agent: string | null; k: number; queries: string[] } {
@@ -36,6 +37,9 @@ async function main() {
   await withCrossTenantAccess(async () => {
     const bp: any = await (prisma as any).businessProfile.findUnique({ where: { tenantId: a.tenant }, select: { address: true } }).catch(() => null);
     const docAddr = await documentAddress(a.tenant, a.agent).catch(() => null);
+    // What v2's prompt gets: the profile address (rendered "Address: ..."), else the documents' one.
+    const cc = await getCompanyContext(a.tenant).catch(() => null);
+    console.log(`[probe] prompt address line: ${cc?.address ? "profile address (Address: ...)" : docAddr ? "documents' address" : "none"}; companyContext=${cc ? "loaded" : "none"}`);
     console.log(`[probe] tenant=${a.tenant} agent=${a.agent ?? "(tenant-wide)"} businessProfile.address=${bp?.address ? "set" : "empty"} documentAddress=${docAddr ? JSON.stringify(docAddr) : "none"} gap=${KNOWLEDGE_GAP_SCORE}`);
     for (const q of a.queries) {
       const [vector, lexical] = await platformPaidScope.run({ reason: "knowledge_probe" }, () => Promise.all([

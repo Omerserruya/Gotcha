@@ -347,6 +347,41 @@ const TOOLS: ToolDefinition[] = [
 ];
 
 
+// ── Store read caches (prod replay 7, Tehila timing: the first search of a
+// process took 13.98s, categories 4.8s then two catalogue pages 5.4s and 3.4s
+// in series; warm runs 1.0-1.5s). Stale-while-revalidate: a fresh entry is
+// served; a stale one is served AND refreshed in the background (one refresh
+// per key at a time); only a missing or too-old one makes the caller wait.
+const inflight = new Map<string, Promise<unknown>>();
+export async function swrCached<T>(
+  cache: Map<string, { at: number; value: T }>,
+  key: string,
+  freshMs: number,
+  staleMs: number,
+  load: () => Promise<T>,
+  keep: (v: T) => boolean = () => true,
+): Promise<T> {
+  const hit = cache.get(key);
+  const age = hit ? Date.now() - hit.at : Infinity;
+  const refresh = (): Promise<T> => {
+    let p = inflight.get(key) as Promise<T> | undefined;
+    if (!p) {
+      p = load().then((v) => { if (keep(v)) cache.set(key, { at: Date.now(), value: v }); return v; }).finally(() => inflight.delete(key));
+      inflight.set(key, p);
+    }
+    return p;
+  };
+  if (hit && age < freshMs) return hit.value;
+  if (hit && age < staleMs) { refresh().catch(() => {}); return hit.value; }
+  return refresh();
+}
+/** Categories change rarely: fresh 6h, served stale up to 24h. */
+const CATEGORY_FRESH_MS = 6 * 60 * 60_000;
+const CATEGORY_STALE_MS = 24 * 60 * 60_000;
+/** The catalogue: fresh 10 min (prices and stock), served stale up to 6h while it refreshes. */
+const CATALOG_FRESH_MS = 10 * 60_000;
+const CATALOG_STALE_MS = 6 * 60 * 60_000;
+
 const AUDIENCE_NAME: Record<"men" | "women", RegExp> = {
   men: /^(?:men|mens|men'?s|man|male|גברים|גבר)$/i,
   women: /^(?:women|womens|women'?s|woman|female|נשים|אישה)$/i,
@@ -357,7 +392,8 @@ const audienceCache = new Map<string, { at: number; ids: Record<string, string |
 async function audienceCategory(auth: string, base: string, audience: "men" | "women"): Promise<string | null> {
   const hit = audienceCache.get(base);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.ids[audience] ?? null;
-  const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true`).catch(() => null);
+  // The same cached category list as every other category read.
+  const list: any = (await storeCategories(auth, base))?.list ?? null;
   if (!Array.isArray(list)) return null;
   const name = (c: any) => String(c?.name ?? "").replace(/&amp;/g, "&").trim();
   const find = (a: "men" | "women") => {
@@ -369,7 +405,7 @@ async function audienceCategory(auth: string, base: string, audience: "men" | "w
   return ids[audience];
 }
 
-const categoryCache = new Map<string, { at: number; list: any[] }>();
+const categoryCache = new Map<string, { at: number; value: any[] | null }>();
 
 /** A word's stem for matching a category name: "accessory" and "Accessories" are one, "dresses" and "Dress". */
 function categoryStem(word: string): string {
@@ -434,17 +470,14 @@ export function queryStems(text: unknown): string[] {
  * חגיגיות", not all "מטפחות"). Never a Men / Women one, which is the audience
  * param's. Ten minutes' cache.
  */
-/** The store's non-empty categories, ten minutes per store and language. */
-async function storeCategories(auth: string, base: string, lang?: string | null): Promise<{ at: number; list: any[] } | null> {
-  const key = lang ? `${base}|${lang}` : base;
-  let hit = categoryCache.get(key);
-  if (!hit || Date.now() - hit.at >= 10 * 60_000) {
-    const list: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true${lang ? `&lang=${lang}` : ""}`).catch(() => null);
-    if (!Array.isArray(list)) return null;
-    hit = { at: Date.now(), list };
-    categoryCache.set(key, hit);
-  }
-  return hit;
+/** The store's non-empty categories, per store and language: fresh 6h, stale-while-revalidate up to 24h. */
+async function storeCategories(auth: string, base: string, lang?: string | null): Promise<{ list: any[] } | null> {
+  const key = `cats|${lang ? `${base}|${lang}` : base}`;
+  const list = await swrCached(categoryCache, key, CATEGORY_FRESH_MS, CATEGORY_STALE_MS, async () => {
+    const l: any = await wooRequest(auth, "GET", `${base}/products/categories?per_page=100&hide_empty=true${lang ? `&lang=${lang}` : ""}`).catch(() => null);
+    return Array.isArray(l) ? l : null;
+  }, (v) => Array.isArray(v));
+  return Array.isArray(list) ? { list } : null;
 }
 
 /**
@@ -684,7 +717,7 @@ export function descriptionTokens(text: unknown): string[][] {
   return out;
 }
 
-const catalogCache = new Map<string, { at: number; list: any[] | null }>();
+const catalogCache = new Map<string, { at: number; value: any[] | null }>();
 
 /**
  * Stores whose products are sold by size (most of them name a footprint:
@@ -710,23 +743,43 @@ export function storeSellsBySize(storeUrl: string): boolean {
  * ignores the parameter and answers its one catalogue.
  */
 async function wholeCatalog(auth: string, base: string, lang: string | null): Promise<any[] | null> {
-  const key = `${base}|${lang ?? ""}`;
-  const hit = catalogCache.get(key);
-  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
-  const page = async (n: number) => {
-    const p = new URLSearchParams({ per_page: "100", page: String(n), status: "publish" });
-    if (lang) p.set("lang", lang);
-    const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`);
-    return Array.isArray(l) ? l : [];
-  };
-  let list: any[] | null = await page(1);
-  if (list.length >= 100) {
-    const second = await page(2);
-    list = second.length >= 100 ? null : [...list, ...second];
+  const key = `catalog|${base}|${lang ?? ""}`;
+  return swrCached(catalogCache, key, CATALOG_FRESH_MS, CATALOG_STALE_MS, async () => {
+    const page = async (n: number) => {
+      const p = new URLSearchParams({ per_page: "100", page: String(n), status: "publish" });
+      if (lang) p.set("lang", lang);
+      const l: any = await wooRequest(auth, "GET", `${base}/products?${p}`);
+      return Array.isArray(l) ? l : [];
+    };
+    // Both pages at once, not one after the other (a small store answers page 2 empty).
+    const [first, second] = await Promise.all([page(1), page(2).catch(() => [] as any[])]);
+    const list: any[] | null = first.length < 100 ? first : second.length >= 100 ? null : [...first, ...second];
+    if (list) rememberSizedStore(base, list);
+    return list;
+  });
+}
+
+/**
+ * Fill the store caches a search needs (categories and the whole catalogue, in
+ * every language a turn may read), off any customer's turn: at boot and on a
+ * timer (woo-cache-warmer.service). Read-only GETs; never throws.
+ */
+export async function warmWooCatalog(credentials: Record<string, any>, config: Record<string, any>): Promise<{ ms: number; ok: boolean }> {
+  const t0 = Date.now();
+  try {
+    const consumerKey = credentials.consumerKey || credentials.consumer_key;
+    const consumerSecret = credentials.consumerSecret || credentials.consumer_secret;
+    const storeUrl = String(config?.storeUrl || credentials.storeUrl || credentials.store_url || "").replace(/\/$/, "");
+    if (!consumerKey || !consumerSecret || !storeUrl) return { ms: 0, ok: false };
+    const base = `${storeUrl}/wp-json/wc/v3`;
+    const auth = `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64")}`;
+    // The languages a turn reads in: none on a single-language store; he and en on a WPML one.
+    const langs: Array<string | null> = productLanguage({}, config) ? [null, "he", "en"] : [null, "he"];
+    await Promise.all(langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l).catch(() => null)]));
+    return { ms: Date.now() - t0, ok: true };
+  } catch {
+    return { ms: Date.now() - t0, ok: false };
   }
-  catalogCache.set(key, { at: Date.now(), list });
-  if (list) rememberSizedStore(base, list);
-  return list;
 }
 
 /**

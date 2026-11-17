@@ -70,7 +70,8 @@ export async function getCompanyContext(tenantId: string): Promise<CompanyContex
       select: { name: true },
     });
     if (tenant?.name && String(tenant.name).trim()) {
-      return { organizationName: String(tenant.name).trim(), businessDescription: null, industry: null, websiteDomain: null, observedVoice: null };
+      // A profile with an address but no organization name still gives its address (prod replay 7, Tehila).
+      return { organizationName: String(tenant.name).trim(), businessDescription: null, industry: null, websiteDomain: null, observedVoice: null, address: bp?.address ? String(bp.address).trim() : null };
     }
     return null;
   } catch (err: any) {

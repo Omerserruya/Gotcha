@@ -810,3 +810,70 @@ describe("prod replay 6 follow-up: the customer's own order on their own number"
     expect(withOwnNumberNote({ ok: false, reason: "x" })).toEqual({ ok: false, reason: "x" });
   });
 });
+
+describe("prod replay 7: the address the documents give", () => {
+  it("★ a price sentence is never an address; real ones are found", async () => {
+    const { extractAddress } = await import("../services/knowledge.service");
+    expect(extractAddress('אפשר להחזיר לכתובת שלנו בדואר רשום בעלות 15 ש"ח.')).toBeNull();
+    expect(extractAddress("משלוח לכל הארץ תוך 3 ימים")).toBeNull();
+    expect(extractAddress("איסוף עצמי עד 5 ימי עסקים")).toBeNull();
+    expect(extractAddress("את המוצר יש לשלוח לכתובת תהילה רוזנבאום, יוסף לוי 8/2 נהריה")).toBe("יוסף לוי 8/2 נהריה");
+    expect(extractAddress("נקודת איסוף: מסילה 23 נשר")).toBe("מסילה 23 נשר");
+    expect(extractAddress("הסטודיו ברחוב הרצל 5, תל אביב")).toBe("הרצל 5, תל אביב");
+    // A number with no city after a loose cue: unsure, so nothing.
+    expect(extractAddress("הסטודיו פתוח 4 ימים")).toBeNull();
+    // A price word before the number is not a street, whatever follows it.
+    expect(extractAddress("איסוף עצמי בעלות 15 בלבד")).toBeNull();
+    // A loose cue needs a city after the number.
+    expect(extractAddress("הסטודיו בקומה 4.")).toBeNull();
+  });
+  it("★ documentAddress: the most frequent real address, never the price sentence", async () => {
+    const { documentAddress } = await import("../services/knowledge.service");
+    const rows = [
+      { content: 'החזרות בדואר רשום בעלות 15 ש"ח לכתובת שלנו' },
+      { content: "יש לשלוח לכתובת תהילה רוזנבאום, יוסף לוי 8/2 נהריה" },
+      { content: "החלפות: לכתובת תהילה רוזנבאום, יוסף לוי 8/2 נהריה, בתוך 14 יום" },
+    ];
+    const db = { knowledgeChunk: { findMany: async () => rows } };
+    expect(await documentAddress("t-addr-1", null, { db, kbIds: ["kb"] })).toBe("יוסף לוי 8/2 נהריה");
+    expect(await documentAddress("t-addr-2", null, { db: { knowledgeChunk: { findMany: async () => [rows[0]] } }, kbIds: ["kb"] })).toBeNull();
+  });
+});
+
+describe("prod replay 7: store caches", () => {
+  it("★ stale-while-revalidate: fresh served, stale served and refreshed once, missing waits", async () => {
+    const { swrCached } = await import("../services/connectors/woocommerce.adapter");
+    const cache = new Map<string, { at: number; value: number }>();
+    let loads = 0;
+    const load = async () => { loads++; return loads; };
+    expect(await swrCached(cache, "k", 1000, 10_000, load)).toBe(1);
+    expect(await swrCached(cache, "k", 1000, 10_000, load)).toBe(1);
+    expect(loads).toBe(1);
+    cache.set("k", { at: Date.now() - 5000, value: 1 });
+    // Stale: the old value now, one background refresh for two callers.
+    const [a, b] = await Promise.all([swrCached(cache, "k", 1000, 10_000, load), swrCached(cache, "k", 1000, 10_000, load)]);
+    expect([a, b]).toEqual([1, 1]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loads).toBe(2);
+    expect(cache.get("k")!.value).toBe(2);
+    // Too old: the caller waits for the new value.
+    cache.set("k", { at: Date.now() - 20_000, value: 2 });
+    expect(await swrCached(cache, "k", 1000, 10_000, load)).toBe(3);
+    // A load the keep() rejects is not cached.
+    const c2 = new Map<string, { at: number; value: number | null }>();
+    await swrCached(c2, "x", 1000, 10_000, async () => null, (v) => v !== null);
+    expect(c2.has("x")).toBe(false);
+  });
+  it("★ the warmer warms only engine tenants, one store at a time, and never throws", async () => {
+    const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
+    const warmed: string[] = [];
+    const r = await warmWooCachesOnce({
+      tenants: async () => ["on", "off", "broken", "nostore"],
+      mode: (t: string) => (t === "off" ? "off" : "autonomous") as any,
+      load: (async ({ tenantId }: any) => { if (tenantId === "broken") throw new Error("db"); return tenantId === "nostore" ? null : { credentials: { k: 1 }, config: {} }; }) as any,
+      warm: async () => { warmed.push("x"); return { ms: 5, ok: true }; },
+    });
+    expect(r).toEqual([{ tenantId: "on", ms: 5, ok: true }, { tenantId: "broken", ok: false, ms: 0 }]);
+    expect(warmed).toHaveLength(1);
+  });
+});

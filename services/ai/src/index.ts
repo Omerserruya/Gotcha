@@ -64,6 +64,7 @@ import unansweredQuestionRoutes from "./routes/unanswered-questions";
 import gdprInternalRoutes from "./routes/gdpr-internal";
 import automationActionsInternalRoutes from "./routes/automation-actions-internal";
 import { startWooCartPoller } from "./services/woo-cart-poller.service";
+import { startWooCacheWarmer } from "./services/woo-cache-warmer.service";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService, getDefaultModel } from "./services/ai.service";
@@ -203,6 +204,8 @@ app.use("/api/internal/automation-actions", automationActionsInternalRoutes);
 // Cart left behind on WooCommerce stores (no cart webhook exists): polls only
 // workspaces that have a live cart automation.
 startWooCartPoller();
+// The store caches a search needs, warmed off the customer's turn (reply engine tenants).
+startWooCacheWarmer();
 app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 

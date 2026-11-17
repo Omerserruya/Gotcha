@@ -117,7 +117,9 @@ describe("Smoovee: what a product fits is in its description", () => {
     const s = store();
     await s.run({ query: "דגם לתמי 4" });
     await s.run({ query: "תמי 4 פרימו" });
-    expect(s.calls.filter((u) => /page=1/.test(u) && /lang=he/.test(u)).length).toBe(1);
+    // [?&]page=1: "per_page=100" is not page 1 (both catalogue pages are now read at once).
+    expect(s.calls.filter((u) => /[?&]page=1(?:&|$)/.test(u) && /lang=he/.test(u)).length).toBe(1);
+    expect(s.calls.filter((u) => /[?&]page=2(?:&|$)/.test(u) && /lang=he/.test(u)).length).toBe(1);
   });
   it("a name the title search finds is unchanged (\"אלכסה\", lang=he titles)", async () => {
     // The default catalogue has no Hebrew titles, so the name is found in the Hebrew one by its name.
