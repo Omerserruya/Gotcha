@@ -1283,6 +1283,10 @@ services:
       # goes through this app's own BFF, because the platform API allows only
       # its own origin through CORS.
       API_BASE_URL: ${V2_API_BASE_URL:-https://dev.gotcha.co.il}
+      # `on` only together with API_BASE_URL=http://gateway:80 (the internal
+      # gateway): server calls then carry the browser's address, so a looping
+      # tab fills only its own rate-limit bucket. Anything else means off.
+      API_FORWARD_CLIENT: ${V2_API_FORWARD_CLIENT:-off}
       # The browser talks to Authentik directly, so this is the PUBLIC issuer,
       # not internal service DNS. Defaulted from the platform's own value so
       # there is one place to change it.
