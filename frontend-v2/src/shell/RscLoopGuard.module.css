@@ -1,0 +1,19 @@
+/* In place of the shell, which is unmounted: the page beneath was looping. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-7);
+  max-inline-size: 40rem;
+  margin: var(--space-12) auto;
+  padding: var(--space-7) var(--space-9);
+  border: var(--border-width-thin) solid var(--intent-urgent-edge);
+  border-radius: var(--radius-card);
+  background: var(--intent-urgent-surface);
+  color: var(--intent-urgent-text);
+}
+
+.text {
+  flex: 1 1 16rem;
+  margin: 0;
+}
