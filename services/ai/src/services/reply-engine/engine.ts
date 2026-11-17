@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -72,12 +72,30 @@ export function conversationLocale(inbound: string[], outbound: string[] = []): 
  * Sizes are read from this message and the customer's last few (a size given
  * three messages ago still holds).
  */
+const ITEM_STOP = new Set(["יש", "לכם", "לך", "אני", "מחפש", "מחפשת", "מחפשים", "רוצה", "רוצים", "צריך", "צריכה", "אפשר", "גם", "עוד", "את", "של", "עם", "על", "בשביל", "למכשיר", "מכשיר", "שלי", "שלנו", "איזה", "איזו", "מה", "האם", "היי", "שלום", "תודה", "בבקשה", "משהו", "כזה", "כזו"]);
+const itemWords = (t: string) => (String(t ?? "").match(/[\u0590-\u05FF]{3,}/g) ?? []).filter((w) => !ITEM_STOP.has(w));
+const itemStem = (w: string) => (w.length > 3 && /^[הובלמשכ]/.test(w) ? w.slice(1) : w);
+/** The first content word of the customer's message: the item they named. */
+export const namedItem = (incoming: string) => itemWords(incoming)[0] ?? "";
+/** The customer named an item (a Hebrew noun) that the model's query does not contain. */
+export function namesOtherItem(incoming: string, query: string): boolean {
+  // Only a message that asks for an item ("והמחיר?" names none).
+  if (!/(?<![\u0590-\u05FF])(?:יש\s+לכם|יש\s+לך|מחפש|מחפשת|מחפשים|רוצה|רוצים|צריך|צריכה|אפשר\s+לקבל|אפשר\s+להזמין)(?![\u0590-\u05FF])/u.test(incoming ?? "")) return false;
+  const theirs = itemWords(incoming).map(itemStem);
+  if (!theirs.length) return false;
+  const mine = itemWords(query).map(itemStem);
+  return !theirs.some((w) => mine.some((m) => m.includes(w) || w.includes(m)));
+}
+
 export function withCustomerSearchFacts(args: Record<string, any>, history: any[], incoming: string): Record<string, any> {
   let out = { ...args };
   const inbound = history.filter((m: any) => m?.direction === "INBOUND");
   if (!/[\u0590-\u05FF]/.test(String(out.query ?? "")) || genericStoreQuery(out.query)) {
     const own = customerSearchQuery(history, incoming, out.query);
     if (own && /[\u0590-\u05FF]/.test(own)) out.customer_query = own;
+  } else if (typeof out.query === "string" && namesOtherItem(incoming, out.query)) {
+    // The customer named an item and the model searched another (prod replay 7): their noun goes first.
+    out.query = `${namedItem(incoming)} ${out.query}`.slice(0, 120);
   }
   if (out.fits_cm == null && out.fits_cm_all == null) {
     const seen = new Set<string>();
@@ -118,6 +136,22 @@ export function scrubOrderSelectors(toolFunctionName: string, args: Record<strin
  * mismatch with the number they gave, opened a team check and repeated it seven
  * times). The model is told what the lookup used.
  */
+/**
+ * Replay only: the store answers with TODAY's orders, so an order created after
+ * the replayed message did not exist yet (prod replay 7: a shipment and a
+ * re-order's payment from later). Created after asOf: gone from a list, "not
+ * found" for one order. An order's status is still today's (Woo keeps no
+ * history of it); the replay report should not rate order-status turns.
+ */
+export function ordersAsOf(toolFunctionName: string, result: any, asOf: Date): any {
+  if (!/^woocommerce\.(?:get_order|list_customer_orders|list_orders)$/.test(toolFunctionName) || !result?.ok) return result;
+  const created = (o: any) => Date.parse(String(o?.date_created_gmt ?? o?.date_created ?? "").replace(/(\d{2}:\d{2}:\d{2})$/, "$1Z"));
+  const later = (o: any) => { const t = created(o); return Number.isFinite(t) && t > asOf.getTime(); };
+  if (Array.isArray(result.result)) return { ...result, result: result.result.filter((o: any) => !later(o)) };
+  if (result.result && typeof result.result === "object" && later(result.result)) return { ok: false, failure: "refused", reason: "woocommerce_404: no such order" };
+  return result;
+}
+
 /** The model passed a phone, email or customer id to "my orders", which the scrub drops. */
 export function droppedOrderSelectors(toolFunctionName: string, args: Record<string, any>): boolean {
   return toolFunctionName === "woocommerce.list_customer_orders" && ["phone", "email", "customer_id"].some((k) => args?.[k] != null && args[k] !== "");
@@ -132,6 +166,34 @@ export function withOwnNumberNote(result: any): any {
       ? "These orders are registered on the number the customer is writing from (looked up by it, not by a number they typed). That is their own order: say it is registered on the number they are writing from (\"ההזמנה רשומה על המספר שממנו כותבים אלינו\"). It is not a mismatch; do not ask the team to check it."
       : "Nothing is registered on the number the customer is writing from. A number they typed is not used to look orders up: ask for the order number.",
   };
+}
+
+/**
+ * The products a text-channel reply means: its card keys, a key in the text, a
+ * title it names; else, when it presents products ("הנה", "יש לנו"), the first
+ * three in stock. Exact store fields only; one the reply already links is skipped.
+ */
+export function textProductList(o: ModelTurnOutput, prose: string, candidates: any[], locale: "he" | "en"): { text: string; keys: string[] } | null {
+  if (!candidates.length) return null;
+  const n = new Set<number>();
+  for (const k of [...(o.cards ?? []), ...(String(o.reply ?? "").match(/PRODUCT_\d+/gi) ?? [])]) {
+    const i = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]);
+    if (i >= 1 && i <= candidates.length) n.add(i);
+  }
+  candidates.forEach((c, i) => { if (c?.title && prose.includes(c.title)) n.add(i + 1); });
+  if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose)) {
+    candidates.forEach((c, i) => { if (n.size < 3 && c?.title && c.inventoryState !== "out_of_stock") n.add(i + 1); });
+  }
+  const chosen = [...n].slice(0, 3).map((i) => ({ i, c: candidates[i - 1] })).filter((x) => x.c?.title && !(x.c.url && prose.includes(x.c.url)));
+  if (!chosen.length) return null;
+  const cur = (c: any) => (c.currency === "ILS" || !c.currency ? "₪" : `${c.currency} `);
+  const lines = chosen.map(({ c }) => [
+    c.title,
+    c.priceOnSite ? (locale === "he" ? "המחיר באתר" : "price on the site") : c.price != null ? `${cur(c)}${c.price}` : null,
+    c.inventoryState === "in_stock" ? (locale === "he" ? "במלאי" : "in stock") : c.inventoryState === "out_of_stock" ? (locale === "he" ? "אזל מהמלאי" : "out of stock") : null,
+    c.url ?? null,
+  ].filter(Boolean).join("\n"));
+  return { text: lines.join("\n\n"), keys: chosen.map((x) => `PRODUCT_${x.i}`) };
 }
 
 /** Parse the model's `respond` arguments, tolerantly. */
@@ -475,7 +537,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         args: effective,
         accessScope: "customer",
       });
-      return dropped ? withOwnNumberNote(out) : out;
+      const asOf = opts.replay ? ordersAsOf(toolFunctionName, out, opts.replay.asOf) : out;
+      return dropped ? withOwnNumberNote(asOf) : asOf;
     },
   };
 
@@ -616,7 +679,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q));
   // The employee's own earlier replies (never a person's): repeated asks, a "yes" to its own offer.
   const previousBotReplies = history
-    .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")))
+    .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")) && !["interim_ack", "holding"].includes((m.metadata as any)?.kind))
     .map((m: any) => String(m.body)).slice(-6);
   const g3Input = (o: ModelTurnOutput) => ({
     reply: resolveKeysInText(o.reply, candidates),
@@ -644,6 +707,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     knowledge: [knowledge ?? "", ...turnTools.knowledgeText].join("\n"),
     previousBotReplies,
     candidateTitles: candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean),
+    cardsChannel: cardChannel,
+    listAppended: !cardChannel && candidates.length > 0,
   });
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
@@ -785,27 +850,43 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // Never a promise of a person without the handoff (prod replay 6): a reply that says
   // a person will continue, or a "yes" to the employee's own offer of one, hands over.
-  if (output && !output.handoff && !turnTools.escalation) {
-    const accepted = ignoredYes(opts.incomingMessage ?? "", previousBotReplies.at(-1), false, false);
-    if (promisesPerson(output.reply) || accepted) {
-      output = {
-        ...output,
-        handoff: accepted ? "the customer accepted the offer of a person" : "the reply says a person will continue",
-        // The canned team line is not what a handoff says.
-        reply: isCannedTeamLine(output.reply) || !output.reply ? (locale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.") : output.reply,
-      };
+  // A yes to the employee's own offer (its last two replies) gets THE handoff line,
+  // whatever the model wrote (prod replay 7: a coupon explained again; a product
+  // question with the handoff set).
+  const handoffLine = locale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.";
+  if (output && !turnTools.escalation) {
+    const accepted = previousBotReplies.slice(-2).some((b) => ignoredYes(opts.incomingMessage ?? "", b, false, false));
+    if (accepted) {
+      if (!output.handoff || output.reply !== handoffLine) (trace as any).handoffSetInCode = true;
+      output = { ...output, handoff: output.handoff ?? "the customer accepted the offer of a person", reply: handoffLine, cards: [], teamQuestion: null };
+    } else if (!output.handoff && promisesPerson(output.reply)) {
+      output = { ...output, handoff: "the reply says a person will continue", reply: isCannedTeamLine(output.reply) || !output.reply ? handoffLine : output.reply };
       (trace as any).handoffSetInCode = true;
     }
+  }
+  // An open complaint answered "no information" with nothing behind it (prod replay 7):
+  // the question goes to the team, and the reply says so.
+  if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && noInfo(output.reply) && !needlessHandoff("x", inbound, false)) {
+    const q = String(opts.incomingMessage ?? "").slice(0, 300) || null;
+    output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
+    (trace as any).deadEndToTeam = true;
   }
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
   (trace as any).cards = final.cards ?? [];
 
   // ── Send shape ──
   // A semicolon reads as a document; legacy banned it (eval I05). Fixed, not rewritten.
-  const reply = stripLaterOpener(
+  const prose = stripLaterOpener(
     (humanizeReply(resolveKeysInText(final.reply, candidates)) ?? "").replace(/\s*;\s*/g, ", "),
     history.some((m: any) => m.direction === "OUTBOUND"),
   );
+  // A text channel (WhatsApp) shows no cards: the products the reply means go out
+  // as text, name, price, stock and link, at most three (prod replay 7: Smoovee had
+  // no card and no link on 56 turns; the product summary tells the model the
+  // system attaches them, and legacy did).
+  const listed = !cardChannel && prose && !final.handoff ? textProductList(final, prose, candidates, locale) : null;
+  const reply = listed ? `${prose}\n\n${listed.text}` : prose;
+  if (listed) (trace as any).listedProducts = listed.keys;
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
   const cardKeys = (final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length);

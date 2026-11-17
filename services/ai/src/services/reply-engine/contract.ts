@@ -148,6 +148,7 @@ export type ClaimProblem =
   | { kind: "no_search" }
   | { kind: "ignored_yes" }
   | { kind: "nameless_products" }
+  | { kind: "card_reference"; claims: string[] }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 

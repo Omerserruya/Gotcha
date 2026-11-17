@@ -800,3 +800,25 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     expect(r.reply).toBe("יש תיק בד, מתאים לך?");
   });
 });
+
+describe("prod replay 7 (2026-11-17), through a whole turn", () => {
+  it("★ a yes to its own offer: THE handoff line, whatever the model wrote", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "הקופון לא עובד", metadata: null },
+      { direction: "OUTBOUND", body: "מצטערים. רוצה שאעביר לנציג שיבדוק?", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "כן", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("y1", { reply: "את הקופון מזינים בעמוד התשלום, בשדה קוד קופון." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+    expect(r.reply).toBe("מעבירים לנציג מהצוות שימשיך איתך כאן.");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
+  });
+
+  it("★ \"no information\" on an open complaint: the question goes to the team, and the reply says so", async () => {
+    h.responses.push({ toolCalls: [respond("e1", { reply: "מצטערים, אין לי מידע על זה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ההזמנה עדיין לא הגיעה, כבר שבועיים" }, "autonomous");
+    expect((r.trace as any).deadEndToTeam).toBe(true);
+    expect(h.teamQuestions).toHaveLength(1);
+    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+  });
+});

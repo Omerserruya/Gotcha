@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "ungrounded_absence", "ungrounded_price", "unknown_product", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -875,5 +875,78 @@ describe("prod replay 7: store caches", () => {
     });
     expect(r).toEqual([{ tenantId: "on", ms: 5, ok: true }, { tenantId: "broken", ok: false, ms: 0 }]);
     expect(warmed).toHaveLength(1);
+  });
+});
+
+describe("prod replay 7 (Smoovee)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const cands = [
+    { title: "משטח הזזה 34*38", price: 149, currency: "ILS", inventoryState: "in_stock", url: "https://s.example/p/1" },
+    { title: "משטח במבוק כהה", price: 189, currency: "ILS", inventoryState: "in_stock", url: "https://s.example/p/2" },
+    { title: "Old", price: 1, inventoryState: "out_of_stock", url: "https://s.example/p/3" },
+  ];
+
+  it("★ a text channel gets the products the reply means: name, price, stock, link", async () => {
+    const { textProductList } = await import("../services/reply-engine/engine");
+    const keyed = textProductList({ reply: "המתאים ביותר הוא PRODUCT_2.", cards: [] } as any, "המתאים ביותר הוא משטח במבוק כהה.", cands, "he")!;
+    expect(keyed.keys).toEqual(["PRODUCT_2"]);
+    expect(keyed.text).toBe("משטח במבוק כהה\n₪189\nבמלאי\nhttps://s.example/p/2");
+    // Presents products without naming any: the first three in stock.
+    expect(textProductList({ reply: "הנה מה שמתאים", cards: [] } as any, "הנה מה שמתאים", cands, "he")!.keys).toEqual(["PRODUCT_1", "PRODUCT_2"]);
+    // Nothing meant, or already linked: nothing appended.
+    expect(textProductList({ reply: "מה גודל המכשיר?", cards: [] } as any, "מה גודל המכשיר?", cands, "he")).toBeNull();
+    expect(textProductList({ reply: "PRODUCT_1", cards: [] } as any, "יש https://s.example/p/1", cands, "he")).toBeNull();
+  });
+
+  it("★ a picture or card referred to when none goes out is a FACT problem; with cards it is fine", async () => {
+    expect(kinds(await g3("אפשר לראות את המשטח בתמונה המצורפת.", { cardsChannel: false }))).toContain("card_reference");
+    expect(kinds(await g3("אפשר לראות את המשטח בתמונה המצורפת.", { cardsChannel: true, cards: ["PRODUCT_1"], candidateCount: 1 }))).not.toContain("card_reference");
+    // On a text channel with products the list is appended: not nameless.
+    expect(kinds(await g3("הנה משטחים שמתאימים.", { incomingMessage: "מחפשת משטח", listAppended: true }))).not.toContain("nameless_products");
+  });
+
+  it("★ a safety complaint anywhere in the conversation keeps its handoff", async () => {
+    const { needlessHandoff } = await import("../services/reply-engine/gates");
+    expect(needlessHandoff("safety", ["המכשיר מתהפך על המשטח", "[Image]", "שלחתי", "מה עכשיו?"], false)).toBe(false);
+    expect(needlessHandoff("x", ["זה לא בטיחותי"], false)).toBe(false);
+    expect(needlessHandoff("x", ["אפשר בתשלומים?"], false)).toBe(true);
+  });
+
+  it("★ a range keeps its dash; a dash between words is a comma", async () => {
+    const { normalizeDashes } = await import("../services/reply-engine/gates");
+    expect(normalizeDashes("3\u20137 ימי עסקים")).toBe("3-7 ימי עסקים");
+    expect(normalizeDashes("3 \u2013 7 ימים")).toBe("3-7 ימים");
+    expect(normalizeDashes("10\u221220")).toBe("10-20");
+    expect(normalizeDashes("יש \u2014 במלאי")).toBe("יש, במלאי");
+  });
+
+  it("★ an address is quoted with one street word and a comma before the city", async () => {
+    const { quotedAddress } = await import("../services/reply-engine/prompt");
+    expect(quotedAddress("מסילה 23 נשר")).toBe("רחוב מסילה 23, נשר");
+    expect(quotedAddress("ברח' מסילה 23 נשר")).toBe("רחוב מסילה 23, נשר");
+    expect(quotedAddress("יוסף לוי 8/2 נהריה")).toBe("רחוב יוסף לוי 8/2, נהריה");
+    expect(quotedAddress("רחוב הרצל 5, תל אביב")).toBe("רחוב הרצל 5, תל אביב");
+  });
+
+  it("★ replay: an order created after the replayed message did not exist yet", async () => {
+    const { ordersAsOf } = await import("../services/reply-engine/engine");
+    const asOf = new Date("2026-11-10T10:00:00Z");
+    const list = { ok: true, result: [{ id: 1, date_created_gmt: "2026-11-09T08:00:00" }, { id: 2, date_created_gmt: "2026-11-12T08:00:00" }] };
+    expect(ordersAsOf("woocommerce.list_customer_orders", list, asOf).result.map((o: any) => o.id)).toEqual([1]);
+    expect(ordersAsOf("woocommerce.get_order", { ok: true, result: { id: 2, date_created_gmt: "2026-11-12T08:00:00" } }, asOf)).toMatchObject({ ok: false, reason: expect.stringMatching(/^woocommerce_404/) });
+    expect(ordersAsOf("woocommerce.get_order", { ok: true, result: { id: 1, date_created_gmt: "2026-11-09T08:00:00" } }, asOf).ok).toBe(true);
+    expect(ordersAsOf("woocommerce.list_products", list, asOf)).toBe(list);
+  });
+
+  it("★ the item the customer names goes first in the search", async () => {
+    const { withCustomerSearchFacts, namesOtherItem } = await import("../services/reply-engine/engine");
+    expect(namesOtherItem("יש לכם מעמד לסמובי?", "משטח הזזה")).toBe(true);
+    expect(namesOtherItem("יש לכם משטח לסמובי?", "משטח הזזה")).toBe(false);
+    expect(namesOtherItem("והמחיר?", "משטח הזזה")).toBe(false);
+    expect(withCustomerSearchFacts({ query: "משטח הזזה" }, [], "יש לכם מעמד לסמובי?").query).toBe("מעמד משטח הזזה");
   });
 });

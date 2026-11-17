@@ -33,6 +33,9 @@ You are a member of this business's team, answering customers in a chat. Think l
 - Cards go in respond.cards and a handoff in respond.handoff: there is no separate tool for either.
 - Finish EVERY turn by calling respond. Its reply is exactly what the customer receives.
 - Messages marked [Human team member ...] or [The business owner ...] were written by a person on the team, not by you. What they said stands: never contradict it, never ask again what they asked, never re-open what they answered, and never say the team is still checking something a person already answered. Build on it.
+- What the conversation already established (a stock state, a colour, a size or a price that a tool, a person on the team or you stated) stands: use it. Do not say you cannot check it, and do not re-open it as a question for the team.
+- When the customer names the item they want (an accessory, a stand, a cover), search for that item by its name first, not for a neighbouring category.
+- Quote an address as "רחוב <street> <number>, <city>"; never add a second preposition ("ברחוב במסילה").
 - Keep in state_update.facts what stays true about the customer's case: the device or model, sizes and dimensions, colours, the order number, their name. Before you ask anything, read the known facts and the conversation: never ask again for what is there, and stay on the device or product being discussed.
 
 ## Truth (never broken)
@@ -79,6 +82,17 @@ NOT a handoff: "are you a bot?" (answer honestly and keep helping), a first comp
 - state_update: what changed this turn (stage, intent, facts the customer stated or a tool confirmed, the open items). Keep it short.
 - claims: every price, product, store fact and action your reply states, each with the tool call (or "knowledge" / "state") that backs it. A product claim names the product by its key (PRODUCT_3), never by a translated name. A claim you cannot back must not be in the reply.`;
 
+/**
+ * An address as it is quoted to a customer: "רחוב מסילה 23, נשר" (prod replay 7:
+ * "ברחוב במסילה 23", the knowledge's "ברח' מסילה" rewritten with a second
+ * preposition). A street word is added when there is none, a comma before the city.
+ */
+export function quotedAddress(a: string): string {
+  let s = String(a ?? "").trim().replace(/^ב(?=רח['׳]|רחוב|שד['׳]|שדרות)/u, "").replace(/^רח['׳]\s*/u, "רחוב ");
+  if (/[\u0590-\u05FF]/.test(s) && !/^(?:רחוב|שד['׳]|שדרות|דרך)\s/u.test(s)) s = `רחוב ${s}`;
+  return s.replace(/(\d(?:\/\d{1,3})?)\s+(?=[\u0590-\u05FF])/u, "$1, ").replace(/,\s*,/g, ",");
+}
+
 const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 export interface PrefixInput {
@@ -120,7 +134,7 @@ export function buildStablePrefix(p: PrefixInput): string {
     // Prod replay 5: "where is the studio" got "the address is not available" twice.
     if (p.company.address) biz.push(`Address: ${clip(p.company.address, 200)}`);
     // Prod replay 6: Tehila's address is only in "send returns to ...". Named for what the documents say it is.
-    else if (p.company.documentAddress) biz.push(`Address given in the business's documents for returns and pickup coordination: ${clip(p.company.documentAddress, 120)}. Asked where the business is, give it as that address, not as a shop or a branch.`);
+    else if (p.company.documentAddress) biz.push(`Address given in the business's documents for returns and pickup coordination: ${clip(quotedAddress(p.company.documentAddress), 120)}. Asked where the business is, give it as that address, not as a shop or a branch.`);
     if (p.company.observedVoice) biz.push(`Voice (how this business really writes, follow it): ${clip(p.company.observedVoice, 600)}`);
   } else {
     biz.push("(no business profile)");

@@ -81,18 +81,27 @@ const ASKS_FOR_PERSON = /(?<![\u0590-\u05FF])(?:נציג|נציגה|נציגים
 // three times and became team questions. "חסר במלאי" is stock, not damage.
 const STRONG_CASE = /(?<![\u0590-\u05FF])(?:[וש]?(?:פגום|פגומה|פגומים|פגומות|שבור|שבורה|שבורים|שבורות|נשבר|נשברה|נשברו|סדוק|סדוקה|נסדק|קרוע|קרועה|נקרע|נקרעה|מפורק|מפורקת|מפורקים|מפורקות|התפרק|התפרקה|התפרקו|לא מחובר|לא מחוברת|לא מחוברים|לא מחוברות|התנתק|התנתקה|התנתקו|לא תקין|לא תקינה|לא עובד|לא עובדת|לא נדלק|חסר(?!\s+(?:במלאי|לכם|לך))|חסרה|חסרים|חסרות|הגיע הרוס|הגיעה הרוסה|הגיעו הרוסים|הגיע פגום|הגיעה פגומה)|נזק|הרוס|הרוסה|לא הגיע|לא הגיעה|עדיין לא קיבלתי|לא קיבלתי|באיחור|איחור|מאחר|תקוע|תקועה|לא מקובל|מחפיר|שערורייה|עורך דין|תביעה|הונאה|נוכלים|רמאים|החזר כספי|כסף בחזרה|כבר שבוע|שבוע שלם|כבר שבועיים|כבר חודש|לא התקדמתם|לא מתקדם|לא מתקדמים|אין התקדמות|אין שום התקדמות|אף אחד לא (?:עונה|חוזר|עונים|מתייחס)|לא עונים לי|נמאס|נמאס לי|מתסכל|מאוכזב|מאוכזבת|מאוכזבים|לא רציני|לא רציניים|זלזול)(?![\u0590-\u05FF])|\b(?:damaged|broken|torn|defective|cracked|came apart|missing (?:a |the )?(?:part|piece|item)|doesn'?t work|not working|never arrived|hasn'?t arrived|didn'?t arrive|late|lawyer|scam|fraud|chargeback|refund|a week (?:already|and nothing)|no progress|nobody (?:answers|replies|gets back)|fed up|frustrat\w*|disappointed)\b/iu;
 
+// A safety or damage complaint anywhere in the conversation keeps its handoff
+// (prod replay 7: an appliance tipping over had its handoff removed).
+const SAFETY = /(?<![\u0590-\u05FF])[וש]?(?:מתהפך|מתהפכת|מתהפכים|התהפך|התהפכה|נופל|נופלת|נפל|נפלה|נפלו|מסוכן|מסוכנת|מסוכנים|לא\s+בטיחותי|לא\s+בטיחותית|סכנה|נשרף|נשרפה|נמס|נמסה|התחמם|התחממה|ניצוץ|קצר|נשבר|נשברה|נשברו|פגום|פגומה|פגומים|נפצע|נפצעה|פציעה)(?![\u0590-\u05FF])|\b(?:tips? over|tipped|fell|unsafe|dangerous|hazard|burn(?:t|ed)?|melt(?:ed)?|spark|injur\w*|broke|broken|defective)\b/iu;
+export const safetyCase = (inbound: string[]) => SAFETY.test(inbound.join("\n"));
+
 const MEDIA_PLACEHOLDER = /^(?:\[(?:Image|Photo|Video|Voice message|Audio|Document|Sticker|File|תמונה|סרטון|הודעה קולית|מסמך)[^\]]*\]|)$/i;
 
 /** A handoff the customer's own words do not call for. */
 export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean): boolean {
   if (!handoff) return false;
   if (toolsAskedPerson) return false;
+  if (safetyCase(recentInbound)) return false;
   // Photos sent right after the words ("[Image]") must not push them out of the window.
   const recent = recentInbound.filter((m) => !MEDIA_PLACEHOLDER.test(String(m ?? "").trim())).slice(-3).join("\n");
   return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent);
 }
 
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
+export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
+export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
+
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
   if (!ATTRIBUTE_ASK.test(incoming ?? "") || !(teamQuestion || NO_INFO.test(reply ?? ""))) return false;
   const canRead = toolsOffered.some((n) => /get_product|list_products|search_products|variation/i.test(n));
@@ -278,11 +287,19 @@ export const promisesPerson = (reply: string) => PERSON_CONTINUES.test(reply ?? 
 
 // "הנה בנדנות מרובעות" with no name, price or card (prod replay 6, Tehila).
 const PRESENTS = /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|דגמים|כמה\s+סוגים|שני\s+סוגים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options)\b/iu;
-/** A product ask answered as if products were shown, with none named, priced or carded. */
-export function namelessProducts(reply: string, incoming: string, cards: string[], titles: string[]): boolean {
-  if (!PRODUCT_WANT.test(incoming ?? "") || !PRESENTS.test(reply ?? "") || cards.length) return false;
+/** A product ask answered as if products were shown, with none named, priced or carded (a text channel gets the list appended, so never there when products came back). */
+export function namelessProducts(reply: string, incoming: string, cards: string[], titles: string[], listAppended = false): boolean {
+  if (listAppended || !PRODUCT_WANT.test(incoming ?? "") || !PRESENTS.test(reply ?? "") || cards.length) return false;
   if (titles.some((t) => t && reply.includes(t))) return false;
   return !/₪|ש["״']ח|\d+\s?(?:NIS|ILS)|https?:\/\//.test(reply ?? "") && !/\?/.test(reply ?? "");
+}
+
+// "בתמונה", "מצורף", "below" with nothing attached (prod replay 7, Smoovee: twice).
+const PICTURE_REF = /(?<![\u0590-\u05FF])(?:בתמונה|בתמונות|בכרטיס|בכרטיסים|מצורף|מצורפת|מצורפים|מצורפות|כאן\s+למטה|בהמשך\s+ההודעה|רואים\s+ב(?:תמונה|כרטיס))(?![\u0590-\u05FF])|\b(?:in the (?:picture|photo|card)s?|attached|see below|shown below)\b/iu;
+/** Sentences that point at a picture or card when none goes out with the reply. */
+export function cardReferences(reply: string, cardsShown: boolean): string[] {
+  if (cardsShown) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => PICTURE_REF.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // The same paragraph again (prod replay 6: one paragraph sent 7 times in one conversation).
@@ -342,6 +359,10 @@ export interface Gate3Input {
   previousBotReplies?: string[];
   /** The titles of the products this turn's tools returned. */
   candidateTitles?: string[];
+  /** The channel shows product cards. */
+  cardsChannel?: boolean;
+  /** A text channel with products this turn: the engine appends them (name, price, link). */
+  listAppended?: boolean;
 }
 
 export function gate3(i: Gate3Input): Gate3Verdict {
@@ -377,7 +398,9 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
   if (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "no_search" });
-  if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [])) problems.push({ kind: "nameless_products" });
+  if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
+  const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
+  if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
   const unknown = unknownProductKeys(i.claims, i.cards, i.candidateCount);
   if (unknown.length) problems.push({ kind: "unknown_product", names: unknown });
@@ -417,7 +440,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -449,7 +472,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
   let s = String(reply ?? "");
   for (const p of problems) {
     if (p.kind === "ungrounded_price") s = stripPrices(s, p.prices);
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -523,7 +546,11 @@ export function tooThin(cleaned: string, original: string, incoming: string, sho
 
 /** Hyphens inside a word become "-"; a dash between words becomes a comma (U+2010 to U+2015, U+2212; prod replay 6: U+2011). */
 export function normalizeDashes(s: string): string {
-  return String(s ?? "").replace(/[\u2010\u2011\u2212]/g, "-").replace(/\s*[\u2012-\u2015]\s*/g, ", ");
+  return String(s ?? "")
+    // A range stays a range: "3\u20137 ימי עסקים" is "3-7" (prod replay 7: it became "3, 7").
+    .replace(/(\d)\s*[\u2010-\u2015\u2212]\s*(?=\d)/g, "$1-")
+    .replace(/[\u2010\u2011\u2212]/g, "-")
+    .replace(/\s*[\u2012-\u2015]\s*/g, ", ");
 }
 
 /** The ONE targeted correction note for the rewrite round. */
@@ -537,6 +564,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
     if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search for those words ran this turn, or it returned them. Search for it now (the customer's own words), and answer from what comes back; if nothing does, say you did not find it by that name and ask.`);
     if (p.kind === "no_search") lines.push("- The customer told you what they want (a category, a colour, a size). Search the store with their words now and show what fits; ask at most one short question, never for a photo you already asked for.");
+    if (p.kind === "card_reference") lines.push("- No picture or card goes out with this reply: do not refer to one (\"בתמונה\", \"מצורף\"). Name the product instead.");
     if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Call it once more with a narrower query (the category, or one or two words, per_page 5). If you still have nothing, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never say you could not check.");
