@@ -936,3 +936,40 @@ describe("prod replay 11 rating: safety sticks", () => {
     expect(h.upserts[0].create.facts._safetyAt).toBeTruthy();
   });
 });
+
+describe("prod replay 12: placeholders and the stop-use line", () => {
+  it("★ a template placeholder at the start: a short neutral opener, no model call", async () => {
+    h.history = [{ direction: "INBOUND", body: "[template attachment]", metadata: null }];
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[template attachment]" }, "autonomous");
+    expect(h.calls).toHaveLength(0);
+    expect(r.reply).toBe("היי, במה אפשר לעזור?");
+  });
+  it("★ a placeholder later in the conversation: nothing", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "היי", metadata: null },
+      { direction: "OUTBOUND", body: "היי! במה אפשר לעזור?", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "[Unsupported message]", metadata: null },
+    ];
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[Unsupported message]" }, "autonomous");
+    expect(h.calls).toHaveLength(0);
+    expect(r.reply).toBeNull();
+  });
+  it("★ a sticky safety conversation and an unrelated ask: the handoff, but no stop-use line", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    h.responses.push({ toolCalls: [respond("u1", { reply: "תודה על הפנייה, נשמח לשמוע עוד." })] });
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _safetyAt: new Date().toISOString() }, offeredItems: [], pending: [], turnCount: 5 });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לשיתוף פעולה עם תוכן UGC" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.trace.safetyHandoff).toBe(true);
+    expect(r.reply).not.toMatch(/להפסיק להשתמש/);
+  });
+});
+
+describe("prod replay 12: one reply, no sentence twice", () => {
+  it("★ a sentence the model wrote twice goes out once", async () => {
+    h.responses.push({ toolCalls: [respond("d1", { reply: "יש תיק בד קנבס במלאי. יש תיק בד קנבס במלאי. לאיזה שימוש?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה לגבי המחיר?" }, "autonomous");
+    expect(r.reply).toBe("יש תיק בד קנבס במלאי. לאיזה שימוש?");
+  });
+});

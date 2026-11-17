@@ -85,6 +85,12 @@ const STRONG_CASE = /(?<![\u0590-\u05FF])(?:[וש]?(?:פגום|פגומה|פגו
 // (prod replay 7: an appliance tipping over had its handoff removed).
 const SAFETY = /(?<![\u0590-\u05FF])[וש]?(?:מתהפך|מתהפכת|מתהפכים|התהפך|התהפכה|נופל|נופלת|נפל|נפלה|נפלו|מסוכן|מסוכנת|מסוכנים|לא\s+בטיחותי|לא\s+בטיחותית|סכנה|נשרף|נשרפה|נמס|נמסה|התחמם|התחממה|ניצוץ|קצר|נשבר|נשברה|נשברו|פגום|פגומה|פגומים|נפצע|נפצעה|פציעה|מתגלגל|מתגלגלת|מתגלגלים|גלגול|כלכול|כלכל|מתכלכל|התגלגל|התגלגלה|נהפך|נהפכת|נהפכו|מתרומם|מתרוממת|התרומם|התרוממה|מחליק|מחליקה|מחליקים|נשמט|נשמטת|לא\s+יציב|לא\s+יציבה|מתנדנד|מתנדנדת|כמעט\s+נפל|כמעט\s+נפלה|נופל\s+אחורה|זז\s+(?:לבד|אחורה)|זזה\s+(?:לבד|אחורה)|לא\s+(?:מונע|עוצר)\s+(?:את\s+זה|את\s+הנפילה|את\s+ההחלקה))(?![\u0590-\u05FF])|\b(?:rolls? (?:back|off)|rolling|slid(?:es?|ing)?|slipp(?:ing|ed)|wobbl\w*|unstable|tips? over|tipped|fell|unsafe|dangerous|hazard|burn(?:t|ed)?|melt(?:ed)?|spark|injur\w*|broke|broken|defective)\b/iu;
 export const safetyCase = (inbound: string[]) => SAFETY.test(inbound.join("\n"));
+// The product in use: its parts, its use, its size (not a collaboration or a coupon).
+const IN_USE = /(?<![\u0590-\u05FF])[והבלמש]?(?:משטח|משטחים|מכשיר|מכשירים|מעצור|מעצורים|גלגל|גלגלים|מיקסר|השימוש|שימוש|להשתמש|משתמש|משתמשת|עובד|עובדת|בסיס|רגליות)(?![\u0590-\u05FF])|\b(?:the (?:mat|pad|appliance|stopper|wheels?)|using it)\b/iu;
+/** This text is about the product in use (a safety word, its parts or use, or a size). */
+export const aboutProductInUse = (texts: string[]) => { const t = texts.join("\n"); return SAFETY.test(t) || IN_USE.test(t) || DIMENSIONS.test(t); };
+/** The safety word that matched, for the trace. */
+export const safetyWord = (inbound: string[]) => SAFETY.exec(inbound.join("\n"))?.[0]?.trim() ?? null;
 
 const MEDIA_PLACEHOLDER = /^(?:\[(?:Image|Photo|Video|Voice message|Audio|Document|Sticker|File|תמונה|סרטון|הודעה קולית|מסמך)[^\]]*\]|)$/i;
 
@@ -103,8 +109,13 @@ export const statusAsk = (incoming: string) => STATUS_ASK.test(incoming ?? "");
 export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
 export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
 
+// A material answered from the business description without reading the product (prod replay 12:
+// "stainless steel" from the product data in one conversation, something else from the description in another).
+const MATERIAL_ASK = /(?<![\u0590-\u05FF])(?:חומר|מאיזה\s+חומר|עשוי|עשויה|עשויים|ממה|נירוסטה|כסף|זהב|ציפוי|מצופה|פליז|נחושת|אלומיניום|פלדה|כותנה|פשתן|משי|צמר)(?![\u0590-\u05FF])|\b(?:material|made of|stainless|silver|gold|plated|steel|cotton|linen|silk|wool)\b/iu;
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
-  if (!ATTRIBUTE_ASK.test(incoming ?? "") || !(teamQuestion || NO_INFO.test(reply ?? ""))) return false;
+  const materialStated = MATERIAL_ASK.test(incoming ?? "") && MATERIAL_ASK.test(reply ?? "");
+  if (!ATTRIBUTE_ASK.test(incoming ?? "") && !MATERIAL_ASK.test(incoming ?? "")) return false;
+  if (!(teamQuestion || NO_INFO.test(reply ?? "") || materialStated)) return false;
   const canRead = toolsOffered.some((n) => /get_product|list_products|search_products|variation/i.test(n));
   const read = tools.some((t) => /product|variation|inventory/i.test(t.tool) && t.decision === "allow");
   return canRead && !read;
@@ -233,6 +244,20 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
 }
 
 const ADDRESS_DENIED = /(?:(?<![\u0590-\u05FF])(?:ה)?כתובת(?:\s+המדויקת)?[^.\n]{0,40}(?:לא\s+(?:מופיעה|מופיע|זמינה|זמין|ידועה|נמצאת|מצוינת)|אינה\s+(?:מופיעה|זמינה))|אין\s+(?:לי|לנו|ברשותי)[^.\n]{0,25}(?:ה)?כתובת)|\b(?:(?:the )?(?:exact )?address (?:is not|isn'?t) (?:available|listed|in my details)|(?:i|we) (?:don'?t|do not) have the (?:exact )?address)\b/iu;
+const INFO_DENIED = /(?<![\u0590-\u05FF])(?:לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות)(?:\s+(?:אצלנו|אצלי|כרגע|במידע))?|אין\s+(?:לנו|לי)\s+(?:כרגע\s+)?(?:מידע|פרטים)\s+(?:על|לגבי|בנושא))(?![\u0590-\u05FF])|\b(?:(?:is|are) not (?:listed|on file)|we have no (?:information|details) (?:on|about))\b/iu;
+const INFO_STOP = new Set(["פרטי", "פרטים", "מידע", "כרגע", "אצלנו", "לגבי", "בנושא", "מופיע", "מופיעה", "מופיעים", "מופיעות"]);
+/** Sentences saying something is not on file while the knowledge names it (two of their word stems, or one 5+ letters). */
+export function infoDeniedButKnown(reply: string, knowledge: string): string[] {
+  const k = unfinal(String(knowledge ?? "").toLowerCase());
+  if (!k) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => {
+    if (!INFO_DENIED.test(x)) return false;
+    const stems = (x.match(/[\u0590-\u05FFa-z]{4,}/giu) ?? []).filter((w) => !INFO_STOP.has(w)).map(stem).filter((w) => w.length >= 3);
+    const hits = stems.filter((w) => k.includes(w));
+    return hits.length >= 2 || hits.some((w) => w.length >= 5);
+  }).map((x) => x.trim().slice(0, 120));
+}
+
 /** Sentences that say the address is not known. */
 export function addressDenied(reply: string): string[] {
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => ADDRESS_DENIED.test(x)).map((x) => x.trim().slice(0, 120));
@@ -356,7 +381,7 @@ export function echoedSizes(reply: string, customerText: string, sourceText: str
 // A usage tip in a safety conversation that the knowledge does not give (prod replay 11:
 // "check that the stopper touches the wheels" on an appliance tipping back).
 const TIP = /(?<![\u0590-\u05FF])(?:כדאי\s+(?:לוודא|לבדוק|לנסות|להזיז|לסובב|למקם|להניח)|יש\s+(?:לוודא|לבדוק|להקפיד)|מומלץ\s+(?:לוודא|לבדוק|לנסות|למקם|להניח)|תוודאו|תוודא|תבדקו|תבדוק|נסו|תנסו|אפשר\s+לנסות|לבדוק\s+ש|לוודא\s+ש)(?![\u0590-\u05FF])|\b(?:make sure|check that|try (?:to|placing|moving)|you can try)\b/iu;
-const STOP_USE = /(?<![\u0590-\u05FF])(?:להפסיק\s+להשתמש|לא\s+להשתמש|להפסיק\s+את\s+השימוש|לא\s+לעבוד\s+עם|stop using|don'?t use)(?![\u0590-\u05FF])/iu;
+const STOP_USE = /(?<![\u0590-\u05FF])(?:להפסיק\s+(?:להשתמש|לעבוד|את\s+השימוש)|לא\s+להשתמש|לא\s+לעבוד\s+(?:עם|על)|להימנע\s+(?:משימוש|מלהשתמש)|stop using|don'?t use|avoid using)(?![\u0590-\u05FF])/iu;
 const tipWords = (t: string) => (String(t ?? "").toLowerCase().match(/[\u0590-\u05FFa-z]{4,}/g) ?? []);
 /** In a safety conversation: tip sentences that the knowledge does not contain (two of their words or more). */
 export function unsafeTips(reply: string, knowledge: string, safety: boolean): string[] {
@@ -397,7 +422,7 @@ export const foreignScript = (reply: string) => (String(reply ?? "").match(FOREI
 export const stripForeignScript = (reply: string) => String(reply ?? "").replace(FOREIGN_SCRIPT, "");
 
 // How the system works is not the customer's business (prod replay 5: "the number is linked to your contact details").
-const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:נוסף|נוספה|הוספתי|הוספנו|שמרתי|שמרנו|עודכן|עודכנה|עדכנו)\s+(?:את\s+\S+\s+)?(?:ל|אל\s+)?(?:פרטי\s+(?:ה)?קשר|הכרטיס\s+שלך|לכרטיס|למערכת)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
+const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:בתיאור\s+העסק|בפרטי\s+העסק|במידע\s+שלנו\s+(?:מופיע|מופיעה|מופיעים|כתוב)|אצלנו\s+(?:מופיע|מופיעה|מופיעים|רשום)|לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות)\s+אצלנו|צירוף\s+(?:של\s+)?תבנית|הודעה\s+(?:קריאה|שאינה\s+קריאה)|לא\s+התקבלה\s+הודעה\s+קריאה)(?![\u0590-\u05FF])|\b(?:template attachment|template message|readable message)\b|(?<![\u0590-\u05FF])(?:נוסף|נוספה|הוספתי|הוספנו|שמרתי|שמרנו|עודכן|עודכנה|עדכנו)\s+(?:את\s+\S+\s+)?(?:ל|אל\s+)?(?:פרטי\s+(?:ה)?קשר|הכרטיס\s+שלך|לכרטיס|למערכת)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
 export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "");
 
 // A tool failure told to the customer (prod replay 8: "the catalogue didn't open for me").
@@ -405,6 +430,8 @@ const FAILURE_NARRATION = /(?<![\u0590-\u05FF])(?:(?:ה)?(?:בדיקה|בקשה|
 export const failureNarration = (reply: string) => FAILURE_NARRATION.test(reply ?? "");
 
 // Broken Hebrew seen in prod replay 8 ("חשוב לנו לשמוע מה לא מרוצה").
+// "ייתכן שהמשטח יזוז" (prod replay 12): a hedge that invents a fault.
+const ODD_HEDGE = /(?<![\u0590-\u05FF])(?:ייתכן|יתכן|אולי|יכול\s+להיות)\s+ש(?:ה)?(?:משטח|מכשיר|מוצר|זה)\s+(?:יזוז|תזוז|יחליק|תחליק|ייפול|יתהפך|לא\s+יחזיק)(?![\u0590-\u05FF])/u;
 const BROKEN_HE = /(?<![\u0590-\u05FF])(?:מה\s+לא\s+(?:מרוצה|מרוצים|מרוצות)|(?:לא\s+)?מצוין\s+התאמה)(?![\u0590-\u05FF])/u;
 // A statement written as a question ("יש כמה מטפחות חגיגיות בגווני כחול?") when products are shown.
 // A plain statement only: no comma (a question after it) and no question word inside.
@@ -484,6 +511,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   ];
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
+  // "Not on file" about something the knowledge does mention (prod replay 12: pickup "בתיאום מראש").
+  absent.push(...infoDeniedButKnown(reply, i.knowledge ?? ""));
   // "The address is not in my details" while the prompt gives one (prod replay 10, Tehila).
   if (i.businessAddress) absent.push(...addressDenied(reply));
   if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
@@ -535,6 +564,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (internalJargon(reply)) style.push("internal_jargon");
   if (failureNarration(reply)) style.push("failure_narration");
   if (i.locale === "he" && BROKEN_HE.test(reply)) style.push("broken_hebrew");
+  if (i.locale === "he" && ODD_HEDGE.test(reply)) style.push("odd_hedge");
   if (i.locale === "he" && (i.candidateCount > 0 || i.cards.length > 0) && new RegExp(STATEMENT_Q.source, "u").test(reply)) style.push("statement_question");
   if (repeatedAsk(reply, i.previousBotReplies ?? [])) style.push("repeated_ask");
   if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
@@ -643,6 +673,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
   if (c.has("foreign_script")) s = stripForeignScript(s);
   if (c.has("internal_jargon")) s = dropSentences(s, INTERNAL_JARGON);
   if (c.has("failure_narration")) s = dropSentences(s, FAILURE_NARRATION);
+  if (c.has("odd_hedge")) s = dropSentences(s, ODD_HEDGE);
   if (c.has("broken_hebrew")) s = s.replace(/(?<![\u0590-\u05FF])מה\s+לא\s+(?:מרוצה|מרוצים|מרוצות)(?![\u0590-\u05FF])/gu, "מה לא היה בסדר").replace(/(?<![\u0590-\u05FF])מצוין(?=\s+התאמה)/gu, "מצוינת");
   if (c.has("statement_question")) s = s.replace(STATEMENT_Q, "$1.");
   if (c.has("repeated_ask")) s = dropSentences(s, PHOTO_ASK);
@@ -706,6 +737,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("foreign_script")) lines.push("- A character from another alphabet slipped into a word: rewrite the reply in the customer's language only.");
       if (c.has("failure_narration")) lines.push("- Never tell the customer a tool or the catalogue failed. Search again narrower, or ask one question about what they want, or show the closest products from earlier in this conversation.");
       if (c.has("statement_question")) lines.push("- \"יש כמה ...\" about the products you show is a statement: end it with a full stop, not a question mark.");
+      if (c.has("odd_hedge")) lines.push("- No hedge that invents a fault (\"ייתכן שהמשטח יזוז\").");
       if (c.has("broken_hebrew")) lines.push("- \"מה לא היה בסדר\" (or \"מה לא עבד\"), not \"מה לא מרוצה\".");
       if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule and put the conflict in team_question.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");

@@ -1206,3 +1206,71 @@ describe("prod replay 11 rating (2026-11-17)", () => {
     expect(echoedSizes("המשטח ברחוב יוסף לוי 8/2.", "יוסף לוי 8/2", "")).toEqual([]);
   });
 });
+
+describe("prod replay 12 (2026-11-17)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ source exposure and placeholder names are internal jargon", async () => {
+    for (const r of ["בתיאור העסק מוזכרים שרשראות מנירוסטה.", "אצלנו מופיע שזה כסף.", "הפרטים לא מופיעים אצלנו.", "לא התקבלה הודעה קריאה, רק צירוף תבנית."]) {
+      expect(styleCodes(await g3(r)), r).toContain("internal_jargon");
+    }
+  });
+
+  it("★ a material stated without reading the product -> unread_product", async () => {
+    const offered = ["woocommerce.get_product", "woocommerce.list_products"];
+    expect(kinds(await g3("השרשראות עשויות כסף.", { incomingMessage: "מאיזה חומר השרשרת?", toolsOffered: offered }))).toContain("unread_product");
+    expect(kinds(await g3("השרשרת מנירוסטה.", { incomingMessage: "מאיזה חומר השרשרת?", toolsOffered: offered, tools: [{ tool: "woocommerce.get_product", decision: "allow", outcome: "ok" }] }))).not.toContain("unread_product");
+  });
+
+  it("★ \"not on file\" about what the knowledge mentions is a FACT problem", async () => {
+    const { infoDeniedButKnown } = await import("../services/reply-engine/gates");
+    const k = "איסוף עצמי מנשר בתיאום מראש מול המשרד.";
+    expect(infoDeniedButKnown("פרטי תיאום האיסוף לא מופיעים אצלנו כרגע.", k)).toHaveLength(1);
+    expect(infoDeniedButKnown("פרטי תיאום האיסוף לא מופיעים אצלנו כרגע.", "")).toEqual([]);
+    expect(infoDeniedButKnown("מועד המשלוח לא מופיע אצלנו.", k)).toEqual([]);
+    expect(kinds(await g3("פרטי תיאום האיסוף לא מופיעים אצלנו כרגע.", { knowledge: k }))).toContain("ungrounded_absence");
+  });
+
+  it("★ the odd hedge is cut; a stop-use sentence the model wrote in other words counts", async () => {
+    const { cleanStyle, hasStopUse } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("ייתכן שהמשטח יזוז קצת."))).toContain("odd_hedge");
+    expect(cleanStyle("יש משטח מתאים. ייתכן שהמשטח יזוז קצת.", ["odd_hedge"])).toBe("יש משטח מתאים.");
+    expect(hasStopUse("עדיף להפסיק לעבוד עם המכשיר על המשטח.")).toBe(true);
+    expect(hasStopUse("מומלץ להימנע משימוש עד הבדיקה.")).toBe(true);
+  });
+
+  it("★ the product in use vs an unrelated ask", async () => {
+    const { aboutProductInUse, safetyWord } = await import("../services/reply-engine/gates");
+    expect(aboutProductInUse(["ומה עם המעצור?"])).toBe(true);
+    expect(aboutProductInUse(["30 על 40"])).toBe(true);
+    expect(aboutProductInUse(["אשמח לשיתוף פעולה עם תוכן UGC לעמוד שלכם"])).toBe(false);
+    expect(safetyWord(["המכשיר נהפך על המשטח"])).toBe("נהפך");
+  });
+
+  it("★ a placeholder is no customer text; the same sentence never twice in a reply", async () => {
+    const { placeholderOnly, dedupeSentences } = await import("../services/reply-engine/engine");
+    for (const t of ["[template attachment]", "[Unsupported message]", "", "  ", "[interactive button]"]) expect(placeholderOnly(t), t).toBe(true);
+    expect(placeholderOnly("[Image]")).toBe(false);
+    expect(placeholderOnly("היי")).toBe(false);
+    expect(dedupeSentences("עד הבדיקה, מומלץ להפסיק. מעבירים לנציג. עד הבדיקה, מומלץ להפסיק.")).toBe("עד הבדיקה, מומלץ להפסיק. מעבירים לנציג.");
+  });
+
+  it("★ an order the guard let through is theirs: the note says so", async () => {
+    const { ownOrderNote } = await import("../services/reply-engine/engine");
+    expect(ownOrderNote("woocommerce.get_order", { ok: true, result: { id: 5 } }).note).toMatch(/Never tell them a number differs/);
+    expect(ownOrderNote("woocommerce.get_order", { ok: false, reason: "x" })).toEqual({ ok: false, reason: "x" });
+    expect(ownOrderNote("woocommerce.list_products", { ok: true, result: [] }).note).toBeUndefined();
+  });
+
+  it("★ a store's coupon field is a platform fact in the prompt", async () => {
+    const { buildStablePrefix } = await import("../services/reply-engine/prompt");
+    const base = { agent: { name: "-", role: "-" }, company: { organizationName: "Smoovee" }, locale: "he", skills: [], channel: "WHATSAPP", cardsChannel: false } as any;
+    expect(buildStablePrefix({ ...base, storePlatform: "woocommerce" })).toContain("\"קוד קופון\" field");
+    expect(buildStablePrefix({ ...base, storePlatform: null })).not.toContain("קוד קופון\" field");
+  });
+});

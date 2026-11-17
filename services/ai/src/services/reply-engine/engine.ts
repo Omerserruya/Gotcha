@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse } from "./gates";
+import { gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, aboutProductInUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -168,6 +168,16 @@ export function labelInactiveOrders(toolFunctionName: string, result: any): any 
     : result;
 }
 
+/**
+ * A single order the guard let through IS this customer's (it matched the number or the
+ * email they write from). Prod replay 12: in get_order turns the reply still said "the
+ * numbers differ" after the customer had typed another one.
+ */
+export function ownOrderNote(toolFunctionName: string, result: any): any {
+  if (toolFunctionName !== "woocommerce.get_order" || !result?.ok || !result.result || Array.isArray(result.result)) return result;
+  return { ...result, note: [result.note, "This order is confirmed as this customer's own (it matches the number or email they are writing from). Never tell them a number differs or does not match; a number they typed elsewhere does not matter."].filter(Boolean).join(" ") };
+}
+
 /** The model passed a phone, email or customer id to "my orders", which the scrub drops. */
 export function droppedOrderSelectors(toolFunctionName: string, args: Record<string, any>): boolean {
   return toolFunctionName === "woocommerce.list_customer_orders" && ["phone", "email", "customer_id"].some((k) => args?.[k] != null && args[k] !== "");
@@ -243,6 +253,19 @@ export function removedSentences(before: string, after: string): string[] {
 
 /** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
 export const profileHasStreet = (address: string | null | undefined) => /[\u0590-\u05FFA-Za-z]{2,}\s+\d{1,4}/.test(String(address ?? ""));
+
+/** A message that is only a placeholder: a template, an unsupported message, an empty one. */
+export function placeholderOnly(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  return !t || /^\[(?:template[^\]]*|unsupported[^\]]*|interactive[^\]]*|button[^\]]*|reaction[^\]]*|empty[^\]]*|הודעה\s+לא\s+נתמכת[^\]]*|תבנית[^\]]*)\]$/iu.test(t);
+}
+
+/** Drops a sentence that repeats one already in the same reply. */
+export function dedupeSentences(reply: string): string {
+  const seen = new Set<string>();
+  const parts = String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")];
+  return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("").trim();
+}
 
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
@@ -452,6 +475,18 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     return empty({ escalation: g1.escalation });
   }
   mark("gate1");
+  // A template, an unsupported message or an empty placeholder is no customer text (prod replay 12:
+  // "only a template attachment was received"): a short neutral opener at the start, else nothing.
+  if (placeholderOnly(opts.incomingMessage)) {
+    const hist: any[] = ((await loadAll.catch(() => null)) as any)?.[1] ?? [];
+    const spoke = hist.some((m: any) => m.direction === "OUTBOUND");
+    trace.gate3 = { ok: true, problems: [], rewrite: "none" };
+    (trace as any).placeholder = true;
+    // The language from real words only: a placeholder's English is not the customer's.
+    const words = hist.filter((m: any) => m.direction === "INBOUND" && !placeholderOnly(m.body)).map((m: any) => String(m.body ?? ""));
+    const en = words.length > 0 && conversationLocale(words, []) === "en";
+    return empty({ reply: spoke ? null : en ? "Hi, how can we help?" : "היי, במה אפשר לעזור?" });
+  }
 
   const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw] = await loadAll;
   const wooTurn = shopifyTurn ? null : wooRaw;
@@ -586,7 +621,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         accessScope: "customer",
       });
       const asOf = labelInactiveOrders(toolFunctionName, opts.replay ? ordersAsOf(toolFunctionName, out, opts.replay.asOf) : out);
-      return dropped ? withOwnNumberNote(asOf) : asOf;
+      return dropped ? withOwnNumberNote(asOf) : ownOrderNote(toolFunctionName, asOf);
     },
   };
 
@@ -619,6 +654,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     skills,
     channel: String(conversation.channel),
     cardsChannel: cardChannel,
+    storePlatform,
   });
   const chat = historyToChat(history);
   const lastRow: any = history.at(-1);
@@ -968,8 +1004,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     (trace as any).handoffSetInCode = true;
     (trace as any).safetyHandoff = true;
   }
-  // A safety reply always keeps the stop-use advice (prod replay 11).
-  if (output?.reply && safetyConversation && !hasStopUse(output.reply)) {
+  // The stop-use advice only when THIS turn is about the product in use (prod replay 12: added to
+  // a collaboration inquiry). A sticky safety conversation still hands over (above).
+  (trace as any).safetyWord = safetyWord(inbound.slice(-10));
+  if (output?.reply && safetyConversation && !hasStopUse(output.reply) && aboutProductInUse([String(opts.incomingMessage ?? ""), output.reply])) {
     output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
     (trace as any).stopUseAdded = true;
   }
@@ -992,6 +1030,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).deadEndToTeam = true;
   }
+  // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
+  if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
   (trace as any).cards = final.cards ?? [];
 
