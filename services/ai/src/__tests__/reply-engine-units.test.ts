@@ -2079,3 +2079,73 @@ describe("first live replies", () => {
     expect(kinds(await g3("מוצר אחד שמתאים הוא כיסוי בינוני.", { candidateTitles: titles, candidateCount: 1 }))).toContain("unnamed_recommendation");
   });
 });
+
+/** Rating on 057d37db (prod replay 2026-11-17). */
+describe("057d37db rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ orders found contradict \"no order\"; payment speculation is never a fact", async () => {
+    const { ungroundedOrderAbsence, ungroundedPayment } = await import("../services/reply-engine/gates");
+    const found = [{ tool: "woocommerce.list_customer_orders", outcome: "ok", content: "[{\"id\":97858,\"status\":\"cancelled\"}]" }] as any;
+    const empty = [{ tool: "woocommerce.list_customer_orders", outcome: "empty" }] as any;
+    expect(ungroundedOrderAbsence("לא נוצרה הזמנה, ולכן לא ניתן לאתר את ההזמנה.", found)).toHaveLength(1);
+    expect(ungroundedOrderAbsence("לא ניתן לאתר את ההזמנה.", empty)).toEqual([]);
+    const spec = "יכול להיות שהאישור בויזה לא הפך לחיוב סופי, ולכן לא נוצרה הזמנה.";
+    expect(ungroundedPayment(spec, found)).toHaveLength(1);
+    expect(ungroundedPayment("Maybe the authorization never went through, so no order was created.", found)).toHaveLength(1);
+    expect(ungroundedPayment("ההזמנה 97858 בוטלה.", found)).toEqual([]);
+    // Even with the order's payment data in hand, speculation about the payment is not a fact.
+    const paid = [{ tool: "woocommerce.get_order", outcome: "ok", content: "{\"id\":97858,\"status\":\"cancelled\",\"date_paid\":null}" }] as any;
+    expect(ungroundedPayment(spec, paid)).toHaveLength(1);
+    expect(ungroundedPayment("ההזמנה בוטלה ולא חויבת.", paid)).toEqual([]);
+    const { namedInResults } = await import("../services/reply-engine/engine");
+    expect(namedInResults("יש מעצור לאליס?", [{ title: "מעצור אליס" }])).toBe(true);
+    expect(namedInResults("יש מעצור לאליס?", [{ title: "משטח כריסטינה" }])).toBe(false);
+  });
+
+  it("★ \"fits <a close but different model>\" is near_name", async () => {
+    const { nearNameAsExact } = await import("../services/reply-engine/gates");
+    expect(nearNameAsExact("לנינג'ה קריספי, סמובי גפן מתאימה לנינג'ה קרמי.", "יש משטח לנינג'ה קריספי?", [])).toEqual({ asked: "קריספי", shown: "קרמי" });
+    expect(nearNameAsExact("סמובי גפן מתאימה לנינג'ה קריספי.", "יש משטח לנינג'ה קריספי?", [])).toBeNull();
+    expect(nearNameAsExact("The Gefen mat fits the Ninja Crami.", "a mat for the Ninja Crispi?", [])).toEqual({ asked: "crispi", shown: "crami" });
+  });
+
+  it("★ any team-pass statement counts before a team line is appended", async () => {
+    const { teamPassIn } = await import("../services/reply-engine/gates");
+    expect(teamPassIn("נעביר את זה לצוות שיבדוק.")).toBe(true);
+    expect(teamPassIn("הצוות יבדוק ויעדכן כאן.")).toBe(true);
+    expect(teamPassIn("We'll check with the team.")).toBe(true);
+    expect(teamPassIn("יש לנו את זה בשחור.")).toBe(false);
+  });
+
+  it("★ a link or price the employee sent earlier is never denied", async () => {
+    const { contradictsEarlier } = await import("../services/reply-engine/gates");
+    const prev = ["הנה סרטון ההדרכה: https://youtube.com/watch?v=x"];
+    expect(contradictsEarlier("אין לי קישור לסרטון כרגע.", prev)).toHaveLength(1);
+    expect(contradictsEarlier("There's no video link available.", prev)).toHaveLength(1);
+    expect(contradictsEarlier("אין לי קישור לסרטון כרגע.", ["שלום"])).toEqual([]);
+    expect(contradictsEarlier("אין לי את המחיר.", ["המשטח עולה ₪199."])).toHaveLength(1);
+    expect(kinds(await g3("אין לי קישור לסרטון כרגע.", { previousBotReplies: prev }))).toContain("ungrounded_absence");
+  });
+
+  it("★ a return question gets returns and exchanges when the business has both", async () => {
+    const { partialReturnPolicy } = await import("../services/reply-engine/gates");
+    const k = "החזרות: עד 14 יום, זיכוי מלא. החלפות: עד 30 יום.";
+    expect(partialReturnPolicy("אפשר להחזיר עד 14 יום ולקבל זיכוי.", "איך מחזירים?", k)).toBe(true);
+    expect(partialReturnPolicy("החזרה עד 14 יום, והחלפה עד 30 יום.", "איך מחזירים?", k)).toBe(false);
+    expect(partialReturnPolicy("אפשר להחזיר עד 14 יום.", "איך מחזירים?", "החזרות: עד 14 יום.")).toBe(false);
+    expect(kinds(await g3("אפשר להחזיר עד 14 יום ולקבל זיכוי.", { incomingMessage: "איך מחזירים?", knowledge: k }))).toContain("partial_return_policy");
+  });
+
+  it("★ \"the assistant\" alone becomes the configured name", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("היי, זה העוזר של GOTCHA. במה אפשר לעזור?", { employeeName: "Daniel" }))).toContain("nameless_self");
+    expect(cleanStyle("היי, זה העוזר של GOTCHA. במה אפשר לעזור?", ["nameless_self"], [], "", "", [], "Daniel")).toBe("היי, זה Daniel מ-GOTCHA. במה אפשר לעזור?");
+    expect(cleanStyle("Hi, this is the AI assistant from GOTCHA.", ["nameless_self"], [], "", "", [], "Daniel")).toBe("Hi, this is Daniel from GOTCHA.");
+  });
+});

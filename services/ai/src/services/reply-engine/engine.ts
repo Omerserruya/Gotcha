@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -424,6 +424,12 @@ export function greetingName(raw: string | null | undefined): string | null {
   if (!t || t.length > 40 || /[\d@_./\\]/.test(t) || /\p{Ll}\p{Lu}/u.test(t)) return null;
   if (!/^\p{L}[\p{L}'\u05F3-]*(?:\s+\p{L}[\p{L}'\u05F3-]*){0,3}$/u.test(t)) return null;
   return t.split(/\s+/)[0];
+}
+
+/** A product the customer named (a distinctive word of theirs) is among this turn's results. */
+export function namedInResults(incoming: string, candidates: any[]): boolean {
+  const words = (String(incoming ?? "").toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((w) => w.length >= 3);
+  return candidates.some((c) => { const t = String(c?.title ?? "").toLowerCase(); return words.some((w) => w.length >= 4 && t.includes(w.replace(/^[הולבמש]/, ""))); });
 }
 
 /** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */
@@ -1200,11 +1206,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
-        if (onlyRepeat) {
+        if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "")) {
           // Nothing new to say: say nothing rather than the same paragraph or a canned line.
+          // Never on a product ask (prod replay 2026-11-17, Tehila): that one gets the products or a question.
           output = { reply: "", stateUpdate: {}, claims: [], handoff: null, cards: [] };
           trace.gate3 = { ...first, rewrite: "silent" };
-        } else if (!grounded && searched && first.problems.some((p) => p.kind === "ungrounded_absence") && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
+        } else if (!grounded && searched && first.problems.some((p) => p.kind === "ungrounded_absence") && needlessHandoff("reply_failed_checks", inbound, approvalPending)
+          // Only a product ask whose named item the search really did not find (prod replay 2026-11-17: on a
+          // stopper or coupon question, with the model in the results).
+          && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
           output = { reply: notFoundReply(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
         } else if (grounded) {
           output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
@@ -1220,6 +1230,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // Nothing calls for a person: a question for the team, and the AI keeps the chat.
           output = { reply: safeFallback(locale, teamAlreadyOpen), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
           cannedNow = true;
+        } else if (productAskNow(opts.incomingMessage ?? "")) {
+          // Never silent on a product ask (prod replay 2026-11-17, Tehila): one question that moves the
+          // choice on, and the question still reaches the team.
+          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
         } else {
           // The canned line already went out once: nothing new to say. The question
           // still reaches the team (once per issue) so the owner sees it.
@@ -1284,14 +1298,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A call request is never ignored (prod replay 8): there is no call tool, so it goes to the team.
   if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && CALL_REQUEST.test(opts.incomingMessage ?? "")) {
-    output = { ...output, teamQuestion: `call request: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט." : "I've passed your call request to the team, and the answer will come here in the chat."}` };
+    output = { ...output, teamQuestion: `call request: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamPassIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט." : "I've passed your call request to the team, and the answer will come here in the chat."}` };
     (trace as any).callToTeam = true;
   }
   // An open complaint answered "no information" with nothing behind it (prod replay 7):
   // the question goes to the team, and the reply says so.
   if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && noInfo(output.reply) && !needlessHandoff("x", inbound, false)) {
     const q = String(opts.incomingMessage ?? "").slice(0, 300) || null;
-    output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
+    output = { ...output, teamQuestion: q, reply: teamPassIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).deadEndToTeam = true;
   }
   // A payment or checkout failure is a support case: no cards, no product list (prod replay 2026-11-17).
@@ -1303,7 +1317,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     && !turnTools.records.some((r) => /list_products|search_products|get_product/.test(r.tool) && (r.outcome === "ok" || r.outcome === "empty"));
   const lastFail = Date.parse(String(state.facts?.[SEARCH_FAIL_FACT] ?? ""));
   if (output?.reply && searchFailedNow && Number.isFinite(lastFail) && Date.now() - lastFail < 30 * 60_000 && !output.handoff && !output.teamQuestion && !turnTools.escalation) {
-    output = { ...output, teamQuestion: `product search failed twice: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
+    output = { ...output, teamQuestion: `product search failed twice: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamPassIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).searchFailTwiceToTeam = true;
   }
   // A team question is a short subject plus the ask, never the raw message alone, and a status ask
@@ -1314,7 +1328,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A question recorded for the team this turn is told to the customer, naming it (prod replay 2026-11-17).
   // Not when the reply offers to ask instead ("Would you like me to ask?"): one or the other, never both.
-  if (output?.reply && output.teamQuestion && isNewTeamQuestion(output.teamQuestion) && !output.handoff && !teamLineIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\bbeing checked\b/iu.test(output.reply)) {
+  if (output?.reply && output.teamQuestion && isNewTeamQuestion(output.teamQuestion) && !output.handoff && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\bbeing checked\b/iu.test(output.reply)) {
     // A fixed line: the team question is internal text and is never quoted (prod replay 2026-11-17:
     // a third-person, cut-off question was read to the customer).
     output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
@@ -1323,7 +1337,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The customer is back on a subject the team already has (prod replay 2026-11-17, NE'A): say it is
   // with the team, naming it, when the reply does not.
   const openOnIt = openTeam.find((t) => sameIssue(t, String(opts.incomingMessage ?? "")));
-  if (output?.reply && openOnIt && !output.handoff && !teamLineIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
+  if (output?.reply && openOnIt && !output.handoff && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
     output = { ...output, reply: `${output.reply.trim()} ${stillCheckingLine(openOnIt, locale)}` };
     (trace as any).openItemMentioned = true;
   }

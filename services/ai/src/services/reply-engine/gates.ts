@@ -169,6 +169,11 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
 export const statusAsk = (incoming: string) => STATUS_ASK.test(incoming ?? "");
 export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
 export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
+// Any statement that the team has it or will: past, present or future (prod replay 2026-11-17: the fixed line
+// appended after a sentence that already said it, six turns running).
+const TEAM_PASS_ANY = /(?<![\u0590-\u05FF])[וש]?(?:נעביר|אעביר|נשאל|אשאל|נבדוק|נברר|הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|בודק|יטפל))(?![\u0590-\u05FF])[^.!?\n]{0,40}(?:צוות|אצלנו)?|\b(?:pass(?:ed|ing)? (?:it|this|that|your \w+) (?:on )?to the team|the team (?:will|is going to|is) (?:check|look|get back|answer)\w*|(?:i|we)(?:'ll| will) (?:ask|check with) the team)\b/iu;
+/** The reply already says the team has it (or will): no team line is appended. */
+export const teamPassIn = (reply: string) => TEAM_LINE.test(reply ?? "") || WE_WILL_WITH_TEAM.test(reply ?? "") || TEAM_PASS_ANY.test(reply ?? "");
 export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).join("").trim();
 
 // A material answered from the business description without reading the product (prod replay 12:
@@ -405,6 +410,27 @@ export function infoDeniedButKnown(reply: string, knowledge: string): string[] {
     const hits = stems.filter((w) => k.includes(w));
     return hits.length >= 2 || hits.some((w) => w.length >= 5);
   }).map((x) => x.trim().slice(0, 120));
+}
+
+// Denying what the employee itself sent earlier in this conversation (prod replay 2026-11-17: a YouTube
+// link sent, then "no video link available"): its own earlier facts stand.
+const DENIES_LINK = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)?\s*(?:כרגע\s+)?(?:קישור|לינק|סרטון)|לא\s+(?:מצאתי|מצאנו|קיים|זמין)\s+(?:קישור|לינק|סרטון)|(?:קישור|לינק|סרטון)[^.!?\n]{0,20}(?:לא\s+(?:זמין|קיים|מופיע)|אין))(?![\u0590-\u05FF])|\b(?:no (?:video|link|url)\b|(?:link|video) (?:is not|isn'?t) available|(?:don'?t|do not) have (?:a|the) (?:link|video))/iu;
+const DENIES_PRICE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)\s+(?:את\s+)?(?:ה)?מחיר|המחיר\s+לא\s+(?:מופיע|זמין|ידוע))(?![\u0590-\u05FF])|\b(?:(?:price|pricing) (?:is not|isn'?t) (?:available|listed)|(?:don'?t|do not) have the price)\b/iu;
+/** Sentences denying a link, a video or a price the employee itself gave earlier in this conversation. */
+export function contradictsEarlier(reply: string, previousBotReplies: string[]): string[] {
+  const said = previousBotReplies.join("\n");
+  const hadLink = /https?:\/\//i.test(said), hadPrice = /₪\s*\d|\d\s*(?:₪|ש["״']?ח)/.test(said);
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => (hadLink && DENIES_LINK.test(x)) || (hadPrice && DENIES_PRICE.test(x))).map((x) => x.trim().slice(0, 120));
+}
+
+// A return question answered with half the policy (prod replay 2026-11-17, Tehila: refunds only).
+const RETURN_ASK = /(?<![\u0590-\u05FF])[וש]?(?:להחזיר|מחזיר|מחזירה|מחזירים|אחזיר|נחזיר|החזרה|החזרות|החזר|להחליף|מחליף|מחליפים|אחליף|החלפה|החלפות)(?![\u0590-\u05FF])|\b(?:return|returns|exchange|exchanges)\b/iu;
+const SAYS_RETURN = /(?<![\u0590-\u05FF])[וש]?ה?(?:החזרה|החזרות|החזר|להחזיר|זיכוי)(?![\u0590-\u05FF])|\b(?:return|refund)/iu;
+const SAYS_EXCHANGE = /(?<![\u0590-\u05FF])[וש]?ה?(?:החלפה|החלפות|להחליף)(?![\u0590-\u05FF])|\bexchange/iu;
+/** The business offers returns and exchanges, the customer asks about one, and the reply gives only one of them. */
+export function partialReturnPolicy(reply: string, incoming: string, knowledge: string): boolean {
+  if (!RETURN_ASK.test(incoming ?? "") || !SAYS_RETURN.test(knowledge ?? "") || !SAYS_EXCHANGE.test(knowledge ?? "")) return false;
+  return SAYS_RETURN.test(reply ?? "") !== SAYS_EXCHANGE.test(reply ?? "");
 }
 
 /** Sentences that say the address is not known. */
@@ -722,9 +748,14 @@ export function foreignLanguageSentences(reply: string, titles: string[] = []): 
 const PAYMENT_CLAIM = /(?<![֐-׿])(?:לא\s+(?:חויב|חויבת|חויבתם|חויבה|חויבו|נגבה|נגבו|ירד(?:\s+(?:לך|לכם))?\s+(?:כסף|חיוב)|נלקח\s+כסף)|החיוב\s+(?:בוטל|יבוטל|הוחזר|לא\s+עבר|לא\s+בוצע)|הכסף\s+(?:יוחזר|הוחזר|חזר|יחזור|יזוכה)|(?:יוחזר|הוחזר|יזוכה|זוכה|זיכינו|נזכה)\s+(?:לך|לכם|לחשבון|לכרטיס|בחזרה)|קיבלת\s+זיכוי|(?:תקבל|תקבלי|תקבלו)\s+(?:זיכוי|החזר)|אפשר\s+(?:להזמין|לבצע\s+הזמנה)\s+(?:שוב|מחדש))(?![֐-׿])|\b(?:(?:were|was|have|has|haven'?t|hasn'?t|weren'?t|wasn'?t)\s+(?:not\s+)?(?:been\s+)?charged|not\s+(?:been\s+)?charged|(?:the\s+)?charge\s+(?:was|has been|will be|is)\s+(?:cancelled|canceled|reversed|refunded|voided)|you(?:'ll| will)\s+(?:get|receive)\s+(?:a\s+|your\s+)?(?:refund|money back)|(?:has|have|was|were)\s+(?:been\s+)?refunded|you can (?:order|place (?:the|a new|another) order) again)\b/iu;
 const PAYMENT_EVIDENCE = /refund|financial_status|date_paid|payment_status|transaction_id|chargeback|voided|"paid"|"total_refunded"|זיכוי|החזר כספי/i;
 /** Payment or charge sentences that no tool result this turn backs. */
+// Speculation about what happened to a payment ("maybe the approval did not become a charge"): never a
+// fact, whatever a tool returned (prod replay 2026-11-17, Smoovee severe).
+const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
 export function ungroundedPayment(reply: string, tools: ToolRunRecord[]): string[] {
-  if (tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return [];
-  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => PAYMENT_CLAIM.test(x)).map((x) => x.trim().slice(0, 120));
+  const sentences = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
+  const speculation = sentences.filter((x) => PAYMENT_SPECULATION.test(x)).map((x) => x.trim().slice(0, 120));
+  if (tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return speculation;
+  return [...new Set([...sentences.filter((x) => PAYMENT_CLAIM.test(x)).map((x) => x.trim().slice(0, 120)), ...speculation])];
 }
 export const PAYMENT_WORDS = /(?<![֐-׿])[וש]?(?:חיוב|חויב|חויבתי|תשלום|שילמתי|כסף|זיכוי|החזר|כרטיס\s+אשראי)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|money|credit card)\b/iu;
 
@@ -782,10 +813,24 @@ export function wrongSelfName(reply: string, employeeName: string | null | undef
 // title, or the reply must say it is a different, close option.
 const ALTERNATIVE = /(?<![֐-׿])(?:דומה|דומים|קרוב|קרובה|במקום|חלופה|חלופי|אחר|אחרת|לא\s+(?:מצאתי|מצאנו|מוצא|מוצאים|נמצא)|אין\s+(?:לנו|כרגע)|בשם\s+הזה)(?![֐-׿])|\b(?:similar|closest|close (?:option|match)|instead|alternative|different (?:model|one)|not (?:found|by that name)|didn'?t find)\b/iu;
 const ASK_STOP = new Set(["יש", "לכם", "לך", "אני", "מחפש", "מחפשת", "מחפשים", "רוצה", "רוצים", "צריך", "צריכה", "אפשר", "דגם", "דגמים", "מוצר", "מתאים", "מתאימה", "כמה", "עולה", "מחיר", "איזה", "איזו", "בבקשה", "תודה", "have", "want", "need", "looking", "model", "price", "does", "with", "please", "thanks"]);
-/** The customer's distinguishing word that the named product's title lacks while a title word is close to it. */
+const close = (w: string, a: string) => w !== a && !w.includes(a) && !a.includes(w) && w.length >= 3 && w.slice(0, 2) === a.slice(0, 2) && Math.abs(w.length - a.length) <= 3;
+// "fits <Y>" / "מתאימה ל<Y>": the device or model the reply attributes the product to.
+const FITS_TARGET = /(?<![\u0590-\u05FF])(?:מתאים|מתאימה|מתאימים|מתאימות|מיועד|מיועדת|תואם|תואמת)\s+ל([\u0590-\u05FF'"׳״-]+(?:\s+[\u0590-\u05FF'"׳״-]+)?)|\b(?:fits|suits|works with|is for|made for|compatible with)\s+(?:the\s+|a\s+|your\s+)?(\S+(?:\s+\S+)?)/giu;
+/** The customer's distinguishing word that the named product's title lacks while a title word is close to it,
+ * or that the reply's "fits <Y>" names as a close but different model. */
 export function nearNameAsExact(reply: string, incoming: string, titles: string[]): { asked: string; shown: string } | null {
-  if (!titles.length || ALTERNATIVE.test(reply ?? "")) return null;
+  if (ALTERNATIVE.test(reply ?? "")) return null;
   const theirs = (String(incoming ?? "").match(/\p{L}{4,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase())).map((w) => stem(w));
+  // The model the reply says the product fits (prod replay 2026-11-17: "קריספי" asked, "מתאימה לנינג'ה קרמי").
+  for (const m of String(reply ?? "").matchAll(FITS_TARGET)) {
+    const target = (String(m[1] ?? m[2] ?? "").match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
+    for (const a of theirs) {
+      if (target.some((w) => w === a || w.includes(a) || a.includes(w))) continue;
+      const hit = target.find((w) => close(w, a));
+      if (hit) return { asked: a, shown: hit };
+    }
+  }
+  if (!titles.length) return null;
   const named = titles.filter((t) => t && String(reply ?? "").toLowerCase().includes(String(t).toLowerCase().split(/\s+/).find((w) => w.length >= 3) ?? "\u0000"));
   for (const t of named) {
     const words = (String(t).match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
@@ -853,7 +898,10 @@ const ORDER_ABSENCE = /(?<![֐-׿])(?:אין\s+(?:לנו\s+|לי\s+)?(?:מספר
 const ORDER_LOOKUP_TOOL = /(?:list_customer_orders|get_customer_orders|find_latest_order|get_orders|search_orders|get_order|order_lookup|list_orders)$/;
 /** Order-absence sentences with no order lookup this turn. */
 export function ungroundedOrderAbsence(reply: string, tools: ToolRunRecord[]): string[] {
-  if (tools.some((t) => ORDER_LOOKUP_TOOL.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"))) return [];
+  // An empty lookup backs "no order"; one that FOUND orders contradicts it (prod replay 2026-11-17:
+  // "no order was created" while the lookup found 97858, cancelled). Only no lookup at all, or found orders, flag it.
+  const lookups = tools.filter((t) => ORDER_LOOKUP_TOOL.test(t.tool));
+  if (lookups.some((t) => t.outcome === "empty") && !lookups.some((t) => t.outcome === "ok")) return [];
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => ORDER_ABSENCE.test(x)).map((x) => x.trim().slice(0, 120));
 }
 // "Per the terms" as the reason not to help (the same Smoovee turn): never the answer.
@@ -881,6 +929,10 @@ export function claimsAttachment(reply: string, recentInbound: string[]): string
   if (recentInbound.slice(-3).some((m) => MEDIA_SENT.test(String(m ?? "")))) return [];
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => GOT_MEDIA.test(x)).map((x) => x.trim().slice(0, 120));
 }
+
+// The employee as "the assistant" with no name (prod replay 2026-11-17, GOTCHA: "זה העוזר של GOTCHA" for Daniel).
+const NAMELESS_SELF = /(?<![\u0590-\u05FF])(?:זה|כאן|אני)\s+ה(?:עוזר|עוזרת|נציג|נציגה|בוט)(?:\s+ה?(?:דיגיטלי|דיגיטלית|וירטואלי|וירטואלית|החכם|החכמה))?\s+(?:של|מ-?)|\b(?:this is|i'?m|i am)\s+(?:the\s+|your\s+)?(?:ai\s+|virtual\s+|digital\s+)?assistant\s+(?:of|from|at)\b/iu;
+const NAMELESS_SELF_G = /(?<![\u0590-\u05FF])(זה|כאן|אני)\s+ה(?:עוזר|עוזרת|נציג|נציגה|בוט)(?:\s+ה?(?:דיגיטלי|דיגיטלית|וירטואלי|וירטואלית|החכם|החכמה))?\s+(?:של|מ-?)\s*/gu;
 
 // A clarifying question offering an option the customer already gave (live 2026-11-17, NE'A: "face
 // tint" asked back as "for the face or the lips?").
@@ -995,6 +1047,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
   absent.push(...ungroundedOrderAbsence(reply, i.tools).filter((x) => !absent.includes(x)));
+  absent.push(...contradictsEarlier(reply, i.previousBotReplies ?? []).filter((x) => !absent.includes(x)));
   // "Not on file" about something the knowledge does mention (prod replay 12: pickup "בתיאום מראש").
   absent.push(...infoDeniedButKnown(reply, i.knowledge ?? ""));
   // "The address is not in my details" while the prompt gives one (prod replay 10, Tehila).
@@ -1045,6 +1098,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   const extra = notNarrowed(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (extra.length) problems.push({ kind: "not_narrowed", extra });
   if (unnamedRecommendation(reply, i.candidateTitles ?? [])) problems.push({ kind: "unnamed_recommendation" });
+  if (partialReturnPolicy(reply, i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "partial_return_policy" });
   const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (near) problems.push({ kind: "near_name", asked: near.asked, shown: near.shown });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
@@ -1085,6 +1139,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
+  if (i.employeeName && NAMELESS_SELF.test(reply)) style.push("nameless_self");
   if (returnsWork(reply)) style.push("returns_work");
   if (termsRefusal(reply)) style.push("terms_refusal");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
@@ -1225,6 +1280,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     .replace(/(?<![֐-׿])((?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו))\s+(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "$1")
     .replace(/,\s*(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "")
     .replace(/(^|[.!?]\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)\s*,\s*/gu, "$1");
+  if (c.has("nameless_self") && employeeName) s = s.replace(NAMELESS_SELF_G, (_m, lead) => `${lead} ${employeeName} מ-`).replace(/\b(this is|i'?m|i am)\s+(?:the\s+|your\s+)?(?:ai\s+|virtual\s+|digital\s+)?assistant\s+(?:of|from|at)\s+/giu, (_m, lead) => `${lead} ${employeeName} from `);
   if (c.has("asks_known")) { const known = new Set(asksKnown(s, incoming)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !known.has(x.trim())).join("").trim(); }
   if (c.has("returns_work")) s = dropSentences(s, RETURNS_WORK);
   if (c.has("terms_refusal")) s = dropSentences(s, TERMS_REFUSAL);
@@ -1303,6 +1359,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
+    if (p.kind === "partial_return_policy") lines.push("- The business has both returns and exchanges: give both, each with its time limit, from the knowledge.");
     if (p.kind === "unnamed_recommendation") lines.push("- You recommend a product without naming it. Name it in the text first, then its key details and price (\"<name>: <details>, <price>\").");
     if (p.kind === "near_name") lines.push(`- The customer named "${p.asked}"; the product you name ("${p.shown}") is another model with a similar name. Say you did not find "${p.asked}" by that name, and offer the other only as a different, close option.`);
     if (p.kind === "dangling_reference") lines.push(`- These sentences point at a list or cards that this message does not carry (${p.claims.join("; ")}). Name the items themselves in the text, or leave the pointer out.`);
@@ -1332,6 +1389,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
       if (c.has("terms_refusal")) lines.push("- Never give the terms as the reason not to help: look it up (the customer's own order lookup, the knowledge) or say what the team will do.");
+      if (c.has("nameless_self")) lines.push("- When you introduce yourself, use your own name (Name above), not \"the assistant\".");
       if (c.has("asks_known")) lines.push("- Do not ask about a detail the customer already gave in their message; use it.");
       if (c.has("returns_work")) lines.push("- Never hand the work back to the customer (\"try another name\", \"check the website\"): search again yourself, narrower, or answer from what the business's knowledge lists, and ask at most one question about what they need.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");

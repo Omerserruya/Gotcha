@@ -582,7 +582,8 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
         { toolCalls: [respond("c3", { reply: "התיק עולה ₪120." })] },
         { toolCalls: [respond("c4", { reply: "בטח, ₪150 בלבד." })] },
       );
-      const r = await runReplyEngineTurn(opts, "autonomous");
+      // Not a product ask: silence is allowed here (a product ask never is, below).
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה זה עולה?" }, "autonomous");
       expect(r.trace.gate3.rewrite).toBe("silent");
       expect(r.reply).toBeNull();
       expect(r.escalation).toBeNull();
@@ -1280,5 +1281,22 @@ describe("an offer to ask is not followed by \"I passed it\"", () => {
     h.responses.push({ toolCalls: [respond("oa1", { reply: "לא בטוחים בזה. רוצה שאבדוק את זה מול הצוות?", team_question: "התאמה למיקסר" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "זה מתאים למיקסר שלי?" }, "autonomous");
     expect(r.reply).not.toMatch(/העברתי את זה לצוות/);
+  });
+});
+
+describe("never silent on a product ask (prod replay 2026-11-17, Tehila)", () => {
+  it("★ the canned line already went out and the checks failed: a question, and the team still gets it", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [], pending: [], turnCount: 3 });
+    h.responses.push(
+      { toolCalls: [respond("s1", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("s2", { reply: "בטח, ₪150 בלבד." })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דווקא חגיגי, גווני כחול" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.reply ?? "").not.toBe("");
+    expect(r.trace.gate3.rewrite).not.toBe("silent");
+    expect(h.teamQuestions).toHaveLength(1);
   });
 });
