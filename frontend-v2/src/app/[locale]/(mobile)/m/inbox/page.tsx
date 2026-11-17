@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
 import { channelName } from '@/api/contracts/inbox';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { ListLive } from '@/features/inbox/ListLive';
 import { loadFilterChips } from '@/features/inbox/load-filter-chips';
 import { loadInbox } from '@/features/inbox/load-inbox';
@@ -12,6 +13,7 @@ import {
   phoneCountViews,
   phoneViewQuery,
   phoneViews,
+  withRelevance,
   shownView,
   soloView,
 } from '@/features/inbox/inbox-views';
@@ -52,7 +54,8 @@ export default async function Page({
   const nav = await getTranslations('navigation');
   const channelNames = await getTranslations('channels');
   const { view: rawView, cursor, channel: rawChannel, q: rawQ } = await searchParams;
-  const askedView = parseInboxView(rawView);
+  const relevance = inboxRelevanceOn();
+  const askedView = parseInboxView(rawView, relevance);
   const explicit = rawView === askedView;
   const channels = parseChannelFilters(rawChannel);
   const channelParam = channels.join(',');
@@ -66,7 +69,7 @@ export default async function Page({
       null,
       explicit,
       q === '' ? null : q,
-      phoneViewQuery,
+      withRelevance(phoneViewQuery, relevance),
     ),
     loadFilterChips(channels),
   ]);
@@ -106,7 +109,10 @@ export default async function Page({
       {/* Renders nothing: re-reads this page when a message arrives or a conversation changes. */}
       <ListLive openId={null} />
       {/* Renders nothing: each view's size, for the chips, kept current by the platform's events. */}
-      <RailUnreadCounts views={phoneCountViews(data.soleHuman)} />
+      <RailUnreadCounts
+        views={phoneCountViews(data.soleHuman, relevance)}
+        hideIrrelevant={relevance}
+      />
       <MobileBar
         brand
         actions={
@@ -116,7 +122,7 @@ export default async function Page({
       <div className={ui.scroll}>
         <MobileInboxSearch value={q} keep={keepSearch} placeholder={t('inbox.search')} />
         <nav className={ui.chips} aria-label={t('inbox.views')}>
-          {phoneViews(data.soleHuman).map((id) => (
+          {phoneViews(data.soleHuman, relevance).map((id) => (
             <Link
               key={id}
               href={{ pathname: '/m/inbox', query: { ...keepView, view: id } }}
@@ -139,6 +145,7 @@ export default async function Page({
           colleagues={data.colleagues}
           filtered={channels.length > 0 || q !== ''}
           soleHuman={data.soleHuman}
+          relevance={relevance}
         />
         {data.hasMore && data.nextCursor !== null ? (
           <Link

@@ -4,6 +4,7 @@ import {
   DEFAULT_INBOX_VIEW,
   shownView,
   viewQuery,
+  withRelevance,
   type InboxView,
   type QueueChannelFilter,
   type InboxPeriod,
@@ -502,7 +503,11 @@ export async function loadConversation(conversationId: string): Promise<Conversa
  * `rows: null` when the list could not be read; `total` is `undefined` on a
  * service that sends no `viewTotal` - absent, never 0.
  */
-export async function loadOpenConversations(limit: number): Promise<{
+export async function loadOpenConversations(
+  limit: number,
+  /** `INBOX_RELEVANCE`: leave out what is personal, a notice or marketing, as the inbox's "Open" does. */
+  relevance = false,
+): Promise<{
   readonly rows: readonly ConversationRow[] | null;
   readonly total: number | undefined;
 }> {
@@ -511,7 +516,12 @@ export async function loadOpenConversations(limit: number): Promise<{
       endpoint: inboxEndpoints.list(),
       payload: queuePageSchema,
       raw: true,
-      query: { ...viewQuery('open', null), limit, cursor: '', total: '1' },
+      query: {
+        ...withRelevance(viewQuery, relevance)('open', null),
+        limit,
+        cursor: '',
+        total: '1',
+      },
     })
     .then((page) => ({ rows: page.data, total: page.viewTotal }))
     .catch((cause: unknown) => {

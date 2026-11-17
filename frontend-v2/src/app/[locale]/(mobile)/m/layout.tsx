@@ -10,6 +10,7 @@ import { loadPermissions } from '@/shell/load-permissions';
 import { loadMessages } from '@/i18n/load-messages';
 import { isLocale, DEFAULT_LOCALE } from '@/i18n/locales';
 import { AppProviders } from '@/shell/AppProviders';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { loadViewerId } from '@/features/roles/load-person';
 import { MobileShell } from '@/shell/mobile/MobileShell';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
@@ -148,6 +149,7 @@ export default async function AuthenticatedLayout({
         permissionsStatus={status}
         support={support}
         soleHuman={soleHuman}
+        inboxRelevance={inboxRelevanceOn()}
       >
         <WithSupportBanner>
           <RscLoopGuard>

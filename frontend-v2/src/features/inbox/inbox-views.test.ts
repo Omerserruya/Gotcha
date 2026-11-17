@@ -88,7 +88,8 @@ describe('★ an unknown view is the default, never an error page', () => {
   it('★★ and accepts every view the rail can write', () => {
     // Both directions: a parser that only knew `queue` would satisfy the test
     // above and turn every rail item back into the bug.
-    for (const id of INBOX_VIEW_IDS) expect(parseInboxView(id)).toBe(id);
+    // `irrelevant` with its flag on (`INBOX_RELEVANCE`, relevance.test.ts holds it off).
+    for (const id of INBOX_VIEW_IDS) expect(parseInboxView(id, true)).toBe(id);
   });
 });
 
@@ -203,9 +204,9 @@ describe('★★ "all" - every conversation, as an assistant counts them (Backen
 });
 
 describe('★★ one view for what GOTCHA handles, not two (Omer, 2026-10-11)', () => {
-  it('★★ the views are seven, and neither "AI managed" nor "Flow managed" is one', () => {
+  it('★★ the views are eight, and neither "AI managed" nor "Flow managed" is one', () => {
     // The rail's own list is asserted in shell/navigation.test.ts (the shell may not import this).
-    // `open` is one person's view (2026-11-15).
+    // `open` is one person's view (2026-11-15); `irrelevant` is flagged (2026-11-17).
     expect(INBOX_VIEW_IDS).toEqual([
       'queue',
       'mine',
@@ -214,6 +215,7 @@ describe('★★ one view for what GOTCHA handles, not two (Omer, 2026-10-11)', 
       'resolved',
       'all',
       'open',
+      'irrelevant',
     ]);
   });
 

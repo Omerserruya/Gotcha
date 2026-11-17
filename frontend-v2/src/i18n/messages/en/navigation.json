@@ -30,6 +30,7 @@
     "mine": "Assigned to me",
     "active": "Active",
     "gotcha": "Handled by GOTCHA",
+    "irrelevant": "Personal and not relevant",
     "resolved": "Resolved",
     "all": "All conversations"
   },

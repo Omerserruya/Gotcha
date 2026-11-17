@@ -48,6 +48,7 @@ import {
 } from '@/api/endpoints/registry';
 import { currentUserSchema, isSoleHuman } from '@/api/contracts/identity';
 import { loadOpenConversations } from '@/features/inbox/load-inbox';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 
 import type { NeedsYouItem } from './QueueList';
 import { logger } from '@/observability/logger';
@@ -174,7 +175,7 @@ async function loadSoloOpen(api: ReturnType<typeof serverApi>): Promise<HomeData
       return null;
     });
   if (me === null || !isSoleHuman(me)) return null;
-  const { rows, total } = await loadOpenConversations(OPEN_CARD_ROWS);
+  const { rows, total } = await loadOpenConversations(OPEN_CARD_ROWS, inboxRelevanceOn());
   return {
     // A full page with no size from the route is not a count: the rest are unknown.
     count: total ?? (rows !== null && rows.length < OPEN_CARD_ROWS ? rows.length : null),

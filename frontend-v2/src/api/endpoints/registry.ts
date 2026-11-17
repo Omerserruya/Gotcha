@@ -2009,6 +2009,15 @@ export const inboxEndpoints = {
     endpoint('/api/conversations/{conversationId}/stop-ai', { conversationId }),
 
   /**
+   * A person's word on what a conversation is (Backend, agreed 2026-11-17):
+   * PUT `{ category: 'business' | 'personal' }`, answered with the relevance
+   * object, `overriddenBy` set to the caller. It sticks: the classifier never
+   * relabels it. Allowed to whoever may reply in the conversation.
+   */
+  relevance: (conversationId: string) =>
+    endpoint('/api/conversations/{conversationId}/relevance', { conversationId }),
+
+  /**
    * Put a conversation back in the queue - the design's *"requeue"*.
    *
    * ★★ ADDED FOR THE RIGHT-CLICK MENU, AND MEASURED RATHER THAN ASSUMED.

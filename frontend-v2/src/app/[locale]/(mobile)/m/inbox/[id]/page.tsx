@@ -10,6 +10,9 @@ import { initials } from '@/features/inbox/initials';
 import { ListLive } from '@/features/inbox/ListLive';
 import { loadInbox } from '@/features/inbox/load-inbox';
 import { MarkReadOnOpen } from '@/features/inbox/MarkReadOnOpen';
+import { RelevanceControl } from '@/features/inbox/RelevanceControl';
+import { relevanceOverride, relevanceTag } from '@/features/inbox/relevance';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import styles from '@/features/mobile/inbox/mobile-inbox.module.css';
 import { MobileCopilotCard } from '@/features/mobile/inbox/MobileCopilotCard';
@@ -139,6 +142,20 @@ export default async function Page({
         }
       />
       <div className={styles.thread}>
+        {/* What it is, and the one-click override (`INBOX_RELEVANCE`). */}
+        {inboxRelevanceOn() ? (
+          <RelevanceControl
+            conversationId={open.id}
+            tag={relevanceTag(open)}
+            override={relevanceOverride(open)}
+            classes={{
+              group: styles.relevanceStrip,
+              tag: ui.tag,
+              button: styles.relevanceButton,
+              problem: styles.relevanceProblem,
+            }}
+          />
+        ) : null}
         <div className={styles.stream}>
           {data.detail ? (
             <Suspense key={open.id} fallback={<StreamSkeleton />}>

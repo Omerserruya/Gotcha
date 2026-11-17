@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { channelName } from '@/api/contracts/inbox';
 import { useRouter } from '@/i18n/navigation';
 import { usePermissions } from '@/permissions/permissions-context';
+import { useInboxRelevance } from '@/tenant/inbox-relevance-context';
 import { useSoleHuman } from '@/tenant/sole-human-context';
 
 import styles from './CommandPalette.module.css';
@@ -71,6 +72,7 @@ export function CommandPalette() {
   const locale = useLocale();
   const { canSee } = usePermissions();
   const soleHuman = useSoleHuman();
+  const relevance = useInboxRelevance();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -152,12 +154,12 @@ export function CommandPalette() {
 
   const screens = useMemo(
     () =>
-      destinations(canSee, soleHuman).map((d) => ({
+      destinations(canSee, soleHuman, relevance).map((d) => ({
         key: `screen-${d.id}`,
         href: d.href,
         label: d.labelKeys.map((k) => t(k as 'primary.home')).join(' · '),
       })),
-    [canSee, soleHuman, t],
+    [canSee, soleHuman, relevance, t],
   );
 
   const items: readonly Item[] = useMemo(() => {

@@ -241,7 +241,9 @@ describe('★★ what the row actually says about the customer', () => {
   });
 
   it('★★ no name: the number the conversation is on, as a person reads it (prod 2026-11-17)', async () => {
-    await show([row({ customerName: null, customerExternalId: '972521234567', channel: 'WHATSAPP' })]);
+    await show([
+      row({ customerName: null, customerExternalId: '972521234567', channel: 'WHATSAPP' }),
+    ]);
     const handle = screen.getByTestId('customer-handle');
     expect(handle).toHaveTextContent('052-123-4567');
     expect(handle).toHaveAttribute('dir', 'ltr');
@@ -834,8 +836,26 @@ describe('⚠⚠ two tags on real data, not six where four are fiction', () => {
     render(
       await ConversationList({
         rows: [
-          row({ id: 'c1', channel: 'WHATSAPP', channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } }),
-          row({ id: 'c2', channel: 'WHATSAPP', channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } }),
+          row({
+            id: 'c1',
+            channel: 'WHATSAPP',
+            channelAccount: {
+              id: 'ch1',
+              channel: 'WHATSAPP',
+              displayName: 'Gotcha',
+              multipleOfChannel: true,
+            },
+          }),
+          row({
+            id: 'c2',
+            channel: 'WHATSAPP',
+            channelAccount: {
+              id: 'ch9',
+              channel: 'WHATSAPP',
+              displayName: 'Only',
+              multipleOfChannel: false,
+            },
+          }),
           row({ id: 'c3', channel: 'WHATSAPP' }),
         ],
         cap: 10,
@@ -1862,5 +1882,38 @@ describe('★★ I4 - a row’s time by its age (Omer, 2026-10-13; F1, 2026-11-0
     } finally {
       intl.locale = 'en';
     }
+  });
+});
+
+describe('★★ not relevant, and which kind (INBOX_RELEVANCE, Omer 2026-11-17)', () => {
+  const tagged = (category: string, relevance: boolean) =>
+    ConversationList({
+      rows: [row({ relevance: { category } })],
+      cap: 10,
+      now: NOW,
+      hasMore: false,
+      relevance,
+    });
+
+  it.each([
+    ['personal', messages.relevance.tag.personal],
+    ['notice', messages.relevance.tag.notice],
+    ['marketing', messages.relevance.tag.marketing],
+  ])('★★ %s wears its type on the row', async (category, words) => {
+    render(await tagged(category, true));
+    expect(screen.getByTestId('tag-relevance-c1')).toHaveTextContent(words);
+  });
+
+  it('★★ a reply to our own message, business and unclear wear nothing (rule 3)', async () => {
+    for (const category of ['reply_to_outbound', 'business', 'unclear']) {
+      const { unmount } = render(await tagged(category, true));
+      expect(screen.queryByTestId('tag-relevance-c1'), category).toBeNull();
+      unmount();
+    }
+  });
+
+  it('★★ the flag off: no tag, whatever the platform says', async () => {
+    render(await tagged('personal', false));
+    expect(screen.queryByTestId('tag-relevance-c1')).toBeNull();
   });
 });

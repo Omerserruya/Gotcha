@@ -23,12 +23,14 @@ export function destinations(
   canSee: (permission?: string) => boolean,
   /** One person: the inbox's views are the rail's for one person ("Open"). */
   soleHuman = false,
+  /** `INBOX_RELEVANCE`: the inbox's "personal and not relevant" view. */
+  relevance = false,
 ): readonly Destination[] {
   const out: Destination[] = [];
   const add = (item: NavigationItem) => {
     if (!canSee(item.permission)) return;
     out.push({ id: item.id, href: item.href, labelKeys: [item.labelKey] });
-    for (const child of childrenFor(item, soleHuman)) {
+    for (const child of childrenFor(item, soleHuman, relevance)) {
       if (!canSee(child.permission)) continue;
       const href =
         child.href ??

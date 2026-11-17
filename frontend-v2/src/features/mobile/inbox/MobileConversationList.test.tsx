@@ -85,7 +85,9 @@ describe('★★ which number on the phone row (Omer, 2026-11-16)', () => {
 
   it('★★ two numbers: "וואטסאפ · מכירות", beside the owner tag', async () => {
     await list({ id: 'ch1', channel: 'WHATSAPP', displayName: 'מכירות', multipleOfChannel: true });
-    expect(screen.getByTestId('mobile-account-c1')).toHaveTextContent(`${channels.name.WHATSAPP} · מכירות`);
+    expect(screen.getByTestId('mobile-account-c1')).toHaveTextContent(
+      `${channels.name.WHATSAPP} · מכירות`,
+    );
     expect(screen.getByText(mobile.inbox.owner.waiting)).toBeInTheDocument();
   });
 
@@ -116,5 +118,34 @@ describe('★★ no name: the number, never "Someone" (prod 2026-11-17)', () => 
   it('★ neither: "Someone"', async () => {
     await list({ customerName: null, customerExternalId: null });
     expect(screen.getByText(inbox.queue.unnamed)).toBeInTheDocument();
+  });
+});
+
+describe('★★ not relevant on the phone row (INBOX_RELEVANCE, Omer 2026-11-17)', () => {
+  const list = async (category: string, relevance: boolean) =>
+    render(
+      await MobileConversationList({
+        rows: [{ ...handoff, relevance: { category } } as never],
+        now: new Date('2026-11-15T10:00:00Z'),
+        meId: 'u1',
+        colleagues: [],
+        filtered: false,
+        relevance,
+      }),
+    );
+
+  it('★★ the type, in Hebrew', async () => {
+    await list('notice', true);
+    expect(screen.getByTestId('mobile-relevance-c1')).toHaveTextContent('חשבונית או התראה');
+  });
+
+  it('★ a reply to our own message wears nothing', async () => {
+    await list('reply_to_outbound', true);
+    expect(screen.queryByTestId('mobile-relevance-c1')).toBeNull();
+  });
+
+  it('★★ the flag off: no tag', async () => {
+    await list('personal', false);
+    expect(screen.queryByTestId('mobile-relevance-c1')).toBeNull();
   });
 });

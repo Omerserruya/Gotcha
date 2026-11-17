@@ -529,5 +529,20 @@
       "useAsReply": "Use as reply",
       "retry": "Try again"
     }
+  },
+  "relevance": {
+    "label": "Conversation type",
+    "tag": {
+      "personal": "Personal",
+      "notice": "Invoice or notification",
+      "marketing": "Newsletter or ad"
+    },
+    "markBusiness": "This is a business enquiry",
+    "markIrrelevant": "Mark as not relevant",
+    "problem": {
+      "not_found": "This conversation is no longer here. Refresh to see where things stand.",
+      "not_allowed": "Only someone who can reply in this conversation can change its type, so nothing changed.",
+      "failed": "That didn't go through, and nothing changed. Try again in a moment."
+    }
   }
 }
