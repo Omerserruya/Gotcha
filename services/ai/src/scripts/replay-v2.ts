@@ -41,7 +41,8 @@ export function parseArgs(argv: string[]): Args {
     cap: n(get("--cap"), 150),
     dry: argv.includes("--dry"),
     keep: argv.includes("--keep"),
-    out: get("--out") ?? "/tmp/replay-v2.md",
+    // Each run its own file: the default carries the run's time, and "{run}" in --out is replaced by it.
+    out: reportPath(get("--out")),
   };
 }
 
@@ -87,6 +88,12 @@ export function stagesLine(trace: any): string {
   // Argument NAMES only (never values: a search value is the customer's words).
   const tools = ((trace?.tools ?? []) as any[]).map((x) => `${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}${x.args && Object.keys(x.args).length ? `:{${Object.keys(x.args).join(",")}}` : ""}`).join(" ");
   return `- stages: ${marks || "-"} | rounds=${trace?.rounds ?? "?"} rewriteRounds=${trace?.rewriteRounds ?? 0} autoLookupMs=${trace?.autoLookupMs ?? 0} rewriteMs=${trace?.rewriteMs ?? 0} | tools: ${tools || "-"}`;
+}
+
+/** The report's path: --out as given, "{run}" in it replaced by the run's time; by default /tmp/replay-v2-<time>.md. */
+export function reportPath(out: string | undefined, now = new Date()): string {
+  const run = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return out ? out.replace("{run}", run) : `/tmp/replay-v2-${run}.md`;
 }
 
 /** The turns to replay: per tenant, newest conversations first, each one's customer messages in order; capped. */
@@ -297,12 +304,13 @@ async function main() {
     summaries.push(s);
     // As each tenant finishes (a cut run kept only the tenants written before it, 2026-11-17).
     console.log(`[replay] ${JSON.stringify(s)}`);
-    try { fs.writeFileSync(args.out, [...md, "", "(partial: written as each tenant finished)"].join("\n")); } catch { /* the final write still runs */ }
+    try { fs.writeFileSync(args.out, [...md, "", "(partial: written as each tenant finished)"].join("\n") + "\n"); } catch { /* the final write still runs */ }
   }
 
   md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | cleaned | gate3 fallbacks | silent | canned lines | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.cleaned} | ${s.fallbacks} | ${s.silent} | ${s.cannedLines} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
-  fs.writeFileSync(args.out, md.join("\n"));
+  // Ends with a newline, so a report cat'ed after another starts on a line of its own.
+  fs.writeFileSync(args.out, md.join("\n") + "\n");
 
   if (!args.keep && replayed.size) {
     const del: any = await withCrossTenantAccess(() => (prisma as any).conversationState.deleteMany({ where: { lane: "replay", conversationId: { in: [...replayed] } } }));

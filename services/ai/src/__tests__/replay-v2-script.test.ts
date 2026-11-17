@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/connectors", () => ({}));
 vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn() }));
-import { parseArgs, planReplay, gateAsOf, stagesLine } from "../scripts/replay-v2";
+import { parseArgs, planReplay, gateAsOf, stagesLine, reportPath } from "../scripts/replay-v2";
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
 function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }, opts: { ownerRecent?: boolean; handovers?: Record<string, any[]> } = {}) {
@@ -116,5 +116,14 @@ describe("the stages line (numbers and tool names only)", () => {
     const withArgs = stagesLine({ tools: [{ tool: "search_products", outcome: "empty", ms: 636, args: { query: "a customer's words", in_stock_only: true } }] });
     expect(withArgs).toContain("search_products:empty:636ms:{query,in_stock_only}");
     expect(withArgs).not.toContain("customer");
+  });
+});
+
+describe("each run its own report file", () => {
+  it("★ the default carries the run's time; {run} in --out is replaced; a plain --out stays", () => {
+    const now = new Date("2026-11-17T21:04:05.678Z");
+    expect(reportPath(undefined, now)).toBe("/tmp/replay-v2-2026-11-17T21-04-05.md");
+    expect(reportPath("/tmp/smoovee-{run}.md", now)).toBe("/tmp/smoovee-2026-11-17T21-04-05.md");
+    expect(reportPath("/tmp/r.md", now)).toBe("/tmp/r.md");
   });
 });
