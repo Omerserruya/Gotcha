@@ -1081,3 +1081,59 @@ describe("prod replay 9 (2026-11-17)", () => {
     expect(removedSentences("א ב. ג ד. ה ו.", "א ב. ה ו.")).toEqual(["ג ד."]);
   });
 });
+
+describe("prod replay 10 (2026-11-17)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ the business block carries the profile address, with the instruction to give it", async () => {
+    const { businessBlock } = await import("../services/reply-engine/prompt");
+    const b = businessBlock({ organizationName: "תהילה", address: "יוסף לוי 8/2, נהריה" } as any);
+    expect(b).toMatch(/^# The business/);
+    expect(b).toContain("Address: יוסף לוי 8/2, נהריה. Asked where the business or the studio is");
+    expect(businessBlock(null)).toMatch(/^# The business/);
+  });
+
+  it("★ v2's knowledge rule lets the business details stand; legacy unchanged", async () => {
+    const { buildKnowledgeContext } = await import("../services/knowledge.service");
+    const chunks = [{ content: "x", score: 0.6, documentTitle: "FAQ", chunkIndex: 0 }];
+    expect(buildKnowledgeContext(chunks as any, { conflicts: "team" })).toMatch(/unless the business details/);
+    expect(buildKnowledgeContext(chunks as any)).toMatch(/treated as unknown for this turn\./);
+  });
+
+  it("★ \"the address isn't in my details\" while the prompt has one is a FACT problem", async () => {
+    const r = "הכתובת המדויקת לא מופיעה אצלי, אבל אפשר לבדוק.";
+    expect(kinds(await g3(r, { businessAddress: "יוסף לוי 8/2, נהריה" }))).toContain("ungrounded_absence");
+    expect(kinds(await g3(r, { businessAddress: null }))).not.toContain("ungrounded_absence");
+    expect(kinds(await g3("I don't have the exact address.", { businessAddress: "x", locale: "en" }))).toContain("ungrounded_absence");
+  });
+
+  it("★ a purchase intent with no store search -> no_search, whatever the reply says", async () => {
+    const offered = ["woocommerce.list_products"];
+    for (const ask of ["אני רוצה להזמין משטח לאלכסה", "לא מוצאת את זה באתר", "תשלחו לי קישור למשטח"]) {
+      expect(kinds(await g3("המשטח מגיע במשלוח תוך 3-7 ימי עסקים.", { incomingMessage: ask, toolsOffered: offered })), ask).toContain("no_search");
+    }
+    expect(kinds(await g3("המשטח מגיע במשלוח.", { incomingMessage: "אני רוצה להזמין", toolsOffered: offered, tools: [{ tool: "woocommerce.list_products", outcome: "ok" }] }))).not.toContain("no_search");
+  });
+
+  it("★ more safety words: rolling, sliding, unstable, the stopper not stopping it", async () => {
+    const { safetyCase } = await import("../services/reply-engine/gates");
+    for (const t of ["המכשיר מתגלגל אחורה", "המיקסר מחליק מהמשטח", "זה לא יציב", "המעצור לא מונע את זה", "הוא נופל אחורה", "it keeps sliding"]) expect(safetyCase([t]), t).toBe(true);
+    expect(safetyCase(["איזה צבע יש?"])).toBe(false);
+  });
+
+  it("★ a sentence sent before is cut; new failure and jargon phrases are caught", async () => {
+    const { repeatedSentences, cleanStyle } = await import("../services/reply-engine/gates");
+    const prev = ["תודה. המשלוח מגיע תוך 3-7 ימי עסקים לכל הארץ, עם שליח עד הבית."];
+    const reply = "המשלוח מגיע תוך 3-7 ימי עסקים לכל הארץ, עם שליח עד הבית. לגבי הצבע, יש את המשטח גם בלבן וגם בשחור, ושניהם במלאי כרגע. איזה מהם מעדיפים לבית?";
+    expect(repeatedSentences(reply, prev)).toHaveLength(1);
+    expect(styleCodes(await g3(reply, { previousBotReplies: prev }))).toContain("repeated_sentence");
+    expect(cleanStyle(reply, ["repeated_sentence"], prev)).toBe("לגבי הצבע, יש את המשטח גם בלבן וגם בשחור, ושניהם במלאי כרגע. איזה מהם מעדיפים לבית?");
+    expect(styleCodes(await g3("הבדיקה של ההזמנה לא נפתחה כרגע."))).toContain("failure_narration");
+    expect(styleCodes(await g3("המספר נוסף לפרטי הקשר שלך."))).toContain("internal_jargon");
+  });
+});

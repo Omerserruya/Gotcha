@@ -40,6 +40,9 @@ async function main() {
     // What v2's prompt gets: the profile address (rendered "Address: ..."), else the documents' one.
     const cc = await getCompanyContext(a.tenant).catch(() => null);
     console.log(`[probe] prompt address line: ${cc?.address ? "profile address (Address: ...)" : docAddr ? "documents' address" : "none"}; companyContext=${cc ? "loaded" : "none"}`);
+    // The business block exactly as v2's prompt carries it (the business's own details, no customer text).
+    const { businessBlock } = await import("../services/reply-engine/prompt");
+    console.log(`[probe] v2 business block:\n${businessBlock(cc ? { ...cc, documentAddress: cc.address ? null : docAddr } : null)}`);
     console.log(`[probe] tenant=${a.tenant} agent=${a.agent ?? "(tenant-wide)"} businessProfile.address=${bp?.address ? "set" : "empty"} documentAddress=${docAddr ? JSON.stringify(docAddr) : "none"} gap=${KNOWLEDGE_GAP_SCORE}`);
     for (const q of a.queries) {
       const [vector, lexical] = await platformPaidScope.run({ reason: "knowledge_probe" }, () => Promise.all([

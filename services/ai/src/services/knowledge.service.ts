@@ -408,7 +408,10 @@ ${opts.conflicts === "team"
   ? "4. Do not contradict this content. Never mention sources, documents or that another text says otherwise. If two sources here disagree, give the rule of the more specific policy document (a returns or exchange policy, the terms) over an FAQ or an about page, the stricter one when both are policies, and put the conflict in team_question so the owner can fix it."
   : "4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently."}
 5. When you use a fact from a specific source, you may reference it by its title or number; never invent sources.
-6. Information NOT present here is treated as unknown for this turn.
+${opts.conflicts === "team"
+  // Prod replay 10, Tehila: the address is in the business details, not in a document, and was "not available".
+  ? "6. Information NOT present here is unknown for this turn, unless the business details (# The business: its name, address, contact) state it: those stand."
+  : "6. Information NOT present here is treated as unknown for this turn."}
 7. A source about a NEIGHBOURING topic is not an answer. A shipping or pickup policy does not say where the products are sold in shops (points of sale, נקודות מכירה, חנויות); opening hours of one place are not the hours of another. When the exact thing asked is not stated, say you do not have that information and offer to have the team answer; do not answer with the nearest policy instead. An address or a pickup place stated anywhere (a shipping or pickup text too) DOES answer "where are you" or "what is the address".
 
 ${allWeak}---BEGIN KNOWLEDGE---

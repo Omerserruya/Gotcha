@@ -755,6 +755,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardsChannel: cardChannel,
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
+    businessAddress: (company as any)?.address || (company?.address ? null : docAddress) || null,
     // Everything but the customer's own words: tools, products, state, knowledge, a person's lines.
     sourceText: [
       ...turnTools.records.map((r) => r.content),
@@ -844,7 +845,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
           : o.handoff;
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
         if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply) return null;
@@ -944,9 +945,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       (trace as any).handoffSetInCode = true;
     }
   }
-  // A safety or damage complaint in the customer's last messages never ends without a
+  // A safety or damage complaint in the customer's last 10 messages never ends without a
   // person or the team (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on one).
-  if (output && !output.handoff && !output.teamQuestion && !turnTools.escalation && safetyCase(inbound.slice(-6))) {
+  if (output && !output.handoff && !output.teamQuestion && !turnTools.escalation && safetyCase(inbound.slice(-10))) {
     output = { ...output, handoff: "safety or damage in the conversation", reply: promisesPerson(output.reply) ? output.reply : [output.reply?.trim(), handoffLine].filter(Boolean).join(" ") };
     (trace as any).handoffSetInCode = true;
     (trace as any).safetyHandoff = true;

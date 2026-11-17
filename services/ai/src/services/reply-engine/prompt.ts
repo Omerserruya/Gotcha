@@ -110,6 +110,17 @@ export interface PrefixInput {
   cardsChannel: boolean;
 }
 
+/** The "# The business" block exactly as the prompt carries it (the probe prints it; no customer text in it). */
+export function businessBlock(company: PrefixInput["company"]): string {
+  const marker = "\n\n# The business";
+  const full = buildStablePrefix({ agent: { name: "-", role: "-" } as any, company, locale: "he", skills: [], channel: "-", cardsChannel: false } as any);
+  const i = full.indexOf(marker);
+  if (i < 0) return "(no business block)";
+  const rest = full.slice(i + 2);
+  const j = rest.indexOf("\n\n# ");
+  return j < 0 ? rest : rest.slice(0, j);
+}
+
 export function buildStablePrefix(p: PrefixInput): string {
   const parts: string[] = [PLATFORM_RULES];
   if (p.locale === "he" && HEBREW) {
@@ -138,7 +149,7 @@ export function buildStablePrefix(p: PrefixInput): string {
     biz.push(`${clip(p.company.organizationName, 80)}${p.company.industry ? ` (${clip(p.company.industry, 60)})` : ""}${p.company.websiteDomain ? `, ${clip(p.company.websiteDomain, 80)}` : ""}.`);
     if (p.company.businessDescription) biz.push(clip(p.company.businessDescription, 600));
     // Prod replay 5: "where is the studio" got "the address is not available" twice.
-    if (p.company.address) biz.push(`Address: ${clip(p.company.address, 200)}`);
+    if (p.company.address) biz.push(`Address: ${clip(p.company.address, 200)}. Asked where the business or the studio is, or for the address, give this.`);
     // Prod replay 6: Tehila's address is only in "send returns to ...". Named for what the documents say it is.
     else if (p.company.documentAddress) biz.push(`Address given in the business's documents for returns and pickup coordination: ${clip(quotedAddress(p.company.documentAddress), 120)}. Asked where the business is, give it as that address, not as a shop or a branch.`);
     if (p.company.observedVoice) biz.push(`Voice (how this business really writes, follow it): ${clip(p.company.observedVoice, 600)}`);
