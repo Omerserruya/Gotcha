@@ -371,9 +371,16 @@ export async function swrCached<T>(
     }
     return p;
   };
-  if (hit && age < freshMs) return hit.value;
-  if (hit && age < staleMs) { refresh().catch(() => {}); return hit.value; }
+  const kind = key.split("|")[0];
+  if (hit && age < freshMs) { countCache(kind, "hit"); return hit.value; }
+  if (hit && age < staleMs) { countCache(kind, "stale"); refresh().catch(() => {}); return hit.value; }
+  countCache(kind, "miss");
   return refresh();
+}
+/** Cache hits, stale serves and misses by kind (cats, catalog), for the replay's summary. */
+export const cacheCounts: Record<string, { hit: number; stale: number; miss: number }> = {};
+function countCache(kind: string, what: "hit" | "stale" | "miss") {
+  (cacheCounts[kind] ??= { hit: 0, stale: 0, miss: 0 })[what]++;
 }
 /** Categories change rarely: fresh 6h, served stale up to 24h. */
 const CATEGORY_FRESH_MS = 6 * 60 * 60_000;
@@ -643,7 +650,8 @@ async function allowedProductIds(auth: string, base: string, cats: Set<string>):
   const langs: Array<string | null> = [null, "he", "en"];
   const key = `${base}|${[...cats].sort().join(",")}|${langs.join(",")}`;
   const hit = allowedIdsCache.get(key);
-  if (hit && Date.now() - hit.at < (hit.failed ? 60_000 : 10 * 60_000)) return hit.ids;
+  if (hit && Date.now() - hit.at < (hit.failed ? 60_000 : 10 * 60_000)) { countCache("allowed", "hit"); return hit.ids; }
+  countCache("allowed", hit && !hit.failed && Date.now() - hit.at < CATALOG_STALE_MS ? "stale" : "miss");
   // A good list past its ten minutes is served while it refreshes (up to 6h); a failed one is retried now.
   if (hit && !hit.failed && Date.now() - hit.at < CATALOG_STALE_MS) {
     if (!inflight.has(`allowed|${key}`)) {
@@ -997,11 +1005,9 @@ async function hebrewProductSearch(
   // "בראון דגם SJ3100BK"): a title hit is one whose name holds the word.
   const named_ = (w: string) => (p: any) => nameHolds(p, w);
   const restSearch = async (w: string) => { const p = new URLSearchParams(params); p.set("search", w); return (await get(p)).filter(named_(w)); };
-  // The words' other forms are searched AT THE SAME TIME as the first round, and used
-  // only if it finds nothing (prod timing, Tehila warm: ~1.2s per round in series, 2.5s).
+  // The words' other forms, only after an empty first round, all at once (prod replay 11:
+  // searching them with the first round made a small store slower for every request).
   const variants = words.filter((w) => /[א-ת]/.test(w)).flatMap(hebrewVariants).filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
-  const variantsP = Promise.all(variants.map((v) => restSearch(v).catch(() => [] as any[])));
-  variantsP.catch(() => {});
   const [inCat, whole, local, ...perWord] = await Promise.all([
     cat ? get(byCat) : Promise.resolve([] as any[]),
     get(params).then((l) => l.filter((p: any) => words.some((w) => nameHolds(p, w)))),
@@ -1043,8 +1049,8 @@ async function hebrewProductSearch(
     log("title", out.length);
     return inStockFirst(out).slice(0, per);
   }
-  // The other forms of each Hebrew word (already searched alongside the first round); the first that finds anything.
-  const found = await variantsP;
+  // The other forms of each Hebrew word, in parallel; the first that finds anything.
+  const found = await Promise.all(variants.map((v) => restSearch(v).catch(() => [] as any[])));
   const i = found.findIndex((l) => l.length);
   if (i >= 0) { log(`variant:${variants[i]}`, found[i].length); return inStockFirst(found[i]).slice(0, per); }
   // What a product fits is in its description (Smoovee: "מתאים ל: תמי 4").
@@ -1705,10 +1711,9 @@ const WooCommerceAdapter: ProviderAdapter = {
         const terms = [...orderPhoneSearchTerms(args.phone), ...(args.email ? [String(args.email).trim()] : [])];
         if (!terms.length) throw new Error("phone_email_or_customer_id_required");
         const found = new Map<string, any>();
-        for (const term of terms) {
-          const rows = await query({ search: term });
-          for (const o of Array.isArray(rows) ? rows : []) if (o?.id != null) found.set(String(o.id), o);
-        }
+        // All forms of the phone at once, within the store's request cap (Tehila: 6.4s in series).
+        const all = await Promise.all(terms.map((term) => query({ search: term }).catch(() => [])));
+        for (const rows of all) for (const o of Array.isArray(rows) ? rows : []) if (o?.id != null) found.set(String(o.id), o);
         return [...found.values()]
           .sort((a, b) => String(b?.date_created_gmt ?? "").localeCompare(String(a?.date_created_gmt ?? "")))
           .slice(0, per);
@@ -1792,6 +1797,25 @@ export async function debugStoreDelay(env: NodeJS.ProcessEnv = process.env): Pro
 let requestSeam: ((method: string, url: string, body?: unknown) => Promise<unknown>) | null = null;
 export function setWooRequestSeam(fn: typeof requestSeam) { requestSeam = fn; }
 
+const storeSlots = new Map<string, { active: number; queue: Array<() => void> }>();
+const storeConcurrency = () => { const n = Number(process.env.WOO_STORE_CONCURRENCY); return Number.isFinite(n) && n >= 1 && n <= 20 ? Math.floor(n) : 3; };
+/** Run fn with one of the store's slots: at most storeConcurrency() at a time per store origin; the rest wait in order. */
+export async function withStoreSlot<T>(url: string, fn: () => Promise<T>): Promise<T> {
+  let key: string;
+  try { key = new URL(url).origin; } catch { key = url; }
+  let slot = storeSlots.get(key);
+  if (!slot) { slot = { active: 0, queue: [] }; storeSlots.set(key, slot); }
+  const s = slot;
+  if (s.active >= storeConcurrency()) await new Promise<void>((resolve) => s.queue.push(resolve));
+  s.active++;
+  try {
+    return await fn();
+  } finally {
+    s.active--;
+    s.queue.shift()?.();
+  }
+}
+
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
   if (requestSeam) {
     const out = await requestSeam(method, url, body);
@@ -1813,7 +1837,9 @@ async function wooRequest(authHeader: string, method: string, url: string, body?
   };
   // A store that does not answer must not hold a customer's turn (Tehila,
   // 2026-11-02: 12-24s per call, no cap). Sized above a slow-but-working store.
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(wooRequestTimeoutMs()) }).catch((err: any) => {
+  // At most WOO_STORE_CONCURRENCY requests at once per store (prod replay 11: more
+  // parallel GETs made a small shared-hosting store slower for every one of them).
+  const res = await withStoreSlot(url, () => fetch(url, { ...init, signal: AbortSignal.timeout(wooRequestTimeoutMs()) })).catch((err: any) => {
     if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new Error("woocommerce_timeout: the store did not answer in time");
     throw err;
   });

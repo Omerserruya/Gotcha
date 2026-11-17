@@ -241,6 +241,9 @@ export function removedSentences(before: string, after: string): string[] {
   return (String(before ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
 }
 
+/** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
+export const profileHasStreet = (address: string | null | undefined) => /[\u0590-\u05FFA-Za-z]{2,}\s+\d{1,4}/.test(String(address ?? ""));
+
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
 
@@ -609,7 +612,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // ── Prompt ──
   const prefix = buildStablePrefix({
     agent: { name: config.name, role: config.role, roleMission: skills.find((k) => k.source === "role")?.whenToUse ?? null, persona: (config as any).persona, goal: (config as any).goal, successCriteria: (config as any).successCriteria, salesContext: (config as any).salesContext, escalationMessage: config.escalationMessage },
-    company: company ? { ...company, documentAddress: company.address ? null : docAddress } : company,
+    // The documents' street address too when the profile's has no house number (prod replay 11,
+    // Tehila: the profile says only "הסטודיו נמצא בנהריה").
+    company: company ? { ...company, documentAddress: profileHasStreet(company.address) ? null : docAddress } : company,
     locale,
     skills,
     channel: String(conversation.channel),
@@ -674,8 +679,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     return r;
   };
 
+  // The whole turn, not only the rewrite, answers inside the budget (prod replay 11: a
+  // turn with no rewrite at 22s p95): with little time left the next call must answer,
+  // and a tool waits at most what is left minus time for that answer.
+  const turnLeft = () => cfg.turnBudgetMs - (Date.now() - t0);
   for (let round = 0; round < cfg.maxRounds && !output; round++) {
-    const lastRound = round === cfg.maxRounds - 1;
+    const lastRound = round === cfg.maxRounds - 1 || (round > 0 && turnLeft() < 6000);
+    if (lastRound && round < cfg.maxRounds - 1) (trace as any).roundsCut = round;
     const r = await call(lastRound ? { type: "function", function: { name: "respond" } } : "required");
     const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
     if (!calls.length) {
@@ -688,7 +698,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const work = calls.filter((c) => c.function?.name !== "respond");
     if (work.length) {
       const tStart = Date.now();
-      await runToolRound(env, work);
+      await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, Math.max(2000, turnLeft() - 4000)) }, work);
       stageMs[`tools_r${round}`] = Date.now() - tStart;
       for (const c of work) {
         const rec = turnTools.records.find((x) => x.callId === c.id);
@@ -755,7 +765,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardsChannel: cardChannel,
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
-    businessAddress: (company as any)?.address || (company?.address ? null : docAddress) || null,
+    businessAddress: [company?.address, profileHasStreet(company?.address) ? null : docAddress].filter(Boolean).join("; ") || null,
     // Everything but the customer's own words: tools, products, state, knowledge, a person's lines.
     sourceText: [
       ...turnTools.records.map((r) => r.content),

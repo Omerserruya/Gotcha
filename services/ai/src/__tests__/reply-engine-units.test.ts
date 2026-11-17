@@ -1137,3 +1137,15 @@ describe("prod replay 10 (2026-11-17)", () => {
     expect(styleCodes(await g3("המספר נוסף לפרטי הקשר שלך."))).toContain("internal_jargon");
   });
 });
+
+describe("prod replay 11 (2026-11-17)", () => {
+  it("★ a profile address with no street gets the documents' address beside it", async () => {
+    const { profileHasStreet } = await import("../services/reply-engine/engine");
+    const { businessBlock } = await import("../services/reply-engine/prompt");
+    expect(profileHasStreet("הסטודיו נמצא בנהריה. יש נקודות מכירה ברחבי הארץ")).toBe(false);
+    expect(profileHasStreet("יוסף לוי 8/2, נהריה")).toBe(true);
+    const b = businessBlock({ organizationName: "תהילה", address: "הסטודיו נמצא בנהריה", documentAddress: "יוסף לוי 8/2 נהריה" } as any);
+    expect(b).toContain("Address: הסטודיו נמצא בנהריה.");
+    expect(b).toContain("Address given in the business's documents for returns and pickup coordination: רחוב יוסף לוי 8/2, נהריה");
+  });
+});

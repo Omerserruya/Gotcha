@@ -170,6 +170,8 @@ async function main() {
     const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
     const warmed = await withCrossTenantAccess(() => warmWooCachesOnce({ tenants: async () => args.tenants, scope: "all" })).catch(() => []);
     console.log(`[replay] warmed ${warmed.map((w: any) => `${w.tenantId}:${w.ok ? `${w.ms}ms` : "failed"}`).join(" ") || "no Woo stores"}`);
+    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
+    for (const k of Object.keys(cacheCounts)) delete (cacheCounts as any)[k];
   }
   if (args.dry) {
     for (const [t, turns] of plan) {
@@ -285,6 +287,11 @@ async function main() {
   } else {
     console.log(`[replay] kept the replay-lane rows (${replayed.size} conversations)`);
   }
+  // Store caches during the turns (after the warm-up): hit, stale (served while refreshing), miss.
+  try {
+    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
+    console.log(`[replay] store cache ${JSON.stringify(cacheCounts)}`);
+  } catch { /* no Woo */ }
   // The console carries numbers only; the markdown (customer messages) is in the file.
   for (const s of summaries) console.log(`[replay] ${JSON.stringify(s)}`);
   console.log(`[replay] report written to ${args.out}`);

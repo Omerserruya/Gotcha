@@ -897,3 +897,23 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
   });
 });
+
+describe("prod replay 11: the whole turn answers inside the budget", () => {
+  it("★ with little time left after a round, the next call must answer", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "5000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    (generateResponse as any).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 2000; return out; });
+    h.responses.push(
+      { toolCalls: [tc("b1", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("b2", { reply: "יש תיק בד קנבס, לאיזה שימוש?" })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(h.calls[1].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
+    expect(r.trace.roundsCut).toBe(1);
+  });
+});

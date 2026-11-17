@@ -42,7 +42,9 @@ async function main() {
     console.log(`[probe] prompt address line: ${cc?.address ? "profile address (Address: ...)" : docAddr ? "documents' address" : "none"}; companyContext=${cc ? "loaded" : "none"}`);
     // The business block exactly as v2's prompt carries it (the business's own details, no customer text).
     const { businessBlock } = await import("../services/reply-engine/prompt");
-    console.log(`[probe] v2 business block:\n${businessBlock(cc ? { ...cc, documentAddress: cc.address ? null : docAddr } : null)}`);
+    const { profileHasStreet } = await import("../services/reply-engine/engine");
+    // The channel line here is the probe's own ("-"): the live prompt names the conversation's channel and whether it shows cards.
+    console.log(`[probe] v2 business block (channel line: probe placeholder):\n${businessBlock(cc ? { ...cc, documentAddress: profileHasStreet(cc.address) ? null : docAddr } : null)}`);
     console.log(`[probe] tenant=${a.tenant} agent=${a.agent ?? "(tenant-wide)"} businessProfile.address=${bp?.address ? "set" : "empty"} documentAddress=${docAddr ? JSON.stringify(docAddr) : "none"} gap=${KNOWLEDGE_GAP_SCORE}`);
     for (const q of a.queries) {
       const [vector, lexical] = await platformPaidScope.run({ reason: "knowledge_probe" }, () => Promise.all([
