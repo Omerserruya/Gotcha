@@ -9,7 +9,6 @@ import {
   renderableType,
   resolveExternal,
   systemEventOf,
-  undeliveredReason,
   unsupportedType,
   type InboxMessage,
   deliveryOf,
@@ -23,6 +22,7 @@ import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './m
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { sendFailure } from './send-failure';
+import { streamUndelivered } from './undelivered';
 import { plainDashes } from '@/lib/plain-dashes';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
@@ -202,8 +202,8 @@ export async function MessageStream({
           happened.
         */
           const unsupported = unsupportedType(message);
-          /* Meta's "unsupported": the reason in plain words, by its code. */
-          const undelivered = undeliveredReason(message);
+          /* Meta's "unsupported": the reason in plain words, by its code; an album's part softly. */
+          const undelivered = streamUndelivered(message, messages);
           /*
            * Did any branch above draw the message's content? Recognising a
            * type and rendering it are different things, and only the second

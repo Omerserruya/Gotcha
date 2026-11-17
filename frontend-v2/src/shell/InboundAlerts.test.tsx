@@ -210,6 +210,15 @@ describe('★ InboundAlerts, mounted', () => {
     expect(made[0]!.title).toBe('052-123-4567');
   });
 
+  it('★★ an undelivered WhatsApp message: the short line, never the raw token', async () => {
+    platform({
+      conversation: { customerName: 'Dana', customerExternalId: null, channel: 'WHATSAPP' },
+    });
+    await mount();
+    await arrive(inbound({ body: '[unsupported message]', messageType: 'text' }));
+    expect(made[0]!.options.body).toBe(heInbox.stream.quote.kind.undelivered);
+  });
+
   it('no name and no handle: "someone" in the reader’s words, and the first line', async () => {
     platform({ conversation: { customerName: null, customerExternalId: null, channel: null } });
     await mount();

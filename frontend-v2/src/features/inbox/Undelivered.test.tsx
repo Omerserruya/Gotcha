@@ -7,6 +7,7 @@ import en from '@/i18n/messages/en/inbox.json';
 import he from '@/i18n/messages/he/inbox.json';
 
 import { MessageStream } from './MessageStream';
+import { streamUndelivered } from './undelivered';
 
 /**
  * A WhatsApp message Meta could not give us (`type: "unsupported"`), stored as
@@ -127,5 +128,69 @@ describe('★★ the words', () => {
     expect(he.stream.undelivered.notArrived).toBe(
       'ההודעה הזו לא הגיעה למערכת. אפשר לראות אותה באפליקציית הוואטסאפ.',
     );
+  });
+});
+
+describe('★★ an album: announced as unsupported, its pictures follow (Supervisior, 2026-11-17)', () => {
+  const photo = (id: string, at: string, direction = 'INBOUND') =>
+    message({
+      id,
+      body: '[Image]',
+      messageType: 'image',
+      mediaUrl: 'https://cdn.example/p.jpg',
+      createdAt: at,
+      direction,
+      metadata: null,
+    });
+  const announced = unsupported(131051, 'a1');
+
+  it('★★ a picture from the customer within a minute: the soft line, not the full sentence', async () => {
+    const after = photo('p1', '2026-11-17T09:00:40.000Z');
+    expect(streamUndelivered(announced, [announced, after])).toBe('albumPart');
+    await stream([announced, after]);
+    expect(screen.getByTestId('undelivered-a1')).toHaveTextContent(he.stream.undelivered.albumPart);
+    expect(screen.queryByText(he.stream.undelivered.notForwarded)).toBeNull();
+  });
+
+  it('exactly 60 s is inside; 61 s is not', () => {
+    expect(streamUndelivered(announced, [announced, photo('p1', '2026-11-17T09:01:00.000Z')])).toBe('albumPart');
+    expect(streamUndelivered(announced, [announced, photo('p1', '2026-11-17T09:01:01.000Z')])).toBe(
+      'notForwarded',
+    );
+  });
+
+  it('our own picture, a picture before it, or a text after it: not an album', () => {
+    expect(
+      streamUndelivered(announced, [announced, photo('p1', '2026-11-17T09:00:10.000Z', 'OUTBOUND')]),
+    ).toBe('notForwarded');
+    expect(streamUndelivered(announced, [photo('p0', '2026-11-17T08:59:50.000Z'), announced])).toBe(
+      'notForwarded',
+    );
+    const text = message({ id: 't1', body: 'hi', createdAt: '2026-11-17T09:00:10.000Z', metadata: null });
+    expect(streamUndelivered(announced, [announced, text])).toBe('notForwarded');
+  });
+
+  it('Meta’s own album marker counts when the pictures are not on this page', () => {
+    const marked = message({
+      id: 'a2',
+      metadata: {
+        unsupported: {
+          providerType: 'unsupported',
+          errors: [{ code: 131051 }],
+          raw: { type: 'unsupported', unsupported: { type: 'album' } },
+        },
+      },
+    });
+    expect(streamUndelivered(marked, [marked])).toBe('albumPart');
+  });
+
+  it('a bad time is no album, never a throw', () => {
+    const odd = message({ id: 'a3', createdAt: 'not a date', metadata: unsupported(131051).metadata });
+    expect(streamUndelivered(odd, [odd, photo('p1', '2026-11-17T09:00:10.000Z')])).toBe('notForwarded');
+  });
+
+  it('the soft line in both languages, no English word or dash in Hebrew', () => {
+    expect(en.stream.undelivered.albumPart.length).toBeGreaterThan(0);
+    expect(he.stream.undelivered.albumPart).not.toMatch(/[A-Za-z\u2013\u2014]/);
   });
 });

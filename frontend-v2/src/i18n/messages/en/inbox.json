@@ -49,7 +49,8 @@
     "undelivered": {
       "phoneOnly": "This message shows only in the WhatsApp app on the phone.",
       "notForwarded": "The customer sent a kind of message WhatsApp doesn't pass on to GOTCHA (a poll or a view-once photo, for example). You can see it on the phone.",
-      "notArrived": "This message didn't reach GOTCHA. You can see it in the WhatsApp app."
+      "notArrived": "This message didn't reach GOTCHA. You can see it in the WhatsApp app.",
+      "albumPart": "Part of this message shows only in the app on the phone."
     },
     "unsupported": "They sent something GOTCHA can't show. WhatsApp calls it a “{type}”.",
     "pending": "Still sending",
@@ -71,7 +72,9 @@
         "voice": "Voice message",
         "file": "File",
         "location": "Location",
-        "contact": "Contact"
+        "contact": "Contact",
+        "undelivered": "A message that didn't reach GOTCHA",
+        "undeliveredPhoneOnly": "A message shown only on the phone"
       }
     },
     "reply": "Reply",

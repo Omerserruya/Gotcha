@@ -894,6 +894,11 @@ export const messageSchema = z.object({
             .object({
               /** The same reason as Meta sent it, for a row written before `errors` was kept. */
               errors: META_ERRORS,
+              /** Meta's own kind for an unsupported message: `"album"` is the one read. */
+              unsupported: z
+                .object({ type: z.string().optional().catch(undefined) })
+                .optional()
+                .catch(undefined),
               reaction: z
                 .object({
                   message_id: z.string().optional(),

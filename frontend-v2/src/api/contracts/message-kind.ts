@@ -21,7 +21,38 @@ export const MESSAGE_PLACEHOLDERS: ReadonlySet<string> = new Set([
 ]);
 
 /** What a quote or a reply preview calls a message whose body is not words. */
-export type QuoteKind = 'photo' | 'sticker' | 'video' | 'voice' | 'file' | 'location' | 'contact';
+export type QuoteKind =
+  | 'photo'
+  | 'sticker'
+  | 'video'
+  | 'voice'
+  | 'file'
+  | 'location'
+  | 'contact'
+  /** WhatsApp's "unsupported" (131051 and any other code): it never reached us. */
+  | 'undelivered'
+  /** The same, 131060: it shows only in the phone's app. Known only where the metadata is. */
+  | 'undeliveredPhoneOnly';
+
+/**
+ * The adapter's body for Meta's `type: "unsupported"` (whatsapp.adapter.ts
+ * `unmodelled`). A list row, a realtime event and a search hit carry only
+ * the body, so this is the signal there; the code is read when there is
+ * metadata to read it from.
+ */
+const UNSUPPORTED_BODY = '[unsupported message]';
+
+/** Meta's first error code on an unsupported message, read without trusting the shape. */
+function unsupportedCode(metadata: unknown): string | null {
+  const u = field(metadata, 'unsupported');
+  const first = (list: unknown) => (Array.isArray(list) ? field(list[0], 'code') : undefined);
+  const code = first(field(u, 'errors')) ?? first(field(field(u, 'raw'), 'errors'));
+  return typeof code === 'number' || typeof code === 'string' ? String(code) : null;
+}
+
+function field(value: unknown, key: string): unknown {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+}
 
 /**
  * A quoted message in words: its own text, or - when the body is only the
@@ -31,9 +62,20 @@ export type QuoteKind = 'photo' | 'sticker' | 'video' | 'voice' | 'file' | 'loca
 export function quoteOf(message: {
   readonly body: string;
   readonly messageType?: string | null;
+  /** A message's metadata, where the reader has it: only Meta's error code is read. */
+  readonly metadata?: unknown;
 }): { readonly text: string } | { readonly kind: QuoteKind } | null {
   const body = message.body.trim();
   const type = (message.messageType ?? '').trim().toLowerCase();
+  /*
+   * ★★ NEVER THE RAW "[unsupported message]" (Supervisior, 2026-11-17): it
+   * was a list preview and a notification, in English, in brackets.
+   */
+  if (body === UNSUPPORTED_BODY || field(field(message.metadata, 'unsupported'), 'providerType') === 'unsupported') {
+    return {
+      kind: unsupportedCode(message.metadata) === '131060' ? 'undeliveredPhoneOnly' : 'undelivered',
+    };
+  }
   const filler =
     body === '' || MESSAGE_PLACEHOLDERS.has(body) || /^\[(Shared )?[Ll]ocation\b/.test(body);
   if (!filler) return { text: body };

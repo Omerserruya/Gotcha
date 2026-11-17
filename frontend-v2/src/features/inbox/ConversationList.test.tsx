@@ -523,6 +523,20 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
     expect(screen.getByTestId('preview-c1')).toHaveTextContent("My package still hasn't arrived");
   });
 
+  it('★★ never the raw "[unsupported message]": the short line (Supervisior, 2026-11-17)', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageBody: '[unsupported message]', lastMessageType: 'text' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    const preview = screen.getByTestId('preview-c1');
+    expect(preview).toHaveTextContent(messages.stream.quote.kind.undelivered);
+    expect(preview).not.toHaveTextContent('[unsupported message]');
+  });
+
   it('⚠ keeps an EMPTY line when there is no body - no text invented', async () => {
     // No body and no known kind: nothing true to write. Dropping the line
     // made those rows 69 tall among 82s; 02 has three lines on every row.
