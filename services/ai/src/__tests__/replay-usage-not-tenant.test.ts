@@ -62,6 +62,8 @@ describe("replay usage is never the tenant's", () => {
     expect(matches(row(null, 1), NOT_REPLAY)).toBe(true);
     expect(matches(row("ai_bot", 1), NOT_REPLAY)).toBe(true);
     expect(matches(row("catalog_semantic_replay", 1), NOT_REPLAY)).toBe(false);
+    // The relevance classifier is platform-paid too.
+    expect(matches(row("conversation_relevance_classify", 1), NOT_REPLAY)).toBe(false);
   });
 
   it("★ inside the replay lane every usage feature is marked; outside it, nothing changes", async () => {

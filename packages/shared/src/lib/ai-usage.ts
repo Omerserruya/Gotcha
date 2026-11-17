@@ -87,7 +87,8 @@ export function computeAICostUsd(opts: {
  * every tenant-facing usage figure leaves those rows out. A row with no feature counts
  * (SQL NOT on a NULL is NULL, so the null branch is explicit).
  */
-export const NOT_REPLAY_USAGE = { OR: [{ feature: null }, { NOT: { feature: { endsWith: "_replay" } } }] };
+// The relevance classifier's calls ("_classify", 2026-11-17) are platform-paid too.
+export const NOT_REPLAY_USAGE = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }] }] };
 
 export interface AIUsageEvent {
   tenantId: string;

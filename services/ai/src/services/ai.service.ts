@@ -377,8 +377,15 @@ export const REPLAY_FEATURE_SUFFIX = "_replay";
 export function inReplayLane(): boolean {
   return platformPaidScope.getStore()?.reason === "reply_engine_replay";
 }
+/** The conversation relevance classifier's calls (2026-11-17): platform-paid, never the tenant's usage. */
+export const CLASSIFY_FEATURE_SUFFIX = "_classify";
+const laneSuffix = (): string | null => {
+  const reason = platformPaidScope.getStore()?.reason;
+  return reason === "reply_engine_replay" ? REPLAY_FEATURE_SUFFIX : reason === "conversation_classify" ? CLASSIFY_FEATURE_SUFFIX : null;
+};
 export function laneFeature(feature: string): string {
-  return inReplayLane() && !feature.endsWith(REPLAY_FEATURE_SUFFIX) ? `${feature}${REPLAY_FEATURE_SUFFIX}` : feature;
+  const suffix = laneSuffix();
+  return suffix && !feature.endsWith(suffix) ? `${feature}${suffix}` : feature;
 }
 
 export const PLATFORM_PAID_AI_TYPES: ReadonlySet<string> = new Set([
@@ -530,7 +537,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       transport: (response as any).transport === "responses" ? "responses" : "chat",
       // Who pays: the audit trail says so on every row.
       billedTo: platformPaid ? "platform" : "tenant",
-      ...(inReplayLane() ? { lane: "replay" } : {}),
+      ...(laneSuffix() ? { lane: laneSuffix()!.slice(1) } : {}),
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
 
@@ -590,7 +597,7 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
     totalTokens: usage.total_tokens,
     metadata: {
       documentId: params.metadata?.documentId,
-      ...(inReplayLane() ? { lane: "replay" } : {}),
+      ...(laneSuffix() ? { lane: laneSuffix()!.slice(1) } : {}),
     },
   }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));
 
@@ -619,7 +626,7 @@ export async function generateEmbeddings(params: { tenantId: string; inputs: str
     promptTokens: response.usage?.prompt_tokens ?? 0,
     completionTokens: 0,
     totalTokens: response.usage?.total_tokens ?? 0,
-    metadata: { count: params.inputs.length, ...(inReplayLane() ? { lane: "replay" } : {}) },
+    metadata: { count: params.inputs.length, ...(laneSuffix() ? { lane: laneSuffix()!.slice(1) } : {}) },
   }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));
   return [...response.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }

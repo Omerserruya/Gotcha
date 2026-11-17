@@ -127,11 +127,12 @@ export function createTurnBudget(opts: CreateTurnBudgetOpts): TurnBudget {
  * the source of truth; budget enforcement is best-effort.
  */
 /**
- * Usage that is not the tenant's: a replay of a past conversation (prod 2026-11-17: replay
+ * Usage that is not the tenant's: a replay of a past conversation, or the platform's relevance
+ * classifier ("_classify") (prod 2026-11-17: replay
  * tokens filled Smoovee's 24h cap and live replies were refused). A row with no feature
  * counts (SQL: NOT on a NULL is NULL, so the null branch is explicit).
  */
-export const NOT_REPLAY = { OR: [{ feature: null }, { NOT: { feature: { endsWith: "_replay" } } }] };
+export const NOT_REPLAY = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }] }] };
 
 async function sumUsage(scope: { tenantId?: string; conversationId?: string; since?: Date }): Promise<number> {
   try {
