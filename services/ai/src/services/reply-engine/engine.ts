@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { automatedInbound, MODEL_SAYS_AUTOMATED, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
+import { automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -285,7 +285,7 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
 }
 
 /** The customer asks to be called (prod replay 8: "יכול להתקשר אלי?" ignored). */
-export const CALL_REQUEST = /(?<![\u0590-\u05FF])(?:תתקשרו|תתקשר|תתקשרי|להתקשר\s+אלי|יכול(?:ה|ים)?\s+להתקשר|אפשר\s+(?:להתקשר|שיחה|לדבר\s+בטלפון)|שיחה\s+טלפונית|שיחת\s+טלפון|תחזרו\s+אלי\s+(?:בטלפון|טלפונית)|תצלצלו|לצלצל\s+אלי|שמישהו\s+יתקשר)(?![\u0590-\u05FF])|\b(?:call me|give me a call|phone me|can (?:you|someone) call)\b/iu;
+export const CALL_REQUEST = /(?<![\u0590-\u05FF])[וש]?(?:תתקשרו|תתקשר|תתקשרי|להתקשר\s+אלי|יכול(?:ה|ים)?\s+להתקשר|אפשר\s+(?:להתקשר|שיחה|לדבר\s+בטלפון)|שיחה\s+טלפונית|שיחת\s+טלפון|תחזרו\s+אלי\s+(?:בטלפון|טלפונית)|תצלצלו|לצלצל\s+אלי|שמישהו\s+יתקשר)(?![\u0590-\u05FF])|\b(?:call me|give me a call|phone me|can (?:you|someone) call)\b/iu;
 
 const wordCount = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9]+/g) ?? []).length;
 /** The sentences of `before` that are not in `after` (what a cleanup cut). */
@@ -322,6 +322,8 @@ export function stripUnmatchedEdges(text: string): string {
 
 export function sanitizeReply(text: string): string {
   return stripUnmatchedEdges(String(text ?? "")
+    // A sarcastic or awkward face is not a warm sign-off (prod replay 2026-11-17: 🙃).
+    .replace(/\s*(?:\u{1F643}|\u{1F605}|\u{1F644}|\u{1F612}|\u{1F611})\uFE0F?/gu, "")
     .replace(/```[a-z]*\n?/gi, "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B\u200C\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "")
     .replace(/[#+*=~_|](?:[ \t]*[#+*=~_|]){2,}/g, "")
@@ -953,6 +955,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
     openTeamText: openTeam.join("\n"),
+    candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? Number(c.price) : null })).filter((c: any) => c.title),
+    onOpenItem: openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? ""))),
     safety: safetyConversation,
     searchFailed: turnTools.records.some((r) => /list_products|search_products/.test(r.tool) && (r.outcome === "timeout" || r.outcome === "error")),
     businessAddress: [company?.address, profileHasStreet(company?.address) ? null : docAddress].filter(Boolean).join("; ") || null,
@@ -1209,6 +1213,24 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, teamQuestion: `product search failed twice: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).searchFailTwiceToTeam = true;
   }
+  // The customer is back on a subject the team already has (prod replay 2026-11-17, NE'A): say it is
+  // with the team, naming it, when the reply does not.
+  const openOnIt = openTeam.find((t) => sameIssue(t, String(opts.incomingMessage ?? "")));
+  if (output?.reply && openOnIt && !output.handoff && !teamLineIn(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
+    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? `ה${openOnIt.slice(0, 80).replace(/^ה/, "")} עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.` : `"${openOnIt.slice(0, 80)}" is still being checked by the team; the answer will come here in the chat.`}` };
+    (trace as any).openItemMentioned = true;
+  }
+  // The engine's own team line at most once per conversation (prod replay 2026-11-17, Tehila: twice in a
+  // row): the second time it names what is being checked instead.
+  const canned = output?.reply ? endsWithCannedTeamLine(output.reply) : null;
+  const cannedBefore = cannedSent || history.some((m: any) => m.direction === "OUTBOUND" && !!endsWithCannedTeamLine(m.body));
+  if (output?.reply && canned && cannedBefore) {
+    const subject = String(output.teamQuestion ?? openTeam.at(-1) ?? opts.incomingMessage ?? "").replace(/^call request:\s*/i, "").slice(0, 90);
+    const named = locale === "he" ? `הצוות בודק את זה: "${subject}". התשובה תגיע כאן בצ'אט.` : `The team is checking this: "${subject}". The answer will come here in the chat.`;
+    const head = output.reply.slice(0, output.reply.length - canned.length).trim();
+    output = { ...output, reply: head ? `${head} ${named}` : named };
+    (trace as any).cannedRenamed = true;
+  } else if (output?.reply && canned) cannedNow = true;
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
   const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };

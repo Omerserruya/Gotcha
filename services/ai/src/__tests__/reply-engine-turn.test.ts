@@ -1143,3 +1143,33 @@ describe("2f6ff7e3 rating: whole turns", () => {
     expect((r.trace as any).internal).toBe(true);
   });
 });
+
+describe("4511b79c rating: engine passes", () => {
+  it("★ no sarcastic emoji; warm ones stay", async () => {
+    const { sanitizeReply } = await import("../services/reply-engine/engine");
+    expect(sanitizeReply("נשמח לעזור 🙃")).toBe("נשמח לעזור");
+    expect(sanitizeReply("אופס 😅 טעות שלנו")).toBe("אופס טעות שלנו");
+    expect(sanitizeReply("תודה 🙏")).toBe("תודה 🙏");
+  });
+  it("★ the engine's own team line once per conversation; the second time names what is checked", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "האם יש הנחה לכמות?", metadata: null },
+      { direction: "OUTBOUND", body: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "ומה עם משלוח לאילת?", metadata: null },
+    ];
+    // A call request: the engine adds its own team line, and one was already sent in this conversation.
+    h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר שתתקשרו אליי לגבי משלוח לאילת?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/והתשובה תגיע כאן בצ'אט\.$/);
+    expect(r.reply ?? "").toMatch(/הצוות בודק את זה: ".*משלוח לאילת/);
+  });
+  it("★ back on an open team subject: the reply says it is with the team", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: הגוון של קרם הלחות", at: new Date().toISOString() }], turnCount: 4 });
+    h.responses.push({ toolCalls: [respond("o1", { reply: "אשמח לעזור עוד." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם הגוון של קרם הלחות?" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; }
+    expect(r.reply).toMatch(/בבדיקה אצל הצוות/);
+  });
+});

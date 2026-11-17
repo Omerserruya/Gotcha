@@ -239,8 +239,9 @@ export const simulationLeak = (reply: string) => SIMULATION_LEAK.test(reply ?? "
 const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו|מעבירים|מעבירה|מעביר)(?:\s+(?:את\s+)?[\u0590-\u05FF"'׳״-]+){0,3}?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
 const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם זה|נשמע)|יש (?:חדש|חדשות|עדכון|תשובה)|עדכון|עדכנו|נו|כמה זמן|עוד כמה|מתי תהיה תשובה|ענו|הצוות)(?![\u0590-\u05FF])|\b(?:any (?:update|news)|still waiting|heard back)\b/iu;
 /** The reply announces the team hand-off again although it is already open and the customer did not ask about it. */
-export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean): boolean {
-  if (!teamAlreadyOpen || newTeamQuestion) return false;
+export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean, onOpenItem = false): boolean {
+  // Back on that very subject: saying it is with the team is the answer (prod replay 2026-11-17, NE'A).
+  if (!teamAlreadyOpen || newTeamQuestion || onOpenItem) return false;
   return TEAM_LINE.test(reply ?? "") && !STATUS_ASK.test(incoming ?? "");
 }
 
@@ -261,9 +262,14 @@ export function unbackedRecords(reply: string, tools: ToolRunRecord[]): string[]
 }
 
 /** "Passed to the team" or a promise of a later action, with nothing in this turn carrying it (no team question, no handoff, nothing open). */
+// A first-person-plural future with the team or "us" in the same sentence (prod replay 2026-11-17:
+// "נבדוק את הפער מול הצוות" with no team item): a promise the team carries, so it needs one.
+const WE_WILL_WITH_TEAM = /(?<![\u0590-\u05FF])[וש]?(?:נבדוק|נברר|נעדכן|נחזור|נטפל|נוודא|נבחן|נסדר|נתאם)(?![\u0590-\u05FF])[^.!?\n]{0,50}(?<![\u0590-\u05FF])(?:צוות|הצוות|לצוות|מהצוות|אצלנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:נבדוק|נברר)\s+מול(?![\u0590-\u05FF])|\b(?:we(?:'ll| will) (?:check|look into|verify|sort out|clarify)[^.!?\n]{0,40}(?:with the team|internally|on our end))\b/iu;
 export function unbackedPromises(reply: string, o: { teamQuestion: boolean; handedOff: boolean; teamAlreadyOpen: boolean; approvalPending: boolean }): string[] {
   if (o.teamQuestion || o.handedOff || o.approvalPending) return [];
   const out: string[] = [];
+  const withTeam = WE_WILL_WITH_TEAM.exec(reply ?? "");
+  if (withTeam && !o.teamAlreadyOpen) out.push(withTeam[0]);
   const team = TEAM_LINE.exec(reply ?? "");
   if (team && !o.teamAlreadyOpen) out.push(team[0]);
   const promise = FUTURE_PROMISE.exec(reply ?? "");
@@ -343,6 +349,35 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
 // own lines). Prices have their own check; a size pair ("90x90") has echoedSizes.
 const UNIT_NUMBER = /(\d+(?:[.,]\d+)?)(?:\s*(?:-|עד|to)\s*(\d+(?:[.,]\d+)?))?\s*(?=(?:ימי\s+עסקים|ימים|ימי|יום|שעות|שעה|דקות|שבועות|שבוע|חודשים|חודש|שנים|שנה|יחידות|יחידה|פריטים|זוגות|%|אחוז|ס["״']?מ|מ["״']?מ|ק["״']?ג|גרם|ליטר|מ["״']?ל|מטר|business days?|days?|hours?|minutes?|weeks?|months?|years?|units?|items?|pieces?|pairs?|percent|cm|mm|kg|grams?|lit(?:er|re)s?|ml|meters?|inch(?:es)?)(?![\p{L}]))/giu;
 const numbersIn = (t: string) => new Set((String(t ?? "").match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => n.replace(",", ".")));
+// A product's price from the knowledge while the store says otherwise (prod replay 2026-11-17, NE'A:
+// 178 from a document, the store 160.20): the store wins, and a product price needs a store read.
+const PRICE_IN = /(?:₪\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:₪|ש["״']?ח|NIS|ILS|shekels?))/giu;
+export function priceAgainstStore(reply: string, candidates: Array<{ title: string; price?: number | null }>, tools: ToolRunRecord[], storeOffered: boolean): string[] {
+  const read = tools.some((t) => /list_products|search_products|get_product|variation/i.test(t.tool) && t.outcome === "ok");
+  const toolText = tools.map((t) => String(t.content ?? "")).join("\n");
+  const out: string[] = [];
+  for (const x of String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []) {
+    const prices = [...x.matchAll(PRICE_IN)].map((m) => Number(String(m[1] ?? m[2]).replace(",", ".")));
+    if (!prices.length) continue;
+    const named = candidates.filter((c) => c?.title && x.toLowerCase().includes(String(c.title).toLowerCase()) && c.price != null);
+    // The store's own price for a product this sentence names, and the sentence says another.
+    if (named.length && prices.some((p) => !named.some((c) => Math.abs(Number(c.price) - p) < 0.01))) { out.push(x.trim().slice(0, 120)); continue; }
+    // A product price with no store read at all, from a document only.
+    if (storeOffered && !read && PRODUCT_NOUN.test(x) && prices.some((p) => !toolText.includes(String(p)))) out.push(x.trim().slice(0, 120));
+  }
+  return out;
+}
+
+// An order's state stated while every order lookup this turn failed (prod replay 2026-11-17, Urban:
+// "עדיין לא בוטלה"): a failed lookup grounds nothing.
+const ORDER_STATE = /(?<![\u0590-\u05FF])[וש]?(?:בוטלה|בוטל|לא\s+בוטלה|נשלחה|נשלח|יצאה|יצא|בדרך|הגיעה|נמסרה|בטיפול|בהכנה|מוכנה|ממתינה|אושרה|שולמה)(?![\u0590-\u05FF])|\b(?:(?:was|is|has been|hasn'?t been|not) (?:cancelled|canceled|shipped|delivered|dispatched|paid|processed)|on its way|is being (?:prepared|processed))\b/iu;
+const ORDER_WORD = /(?<![\u0590-\u05FF])[וש]?ה?(?:הזמנה|ההזמנה|חבילה|החבילה|משלוח|המשלוח)(?![\u0590-\u05FF])|\b(?:order|package|parcel|shipment)\b/iu;
+export function orderStateWithoutLookup(reply: string, tools: ToolRunRecord[]): string[] {
+  const orders = tools.filter((t) => ORDER_LOOKUP_TOOL.test(t.tool) || /tracking|fulfil?lment|shipment/i.test(t.tool));
+  if (!orders.length || orders.some((t) => t.outcome === "ok" || t.outcome === "empty")) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => ORDER_STATE.test(x) && ORDER_WORD.test(x)).map((x) => x.trim().slice(0, 120));
+}
+
 /** Sentences stating a number with a unit that no evidence this turn holds. */
 export function ungroundedNumbers(reply: string, evidence: string): string[] {
   const known = numbersIn(evidence);
@@ -419,6 +454,21 @@ const OBTAIN = /(?<![\u0590-\u05FF])(?:מקבלים|מתקבל|מתקבלת|נש
 // "איפה מוצאת את זה" after a code was discussed: the pronoun is the code (prod replay 2026-11-17, third time).
 const GET_PRONOUN = /(?:(?:איפה|איך|מאיפה|מהיכן)\s+(?:אני\s+)?(?:מוצא|מוצאת|מוצאים|משיג|משיגה|משיגים|מקבל|מקבלת|מקבלים|יש)\s+(?:את\s+)?(?:זה|אותו|אותה)(?![\u0590-\u05FF]))|\b(?:where (?:do i|can i) (?:get|find) (?:it|that|one)|how (?:do i|can i) get (?:it|that|one))\b/iu;
 const CODE_CONTEXT = new RegExp(String.raw`${OBTAINABLE}|\b(?:code|coupon|voucher|gift card)\b`, "iu");
+/**
+ * Where something is obtained, stated with nothing in the knowledge saying so (prod replay 2026-11-17:
+ * "את הקוד עצמו מקבלים מהצוות", invented). Backed by a knowledge sentence naming a code (or the like)
+ * and how it is obtained.
+ */
+export function ungroundedSource(incoming: string, reply: string, context: string, knowledge: string): string[] {
+  const asks = GET_IT.test(incoming ?? "") || (GET_PRONOUN.test(incoming ?? "") && CODE_CONTEXT.test(context ?? ""));
+  if (!asks) return [];
+  const known = (String(knowledge ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).some((x) => CODE_CONTEXT.test(x) && OBTAIN_ANY.test(x));
+  if (known) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => OBTAIN_ANY.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
+}
+// How a thing is obtained, wider than OBTAIN: from someone ("מקבלים מהצוות"), by mail, at purchase.
+const OBTAIN_ANY = new RegExp(`${OBTAIN.source}|(?<![\\u0590-\\u05FF])(?:מקבלים|מקבל|מקבלת|תקבל|תקבלי|תקבלו|מגיע|מגיעה|נשלח|נשלחת)\\s+(?:מ|ב|אחרי|לאחר|עם)[\\u0590-\\u05FF]*|\\b(?:you (?:get|receive) (?:it|one|the code) (?:from|by|after|with|when))\\b`, "iu");
+
 /** The customer asks where to GET something (named, or "it" after one was discussed), and the reply only says where to use it. */
 export function couponSourceMissed(incoming: string, reply: string, context = ""): boolean {
   const asks = GET_IT.test(incoming ?? "") || (GET_PRONOUN.test(incoming ?? "") && CODE_CONTEXT.test(context ?? ""));
@@ -861,6 +911,10 @@ export interface Gate3Input {
   cardsChannel?: boolean;
   /** A text channel with products this turn: the engine appends them (name, price, link). */
   listAppended?: boolean;
+  /** This turn's products with their store prices (the store wins over a document's price). */
+  candidatePrices?: Array<{ title: string; price?: number | null }>;
+  /** The customer came back on the subject of an open team item. */
+  onOpenItem?: boolean;
   /** The open team items' text (state.pending), for a payment question already being checked. */
   openTeamText?: string;
   /** The customer's own messages, and everything else a fact may come from (tools, knowledge, a person, the state). */
@@ -932,6 +986,12 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (payment.length) problems.push({ kind: "ungrounded_payment", claims: payment, teamOpen: !!i.openTeamText && PAYMENT_WORDS.test(i.openTeamText) });
   const inactive = unlabelledInactiveOrders(reply, i.tools);
   if (inactive.length) problems.push({ kind: "inactive_order_unlabelled", claims: inactive });
+  const source = ungroundedSource(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"), i.knowledge ?? "");
+  if (source.length) problems.push({ kind: "ungrounded_source", claims: source });
+  const priceClash = priceAgainstStore(reply, i.candidatePrices ?? [], i.tools, i.toolsOffered.some((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n)));
+  if (priceClash.length) problems.push({ kind: "price_against_store", claims: priceClash });
+  const orderState = orderStateWithoutLookup(reply, i.tools);
+  if (orderState.length) problems.push({ kind: "order_state_unread", claims: orderState });
   const optionClaims = optionClaimsWithoutVariations(reply, i.incomingMessage, i.tools);
   if (optionClaims.length) problems.push({ kind: "option_without_variation", claims: optionClaims });
   const extra = notNarrowed(reply, i.incomingMessage, i.candidateTitles ?? []);
@@ -978,7 +1038,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (returnsWork(reply)) style.push("returns_work");
   if (termsRefusal(reply)) style.push("terms_refusal");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
-  if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
+  if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion, !!i.onOpenItem)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
   return { ok: problems.length === 0, problems };
@@ -990,7 +1050,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /[^.!?\n]+[.!?]*\s*/g;
@@ -1027,11 +1087,11 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
-      if (p.kind === "unsupported_action") s = dropSentences(dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE), RECORDED);
+      if (p.kind === "unsupported_action") s = dropSentences(dropSentences(dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE), RECORDED), WE_WILL_WITH_TEAM);
     }
   }
   return s.trim();
@@ -1180,6 +1240,9 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Say it is not known here and put the question in team_question; never guess a source.`);
+    if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). Read the product (search or get_product) and give the store's price.`);
+    if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
     if (p.kind === "near_name") lines.push(`- The customer named "${p.asked}"; the product you name ("${p.shown}") is another model with a similar name. Say you did not find "${p.asked}" by that name, and offer the other only as a different, close option.`);
@@ -1239,7 +1302,15 @@ export function notFoundReply(locale: "he" | "en"): string {
 /** The canned team lines (both forms), to know one was already sent. */
 export function isCannedTeamLine(text: string | null | undefined): boolean {
   const t = String(text ?? "").trim();
-  return !!t && ([safeFallback("he"), safeFallback("he", true), safeFallback("en"), safeFallback("en", true)].includes(t));
+  // The engine's own team lines, the fallbacks and the ones its final passes add, alone or ending a reply.
+  const lines = [safeFallback("he"), safeFallback("he", true), safeFallback("en"), safeFallback("en", true), "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "I've passed this to the team, and the answer will come here in the chat."];
+  return !!t && lines.some((l) => t === l);
+}
+/** A reply that ends with one of the engine's own team lines. */
+export function endsWithCannedTeamLine(text: string | null | undefined): string | null {
+  const t = String(text ?? "").trim();
+  const lines = [safeFallback("he"), safeFallback("en"), "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "I've passed this to the team, and the answer will come here in the chat.", "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט."];
+  return lines.find((l) => t.endsWith(l)) ?? null;
 }
 
 /** The safe fixed reply when the rewrite fails too: honest, short, hands the case on. */

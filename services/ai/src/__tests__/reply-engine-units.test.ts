@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "dangling_reference", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -1890,5 +1890,66 @@ describe("2f6ff7e3 rating fixes", () => {
     expect(notNarrowed("Foundation Fair is the one.", "fair skin, which shade?", titles)).toEqual([]);
     expect(notNarrowed("Foundation Fair and Foundation Light.", "which shade?", titles)).toEqual([]);
     expect(kinds(await g3("Foundation Fair or Foundation Medium Dark.", { incomingMessage: "fair skin", candidateTitles: titles, candidateCount: 3, locale: "en" }))).toContain("not_narrowed");
+  });
+});
+
+/** Rating on 4511b79c (prod 2026-11-17, Smoovee live). */
+describe("4511b79c rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+
+  it("★ \"we'll check X with the team\" needs a team item or a handoff", async () => {
+    const { unbackedPromises, stripFactProblems } = await import("../services/reply-engine/gates");
+    const o = { teamQuestion: false, handedOff: false, teamAlreadyOpen: false, approvalPending: false };
+    expect(unbackedPromises("נבדוק את הפער מול הצוות ונעדכן.", o)).not.toEqual([]);
+    expect(unbackedPromises("נברר את זה אצלנו.", o)).not.toEqual([]);
+    expect(unbackedPromises("We'll check this with the team.", o)).not.toEqual([]);
+    expect(unbackedPromises("נבדוק את הפער מול הצוות.", { ...o, teamQuestion: true })).toEqual([]);
+    expect(unbackedPromises("נבדוק את הפער מול הצוות.", { ...o, teamAlreadyOpen: true })).toEqual([]);
+    expect(unbackedPromises("אפשר לבדוק את המידות בטבלה.", o)).toEqual([]);
+    const r = "מבינים. נבדוק את הפער מול הצוות. בינתיים יש במלאי.";
+    expect(stripFactProblems(r, await g3(r))).toBe("מבינים. בינתיים יש במלאי.");
+  });
+
+  it("★ where a code comes from only from the knowledge", async () => {
+    const { ungroundedSource } = await import("../services/reply-engine/gates");
+    expect(ungroundedSource("איפה מוצאת את הקוד עצמו?", "את הקוד עצמו מקבלים מהצוות.", "", "")).toHaveLength(1);
+    expect(ungroundedSource("איפה מוצאת את הקוד עצמו?", "את הקוד עצמו מקבלים בניוזלטר.", "", "קוד הנחה נשלח לכל מי שנרשם לניוזלטר.")).toEqual([]);
+    expect(ungroundedSource("איפה מוצאת את זה?", "מקבלים אותו מהצוות.", "יש לכם קוד קופון?", "")).toHaveLength(1);
+    expect(ungroundedSource("יש לכם משטח?", "מקבלים אותו מהצוות.", "", "")).toEqual([]);
+    expect(kinds(await g3("את הקוד עצמו מקבלים מהצוות.", { incomingMessage: "איפה מוצאת את הקוד עצמו?" }))).toContain("ungrounded_source");
+  });
+
+  it("★ a product price from the store, never a document's", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    const c = [{ title: "Velvet Foundation", price: 160.2 }];
+    const read = [{ tool: "woocommerce.list_products", outcome: "ok", content: "[{\"price\":\"160.20\"}]" }] as any;
+    expect(priceAgainstStore("Velvet Foundation עולה 178 ₪.", c, read, true)).toHaveLength(1);
+    expect(priceAgainstStore("Velvet Foundation עולה 160.20 ₪.", c, read, true)).toEqual([]);
+    // No store read: a product price from a document is not stated.
+    expect(priceAgainstStore("המוצר עולה 178 ₪.", [], [], true)).toHaveLength(1);
+    // Shipping is no product.
+    expect(priceAgainstStore("המשלוח עולה 30 ₪.", [], [], true)).toEqual([]);
+    expect(priceAgainstStore("המוצר עולה 178 ₪.", [], [], false)).toEqual([]);
+    expect(kinds(await g3("Velvet Foundation עולה 178 ₪.", { candidatePrices: c, tools: read, grounding: "178 ₪ 160.20", toolsOffered: ["woocommerce.list_products"] }))).toContain("price_against_store");
+  });
+
+  it("★ an order's state is never stated when every order lookup failed", async () => {
+    const { orderStateWithoutLookup } = await import("../services/reply-engine/gates");
+    const failed = [{ tool: "shopify.get_order", outcome: "error" }, { tool: "shopify.track_shipment", outcome: "timeout" }] as any;
+    expect(orderStateWithoutLookup("ההזמנה עדיין לא בוטלה.", failed)).toHaveLength(1);
+    expect(orderStateWithoutLookup("Your order was shipped yesterday.", failed)).toHaveLength(1);
+    expect(orderStateWithoutLookup("ההזמנה עדיין לא בוטלה.", [...failed, { tool: "shopify.get_orders", outcome: "ok" }] as any)).toEqual([]);
+    expect(orderStateWithoutLookup("ההזמנה עדיין לא בוטלה.", [])).toEqual([]);
+    expect(kinds(await g3("ההזמנה עדיין לא בוטלה.", { tools: failed }))).toContain("order_state_unread");
+  });
+
+  it("★ back on an open team subject, saying it is with the team is no repeat", async () => {
+    const { repeatedTeamLine } = await import("../services/reply-engine/gates");
+    expect(repeatedTeamLine("זה כבר אצל הצוות.", "ומה עם הגוון?", true, false, false)).toBe(true);
+    expect(repeatedTeamLine("זה כבר אצל הצוות.", "ומה עם הגוון?", true, false, true)).toBe(false);
   });
 });

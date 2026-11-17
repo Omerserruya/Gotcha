@@ -166,7 +166,7 @@ const pct = (xs: number[], p: number) => {
 };
 const oneLine = (s: unknown, n = 600) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; rewriteRounds: Record<string, number>; rewriteP95: Record<string, number>; fallbackKinds: Record<string, number>; toolP95: Record<string, number>; rewriteMsP95: number; autoLookupMsP95: number; rewriteCut: Record<string, number>; cannedFrom: Record<string, number>; handoffSetInCode: number; withCards: number; withList: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; p50: number; p95: number }
+export interface TenantSummary { tenantId: string; turns: number; errors: number; handoffs: number; teamQuestions: number; teamQuestionRepeats: number; skipped: number; skippedReasons: Record<string, number>; priceStripped: number; rewriteRounds: Record<string, number>; rewriteP95: Record<string, number>; fallbackKinds: Record<string, number>; toolP95: Record<string, number>; rewriteMsP95: number; autoLookupMsP95: number; rewriteCut: Record<string, number>; cannedFrom: Record<string, number>; handoffSetInCode: number; withCards: number; withList: number; fallbacks: number; rewrites: number; cleaned: number; silent: number; cannedLines: number; toolErrors: number; toolErrorKinds: Record<string, number>; gate3Kinds: Record<string, number>; gate1Silent: Record<string, number>; p50: number; p95: number }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -201,7 +201,7 @@ async function main() {
   const replayed = new Set<string>();
 
   for (const [tenantId, turns] of plan) {
-    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, toolP95: {}, rewriteMsP95: 0, autoLookupMsP95: 0, rewriteCut: {}, cannedFrom: {}, handoffSetInCode: 0, withCards: 0, withList: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, p50: 0, p95: 0 };
+    const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, toolP95: {}, rewriteMsP95: 0, autoLookupMsP95: 0, rewriteCut: {}, cannedFrom: {}, handoffSetInCode: 0, withCards: 0, withList: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, gate1Silent: {}, p50: 0, p95: 0 };
     const ms: number[] = [];
     const byRounds: Record<string, number[]> = {};
     const toolMs: Record<string, number[]> = {};
@@ -258,6 +258,8 @@ async function main() {
         s.toolErrors += errored.length;
         // Codes only (tool name + error code), never arguments or results: safe for the console.
         for (const x of errored) { const k = `${x.tool}:${x.errorKind ?? x.outcome}`; s.toolErrorKinds[k] = (s.toolErrorKinds[k] ?? 0) + 1; }
+        // Silent by Gate 1 inside the engine (internal sender, automated mail): counted by reason.
+        if (r.trace?.gate1 && r.trace.gate1 !== "reply") { const g = String(r.trace.gate1).split(":")[0]; s.gate1Silent[g] = (s.gate1Silent[g] ?? 0) + 1; }
         for (const p of (r.trace?.gate3?.problems ?? []) as any[]) {
           const ks = p.kind === "style" ? (p.codes ?? []).map((c: string) => `style:${c}`) : [p.kind];
           for (const k of ks) s.gate3Kinds[k] = (s.gate3Kinds[k] ?? 0) + 1;
@@ -274,6 +276,7 @@ async function main() {
           "",
           `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""} args[${Object.keys(x.args ?? {}).join(",")}]`).join("; ") : "none"}`,
           `- cards: ${(r.trace?.cards ?? []).length ? `[${r.trace.cards.join(", ")}]` : "none"}; text list: ${(r.trace?.listedProducts ?? []).length ? `[${r.trace.listedProducts.join(", ")}] (part of the reply above, as live)` : "none"}${r.trace?.handoffSetInCode ? "; handoff set in code" : ""}`,
+          ...(r.trace?.gate1 && r.trace.gate1 !== "reply" ? [`- gate1: ${r.trace.gate1} (no model call)`] : []),
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
