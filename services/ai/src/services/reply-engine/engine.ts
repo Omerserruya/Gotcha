@@ -974,7 +974,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
           : o.handoff;
         const facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? ""), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+        const cleaned: ModelTurnOutput = { ...o, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? "", candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean)), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
         // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
         if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
         if (!cleaned.reply) return null;
@@ -1063,7 +1063,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // A yes to the employee's own offer (its last two replies) gets THE handoff line,
   // whatever the model wrote (prod replay 7: a coupon explained again; a product
   // question with the handoff set).
-  const handoffLine = locale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.";
+  // The lines the engine adds are in the reply's own language (eval 2026-11-17: an English line
+  // inside a Hebrew reply when the customer's last words were Latin, a product name or "ok").
+  const lineLocale: "he" | "en" = output?.reply && /[\u0590-\u05FF]/.test(output.reply) ? "he" : output?.reply && /[A-Za-z]{2,}/.test(output.reply) && !/[\u0590-\u05FF]/.test(output.reply) ? "en" : locale;
+  const handoffLine = lineLocale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.";
   if (output && !turnTools.escalation) {
     const accepted = previousBotReplies.slice(-2).some((b) => ignoredYes(opts.incomingMessage ?? "", b, false, false));
     if (accepted) {
@@ -1085,7 +1088,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // a collaboration inquiry). A sticky safety conversation still hands over (above).
   (trace as any).safetyWord = safetyWord(inbound.slice(-10));
   if (output?.reply && safetyConversation && !hasStopUse(output.reply) && customerDescribesUse(String(opts.incomingMessage ?? ""), [knowledge ?? "", ...turnTools.knowledgeText].join("\n")) && !hasStopUse(previousBotReplies.at(-1) ?? "")) {
-    output = { ...output, reply: `${output.reply.trim()} ${locale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
+    output = { ...output, reply: `${output.reply.trim()} ${lineLocale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
     (trace as any).stopUseAdded = true;
   }
   // "Already with the team" only for the SAME subject as an open team item (prod replay 9: a
@@ -1097,14 +1100,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A call request is never ignored (prod replay 8): there is no call tool, so it goes to the team.
   if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && CALL_REQUEST.test(opts.incomingMessage ?? "")) {
-    output = { ...output, teamQuestion: `call request: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט." : "I've passed your call request to the team, and the answer will come here in the chat."}` };
+    output = { ...output, teamQuestion: `call request: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט." : "I've passed your call request to the team, and the answer will come here in the chat."}` };
     (trace as any).callToTeam = true;
   }
   // An open complaint answered "no information" with nothing behind it (prod replay 7):
   // the question goes to the team, and the reply says so.
   if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && noInfo(output.reply) && !needlessHandoff("x", inbound, false)) {
     const q = String(opts.incomingMessage ?? "").slice(0, 300) || null;
-    output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
+    output = { ...output, teamQuestion: q, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${lineLocale === "he" ? "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." : "I've passed this to the team, and the answer will come here in the chat."}` };
     (trace as any).deadEndToTeam = true;
   }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
@@ -1122,7 +1125,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // as text, name, price, stock and link, at most three (prod replay 7: Smoovee had
   // no card and no link on 56 turns; the product summary tells the model the
   // system attaches them, and legacy did).
-  const listed = !cardChannel && prose && !final.handoff ? textProductList(final, prose, candidates, locale) : null;
+  const listed = !cardChannel && prose && !final.handoff ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);

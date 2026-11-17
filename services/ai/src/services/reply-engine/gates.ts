@@ -66,6 +66,8 @@ const V2_BANS_HE: Array<[string, RegExp]> = [
   ["gendered_agree", /(?<![\u0590-\u05FF])(?:צודק|צודקת)(?![\u0590-\u05FF])/u],
   // Prod replay 4: "מה אפשר לעזור" (במה), "ביקשתם ממך" (one customer, two persons).
   ["help_grammar", /(?<![\u0590-\u05FF])מה\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור/u],
+  // Eval 2026-11-17: "כן אחי, ..." to a customer. A vocative only (start, or after a greeting or a comma); "בושם גבר" is a product.
+  ["familiar_address", /(?:^|[.!?]\s*|(?<![֐-׿])(?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו)\s+|,\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/u],
   ["mixed_person", /(?<![\u0590-\u05FF])(?:ביקשתם\s+ממך|ביקשת\s+מכם|שלחתם\s+לך|אמרתם\s+לך)(?![\u0590-\u05FF])/u],
 ];
 
@@ -601,6 +603,17 @@ export function neutralSecondPerson(s: string): string {
     .replace(/(^|[.!?,]\s*)(מחפשת|מעדיפה|מעוניינת|מתלבטת)(?=[^.!?\n]*\?)/gu, (_m, p, w) => `${p}${TO_PLURAL[w]}`);
 }
 
+// An English sentence inside a Hebrew reply (eval 2026-11-17, twice). Four or more Latin words and
+// no Hebrew, not a product's own title or a link.
+export function foreignLanguageSentences(reply: string, titles: string[] = []): string[] {
+  if (!/[֐-׿]/.test(reply ?? "")) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => {
+    if (/[֐-׿]/.test(x) || /https?:\/\/|PRODUCT_\d+/i.test(x)) return false;
+    if (titles.some((t) => t && x.toLowerCase().includes(t.toLowerCase()))) return false;
+    return (x.match(/[A-Za-z]{2,}/g) ?? []).length >= 4;
+  }).map((x) => x.trim());
+}
+
 export interface Gate3Input {
   reply: string;
   claims: Claim[];
@@ -743,6 +756,7 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
   else if (repeatedSentences(reply, i.previousBotReplies ?? []).length) style.push("repeated_sentence");
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
+  if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
@@ -848,7 +862,7 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
  * code can fix safely is fixed, the rest is sent as written. An empty result means
  * nothing is left to say.
  */
-export function cleanStyle(reply: string, codes: string[], previousBotReplies: string[] = [], allowedScripts = "", incoming = ""): string {
+export function cleanStyle(reply: string, codes: string[], previousBotReplies: string[] = [], allowedScripts = "", incoming = "", titles: string[] = []): string {
   const c = new Set(codes);
   let s = String(reply ?? "");
   if (c.has("repeated_sentence")) {
@@ -860,6 +874,11 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     s = (s.match(SENTENCES) ?? [s]).filter((x) => !again.has(x.trim())).join("").trim();
   }
   if (c.has("gendered_address")) s = neutralSecondPerson(s);
+  if (c.has("mixed_language")) { const en = new Set(foreignLanguageSentences(s, titles)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !en.has(x.trim())).join("").trim(); }
+  if (c.has("familiar_address")) s = s
+    .replace(/(?<![֐-׿])((?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו))\s+(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "$1")
+    .replace(/,\s*(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "")
+    .replace(/(^|[.!?]\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)\s*,\s*/gu, "$1");
   if (c.has("simulation_leak")) s = dropSentences(s, SIMULATION_LEAK);
   if (c.has("repeated_team_line")) s = dropSentences(s, TEAM_LINE);
   // "מצאתי כמה אפשרויות" -> "יש כמה אפשרויות"; "לא מצאתי" is left alone (the ban skips it too).
@@ -943,6 +962,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("odd_hedge")) lines.push("- No hedge that predicts a fault the data does not state (\"ייתכן שהמוצר יזוז\", \"it might break\").");
       if (c.has("broken_hebrew")) lines.push("- \"מה לא היה בסדר\" (or \"מה לא עבד\"), not \"מה לא מרוצה\".");
       if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule and put the conflict in team_question.");
+      if (c.has("mixed_language")) lines.push("- Write the whole reply in the customer's language: one sentence is in another language.");
+      if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");
       if (c.has("near_duplicate")) lines.push("- That reply repeats one you already sent in this conversation. Answer the new message itself, briefly, or only what is new.");

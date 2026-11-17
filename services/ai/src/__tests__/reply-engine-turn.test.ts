@@ -1029,3 +1029,17 @@ describe("automated mail (prod replay 2026-11-17, a held-out store)", () => {
     expect((r.trace as any).automated).toBeUndefined();
   });
 });
+
+describe("eval follow-up: the lines the engine adds are in the reply's language", () => {
+  it("★ a Latin-only \"yes please\" in a Hebrew chat: the handoff line is Hebrew", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "hello", metadata: null },
+      { direction: "OUTBOUND", body: "אפשר להעביר לנציג מהצוות, רוצה?", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "yes please", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("l1", { reply: "בטח." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "yes please" }, "autonomous");
+    expect(r.reply).toMatch(/[\u0590-\u05FF]/);
+    expect(r.reply).not.toMatch(/A person from the team/);
+  });
+});

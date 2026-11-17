@@ -1521,3 +1521,38 @@ describe("fc618f4f validation fixes", () => {
     expect(cleanStyle("שלחי לנו את מספר ההזמנה.", ["gendered_address"])).toBe("שלחו לנו את מספר ההזמנה.");
   });
 });
+
+/** Dev eval 2026-11-17 on fc618f4f: an English sentence in a Hebrew reply; "כן אחי". */
+describe("eval follow-up: one language per reply, friendly not familiar", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ an English sentence inside a Hebrew reply is cut; a product's own English title stays", async () => {
+    const { foreignLanguageSentences, cleanStyle } = await import("../services/reply-engine/gates");
+    const r = "יש לנו את זה במלאי. A person from the team will continue with you here.";
+    expect(foreignLanguageSentences(r)).toHaveLength(1);
+    expect(styleCodes(await g3(r))).toContain("mixed_language");
+    expect(cleanStyle(r, ["mixed_language"])).toBe("יש לנו את זה במלאי.");
+    expect(foreignLanguageSentences("מומלץ: Oak Desk Pad Pro Max.", ["Oak Desk Pad Pro Max"])).toEqual([]);
+    expect(foreignLanguageSentences("Delivery takes three business days.")).toEqual([]);
+    // In a Hebrew reply: a product's own English title alone, and a short Latin name, stay.
+    expect(foreignLanguageSentences("יש לנו את זה. Oak Desk Pad Pro Max.", ["Oak Desk Pad Pro Max"])).toEqual([]);
+    expect(foreignLanguageSentences("יש לנו את זה. Oak Desk Pad Pro Max.")).toHaveLength(1);
+    expect(foreignLanguageSentences("יש במלאי. Nike Air.")).toEqual([]);
+    expect(styleCodes(await g3(r, { locale: "en" }))).not.toContain("mixed_language");
+  });
+
+  it("★ \"אחי\" and the like are dropped as a vocative; a product word is not one", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("כן אחי, יש במלאי."))).toContain("familiar_address");
+    expect(styleCodes(await g3("יש במלאי, מותק."))).toContain("familiar_address");
+    expect(styleCodes(await g3("יש לנו בושם גבר במבצע."))).not.toContain("familiar_address");
+    expect(styleCodes(await g3("מיטת מלך במלאי."))).not.toContain("familiar_address");
+    expect(cleanStyle("כן אחי, יש במלאי.", ["familiar_address"])).toBe("כן, יש במלאי.");
+    expect(cleanStyle("יש במלאי, מותק.", ["familiar_address"])).toBe("יש במלאי.");
+    expect(cleanStyle("נשמה, יש במלאי.", ["familiar_address"])).toBe("יש במלאי.");
+  });
+});
