@@ -135,7 +135,7 @@ async function defaultKnowledge(tenantId: string, query: string, aiAgentId: stri
     lexicalKnowledge(tenantId, query, 5, aiAgentId).catch(() => []),
   ]);
   const chunks = mergeKnowledge(vector, lexical, knowledgeLimit(query));
-  return buildKnowledgeContext(chunks, { dropWhenAllWeak: true }) || "";
+  return buildKnowledgeContext(chunks, { dropWhenAllWeak: true, conflicts: "team" }) || "";
 }
 
 async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecord & { side?: AgentToolDispatchResult["sideEffect"] }> {
@@ -247,6 +247,9 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     const envlp = await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: content }).catch(() => null);
     if (envlp) {
       content = mergeEnvelope(env.turn, envlp, env.locale, env.cardChannel);
+      // The shared summary tells the model to say it can't check the catalogue and offer a
+      // person (prod replay 8: "the catalogue didn't open for me"). v2: the code stays, the advice does not.
+      if (/^PRODUCT_SEARCH_FAILED/.test(content)) content = `PRODUCT_SEARCH_FAILED: ${SEARCH_SLOW_NOTE}`;
       resultCount = envlp.status === "ok" ? envlp.candidates.length : 0;
     }
   }

@@ -864,10 +864,17 @@ describe("prod replay 7: store caches", () => {
     await swrCached(c2, "x", 1000, 10_000, async () => null, (v) => v !== null);
     expect(c2.has("x")).toBe(false);
   });
-  it("★ the warmer warms only engine tenants, one store at a time, and never throws", async () => {
+  it("★ the warmer warms every Woo store by default; WOO_CACHE_WARMER=engine limits it", async () => {
+    const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
+    const base = { tenants: async () => ["on", "off"], mode: (t: string) => (t === "off" ? "off" : "autonomous") as any, load: (async () => ({ credentials: {}, config: {} })) as any, warm: async () => ({ ms: 1, ok: true }) };
+    expect((await warmWooCachesOnce(base)).map((x) => x.tenantId)).toEqual(["on", "off"]);
+    expect((await warmWooCachesOnce({ ...base, scope: "engine" })).map((x) => x.tenantId)).toEqual(["on"]);
+  });
+  it("★ the warmer (engine scope) warms only engine tenants, one store at a time, and never throws", async () => {
     const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
     const warmed: string[] = [];
     const r = await warmWooCachesOnce({
+      scope: "engine",
       tenants: async () => ["on", "off", "broken", "nostore"],
       mode: (t: string) => (t === "off" ? "off" : "autonomous") as any,
       load: (async ({ tenantId }: any) => { if (tenantId === "broken") throw new Error("db"); return tenantId === "nostore" ? null : { credentials: { k: 1 }, config: {} }; }) as any,
@@ -948,5 +955,89 @@ describe("prod replay 7 (Smoovee)", () => {
     expect(namesOtherItem("יש לכם משטח לסמובי?", "משטח הזזה")).toBe(false);
     expect(namesOtherItem("והמחיר?", "משטח הזזה")).toBe(false);
     expect(withCustomerSearchFacts({ query: "משטח הזזה" }, [], "יש לכם מעמד לסמובי?").query).toBe("מעמד משטח הזזה");
+  });
+});
+
+describe("prod replay 8 (2026-11-17)", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ v2's knowledge rule: never mention sources; the specific policy wins and the conflict goes to the team. Legacy unchanged", async () => {
+    const { buildKnowledgeContext } = await import("../services/knowledge.service");
+    const chunks = [{ content: "x", score: 0.6, documentTitle: "FAQ", chunkIndex: 0 }];
+    const v2 = buildKnowledgeContext(chunks as any, { conflicts: "team" });
+    expect(v2).toMatch(/Never mention sources/);
+    expect(v2).toMatch(/team_question/);
+    expect(v2).not.toMatch(/surface the disagreement/);
+    expect(buildKnowledgeContext(chunks as any)).toMatch(/surface the disagreement/);
+  });
+
+  it("★ talk of sources, and a tool failure told to the customer, are style problems and are cut", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(styleCodes(await g3("בתקנון כתוב 14 יום, ובמקור אחר כתוב שבוע."))).toContain("internal_jargon");
+    expect(styleCodes(await g3("הקטלוג לא נפתח לי כרגע."))).toContain("failure_narration");
+    expect(cleanStyle("הקטלוג לא נפתח לי כרגע. איזה גודל מחפשים?", ["failure_narration"])).toBe("איזה גודל מחפשים?");
+    expect(styleCodes(await g3("חשוב לנו לשמוע מה לא מרוצה."))).toContain("broken_hebrew");
+    expect(cleanStyle("חשוב לנו לשמוע מה לא מרוצה.", ["broken_hebrew"])).toBe("חשוב לנו לשמוע מה לא היה בסדר.");
+  });
+
+  it("★ a failed search, then giving up -> gave_up_search (not only a timeout)", async () => {
+    const { gaveUpSearch } = await import("../services/reply-engine/gates");
+    expect(gaveUpSearch("הקטלוג לא נפתח לי.", [{ tool: "woocommerce.list_products", outcome: "error" } as any])).toBe(true);
+  });
+
+  it("★ any offer of a person or the team, then yes -> ignored_yes", async () => {
+    const { ignoredYes } = await import("../services/reply-engine/gates");
+    for (const offer of ["רוצה שאעביר את זה לצוות?", "להעביר אותך?", "שנציג יחזור אלייך?", "שמישהו מהצוות יחזור אלייך?", "רוצה שיחזרו אלייך?"]) {
+      expect(ignoredYes("כן", offer, false, false), offer).toBe(true);
+    }
+    expect(ignoredYes("כן", "רוצה לראות עוד צבעים?", false, false)).toBe(false);
+  });
+
+  it("★ \"the team is already checking\" with nothing open is an unbacked promise", async () => {
+    const { unbackedPromises } = await import("../services/reply-engine/gates");
+    const none = { teamQuestion: false, handedOff: false, teamAlreadyOpen: false, approvalPending: false };
+    expect(unbackedPromises("הצוות כבר בודק את זה.", none)).toHaveLength(1);
+    expect(unbackedPromises("זה כבר אצל הצוות.", none)).toHaveLength(1);
+    expect(unbackedPromises("הצוות כבר בודק את זה.", { ...none, teamAlreadyOpen: true })).toEqual([]);
+  });
+
+  it("★ sizes or an item given, answered with a question or \"I don't want to guess\" -> no_search; not when products are shown", async () => {
+    const offered = ["woocommerce.list_products"];
+    expect(kinds(await g3("מה הגודל של המכשיר?", { incomingMessage: "יש לי מיקסר 22 על 35", toolsOffered: offered }))).toContain("no_search");
+    expect(kinds(await g3("לא רוצה לנחש, תשלחו פרטים.", { incomingMessage: "מחפשת משטח למיקסר", toolsOffered: offered }))).toContain("no_search");
+    expect(kinds(await g3("יש משטח 34*38 ב-₪149, מתאים?", { incomingMessage: "מחפשת משטח למיקסר", toolsOffered: offered }))).not.toContain("no_search");
+  });
+
+  it("★ the appended list is exactly what the text names; first three only when it names none", async () => {
+    const { textProductList, namesTitle } = await import("../services/reply-engine/engine");
+    const c = [
+      { title: "סמובי אלכסה שחור 34*38", price: 149, inventoryState: "in_stock", url: "u1" },
+      { title: "סמובי כריסטינה לבן 30*40", price: 159, inventoryState: "in_stock", url: "u2" },
+      { title: "סמובי נועם אפור 25*35", price: 129, inventoryState: "in_stock", url: "u3" },
+    ];
+    expect(namesTitle("האלכסה בשחור מתאימה", c[0].title)).toBe(true);
+    expect(namesTitle("המשטח 34*38 מתאים", c[0].title)).toBe(true);
+    expect(namesTitle("משטח מתאים", c[0].title)).toBe(false);
+    const named = textProductList({ reply: "", cards: [] } as any, "האלכסה בשחור והכריסטינה בלבן מתאימות.", c, "he")!;
+    expect(named.keys).toEqual(["PRODUCT_1", "PRODUCT_2"]);
+    // Speaks of a product without matching one fully: no generic list.
+    expect(textProductList({ reply: "", cards: [] } as any, "הנה, הנועם מתאים.", c, "he")?.keys ?? []).not.toContain("PRODUCT_1");
+    expect(textProductList({ reply: "", cards: [] } as any, "הנה מה שמתאים.", c, "he")!.keys).toEqual(["PRODUCT_1", "PRODUCT_2", "PRODUCT_3"]);
+  });
+
+  it("★ a call request is recognised", async () => {
+    const { CALL_REQUEST } = await import("../services/reply-engine/engine");
+    for (const t of ["יכול להתקשר אלי?", "תתקשרו אליי בבקשה", "אפשר שיחה טלפונית?", "can someone call me"]) expect(CALL_REQUEST.test(t), t).toBe(true);
+    expect(CALL_REQUEST.test("מה הטלפון של החנות?")).toBe(false);
+  });
+
+  it("★ the address starts at the street word: \"המפעל ברח במסילה 23 נשר\"", async () => {
+    const { extractAddress } = await import("../services/knowledge.service");
+    expect(extractAddress("איסוף עצמי מהמפעל ברח במסילה 23 נשר")).toBe("רחוב במסילה 23 נשר");
   });
 });

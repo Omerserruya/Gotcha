@@ -136,11 +136,11 @@ export function unreadBusinessInfo(reply: string, incoming: string, tools: ToolR
 
 // "I couldn't check" after a store search timed out (prod replay 3: a category ask
 // got that where legacy named the category).
-const GAVE_UP = /(?:לא (?:הצלחתי|הצלחנו|יכולתי|יכולנו|מצליח|מצליחה) (?:לבדוק|לגשת|לראות|לחפש)|(?:אין|אין לי) (?:גישה|אפשרות לבדוק)|כרגע (?:לא ניתן|אי אפשר) לבדוק|לבדוק (?:את זה )?כרגע)|\b(?:could(?:n'?t| not) (?:check|look|access|search)|unable to (?:check|look|access))\b/iu;
+const GAVE_UP = /(?:הקטלוג\s+לא\s+(?:נפתח|נטען)|לא\s+נפתח\s+לי|תקלה|לא (?:הצלחתי|הצלחנו|יכולתי|יכולנו|מצליח|מצליחה) (?:לבדוק|לגשת|לראות|לחפש)|(?:אין|אין לי) (?:גישה|אפשרות לבדוק)|כרגע (?:לא ניתן|אי אפשר) לבדוק|לבדוק (?:את זה )?כרגע)|\b(?:could(?:n'?t| not) (?:check|look|access|search)|unable to (?:check|look|access))\b/iu;
 /** A product search timed out, nothing else was found this turn, and the reply gives up on the customer. */
 export function gaveUpSearch(reply: string, tools: ToolRunRecord[]): boolean {
   const search = (t: ToolRunRecord) => /list_products|search_products|get_product|variation/i.test(t.tool);
-  if (!tools.some((t) => search(t) && t.outcome === "timeout")) return false;
+  if (!tools.some((t) => search(t) && (t.outcome === "timeout" || t.outcome === "error"))) return false;
   if (tools.some((t) => search(t) && (t.outcome === "ok" || t.outcome === "empty"))) return false;
   return GAVE_UP.test(reply ?? "");
 }
@@ -156,7 +156,7 @@ const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניס�
 export const simulationLeak = (reply: string) => SIMULATION_LEAK.test(reply ?? "");
 
 // "I passed it to the team", said again while the team already has it open.
-const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו)(?:\s+(?:את\s+)?(?:השאלה|הבקשה|הפנייה|זה|הנושא|הפרטים))?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:יבדוק|בודק|יחזור|יעדכן|יענה)|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:check|look|get back))\b/iu;
+const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו)(?:\s+(?:את\s+)?(?:השאלה|הבקשה|הפנייה|זה|הנושא|הפרטים))?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
 const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם זה|נשמע)|יש (?:חדש|חדשות|עדכון|תשובה)|עדכון|עדכנו|נו|כמה זמן|עוד כמה|מתי תהיה תשובה|ענו|הצוות)(?![\u0590-\u05FF])|\b(?:any (?:update|news)|still waiting|heard back)\b/iu;
 /** The reply announces the team hand-off again although it is already open and the customer did not ask about it. */
 export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean): boolean {
@@ -255,8 +255,14 @@ const PHOTO_ASK = /(?<![\u0590-\u05FF])(?:תמונה|תמונות|צילום|ל�
 const PRODUCT_WANT = /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|יש לכם|רוצה|רוצים|צריך|צריכה|בצבע|בגוון|צבע|גוון|מתאים|מתאימה|דגם|מידה)(?![\u0590-\u05FF])|\b(?:looking for|do you have|i want|i need|colou?r)\b/iu;
 const OCCASION = /(?<![\u0590-\u05FF])(?:לחתונה|לאירוע|אירוע|חגיגי|חגיגית|חגיגיים|מתנה|למתנה|ליום\s+הולדת|לחג|לבר\s+מצווה|לבת\s+מצווה|ערב|יומיומי|יומיומית)(?![\u0590-\u05FF])|\b(?:wedding|occasion|gift|party|festive|everyday)\b/iu;
 /** A product ask (a category, colour, size or occasion) met with a photo request or a team question, while the store search was there and did not run. */
+const DIMENSIONS = /\d{1,3}(?:[.,]\d)?\s*(?:ס["״']?מ|cm)?\s*(?:[x×*]|על|by)\s*\d{1,3}/iu;
+const NOT_GUESSING = /(?<![\u0590-\u05FF])(?:לא\s+(?:רוצה|רוצים|נרצה)\s+לנחש|לא\s+אנחש|לא\s+ננחש|כדי\s+לא\s+לטעות|בלי\s+לנחש)(?![\u0590-\u05FF])|\b(?:don'?t want to guess|not to guess)\b/iu;
 export function photoInsteadOfSearch(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
-  if (!(PHOTO_ASK.test(reply ?? "") || teamQuestion) || !(PRODUCT_WANT.test(incoming ?? "") || OCCASION.test(incoming ?? ""))) return false;
+  // Prod replay 8: sizes, a category or an item given, and a question (or "I don't want to guess") instead of the search legacy ran.
+  // A question counts only when it replaces the products: no price, no size, no number in the reply.
+  const asksInstead = /\?/.test(reply ?? "") && !/₪|ש["״']ח|\d/.test(reply ?? "");
+  const deflects = PHOTO_ASK.test(reply ?? "") || teamQuestion || NOT_GUESSING.test(reply ?? "") || asksInstead;
+  if (!deflects || !(PRODUCT_WANT.test(incoming ?? "") || OCCASION.test(incoming ?? "") || DIMENSIONS.test(incoming ?? ""))) return false;
   const canSearch = toolsOffered.some((n) => /list_products|search_products/i.test(n));
   return canSearch && !tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
 }
@@ -272,7 +278,7 @@ export function repeatedAsk(reply: string, previousBotReplies: string[]): boolea
 }
 
 // The employee offered a person, or asked if it is urgent, and the customer said yes (prod replay 5).
-const OFFERED_PERSON = /(?<![\u0590-\u05FF])(?:דחוף|דחופה|להעביר\s+(?:אותך|את\s+זה|את\s+הפנייה|לנציג|לצוות)|שאעביר|שנעביר|נציג|נציגה|שמישהו\s+מהצוות|לדבר\s+עם\s+(?:מישהו|נציג))(?![\u0590-\u05FF])|\b(?:urgent|connect you|pass (?:this|you) (?:on|to)|talk to (?:someone|a person))\b/iu;
+const OFFERED_PERSON = /(?<![\u0590-\u05FF])[וש]?(?:דחוף|דחופה|להעביר|שאעביר|שנעביר|אעביר|נעביר|נציג|נציגה|נציגים|צוות|הצוות|לצוות|מהצוות|מישהו|מישהי|שיחזרו|שיחזור|שתחזור|שנחזור|לחבר\s+אותך|שיתקשרו|שיתקשר|לדבר\s+עם)(?![\u0590-\u05FF])|\b(?:urgent|connect you|pass (?:this|you) (?:on|to)|talk to (?:someone|a person))\b/iu;
 const YES = /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|ברור|בטח|אשמח|בהחלט|yes|yeah|yep|please|sure)(?:[\s,.!]|$)/iu;
 /** The customer accepted the employee's own offer of a person, and the reply does neither hand over nor record it. */
 export function ignoredYes(incoming: string, lastBotReply: string | null | undefined, handedOff: boolean, teamQuestion: boolean): boolean {
@@ -321,8 +327,15 @@ export const foreignScript = (reply: string) => (String(reply ?? "").match(FOREI
 export const stripForeignScript = (reply: string) => String(reply ?? "").replace(FOREIGN_SCRIPT, "");
 
 // How the system works is not the customer's business (prod replay 5: "the number is linked to your contact details").
-const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b/iu;
+const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
 export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "");
+
+// A tool failure told to the customer (prod replay 8: "the catalogue didn't open for me").
+const FAILURE_NARRATION = /(?<![\u0590-\u05FF])(?:הקטלוג\s+לא\s+(?:נפתח|נטען|עובד|זמין)|לא\s+נפתח\s+לי|לא\s+נטען\s+לי|יש\s+(?:לי\s+)?(?:תקלה|בעיה\s+טכנית)|תקלה\s+(?:טכנית|במערכת|בחיפוש)|המערכת\s+לא\s+(?:עובדת|עונה|מאפשרת)|החיפוש\s+(?:נכשל|לא\s+עבד))(?![\u0590-\u05FF])|\b(?:catalog(?:ue)? (?:didn'?t|did not|won'?t) (?:open|load)|technical (?:issue|problem)|the system (?:is down|isn'?t working)|search failed)\b/iu;
+export const failureNarration = (reply: string) => FAILURE_NARRATION.test(reply ?? "");
+
+// Broken Hebrew seen in prod replay 8 ("חשוב לנו לשמוע מה לא מרוצה").
+const BROKEN_HE = /(?<![\u0590-\u05FF])מה\s+לא\s+(?:מרוצה|מרוצים|מרוצות)(?![\u0590-\u05FF])/u;
 
 export interface Gate3Input {
   reply: string;
@@ -397,7 +410,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   else if (unreadOrder(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_order" });
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
-  if (photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "no_search" });
+  // Products this turn mean a search ran.
+  if (!i.candidateCount && photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "no_search" });
   if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
   const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
@@ -426,6 +440,8 @@ export function gate3(i: Gate3Input): Gate3Verdict {
   if (simulationLeak(reply)) style.push("simulation_leak");
   if (foreignScript(reply)) style.push("foreign_script");
   if (internalJargon(reply)) style.push("internal_jargon");
+  if (failureNarration(reply)) style.push("failure_narration");
+  if (i.locale === "he" && BROKEN_HE.test(reply)) style.push("broken_hebrew");
   if (repeatedAsk(reply, i.previousBotReplies ?? [])) style.push("repeated_ask");
   if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion)) style.push("repeated_team_line");
@@ -523,6 +539,8 @@ export function cleanStyle(reply: string, codes: string[]): string {
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
   if (c.has("foreign_script")) s = stripForeignScript(s);
   if (c.has("internal_jargon")) s = dropSentences(s, INTERNAL_JARGON);
+  if (c.has("failure_narration")) s = dropSentences(s, FAILURE_NARRATION);
+  if (c.has("broken_hebrew")) s = s.replace(/(?<![\u0590-\u05FF])מה\s+לא\s+(?:מרוצה|מרוצים|מרוצות)(?![\u0590-\u05FF])/gu, "מה לא היה בסדר");
   if (c.has("repeated_ask")) s = dropSentences(s, PHOTO_ASK);
   if (c.has("help_grammar")) s = s.replace(/(?<![\u0590-\u05FF])מה(\s+(?:אפשר|אוכל|נוכל|ניתן)\s+לעזור)/gu, "במה$1");
   if (c.has("mixed_person")) s = s.replace(/(?<![\u0590-\u05FF])(?:ביקשתם)(?=\s+ממך)/gu, "ביקשנו").replace(/(?<![\u0590-\u05FF])(?:שלחתם)(?=\s+לך)/gu, "שלחנו").replace(/(?<![\u0590-\u05FF])(?:אמרתם)(?=\s+לך)/gu, "אמרנו");
@@ -578,7 +596,9 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
       if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
       if (c.has("foreign_script")) lines.push("- A character from another alphabet slipped into a word: rewrite the reply in the customer's language only.");
-      if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access): say what the customer can do, plainly.");
+      if (c.has("failure_narration")) lines.push("- Never tell the customer a tool or the catalogue failed. Search again narrower, or ask one question about what they want, or show the closest products from earlier in this conversation.");
+      if (c.has("broken_hebrew")) lines.push("- \"מה לא היה בסדר\" (or \"מה לא עבד\"), not \"מה לא מרוצה\".");
+      if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule and put the conflict in team_question.");
       if (c.has("near_duplicate")) lines.push("- That reply repeats one you already sent in this conversation. Answer the new message itself, briefly, or only what is new.");
       if (c.has("repeated_ask")) lines.push("- You already asked that in this conversation: do not ask it again. Use what you have, or move on.");
       if (c.has("help_grammar")) lines.push("- \"במה אפשר לעזור\", not \"מה אפשר לעזור\".");

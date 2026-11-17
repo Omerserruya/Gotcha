@@ -268,7 +268,9 @@ const NOT_A_STREET = /(?<![\u0590-\u05FF])(?:בעלות|עלות|במחיר|מח
 export function extractAddress(text: string): string | null {
   for (const re of [STREET, CUED]) {
     const m = re.exec(String(text ?? ""));
-    const a = m?.[1]?.replace(/\s+/g, " ").replace(/[,\s]+$/, "").trim();
+    // From a street word inside what was captured ("המפעל ברח במסילה 23 נשר" -> "רחוב במסילה 23 נשר").
+    const a = m?.[1]?.replace(/\s+/g, " ").replace(/[,\s]+$/, "").trim()
+      .replace(/^.*?(?<![\u0590-\u05FF])ב?(?:רח['׳"]?|רחוב)\s+/u, "רחוב ");
     if (a && a.length <= 80 && !NOT_A_STREET.test(a)) return a;
   }
   return null;
@@ -377,7 +379,7 @@ export async function documentAddress(tenantId: string, aiAgentId?: string | nul
   return value;
 }
 
-export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean } = {}): string {
+export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean; conflicts?: "surface" | "team" } = {}): string {
   if (chunks.length === 0) return "";
   if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return NO_KNOWLEDGE_MATCH_BLOCK;
 
@@ -401,7 +403,10 @@ Rules:
 1. Treat the content below as authoritative. If it answers the question, use it.
 2. Prefer the wording, numbers, and definitions found here over anything you "remember".
 3. If the answer is NOT covered here, say so plainly - do not guess, do not infer beyond the text, do not fabricate names, prices, dates, links, or policies.
-4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently.
+${opts.conflicts === "team"
+  // Reply engine v2 (prod replay 8, Tehila: "the terms say X ... another source says Y" sent to a customer).
+  ? "4. Do not contradict this content. Never mention sources, documents or that another text says otherwise. If two sources here disagree, give the rule of the more specific policy document (a returns or exchange policy, the terms) over an FAQ or an about page, the stricter one when both are policies, and put the conflict in team_question so the owner can fix it."
+  : "4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently."}
 5. When you use a fact from a specific source, you may reference it by its title or number; never invent sources.
 6. Information NOT present here is treated as unknown for this turn.
 7. A source about a NEIGHBOURING topic is not an answer. A shipping or pickup policy does not say where the products are sold in shops (points of sale, נקודות מכירה, חנויות); opening hours of one place are not the hours of another. When the exact thing asked is not stated, say you do not have that information and offer to have the team answer; do not answer with the nearest policy instead. An address or a pickup place stated anywhere (a shipping or pickup text too) DOES answer "where are you" or "what is the address".

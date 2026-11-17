@@ -173,6 +173,23 @@ export function withOwnNumberNote(result: any): any {
  * title it names; else, when it presents products ("הנה", "יש לנו"), the first
  * three in stock. Exact store fields only; one the reply already links is skipped.
  */
+const TITLE_STOP = new Set(["משטח", "משטחים", "סמובי", "smoovee", "של", "עם", "for", "the", "and"]);
+const titleWords = (t: string) => (String(t ?? "").toLowerCase().match(/[\u0590-\u05FFa-z]{3,}|\d+(?:[*x×]\d+)?/g) ?? []).filter((w) => !TITLE_STOP.has(w));
+/** The text names this product: its whole title, two of its distinctive words, or its size. */
+export function namesTitle(prose: string, title: string): boolean {
+  if (prose.includes(title)) return true;
+  const text = String(prose ?? "").toLowerCase();
+  const words = titleWords(title);
+  const size = words.find((w) => /\d+[*x×]\d+/.test(w));
+  if (size && new RegExp(size.replace(/[*x×]/, "\\s*[*x×]\\s*")).test(text)) return true;
+  return words.filter((w) => !/^\d+$/.test(w) && text.includes(w)).length >= 2;
+}
+/** The text speaks of specific products (a distinctive title word) even if none matches fully: no generic list then. */
+function namesAnyProductWord(prose: string, candidates: any[]): boolean {
+  const text = String(prose ?? "").toLowerCase();
+  return candidates.some((c) => titleWords(c?.title).some((w) => w.length >= 4 && !/^\d+$/.test(w) && text.includes(w)));
+}
+
 export function textProductList(o: ModelTurnOutput, prose: string, candidates: any[], locale: "he" | "en"): { text: string; keys: string[] } | null {
   if (!candidates.length) return null;
   const n = new Set<number>();
@@ -180,8 +197,10 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
     const i = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]);
     if (i >= 1 && i <= candidates.length) n.add(i);
   }
-  candidates.forEach((c, i) => { if (c?.title && prose.includes(c.title)) n.add(i + 1); });
-  if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose)) {
+  // A title named exactly, or by its distinctive words (two of them, or a size like "34*38"):
+  // the list is exactly the products the text names (prod replay 8: the text named A and B, the list added C).
+  candidates.forEach((c, i) => { if (c?.title && namesTitle(prose, c.title)) n.add(i + 1); });
+  if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose) && !namesAnyProductWord(prose, candidates)) {
     candidates.forEach((c, i) => { if (n.size < 3 && c?.title && c.inventoryState !== "out_of_stock") n.add(i + 1); });
   }
   const chosen = [...n].slice(0, 3).map((i) => ({ i, c: candidates[i - 1] })).filter((x) => x.c?.title && !(x.c.url && prose.includes(x.c.url)));
@@ -195,6 +214,9 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
   ].filter(Boolean).join("\n"));
   return { text: lines.join("\n\n"), keys: chosen.map((x) => `PRODUCT_${x.i}`) };
 }
+
+/** The customer asks to be called (prod replay 8: "יכול להתקשר אלי?" ignored). */
+export const CALL_REQUEST = /(?<![\u0590-\u05FF])(?:תתקשרו|תתקשר|תתקשרי|להתקשר\s+אלי|יכול(?:ה|ים)?\s+להתקשר|אפשר\s+(?:להתקשר|שיחה|לדבר\s+בטלפון)|שיחה\s+טלפונית|שיחת\s+טלפון|תחזרו\s+אלי\s+(?:בטלפון|טלפונית)|תצלצלו|לצלצל\s+אלי|שמישהו\s+יתקשר)(?![\u0590-\u05FF])|\b(?:call me|give me a call|phone me|can (?:you|someone) call)\b/iu;
 
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
@@ -581,7 +603,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const earlier = earlierNote(history.slice(0, Math.max(0, history.length - cfg.windowMessages)));
     if (earlier) windowed.unshift({ role: "system", content: earlier });
   }
-  const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true }) || null;
+  const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true, conflicts: "team" }) || null;
   const customerName = String((conversation as any).customerName ?? "").trim();
   const customerLine = customerName ? `Name: ${customerName.slice(0, 60)}` : null;
   const turnPart = buildTurnPart({
@@ -863,6 +885,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       output = { ...output, handoff: "the reply says a person will continue", reply: isCannedTeamLine(output.reply) || !output.reply ? handoffLine : output.reply };
       (trace as any).handoffSetInCode = true;
     }
+  }
+  // A call request is never ignored (prod replay 8): there is no call tool, so it goes to the team.
+  if (output?.reply && !output.handoff && !output.teamQuestion && !turnTools.escalation && CALL_REQUEST.test(opts.incomingMessage ?? "")) {
+    output = { ...output, teamQuestion: `call request: ${String(opts.incomingMessage ?? "").slice(0, 260)}`, reply: teamLineIn(output.reply) ? output.reply : `${output.reply.trim()} ${locale === "he" ? "העברתי לצוות את הבקשה לשיחה, והתשובה תגיע כאן בצ'אט." : "I've passed your call request to the team, and the answer will come here in the chat."}` };
+    (trace as any).callToTeam = true;
   }
   // An open complaint answered "no information" with nothing behind it (prod replay 7):
   // the question goes to the team, and the reply says so.

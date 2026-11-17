@@ -4,8 +4,9 @@
  * catalogue, and timed out at 8s; warm it is 1.0 to 1.5s).
  *
  * At boot (after a short delay) and every 8 minutes (the catalogue is fresh for
- * 10), for every tenant whose reply engine is on (shadow or autonomous) with a
- * CONNECTED WooCommerce store: categories and the whole catalogue, in each
+ * 10), for every tenant with a CONNECTED WooCommerce store (legacy searches the
+ * same caches; prod replay 8: Tehila's engine is off and her search was cold).
+ * WOO_CACHE_WARMER=engine limits it to reply-engine tenants, =off stops it: categories and the whole catalogue, in each
  * language a turn reads. Read-only GETs to the store, one store at a time;
  * a failure is logged and the next tick tries again. The caches are per
  * process, so every ai replica warms its own.
@@ -23,6 +24,8 @@ export interface WarmDeps {
   load?: typeof loadConnection;
   warm?: typeof warmWooCatalog;
   mode?: typeof replyEngineMode;
+  /** "engine": reply-engine tenants only; otherwise every Woo tenant. */
+  scope?: string;
 }
 
 /** Tenants with a CONNECTED WooCommerce store. */
@@ -38,7 +41,8 @@ async function wooTenants(): Promise<string[]> {
 /** One pass: warm each engine tenant's store; returns what was warmed (for the log and tests). */
 export async function warmWooCachesOnce(deps: WarmDeps = {}): Promise<Array<{ tenantId: string; ok: boolean; ms: number }>> {
   const mode = deps.mode ?? replyEngineMode;
-  const ids = (await (deps.tenants ?? wooTenants)().catch(() => [] as string[])).filter((t) => mode(t) !== "off");
+  const engineOnly = (deps.scope ?? process.env.WOO_CACHE_WARMER) === "engine";
+  const ids = (await (deps.tenants ?? wooTenants)().catch(() => [] as string[])).filter((t) => !engineOnly || mode(t) !== "off");
   const out: Array<{ tenantId: string; ok: boolean; ms: number }> = [];
   for (const tenantId of ids) {
     try {

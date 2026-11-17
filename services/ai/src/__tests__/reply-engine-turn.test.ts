@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   lexical: [] as any[],
   groundTitle: "Canvas Tote",
   docAddress: null as string | null,
+  groundStatus: "ok" as string,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -106,7 +107,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   complementaryAnchorAllowed: async () => ({ ok: true }),
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ({
-    provider: "woocommerce", tool: "woocommerce_product_search", status: "ok",
+    provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
     candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] }],
     appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
   }),
@@ -148,6 +149,7 @@ beforeEach(() => {
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
   h.docAddress = null;
+  h.groundStatus = "ok";
   h.agentStatus = "ACTIVE";
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
@@ -339,7 +341,8 @@ describe("one v2 turn, live", () => {
       { toolCalls: [respond("r1", { reply: "התיק עולה ₪120." })] },
       { toolCalls: [respond("r2", { reply: "אפשר לבדוק לך את המחיר, איזה תיק?" })] },
     );
-    const r = await runReplyEngineTurn(opts, "autonomous");
+    // Not a product ask (that one now searches first, prod replay 8).
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה לגבי המחיר?" }, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toBe("אפשר לבדוק לך את המחיר, איזה תיק?");
   });
@@ -349,7 +352,7 @@ describe("one v2 turn, live", () => {
       { toolCalls: [tc("s1", "read_skill", { name: "role_support" })] },
       { toolCalls: [respond("s2", { reply: "בטח, מה מספר ההזמנה?" })] },
     );
-    await runReplyEngineTurn(opts, "autonomous");
+    await runReplyEngineTurn({ ...opts, incomingMessage: "איפה ההזמנה שלי?" }, "autonomous");
     const toolMsg = h.calls[1].messages.find((m: any) => m.role === "tool");
     expect(toolMsg.content).toMatch(/Skill|Playbook/);
     expect(h.dispatched).toHaveLength(0);
@@ -820,5 +823,30 @@ describe("prod replay 7 (2026-11-17), through a whole turn", () => {
     expect((r.trace as any).deadEndToTeam).toBe(true);
     expect(h.teamQuestions).toHaveLength(1);
     expect(r.reply).toMatch(/העברתי את זה לצוות/);
+  });
+});
+
+describe("prod replay 8 (2026-11-17), through a whole turn", () => {
+  it("★ a call request the reply ignores: recorded for the team, and the reply says so", async () => {
+    h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה לעזור כאן בצ'אט." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יכול להתקשר אלי?" }, "autonomous");
+    expect((r.trace as any).callToTeam).toBe(true);
+    expect(h.teamQuestions[0].question).toMatch(/^call request:/);
+    expect(r.reply).toMatch(/הבקשה לשיחה/);
+  });
+});
+
+describe("prod replay 8: a failed store search", () => {
+  it("★ the model is told to search narrower, never to say the catalogue failed or to hand over", async () => {
+    h.groundStatus = "error";
+    h.responses.push(
+      { toolCalls: [tc("x1", "woocommerce.list_products", { query: "משטח" })] },
+      { toolCalls: [respond("x2", { reply: "איזה גודל מחפשים?" })] },
+    );
+    await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לראות משטחים?" }, "autonomous");
+    const note = h.calls[1].messages.find((m: any) => m.role === "tool" && m.tool_call_id === "x1")?.content;
+    expect(note).toMatch(/^PRODUCT_SEARCH_FAILED: /);
+    expect(note).toMatch(/narrower query/);
+    expect(note).not.toMatch(/offer a human handoff|can't check the catalog/);
   });
 });
