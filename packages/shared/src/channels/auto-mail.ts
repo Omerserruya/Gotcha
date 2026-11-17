@@ -67,18 +67,3 @@ export function parseHeaderBlock(raw: string | null | undefined): Record<string,
   }
   return out;
 }
-
-/**
- * Mail sent to a list or from an address nobody reads (2026-11-17, prod replay:
- * 75 of one store's 92 email turns were newsletters, account notices and our own
- * alerts, and the AI answered them). Kept, not dropped: the business still sees
- * it in the inbox, and the AI does not answer it. The reason rides on the
- * message (metadata.email.bulk).
- */
-export type BulkMailHint = "list" | "no_reply";
-const NO_REPLY_LOCAL = /^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|noreply[-_.].*|.*[-_.]noreply|notifications?|notify|alerts?|mailer|bounces?|newsletters?|marketing|promotions?|digest)$/i;
-export function bulkMailHint(input: AutoMailInput): BulkMailHint | null {
-  if (headerOf(input.headers, "List-Unsubscribe") || headerOf(input.headers, "List-Id")) return "list";
-  const local = addressOf(String(input.from ?? headerOf(input.headers, "From"))).split("@")[0] ?? "";
-  return NO_REPLY_LOCAL.test(local) ? "no_reply" : null;
-}
