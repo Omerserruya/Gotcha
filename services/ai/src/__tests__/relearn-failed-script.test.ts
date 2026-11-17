@@ -153,7 +153,8 @@ describe("control: the first prod run, reproduced", () => {
     const r = await fresh.runCustomerLearningStage({ tenantId: H.TENANT, importId: H.IMPORT });
     expect(r.detail).toMatchObject({ learned: 0, failed: 9 });
     expect(H.openaiCalls).toHaveLength(0);
-  });
+    // A fresh module graph (vi.resetModules + import) takes ~4.5s on a loaded host: past the 5s default at times.
+  }, 20_000);
 
   it("and the script now stops on such a round instead of reporting it as a run", async () => {
     seed(3);
