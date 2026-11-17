@@ -104,7 +104,7 @@ router.get("/daily", requirePermission("analytics:dashboard:read"), async (req: 
 
 router.get("/queue", requirePermission("analytics:workspace:read"), async (req: Request, res: Response) => {
   try {
-    const data = await analyticsService.getQueueDepth(req.tenantId!);
+    const data = await analyticsService.getQueueDepth(req.tenantId!, { hideIrrelevant: req.query.hideIrrelevant === "true" });
     res.json({ data });
   } catch (err) {
     console.error("Queue stats error:", err);
@@ -125,7 +125,7 @@ router.get("/queue/items", requirePermission("conversation:messages:read"), asyn
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
-    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor, viewer: viewerOf(req) });
+    const result = await analyticsService.getQueueItems(req.tenantId!, { limit, cursor, viewer: viewerOf(req), hideIrrelevant: req.query.hideIrrelevant === "true" });
     res.json(result);
   } catch (err) {
     console.error("Queue items error:", err);

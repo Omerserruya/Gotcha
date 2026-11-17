@@ -1,3 +1,5 @@
+// A pure module by its own path, so the many tests that mock "@chatcenter/shared" keep the real rule.
+import { irrelevantWhere, notIrrelevantWhere, withRelevance, RELEVANCE_OVERRIDES, type ConversationRelevanceView } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause, parseBusinessHours, isWorkspaceDay, dayStart, nextWorkspaceDay } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue, replyWindowsFor, type ReplyWindow } from "@chatcenter/shared";
@@ -115,7 +117,12 @@ export interface ConversationFilters {
    * every status (closed included) and every assignee, so it disagreed with
    * Home (10 vs 9).
    */
-  view?: "queue" | "open";
+  view?: "queue" | "open" | "irrelevant";
+  /**
+   * Leave out conversations labelled not relevant (personal, notice, marketing). Opt-in, so a
+   * caller that does not send it sees exactly what it saw before (2026-11-17).
+   */
+  hideIrrelevant?: boolean;
   /**
    * A period in the workspace's days (YYYY-MM-DD, `to` inclusive): the
    * conversations STARTED in it, cut at the business-hours time zone's
@@ -151,16 +158,21 @@ const AUTOMATED_HANDLERS = ["ai_agent", "flow"];
  * can never disagree with the rows it counts. No cursor: that is the page's.
  */
 export async function listWhere(tenantId: string, filters: ConversationFilters): Promise<any> {
-  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, excludeClosed = false, view, from, to, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, includeAutomated = false, automatedOnly = false, excludeClosed = false, view, from, to, userRole, userId, userDepartmentId, hideIrrelevant = false } = filters;
   const where: any = { tenantId };
+  if (view === "irrelevant") {
+    // The "not relevant" view: those labels only, any status, automated included.
+    where.AND = [irrelevantWhere()];
+    if (status) where.status = status;
+  }
   if (view === "queue") {
     // One AND element carrying the whole definition (its own OR inside), so the
     // visibility clause below keeps the top-level OR. Status and the
     // automation rule come from the definition, not from the query.
     const { AND: inner, ...flat } = waitingForPersonClause();
     where.AND = [{ ...flat, ...inner[0] }];
-  } else if (status) where.status = status;
-  if (view === "queue") {
+  } else if (status && view !== "irrelevant") where.status = status;
+  if (view === "queue" || view === "irrelevant") {
     // Fully defined above.
   } else if (view === "open") {
     // Everything not closed, minus exactly what GOTCHA is handling alone (the
@@ -205,7 +217,11 @@ export async function listWhere(tenantId: string, filters: ConversationFilters):
       ],
     });
   }
-  if (excludeClosed && view !== "queue" && !status) where.status = { not: "CLOSED" };
+  if (excludeClosed && view !== "queue" && view !== "irrelevant" && !status) where.status = { not: "CLOSED" };
+  if (hideIrrelevant && view !== "irrelevant") {
+    where.AND = where.AND || [];
+    where.AND.push(notIrrelevantWhere());
+  }
   if (assignedAgentId) where.assignedAgentId = assignedAgentId;
   if (from || to) {
     const tz = await workspaceTimeZone(tenantId);
@@ -443,7 +459,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     const { messages, ...rest } = c;
     const state = unread.get(c.id);
     return {
-      ...rest,
+      ...withRelevance(rest),
       channelAccount: presentChannelAccount((rest as any).channelAccount, accountCounts),
       contactId: contactIdOf(contactMap, c as any),
       lastMessageDirection: lastMsg?.direction || null,
@@ -480,7 +496,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
  * The inbox views, as list filters: the same mapping as frontend-v2's
  * `viewQuery` (features/inbox/inbox-views.ts), so a count and its list agree.
  */
-export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved", "mine_open", "open"] as const;
+export const UNREAD_COUNT_VIEWS = ["queue", "mine", "active", "gotcha", "all", "resolved", "mine_open", "open", "irrelevant"] as const;
 export type UnreadCountView = (typeof UNREAD_COUNT_VIEWS)[number];
 
 function viewFilters(view: UnreadCountView, userId: string): Partial<ConversationFilters> {
@@ -496,6 +512,8 @@ function viewFilters(view: UnreadCountView, userId: string): Partial<Conversatio
     case "mine_open": return { assignedAgentId: userId, includeAutomated: true, excludeClosed: true };
     // A workspace of one: everything not closed that a person has (see listWhere).
     case "open": return { view: "open" };
+    // The "not relevant" view (2026-11-17).
+    case "irrelevant": return { view: "irrelevant" };
   }
 }
 
@@ -510,10 +528,12 @@ export async function unreadCounts(
   tenantId: string,
   viewer: { userId: string; role?: string; departmentId?: string },
   views: UnreadCountView[],
+  opts: { hideIrrelevant?: boolean } = {},
 ): Promise<{ unread: Record<string, number>; totals: Record<string, number> }> {
   const sets = await Promise.all(views.map(async (view) => {
     const where = await listWhere(tenantId, {
       ...viewFilters(view, viewer.userId),
+      hideIrrelevant: !!opts.hideIrrelevant,
       userId: viewer.userId, userRole: viewer.role, userDepartmentId: viewer.departmentId,
     });
     const rows = await prisma.conversation.findMany({ where, select: { id: true } });
@@ -543,7 +563,7 @@ export async function getById(tenantId: string, id: string) {
   const [contactMap, accountCounts] = await Promise.all([contactIdsFor(tenantId, [conversation as any]), activeAccountCounts(tenantId)]);
   const account = conversation.channelAccount as any;
   return {
-    ...conversation,
+    ...withRelevance(conversation),
     channelAccount: account ? { ...presentChannelAccount(account, accountCounts)!, externalId: account.externalId } : null,
     // Stored uploads go out as the logged-in media route (2026-10-10).
     ...(Array.isArray(conversation.messages) ? { messages: conversation.messages.map((m) => presentMessageMedia(m)) } : {}),
@@ -1093,4 +1113,40 @@ async function sendAutoGreeting(
   } catch (err) {
     console.error("Auto-greeting error (non-fatal):", err);
   }
+}
+
+
+/**
+ * A person's relevance override ("this is business" / "this is personal", 2026-11-17). Only on a
+ * conversation the person can see (the list's visibility rule); the classifier never relabels it.
+ * Null when there is no such conversation for this viewer.
+ */
+export async function setRelevanceOverride(
+  tenantId: string,
+  conversationId: string,
+  category: string,
+  viewer: { userId: string; role?: string; departmentId?: string },
+): Promise<ConversationRelevanceView | null> {
+  if (!(RELEVANCE_OVERRIDES as readonly string[]).includes(category)) {
+    throw Object.assign(new Error(`invalid_category: one of ${RELEVANCE_OVERRIDES.join(", ")}`), { status: 400 });
+  }
+  const where: any = { id: conversationId, tenantId };
+  const visibility = visibilityClause({ userId: viewer.userId, role: viewer.role, departmentId: viewer.departmentId });
+  if (visibility) where.OR = visibility;
+  const found = await prisma.conversation.findFirst({ where, select: { id: true } });
+  if (!found) return null;
+  const now = new Date();
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      relevanceCategory: category,
+      relevanceSource: "override",
+      relevanceOverriddenBy: viewer.userId,
+      relevanceOverriddenAt: now,
+    } as any,
+  });
+  const relevance = withRelevance(updated as any).relevance;
+  // The list moves the row live; a partial payload, merged by id.
+  emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
+  return relevance;
 }

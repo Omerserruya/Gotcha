@@ -67,6 +67,12 @@ service, with the same permission as sending a message in that conversation.
 The old exits stay first, as fast paths: automatedInbound, internalSender, human_owned:person_recent,
 placeholderOnly. Then:
 
+- A person's override is read FIRST and wins over every classifier rule, the fast paths included: "business"
+  on a conversation the classifier called internal or auto_reply means the AI answers again.
+- New categories (dry run review, 2026-11-17): auto_reply (another business's greeting or away message)
+  joins the "not relevant" folder; internal (the tenant's own team) keeps the AI out but stays in the
+  normal views with a "צוות" chip. Neither needs a migration (the column is text).
+
 - If `shouldReclassify`, classify **in parallel** with the turn's context load, so the extra call adds
   little latency. A conversation that already has a fresh label costs nothing.
 - personal, notice or marketing with confidence >= 0.7 (or overridden): no reply and no handoff.

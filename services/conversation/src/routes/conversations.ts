@@ -92,7 +92,8 @@ router.get("/", async (req: Request, res: Response) => {
       includeAutomated: includeAutomated === "true",
       automatedOnly: automatedOnly === "true",
       excludeClosed: excludeClosed === "true",
-      view: view === "queue" ? "queue" : view === "open" ? "open" : undefined,
+      view: view === "queue" ? "queue" : view === "open" ? "open" : view === "irrelevant" ? "irrelevant" : undefined,
+      hideIrrelevant: req.query.hideIrrelevant === "true",
       // Present-but-invalid is refused (400), not ignored: a link that says
       // "this week" must never open every conversation.
       from: from === undefined ? undefined : String(from),
@@ -129,12 +130,33 @@ router.get("/unread-counts", async (req: Request, res: Response) => {
       req.tenantId!,
       { userId: req.user!.userId, role: req.user!.role, departmentId: req.user!.departmentId },
       views,
+      { hideIrrelevant: req.query.hideIrrelevant === "true" },
     );
     res.setHeader("Cache-Control", "private, no-store");
     res.json({ data: { ...unread, totals } });
   } catch (err) {
     console.error("Unread counts error:", err);
     res.status(500).json({ error: "Failed to count unread conversations" });
+  }
+});
+
+/**
+ * PUT /:id/relevance { category: "business" | "personal" } -> { data: relevance }
+ * A person's override of the relevance label (2026-11-17). Sticks: the classifier never relabels it.
+ * 404 when the conversation is not this viewer's to see.
+ */
+router.put("/:id/relevance", async (req: Request, res: Response) => {
+  try {
+    const category = typeof req.body?.category === "string" ? req.body.category : "";
+    const relevance = await conversationService.setRelevanceOverride(req.tenantId!, req.params.id as string, category, {
+      userId: req.user!.userId, role: req.user!.role, departmentId: (req.user as any)?.departmentId,
+    });
+    if (!relevance) { res.status(404).json({ error: "Conversation not found" }); return; }
+    res.json({ data: relevance });
+  } catch (err: any) {
+    if (err?.status === 400) { res.status(400).json({ error: err.message }); return; }
+    console.error("Relevance override error:", err);
+    res.status(500).json({ error: "Failed to set relevance" });
   }
 });
 

@@ -10,7 +10,9 @@ import {
   toolSubject,
   isoWeekKey,
   visibilityClause, type Viewer,
-  buildQuietDayList, waitingForPersonWhere, NOT_REPLAY_USAGE } from "@chatcenter/shared";
+  buildQuietDayList, NOT_REPLAY_USAGE, waitingForPersonWhere } from "@chatcenter/shared";
+// By its own path, so tests that mock "@chatcenter/shared" keep the real rule.
+import { notIrrelevantWhere } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { intentLabel } from "@chatcenter/shared/src/lib/conversation-intents";
 import { bareTool, feedToolWhere, requestSelect, requestToExecutionLike, type RequestRow } from "../lib/action-requests";
 
@@ -245,9 +247,12 @@ export async function getDailyVolume(tenantId: string, days = 30) {
  */
 export { waitingForPersonWhere };
 
-export async function getQueueDepth(tenantId: string) {
+export async function getQueueDepth(tenantId: string, opts: { hideIrrelevant?: boolean } = {}) {
+  const where = waitingForPersonWhere(tenantId);
+  // Opt-in (2026-11-17): without the conversations labelled not relevant.
+  if (opts.hideIrrelevant) (where.AND as unknown[]).push(notIrrelevantWhere());
   const waitingConversations = await prisma.conversation.findMany({
-    where: waitingForPersonWhere(tenantId),
+    where,
     select: { createdAt: true, lastMessageAt: true },
   });
   const now = Date.now();
@@ -1089,7 +1094,7 @@ const QUEUE_CANDIDATE_CAP = 500;
 
 export async function getQueueItems(
   tenantId: string,
-  opts: { limit?: number; cursor?: string; viewer?: Viewer } = {},
+  opts: { limit?: number; cursor?: string; viewer?: Viewer; hideIrrelevant?: boolean } = {},
 ) {
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
   // The cursor is an offset into a deterministic ordering, not a row id: the
@@ -1103,6 +1108,7 @@ export async function getQueueItems(
 
   // The same "waiting for a person" as Home's count (see waitingForPersonWhere).
   const where = waitingForPersonWhere(tenantId);
+  if (opts.hideIrrelevant) (where.AND as unknown[]).push(notIrrelevantWhere());
   // 2026-10-09: the inbox's rule, kept in AND (its OR is the visibility
   // clause's own). The count reads the same `where`, so it cannot leak a total.
   const clause = opts.viewer ? visibilityClause(opts.viewer) : null;
