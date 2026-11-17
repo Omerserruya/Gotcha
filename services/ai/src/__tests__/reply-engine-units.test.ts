@@ -2050,3 +2050,32 @@ describe("39b65d68 regression fixes", () => {
     expect(greetingName("")).toBeNull();
   });
 });
+
+/** First live replies on v2 (NE'A web chat, 2026-11-17). */
+describe("first live replies", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ a clarifying question never asks back a detail the customer gave", async () => {
+    const { asksKnown, cleanStyle } = await import("../services/reply-engine/gates");
+    expect(asksKnown("יש טינט מעולה. התכוונת לטינט לפנים או לשפתיים?", "אני צריכה טינט לפנים, מה ממליצים?")).toHaveLength(1);
+    expect(asksKnown("There is a great one. Did you mean a tint for the face or the lips?", "I need a face tint, what do you recommend")).toHaveLength(1);
+    expect(asksKnown("התכוונת לטינט לפנים או לשפתיים?", "אני צריכה טינט, מה ממליצים?")).toEqual([]);
+    expect(styleCodes(await g3("יש טינט מעולה. התכוונת לפנים או לשפתיים?", { incomingMessage: "אני צריכה טינט לפנים" }))).toContain("asks_known");
+    expect(cleanStyle("יש טינט מעולה. התכוונת לפנים או לשפתיים?", ["asks_known"], [], "", "אני צריכה טינט לפנים")).toBe("יש טינט מעולה.");
+  });
+
+  it("★ a recommendation names the product", async () => {
+    const { unnamedRecommendation } = await import("../services/reply-engine/gates");
+    const titles = ["מייקאפ טינט SPF50"];
+    expect(unnamedRecommendation("מוצר אחד שמתאים לטינט לפנים הוא כיסוי בינוני שנבנה, SPF50.", titles)).toBe(true);
+    expect(unnamedRecommendation("One product that fits is medium buildable coverage, SPF50.", titles)).toBe(true);
+    expect(unnamedRecommendation("מייקאפ טינט SPF50: כיסוי בינוני שנבנה, 160.20 ₪.", titles)).toBe(false);
+    expect(unnamedRecommendation("מוצר אחד שמתאים הוא מייקאפ טינט SPF50.", titles)).toBe(false);
+    expect(kinds(await g3("מוצר אחד שמתאים הוא כיסוי בינוני.", { candidateTitles: titles, candidateCount: 1 }))).toContain("unnamed_recommendation");
+  });
+});

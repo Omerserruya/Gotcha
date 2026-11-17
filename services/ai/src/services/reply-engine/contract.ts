@@ -163,6 +163,7 @@ export type ClaimProblem =
   | { kind: "price_against_store"; claims: string[] }
   | { kind: "order_state_unread"; claims: string[] }
   | { kind: "claims_attachment"; claims: string[] }
+  | { kind: "unnamed_recommendation" }
   | { kind: "knowledge_has_it" }
   | { kind: "coupon_source" }
   /** A handoff the customer's words do not call for (it would silence the AI). */

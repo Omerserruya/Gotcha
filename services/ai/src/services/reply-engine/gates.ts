@@ -882,6 +882,33 @@ export function claimsAttachment(reply: string, recentInbound: string[]): string
   return (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => GOT_MEDIA.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
+// A clarifying question offering an option the customer already gave (live 2026-11-17, NE'A: "face
+// tint" asked back as "for the face or the lips?").
+/** Question sentences "X or Y?" one of whose options the customer's own message already names. */
+export function asksKnown(reply: string, incoming: string): string[] {
+  const mine = new Set(contentStems(incoming).filter((w) => w.length >= 3));
+  if (!mine.size) return [];
+  return (String(reply ?? "").match(/[^.!?\n]+\?/g) ?? []).filter((q) => {
+    const parts = q.split(/\s+(?:או|or)\s+/iu);
+    if (parts.length < 2) return false;
+    // The options themselves: the word right before "or" and what follows it (a shared head, "טינט", is not an option).
+    const before = (parts.at(-2) ?? "").trim().split(/\s+/).slice(-1).join(" ");
+    const after = (parts.at(-1) ?? "").replace(/\?.*$/, "").trim().split(/\s+/).slice(-2).join(" ");
+    const head = new Set(contentStems((parts.at(-2) ?? "").trim().split(/\s+/).slice(0, -1).join(" ")));
+    const opts = [before, after].map((p) => contentStems(p).filter((w) => !head.has(w)));
+    return opts.some((o) => o.some((w) => mine.has(w) || [...mine].some((m) => m.length >= 4 && (m.includes(w) || w.includes(m)))));
+  }).map((q) => q.trim());
+}
+
+// "One product that fits..." with no product named (live 2026-11-17, NE'A): a recommendation names it.
+const UNNAMED_PICK = /(?<![֐-׿])(?:מוצר|פריט|דגם)\s+(?:אחד\s+)?ש?(?:מתאים|יתאים|מתאימה|עונה)|\b(?:one|a) (?:product|item|option|model) that (?:fits|suits|works|matches)\b/iu;
+/** The reply recommends a product by description, naming none of this turn's products. */
+export function unnamedRecommendation(reply: string, titles: string[]): boolean {
+  if (!UNNAMED_PICK.test(reply ?? "")) return false;
+  const t = String(reply ?? "").toLowerCase();
+  return !titles.some((x) => x && t.includes(String(x).toLowerCase()));
+}
+
 export interface Gate3Input {
   reply: string;
   claims: Claim[];
@@ -1017,6 +1044,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (optionClaims.length) problems.push({ kind: "option_without_variation", claims: optionClaims });
   const extra = notNarrowed(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (extra.length) problems.push({ kind: "not_narrowed", extra });
+  if (unnamedRecommendation(reply, i.candidateTitles ?? [])) problems.push({ kind: "unnamed_recommendation" });
   const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (near) problems.push({ kind: "near_name", asked: near.asked, shown: near.shown });
   if (ignoredYes(i.incomingMessage, (i.previousBotReplies ?? []).at(-1), i.handedOff, !!i.teamQuestion)) problems.push({ kind: "ignored_yes" });
@@ -1056,6 +1084,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   else if (repeatedSentences(reply, i.previousBotReplies ?? []).length) style.push("repeated_sentence");
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
+  if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
   if (returnsWork(reply)) style.push("returns_work");
   if (termsRefusal(reply)) style.push("terms_refusal");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
@@ -1196,6 +1225,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     .replace(/(?<![֐-׿])((?:כן|היי|הי|אהלן|תודה|בטח|סבבה|שלום|וואו))\s+(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "$1")
     .replace(/,\s*(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)(?=\s*[,!.?]|\s*$)/gu, "")
     .replace(/(^|[.!?]\s*)(?:אחי|אחותי|אחיי|גבר|מותק|נשמה|חמוד|חמודה|מלך|מלכה|בובה|יקירי|יקירתי)\s*,\s*/gu, "$1");
+  if (c.has("asks_known")) { const known = new Set(asksKnown(s, incoming)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !known.has(x.trim())).join("").trim(); }
   if (c.has("returns_work")) s = dropSentences(s, RETURNS_WORK);
   if (c.has("terms_refusal")) s = dropSentences(s, TERMS_REFUSAL);
   if (c.has("simulation_leak")) s = dropSentences(s, SIMULATION_LEAK);
@@ -1273,6 +1303,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
+    if (p.kind === "unnamed_recommendation") lines.push("- You recommend a product without naming it. Name it in the text first, then its key details and price (\"<name>: <details>, <price>\").");
     if (p.kind === "near_name") lines.push(`- The customer named "${p.asked}"; the product you name ("${p.shown}") is another model with a similar name. Say you did not find "${p.asked}" by that name, and offer the other only as a different, close option.`);
     if (p.kind === "dangling_reference") lines.push(`- These sentences point at a list or cards that this message does not carry (${p.claims.join("; ")}). Name the items themselves in the text, or leave the pointer out.`);
     if (p.kind === "no_recommendation") lines.push("- The customer asked you to recommend. Pick one or two of the products the search returned and say why, from their own data (price, size, level, features); or, if you truly cannot choose, ask ONE question that decides it. Never neither.");
@@ -1301,6 +1332,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
       if (c.has("terms_refusal")) lines.push("- Never give the terms as the reason not to help: look it up (the customer's own order lookup, the knowledge) or say what the team will do.");
+      if (c.has("asks_known")) lines.push("- Do not ask about a detail the customer already gave in their message; use it.");
       if (c.has("returns_work")) lines.push("- Never hand the work back to the customer (\"try another name\", \"check the website\"): search again yourself, narrower, or answer from what the business's knowledge lists, and ask at most one question about what they need.");
       if (c.has("repeated_advice")) lines.push("- You already gave this advice or warning in this conversation: do not give it again unless the customer asks about it; answer the new message.");
       if (c.has("repeated_sentence")) lines.push("- A sentence of this reply was already sent in this conversation: do not send it again; say only what is new.");
