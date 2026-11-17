@@ -1274,3 +1274,18 @@ describe("prod replay 12 (2026-11-17)", () => {
     expect(buildStablePrefix({ ...base, storePlatform: null })).not.toContain("קוד קופון\" field");
   });
 });
+
+describe("prod replay 13: the final sanitizer", () => {
+  it("★ symbol runs, fences, control and zero-width characters, a symbol tail: gone; text, emoji and punctuation stay", async () => {
+    const { sanitizeReply } = await import("../services/reply-engine/engine");
+    expect(sanitizeReply("התשלום מתבצע בעמוד הקופה.+#+#+#+#+#+")).toBe("התשלום מתבצע בעמוד הקופה.");
+    expect(sanitizeReply("יש ### כמה ==== אפשרויות")).toBe("יש כמה אפשרויות");
+    expect(sanitizeReply("```\nשלום\n```")).toBe("שלום");
+    expect(sanitizeReply("של\u200Bום\u0007")).toBe("שלום");
+    expect(sanitizeReply("שמחים לעזור 👨\u200D👩\u200D👧")).toBe("שמחים לעזור 👨\u200D👩\u200D👧");
+    expect(sanitizeReply("מתאים לך? 🙂")).toBe("מתאים לך? 🙂");
+    expect(sanitizeReply("המחיר ₪149, 30*40 ס\"מ, 3-7 ימי עסקים.")).toBe("המחיר ₪149, 30*40 ס\"מ, 3-7 ימי עסקים.");
+    expect(sanitizeReply("המשלוח: 2 + 1 במבצע")).toBe("המשלוח: 2 + 1 במבצע");
+    expect(sanitizeReply("נתראה --")).toBe("נתראה");
+  });
+});

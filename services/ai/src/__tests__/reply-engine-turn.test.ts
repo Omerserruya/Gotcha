@@ -973,3 +973,12 @@ describe("prod replay 12: one reply, no sentence twice", () => {
     expect(r.reply).toBe("יש תיק בד קנבס במלאי. לאיזה שימוש?");
   });
 });
+
+describe("prod replay 13: garbage never reaches the customer", () => {
+  it("★ a reply ending in \"+#+#+#+#+#+\" goes out clean", async () => {
+    h.responses.push({ toolCalls: [respond("g1", { reply: "את התשלום עושים בעמוד הקופה באתר.+#+#+#+#+#+" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך משלמים?" }, "autonomous");
+    expect(r.reply).toBe("את התשלום עושים בעמוד הקופה באתר.");
+    expect((r.trace as any).sanitized).toBe(true);
+  });
+});

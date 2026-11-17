@@ -254,6 +254,24 @@ export function removedSentences(before: string, after: string): string[] {
 /** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
 export const profileHasStreet = (address: string | null | undefined) => /[\u0590-\u05FFA-Za-z]{2,}\s+\d{1,4}/.test(String(address ?? ""));
 
+/**
+ * The last word on what reaches the customer, on every path: no run of 3+ symbol
+ * characters (#, +, *, =, ~, _, |, mixed or not), no markdown fence, no control or
+ * zero-width character (the emoji joiner stays), no tail of symbols after the last
+ * sentence.
+ */
+export function sanitizeReply(text: string): string {
+  return String(text ?? "")
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B\u200C\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, "")
+    .replace(/[#+*=~_|](?:[ \t]*[#+*=~_|]){2,}/g, "")
+    .replace(/[^\p{L}\p{N}.!?)"'״׳\p{Extended_Pictographic}\u200D\uFE0F\s]+$/u, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** A message that is only a placeholder: a template, an unsupported message, an empty one. */
 export function placeholderOnly(text: string | null | undefined): boolean {
   const t = String(text ?? "").trim();
@@ -1046,7 +1064,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // no card and no link on 56 turns; the product summary tells the model the
   // system attaches them, and legacy did).
   const listed = !cardChannel && prose && !final.handoff ? textProductList(final, prose, candidates, locale) : null;
-  const reply = listed ? `${prose}\n\n${listed.text}` : prose;
+  // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
+  // end of a reply); the appended list is the store's exact fields and is left as it is.
+  const clean = sanitizeReply(prose);
+  if (clean !== prose) (trace as any).sanitized = true;
+  const reply = listed ? `${clean}\n\n${listed.text}` : clean;
   if (listed) (trace as any).listedProducts = listed.keys;
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
