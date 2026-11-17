@@ -1231,7 +1231,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         (trace as any).fallbackKinds = factLeft.length ? factLeft : ["thin_or_empty"];
         // A product turn is answered from what the tools returned, never handed to a person.
         // Products as the fallback only for a product ask (prod replay 2026-11-17: a payment problem got cards).
-        const grounded = productAskNow(opts.incomingMessage ?? "") ? groundedProductFallback(candidates as any, locale, cardChannel) : null;
+        // The header only, on every channel: cards show the products, and on a text channel the list
+        // appended at send names each one once with its price, stock and link (prod replay 2026-11-17:
+        // inline bullets AND the same three listed again).
+        const grounded = productAskNow(opts.incomingMessage ?? "") ? groundedProductFallback(candidates as any, locale, true) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));

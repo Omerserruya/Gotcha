@@ -2167,6 +2167,11 @@ describe("1f510cc4 rating fixes", () => {
     expect((out.match(/סמובי כריסטינה/g) ?? []).length).toBe(1);
     expect(assembleOnce("הנה מה שיש לנו שמתאים:\nהנה מה שיש לנו שמתאים:\nתודה", null, [])).toBe("הנה מה שיש לנו שמתאים:\nתודה");
     expect(assembleOnce("הנה מה שיש לנו שמתאים.\nהנה מה שיש לנו שמתאים:\n• Canvas Tote, ₪79", null, [])).toBe("הנה מה שיש לנו שמתאים.\n• Canvas Tote, ₪79");
+    // The replay's exact shape: the fallback's bullets inline, each with its price, then the same three listed.
+    const inline = "הנה מה שיש לנו שמתאים: • סמובי אלכסה, 30*40, ₪199 • סמובי כריסטינה, 34*38, ₪229 • סמובי גפן, 40*50, ₪249";
+    const three = "סמובי אלכסה\n₪199\nhttps://x/a\n\nסמובי כריסטינה\n₪229\nhttps://x/c\n\nסמובי גפן\n₪249\nhttps://x/g";
+    const once = assembleOnce(inline, three, ["סמובי אלכסה", "סמובי כריסטינה", "סמובי גפן"]);
+    for (const t of ["סמובי אלכסה", "סמובי כריסטינה", "סמובי גפן"]) expect((once.match(new RegExp(t, "g")) ?? []).length).toBe(1);
     // A product the text only names (no price, no link) keeps its details in the list.
     expect(assembleOnce("סמובי אלכסה מתאים לך.", "סמובי אלכסה\n₪199\nhttps://x/a", ["סמובי אלכסה"])).toMatch(/https:\/\/x\/a/);
   });

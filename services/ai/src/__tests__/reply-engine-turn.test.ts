@@ -1335,5 +1335,8 @@ describe("1f510cc4 rating: engine passes", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
     expect(r.reply).toMatch(/Canvas Tote/);
     expect(((r.reply ?? "").match(/Canvas Tote/g) ?? []).length).toBe(1);
+    // The fallback writes its header only; the list carries each product once (no inline bullets).
+    expect(r.reply).not.toMatch(/•/);
+    expect(((r.reply ?? "").match(/הנה מה שיש לנו שמתאים/g) ?? []).length).toBe(1);
   });
 });
