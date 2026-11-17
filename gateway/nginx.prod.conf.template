@@ -235,7 +235,11 @@ http {
     # 429. An empty key means the request is not limited. These variables are
     # not on the envsubst allowlist, so they survive rendering.
     # Long-term fix: SSR should call the internal gateway, not the public URL.
-    geo $gotcha_self_egress { default 0; 51.84.227.95 1; }
+    # Backstop (2026-11-17): a caller still on a PRIVATE address after realip is one of
+    # our own containers that sent no CF-Connecting-IP (frontend-v2's server calls on
+    # the internal route, if the header is missing). Keyed on its container IP it would
+    # put every user in one bucket again, so it is exempt like our egress.
+    geo $gotcha_self_egress { default 0; 51.84.227.95 1; 10.0.0.0/8 1; 172.16.0.0/12 1; 192.168.0.0/16 1; 127.0.0.0/8 1; }
     map $gotcha_self_egress $api_limit_key { 0 $binary_remote_addr; 1 ""; }
 
     # Rate limiting zone
