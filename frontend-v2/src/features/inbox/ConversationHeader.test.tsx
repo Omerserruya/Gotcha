@@ -59,14 +59,29 @@ describe('★★ who this is, on what channel, and how long they have waited', (
     expect(who.querySelector('bdi')).toHaveAttribute('dir', 'auto');
   });
 
-  it('★★ says plainly that there is no name, rather than inventing "Someone"', async () => {
+  it('★★ no name: the heading is the number, as a person reads it, and the facts do not repeat it', async () => {
     /*
-     * A first message from a number nobody has met is an ordinary state. The
-     * handle below identifies them, so the heading tells the truth - and every
-     * queue row reading "Someone" was this week's most visible defect.
+     * The same chain as the list (customer-label.ts, 2026-11-17): a first
+     * message from a number nobody has met is headed by that number.
      */
     await show({ customerName: null });
-    expect(screen.getByTestId('conversation-who')).toHaveTextContent(/no name/i);
+    const who = screen.getByTestId('conversation-who');
+    expect(who).toHaveTextContent('052-540-1686');
+    expect(who.querySelector('bdi')).toHaveAttribute('dir', 'ltr');
+    const facts = screen.getByTestId('conversation-facts');
+    expect(facts).not.toHaveTextContent('+972525401686');
+    expect(facts).not.toHaveTextContent('052-540-1686');
+    expect(facts).toHaveTextContent('Open');
+  });
+
+  it('★ a name: the handle stays in the facts', async () => {
+    await show();
+    expect(screen.getByTestId('conversation-facts')).toHaveTextContent('+972525401686');
+  });
+
+  it('★ neither a name nor a handle: "Someone", the same word as the list', async () => {
+    await show({ customerName: null, customerExternalId: null });
+    expect(screen.getByTestId('conversation-who')).toHaveTextContent(inbox.queue.unnamed);
   });
 
   it('★★ names the channel, never its enum', async () => {
@@ -94,9 +109,9 @@ describe('★★ who this is, on what channel, and how long they have waited', (
     expect(facts).toHaveTextContent('Another channel');
   });
 
-  it('carries the handle, which is what tells two unnamed people apart', async () => {
+  it('carries the handle, which is what tells two unnamed people apart: in the heading now', async () => {
     await show({ customerName: null });
-    expect(screen.getByTestId('conversation-facts')).toHaveTextContent('+972525401686');
+    expect(screen.getByTestId('conversation-header')).toHaveTextContent('052-540-1686');
   });
 
   it('★ names the status rather than showing it', async () => {

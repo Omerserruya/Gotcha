@@ -97,6 +97,19 @@ describe('★★ one person: the card lists open conversations (2026-11-15)', ()
     expect(screen.getByText('1h')).toBeInTheDocument();
   });
 
+  it('★★ no name: the number, as the inbox list says it (prod 2026-11-17)', async () => {
+    render(
+      await QueueList({
+        items: [open({ customer: { id: '+972541234567', name: null } })],
+        totalWaiting: 1,
+        now,
+        of: 'open',
+      }),
+    );
+    expect(screen.getByTestId('customer-handle')).toHaveTextContent('054-123-4567');
+    expect(screen.queryByText('+972541234567')).toBeNull();
+  });
+
   it('★ no time is no age; no name and no handle is the inbox\'s "Someone"', async () => {
     render(
       await QueueList({

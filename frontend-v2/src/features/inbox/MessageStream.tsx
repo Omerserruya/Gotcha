@@ -22,6 +22,7 @@ import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './m
 import { ReplyButton } from './ReplyButton';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { sendFailure } from './send-failure';
+import { streamUndelivered } from './undelivered';
 import { plainDashes } from '@/lib/plain-dashes';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
@@ -201,6 +202,8 @@ export async function MessageStream({
           happened.
         */
           const unsupported = unsupportedType(message);
+          /* Meta's "unsupported": the reason in plain words, by its code; an album's part softly. */
+          const undelivered = streamUndelivered(message, messages);
           /*
            * Did any branch above draw the message's content? Recognising a
            * type and rendering it are different things, and only the second
@@ -329,7 +332,11 @@ export async function MessageStream({
               no body and no branch - location, template, interactive,
               system, and whatever is added next - lands here and says so.
             */}
-                {unsupported !== null ? (
+                {undelivered !== null ? (
+                  <p className={styles.mediaNote} data-testid={`undelivered-${message.id}`}>
+                    {t(`stream.undelivered.${undelivered}`)}
+                  </p>
+                ) : unsupported !== null ? (
                   <p className={styles.mediaNote} data-testid={`unsupported-${message.id}`}>
                     {t('stream.unsupported', { type: unsupported })}
                   </p>

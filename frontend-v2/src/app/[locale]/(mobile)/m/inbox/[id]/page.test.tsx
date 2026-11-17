@@ -1,3 +1,4 @@
+import { render, screen } from '@testing-library/react';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { Composer } from '@/features/inbox/Composer';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 
 const elements = (node: ReactNode, out: ReactElement[] = []): ReactElement[] => {
   if (Array.isArray(node)) node.forEach((n) => elements(n, out));
@@ -87,5 +89,25 @@ describe('★★ which number, on the phone thread (Omer, 2026-11-16)', () => {
     const all = await tree({ id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false });
     expect(all.some((e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account')).toBe(false);
     expect((all.find((e) => e.type === Composer)?.props as { accountName?: string | null }).accountName).toBeNull();
+  });
+});
+
+describe('★★ no name: the bar names the number (prod 2026-11-17)', () => {
+  it('★★ the bar title is the shared chain, given the open conversation', async () => {
+    loadInbox.mockResolvedValue({
+      open: { ...open, customerName: null, customerExternalId: '972521234567' },
+      missing: null,
+      meId: 'me',
+      colleagues: [],
+      greeting: null,
+      detail: Promise.resolve({ messages: [], timeline: null, orders: null }),
+    });
+    const { default: Page } = await import('./page');
+    const all = elements(await Page({ params: Promise.resolve({ id: 'c1' }) }));
+    const who = all.filter((e) => e.type === CustomerWho);
+    expect(who).toHaveLength(1);
+    render(who[0]!);
+    expect(screen.getByTestId('customer-handle')).toHaveTextContent('052-123-4567');
+    expect(screen.queryByText('queue.unnamed')).toBeNull();
   });
 });

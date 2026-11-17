@@ -32,6 +32,7 @@ import {
   desktopPermission,
   readDeviceAlerts,
 } from '@/lib/inbound-alerts/settings';
+import { customerLabelText } from '@/lib/customer-label';
 import { personName } from '@/lib/shopper-name';
 import { logger } from '@/observability/logger';
 import type { RealtimeEvent } from '@/realtime/events';
@@ -208,8 +209,8 @@ async function readGlance(conversationId: string): Promise<ConversationGlance> {
     });
     return {
       access: 'visible',
-      // A name, else the handle it arrived on; the caller says "Someone" for neither.
-      name: row.customerName?.trim() || row.customerExternalId?.trim() || null,
+      // A name, else the handle it arrived on, formatted; the caller says "Someone" for neither.
+      name: customerLabelText(row),
       channel: row.channel,
     };
   } catch (cause) {

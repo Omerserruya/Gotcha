@@ -101,3 +101,39 @@ describe('★ a sticker is a sticker, by its own type (Backend 9e68eb03)', () =>
     expect(mediaKind({ messageType: 'sticker', mediaUrl: null })).toBe('sticker');
   });
 });
+
+describe('★★ "[unsupported message]" is never a preview (Supervisior, 2026-11-17)', () => {
+  it('the body alone (a list row, an event): the generic short line', () => {
+    expect(quoteOf({ body: '[unsupported message]', messageType: 'text' })).toEqual({ kind: 'undelivered' });
+  });
+
+  it('with metadata, 131060 is the phone-only line; any other code the generic one', () => {
+    const meta = (code: unknown) => ({ unsupported: { providerType: 'unsupported', errors: [{ code }] } });
+    expect(quoteOf({ body: '[unsupported message]', metadata: meta(131060) })).toEqual({
+      kind: 'undeliveredPhoneOnly',
+    });
+    expect(quoteOf({ body: '[unsupported message]', metadata: meta('131060') })).toEqual({
+      kind: 'undeliveredPhoneOnly',
+    });
+    expect(quoteOf({ body: '[unsupported message]', metadata: meta(131051) })).toEqual({ kind: 'undelivered' });
+    expect(
+      quoteOf({
+        body: '',
+        metadata: { unsupported: { providerType: 'unsupported', raw: { errors: [{ code: 131060 }] } } },
+      }),
+    ).toEqual({ kind: 'undeliveredPhoneOnly' });
+  });
+
+  it('malformed metadata is no code, never a throw', () => {
+    for (const metadata of [null, 'x', { unsupported: 'x' }, { unsupported: { errors: 'x' } }, { unsupported: { errors: [null] } }]) {
+      expect(quoteOf({ body: '[unsupported message]', metadata })).toEqual({ kind: 'undelivered' });
+    }
+  });
+
+  it('a customer who types something else in brackets is not this', () => {
+    expect(quoteOf({ body: '[unsupported message] lol' })).toEqual({ text: '[unsupported message] lol' });
+    expect(quoteOf({ body: 'hello', metadata: { unsupported: { providerType: 'reaction' } } })).toEqual({
+      text: 'hello',
+    });
+  });
+});

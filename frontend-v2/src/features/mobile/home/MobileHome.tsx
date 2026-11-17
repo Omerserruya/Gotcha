@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { channelName } from '@/api/contracts/inbox';
 import { Logo } from '@/design-system/brand/Logo';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { PersonName } from '@/features/customers/PersonName';
+import { CustomerWho } from '@/features/inbox/CustomerWho';
 import { clockTime, describe } from '@/features/home/ActivityCard';
 import { homeFace } from '@/features/home/first-steps';
 import { loadHomeData, loadViewerFirstName } from '@/features/home/load-home-data';
@@ -162,11 +162,14 @@ export async function MobileHome({ account }: { readonly account: ReactNode }) {
                       <div className={styles.needTop}>
                         <span className={styles.needTitle}>
                           {/* No name means no contact record: the identifier as itself, as on the website. */}
-                          {item.customer.name ? (
-                            <PersonName name={item.customer.name} />
-                          ) : (
-                            item.customer.id || inbox('queue.unnamed')
-                          )}
+                          <CustomerWho
+                            row={{
+                              customerName: item.customer.name,
+                              customerExternalId: item.customer.id,
+                              channel: item.channel,
+                            }}
+                            unnamed={inbox('queue.unnamed')}
+                          />
                         </span>
                         <span className={styles.needTime}>
                           {item.waitingSince === null

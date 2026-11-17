@@ -240,6 +240,14 @@ describe('★★ what the row actually says about the customer', () => {
     expect(screen.queryByText(/someone/i)).toBeNull();
   });
 
+  it('★★ no name: the number the conversation is on, as a person reads it (prod 2026-11-17)', async () => {
+    await show([row({ customerName: null, customerExternalId: '972521234567', channel: 'WHATSAPP' })]);
+    const handle = screen.getByTestId('customer-handle');
+    expect(handle).toHaveTextContent('052-123-4567');
+    expect(handle).toHaveAttribute('dir', 'ltr');
+    expect(screen.queryByText(/someone/i)).toBeNull();
+  });
+
   it('★ still says "Someone" when the platform really sends no name', async () => {
     // `customerName` is nullable on the model. An unnamed customer is a real
     // state and the fallback is for that, not for a contract mistake.
@@ -513,6 +521,20 @@ describe('⚠⚠ the row the design draws, and the line it exists for', () => {
       }),
     );
     expect(screen.getByTestId('preview-c1')).toHaveTextContent("My package still hasn't arrived");
+  });
+
+  it('★★ never the raw "[unsupported message]": the short line (Supervisior, 2026-11-17)', async () => {
+    render(
+      await ConversationList({
+        rows: [row({ lastMessageBody: '[unsupported message]', lastMessageType: 'text' })],
+        cap: 10,
+        now: NOW,
+        hasMore: false,
+      }),
+    );
+    const preview = screen.getByTestId('preview-c1');
+    expect(preview).toHaveTextContent(messages.stream.quote.kind.undelivered);
+    expect(preview).not.toHaveTextContent('[unsupported message]');
   });
 
   it('⚠ keeps an EMPTY line when there is no body - no text invented', async () => {
