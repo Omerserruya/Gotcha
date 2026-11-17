@@ -1100,3 +1100,19 @@ describe("3ca1dabe rating: engine passes", () => {
     expect(r.reply).not.toMatch(/Canvas Tote/);
   });
 });
+
+describe("2f6ff7e3 rating: engine passes", () => {
+  it("★ the tenant's own team member on WhatsApp is not answered", async () => {
+    const { internalSender } = await import("../services/reply-engine/engine");
+    const db = { user: { findMany: async () => [{ phoneNumber: "+972-50-123-4567" }] } };
+    expect(await internalSender("t1", "WHATSAPP", "972501234567", db)).toBe(true);
+    expect(await internalSender("t1", "WHATSAPP", "972509999999", db)).toBe(false);
+    expect(await internalSender("t1", "WEBCHAT", "972501234567", db)).toBe(false);
+  });
+  it("★ a fallback's own bullets are not listed again", async () => {
+    const { textProductList } = await import("../services/reply-engine/engine");
+    const c = [{ title: "Canvas Tote", price: 79, currency: "ILS", inventoryState: "in_stock", url: "https://x/t" }];
+    expect(textProductList({ reply: "x", cards: [] } as any, "הנה מה שיש לנו שמתאים:\n• Canvas Tote, ₪79", c as any, "he")).toBeNull();
+    expect(textProductList({ reply: "x", cards: [] } as any, "יש לנו את Canvas Tote.", c as any, "he")?.text).toMatch(/Canvas Tote/);
+  });
+});

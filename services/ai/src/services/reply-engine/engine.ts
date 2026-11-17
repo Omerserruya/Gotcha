@@ -270,7 +270,9 @@ export function textProductList(o: ModelTurnOutput, prose: string, candidates: a
   if (!n.size && /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|מתאים|מתאימים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options|fits)\b/iu.test(prose) && !namesAnyProductWord(prose, candidates, common)) {
     candidates.forEach((c, i) => { if (n.size < 3 && c?.title && c.inventoryState !== "out_of_stock") n.add(i + 1); });
   }
-  const chosen = [...n].slice(0, 3).map((i) => ({ i, c: candidates[i - 1] })).filter((x) => x.c?.title && !(x.c.url && prose.includes(x.c.url)));
+  // Never twice: a product the text already lists as a line of its own (a fallback's bullets) is not listed again.
+  const listedInText = (t: string) => new RegExp(`(?:^|\\n)\\s*[•\\-*]\\s*${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(prose);
+  const chosen = [...n].slice(0, 3).map((i) => ({ i, c: candidates[i - 1] })).filter((x) => x.c?.title && !(x.c.url && prose.includes(x.c.url)) && !listedInText(String(x.c.title)));
   if (!chosen.length) return null;
   const cur = (c: any) => (c.currency === "ILS" || !c.currency ? "₪" : `${c.currency} `);
   const lines = chosen.map(({ c }) => [
@@ -358,6 +360,34 @@ export function openTeamQuestions(state: { pending?: Array<{ kind?: string; text
 const FILLER = new Set(["הלקוח", "הלקוחה", "לקוח", "לקוחה", "שואל", "שואלת", "שואלים", "מבקש", "מבקשת", "רוצה", "האם", "אם", "יש", "אין", "של", "את", "על", "עם", "זה", "זו", "לו", "לה", "לי", "גם", "או", "כי", "מה", "איך", "מתי", "איפה", "אפשר", "לגבי", "בנוגע", "the", "customer", "asks", "asked", "wants", "whether", "if", "is", "are", "there", "can", "about", "for", "of", "to", "and", "or", "a", "an"]);
 const words = (s: string) => new Set(String(s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !FILLER.has(w)));
 /** Two team questions about the same issue: enough shared words (a reworded repeat still counts). */
+/** The open team item a repeat belongs to, with the digits the customer just gave that it lacks. */
+export function withNewDetails(pending: Array<{ kind?: string; text?: string; at?: string }>, question: string, incoming: string): { pending: any[]; added: string[]; text: string } | null {
+  const digits = [...new Set(String(incoming ?? "").match(/\d{4,}/g) ?? [])];
+  if (!digits.length) return null;
+  const i = pending.findIndex((p) => isTeamPromise(p) && sameIssue(String(p.text ?? "").slice(TEAM_PROMISE_PREFIX.length), question));
+  if (i < 0) return null;
+  const added = digits.filter((d) => !String(pending[i].text ?? "").includes(d));
+  if (!added.length) return null;
+  const text = `${pending[i].text} (customer gave: ${added.join(", ")})`.slice(0, 260);
+  return { pending: pending.map((p, k) => (k === i ? { ...p, text } : p)), added, text: text.slice(TEAM_PROMISE_PREFIX.length) };
+}
+
+/** A conversation with one of the tenant's own users (their phone on the users table): internal, not a customer. */
+export async function internalSender(tenantId: string, channel: string, externalId: string | null | undefined, db: any = prisma): Promise<boolean> {
+  if (!/^(?:WHATSAPP|VOICE)$/i.test(channel)) return false;
+  const digits = String(externalId ?? "").replace(/\D/g, "");
+  if (digits.length < 9) return false;
+  const users: any[] = await db.user.findMany({ where: { tenantId, phoneNumber: { not: null } }, select: { phoneNumber: true }, take: 200 });
+  return users.some((u) => String(u.phoneNumber ?? "").replace(/\D/g, "").slice(-9) === digits.slice(-9));
+}
+
+/** The customer's subjects (clauses joined by a comma, "and", "או", "וגם" or a "וה" noun) that no open team item covers. */
+export function uncoveredSubjects(incoming: string, openItems: string[]): string[] {
+  const clauses = String(incoming ?? "").split(/\s*[,;]\s*|\s+(?:and|or|או|וגם|גם)\s+|\s+(?=וה[\u0590-\u05FF]{2,})/iu).map((c) => c.replace(/^ו(?=ה)/u, "").trim()).filter((c) => words(c).size >= 1);
+  if (clauses.length <= 1) return openItems.some((t) => sameIssue(t, incoming)) ? [] : [String(incoming ?? "").trim()].filter(Boolean);
+  return clauses.filter((c) => !openItems.some((t) => sameIssue(t, c)));
+}
+
 export function sameIssue(a: string, b: string): boolean {
   const A = words(a), B = words(b);
   if (!A.size || !B.size) return false;
@@ -554,6 +584,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   mark("gate1");
   // A template, an unsupported message or an empty placeholder is no customer text (prod replay 12:
   // "only a template attachment was received"): a short neutral opener at the start, else nothing.
+  // The tenant's own team member writing from their phone (prod replay 2026-11-17, GOTCHA): not a customer.
+  {
+    const internal = await internalSender(opts.tenantId, String(conversation.channel ?? ""), conversation.customerExternalId).catch(() => false);
+    if (internal) {
+      trace.gate1 = "internal:team_member";
+      (trace as any).internal = true;
+      trace.gate3 = { ok: true, problems: [], rewrite: "none" };
+      return empty({ reply: null });
+    }
+  }
   // Mail no customer wrote (a newsletter, an account notice, our own alert): no reply, no
   // handoff, no team question, and nothing inside it is acted on (prod replay 2026-11-17).
   {
@@ -1136,9 +1176,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // "Already with the team" only for the SAME subject as an open team item (prod replay 9: a
   // colour ask told "זה כבר אצל הצוות" when the open item was a coupon): else this ask is recorded.
-  if (output?.reply && !output.handoff && !output.teamQuestion && teamAlreadyOpen && teamLineIn(output.reply) && !statusAsk(opts.incomingMessage ?? "")
-    && !openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? "")))) {
-    output = { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) || null, reply: isCannedTeamLine(output.reply) ? safeFallback(locale) : output.reply };
+  // Every subject the customer raised, not only the message as a whole (prod replay 2026-11-17: white AND
+  // a coupon, only the coupon open, and "the check on white and the coupon is still open").
+  const uncovered = teamAlreadyOpen ? uncoveredSubjects(String(opts.incomingMessage ?? ""), openTeam) : [];
+  if (output?.reply && !output.handoff && !output.teamQuestion && teamAlreadyOpen && teamLineIn(output.reply) && !statusAsk(opts.incomingMessage ?? "") && uncovered.length) {
+    output = { ...output, teamQuestion: uncovered.join("; ").slice(0, 300) || null, reply: isCannedTeamLine(output.reply) ? safeFallback(locale) : output.reply };
     (trace as any).newSubjectToTeam = true;
   }
   // A call request is never ignored (prod replay 8): there is no call tool, so it goes to the team.
@@ -1219,6 +1261,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const newTeamQuestion = isNewTeamQuestion(final.teamQuestion) ? final.teamQuestion! : null;
   trace.teamQuestion = newTeamQuestion;
   trace.teamQuestionRepeat = !!final.teamQuestion && !newTeamQuestion;
+  // A repeat that brings new details (digits the customer gave: a card's last four, an order number)
+  // updates the open item instead of being skipped (prod replay 2026-11-17: "4155" lost).
+  let pendingNow = state.pending;
+  if (final.teamQuestion && !newTeamQuestion) {
+    const upd = withNewDetails(state.pending, final.teamQuestion, String(opts.incomingMessage ?? ""));
+    if (upd) {
+      pendingNow = upd.pending;
+      (trace as any).teamItemUpdated = upd.added;
+      if (lane === "live") void recordUnansweredQuestion({ tenantId: opts.tenantId, question: `${upd.text} (update: the customer gave ${upd.added.join(", ")})`.slice(0, 300), reason: "no_knowledge", askerKey: opts.conversationId });
+    }
+  }
   const teamPromise = newTeamQuestion
     ? [{ kind: "promise" as const, text: `${TEAM_PROMISE_PREFIX}${newTeamQuestion.slice(0, 200)}`, at: now }]
     : [];
@@ -1227,7 +1280,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
 
   // ── Save ──
-  const next = mergeState(state, final.stateUpdate, {
+  const next = mergeState({ ...state, pending: pendingNow }, final.stateUpdate, {
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],

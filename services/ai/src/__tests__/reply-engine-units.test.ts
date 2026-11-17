@@ -1808,3 +1808,76 @@ describe("3ca1dabe rating fixes", () => {
     expect(wrongSelfName("זה נכון מאוד.", "Daniel")).toBeNull();
   });
 });
+
+/** Rating on 2f6ff7e3 (prod replay 2026-11-17). */
+describe("2f6ff7e3 rating fixes", () => {
+  const g3 = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "תודה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kinds = (ps: any[]) => ps.map((p) => p.kind);
+  const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
+
+  it("★ each subject the customer raised must be an open team item, or it is recorded", async () => {
+    const { uncoveredSubjects } = await import("../services/reply-engine/engine");
+    expect(uncoveredSubjects("מה עם הלבן והקופון?", ["הקופון שלא עבד בקופה"])).toEqual(["מה עם הלבן"]);
+    expect(uncoveredSubjects("מה עם הקופון?", ["הקופון שלא עבד בקופה"])).toEqual([]);
+    expect(uncoveredSubjects("the white one, and the coupon?", ["coupon did not work"])).toEqual(["the white one"]);
+    expect(uncoveredSubjects("מה עם הצבע?", ["הקופון שלא עבד"])).toEqual(["מה עם הצבע?"]);
+  });
+
+  it("★ a repeat with new digits updates the open item", async () => {
+    const { withNewDetails } = await import("../services/reply-engine/engine");
+    const pending = [{ kind: "promise", text: "checking with the team: התשלום בביימי לא עבר", at: "x" }];
+    const u = withNewDetails(pending, "התשלום בביימי לא עבר", "הכרטיס שלי נגמר ב-4155");
+    expect(u?.added).toEqual(["4155"]);
+    expect(u?.pending[0].text).toMatch(/customer gave: 4155/);
+    expect(withNewDetails(u!.pending, "התשלום בביימי לא עבר", "4155")).toBeNull();
+    expect(withNewDetails(pending, "התשלום בביימי לא עבר", "עדיין לא עובד")).toBeNull();
+  });
+
+  it("★ no order, or it cannot be located, only after the customer's own order lookup; never \"per the terms\"", async () => {
+    const { ungroundedOrderAbsence, termsRefusal, autoLookups, cleanStyle } = await import("../services/reply-engine/gates");
+    const r = "אין מספר הזמנה, ולכן לא ניתן לאתר את ההזמנה.";
+    expect(ungroundedOrderAbsence(r, [])).toHaveLength(1);
+    expect(ungroundedOrderAbsence("We can't find an order under that name.", [])).toHaveLength(1);
+    expect(ungroundedOrderAbsence(r, [{ tool: "woocommerce.list_customer_orders", outcome: "empty" }] as any)).toEqual([]);
+    expect(kinds(await g3(r))).toContain("ungrounded_absence");
+    const auto = autoLookups([{ kind: "ungrounded_absence", claims: [r] }] as any, "מה עם ההזמנה שלי?", ["woocommerce.list_customer_orders", "woocommerce.list_products"], []);
+    expect(auto.map((a) => a.function.name)).toEqual(["woocommerce.list_customer_orders"]);
+    expect(JSON.parse(auto[0].function.arguments)).toEqual({});
+    expect(termsRefusal("לפי התקנון לא ניתן לאתר הזמנה בלי מספר.")).toBe(true);
+    expect(termsRefusal("According to our terms we cannot help without an order number.")).toBe(true);
+    expect(termsRefusal("לפי התקנון, אפשר להחזיר תוך 14 יום.")).toBe(false);
+    expect(styleCodes(await g3("לפי התקנון לא ניתן לאתר הזמנה בלי מספר. נשמח לעזור."))).toContain("terms_refusal");
+    expect(cleanStyle("לפי התקנון לא ניתן לאתר הזמנה בלי מספר. נשמח לעזור.", ["terms_refusal"])).toBe("נשמח לעזור.");
+  });
+
+  it("★ products answer a product ask only: not a policy, coupon or how-to question", async () => {
+    const { productAskNow } = await import("../services/reply-engine/gates");
+    expect(productAskNow("יש משטחי במבוק?")).toBe(true);
+    expect(productAskNow("מחפשת משטח למיקסר")).toBe(true);
+    expect(productAskNow("מה מדיניות ההחזרות?")).toBe(false);
+    expect(productAskNow("איך מזינים את הקופון?")).toBe(false);
+    expect(productAskNow("איך מנקים את המשטח?")).toBe(false);
+    expect(productAskNow("יש עדכון?")).toBe(false);
+    expect(productAskNow("how do I clean it?")).toBe(false);
+    expect(productAskNow("how do I order?")).toBe(true);
+  });
+
+  it("★ \"where do I find it\" after a code was discussed is a get-vs-use ask", async () => {
+    const { couponSourceMissed } = await import("../services/reply-engine/gates");
+    expect(couponSourceMissed("איפה מוצאת את זה?", "מזינים את הקוד בשדה בעמוד התשלום.", "יש לכם קוד קופון?")).toBe(true);
+    expect(couponSourceMissed("איפה מוצאת את זה?", "מזינים את הקוד בשדה בעמוד התשלום.", "יש לכם משטח לבן?")).toBe(false);
+    expect(kinds(await g3("מזינים את הקוד בשדה בעמוד התשלום.", { incomingMessage: "איפה מוצאת את זה?", recentInbound: ["יש לכם קוד קופון?", "איפה מוצאת את זה?"] }))).toContain("coupon_source");
+  });
+
+  it("★ a qualifier narrows: only the products that carry it", async () => {
+    const { notNarrowed } = await import("../services/reply-engine/gates");
+    const titles = ["Foundation Fair", "Foundation Light", "Foundation Medium Dark"];
+    expect(notNarrowed("Foundation Fair or Foundation Medium Dark would work.", "fair skin, which shade?", titles)).toEqual(["Foundation Medium Dark"]);
+    expect(notNarrowed("Foundation Fair is the one.", "fair skin, which shade?", titles)).toEqual([]);
+    expect(notNarrowed("Foundation Fair and Foundation Light.", "which shade?", titles)).toEqual([]);
+    expect(kinds(await g3("Foundation Fair or Foundation Medium Dark.", { incomingMessage: "fair skin", candidateTitles: titles, candidateCount: 3, locale: "en" }))).toContain("not_narrowed");
+  });
+});
