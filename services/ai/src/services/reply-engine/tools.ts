@@ -183,7 +183,10 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
 
   // ── Gate 2 + execution ──
   const isRead = classifyToolEffect(tool) === "read";
-  const timeoutMs = isRead ? env.toolTimeoutMs : Math.max(env.toolTimeoutMs * 3, 20000);
+  // One order's read (by id or number, its tracking) gets 10s and one retry on a timeout (prod 2026-11-18,
+  // Smoovee 376b13: get_order 97837 timed out at 8s on a slow store).
+  const singleOrder = SINGLE_ORDER_READ.test(tool);
+  const timeoutMs = singleOrder ? Math.max(env.toolTimeoutMs, orderReadTimeoutMs()) : isRead ? env.toolTimeoutMs : Math.max(env.toolTimeoutMs * 3, 20000);
   // MCP tools run on the tenant's server; everything else through the shared dispatcher.
   const run = async (ctx: AgentToolContext): Promise<AgentToolDispatchResult> => {
     if (tool.startsWith("mcp.")) {
@@ -243,17 +246,17 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   // A read that threw or came back errored is retried once (a write never is).
   // Not one that timed out: it already took the whole budget, and a second try
   // doubled the wait to 16s on slow Smoovee searches (prod replay 2026-11-16).
-  if (isRead && first !== TIMEOUT && ("thrown" in first || readErrored(first.r?.content))) {
+  if (isRead && ((first === TIMEOUT && singleOrder) || (first !== TIMEOUT && ("thrown" in first || readErrored(first.r?.content))))) {
     retried = true;
     first = await attempt();
   }
   if (first !== TIMEOUT && "thrown" in first) {
-    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", errorKind: "tool_error", retried };
+    return { ...rec("error", JSON.stringify({ ok: false, reason: "tool_error", detail: String(first.thrown?.message ?? first.thrown).slice(0, 200), note: isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : ORDER_READ.test(tool) ? ORDER_FAILED_NOTE : "Not a catalogue outage. Say you could not check it right now; do not hand over for this." })), outcome: "error", errorKind: "tool_error", retried };
   }
   outcome = first;
   if (outcome === TIMEOUT) {
     console.warn(`[reply-engine] tool ${tool} timed out after ${timeoutMs}ms conv=${env.conversationId}`);
-    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? (isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over.") : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", errorKind: "timeout", retried };
+    return { ...rec("timeout", JSON.stringify({ ok: false, reason: "timeout", note: isRead ? (isProductSearchTool(tool) || /get_product|variation/.test(tool) ? SEARCH_SLOW_NOTE : ORDER_READ.test(tool) ? ORDER_FAILED_NOTE : "The lookup did not answer in time. Do not guess; say you could not check it right now. Not a reason to hand over.") : "No confirmation came back in time. Do NOT say it was done; say the team will confirm." })), outcome: "timeout", errorKind: "timeout", retried };
   }
 
   let content = outcome.r.content;
@@ -341,6 +344,40 @@ export function outcomeOf(decision: string, content: string, resultCount?: numbe
 }
 
 /** Run one round's calls in parallel; records land on env.turn in call order. */
+/** A short, stable summary of a call's arguments for the feed: keys and short values, at most 200 characters. */
+export function argsSummary(args: unknown): string {
+  if (!args || typeof args !== "object") return "";
+  return Object.entries(args as Record<string, unknown>).map(([k, v]) => `${k}=${typeof v === "object" ? "[…]" : String(v).slice(0, 40)}`).join(" ").slice(0, 200);
+}
+/**
+ * The failure code of a call, or null when it ran: timeout, tool_error, refused:<why>, denied, http_<status>, or
+ * the result's own failure. Read from the record and its result, never guessed.
+ */
+export function errorCodeOf(r: { outcome?: string; errorKind?: string; decision?: string; content?: string }): string | null {
+  if (r.outcome === "timeout") return "timeout";
+  let body: any = null;
+  try { body = JSON.parse(String(r.content ?? "")); } catch { body = null; }
+  if (body?.failure === "refused") return `refused:${String(body.reason ?? "").split(":")[0] || "unknown"}`.slice(0, 60);
+  if (r.decision === "deny" || body?.status === "denied") return "denied";
+  const status = Number(body?.status ?? body?.httpStatus ?? body?.statusCode);
+  if (r.outcome === "error" || r.errorKind) {
+    if (Number.isFinite(status) && status >= 400) return `http_${status}`;
+    return String(r.errorKind ?? body?.reason ?? "tool_error").slice(0, 60);
+  }
+  if (body && body.ok === false) return String(body.failure ?? body.reason ?? body.error ?? "failed").slice(0, 60);
+  return null;
+}
+
+/** One order's own reads (tracking included): a longer wait and a retry. */
+export const SINGLE_ORDER_READ = /^(?:woocommerce\.(?:get_order|get_shipment_tracking)|shopify\.(?:get_order|order_lookup|find_latest_order))$/;
+/** Every order read, of both stores. */
+export const ORDER_READ = /^(?:woocommerce\.(?:get_order|list_customer_orders|list_orders|get_shipment_tracking|list_order_notes|list_refunds)|shopify\.(?:get_order|order_lookup|get_orders|search_orders|get_customer_orders|find_latest_order))$/;
+export const ORDER_READ_TIMEOUT_MS = 10_000;
+/** REPLY_ENGINE_ORDER_TIMEOUT_MS, 100 to 60000; else 10s (and one retry: 20s worst case). */
+export const orderReadTimeoutMs = (env: NodeJS.ProcessEnv = process.env) => { const n = Number(env.REPLY_ENGINE_ORDER_TIMEOUT_MS); return Number.isFinite(n) && n >= 100 && n <= 60000 ? n : ORDER_READ_TIMEOUT_MS; };
+/** An order read that failed goes to the team (the engine records the item): the model says so, nothing else. */
+export const ORDER_FAILED_NOTE = "The order could not be read right now. Do not guess its state and do not say you could not check it: the team gets this order now, say it was passed to the team.";
+
 export async function runToolRound(env: RunnerEnv, calls: ModelToolCall[]): Promise<ToolRunRecord[]> {
   const out = await Promise.all(calls.map((c) => runOne(env, c)));
   // Store envelopes were merged as results arrived; key order follows arrival, which
@@ -356,7 +393,8 @@ export async function runToolRound(env: RunnerEnv, calls: ModelToolCall[]): Prom
           action: `ai.tool_call.${record.tool}`,
           targetType: "conversation",
           targetId: env.conversationId,
-          metadata: { tool: record.tool, args: record.args, decision: record.decision, result: record.content.slice(0, 500), source: "reply_engine_v2", toolCallId: record.callId, ms: record.ms } as any,
+          // outcome and errorCode feed the platform's failed-action feed (2026-11-18, SYSTEM_ADMIN only).
+          metadata: { tool: record.tool, args: record.args, argsSummary: argsSummary(record.args), decision: record.decision, outcome: (record as any).outcome ?? null, errorCode: errorCodeOf(record), result: record.content.slice(0, 500), source: "reply_engine_v2", toolCallId: record.callId, ms: record.ms } as any,
         },
       }).catch(() => {});
     }

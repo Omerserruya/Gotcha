@@ -26,9 +26,12 @@ const h = vi.hoisted(() => ({
   historyQueries: [] as any[],
   failReads: 0,
   slowReads: 0,
+  slowOrders: 0,
+  orderDelay: 900,
   history: null as any[] | null,
   lexical: [] as any[],
   groundTitle: "Canvas Tote",
+  groundUrl: "u",
   groundCategory: "",
   extraTitle: "",
   docAddress: null as string | null,
@@ -64,6 +67,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     dispatchToolCall: async (tc: any, ctx: any) => {
       h.dispatched.push({ name: tc.function.name, args: JSON.parse(tc.function.arguments), sandbox: ctx.sandbox ?? null });
       if (tc.function.name === "woocommerce.list_products" && h.slowReads > 0) { h.slowReads--; await new Promise((r) => setTimeout(r, 900)); }
+      if (tc.function.name === "woocommerce.get_order" && h.slowOrders > 0) { h.slowOrders--; await new Promise((r) => setTimeout(r, h.orderDelay)); }
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
       if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "denied") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
@@ -117,7 +121,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
-    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
+    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: h.groundUrl, attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
     appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
   }),
 }));
@@ -154,12 +158,15 @@ beforeEach(() => {
   for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
   h.slowReads = 0;
+  h.slowOrders = 0;
+  h.orderDelay = 900;
   h.textChannel = false;
   h.offerWrite = false;
   h.lexicalFor = null;
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
+  h.groundUrl = "u";
   h.groundCategory = "";
   h.extraTitle = "";
   h.docAddress = null;
@@ -421,7 +428,8 @@ describe("one v2 turn, replay (scripts/replay-v2.ts)", () => {
       { toolCalls: [tc("x1", "woocommerce.create_coupon", { amount: 10 }), tc("x2", "woocommerce.list_products", { query: "tote" })] },
       { toolCalls: [respond("x3", { reply: "יש Canvas Tote.", cards: ["PRODUCT_1"], team_question: "יש הנחה?" })] },
     );
-    const r = await runReplyEngineTurn({ ...opts, replay: { asOf, messageId: "m9" } }, "autonomous");
+    // She asks about a discount: the team question is hers (since 2026-11-18 one she never raised is dropped).
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש הנחה על התיק?", replay: { asOf, messageId: "m9" } }, "autonomous");
     expect(h.historyQueries[0].where.createdAt).toEqual({ lte: asOf });
     expect(h.scopeSeen.every((s) => s === "reply_engine_replay")).toBe(true);
     expect(h.calls[0].metadata.type).toBe("ai_bot_replay");
@@ -1969,5 +1977,195 @@ describe("1f510cc4 rating: engine passes", () => {
     // The fallback writes its header only; the list carries each product once (no inline bullets).
     expect(r.reply).not.toMatch(/•/);
     expect(((r.reply ?? "").match(/הנה כמה אפשרויות/g) ?? []).length).toBe(1);
+  });
+});
+
+/** Prod 2026-11-18 (Smoovee, cmwlusggx): a product link cut at the domain, the team line glued on. */
+describe("urlfix: links whole, verified, never glued", () => {
+  const URL = "https://smoovee-ltd.com/product/%d7%a1%d7%9e%d7%95%d7%91%d7%99-%d7%90%d7%9c%d7%9b%d7%a1%d7%94/";
+  it("★ the link reaches the customer whole, with the product's own URL", async () => {
+    h.groundTitle = "סמובי אלכסה";
+    h.groundUrl = URL;
+    h.responses.push({ toolCalls: [tc("uf1", "woocommerce.list_products", { query: "אלכסה" })] }, { toolCalls: [respond("uf2", { reply: `הקישור לסמובי אלכסה: ${URL}` })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר קישור לסמובי אלכסה?" }, "autonomous");
+    expect(r.reply).toContain(URL);
+    expect(r.reply).not.toMatch(/[.!?][\u05D0-\u05EA]/);
+  });
+  it("★ a link no source has never reaches the customer", async () => {
+    h.responses.push({ toolCalls: [respond("uf3", { reply: "אפשר לקנות כאן: https://evil.example/buy-now. תודה שפנית!" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה קונים?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/evil\.example/);
+    expect((r.trace as any).urlsRepaired?.dropped).toBe(1);
+  });
+});
+
+/** Narrow prod hotfix on 7c476131 (Smoovee live, 2026-11-18). */
+describe("smoovee live hotfix: engine passes", () => {
+  it("★ a return request: the team now, the failure narration and the re-asked reason cut", async () => {
+    h.lexical = [{ content: "מדיניות החזרות: אפשר להחזיר תוך 14 יום מקבלת המוצר.", score: 0.9, documentTitle: "returns", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [respond("rt1", { reply: "כרגע לא הצלחתי לבדוק את פרטי העסקה. מה סיבת ההחזרה? אפשר להחזיר תוך 14 יום." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני רוצה להחזיר את הזמנה 97837 כי זה לא מתאים" }, "autonomous");
+    expect(r.reply).not.toMatch(/לא הצלחתי/);
+    expect(r.reply).not.toMatch(/סיבת ההחזרה/);
+    expect(r.reply).toMatch(/14 יום/);
+    expect(r.reply).toMatch(/העברתי את הבקשה לצוות/);
+    expect(r.trace.teamQuestion).toMatch(/return request/);
+  });
+  it("★ a statement of interest asks the team nothing", async () => {
+    h.responses.push({ toolCalls: [respond("ti1", { reply: "מעולה, נשמח לעזור. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "כמה משטחים" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני מתעניינת בכמה משטחים" }, "autonomous");
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+    expect(r.reply).not.toMatch(/לצוות/);
+  });
+  it("★ a team topic none of her words name is dropped", async () => {
+    h.responses.push({ toolCalls: [respond("tn1", { reply: "בשמחה. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "הנחת כמות לעסקים" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה המידות של המשטח הגדול?" }, "autonomous");
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+  });
+  it("★ the price of another product next to a named one is cut", async () => {
+    h.groundTitle = "סמובי אלכסה";
+    h.responses.push(
+      { toolCalls: [tc("pp1", "woocommerce.list_products", { query: "אלכסה" })] },
+      { toolCalls: [respond("pp2", { reply: "סמובי אלכסה במחיר 158.76 ₪." })] },
+      { toolCalls: [respond("pp3", { reply: "סמובי אלכסה במחיר 158.76 ₪." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה עולה אלכסה?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/158\.76/);
+  });
+});
+
+/** Smoovee 376b13 (prod 2026-11-18): get_order 97837 timed out at 8s; "לא הצלחתי לבדוק", no team. */
+describe("an order read that fails is the team's", () => {
+  it("★ one retry on a timeout; still nothing: a team item naming the order, the fixed line, no 'could not check'", async () => {
+    process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
+    process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS = "600";
+    h.slowOrders = 2;
+    h.responses.push(
+      { toolCalls: [tc("or1", "woocommerce.get_order", { order_id: "97837" })] },
+      { toolCalls: [respond("or2", { reply: "בודקת את ההזמנה." })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה הסטטוס של הזמנה 97837?" }, "autonomous"); }
+    finally { delete process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS; delete process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS; }
+    expect(r.trace.tools.filter((x: any) => x.tool === "woocommerce.get_order").map((x: any) => x.outcome)).toEqual(["timeout"]);
+    expect(h.dispatched.filter((d: any) => d.name === "woocommerce.get_order")).toHaveLength(2);
+    expect(r.trace.teamQuestion).toMatch(/woocommerce\.get_order 97837 timeout/);
+    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    // The model is told the team gets it, never "say you could not check it".
+    expect(JSON.stringify(h.calls.at(-1)?.messages ?? [])).toMatch(/the team gets this order now/);
+  });
+  it("★ the order read waits longer than other reads (600 here against 500)", async () => {
+    process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
+    process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS = "600";
+    h.slowOrders = 1;
+    h.orderDelay = 550;
+    h.responses.push({ toolCalls: [tc("ow1", "woocommerce.get_order", { order_id: "97837" })] }, { toolCalls: [respond("ow2", { reply: "ההזמנה בדרך." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה הסטטוס של הזמנה 97837?" }, "autonomous"); }
+    finally { delete process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS; delete process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS; }
+    expect(h.dispatched.filter((d: any) => d.name === "woocommerce.get_order")).toHaveLength(1);
+    expect(r.trace.tools.find((x: any) => x.tool === "woocommerce.get_order")?.outcome).toBe("ok");
+  });
+  it("one slow attempt, then the order: answered, no team", async () => {
+    process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
+    process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS = "600";
+    h.slowOrders = 1;
+    h.responses.push(
+      { toolCalls: [tc("os1", "woocommerce.get_order", { order_id: "97837" })] },
+      { toolCalls: [respond("os2", { reply: "ההזמנה בדרך." })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה הסטטוס של הזמנה 97837?" }, "autonomous"); }
+    finally { delete process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS; delete process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS; }
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+  });
+});
+
+
+/** Items 5, 8 and 9 through a whole turn (1771ba14 rating, 2026-11-18). */
+describe("1771ba14 rating items: engine passes", () => {
+  it("★ 9: a video ask the model passed to the team gets the business's link", async () => {
+    h.lexical = [{ content: "סרטון הדרכה: https://youtu.be/abc123", score: 0.9, documentTitle: "howto", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [respond("vd1", { reply: "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "סרטון הדרכה" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש סרטון הדרכה איך משתמשים?" }, "autonomous");
+    expect(r.reply).toMatch(/https:\/\/youtu\.be\/abc123/);
+    expect(r.reply).not.toMatch(/לצוות/);
+  });
+});
+
+/** The wiring of items 1, 2, 4, 5, 7 and 8, and the two from the 87076cab replay, through whole turns. */
+describe("1771ba14 items and the 87076cab replay: wiring", () => {
+  const held = (text: string, facts: any = {}, turnCount = 6) => async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: `checking with the team: ${text}`, at: new Date().toISOString() }], turnCount });
+  const withState = async (fn: any, body: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversationState.findUnique;
+    (prisma as any).conversationState.findUnique = fn;
+    try { await body(); } finally { (prisma as any).conversationState.findUnique = before; }
+  };
+  it("★ 1: a size line names the pad by the knowledge's name when the store title is generic", async () => {
+    h.groundTitle = "משטח הזזה 31*41";
+    h.extraTitle = "משטח הזזה 26*20";
+    h.lexical = [{ content: "מידות המשטחים: סמובי אליס 31*41, סמובי גפן 26*20", score: 0.9, documentTitle: "sizes", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [tc("pn1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("pn2", { reply: "הנה ההתאמות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 30x22 טוסטר 24x15" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/סמובי אליס/);
+    expect(r.reply ?? "").not.toMatch(/: משטח הזזה\./);
+  });
+  it("★ 2: a cut that left a bracket fragment never reaches the customer", async () => {
+    h.responses.push({ toolCalls: [respond("bf1", { reply: "מתאים לפמילי ושבת. [אלכסה מתאים לתמי 4" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה מתאים לי?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/\[/);
+  });
+  it("★ 4: 'no model by that name' when she named none is cut", async () => {
+    // The rewrite repeats it: the cut itself is what keeps it from her.
+    h.responses.push({ toolCalls: [respond("nm1", { reply: "לא מצאתי דגם בשם הזה. איזה מכשיר יש לך?" })] }, { toolCalls: [respond("nm2", { reply: "לא מצאתי דגם בשם הזה. איזה מכשיר יש לך?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר המלצה?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/לא מצאתי דגם/);
+  });
+  it("★ 5: in a hold, 'we'll keep it quiet' is cut", async () => {
+    await withState(held("חויבתי פעמיים על אותה הזמנה"), async () => {
+      // A question on another topic: the hold keeps the model's other sentences, so only the cut removes this one.
+      h.responses.push({ toolCalls: [respond("sp1", { reply: "החיוב בבדיקה. נשאיר את זה בשקט ולא נשלח הודעה נוספת. שעות הפעילות מופיעות באתר." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/בשקט|לא נשלח הודעה/);
+      expect(r.reply ?? "").toMatch(/שעות הפעילות/);
+    });
+  });
+  it("★ 7: a measure the data does not give is cut", async () => {
+    h.groundTitle = "מטפחת משי 70x70";
+    h.responses.push({ toolCalls: [tc("dm1", "woocommerce.list_products", { query: "מטפחת" })] }, { toolCalls: [respond("dm2", { reply: "מטפחת משי 70x70 עולה ₪79. כל צלע של המשולש היא בערך 70 ס\"מ." })] }, { toolCalls: [respond("dm3", { reply: "מטפחת משי 70x70 עולה ₪79. כל צלע של המשולש היא בערך 70 ס\"מ." })] });
+    // The rewrite repeats it: the cut itself is what keeps it from her.
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה גדולה המטפחת כשמקפלים אותה?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/צלע/);
+    expect(r.reply ?? "").toMatch(/79/);
+  });
+  it("★ 8: the identical holding line never twice in a row", async () => {
+    const line = "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.";
+    h.history = [
+      { direction: "INBOUND", body: "חויבתי פעמיים", metadata: null, createdAt: new Date(Date.now() - 3 * 60_000) },
+      { direction: "OUTBOUND", body: line, senderName: "AI Bot", metadata: null, createdAt: new Date(Date.now() - 2 * 60_000) },
+      { direction: "INBOUND", body: "נו?", metadata: null, createdAt: new Date(Date.now() - 60_000) },
+    ];
+    await withState(held("חויבתי פעמיים על אותה הזמנה", { _holdLineTurn: "4", _spokeTurn: "4" }), async () => {
+      h.responses.push({ toolCalls: [respond("hc1", { reply: "החיוב עדיין נבדק." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם החיוב?" }, "autonomous");
+      expect(r.reply ?? "").not.toContain(line);
+    });
+  });
+  it("★ a held return and 'how do I return it?': the steps from the policy and the team's part, never silence", async () => {
+    h.lexical = [{ content: "מדיניות החזרות: אפשר להחזיר תוך 14 יום באריזה המקורית, דמי משלוח 25 ש\"ח.", score: 0.9, documentTitle: "returns", chunkIndex: 1, documentId: "d" }];
+    await withState(held("החזר כספי על המשטח, לא מתאים למיקסר"), async () => {
+      h.responses.push({ toolCalls: [respond("rh1", { reply: "ההחזרה בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אוקיי. מה לעשות? איך להחזיר את המוצר ולהזדכות על המחיר?" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/14 יום/);
+      expect(r.reply ?? "").toMatch(/את פרטי הזיכוי הצוות יאשר כאן/);
+    });
+  });
+  it("★ the model talking about its own tools is cut", async () => {
+    h.lexical = [{ content: "ביטול עסקה: אפשר לבטל בתוך 14 יום.", score: 0.9, documentTitle: "terms", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [respond("tt1", { reply: "מצטערים, לא נדרש כאן חיפוש מוצר. אפשר לבטל בתוך 14 יום." })] }, { toolCalls: [respond("tt2", { reply: "מצטערים, לא נדרש כאן חיפוש מוצר. אפשר לבטל בתוך 14 יום." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לבטל את ההזמנה?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/חיפוש/);
+    expect(r.reply ?? "").toMatch(/14 יום/);
   });
 });

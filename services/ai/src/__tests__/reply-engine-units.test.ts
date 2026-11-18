@@ -433,19 +433,20 @@ describe("tool errors from the prod replay", () => {
     expect(errorKindOf(JSON.stringify({ ok: false, failure: "refused", reason: "selector_phone_not_owned:05*****12" }))).toBe("selector_phone_not_owned");
     expect(errorKindOf(JSON.stringify({ ok: false, failure: "refused", reason: "Dana Levi: no such order" }))).toBe("refused");
   });
-  it("a read that timed out is not retried (it already took the whole budget: 2 x 8s on Smoovee searches)", async () => {
+  // Since 2026-11-18 one order's read IS retried once on a timeout (Smoovee 376b13); every other read is not.
+  it("a read that timed out is not retried, except one order's own read (2 x 8s on Smoovee searches)", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const src = readFileSync(join(__dirname, "../services/reply-engine/tools.ts"), "utf8");
     const retry = src.slice(src.indexOf("let first: any = await attempt();"), src.indexOf("let first: any = await attempt();") + 600);
-    expect(retry).toMatch(/if \(isRead && first !== TIMEOUT && \("thrown" in first \|\| readErrored\(first\.r\?\.content\)\)\)/);
+    expect(retry).toMatch(/if \(isRead && \(\(first === TIMEOUT && singleOrder\) \|\| \(first !== TIMEOUT && \("thrown" in first \|\| readErrored\(first\.r\?\.content\)\)\)\)\)/);
   });
 });
 
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_positive_fit", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "derived_measure", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "price_of_other_product", "ungrounded_absence", "ungrounded_attribute", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_positive_fit", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -2434,6 +2435,116 @@ describe("d7782dd2 rating fixes", () => {
   });
 });
 
+/** Prod 2026-11-18 (Smoovee, cmwlusggx): "https://smoovee-ltd.העברתי את השאלה לצוות". */
+describe("urlfix units", () => {
+  const URL = "https://smoovee-ltd.com/product/%d7%a1%d7%9e%d7%95%d7%91%d7%99-%d7%90%d7%9c%d7%9b%d7%a1%d7%94/";
+  const LIVE = "הקישור לסמובי אלכסה: https://smoovee-ltd.העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+  it("★ the sentence cuts keep a URL whole", async () => {
+    const g: any = await import("../services/reply-engine/gates");
+    const s = `הקישור לסמובי אלכסה: ${URL}\nהעברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.`;
+    expect(g.removeTeamLines(s)).toContain(URL);
+    expect(g.dropPersonPromises(`הנה: ${URL}\nנציג יחזור אלייך.`)).toContain(URL);
+    // The digits of a percent-encoded path are no numbers to ground.
+    expect(g.ungroundedNumbers(`הקישור: ${URL}`, "")).toEqual([]);
+    expect(g.ungroundedNumbers("זה 95% כותנה", "")).toHaveLength(1);
+  });
+  it("★ the exact live text: the cut link becomes the product's URL, the team line keeps its own sentence", async () => {
+    const { repairUrls, spaceSentences } = await import("../services/reply-engine/gates");
+    const r = repairUrls(LIVE, `product: ${URL}`);
+    expect(r.text).toContain(URL);
+    expect(spaceSentences(r.text)).toMatch(/העברתי את השאלה לצוות/);
+    expect(spaceSentences(r.text)).not.toMatch(/[.!?][\u05D0-\u05EA]/);
+    // Two product URLs: no way to tell which, so the cut link's sentence goes and the team line stays.
+    const two = repairUrls(LIVE, `${URL} https://smoovee-ltd.com/product/other/`);
+    expect(two.text).not.toMatch(/smoovee-ltd(?!\.com)/);
+    expect(two.text).toMatch(/^העברתי את השאלה לצוות/);
+    expect(two.dropped).toBe(1);
+  });
+  it("★ kept sentences never touch; a sentence end gets a space before a Hebrew letter, never inside a URL", async () => {
+    const { joinKept, spaceSentences } = await import("../services/reply-engine/gates");
+    expect(["הקישור: x.", "העברתי."].reduce(joinKept, "")).toBe("הקישור: x. העברתי.");
+    expect(["a. ", "b."].reduce(joinKept, "")).toBe("a. b.");
+    expect(spaceSentences("תודה.העברתי")).toBe("תודה. העברתי");
+    expect(spaceSentences(`ראי ${URL}`)).toBe(`ראי ${URL}`);
+  });
+});
+
+/** Narrow prod hotfix on 7c476131 (Smoovee live, 2026-11-18). */
+describe("smoovee live hotfix units", () => {
+  it("★ a decimal price cut by the splitters is one number again", async () => {
+    const { joinKept } = await import("../services/reply-engine/gates");
+    expect(["סמובי אלכסה במחיר 227.", "50 ₪."].reduce(joinKept, "")).toBe("סמובי אלכסה במחיר 227.50 ₪.");
+    expect(["תודה.", "העברתי."].reduce(joinKept, "")).toBe("תודה. העברתי.");
+  });
+  it("★ an attribute nothing states: 'בסיס: פרספקס' never makes it transparent", async () => {
+    const { ungroundedAttribute } = await import("../services/reply-engine/gates");
+    expect(ungroundedAttribute("המשטחים מפרספקס שקוף.", "בסיס: פרספקס")).toHaveLength(1);
+    expect(ungroundedAttribute("המשטח שקוף לגמרי.", "חומר: פרספקס שקוף")).toEqual([]);
+    expect(ungroundedAttribute("אין לי מידע שמאשר אם הם שקופים.", "בסיס: פרספקס")).toEqual([]);
+    expect(ungroundedAttribute("יש אותו בצבע ורוד.", "צבעים: שחור, לבן")).toHaveLength(1);
+    expect(ungroundedAttribute("יש אותו בשחור.", "צבעים: שחור, לבן")).toEqual([]);
+    expect(ungroundedAttribute("הוא עמיד במים.", "פרספקס")).toHaveLength(1);
+  });
+  it("★ a price next to a named product is its own; the sale's prices count", async () => {
+    const { priceOfOtherProduct, namedOnce } = await import("../services/reply-engine/gates");
+    const c = [{ title: "סמובי אלכסה", price: "227" }, { title: "סמובי אריאל", price: "158.76" }, { title: "סמובי גפן", price: "99", discount: { was: "129", now: "99" } }];
+    expect(priceOfOtherProduct("סמובי אלכסה במחיר 158.76 ₪.", c)).toHaveLength(1);
+    expect(priceOfOtherProduct("סמובי אלכסה במחיר 227 ₪.", c)).toEqual([]);
+    expect(priceOfOtherProduct("סמובי גפן ב-₪99 במקום ₪129.", c)).toEqual([]);
+    expect(priceOfOtherProduct("סמובי אלכסה ב-227 ₪ וסמובי אריאל ב-158.76 ₪.", c)).toEqual([]);
+    expect(namedOnce("הנה סמובי אלכסה", c)).toBe(0);
+    expect(namedOnce("אלכסה ואריאל", c)).toBe(-1);
+  });
+  it("★ a return REQUEST, not a policy question; a failure told; a reason given", async () => {
+    const g: any = await import("../services/reply-engine/gates");
+    expect(g.returnRequest("אני רוצה להחזיר את המשטח")).toBe(true);
+    expect(g.returnRequest("החזרה של הזמנה 97837")).toBe(true);
+    expect(g.returnRequest("אפשר להחזיר מוצר אחרי שבוע?")).toBe(false);
+    expect(g.FAILURE_TOLD.test("כרגע לא הצלחתי לבדוק את פרטי העסקה.")).toBe(true);
+    expect(g.gaveReason(["רוצה להחזיר כי זה לא מתאים למיקסר"])).toBe(true);
+    expect(g.gaveReason(["רוצה להחזיר"])).toBe(false);
+  });
+});
+
+describe("smoovee live hotfix: gate3 and the hold noun", () => {
+  it("★ gate3 cuts a transparency nothing states, and another product's price next to a named one", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const v = gate3({ ...baseG3, reply: "המשטחים מפרספקס שקוף.", grounding: "סמובי אלכסה בסיס: פרספקס 227" } as any);
+    expect(JSON.stringify(v)).toMatch(/ungrounded_attribute/);
+    const w = gate3({ ...baseG3, reply: "סמובי אלכסה במחיר 158.76 ₪.", grounding: "סמובי אלכסה 227 ₪; סמובי אריאל 158.76 ₪", candidateTitles: ["סמובי אלכסה", "סמובי אריאל"], candidates: [{ title: "סמובי אלכסה", price: "227" }, { title: "סמובי אריאל", price: "158.76" }] } as any);
+    expect(JSON.stringify(w)).toMatch(/price_of_other_product/);
+  });
+  it("★ a held return is 'the request', never 'the charge'", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    expect(stillCheckingLine("return request: רוצה להחזיר, יש זיכוי?", "he")).toMatch(/^הבקשה עדיין בבדיקה/);
+    expect(stillCheckingLine("חויבתי פעמיים", "he")).toMatch(/^החיוב עדיין בבדיקה/);
+  });
+});
+
+describe("the action trace and the money floor (2026-11-18)", () => {
+  it("★ error codes and an argument summary for the platform's feed", async () => {
+    const { errorCodeOf, argsSummary, orderReadTimeoutMs } = await import("../services/reply-engine/tools");
+    expect(errorCodeOf({ outcome: "timeout" })).toBe("timeout");
+    expect(errorCodeOf({ outcome: "error", errorKind: "tool_error", content: JSON.stringify({ status: 403 }) })).toBe("http_403");
+    expect(errorCodeOf({ decision: "deny", content: JSON.stringify({ ok: false, failure: "refused", reason: "not_asked: x" }) })).toBe("refused:not_asked");
+    expect(errorCodeOf({ outcome: "ok", content: JSON.stringify({ ok: true }) })).toBeNull();
+    expect(errorCodeOf({ outcome: "ok", content: JSON.stringify({ ok: false, failure: "order_not_found" }) })).toBe("order_not_found");
+    expect(argsSummary({ order_id: "97837", items: [1, 2] })).toBe("order_id=97837 items=[…]");
+    expect(orderReadTimeoutMs({} as any)).toBe(10000);
+  });
+  it("the money tools are named (the floor waits for Omer's decision)", async () => {
+    // By path: this worktree's node_modules may link another line's shared package.
+    const { readFileSync: rf } = await import("fs");
+    const gateSrc = rf("../../packages/shared/src/lib/tool-gate.ts", "utf8");
+    const ALWAYS_APPROVAL = new RegExp(eval(gateSrc.match(/export const ALWAYS_APPROVAL = (\/.*\/);/)![1]).source);
+    for (const t of ["woocommerce.create_refund", "woocommerce.create_coupon", "shopify.create_discount_code", "refund", "apply_discount"]) expect(ALWAYS_APPROVAL.test(t)).toBe(true);
+    for (const t of ["woocommerce.get_order", "woocommerce.add_order_note", "woocommerce.disable_coupon"]) expect(ALWAYS_APPROVAL.test(t)).toBe(false);
+    const src = (await import("fs")).readFileSync("../../packages/shared/src/lib/tool-gate.ts", "utf8");
+    // Not applied until Omer decides (the workspace's Execute still holds).
+    expect(src).not.toMatch(/if \(ALWAYS_APPROVAL\.test\(opts\.toolName\)/);
+  });
+});
+
 /** Rating on 93f9fdff (2026-11-18, LIVE). */
 describe("93f9fdff rating fixes", () => {
   const URL = "https://chanivainberger.co.il/product/makeup-base.v2/?ref=a.b";
@@ -2703,28 +2814,53 @@ describe("052f53ad rating fixes", () => {
   });
 });
 
-/** Prod 2026-11-18 (Smoovee, cmwlusggx): "https://smoovee-ltd.העברתי את השאלה לצוות". */
-describe("urlfix units", () => {
-  const URL = "https://smoovee-ltd.com/product/%d7%a1%d7%9e%d7%95%d7%91%d7%99-%d7%90%d7%9c%d7%9b%d7%a1%d7%94/";
-  const LIVE = "הקישור לסמובי אלכסה: https://smoovee-ltd.העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
-  it("★ the sentence cuts keep a URL whole", async () => {
+/** Items 1 to 9 of the 1771ba14 rating (2026-11-18), on the prod engine line. */
+describe("1771ba14 rating items", () => {
+  it("★ 1: a pad's distinguishing name, never a generic noun; 'לא נקבעה התאמה' is a no-fit claim", async () => {
     const g: any = await import("../services/reply-engine/gates");
-    const s = `הקישור לסמובי אלכסה: ${URL}\nהעברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.`;
-    expect(g.removeTeamLines(s)).toContain(URL);
-    expect(g.dropPersonPromises(`הנה: ${URL}\nנציג יחזור אלייך.`)).toContain(URL);
-    // The digits of a percent-encoded path are no numbers to ground.
-    expect(g.ungroundedNumbers(`הקישור: ${URL}`, "")).toEqual([]);
-    expect(g.ungroundedNumbers("זה 95% כותנה", "")).toHaveLength(1);
+    const pads = ["משטח הזזה 32*22", "משטח הזזה 31*41", "משטח הזזה 46*33"];
+    expect(g.padName("משטח הזזה 31*41", pads, ["סמובי אליס 31*41", "סמובי אסף 46*33"])).toBe("סמובי אליס");
+    expect(g.padName("משטח הזזה 32*22", pads, [])).toBe("משטח הזזה 32*22");
+    expect(g.padName("סמובי גפן 26*20", ["סמובי גפן 26*20", "סמובי אליס 31*41"], [])).toBe("סמובי גפן");
+    expect(g.ungroundedNegativeFit("למיקסר ולטוסטר לא נקבעה התאמה.", "מיקסר 32x22", ["סמובי אליס 31*41"], "")).toHaveLength(1);
   });
-  it("★ the exact live text: the cut link becomes the product's URL, the team line keeps its own sentence", async () => {
-    const { repairUrls } = await import("../services/reply-engine/gates");
-    const r = repairUrls(LIVE, `product: ${URL}`);
-    expect(r.text).toContain(URL);
-    expect(r.text).toMatch(/העברתי את השאלה לצוות/);
-    // Two product URLs: no way to tell which, so the cut link's sentence goes and the team line stays.
-    const two = repairUrls(LIVE, `${URL} https://smoovee-ltd.com/product/other/`);
-    expect(two.text).not.toMatch(/smoovee-ltd(?!\.com)/);
-    expect(two.text).toMatch(/^העברתי את השאלה לצוות/);
-    expect(two.dropped).toBe(1);
+  it("★ 2: a sentence with an unbalanced bracket goes; never the whole reply", async () => {
+    const { dropBrokenFragments } = await import("../services/reply-engine/gates");
+    expect(dropBrokenFragments("מתאים לפמילי ושבת. [אלכסה מתאים לתמי 4").text).toBe("מתאים לפמילי ושבת.");
+    expect(dropBrokenFragments("ראי (בעמוד המוצר) כאן.").dropped).toBe(0);
+    expect(dropBrokenFragments("[רק זה").text).toBe("רק זה");
+    expect(dropBrokenFragments("ראי https://x.co/a(1 כאן.").dropped).toBe(0);
+  });
+  it("★ 3: a pad for ANOTHER device offered as an alternative is cut", async () => {
+    const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
+    const titles = ["סמובי כריסטינה 23*40", "סמובי אליס 31*41"];
+    const kb = "סמובי כריסטינה: נינג'ה סלושי";
+    expect(ungroundedPositiveFit("או לראות את סמובי כריסטינה שמתאימה לנינג'ה סלושי.", "יש משטח לנינג'ה קריספי?", titles, "", kb)).toHaveLength(1);
+    expect(ungroundedPositiveFit("סמובי כריסטינה מתאימה לנינג'ה סלושי.", "יש משטח לנינג'ה סלושי?", titles, "", kb)).toEqual([]);
+  });
+  it("★ 4: 'no model by that name' when she named none", async () => {
+    const { nameMissUnasked } = await import("../services/reply-engine/gates");
+    expect(nameMissUnasked("לא מצאתי דגם בשם הזה. אפשר את שם הדגם?", "אפשר המלצה?")).toHaveLength(1);
+    expect(nameMissUnasked("לא מצאתי דגם בשם הזה.", "יש לכם XR-200?")).toEqual([]);
+  });
+  it("★ 5: a silence promise", async () => {
+    const { SILENCE_PROMISE } = await import("../services/reply-engine/gates");
+    expect(SILENCE_PROMISE.test("נשאיר את זה בשקט ולא נשלח הודעה נוספת.")).toBe(true);
+    expect(SILENCE_PROMISE.test("לא נשלח הודעה נוספת עד שיהיה עדכון.")).toBe(true);
+    expect(SILENCE_PROMISE.test("נשלח לך עדכון כאן.")).toBe(false);
+  });
+  it("★ 6: the replay always prints a search line", async () => {
+    const { searchLine } = await import("../scripts/replay-v2");
+    expect(searchLine({})).toBe("none");
+    expect(searchLine({ tools: [{ tool: "woocommerce.list_products", args: { query: "בובות" }, outcome: "empty", resultCount: 0 }] })).toMatch(/ran: list_products \{"query":"בובות"\} -> empty \(0\)/);
+  });
+  it("★ 7: a derived measure no source states", async () => {
+    const { derivedMeasure } = await import("../services/reply-engine/gates");
+    expect(derivedMeasure("כל צלע של המשולש היא בערך 70 ס\"מ.", "מטפחת 70x70 ס\"מ")).toHaveLength(1);
+    expect(derivedMeasure("המטפחת בגודל 70 על 70 ס\"מ.", "מטפחת 70x70 ס\"מ")).toEqual([]);
+  });
+  it("★ 9: 'אין כאן מידע על גוונים' while the product data has the shades", async () => {
+    const { infoDeniedButKnown } = await import("../services/reply-engine/gates");
+    expect(infoDeniedButKnown("אין כאן מידע על גוונים של הבסיס.", "גוונים: Sand, Medium, Honey")).toHaveLength(1);
   });
 });

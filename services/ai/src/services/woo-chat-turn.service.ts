@@ -547,8 +547,12 @@ export function customerSearchQuery(
 ): string | null {
   const now = String(incoming ?? "").trim();
   const words = (t: string) => t.toLowerCase().match(/[a-z\u0590-\u05ff]{3,}|\d+/g) ?? [];
+  // A message that is only a greeting or an acknowledgement names no item: never part of the search ("היי" then
+  // "דגם לתמי 4" then "כן" searches "דגם לתמי 4 כן", never "היי דגם לתמי 4 כן").
+  const bare = (t: string) => /^(?:היי|הי|שלום|אהלן|הלו|בוקר\s+טוב|ערב\s+טוב|תודה(?:\s+רבה)?|כן|לא|אוקיי?|סבבה|hi|hey|hello|thanks|thank\s+you|yes|no|ok(?:ay)?)[\s!.?,]*$/iu.test(t);
   const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? "").trim()).filter(Boolean);
   if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
+  for (let i = earlier.length - 1; i >= 0; i--) if (bare(earlier[i]!)) earlier.splice(i, 1);
   const parts = [now];
   // A short follow-up ("בצבע שחור") carries the item from before it: the last message, and the one before
   // when this one is very short (rating 657e5f85, Tehila: "בובון" two messages back was never searched).
