@@ -2165,7 +2165,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const named = new Set<number>(cardKeys);
   candidates.forEach((c: any, i: number) => { if (c?.title && reply.includes(c.title)) named.add(i + 1); });
   // Named without the exact title (a shortened or translated name, or the model's own intent): in focus too.
-  if (reply) for (const i of referredCandidates(candidates as any[], reply, String(final.stateUpdate?.intent ?? ""))) named.add(i + 1);
+  if (reply) for (const i of referredCandidates(candidates as any[], reply, String(final.stateUpdate?.intent ?? ""), [firstName])) named.add(i + 1);
   for (const n of named) {
     const c: any = candidates[n - 1];
     if (c) offered.push({ ref: `id:${c.productId}`, title: c.title, price: c.price ?? null, currency: c.currency ?? null, productId: c.productId ?? null, variantId: c.variantId ?? null, at: now });

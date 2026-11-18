@@ -254,10 +254,14 @@ describe("b77ec0d1 verify: the focus rules", () => {
   });
   it("★ 2: a 3-letter name unique to one title is distinctive, with up to two Hebrew prefix letters", () => {
     expect(referredCandidates(smoovee, "למכונה שלך מתאים משטח גפן.", "")).toEqual([0]);
-    expect(referredCandidates(smoovee, "לגפן יש ידית.", "")).toEqual([0]);
-    expect(referredCandidates(smoovee, "בגפן ובאריאל אין ידית.", "")).toEqual([0, 1]);
-    expect(referredCandidates([{ title: "אסף למיקסר" }, { title: "גפן למכונות קפה" }], "וגם אסף מתאים.", "")).toEqual([0]);
-    expect(referredCandidates([{ title: "Zip Hoodie" }, { title: "Cropped Hoodie" }, { title: "Heavyweight Hoodie" }], "יש לנו zip וגם cropped", "")).toEqual([0, 1]);
+    expect(referredCandidates(smoovee, "המשטח של מלאני מתאים.", "")).toEqual([2]);
+    // The companion word carries a prefix letter in the reply ("למכונה" for "מכונות").
+    expect(referredCandidates([{ title: "גפן מכונות קפה" }, { title: "אריאל מכונות קפה" }], "למכונה שלך מתאים גפן.", "")).toEqual([0]);
+    // A short name alone, no other word of its title (13afc633 verify): not enough; a 5-letter name is.
+    expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([1]);
+    expect(referredCandidates([{ title: "אסף לנינג'ה קריספי" }, { title: "גפן למכונות קפה" }], "אסף מתאים לנינג'ה.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "אסף למיקסר" }, { title: "גפן למכונות קפה" }], "וגם אסף מתאים.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "Zip Hoodie" }, { title: "Cropped Hoodie" }, { title: "Heavyweight Hoodie" }], "יש לנו zip וגם cropped", "")).toEqual([1]);
   });
   it("★ 3: a word two found titles share never counts; the same base marks both", () => {
     expect(referredCandidates(smoovee, "יש לנו כמה משטחים למכונות קפה.", "")).toEqual([]);
@@ -268,5 +272,29 @@ describe("b77ec0d1 verify: the focus rules", () => {
     expect(focusTitle(["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"], "בירור Zip Hoodie", null)).toBe("Zip Hoodie");
     // Two named now outrank an older shown product: still no focus.
     expect(focusTitle(["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"], "השוואה בין Zip Hoodie ל-Cropped Hoodie", "Heavyweight Hoodie")).toBeNull();
+  });
+});
+
+describe("13afc633 verify: attribute words that are the product; ordinary speech", () => {
+  it("★ must-fix: a bare attribute word beside another content word is the product and stays", () => {
+    expect(storeQueryOf("יש לכם משקל מטבח?")).toBe("משקל מטבח");
+    expect(storeQueryOf("יש לכם צבע לקיר בלבן?")).toBe("צבע לקיר בלבן");
+    expect(storeQueryOf("אני מחפשת בד כותנה לתפירה")).toBe("בד כותנה לתפירה");
+    expect(storeQueryOf("יש לכם סרט מידה?")).toBe("סרט מידה");
+    expect(storeQueryOf("יש לכם חומר ניקוי לנירוסטה?")).toBe("חומר ניקוי לנירוסטה");
+  });
+  it("★ must-fix: the attribute use still comes out (a ה or ב form, or nothing beside it)", () => {
+    expect(storeQueryOf("יש לכם מטפחת בצבע כחול?")).toBe("מטפחת כחול");
+    expect(storeQueryOf("מה האורך של השרשרת?")).toBe("השרשרת");
+    expect(storeQueryOf("מה האורך של השרשרת?", { substring: true })).toBe("שרשרת");
+    for (const s of ["יש כמה צבעים?", "באילו מידות?", "מה המידות שלו?", "מאיזה בד הוא עשוי?", "what material is it?"]) expect(storeQueryOf(s), s).toBeNull();
+  });
+  it("★ should-fix: a short everyday word or a person's name never marks a product", () => {
+    expect(referredCandidates([{ title: "קרם יום לעור יבש" }, { title: "קרם לילה לעור יבש" }], "תוך יום עסקים נחזור אליך.", "")).toEqual([]);
+    const smoovee = [{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }];
+    expect(referredCandidates(smoovee, "שלום אריאל, נשמח לעזור", "")).toEqual([]);
+    expect(referredCandidates(smoovee, "נשמח לעזור, אריאל.", "", ["אריאל"])).toEqual([]);
+    // Still a product with a word of its own title beside it.
+    expect(referredCandidates([{ title: "קרם יום לעור יבש" }, { title: "קרם לילה לעור יבש" }], "קרם יום מתאים לעור יבש.", "")).toEqual([0]);
   });
 });

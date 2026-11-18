@@ -2612,6 +2612,20 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
+  it("★ (13afc633 verify) the contact's own first name never puts a product of that name in focus", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const contact = (prisma as any).contact.findFirst;
+    (prisma as any).contact.findFirst = async () => ({ id: "k1", email: null, phone: null, displayName: "אריאל כהן" });
+    try {
+      h.groundTitle = "אריאל למכונות קפה";
+      h.extraTitle = "גפן למכונות קפה";
+      h.responses.push({ toolCalls: [tc("n1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("n2", { reply: "נשמח לעזור, אריאל. לאיזו מכונה המשטח?" })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת משטח" }, "autonomous");
+      const up = h.upserts[h.upserts.length - 1];
+      expect(((up?.create ?? up?.update)?.offeredItems ?? []).map((o: any) => o.title)).not.toContain("אריאל למכונות קפה");
+    } finally { (prisma as any).contact.findFirst = contact; }
+  });
+
   it("★ the audit row carries the cut fields when something was cut", async () => {
     h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
