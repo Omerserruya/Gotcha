@@ -236,6 +236,8 @@ export function gaveUpSearch(reply: string, tools: ToolRunRecord[], incoming = "
   return knowledgeAnswersIt(reply, incoming, teamQuestion, knowledge);
 }
 const FIT_ASK = /(?<![\u0590-\u05FF])[וש]?(?:מתאים|מתאימה|יתאים|תתאים|מידה|מידות|גודל|ס["״']?מ)(?![\u0590-\u05FF])|\b(?:fits?|size|sizes|dimensions?|cm)\b/iu;
+/** A device-fit ask ("משטח שמתאים לנינג'ה קריספי", "fits my mixer"): the business's device table belongs in it. */
+export const deviceFitAsk = (incoming: string) => FIT_ASK.test(String(incoming ?? "")) && /\p{L}{3,}/u.test(String(incoming ?? ""));
 /** Sent to the team while the business's own knowledge speaks of what they asked. */
 export function knowledgeAnswersIt(reply: string, incoming: string, teamQuestion: boolean, knowledge: string): boolean {
   // Sent to the team while the business's own knowledge speaks of what they asked (prod rating 2026-11-17,

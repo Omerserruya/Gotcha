@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -686,7 +686,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         askerKey: opts.conversationId,
       }).catch(() => [] as any[]),
       lexicalKnowledge(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[]),
-    ]).then(([v, l]) => mergeKnowledge(v as any, l as any, knowledgeLimit(String(opts.incomingMessage ?? ""))))),
+      // A device-fit ask also reads the business's device-to-product table (rating 657e5f85, Smoovee: an air
+      // fryer the store's texts never name sits under "סיר טיגון / אייר פרייר" in the table).
+      deviceFitAsk(String(opts.incomingMessage ?? ""))
+        ? lexicalKnowledge(opts.tenantId, `${String(opts.incomingMessage ?? "").slice(0, 300)} טבלה התאמה מכשיר מכשירים`, 4, config.id).catch(() => [] as any[])
+        : Promise.resolve([] as any[]),
+    ]).then(([v, l, fit]) => {
+      const main = mergeKnowledge(v as any, l as any, knowledgeLimit(String(opts.incomingMessage ?? "")));
+      const key = (c: any) => `${c.documentId ?? c.documentTitle}#${c.chunkIndex}`;
+      const seen = new Set(main.map(key));
+      return [...main, ...(fit as any[]).filter((c) => !seen.has(key(c))).slice(0, 2)];
+    })),
     // An address the documents give, for a profile with none (cached per tenant).
     timed("docAddress", documentAddress(opts.tenantId, config.id).catch(() => null)),
     // Both store turns in parallel; a Shopify chat wins when both answer.

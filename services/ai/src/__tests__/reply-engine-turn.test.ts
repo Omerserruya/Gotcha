@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   agentStatus: "ACTIVE",
   textChannel: false,
   offerWrite: false,
+  lexicalFor: null as null | ((q: string) => any[]),
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
   historyQueries: [] as any[],
@@ -121,7 +122,7 @@ vi.mock("../services/discovery-integration.service", () => ({
 }));
 vi.mock("../services/knowledge.service", () => ({
   retrieveRelevantChunks: async () => [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
-  lexicalKnowledge: async () => h.lexical, mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
+  lexicalKnowledge: async (_t: string, q: string) => (h.lexicalFor ? h.lexicalFor(q) : h.lexical), mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
   knowledgeLimit: () => 5, documentAddress: async () => h.docAddress,
 }));
 vi.mock("../services/skill-runtime.service", () => ({ loadSkillContext: async () => ({ candidates: [] }), skillApprovalReason: () => null }));
@@ -154,6 +155,7 @@ beforeEach(() => {
   h.slowReads = 0;
   h.textChannel = false;
   h.offerWrite = false;
+  h.lexicalFor = null;
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
@@ -1631,6 +1633,23 @@ describe("657e5f85 rating: engine passes", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם מטפחת חגיגית בגווני כחול?" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/קשת/);
     expect(h.staged.flatMap((s: any) => s.products ?? []).map((p: any) => p?.title ?? p?.name ?? "").join(" ")).not.toMatch(/קשת/);
+  });
+});
+
+describe("657e5f85 Crispy trace: the device table on a fit ask", () => {
+  it("★ a device-fit ask brings the business's device table into the prompt", async () => {
+    const table = { content: "טבלת התאמה: סיר טיגון / אייר פרייר (נינג'ה קריספי) - סמובי אליס", score: 0.5, documentTitle: "devices", chunkIndex: 3, documentId: "kb1" };
+    h.lexicalFor = (q: string) => (/טבלה/.test(q) ? [table] : []);
+    h.responses.push({ toolCalls: [respond("dt1", { reply: "סמובי אליס מתאים לנינג'ה קריספי." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "איזה משטח מתאים לנינג'ה קריספי?" }, "autonomous");
+    expect(JSON.stringify(h.calls[0].messages)).toMatch(/אייר פרייר/);
+  });
+  it("not on a question that is no fit ask", async () => {
+    const table = { content: "טבלת התאמה: סיר טיגון / אייר פרייר - סמובי אליס", score: 0.5, documentTitle: "devices", chunkIndex: 3, documentId: "kb1" };
+    h.lexicalFor = (q: string) => (/טבלה/.test(q) ? [table] : []);
+    h.responses.push({ toolCalls: [respond("dt2", { reply: "אנחנו פתוחים א-ה 9-17." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מה שעות הפעילות?" }, "autonomous");
+    expect(JSON.stringify(h.calls[0].messages)).not.toMatch(/אייר פרייר/);
   });
 });
 
