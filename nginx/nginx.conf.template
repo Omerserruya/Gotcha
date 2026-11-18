@@ -2464,6 +2464,19 @@ http {
             add_header Cache-Control "no-cache, must-revalidate" always;
         }
 
+        # The setup screen's Terms acceptance, as on the prod auth vhost (gateway/nginx.prod.conf.template). An
+        # invited user's setup on auth-dev posted here and got a 404 page (2026-11-18). Only this one
+        # path of the auth service is opened here: nothing else of /api/auth.
+        location ~ ^/api/auth/setup/[^/]+/accept$ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ★★ THE ROOT OF THIS ORIGIN IS OUR SIGN-IN SCREEN, NOT THE IdP's.
         #
         # `location /` below hands everything unmatched to Authentik, which is
