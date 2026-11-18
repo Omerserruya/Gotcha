@@ -2563,3 +2563,66 @@ describe("replay e: engine passes", () => {
     }
   });
 });
+
+describe("dev live round on 9480dfb2: the product in focus", () => {
+  it("★ named without its exact title: kept in focus, and the next turn's material question reads it, never the team", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    h.groundTitle = "Heavyweight Hoodie (Black)";
+    h.responses.push({ toolCalls: [tc("f1", "woocommerce.list_products", { query: "hoodie black" })] }, { toolCalls: [respond("f2", { reply: "כן, יש קפוצ'ון שחור בגזרה כבדה.", state_update: { stage: "choosing", intent: "בדיקת צבעי Heavyweight Hoodie", facts: {}, pending: [] } })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם את הקפוצ'ון השחור?" }, "autonomous");
+    const up = h.upserts[h.upserts.length - 1];
+    const saved = up?.create ?? up?.update;
+    expect((saved?.offeredItems ?? []).map((o: any) => o.title)).toContain("Heavyweight Hoodie (Black)");
+    expect(saved?.facts?._focusTitles).toContain("Heavyweight Hoodie (Black)");
+    // Next turn: the state as saved, minus the offered list (the focus alone carries it).
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", stage: "choosing", intent: "בירור הרכב הבד של Heavyweight Hoodie", facts: saved.facts, offeredItems: [], pending: [], turnCount: 2 });
+    try {
+      h.dispatched.length = 0;
+      h.responses.push({ toolCalls: [respond("f3", { reply: "אין לנו מידע מדויק על הרכב הבד, אפשר לברר את זה מול הצוות." })] }, { toolCalls: [respond("f4", { reply: "Heavyweight Hoodie (Black) עשוי מכותנה." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "מאיזה בד הוא עשוי?" }, "autonomous");
+      expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("Heavyweight Hoodie (Black)");
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ (verify) a newer lookup replaces the focus; an order question clears it and reads no old product", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", stage: "choosing", intent: "Heavyweight Hoodie", facts: { _focusTitles: JSON.stringify(["Heavyweight Hoodie (Black)"]) }, offeredItems: [], pending: [], turnCount: 3 });
+    try {
+      h.groundTitle = "Canvas Tote";
+      h.responses.push({ toolCalls: [tc("g1", "woocommerce.list_products", { query: "tote" })] }, { toolCalls: [respond("g2", { reply: "יש לנו Canvas Tote ב-79 ₪." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+      let up = h.upserts[h.upserts.length - 1];
+      expect(JSON.parse((up?.create ?? up?.update).facts._focusTitles)).toEqual(["Canvas Tote"]);
+      h.dispatched.length = 0;
+      h.responses.push({ toolCalls: [respond("g3", { reply: "אפשר את מספר ההזמנה?" })] }, { toolCalls: [respond("g4", { reply: "אפשר את מספר ההזמנה?" })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "איפה ההזמנה שלי?" }, "autonomous");
+      up = h.upserts[h.upserts.length - 1];
+      expect((up?.create ?? up?.update).facts._focusTitles ?? "").toBe("");
+      expect(h.dispatched.some((d) => /list_products/.test(d.name) && /Hoodie/.test(String(d.args?.query ?? "")))).toBe(false);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ (verify) on an order question the old focus is never read, even when the model says it has no details", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", stage: "choosing", intent: "Heavyweight Hoodie", facts: { _focusTitles: JSON.stringify(["Heavyweight Hoodie (Black)"]) }, offeredItems: [], pending: [], turnCount: 3 });
+    try {
+      h.responses.push({ toolCalls: [respond("g7", { reply: "אין לי פרטים על החומר כאן." })] }, { toolCalls: [respond("g8", { reply: "אפשר את מספר ההזמנה?" })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "ההזמנה שלי הגיעה, מאיזה חומר הוא עשוי?" }, "autonomous");
+      expect(h.dispatched.some((d) => /list_products/.test(d.name) && /Hoodie/.test(String(d.args?.query ?? "")))).toBe(false);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ the audit row carries the cut fields when something was cut", async () => {
+    h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+    const audit = h.audits.find((a) => a.data.action === "ai.bot_turn");
+    expect(audit.data.metadata.cuts?.markers ?? []).toContain("checkedClaimCut");
+  });
+
+  it("★ \"אפשר להזמין?\" with the site in the knowledge is never a team pass", async () => {
+    h.responses.push({ toolCalls: [respond("f5", { reply: "כן, אפשר להזמין באתר שלנו." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר להזמין?" }, "autonomous");
+    expect(r.trace.gate3.problems?.map((p: any) => p.kind) ?? []).not.toContain("no_search");
+    expect(r.reply).not.toMatch(/לצוות/);
+  });
+});

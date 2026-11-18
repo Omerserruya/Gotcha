@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -503,6 +503,23 @@ const HOLD_LINE_FACT = "_holdLineTurn";
 const THANKS_FACT = "_thanksTurn";
 // The turn the engine last sent something (holding mode: never silent twice running).
 const SPOKE_FACT = "_spokeTurn";
+/** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
+const CUT_MARKERS = ["closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+export function cutFields(trace: any): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {};
+  if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
+  if (trace?.rewriteCut) out.rewriteCut = trace.rewriteCut;
+  if (Array.isArray(trace?.fallbackKinds) && trace.fallbackKinds.length) out.fallbackKinds = trace.fallbackKinds;
+  if (Array.isArray(trace?.cutText) && trace.cutText.length) out.cutText = trace.cutText.slice(0, 4).map((x: unknown) => String(x).slice(0, 120));
+  const markers = CUT_MARKERS.filter((k) => trace?.[k]);
+  if (markers.length) out.markers = markers;
+  return Object.keys(out).length ? out : undefined;
+}
+// The titles the last product lookup found (the focus when the reply named none by its exact title).
+const FOCUS_FACT = "_focusTitles";
+export function focusTitlesOf(facts: Record<string, unknown> | null | undefined): string[] {
+  try { const v = JSON.parse(String(facts?.[FOCUS_FACT] ?? "[]")); return Array.isArray(v) ? v.map(String).filter(Boolean).slice(0, 5) : []; } catch { return []; }
+}
 /** A store search's args, cleaned (rating 83086356): no 0..0 price, an audience only when she names one, never her whole message as the query. */
 export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming: string): T {
   const ea: any = { ...args };
@@ -1359,7 +1376,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // the customer's own words in the store, or in the knowledge. Short, and only with time for an answer after.
       // A lookup is a second or two; with the rewrite's own time kept after it (prod replay on 1b35c535: a question
       // the product's text answered went to the team with no lookup at all).
-      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, String(state.offeredItems?.at(-1)?.title ?? "").trim() || null) : [];
+      // The product in focus: the last lookup's product the model's intent names, else the last one shown (dev live
+      // round on 9480dfb2: a paraphrased title left nothing in focus, and "מאיזה בד הוא עשוי?" went to the team).
+      const subject = nonProductAsk(String(opts.incomingMessage ?? "")) ? null : focusTitle(focusTitlesOf(state.facts), String((output as any)?.stateUpdate?.intent ?? "").trim() || state.intent, state.offeredItems?.at(-1)?.title);
+      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject) : [];
       if (auto.length) {
         const ta = Date.now();
         messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
@@ -2144,6 +2164,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // What the customer was shown or told about this turn becomes "already shown".
   const named = new Set<number>(cardKeys);
   candidates.forEach((c: any, i: number) => { if (c?.title && reply.includes(c.title)) named.add(i + 1); });
+  // Named without the exact title (a shortened or translated name, or the model's own intent): in focus too.
+  if (reply) for (const i of referredCandidates(candidates as any[], reply, String(final.stateUpdate?.intent ?? ""))) named.add(i + 1);
   for (const n of named) {
     const c: any = candidates[n - 1];
     if (c) offered.push({ ref: `id:${c.productId}`, title: c.title, price: c.price ?? null, currency: c.currency ?? null, productId: c.productId ?? null, variantId: c.variantId ?? null, at: now });
@@ -2189,7 +2211,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: { ...holdFacts, ...(reply ? { [SPOKE_FACT]: String(Number(state.turnCount ?? 0)) } : {}), ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
+    // The last lookup's titles replace the earlier ones; an order, payment or business turn clears them.
+    engineFacts: { ...holdFacts, ...(candidates.length ? { [FOCUS_FACT]: JSON.stringify(candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean).slice(0, 5)) } : nonProductAsk(String(opts.incomingMessage ?? "")) && state.facts?.[FOCUS_FACT] ? { [FOCUS_FACT]: "" } : {}), ...(reply ? { [SPOKE_FACT]: String(Number(state.turnCount ?? 0)) } : {}), ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
@@ -2217,6 +2240,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined })),
           gate3: trace.gate3, teamQuestion: final.teamQuestion ?? undefined,
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
+          // What the cleanup cut and why, the bot's own words only (internal: never read by a customer or tenant screen).
+          cuts: cutFields(trace),
         } as any,
       },
     }).catch(() => {});

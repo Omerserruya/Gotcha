@@ -1,7 +1,9 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
+import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
+import { cutFields } from "../services/reply-engine/engine";
 import { oneTeamPass, withoutCheckedClaims, selfSearch, withClosingQuestion, withNewDetails } from "../services/reply-engine/engine";
 
 const WOO = ["woocommerce.list_products", "search_knowledge"];
@@ -164,5 +166,73 @@ describe("the replay printout shows what was cut", () => {
   it("★ cut count, rewrite cut, fallback kinds, the bot's cut words and the new markers", () => {
     expect(cutLine({ cutSentences: 1, rewriteCut: "budget", fallbackKinds: ["derived_measure"], cutText: ["כל צלע בערך 70 ס\"מ"], closingQuestionKept: true })).toBe(' | cutSentences=1 | rewriteCut=budget | fallback=derived_measure | cut: "כל צלע בערך 70 ס\\"מ" | closingQuestionKept');
     expect(cutLine({})).toBe("");
+  });
+});
+
+describe("dev live round on 9480dfb2", () => {
+  const hoodies = [{ title: "Heavyweight Hoodie (Black)" }, { title: "Zip Hoodie (Charcoal)" }, { title: "Pullover Hoodie" }];
+  it("★ 1: a product named without its exact title is in focus: the model's intent or a distinctive word names it", () => {
+    expect(referredCandidates(hoodies, "כן, יש קפוצ'ון שחור בגזרה כבדה.", "בדיקת צבעי Heavyweight Hoodie")).toEqual([0]);
+    expect(referredCandidates(hoodies, "The Heavyweight one comes in black.", "")).toEqual([0]);
+    // "Hoodie" is in every title: no product of its own.
+    expect(referredCandidates(hoodies, "כן, יש לנו Hoodie.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "סמובי גפן" }], "כן, יש לנו משטח כזה במלאי.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "סמובי גפן" }], "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "")).toEqual([]);
+  });
+  it("★ 1 (verify): a colour or size word in a title is never a distinctive word; the variant part never counts", () => {
+    // The reply speaks of the Zip in black: never the Heavyweight Hoodie (Black).
+    expect(referredCandidates(hoodies, "יש לנו את ה-Zip Hoodie גם ב-Black.", "")).toEqual([1]);
+    expect(referredCandidates(hoodies, "We have a black one too.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "Black Tee" }, { title: "Black Hoodie" }], "The black is popular.", "")).toEqual([]);
+    // A colour word in the title itself (not the variant part) is still no distinctive word.
+    expect(referredCandidates([{ title: "Black Runner Tee" }, { title: "Grey Classic Tee" }], "Our hoodie comes in black.", "")).toEqual([]);
+    // The variant part never counts, whatever its word.
+    expect(referredCandidates([{ title: "Heavyweight Hoodie (Organic)" }, { title: "Zip Hoodie (Recycled)" }], "The organic fabric is soft.", "")).toEqual([]);
+  });
+  it("★ 1 (verify): several products, none named by the intent and none shown: no focus, never the first of the list", () => {
+    expect(focusTitle(hoodies.map((h) => h.title), "בירור צבעים", null)).toBeNull();
+    expect(focusTitle(hoodies.map((h) => h.title), null, null)).toBeNull();
+    expect(autoLookups([{ kind: "unread_product" }] as any, "מאיזה בד הוא עשוי?", ["woocommerce.list_products"], [], focusTitle(hoodies.map((h) => h.title), null, null))).toEqual([]);
+  });
+  it("★ 1: the focus for the engine's own lookup: the last lookup's product the intent names, else the last shown, else the only one", () => {
+    const titles = hoodies.map((h) => h.title);
+    expect(focusTitle(titles, "בירור הרכב הבד של Heavyweight Hoodie", null)).toBe("Heavyweight Hoodie (Black)");
+    expect(focusTitle(titles, "בירור בד", "Pullover Hoodie")).toBe("Pullover Hoodie");
+    expect(focusTitle(["Pullover Hoodie"], null, null)).toBe("Pullover Hoodie");
+    expect(focusTitle(titles, null, null)).toBeNull();
+    expect(q(autoLookups([{ kind: "unread_product" }] as any, "מאיזה בד הוא עשוי?", WOO, [], focusTitle(titles, "בירור הרכב הבד של Heavyweight Hoodie", null)))[0]).toEqual(["woocommerce.list_products", "Heavyweight Hoodie (Black)"]);
+  });
+  it("★ 1: \"no details\" and \"not checked\" on a colour ask with nothing read is an unread product", () => {
+    expect(unreadProduct("הוצגו 3 צבעים לקפוצ'ון. שמות הצבעים והמלאי לא נבדקו, אז אין לי פירוט שלהם כרגע.", "יש כמה צבעים?", [], WOO, false)).toBe(true);
+  });
+  it("★ 2: a general \"can I order?\" needs no store search; a named product does", () => {
+    expect(purchaseWithoutSearch("אפשר להזמין?", [], WOO)).toBe(false);
+    expect(purchaseWithoutSearch("can I order?", [], ["shopify.search_products"])).toBe(false);
+    expect(purchaseWithoutSearch("אפשר להזמין את משטח גפן?", [], WOO)).toBe(true);
+  });
+  it("★ 2: the gate counts no leak when the business's own knowledge says it", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const base = { claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "אפשר להזמין?", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any;
+    const r = "אפשר להזמין באתר. זו סביבת בדיקות, וההזמנות לא מסופקות.";
+    const codes = (o: any) => gate3({ ...base, reply: r, ...o }).problems.flatMap((p: any) => (p.kind === "style" ? p.codes : []));
+    expect(codes({ knowledge: "" })).toContain("simulation_leak");
+    expect(codes({ knowledge: "האתר הוא סביבת בדיקות: הזמנות לא מסופקות ולא מחויבות." })).not.toContain("simulation_leak");
+  });
+  it("★ 2: a test named in the business's own texts is no leak", () => {
+    const r = "אפשר להזמין באתר. זו סביבת בדיקות, וההזמנות לא מסופקות.";
+    expect(simulationLeak(r, "")).toBe(true);
+    expect(simulationLeak(r, "האתר הוא סביבת בדיקות: הזמנות לא מסופקות ולא מחויבות.")).toBe(false);
+  });
+  it("★ leftovers: \"או\" never reaches the store; a 4-letter word with ה loses it on a substring search only", () => {
+    expect(storeQueryOf("יש קרם או סרום לפנים?")).toBe("קרם סרום לפנים");
+    expect(storeQueryOf("יש לכם את הקרם?", { substring: true })).toBe("קרם");
+    expect(storeQueryOf("יש לכם את הקרם?")).toBe("הקרם");
+  });
+});
+
+describe("the internal audit row carries the cut fields", () => {
+  it("★ the bot's own cut words and markers only; nothing when nothing was cut", () => {
+    expect(cutFields({ cutSentences: 2, rewriteCut: "budget", fallbackKinds: ["thin_or_empty"], cutText: ["a", "b", "c", "d", "e"], closingQuestionKept: true, checkedClaimCut: true, incomingMessage: "her words" })).toEqual({ cutSentences: 2, rewriteCut: "budget", fallbackKinds: ["thin_or_empty"], cutText: ["a", "b", "c", "d"], markers: ["closingQuestionKept", "checkedClaimCut"] });
+    expect(cutFields({})).toBeUndefined();
   });
 });

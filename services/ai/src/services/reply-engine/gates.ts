@@ -78,7 +78,7 @@ const V2_BANS_ANY: Array<[string, RegExp]> = [
 ];
 
 const ATTRIBUTE_ASK = /(?<![\u0590-\u05FF])(?:מגרד|מגרדת|נעים|נעימה|רך|רכה|קשיח|קשיחה|עבה|דק|דקה|נוח|נוחה|כבד|כבדה|עמיד|עמידה|חומר|מאיזה|עשוי|עשויה|עשויים|ממה|גזרה|גזרת|מידות|מידה|גודל|מימדים|משקל|אורך|רוחב|גובה|עובי|קיבולת|לכבס|כביסה|לנקות|ניקוי|טיפול|מיוצר|תוצרת|ארץ\s+ייצור|איכות|צבע|צבעים|בצבע|באיזה\s+צבע|באילו\s+צבעים|גוון|גוונים|מה\s+כולל|מה\s+בערכה|תואם|תואמת|מתאים\s+ל|אחריות)(?![\u0590-\u05FF])|\b(?:colou?rs?|shades?|itch(?:y)?|soft|comfortable|heavy|light|durable|material|fabric|made of|fit|sizing|size|dimensions?|weight|length|width|height|capacity|runs (?:small|large)|wash|clean|care|origin|made in|quality|compatible|what'?s included|warranty)\b/iu;
-const NO_INFO = /אין (?:לי|לנו)(?: כאן)? (?:מידע|פרטים)|אין (?:לי|לנו|ברשותי)(?: כאן)? את (?:ה)?(?:כתובת|פרטים|מידע|שעות|מספר)|(?:לא|אינה|אינו) (?:זמין|זמינה|זמינים|מופיע|מופיעה|מופיעים)|לא (?:בטוח|בטוחה|יודע|יודעת|ידוע)|(?:לבדוק|אבדוק|נבדוק|בודקים)(?: את זה)? (?:מול|עם) הצוות|\b(?:I don'?t have (?:that |the )?(?:info|information|details|address|exact address)|not (?:available|listed)|not sure|check with the team)\b/iu;
+const NO_INFO = /אין (?:לי|לנו)(?: כאן)? (?:מידע|פרטים|פירוט)|(?<![\u0590-\u05FF])לא\s+נבדק(?:ו|ה)?(?![\u0590-\u05FF])|אין (?:לי|לנו|ברשותי)(?: כאן)? את (?:ה)?(?:כתובת|פרטים|מידע|שעות|מספר)|(?:לא|אינה|אינו) (?:זמין|זמינה|זמינים|מופיע|מופיעה|מופיעים)|לא (?:בטוח|בטוחה|יודע|יודעת|ידוע)|(?:לבדוק|אבדוק|נבדוק|בודקים)(?: את זה)? (?:מול|עם) הצוות|\b(?:I don'?t have (?:that |the )?(?:info|information|details|address|exact address)|not (?:available|listed)|not sure|check with the team)\b/iu;
 
 // A handoff silences the AI for the rest of the conversation, so it is kept for
 // these only (Omer via the Supervisor, 2026-11-16): an explicit ask for a person,
@@ -256,7 +256,11 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
 
 // A note meant for the engine (a simulated or test run) must never reach the customer, in any lane.
 const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניסוי|טסט)|סימולציה|בסימולציה|לא בוצע(?:ה)? בפועל|שיחת (?:ה)?(?:בדיקה|ניסיון)|הודעת בדיקה)|\b(?:simulat(?:ed|ion)|sandbox|test (?:environment|conversation|mode)|not (?:actually|really) (?:performed|executed|sent))\b/iu;
-export const simulationLeak = (reply: string) => SIMULATION_LEAK.test(reply ?? "");
+/** A test or simulation named in the reply; never when the business's own texts say the same words (a demo site's notice). */
+export const simulationLeak = (reply: string, sources = "") => {
+  const m = SIMULATION_LEAK.exec(reply ?? "");
+  return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
+};
 
 // "I passed it to the team", said again while the team already has it open.
 const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו|מעבירים|מעבירה|מעביר)(?:\s+(?:את\s+)?[\u0590-\u05FF"'׳״-]+){0,3}?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
@@ -485,6 +489,9 @@ const NOT_GUESSING = /(?<![\u0590-\u05FF])(?:לא\s+(?:רוצה|רוצים|נר�
 const PURCHASE = /(?<![\u0590-\u05FF])[וש]?(?:להזמין|לקנות|לרכוש|אזמין|אקנה|רוצה\s+להזמין|איך\s+(?:מזמינים|קונים)|לא\s+(?:מוצא|מוצאת|מוצאים)(?:\s+(?:את\s+זה\s+)?באתר)?|קישור|לינק|תשלחו\s+(?:לי\s+)?(?:קישור|לינק))(?![\u0590-\u05FF])|\b(?:buy|order (?:it|one|this)|purchase|can'?t find (?:it )?on the (?:site|website)|link)\b/iu;
 export function purchaseWithoutSearch(incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
   if (!PURCHASE.test(incoming ?? "")) return false;
+  // A general "can I order?" names no product: the site or the knowledge answers it, no store search (dev live
+  // round on 9480dfb2: "אפשר להזמין?" went to the team as no_search).
+  if (!storeQueryOf(incoming)) return false;
   const canSearch = toolsOffered.some((n) => /list_products|search_products/i.test(n));
   return canSearch && !tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
 }
@@ -1252,7 +1259,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price") as string[];
   if (i.locale === "he") for (const [code, re] of V2_BANS_HE) if (re.test(reply)) style.push(code);
   for (const [code, re] of V2_BANS_ANY) if (re.test(reply)) style.push(code);
-  if (simulationLeak(reply)) style.push("simulation_leak");
+  if (simulationLeak(reply, `${i.knowledge ?? ""}\n${i.grounding ?? ""}`)) style.push("simulation_leak");
   if (foreignScript(reply, i.customerText ?? i.incomingMessage)) style.push("foreign_script");
   if (internalJargon(reply)) style.push("internal_jargon");
   if (INTERNAL_REASONING.test(reply ?? "")) style.push("internal_reasoning");
@@ -1350,7 +1357,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
 
 // The question around the product: never a store search word (prod replay on 1b35c535: "איך אדע מה התת גוון"
 // searched as written found a powder; "מאיזה חומר השרשרת" found head coverings).
-const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "חומר", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "material", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please"]);
+const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "חומר", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "material", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please", "או", "or"]);
 const queryStop = (w: string) => {
   const l = w.toLowerCase();
   return QUERY_STOP.has(l) || ASK_STOP.has(l) || STEM_STOP.has(l) || (/^[הוש][\u0590-\u05FF]{2,}$/u.test(l) && (QUERY_STOP.has(l.slice(1)) || STEM_STOP.has(l.slice(1))));
@@ -1358,6 +1365,11 @@ const queryStop = (w: string) => {
 // Words of the ask, never of the product (the Supervisor's probe on d5f288f6: "מחיר סרום" finds nothing on a search
 // that needs every word, where "סרום" finds the serum).
 const ASK_WORDS = new Set(["מחיר", "המחיר", "מחירים", "הנחה", "ההנחה", "הנחות", "מבצע", "מבצעים", "קיים", "קיימת", "קיימים", "קיימות", "המלצה", "המלצות", "ממליצים", "תמליצו", "הזמנה", "ההזמנה", "הזמנתי", "משלוח", "המשלוח", "משלוחים", "מידה", "במידה", "מידות", "במלאי", "מלאי", "price", "discount", "sale", "exists", "recommend", "recommendation", "order", "shipping", "size", "stock"]);
+/** An ask no product search answers: her order, shipping, a business fact, a coupon, a payment problem (no product wanted). */
+export function nonProductAsk(incoming: string): boolean {
+  const t = normalizeQuotes(String(incoming ?? ""));
+  return !productAskNow(t) && (MY_ORDER.test(t) || ORDER_ASK.test(t) || BUSINESS_ASK.test(t) || COUPON_ASK.test(t) || PAY_PROBLEM.test(t));
+}
 /**
  * The customer's product words for a store search: the question and the ask words off, four at most; null with no
  * letter word left, or for an ask no product search answers (her order, shipping, a business fact, a coupon, a
@@ -1367,9 +1379,9 @@ const ASK_WORDS = new Set(["מחיר", "המחיר", "מחירים", "הנחה",
  */
 export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {}): string | null {
   const t = normalizeQuotes(String(incoming ?? ""));
-  if (!productAskNow(t) && (MY_ORDER.test(t) || ORDER_ASK.test(t) || BUSINESS_ASK.test(t) || COUPON_ASK.test(t) || PAY_PROBLEM.test(t))) return null;
+  if (nonProductAsk(t)) return null;
   const words = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []).filter((w) => !queryStop(w) && !ASK_WORDS.has(w.toLowerCase()));
-  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && /^[הול][\u0590-\u05FF]{4,}$/u.test(w) ? w.slice(1) : w));
+  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && (/^ה[\u0590-\u05FF]{3,}$/u.test(w) || /^[ול][\u0590-\u05FF]{4,}$/u.test(w)) ? w.slice(1) : w));
   if (!content.some((w) => /\p{L}{2,}/u.test(w))) return null;
   return content.slice(0, 4).join(" ");
 }
@@ -1388,6 +1400,8 @@ export function explanationAsk(incoming: string): boolean {
  * fact). Two at most. Product and order reads need the model (which product,
  * which order) and are not here.
  */
+// The product named only as "it" ("הוא", "זה", "it", "this one").
+const PRONOUN_REF = /(?<![\u0590-\u05FF])(?:הוא|היא|הם|הן|זה|זו|זאת|אותו|אותה|לזה|בזה|עליו|עליה)(?![\u0590-\u05FF])|\b(?:it|this(?: one)?|that(?: one)?|they|them)\b/iu;
 export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOffered: string[], done: ToolRunRecord[], subject: string | null = null): Array<{ id: string; function: { name: string; arguments: string } }> {
   const out: Array<{ id: string; function: { name: string; arguments: string } }> = [];
   const words = String(incoming ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -1432,8 +1446,10 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   } else if (store && has("unread_product") && !done.some((t) => PRODUCT_TOOL.test(t.tool))) {
     // A question about the product itself with nothing read (prod replay on 1b35c535, Smoovee: a stopper question
     // went to the team): the product the conversation is about, by its name, else the customer's product words.
-    const q = String(subject ?? "").trim().slice(0, 80) || query;
-    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
+    // "מאיזה בד הוא עשוי?" with several products and none in focus: "it" names no product, so no store search
+    // (the model asks which one), never a search for the attribute word.
+    const q = String(subject ?? "").trim().slice(0, 80) || (PRONOUN_REF.test(normalizeQuotes(words)) ? null : query);
+    if (q) out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
   } else if (store && has("gave_up_search")) {
     const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
     const narrow = String((last?.args as any)?.query ?? words).split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
@@ -2456,4 +2472,41 @@ export function colourList(reply: string, candidates: Array<{ title?: string; de
   const colours = raw.split(/\s*,\s*|\s+\/\s+/).map((x) => x.trim()).filter((x) => x && x.length <= 30).slice(0, 12);
   if (colours.length < 2 || colours.some((x) => text.includes(x))) return text;
   return `${text.trim()} ${locale === "en" ? `The colours: ${colours.join(", ")}.` : `הצבעים: ${colours.join(", ")}.`}`;
+}
+
+
+/**
+ * The products a reply refers to without their exact catalogue title (dev live round on 9480dfb2: "קפוצ'ון שחור
+ * בגזרה כבדה" for "Heavyweight Hoodie", so nothing was in focus for the next turn's "מאיזה בד הוא עשוי?"). The
+ * title without its variant part, or a distinctive word of it (not shared by every product found), in the reply
+ * or in the model's own intent; or the only product found, when the reply is about a product at all.
+ */
+const VARIANT_WORDS = new Set(["black", "white", "grey", "gray", "red", "blue", "green", "pink", "navy", "beige", "brown", "sand", "cream", "charcoal", "melange", "olive", "yellow", "orange", "purple", "silver", "gold", "small", "medium", "large", "xlarge", "size", "שחור", "שחורה", "לבן", "לבנה", "אפור", "אפורה", "אדום", "אדומה", "כחול", "כחולה", "ירוק", "ירוקה", "ורוד", "ורודה", "בז'", "חום", "חומה", "קרם", "זהב", "כסף", "צהוב", "כתום", "סגול", "קטן", "קטנה", "בינוני", "בינונית", "גדול", "גדולה", "מידה"]);
+export function referredCandidates(candidates: Array<{ title?: string }>, reply: string, intent: string): number[] {
+  const hay = `${String(reply ?? "")}\n${String(intent ?? "")}`.toLowerCase();
+  const titles = candidates.map((c) => String(c?.title ?? "").trim());
+  const wordsOf = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []) as string[];
+  const shared = titles.length > 1 ? new Set(wordsOf(titles[0]).filter((w) => titles.every((t) => wordsOf(t).includes(w)))) : new Set<string>();
+  const out: number[] = [];
+  titles.forEach((t, i) => {
+    if (!t) return;
+    const base = t.replace(/\s*[(\[][^)\]]*[)\]]\s*$/u, "").replace(/\s+[-|:]\s+.*$/u, "").trim().toLowerCase();
+    // From the title without its variant part, and never a colour or size word ("Black" in "Heavyweight Hoodie
+    // (Black)" is not that hoodie when the reply speaks of another product in black).
+    const distinct = wordsOf(base).filter((w) => !shared.has(w) && !/^\d+$/.test(w) && !VARIANT_WORDS.has(w));
+    if ((base.length >= 4 && hay.includes(base)) || distinct.some((w) => w.length >= 4 && new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(hay))) out.push(i);
+  });
+  if (!out.length && titles.filter(Boolean).length === 1 && !TEAM_LINE.test(reply ?? "") && !NO_INFO.test(reply ?? "")) out.push(titles.findIndex(Boolean));
+  return out;
+}
+
+/**
+ * The product the conversation is about, for a lookup the engine makes itself: the last lookup's product the model's
+ * intent names, else the last one shown or named, else the last lookup's only product.
+ */
+export function focusTitle(focusTitles: string[], intent: string | null | undefined, lastOffered: string | null | undefined): string | null {
+  const named = referredCandidates(focusTitles.map((title) => ({ title })), "", String(intent ?? "")).filter((i) => i >= 0);
+  if (named.length === 1 || (named.length > 1 && String(intent ?? "").trim())) return focusTitles[named[0]];
+  if (String(lastOffered ?? "").trim()) return String(lastOffered).trim();
+  return focusTitles.length === 1 ? focusTitles[0] : null;
 }
