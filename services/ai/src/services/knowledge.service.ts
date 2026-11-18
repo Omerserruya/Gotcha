@@ -296,6 +296,12 @@ export function lexicalTerms(query: string): { own: string[]; expanded: string[]
     if (LEXICAL_STOP.has(lw)) continue;
     own.add(lw);
     if (lw.length > 3 && /^[הובלמשכ]/.test(lw)) own.add(lw.slice(1));
+    // Two prefix letters ("ולנינגה"), and a geresh the customer left out (rating 83086356: "נינגה" never met
+    // the table's "נינג'ה"; the text splits there, so the word up to the ג, ז or צ matches both).
+    const bare = lw.replace(/^[הובלמשכ]{1,2}(?=[\u0590-\u05FF]{3,})/u, "");
+    if (bare !== lw && bare.length >= 3) own.add(bare);
+    const g = /[גזצ](?=[\u0590-\u05FF])/u.exec(bare);
+    if (g && g.index + 1 >= 4 && !/['׳]/.test(bare)) own.add(bare.slice(0, g.index + 1));
     // A final letter becomes plain inside a longer word ("טלפון" in "טלפוני"): the word without it matches both.
     if (lw.length >= 4 && /[ךםןףץ]$/.test(lw)) own.add(lw.slice(0, -1));
   }

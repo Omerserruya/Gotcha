@@ -2598,3 +2598,21 @@ describe("ed780586 rating fixes", () => {
     expect(wrongProductType("טינט שפתיים עם מברשת מתאים.", "טינט שיש בסוף מברשת", c.map((x) => x.title))).toBe(false);
   });
 });
+
+/** Rating on 83086356 (2026-11-18): "נינגה" with no geresh. */
+describe("83086356 spot check: a geresh left out", () => {
+  it("★ the knowledge search meets the table's spelling", async () => {
+    const { lexicalTerms } = await import("../services/knowledge.service");
+    const { own } = lexicalTerms("ולנינגה קריספי");
+    expect(own).toContain("נינג");
+    expect(own).toContain("נינגה");
+    // Short words are not cut.
+    expect(lexicalTerms("גזר").own).not.toContain("ג");
+  });
+  it("★ the fit check reads נינגה as נינג'ה", async () => {
+    const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
+    const table = "סיר טיגון ללא שמן נינג'ה: סמובי אליס";
+    const three = ["סמובי אליס 31*41", "סמובי אסף 46*33"];
+    expect(ungroundedPositiveFit("נינגה קריספי הוא סיר טיגון ללא שמן, ולנינגה קריספי מתאים סמובי אליס.", "ולנינגה קריספי", three, "", table)).toEqual([]);
+  });
+});
