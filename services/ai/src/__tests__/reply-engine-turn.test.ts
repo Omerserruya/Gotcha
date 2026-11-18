@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   history: null as any[] | null,
   lexical: [] as any[],
   groundTitle: "Canvas Tote",
+  groundCategory: "",
   docAddress: null as string | null,
   groundStatus: "ok" as string,
 }));
@@ -114,7 +115,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
-    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] }],
+    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }],
     appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
   }),
 }));
@@ -156,6 +157,7 @@ beforeEach(() => {
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
+  h.groundCategory = "";
   h.docAddress = null;
   h.groundStatus = "ok";
   h.agentStatus = "ACTIVE";
@@ -1587,6 +1589,48 @@ describe("93f9fdff rating: engine passes", () => {
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
       expect(r.reply ?? "").not.toMatch(/תיקי בד/);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+});
+
+describe("657e5f85 rating: engine passes", () => {
+  it("★ the turn a charge complaint opens: no state or cause, the team has it", async () => {
+    h.responses.push({ toolCalls: [respond("op1", { reply: "ההזמנה 97858 בוטלה כי התשלום לא נקלט במערכת." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים ואין לי הזמנה" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/בוטלה|לא נקלט/);
+    expect(r.reply ?? "").toMatch(/צוות/);
+    expect(r.trace.teamQuestion).toBeTruthy();
+  });
+  it("★ holding mode's floor: a direct ask is never left without a reply", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _holdLineTurn: "7", _spokeTurn: "7" }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
+    try {
+      h.responses.push({ toolCalls: [respond("fl1", { reply: "ההזמנה בוטלה כי התשלום לא נקלט." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תעדכנו בבקשה ושלחו לי מספר הזמנה" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+  it("★ holding mode's floor after the gate went silent: the bot quiet 2+ turns gets the holding line", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString(), _spokeTurn: "7" }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
+    try {
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "נו", metadata: null }];
+      h.responses.push({ toolCalls: [respond("fs1", { reply: para })] }, { toolCalls: [respond("fs2", { reply: para })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+  it("★ the fallback never lists products of another kind than the customer's noun", async () => {
+    h.groundTitle = "קשת-כחולה";
+    h.groundCategory = "קשתות";
+    h.responses.push(
+      { toolCalls: [tc("nf1", "woocommerce.list_products", { query: "מטפחת" })] },
+      { toolCalls: [respond("nf2", { reply: "יש לנו ב-₪999." })] },
+      { toolCalls: [respond("nf3", { reply: "יש לנו ב-₪888." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם מטפחת חגיגית בגווני כחול?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/קשת/);
+    expect(h.staged.flatMap((s: any) => s.products ?? []).map((p: any) => p?.title ?? p?.name ?? "").join(" ")).not.toMatch(/קשת/);
   });
 });
 

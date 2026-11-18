@@ -162,7 +162,8 @@ export function needlessHandoff(handoff: string | null | undefined, recentInboun
   const recent = recentInbound.filter((m) => !MEDIA_PLACEHOLDER.test(String(m ?? "").trim())).slice(-3).join("\n");
   // A payment or checkout failure is a support case: a person may take it.
   // A cancel or refund request too (prod replay 2026-11-17, Urban: its handoff was removed).
-  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent) && !PAY_PROBLEM.test(normalizeQuotes(recent)) && !CANCEL_REQUEST.test(normalizeQuotes(recent));
+  // A charge or refund complaint too (rating 657e5f85: "I was charged" lost its team pass as "needless").
+  return !ASKS_FOR_PERSON.test(recent) && !STRONG_CASE.test(recent) && !PAY_PROBLEM.test(normalizeQuotes(recent)) && !CANCEL_REQUEST.test(normalizeQuotes(recent)) && !PAYMENT_WORDS.test(normalizeQuotes(recent));
 }
 
 /** The customer asked about a product's material, feel, fit, care or origin, and the reply pleads no info without reading the product. */
@@ -1180,6 +1181,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (unnamedRecommendation(reply, i.candidateTitles ?? [])) problems.push({ kind: "unnamed_recommendation" });
   if (partialReturnPolicy(reply, i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "partial_return_policy" });
   const mismatch = deviceMismatch(reply, i.incomingMessage, i.grounding ?? "");
+  const negFit = ungroundedNegativeFit(reply, i.incomingMessage, i.candidateTitles ?? [], i.grounding ?? "");
+  if (negFit.length) problems.push({ kind: "ungrounded_negative_fit", claims: negFit, fits: fittingBySize(i.incomingMessage, i.candidateTitles ?? []).slice(0, 3) } as any);
   if (mismatch.length) problems.push({ kind: "device_mismatch", claims: mismatch });
   const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (near) problems.push({ kind: "near_name", asked: near.asked, shown: near.shown });
@@ -1222,6 +1225,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
+  // Products this turn: several items asked, some never answered (a mixer, a toaster, a blender).
+  if (i.candidateCount > 0 && unansweredItems(reply, i.incomingMessage).length) style.push("unanswered_items");
   if (orderNumberDiffers(reply, i.incomingMessage).length) style.push("order_number_differs");
   if (i.employeeName && NAMELESS_SELF.test(reply)) style.push("nameless_self");
   if (returnsWork(reply)) style.push("returns_work");
@@ -1239,7 +1244,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_negative_fit"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g;
@@ -1276,7 +1281,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch" || p.kind === "ungrounded_negative_fit") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -1445,6 +1450,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "ungrounded_negative_fit") lines.push(`- You said a product does not fit with nothing showing it (${p.claims.join("; ")}). Say it does not fit only when its own text says so or its size is smaller than the customer's base.${(p as any).fits?.length ? ` By size, these take the customer's base: ${(p as any).fits.join(", ")}.` : ""}`);
     if (p.kind === "device_mismatch") lines.push(`- You offered a product for another device than the customer's (${p.claims.join("; ")}). Offer only what fits their own device, from the search or the knowledge's device table; if nothing does, say so and ask.`);
     if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
     if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Say it is not known here and put the question in team_question; never guess a source.`);
@@ -1484,6 +1490,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
       if (c.has("terms_refusal")) lines.push("- Never give the terms as the reason not to help: look it up (the customer's own order lookup, the knowledge) or say what the team will do.");
       if (c.has("nameless_self")) lines.push("- When you introduce yourself, use your own name (Name above), not \"the assistant\".");
+      if (c.has("unanswered_items")) lines.push("- The customer asked about several items and your reply skips some of them. Answer every item they named, or say which ones you are still checking.");
       if (c.has("asks_known")) lines.push("- Do not ask about a detail the customer already gave in their message; use it.");
       if (c.has("order_number_differs")) lines.push("- The order you found has another number than the one the customer typed. Say which order you found (its number and date) and ask whether that is the one they mean; never call it their order or their previous order.");
       if (c.has("returns_work")) lines.push("- Never hand the work back to the customer (\"try another name\", \"check the website\"): search again yourself, narrower, or answer from what the business's knowledge lists, and ask at most one question about what they need.");
@@ -1765,4 +1772,73 @@ export function fixListCount(text: string): string {
 /** The message also asks about something other than the held subject (a question clause not about it). */
 export function asksOtherTopic(incoming: string): boolean {
   return String(incoming ?? "").split(/(?<=[?؟.!\n])\s*/u).some((c) => c.trim() && /[?؟]|^(?:מה|איך|יש|האם|מתי|איפה|כמה|אפשר|how|what|is|are|do|can)\b/iu.test(c.trim()) && !aboutHeld(c) && !statusAsk(c));
+}
+
+
+/**
+ * A fit denied with nothing behind it (rating 657e5f85: "סמובי אליס מתאים... לא לקריספי", "למיקסר לא
+ * התקבלה התאמה לפי המידות", both wrong). Kept only when the product's own text says it does not fit, or the
+ * customer's base is bigger than the pad on an axis (pad >= base on both, either way round).
+ */
+const NEG_FIT = /(?<![֐-׿])(?:לא\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|מתאים\s+ל)|(?:אין|לא\s+(?:התקבלה|נמצאה|קיימת))\s+(?:לנו\s+)?התאמה)(?![֐-׿])|\b(?:(?:does|do|will)n'?t fit|(?:is|are) not compatible|no (?:matching|suitable) (?:pad|size|product))\b/iu;
+const SIZE_PAIR = /(\d{2,3}(?:\.\d)?)\s*(?:[x×*]|על)\s*(\d{2,3}(?:\.\d)?)/iu;
+export const sizePair = (t: string): [number, number] | null => { const m = SIZE_PAIR.exec(String(t ?? "")); return m ? [Number(m[1]), Number(m[2])] : null; };
+export const padFits = (pad: [number, number], base: [number, number]) => { const [a, b] = [...pad].sort((x, y) => x - y), [c, d] = [...base].sort((x, y) => x - y); return a >= c && b >= d; };
+export function ungroundedNegativeFit(reply: string, incoming: string, titles: string[], grounding: string): string[] {
+  const base = sizePair(incoming);
+  const groundedNo = NEG_FIT.test(String(grounding ?? ""));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+    if (!NEG_FIT.test(x)) return false;
+    if (groundedNo) return false;
+    // The sentence's product, by its title, and its size from the title.
+    const t = titles.find((title) => title && x.toLowerCase().includes(String(title).toLowerCase().split(/\s+/).slice(0, 2).join(" ")));
+    const pad = t ? sizePair(t) : null;
+    // A size comparison proves the misfit: the claim stands.
+    if (base && pad && !padFits(pad, base)) return false;
+    return true;
+  }).map((x) => x.trim().slice(0, 120));
+}
+/** The products whose size (from the title) takes the customer's base: for the correction note, store titles only. */
+export function fittingBySize(incoming: string, titles: string[]): string[] {
+  const base = sizePair(incoming);
+  if (!base) return [];
+  return titles.filter((t) => { const pad = sizePair(t); return !!pad && padFits(pad, base); });
+}
+
+/**
+ * Several items in one ask (rating 657e5f85: a mixer, a toaster and a blender, two left unanswered). The short
+ * items joined by commas or "ו", each named by its first content word; those the reply never names.
+ */
+export function unansweredItems(reply: string, incoming: string): string[] {
+  const parts = String(incoming ?? "").split(/\s*,\s*|\s+(?:ו(?=[\u0590-\u05FF]{3,})|and\s+|או\s+)/u).map((x) => x.replace(/[?!.]/g, "").trim()).filter(Boolean);
+  // A list: the first part may be the ask ("יש לכם משטח למיקסר"), each part after it is a short item.
+  if (parts.length < 2 || parts.slice(1).some((x) => x.split(/\s+/).length > 2)) return [];
+  const content = (x: string) => (x.match(/\p{L}{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase()));
+  const heads = [content(parts[0]).at(-1), ...parts.slice(1).map((x) => content(x)[0])].filter(Boolean) as string[];
+  if (heads.length < 2) return [];
+  const r = String(reply ?? "").toLowerCase();
+  return heads.filter((w) => !nounKeys(w).some((k) => r.includes(k)));
+}
+
+/** The customer's head noun: the first content word of the ask ("מטפחת" in "מטפחת חגיגית בגווני כחול"). */
+export function headNoun(incoming: string): string | null {
+  return (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).find((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase())) ?? null;
+}
+/**
+ * Is the product of the customer's noun's kind? Its title, category or own text holds the noun. A product is
+ * ruled out only with evidence it is another kind: a category in the noun's own script that does not hold it
+ * (a Latin "Canvas Tote" for "תיק" is not ruled out; a "קשתות" arch for "מטפחת" is).
+ */
+export function ofNoun(c: { title?: string; attributes?: Record<string, unknown>; details?: string }, noun: string): boolean {
+  const hebrew = /[\u0590-\u05FF]/;
+  const hay = `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")} ${c?.details ?? ""}`.toLowerCase();
+  if (nounKeys(noun).some((k) => hay.includes(k))) return true;
+  const cat = String(c?.attributes?.category ?? "");
+  return !(cat && hebrew.test(cat) === hebrew.test(noun));
+}
+/** A noun's match keys: its first four letters, with and without a possible prefix letter ("מטפחת" keeps its מ). */
+function nounKeys(noun: string): string[] {
+  const full = String(noun ?? "").toLowerCase();
+  const bare = full.replace(/^[הובלמש](?=[\u0590-\u05FF]{3,})/u, "");
+  return [...new Set([full, bare].map((x) => (x.length >= 5 ? x.slice(0, 4) : x)))];
 }

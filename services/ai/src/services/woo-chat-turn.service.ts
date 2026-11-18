@@ -550,7 +550,11 @@ export function customerSearchQuery(
   const earlier = messages.filter((m) => m.direction === "INBOUND").map((m) => String(m.body ?? "").trim()).filter(Boolean);
   if (earlier.length && earlier[earlier.length - 1] === now) earlier.pop();
   const parts = [now];
-  if (words(now).filter((w) => !/^\d+$/.test(w)).length < 2 && earlier.length) parts.unshift(earlier[earlier.length - 1]!);
+  // A short follow-up ("בצבע שחור") carries the item from before it: the last message, and the one before
+  // when this one is very short (rating 657e5f85, Tehila: "בובון" two messages back was never searched).
+  const own = words(now).filter((w) => !/^\d+$/.test(w)).length;
+  if (own < 3 && earlier.length) parts.unshift(earlier[earlier.length - 1]!);
+  if (own < 2 && earlier.length > 1) parts.unshift(earlier[earlier.length - 2]!);
   const q = parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 120);
   const mine = new Set(words(String(modelQuery ?? "")));
   const theirs = words(q);

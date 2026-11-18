@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -2488,5 +2488,54 @@ describe("93f9fdff rating fixes", () => {
     expect(asksOtherTopic("ומה המידה של אלכסה?")).toBe(true);
     const out = holdReply("סמובי אלכסה היא במידה 35×28 ס\"מ.", "החיוב עדיין בבדיקה אצל הצוות.", { details: false, locale: "he", keepOther: false });
     expect(out).toBe("החיוב עדיין בבדיקה אצל הצוות.");
+  });
+});
+
+/** Rating on 657e5f85 (2026-11-18). */
+describe("657e5f85 rating fixes", () => {
+  it("★ a charge complaint's handoff or team pass is never needless", async () => {
+    const { needlessHandoff } = await import("../services/reply-engine/gates");
+    expect(needlessHandoff("payment", ["חויבתי ואין לי הזמנה"], false)).toBe(false);
+    expect(needlessHandoff("refund", ["אני רוצה החזר כספי"], false)).toBe(false);
+    expect(needlessHandoff("x", ["יש לכם משטח לתמי 4?"], false)).toBe(true);
+  });
+  it("★ a fit denied with nothing behind it is cut; a size comparison or the product's text keeps it", async () => {
+    const { ungroundedNegativeFit, fittingBySize, padFits } = await import("../services/reply-engine/gates");
+    expect(padFits([31, 41], [32, 22])).toBe(true);
+    expect(padFits([20, 20], [32, 22])).toBe(false);
+    expect(ungroundedNegativeFit("סמובי אליס לא מתאים למיקסר.", "מיקסר 32x22", ["סמובי אליס 31*41"], "")).toHaveLength(1);
+    expect(ungroundedNegativeFit("למיקסר לא התקבלה התאמה לפי המידות.", "מיקסר 32 על 22", ["סמובי אליס 31*41"], "")).toHaveLength(1);
+    expect(ungroundedNegativeFit("סמובי קטן לא מתאים למיקסר.", "מיקסר 32x22", ["סמובי קטן 20*20"], "")).toEqual([]);
+    expect(ungroundedNegativeFit("סמובי אליס לא מתאים לקריספי.", "קריספי", ["סמובי אליס 31*41"], "סמובי אליס: לא מתאים לקריספי")).toEqual([]);
+    expect(fittingBySize("מיקסר 32x22", ["סמובי אליס 31*41", "סמובי אסף 46*33", "סמובי קטן 20*20"])).toEqual(["סמובי אליס 31*41", "סמובי אסף 46*33"]);
+  });
+  it("★ several items asked: those the reply never names", async () => {
+    const { unansweredItems } = await import("../services/reply-engine/gates");
+    expect(unansweredItems("למיקסר מתאים סמובי אליס.", "מיקסר, טוסטר ובלנדר")).toEqual(["טוסטר", "בלנדר"]);
+    expect(unansweredItems("למיקסר סמובי אליס, לטוסטר אסף ולבלנדר אלכסה.", "מיקסר, טוסטר ובלנדר")).toEqual([]);
+    expect(unansweredItems("הנה.", "יש לכם משטח שמתאים למיקסר שלי בגודל 32 על 22 ס\"מ?")).toEqual([]);
+    // A long clause after the comma is a sentence, not a list item.
+    expect(unansweredItems("הנה.", "מיקסר, ואני צריכה את זה עד יום שישי")).toEqual([]);
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const base = { claims: [], cards: [], tools: [], grounding: "", locale: "he", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: true, handedOff: false, approvalPending: false };
+    const g = gate3({ ...base, reply: "למיקסר מתאים סמובי אליס.", candidateCount: 2, candidateTitles: ["סמובי אליס 31*41"], incomingMessage: "מיקסר, טוסטר ובלנדר" } as any);
+    expect(g.problems.some((p: any) => p.kind === "style" && p.codes.includes("unanswered_items"))).toBe(true);
+    // No products this turn (an order complaint joined by a comma): never "unanswered items".
+    const o = gate3({ ...base, reply: "העברתי את זה לצוות.", candidateCount: 0, candidateTitles: [], incomingMessage: "ההזמנה עדיין לא הגיעה, כבר שבועיים" } as any);
+    expect(o.problems.some((p: any) => p.kind === "style" && p.codes.includes("unanswered_items"))).toBe(false);
+    const n = gate3({ ...base, reply: "סמובי אליס לא מתאים למיקסר.", candidateCount: 1, candidateTitles: ["סמובי אליס 31*41"], incomingMessage: "יש משטח למיקסר 32x22?" } as any);
+    expect(n.problems.map((p: any) => p.kind)).toContain("ungrounded_negative_fit");
+  });
+  it("★ the customer's head noun and a product of its kind", async () => {
+    const { headNoun, ofNoun } = await import("../services/reply-engine/gates");
+    expect(headNoun("מטפחת חגיגית בגווני כחול")).toBe("מטפחת");
+    expect(headNoun("יש לכם מטפחות חגיגיות?")).toBe("מטפחות");
+    expect(ofNoun({ title: "אנה", attributes: { category: "מטפחות חגיגיות" } }, "מטפחת")).toBe(true);
+    expect(ofNoun({ title: "קשת-כחולה", attributes: { category: "קשתות" } }, "מטפחת")).toBe(false);
+  });
+  it("★ a short follow-up carries the item from two messages back", async () => {
+    const { customerSearchQuery } = await import("../services/woo-chat-turn.service");
+    const msgs = [{ direction: "INBOUND", body: "יש לכם בובון לקשירה נמוכה?" }, { direction: "OUTBOUND", body: "באיזה צבע?" }, { direction: "INBOUND", body: "כן" }, { direction: "INBOUND", body: "שחור" }];
+    expect(customerSearchQuery(msgs, "שחור", "מטפחת שחורה")).toMatch(/בובון/);
   });
 });

@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -1293,7 +1293,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // The header only, on every channel: cards show the products, and on a text channel the list
         // appended at send names each one once with its price, stock and link (prod replay 2026-11-17:
         // inline bullets AND the same three listed again).
-        const grounded = productAskNow(opts.incomingMessage ?? "") ? groundedProductFallback(candidates as any, locale, true) : null;
+        // Only products of the customer's own noun (rating 657e5f85, Tehila: hair arches for "מטפחת חגיגית"): none
+        // of that kind, no product fallback at all.
+        const noun = headNoun(String(opts.incomingMessage ?? ""));
+        const ofTheirs = noun ? (candidates as any[]).filter((c: any) => ofNoun(c, noun)) : (candidates as any[]);
+        const grounded = productAskNow(opts.incomingMessage ?? "") && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
@@ -1333,7 +1337,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
           output = { reply: notFoundReply(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
         } else if (grounded) {
-          output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock").slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+          output = { reply: grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // A simple product ask with nothing grounded to show: one question that moves the choice on,
           // never a question for the team (prod replay 2026-11-17: "רוצה לבן" sent to the team).
@@ -1435,6 +1439,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         heldTurn = onSubject;
         if (onSubject && output.teamQuestion) { output = { ...output, teamQuestion: null }; heldMerged = true; (trace as any).holding.teamQuestionMerged = true; }
       }
+    } else if (holdingItem([String(opts.incomingMessage ?? "")]) && aboutHeld(String(opts.incomingMessage ?? ""))) {
+      // The turn the item OPENS is held too (rating 657e5f85: "בוטלה כי התשלום לא נקלט" on the first turn of a
+      // charge complaint): no state or cause; the team has it, and the reply says so.
+      const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
+      const told = holdLoc === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+      const rest = holdReply(text, "", { details: false, locale: holdLoc, keepOther: asksOtherTopic(String(opts.incomingMessage ?? "")) });
+      text = rest || told;
+      if (!output.handoff && !output.teamQuestion) output = { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
+      heldTurn = true;
+      (trace as any).holdingOpened = true;
     }
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
@@ -1577,6 +1591,28 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
   // alone on "טוש אני רוצה"): a question that moves the choice on instead. Cards on a cards channel are
   // what it introduces, so there it stays.
+  // Holding mode's floor, on the FINAL text (rating 657e5f85: three payment turns ended empty after the
+  // gate, a direct ask among them): a direct ask, or the bot silent 2+ turns, gets the holding line.
+  {
+    const heldNow = holdingItem(openTeam);
+    if (heldNow && !reply.trim() && !final.handoff) {
+      const turnNo = Number(state.turnCount ?? 0);
+      const spokeAt = Math.max(...[SPOKE_FACT, HOLD_LINE_FACT, THANKS_FACT].map((k) => (state.facts?.[k] != null ? Number(state.facts[k]) : -Infinity)));
+      // No record in the state: the history says whether the bot's message came right before this one.
+      const lastOutIdx = history.map((m: any) => m?.direction).lastIndexOf("OUTBOUND");
+      const inboundSince = lastOutIdx < 0 ? 99 : history.slice(lastOutIdx + 1).filter((m: any) => m?.direction === "INBOUND").length;
+      const silentLong = Number.isFinite(spokeAt) ? turnNo - spokeAt >= 2 : inboundSince > 1;
+      const incomingNow = String(opts.incomingMessage ?? "");
+      // Not on a thanks; a direct ask right after the line (last turn) may stay quiet (the every-third cap).
+      const lastOutBody = lastOutIdx >= 0 ? String(history[lastOutIdx]?.body ?? "") : "";
+      const sinceLine = state.facts?.[HOLD_LINE_FACT] != null ? turnNo - Number(state.facts[HOLD_LINE_FACT]) : lastOutBody.includes(HOLD_LINE_CORE[locale === "en" ? "en" : "he"]) && inboundSince <= 1 ? 1 : 99;
+      if (!customerAck(incomingNow) && (silentLong || (asksSomething(incomingNow) && sinceLine >= 2))) {
+        reply = stillCheckingLine(heldNow, locale === "en" ? "en" : "he");
+        holdFacts[HOLD_LINE_FACT] = String(turnNo);
+        (trace as any).holdingFloor = true;
+      }
+    }
+  }
   if (HOLLOW_HEADER.test(reply.trim()) && !listed) {
     // Never the whole reply (rating d7782dd2: still alone twice). With cards, the header names what they
     // show (store titles only); with nothing to show, the question that moves the choice on.

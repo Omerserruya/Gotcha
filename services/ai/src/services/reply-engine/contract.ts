@@ -164,6 +164,7 @@ export type ClaimProblem =
   | { kind: "order_state_unread"; claims: string[] }
   | { kind: "claims_attachment"; claims: string[] }
   | { kind: "device_mismatch"; claims: string[] }
+  | { kind: "ungrounded_negative_fit"; claims: string[]; fits?: string[] }
   | { kind: "unnamed_recommendation" }
   | { kind: "partial_return_policy" }
   | { kind: "knowledge_has_it" }
