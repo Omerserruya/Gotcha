@@ -273,6 +273,7 @@ export function languageDirective(language: string): string {
     // grouping that makes the review queue usable. It stayed hidden for two
     // runs because an invalid enum used to fail the whole call and the retry
     // silently corrected it; the enum was never the problem, this sentence was.
+    `Never write an em dash or an en dash in generated prose: use a comma, or a hyphen between two numbers.\n` +
     `Two exceptions:\n` +
     `- Verbatim quote fields: copy them exactly as written in the conversation, whatever language that is.\n` +
     `- Fields with a fixed list of allowed values (enums such as category and scope): reply with the EXACT value from the list, in English, spelled exactly as given. Never translate these, never rephrase them.`

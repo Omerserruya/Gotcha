@@ -118,7 +118,7 @@ export async function structuredCall<T extends z.ZodTypeAny>(
       continue;
     }
 
-    const result = args.schema.safeParse(parsedJson);
+    const result = args.schema.safeParse(noDashesDeep(parsedJson));
     if (result.success) return result.data;
     lastError = result.error.issues
       .slice(0, 4)
@@ -130,6 +130,25 @@ export async function structuredCall<T extends z.ZodTypeAny>(
     `[historical-intelligence] ${args.feature} produced no schema-valid output: ${lastError}`,
   );
   return null;
+}
+
+/**
+ * No em dash or en dash in what the import writes (Omer's rule; the Smoovee rerun on luna had 9 item answers and 6
+ * merged answers with one). A dash between two digits ("9 to 17") becomes a hyphen, any other one a comma. Verbatim
+ * quotes stay as the chat or the document has them: a key that starts with "quoted" or "quote", "passage", and a document title ("document").
+ */
+const DASH_RANGE = /(\d)\s*[\u2013\u2014]\s*(\d)/g;
+const DASH_ANY = /\s*[\u2013\u2014]\s*/g;
+export function noDashes(s: string): string {
+  return String(s ?? "").replace(DASH_RANGE, "$1-$2").replace(DASH_ANY, ", ").replace(/,\s*,/g, ",").replace(/^,\s*/, "");
+}
+const VERBATIM_KEY = /^(?:quoted|quote|passage|document)/i;
+export function noDashesDeep(v: unknown, key = ""): unknown {
+  if (VERBATIM_KEY.test(key)) return v;
+  if (typeof v === "string") return noDashes(v);
+  if (Array.isArray(v)) return v.map((x) => noDashesDeep(x, key));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, noDashesDeep(x, k)]));
+  return v;
 }
 
 /**

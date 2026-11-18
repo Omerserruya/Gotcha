@@ -3,6 +3,7 @@ import { prisma } from "@chatcenter/shared";
 import { structuredCall } from "./llm";
 import { randomUUID } from "crypto";
 import { consolidateTopic } from "./consolidation";
+import { shapeTopics } from "./topic-shaping";
 import { dropCandidateVectors } from "./candidate-index";
 import { matchQuote } from "./knowledge-extraction.stage";
 import {
@@ -36,16 +37,19 @@ const CheckSchema = z.object({
     id: z.string(),
     relation: z.enum(["agrees", "contradicts", "unrelated"]),
     note: z.string().max(200).optional(),
+    /** For "contradicts": the document's title and its sentence that contradicts, for the person approving. */
+    document: z.string().max(200).optional(),
+    passage: z.string().max(400).optional(),
   })).max(40),
 });
 
 const CHECK_PROMPT = `You compare answers mined from a business's conversations with the business's own written knowledge.
 For each item you get the question, the answer the business gave in chats, and passages from its documents.
-- "contradicts": a passage states something that cannot be true together with the answer (a different price, time, place, rule or condition). Note in one short line what differs, naming the document title.
+- "contradicts": a passage states something that cannot be true together with the answer (a different price, time, place, rule or condition). Note in one short line what differs, naming the document title; give "document" (the title exactly as shown in brackets) and "passage" (the document's sentence that contradicts, copied as written, at most 160 characters).
 - "agrees": a passage says the same thing.
 - "unrelated": no passage is about this question.
 Judge only what is written. A passage that says less is not a contradiction.
-Every id you are given must appear exactly once. Reply with ONLY JSON: {"results":[{"id":"...","relation":"contradicts","note":"..."}]}`;
+Every id you are given must appear exactly once. Reply with ONLY JSON: {"results":[{"id":"...","relation":"contradicts","note":"...","document":"...","passage":"..."}]}`;
 
 const ForeignSchema = z.object({ names: z.array(z.string().max(80)).max(10) });
 const FOREIGN_PROMPT = `You read one document from a business's knowledge base. The business is named below.
@@ -67,6 +71,28 @@ const MERGE_PROMPT = `You write ONE knowledge article from several answers a bus
 - Where answers differ, the NEWEST one (by its date) is the business's current answer; do not mention older ones.
 - Write it as the business stating its own policy, clearly, in a few sentences or short lines.
 Reply with ONLY JSON: {"answer":"..."}`;
+
+/** A document conflict with its source, for the review screen (both sides shown). */
+export interface DocConflictSource { documentId: string | null; document: string | null; passage: string | null; note: string }
+
+/**
+ * The tenant's real document a cross-check note names (the model's title is never trusted: Smoovee's 13 notes
+ * spell one catalogue four ways, with ״, „ ”, « » and bare). Titles compared without quote marks, dashes,
+ * punctuation and spacing; the model's `document` first, then its note; else, when every passage sent came from
+ * one document, that one; else null.
+ */
+const titleKey = (s: unknown) => String(s ?? "").toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, "");
+export function matchDocument(docs: Array<{ id: string; title: string }>, said: unknown, note: unknown, sent: Array<{ title: string }>): { id: string; title: string } | null {
+  const keyed = docs.map((d) => ({ d, k: titleKey(d.title) })).filter((x) => x.k.length >= 2);
+  const exact = (s: unknown) => { const k = titleKey(s); return k ? keyed.find((x) => x.k === k)?.d ?? null : null; };
+  // The longest title the note contains, so "שאלות נפוצות" is not taken for "שאלות".
+  const inNote = (s: unknown) => { const k = titleKey(s); return keyed.filter((x) => x.k.length >= 3 && k.includes(x.k)).sort((a, b) => b.k.length - a.k.length)[0]?.d ?? null; };
+  const hit = exact(said) ?? inNote(said) ?? inNote(note);
+  if (hit) return { id: hit.id, title: hit.title };
+  const titles = [...new Set(sent.map((p) => p.title))];
+  if (titles.length === 1) { const d = docs.find((x) => x.title === titles[0]); if (d) return { id: d.id, title: d.title }; }
+  return null;
+}
 
 export interface TopicGroup {
   label: string;
@@ -164,7 +190,7 @@ export async function buildReview(input: {
   evidence: ReviewEvidence[];
   humanSourced: ReadonlySet<string>;
   docs: Array<{ id: string; title: string; content: string }>;
-  onContradiction?: (candidateId: string, note: string) => Promise<void>;
+  onContradiction?: (candidateId: string, note: string, source?: DocConflictSource) => Promise<void>;
   /** The topics as already decided (after consolidation): no topic call, and no cross-check (done once before). */
   fixedGroups?: Array<{ label: string; category: string; ids: string[] }>;
 }): Promise<{
@@ -191,7 +217,10 @@ export async function buildReview(input: {
       const hit = batch.find((x) => x.c.id === r.id);
       if (!hit || r.relation !== "contradicts") continue;
       const note = `${DOC_CONFLICT} ${String(r.note ?? "").trim()}`.trim().slice(0, 300);
-      await input.onContradiction?.(hit.c.id, note);
+      // A real document of the tenant, matched in code; its stored title, never the model's spelling.
+      const doc = matchDocument(docs, r.document, r.note, hit.passages);
+      const passage = doc ? String(r.passage ?? "").trim().slice(0, 160) || null : null;
+      await input.onContradiction?.(hit.c.id, note, { documentId: doc?.id ?? null, document: doc?.title ?? null, passage, note: String(r.note ?? "").trim().slice(0, 200) });
       hit.c.curationNote = note;
       contradictions++;
     }
@@ -328,10 +357,15 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
     select: { candidateId: true, conversationId: true, questionText: true, answerText: true, occurredAt: true },
   });
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
+  // Each document conflict with its document and sentence (read by GET /:id/topics, no new columns).
+  const conflictSource = new Map<string, DocConflictSource>();
   const first = await buildReview({
     tenantId, importId, language, tenantName: tenant?.name ?? "", candidates, evidence,
     humanSourced: await humanSourcedIds(tenantId, evidence), docs,
-    onContradiction: async (id, note) => { await prisma.knowledgeCandidate.updateMany({ where: { id, tenantId, status: "PENDING" }, data: { curationNote: note } }); },
+    onContradiction: async (id, note, source) => {
+      if (source) conflictSource.set(id, source);
+      await prisma.knowledgeCandidate.updateMany({ where: { id, tenantId, status: "PENDING" }, data: { curationNote: note } });
+    },
   });
 
   // Consolidation: per topic, a small canonical set replaces its items (2026-11-18). The canonical rows take the
@@ -345,14 +379,26 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
   let canonicalCount = 0, replaced = 0, unresolved = 0, switched = 0;
   // What each canonical item chose and what it replaced, for the review (read by GET /:id/topics).
   const choices: Record<string, { chosen: unknown; previous: unknown; policy: boolean }> = {};
-  await mapLimited(first.topics, 4, async (t) => {
+  const docConflicts: Record<string, DocConflictSource> = {};
+  // The tail joined to its topics, the big topics split (2026-11-18, the Smoovee rerun): the groups consolidated.
+  const shaped = await shapeTopics({
+    tenantId, importId, language,
+    groups: first.topics.map((t) => ({ label: t.label, category: t.category ?? "OTHER", candidateIds: t.candidateIds.filter((id) => freshById.has(id)) })).filter((g) => g.candidateIds.length),
+    byId: new Map(fresh.map((c) => [c.id, { id: c.id, question: c.question, answer: c.answer }])),
+  });
+  await mapLimited(shaped.groups, 4, async (t) => {
     const members = t.candidateIds.map((id) => freshById.get(id)).filter(Boolean) as any[];
     if (members.length < 2) { fixedGroups.push({ label: t.label, category: t.category ?? "OTHER", ids: members.map((m) => m.id) }); canonicalCount += members.length; return; }
     const canon = await consolidateTopic({ tenantId, importId, language, label: t.label, members, docs });
     const ids: string[] = [];
     for (const c of canon) {
       // An item placed alone and unchanged keeps its row.
-      if (c.sourceIds.length === 1 && c.status === "ok" && c.answer === freshById.get(c.sourceIds[0])?.answer) { ids.push(c.sourceIds[0]); continue; }
+      if (c.sourceIds.length === 1 && c.status === "ok" && c.answer === freshById.get(c.sourceIds[0])?.answer) {
+        ids.push(c.sourceIds[0]);
+        const s0 = conflictSource.get(c.sourceIds[0]);
+        if (s0) docConflicts[c.sourceIds[0]] = s0;
+        continue;
+      }
       const src = c.sourceIds.map((id) => freshById.get(id)!).filter(Boolean);
       const id = randomUUID();
       await prisma.knowledgeCandidate.create({
@@ -371,6 +417,9 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
       replaced += gone.length;
       ids.push(id);
       if (c.chosen || c.previous) choices[id] = { chosen: c.chosen, previous: c.previous, policy: c.policy };
+      // The conflict stays with the canonical item while it still carries it (a document that was chosen settles it).
+      const src0 = String(c.curationNote ?? "").startsWith(DOC_CONFLICT) ? c.sourceIds.map((sid) => conflictSource.get(sid)).find(Boolean) : undefined;
+      if (src0) docConflicts[id] = src0;
       if (c.status === "unresolved") unresolved++;
       if (c.status === "switched") switched++;
     }
@@ -391,7 +440,7 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
     tenantId, importId, language, tenantName: tenant?.name ?? "", candidates: after, evidence: evidence2,
     humanSourced: await humanSourcedIds(tenantId, evidence2), docs, fixedGroups,
   });
-  const detail = { ...second, contradictions: first.contradictions, foreignBusinessDocs: first.foreignBusinessDocs, consolidation: { before: candidates.length, canonical: canonicalCount, replaced, switched, unresolved }, choices };
+  const detail = { ...second, contradictions: first.contradictions, foreignBusinessDocs: first.foreignBusinessDocs, consolidation: { before: candidates.length, canonical: canonicalCount, replaced, switched, unresolved }, choices, docConflicts, shaping: shaped.detail };
   await recordEvent(importId, "KNOWLEDGE_TOPICS", "SUCCESS", null, detail as any, Date.now() - startedAt);
   return { ok: true, detail: { topics: detail.topicCount, contradictions: detail.contradictions, foreign: detail.foreignBusinessDocs.length } };
 }

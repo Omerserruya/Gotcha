@@ -268,10 +268,11 @@ export function topicStatus(items: Array<{ status: string; decidedBy?: string | 
  * { topics: [{ topicId, label, category, status: pending|approved|auto|rejected, mergedAnswer, occurrences,
  *   customers, lastSeenAt, conflict, unresolvedConflicts, docConflict, autoApprovable, quotes,
  *   items: [{ candidateId, status, question, answer, quotes, chosen: {value, basis: latest|policy, at}|null,
- *   previous: {value, until}|null, unresolved, variants: [{answer, lastSeenAt}] }],
+ *   previous: {value, until}|null, unresolved, variants: [{answer, lastSeenAt}],
+ *   docConflict: {documentId, document, passage, note}|null }], docConflicts: [{candidateId, documentId, document, passage, note}],
  *   candidateIds (PENDING), candidates (PENDING rows, the /:id/candidates shape) }],
  *   progress: { total (topics not rejected), done (approved + auto) }, generatedAt, foreignBusinessDocs,
- *   contradictions, autoApproveEnabled }. 404 for another tenant's import; topics [] before a review ran.
+ *   contradictions, autoApproveEnabled, autoApprovable (the sum of the topics' counts) }. 404 for another tenant's import; topics [] before a review ran.
  */
 router.get("/:id/topics", async (req: Request, res: Response) => {
   try {
@@ -279,6 +280,8 @@ router.get("/:id/topics", async (req: Request, res: Response) => {
     if (!row) { res.status(404).json({ error: "Import not found" }); return; }
     const { event, detail, topics, rows, evidence } = await loadTopics(req.tenantId!, row.id);
     const choices = (detail.choices ?? {}) as Record<string, { chosen?: any; previous?: any }>;
+    // The document and its sentence behind a document conflict (a review run before 2026-11-18 has none).
+    const docConflicts = (detail.docConflicts ?? {}) as Record<string, { documentId: string | null; document: string | null; passage: string | null; note: string }>;
     const out = topics.map((t) => {
       const members = (t.candidateIds ?? []).map((id: string) => rows.get(id)).filter(Boolean) as any[];
       const items = members.map((c) => ({
@@ -286,11 +289,13 @@ router.get("/:id/topics", async (req: Request, res: Response) => {
         quotes: evidence.filter((e) => e.candidateId === c.id).slice(0, 2).map((e) => ({ question: e.questionText, answer: e.answerText, occurredAt: e.occurredAt })),
         chosen: choices[c.id]?.chosen ?? null, previous: choices[c.id]?.previous ?? null,
         unresolved: unresolvedConflict(c),
+        docConflict: String(c.curationNote ?? "").startsWith("[doc-conflict]") ? (docConflicts[c.id] ?? { documentId: null, document: null, passage: null, note: String(c.curationNote).replace("[doc-conflict]", "").trim() }) : null,
         variants: (Array.isArray(c.variants) ? c.variants : []).map((v: any) => ({ answer: String(v?.answer ?? ""), lastSeenAt: v?.lastSeenAt ?? null })),
       }));
       const pending = members.filter((c) => c.status === "PENDING");
       return {
         ...t, status: topicStatus(members), items,
+        docConflicts: items.filter((i: any) => i.docConflict).map((i: any) => ({ candidateId: i.candidateId, ...i.docConflict })),
         candidateIds: pending.map((c) => c.id),
         candidates: pending.map(({ decidedBy, approvedDocumentId, editedAnswer, ...c }: any) => c),
       };
@@ -303,6 +308,8 @@ router.get("/:id/topics", async (req: Request, res: Response) => {
       foreignBusinessDocs: Array.isArray(detail.foreignBusinessDocs) ? detail.foreignBusinessDocs : [],
       contradictions: Number(detail.contradictions ?? 0),
       autoApproveEnabled: !!detail.autoApproveEnabled,
+      // The number the screen promises: the sum of topic.autoApprovable (a count per topic, never all of a topic).
+      autoApprovable: out.reduce((n: number, t: any) => n + Number(t.autoApprovable ?? 0), 0),
     });
   } catch (err: any) {
     console.error("[historical-import] topics failed:", err?.message);

@@ -21,6 +21,7 @@ import { CURATION_PROMPT, CurationSchema, judgeAll } from "../services/historica
 import { buildReview, humanSourcedIds, autoApprovable, type ReviewCandidate, type ReviewEvidence } from "../services/historical-intelligence/knowledge-review.stage";
 import { embedForCluster } from "../services/historical-intelligence/candidate-index";
 import { consolidateTopic, type CanonicalItem } from "../services/historical-intelligence/consolidation";
+import { shapeTopics } from "../services/historical-intelligence/topic-shaping";
 import {
   loadConversationTranscript,
   renderTranscript,
@@ -263,7 +264,15 @@ async function main(): Promise<void> {
     // ── Consolidation, in memory: per topic, the canonical set (2026-11-18) ──
     const byIdC = new Map(clusters.map((c) => [c.id, c]));
     const canonical: Array<CanonicalItem & { topic: string; category: string }> = [];
-    await mapLimited(review.topics, 4, async (t) => {
+    // The same shaping as the stage: the tail joined, the big topics split (2026-11-18).
+    const shaped = await shapeTopics({
+      tenantId, importId, language,
+      groups: review.topics.map((t) => ({ label: t.label, category: t.category ?? "OTHER", candidateIds: t.candidateIds })),
+      byId: new Map(clusters.map((c) => [c.id, { id: c.id, question: c.question, answer: c.answer }])),
+    });
+    (report as any).shaping = shaped.detail;
+    console.log(`[dry-run-import] shaping ${JSON.stringify(shaped.detail)}`);
+    await mapLimited(shaped.groups.map((g) => ({ label: g.label, category: g.category, candidateIds: g.candidateIds })), 4, async (t) => {
       const members = t.candidateIds.map((id) => byIdC.get(id)).filter(Boolean).map((c) => ({
         id: c!.id, question: c!.question, answer: c!.answer, occurrenceCount: c!.occurrenceCount,
         firstSeenAt: c!.variants.map((v) => v.firstSeenAt).filter(Boolean).sort()[0] ? new Date(c!.variants.map((v) => v.firstSeenAt).filter(Boolean).sort()[0]!) : c!.lastSeenAt,

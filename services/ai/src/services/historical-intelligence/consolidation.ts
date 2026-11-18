@@ -45,6 +45,8 @@ WRITE
 - Each canonical answer merges every fact the items give about that sub-question, in one clear answer.
 - Generalise: state the rule, never one customer's case. "Do you ship to Cyprus? No" from a question about shipping abroad becomes the business's rule about shipping abroad only if the items support it; never narrow it to one country.
 - Never add a fact, number or condition the items do not state.
+- The same question about the same device or model is ONE item (five questions about the Tami 4 are one). Questions of the form "which pad for a device of A by B" are ONE item that states the rule from the size table, never one item per size.
+- Every question must stand alone, understood without the chat. Rewrite a fragment ("אבל עד לידית מה המידה") into a full question from its answer, or put its id in the item that answers it.
 
 CONTRADICTIONS (two items give different facts for the same sub-question: "up to 3 business days" vs "up to 7")
 - If the newer answer clearly replaced the older one (the older stopped being given before the newer started): status "switched", the answer is the NEWEST, and the note says "was <old> until <date>".
@@ -132,6 +134,34 @@ export function canonicalFrom(members: ConsolidationMember[], raw: z.infer<typeo
   return out;
 }
 
+/**
+ * A fragment the model left as a question of its own ("אבל עד לידית מה המידה", 5 words): 5 words or fewer, opening with
+ * אבל, אז, גם, ומה or a joined ו. It folds into the item of the same topic whose answer shares the most words with
+ * its answer; with no shared word it stays as it is (a visible fragment is better than a wrong merge).
+ */
+const FRAGMENT_OPEN = /^\s*(?:אבל|אז|גם|ומה|ו[\u0590-\u05FF]{2,})(?![\u0590-\u05FF])/u;
+export function isFragment(question: string): boolean {
+  const q = String(question ?? "").trim();
+  return q.split(/\s+/).filter(Boolean).length <= 5 && FRAGMENT_OPEN.test(q);
+}
+const answerWords = (t: string) => new Set((String(t ?? "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []) as string[]);
+export function foldFragments(items: CanonicalItem[]): CanonicalItem[] {
+  const out = [...items];
+  for (const f of items.filter((x) => isFragment(x.question))) {
+    const fw = answerWords(f.answer);
+    const best = out.filter((o) => o !== f && !isFragment(o.question)).map((o) => ({ o, s: [...answerWords(o.answer)].filter((w) => fw.has(w)).length })).sort((a, b) => b.s - a.s)[0];
+    if (!best || best.s === 0) continue;
+    const o = best.o;
+    o.sourceIds = [...new Set([...o.sourceIds, ...f.sourceIds])];
+    o.occurrences += f.occurrences;
+    if (f.lastSeenAt && (!o.lastSeenAt || f.lastSeenAt > o.lastSeenAt)) o.lastSeenAt = f.lastSeenAt;
+    if (f.firstSeenAt && (!o.firstSeenAt || f.firstSeenAt < o.firstSeenAt)) o.firstSeenAt = f.firstSeenAt;
+    if (f.requiresLiveLookup) o.requiresLiveLookup = true;
+    out.splice(out.indexOf(f), 1);
+  }
+  return out;
+}
+
 export async function consolidateTopic(args: { tenantId: string; importId?: string; language: string; label: string; members: ConsolidationMember[]; docs?: Array<{ title: string; content: string }> }): Promise<CanonicalItem[]> {
   if (args.members.length < 2) return canonicalFrom(args.members, null);
   // The business's own documents on this topic: a policy fact they state wins (Omer 2026-11-18).
@@ -142,5 +172,5 @@ export async function consolidateTopic(args: { tenantId: string; importId?: stri
     feature: "historical_knowledge_consolidation", system: CONSOLIDATE_PROMPT + languageDirective(args.language),
     user: `Topic: ${args.label}\n${args.members.length} items:\n\n${listing}${passages.length ? `\n\nThe business's own documents:\n${passages.map((p) => `[${p.title}] ${p.text}`).join("\n")}` : "\n\nThe business's own documents: none on this topic."}`,
   });
-  return canonicalFrom(args.members, raw);
+  return foldFragments(canonicalFrom(args.members, raw));
 }

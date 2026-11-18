@@ -89,3 +89,26 @@ describe("topics", () => {
     expect(topicStatus([{ status: "APPROVED", decidedBy: "u1" }])).toBe("approved");
   });
 });
+
+describe("a document conflict with its document and sentence (2026-11-18, the Smoovee rerun)", () => {
+  it("★ per item and per topic: the document's title, its sentence and the note; the boolean stays", async () => {
+    H.cands = [c("a", { curationNote: "[doc-conflict] the terms say 14 days" }), c("b"), c("x", { topic: "החזרות", curationNote: "[doc-conflict] older note" })];
+    H.event = { id: "ev2", createdAt: new Date(), detail: {
+      topics: [{ label: "משלוחים", category: "SHIPPING_AND_DELIVERY", candidateIds: ["a", "b"], docConflict: true }, { label: "החזרות", category: "RETURNS_AND_CANCELLATION", candidateIds: ["x"], docConflict: true }],
+      docConflicts: { a: { documentId: "d1", document: "תקנון", passage: "ניתן להחזיר תוך 14 יום.", note: "the terms say 14 days" } },
+    } };
+    const r = await request(app).get("/api/historical-imports/imp1/topics");
+    const t = r.body.topics[0];
+    expect(t.docConflict).toBe(true);
+    expect(t.docConflicts).toEqual([{ candidateId: "a", documentId: "d1", document: "תקנון", passage: "ניתן להחזיר תוך 14 יום.", note: "the terms say 14 days" }]);
+    expect(t.items.find((i: any) => i.candidateId === "b").docConflict).toBeNull();
+    // A review run before the sources were kept: the note alone, no document.
+    expect(r.body.topics[1].items[0].docConflict).toEqual({ documentId: null, document: null, passage: null, note: "older note" });
+  });
+  it("★ the auto-approve total is the sum of the topics' counts", async () => {
+    H.event = { id: "ev3", createdAt: new Date(), detail: { topics: [{ label: "משלוחים", category: "SHIPPING_AND_DELIVERY", candidateIds: ["a", "b"], autoApprovable: 1 }, { label: "החזרות", category: "RETURNS_AND_CANCELLATION", candidateIds: ["x"], autoApprovable: 1 }] } };
+    const r = await request(app).get("/api/historical-imports/imp1/topics");
+    expect(r.body.autoApprovable).toBe(2);
+    expect(r.body.topics[0].autoApprovable).toBe(1);
+  });
+});
