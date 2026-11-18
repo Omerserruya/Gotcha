@@ -95,28 +95,24 @@ export function teamSender(c: RelevanceInput): boolean {
 
 /**
  * Another business's automated greeting or away message (dry run 2026-11-17: four auto-replies to GOTCHA's
- * outreach were labelled business). Generic, from its shape: a thanks-for-contacting greeting, opening hours,
- * "not available now", "we will get back to you", out of office.
+ * outreach were labelled business). The cost is one-sided (dev relevance test 2026-11-18): answering an away
+ * message wastes one reply, silencing a customer loses the customer. So only the business's OWN voice counts
+ * ("תודה שפניתם אלינו", "פנייתך התקבלה", "נחזור אליכם", "אנחנו לא זמינים כרגע", out of office), never a topic
+ * word a customer also uses ("שעות הפעילות", "תודה על ההודעה"); and any sign of a person wins.
  */
-const AUTO_REPLY_SHAPE = /(?<![\u0590-\u05FF])(?:תודה(?:\s+רבה)?\s+(?:ש|על\s+)(?:פנית|פניתם|פנייתך|פנייתכם|יצרת|יצרתם|כתבת|כתבתם|הפנייה|ההודעה|ההודעה\s+שלך)|הגעתם\s+ל|הגעת\s+ל|שעות\s+(?:ה)?פעילות|(?:כרגע|כעת|ברגע\s+זה)\s+(?:אנחנו\s+|אנו\s+)?(?:לא|אינם|איננו)\s+(?:פנויים|זמינים|זמינה|זמין)|נחזור\s+(?:אליך|אלייך|אליכם)|(?:נציג|נציגה)\s+(?:יחזור|תחזור|יחזרו)|הודעה\s+אוטומטית|מענה\s+אוטומטי)|\b(?:thank(?:s| you) for (?:contacting|reaching out|your (?:message|email|inquiry))|out of (?:the )?office|(?:we|i)(?:'ll| will) get back to you|business hours|currently (?:unavailable|away|closed)|auto(?:matic|mated)?[- ]reply|this is an automated)\b/iu;
-/** An inbound that came within this long of our own message reads as a machine's answer. */
-const AUTO_REPLY_WINDOW_MS = 2 * 60_000;
+const BUSINESS_VOICE = /(?<![\u0590-\u05FF])(?:תודה(?:\s+רבה)?\s+(?:ש(?:פנית|פניתם|פנית\s+אלינו|פניתם\s+אלינו|יצרת|יצרתם)(?:\s+(?:אלינו|קשר))?|על\s+(?:פנייתך|פנייתכם|הפנייה|פנייתך\s+אלינו))|(?:פנייתך|פנייתכם|הפנייה|ההודעה\s+שלך|הודעתך)\s+(?:התקבלה|נקלטה|הגיעה\s+אלינו)|נחזור\s+(?:אליך|אלייך|אליכם)|(?:נציג|נציגה|נציגינו)\s+(?:יחזור|תחזור|יחזרו|יחזרו\s+אליך)|(?:כרגע|כעת|ברגע\s+זה)\s+(?:אנחנו\s+|אנו\s+)?(?:לא|אינם|איננו)\s+(?:פנויים|זמינים)|(?:אנחנו|אנו)\s+(?:לא|אינם)\s+(?:פנויים|זמינים)\s+(?:כרגע|כעת)|הגעתם\s+ל|שעות\s+(?:ה)?פעילות\s+שלנו|(?:זוהי\s+)?הודעה\s+אוטומטית|מענה\s+אוטומטי)(?![\u0590-\u05FF])|\b(?:thank(?:s| you) for (?:contacting us|reaching out(?: to us)?|your (?:message|email|inquiry))|we(?:'ll| will) get back to you|out of (?:the )?office|our (?:business|opening) hours|we are currently (?:unavailable|away|closed)|auto(?:matic|mated)?[- ]reply|this is an automated)\b/iu;
+/** A person speaking: a question, a question word, the business addressed, or an intent. In doubt, a person. */
+const PERSON_SIGNAL = /[?؟]|(?<![\u0590-\u05FF])[וש]?(?:מה|מתי|איך|האם|אפשר|כמה|איפה|למה|מי|איזה|איזו|שלכם|אתם|אצלכם|לכם|רוצה|רוצים|ארצה|להזמין|הזמנתי|מחיר|מעוניין|מעוניינת|מעוניינים|לקנות|קניתי|מחפש|מחפשת|צריך|צריכה|אשמח|תשלחו|שלחו)(?![\u0590-\u05FF])|\b(?:what|when|how|can|could|would|do you|does|is there|are you|where|why|which|who|want|wanna|order|buy|price|interested|looking for|need|i'?d like)\b/iu;
+export const machineVoice = (body: unknown) => { const b = String(body ?? ""); return BUSINESS_VOICE.test(b) && !PERSON_SIGNAL.test(b); };
+
 export function autoReply(c: RelevanceInput): boolean {
-  const msgs = c.messages;
-  for (let i = 0; i < msgs.length; i++) {
-    const m = msgs[i];
-    if (m.direction !== "INBOUND" || !AUTO_REPLY_SHAPE.test(String(m.body ?? ""))) continue;
-    // Every later inbound must also be a machine's (a person who wrote after it is not an auto-reply).
-    if (msgs.slice(i + 1).some((x) => x.direction === "INBOUND" && clip(x.body, 1) && !AUTO_REPLY_SHAPE.test(String(x.body ?? "")))) return false;
-    const prevOut = [...msgs.slice(0, i)].reverse().find((x) => x.direction === "OUTBOUND");
-    const fast = prevOut?.createdAt && m.createdAt ? new Date(m.createdAt).getTime() - new Date(prevOut.createdAt).getTime() <= AUTO_REPLY_WINDOW_MS : false;
-    if (fast || c.firstDirection === "OUTBOUND") return true;
-    // The contact wrote first with a machine's greeting (dry run 2, ALEA): the shape alone, when it is a
-    // statement of some length, not a question ("שעות הפעילות שלכם?" is a customer asking).
-    const body = String(m.body ?? "");
-    if (!/[?؟]/.test(body) && (body.trim().split(/\s+/).length >= 6)) return true;
-  }
-  return false;
+  // Every message the contact sent in view must be the machine's: one person's line and it is a person.
+  const ins = c.messages.filter((m) => m.direction === "INBOUND" && clip(m.body, 1));
+  if (!ins.length || !ins.every((m) => machineVoice(m.body))) return false;
+  // The business wrote first: the other side's machine answering our opener.
+  if (c.firstDirection === "OUTBOUND") return true;
+  // The contact wrote first with a machine's greeting (dry run 2, ALEA): a statement of some length.
+  return String(ins[0].body ?? "").trim().split(/\s+/).length >= 6;
 }
 
 /**

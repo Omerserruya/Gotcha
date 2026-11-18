@@ -2333,3 +2333,32 @@ describe("relevance R3 through a whole turn: machines silent, customers answered
     }
   });
 });
+
+describe("relevance R3 fix through a whole turn: the Supervisor's five customers are answered", () => {
+  const t = (s: number) => new Date(Date.now() - (3600 - s) * 1000);
+  const cases: Array<[string, any[], string]> = [
+    ["1", [{ direction: "INBOUND", body: "היי", metadata: null, createdAt: t(0) }, { direction: "OUTBOUND", body: "היי! איך אפשר לעזור?", senderName: "AI Bot", metadata: null, createdAt: t(3540) }], "מה שעות הפעילות שלכם?"],
+    ["2", [{ direction: "INBOUND", body: "היי", metadata: null, createdAt: t(0) }, { direction: "OUTBOUND", body: "היי! איך אפשר לעזור?", senderName: "AI Bot", metadata: null, createdAt: t(3540) }], "מה שעות הפעילות שלכם ביום שישי"],
+    ["3", [], "היי רציתי לדעת מה שעות הפעילות שלכם ביום שישי"],
+    ["4", [{ direction: "INBOUND", body: "כמה עולה משלוח?", metadata: null, createdAt: t(0) }, { direction: "OUTBOUND", body: "משלוח עולה 30 ש\"ח.", senderName: "AI Bot", metadata: null, createdAt: t(3540) }], "תודה על ההודעה, אז אני רוצה להזמין את השמלה הכחולה"],
+    ["5", [{ direction: "OUTBOUND", body: "מבצע סוף עונה בחנות!", senderName: "Campaign", metadata: null, createdAt: t(0) }], "מה שעות הפעילות של החנות?"],
+    ["en", [{ direction: "OUTBOUND", body: "Shipping is 30 ILS.", senderName: "AI Bot", metadata: null, createdAt: t(3540) }], "thanks for the message, I want to order the blue dress"],
+  ];
+  for (const [name, history, incoming] of cases) {
+    it(`★ R3 turn ${name}: answered, gate1 not automated`, async () => {
+      h.history = history.length ? history : null;
+      h.responses.push({ toolCalls: [respond(`r3${name}`, { reply: "בשמחה, אנחנו פתוחים מ-9 עד 17." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+      expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
+      expect(r.reply ?? "").not.toBe("");
+    });
+  }
+  it("★ R3 turn: a real away message after our outreach stays silent", async () => {
+    const away = "תודה שפניתם אלינו! נחזור אליכם בהקדם האפשרי.";
+    h.history = [{ direction: "OUTBOUND", body: "היי, רציתי להציע לכם שירות", senderName: "Omer", metadata: null, createdAt: t(0) }, { direction: "INBOUND", body: away, metadata: null, createdAt: t(4) }];
+    h.responses.push({ toolCalls: [respond("r3away", { reply: "ההודעה נשמעת כמו מענה אוטומטי." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: away }, "autonomous");
+    expect(r.reply ?? null).toBeNull();
+    expect(r.trace.gate1).toBe("automated:auto_reply");
+  });
+});
