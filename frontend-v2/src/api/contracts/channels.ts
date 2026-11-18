@@ -126,6 +126,13 @@ export const channelSchema = z.object({
    * none". Checked with `typeof`, never for truthiness - 0 is a real answer.
    */
   conversationsInWindow: z.number().optional(),
+  /**
+   * Does the "personal and not relevant" classifier run on this account
+   * (Backend, 2026-11-18)? `null` where it never runs (web chat, Shopify live
+   * chat, voice, Slack): no switch. Absent (an older backend) reads as `null`
+   * too, so the list still parses and simply draws no switch.
+   */
+  relevanceFilterEnabled: z.boolean().nullish().catch(null),
 });
 
 export const channelsSchema = z.array(channelSchema);

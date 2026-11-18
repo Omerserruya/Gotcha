@@ -666,6 +666,12 @@ export const channelEndpoints = {
   connectEmail: () => endpoint('/api/channels/connect/email'),
   disconnect: (id: string) => endpoint('/api/channels/{id}/disconnect', { id }),
   /**
+   * PATCH `{ relevanceFilterEnabled }` - this account's "personal and not
+   * relevant" filter (Backend, 2026-11-18). `channels:manage:update`; 400
+   * `RELEVANCE_FILTER_NOT_APPLICABLE` on a channel it never runs on.
+   */
+  relevanceFilter: (id: string) => endpoint('/api/channels/{id}/relevance-filter', { id }),
+  /**
    * The Pages a Messenger grant offered, to choose from (backend 0ce84f21):
    * names and ids, never a token. 410 `SESSION_EXPIRED` for an expired,
    * replaced, another workspace's or another person's session.

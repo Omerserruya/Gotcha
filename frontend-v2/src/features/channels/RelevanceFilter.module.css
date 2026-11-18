@@ -1,0 +1,124 @@
+@layer features {
+  /*
+   * A channel account's relevance filter switch: the email template's plain
+   * pill (EmailTemplate.module.css), its label beside it.
+   */
+
+  /* In a card or a drawer: a well, the help line under the label. */
+  .block {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-4) var(--space-10);
+    align-items: center;
+    padding: var(--space-12) var(--space-14);
+    background-color: var(--panel-well);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    line-height: normal;
+  }
+
+  /*
+   * Without channels:manage:update: the whole row reads as unavailable
+   * (dimmed, not-allowed), never as the switch's off colour.
+   */
+  .block[data-readonly='yes'],
+  .inline[data-readonly='yes'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .block[data-readonly='yes'] .switch,
+  .inline[data-readonly='yes'] .switch {
+    cursor: not-allowed;
+  }
+
+  /* A mailbox's drawer: the filter and the template, two named parts. */
+  .drawerPart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+  }
+
+  .drawerPart + .drawerPart {
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  /* On a channel row: the switch and its label, nothing under them. */
+  .inline {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6) var(--space-8);
+    line-height: normal;
+  }
+
+  .switch {
+    position: relative;
+    display: block;
+    flex: none;
+    inline-size: 34px;
+    block-size: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background-color: var(--border-default);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 14px;
+    block-size: 14px;
+    border-radius: 50%;
+    background-color: var(--panel-field);
+  }
+
+  .switch[data-on='yes'] {
+    background-color: var(--action-base);
+  }
+
+  .switch[data-on='yes']::after {
+    inset-inline-start: 18px;
+  }
+
+  /* Disabled only while a save is on its way: no dimming for a moment's wait. */
+  .switch:disabled {
+    cursor: progress;
+  }
+
+  .switch:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: var(--focus-ring-offset);
+  }
+
+  .label {
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+  }
+
+  .inline .label {
+    font-size: var(--font-size-caption);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-body);
+  }
+
+  .help {
+    grid-column: 2;
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+  }
+
+  .problem {
+    grid-column: 1 / -1;
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-caption);
+    color: var(--alert-text);
+  }
+}

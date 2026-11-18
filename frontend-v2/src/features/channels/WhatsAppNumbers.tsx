@@ -22,6 +22,7 @@ import {
 } from '@/api/contracts/whatsapp-numbers';
 
 import { PrimaryNumber } from './PrimaryNumber';
+import { RelevanceFilterSwitch } from './RelevanceFilterSwitch';
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import rowLink from '@/design-system/styles/row-link.module.css';
@@ -73,10 +74,17 @@ type T = Awaited<ReturnType<typeof getTranslations<'channels.whatsapp'>>>;
 export async function WhatsAppNumbers({
   numbers,
   connectable = false,
+  relevanceFilters = null,
 }: {
   readonly numbers: NumbersResponse | null;
   /** The server can launch Meta's Embedded Signup (13c). */
   readonly connectable?: boolean;
+  /**
+   * Each number's relevance filter, by its channel account (GET
+   * /api/channels' `relevanceFilterEnabled`). `null` while INBOX_RELEVANCE is
+   * off: no number draws the switch.
+   */
+  readonly relevanceFilters?: Readonly<Record<string, boolean>> | null;
 }) {
   const t = await getTranslations('channels.whatsapp');
   const locale = await getLocale();
@@ -144,6 +152,7 @@ export async function WhatsAppNumbers({
     channelAccountId: n.channelAccountId,
     label: labelOf(n),
     current: primaryRow ? labelOf(primaryRow) : null,
+    relevanceFilter: n.channelAccountId ? (relevanceFilters?.[n.channelAccountId] ?? null) : null,
   });
   const rows = byAccount([
     ...numbers.data.map((n) => ({
@@ -244,6 +253,8 @@ interface Place {
   /** This number and the primary now, as their rows name them. */
   readonly label: string;
   readonly current: string | null;
+  /** This number's relevance filter; `null` draws no switch. */
+  readonly relevanceFilter: boolean | null;
 }
 
 /**
@@ -604,6 +615,13 @@ function NumberRows({ t, place }: { readonly t: T; readonly place: Place }) {
           </div>
         ) : null}
       </dl>
+      {/* Per number: two numbers can differ (Omer, 2026-11-18). */}
+      {place.channelAccountId && place.relevanceFilter !== null ? (
+        <RelevanceFilterSwitch
+          channelAccountId={place.channelAccountId}
+          enabled={place.relevanceFilter}
+        />
+      ) : null}
       <p className={styles.whoAnswersNote} data-testid="number-who-answers">
         {t.rich('rows.whoAnswers', {
           automations: (chunks) => (

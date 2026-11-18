@@ -14,6 +14,7 @@ import styles from './Channels.module.css';
 import { ChannelTile } from './ChannelTile';
 import { ConnectableRow } from './ConnectableRow';
 import { DisconnectChannel } from './DisconnectChannel';
+import { RelevanceFilterSwitch } from './RelevanceFilterSwitch';
 import { ReconnectChannel } from './ReconnectChannel';
 import {
   buildChannelRows,
@@ -25,6 +26,7 @@ import {
   type ConnectedRow,
   type WidgetRow,
 } from './rows';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { channelName } from '@/api/contracts/inbox';
 import type { ChannelErrorReason } from '@/api/contracts/platform-errors';
 import {
@@ -75,6 +77,17 @@ export async function ChannelList({
   const locale = await getLocale();
   const rows = buildChannelRows(channels, voice, voiceOffered, locale);
   const number = new Intl.NumberFormat(locale);
+  /*
+    The relevance filter's switch ON THE ROW: only where the row has no
+    settings of its own (Instagram, Messenger). WhatsApp's is on each number
+    in 13b, a mailbox's in its drawer. Dark while INBOX_RELEVANCE is off.
+  */
+  const relevance = inboxRelevanceOn();
+  const rowSwitch = (row: ConnectedRow): row is ConnectedRow & { relevanceFilter: boolean } =>
+    relevance &&
+    row.relevanceFilter !== null &&
+    row.channel !== 'WHATSAPP' &&
+    !hasEmailTemplate(row);
 
   /**
    * The line under the name: identity, then the two numbers.
@@ -236,7 +249,7 @@ export async function ChannelList({
                 >
                   {t('rowSettings')}
                 </Link>
-              ) : hasEmailTemplate(row) || canDisconnect(row) ? (
+              ) : hasEmailTemplate(row) || canDisconnect(row) || rowSwitch(row) ? (
                 /*
                   Disconnect, after a confirmation in the channel's name
                   (POST /api/channels/:id/disconnect; conversations are kept).
@@ -255,6 +268,13 @@ export async function ChannelList({
                     >
                       {t('rowSettings')}
                     </Link>
+                  ) : null}
+                  {rowSwitch(row) ? (
+                    <RelevanceFilterSwitch
+                      channelAccountId={row.id}
+                      enabled={row.relevanceFilter}
+                      layout="inline"
+                    />
                   ) : null}
                   {needsReconnect(row) ? (
                     <ReconnectChannel
