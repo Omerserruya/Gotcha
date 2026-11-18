@@ -1762,6 +1762,97 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
 
 // ─── System Admin: Usage Stats (all tenants) ───────────────
 
+/**
+ * GET /api/system/ai-actions/alerts (2026-11-18): the console nav badge. The tool and error groups that failed at
+ * least AI_ACTION_ALERT_THRESHOLD times (default 5) in the last hour, across tenants. No mail, no WhatsApp.
+ */
+export const aiActionAlertThreshold = (env: NodeJS.ProcessEnv = process.env) => { const n = Number(env.AI_ACTION_ALERT_THRESHOLD); return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 5; };
+router.get("/ai-actions/alerts", authenticate, requireSystemAdmin(), async (_req: Request, res: Response) => {
+  try {
+    const threshold = aiActionAlertThreshold();
+    const rows = await prisma.auditLog.findMany({
+      where: {
+        action: { startsWith: "ai.tool_call." },
+        createdAt: { gte: new Date(Date.now() - 3600_000) },
+        OR: [
+          { metadata: { path: ["outcome"], equals: "timeout" } },
+          { metadata: { path: ["outcome"], equals: "error" } },
+          { metadata: { path: ["decision"], equals: "deny" } },
+        ],
+      },
+      take: 5000,
+      select: { action: true, metadata: true },
+    });
+    const counts = new Map<string, number>();
+    for (const r of rows as any[]) {
+      const m = (r.metadata ?? {}) as Record<string, any>;
+      const k = `${String(m.tool ?? r.action.replace(/^ai\.tool_call\./, ""))}|${m.errorCode ?? m.outcome ?? m.decision ?? ""}`;
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const over = [...counts.entries()].filter(([, n]) => n >= threshold).map(([k, n]) => ({ tool: k.split("|")[0], errorCode: k.split("|")[1] || null, count: n }));
+    res.json({ threshold, count: over.length, groups: over.sort((a, b) => b.count - a.count) });
+  } catch (err: any) {
+    console.error("[system] ai-actions alerts failed:", err?.message);
+    res.status(500).json({ error: "Failed to load AI action alerts" });
+  }
+});
+
+/**
+ * GET /api/system/ai-actions/failures?hours=24&tenantId=&tool= (2026-11-18, Omer: SYSTEM_ADMIN only, nothing in a
+ * tenant's inbox). The AI's tool calls that failed, timed out or were refused, across tenants, from the reply
+ * engine's audit rows (action "ai.tool_call.<tool>"): grouped by tool and error, and the latest 100. Arguments
+ * as their short summary only; never a result body (it may hold a customer's data).
+ */
+router.get("/ai-actions/failures", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const hours = Math.min(Math.max(Number(req.query.hours ?? 24) || 24, 1), 24 * 14);
+    const since = new Date(Date.now() - hours * 3600_000);
+    const tenantId = typeof req.query.tenantId === "string" && req.query.tenantId.trim() ? req.query.tenantId.trim() : undefined;
+    const tool = typeof req.query.tool === "string" && req.query.tool.trim() ? req.query.tool.trim() : undefined;
+    const rows = await prisma.auditLog.findMany({
+      where: {
+        action: tool ? `ai.tool_call.${tool}` : { startsWith: "ai.tool_call." },
+        createdAt: { gte: since },
+        ...(tenantId ? { tenantId } : {}),
+        OR: [
+          { metadata: { path: ["outcome"], equals: "timeout" } },
+          { metadata: { path: ["outcome"], equals: "error" } },
+          { metadata: { path: ["decision"], equals: "deny" } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 2000,
+      select: { id: true, tenantId: true, action: true, targetId: true, createdAt: true, metadata: true },
+    });
+    const items = rows.map((r: any) => {
+      const m = (r.metadata ?? {}) as Record<string, any>;
+      return {
+        id: r.id, tenantId: r.tenantId, conversationId: r.targetId, at: r.createdAt,
+        tool: String(m.tool ?? r.action.replace(/^ai\.tool_call\./, "")),
+        errorCode: m.errorCode ?? (m.outcome === "timeout" ? "timeout" : m.decision === "deny" ? "denied" : m.outcome ?? null),
+        argsSummary: typeof m.argsSummary === "string" ? m.argsSummary : "",
+        ms: typeof m.ms === "number" ? m.ms : null,
+      };
+    });
+    const groups = new Map<string, { tool: string; errorCode: string | null; count: number; tenants: Set<string>; lastAt: Date }>();
+    for (const it of items) {
+      const k = `${it.tool}|${it.errorCode}`;
+      const g = groups.get(k) ?? { tool: it.tool, errorCode: it.errorCode, count: 0, tenants: new Set<string>(), lastAt: it.at };
+      g.count++; g.tenants.add(it.tenantId); if (it.at > g.lastAt) g.lastAt = it.at;
+      groups.set(k, g);
+    }
+    res.json({
+      hours,
+      total: items.length,
+      groups: [...groups.values()].sort((a, b) => b.count - a.count).map((g) => ({ tool: g.tool, errorCode: g.errorCode, count: g.count, tenants: g.tenants.size, lastAt: g.lastAt })),
+      recent: items.slice(0, 100),
+    });
+  } catch (err: any) {
+    console.error("[system] ai-actions failures failed:", err?.message);
+    res.status(500).json({ error: "Failed to load AI action failures" });
+  }
+});
+
 router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 30;

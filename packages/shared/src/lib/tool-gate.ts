@@ -66,6 +66,9 @@ export interface PolicyResult {
 /** See the branch in evaluatePolicies; ai woo-chat-turn.service builds and runs it. */
 export const WOO_COMPLEMENTARY_TOOL_NAME = "woocommerce.complementary_products";
 
+/** Tools that always need a person's approval: refunds, coupons and discounts, on every store. */
+export const ALWAYS_APPROVAL = /^(?:(?:woocommerce|shopify)\.(?:create_refund|refund_order|issue_refund|create_coupon|create_discount|create_discount_code|apply_discount)|issue_refund|refund|apply_discount)$/;
+
 const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // Low-risk / context tools - always allowed.
   link_customer_identifier:    { mode: "never" },
@@ -360,6 +363,12 @@ export async function evaluatePolicies(opts: {
     if (level === "ask" && effective.mode !== "always") {
       effective = { ...effective, mode: "always", condition: undefined };
     }
+  }
+
+  // Money always goes through a person (CLAUDE.md rule 9, Omer 2026-11-18): a refund, a coupon or a discount on
+  // any store, whatever the catalogue, the tenant or the employee level says. A floor: never looser.
+  if (ALWAYS_APPROVAL.test(opts.toolName) && effective.mode !== "always") {
+    effective = { ...effective, mode: "always", condition: undefined };
   }
 
   // Materialise the decision
