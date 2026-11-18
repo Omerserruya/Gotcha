@@ -20,6 +20,7 @@ import { DEDUPE_PROMPT, DedupeSchema } from "../services/historical-intelligence
 import { CURATION_PROMPT, CurationSchema, judgeAll } from "../services/historical-intelligence/knowledge-curation.stage";
 import { buildReview, humanSourcedIds, autoApprovable, type ReviewCandidate, type ReviewEvidence } from "../services/historical-intelligence/knowledge-review.stage";
 import { embedForCluster } from "../services/historical-intelligence/candidate-index";
+import { consolidateTopic, type CanonicalItem } from "../services/historical-intelligence/consolidation";
 import {
   loadConversationTranscript,
   renderTranscript,
@@ -259,6 +260,31 @@ async function main(): Promise<void> {
         }),
       })),
     };
+    // ── Consolidation, in memory: per topic, the canonical set (2026-11-18) ──
+    const byIdC = new Map(clusters.map((c) => [c.id, c]));
+    const canonical: Array<CanonicalItem & { topic: string; category: string }> = [];
+    await mapLimited(review.topics, 4, async (t) => {
+      const members = t.candidateIds.map((id) => byIdC.get(id)).filter(Boolean).map((c) => ({
+        id: c!.id, question: c!.question, answer: c!.answer, occurrenceCount: c!.occurrenceCount,
+        firstSeenAt: c!.variants.map((v) => v.firstSeenAt).filter(Boolean).sort()[0] ? new Date(c!.variants.map((v) => v.firstSeenAt).filter(Boolean).sort()[0]!) : c!.lastSeenAt,
+        lastSeenAt: c!.lastSeenAt, curationVerdict: c!.curationVerdict, curationNote: c!.curationNote, requiresLiveLookup: c!.requiresLiveLookup,
+      }));
+      const out = await consolidateTopic({ tenantId, importId, language, label: t.label, members });
+      for (const it of out) canonical.push({ ...it, topic: t.label, category: t.category ?? "OTHER" });
+    });
+    const canonApprovable = canonical.filter((c) => autoApprovable({ humanSourced: true, occurrenceCount: c.occurrences, conflict: c.conflict, variants: c.variants, curationVerdict: c.curationVerdict, curationNote: c.curationNote, requiresLiveLookup: c.requiresLiveLookup }));
+    const canonByCat: Record<string, number> = {};
+    for (const c of canonApprovable) canonByCat[c.category] = (canonByCat[c.category] ?? 0) + 1;
+    (report as any).consolidation = {
+      before: clusters.length, canonical: canonical.length,
+      switched: canonical.filter((c) => c.status === "switched").length,
+      unresolved: canonical.filter((c) => c.status === "unresolved").length,
+      autoApprovable: canonApprovable.length, autoApprovableByCategory: canonByCat,
+      samples: canonical.filter((c) => c.sourceIds.length > 1).slice(0, 8).map((c) => ({ topic: c.topic, question: c.question, answer: c.answer, status: c.status, note: c.note, sources: c.sourceIds.length, occurrences: c.occurrences })),
+      conflicts: canonical.filter((c) => c.status !== "ok").slice(0, 20).map((c) => ({ topic: c.topic, question: c.question, status: c.status, note: c.note, competing: c.variants.map((v) => ({ answer: v.answer, lastSeenAt: v.lastSeenAt, occurrences: v.occurrenceCount })) })),
+    };
+    console.log(`[dry-run-import] consolidation ${clusters.length} -> ${canonical.length} canonical (switched ${(report as any).consolidation.switched}, unresolved ${(report as any).consolidation.unresolved}), auto-approvable ${canonApprovable.length} ${JSON.stringify(canonByCat)}`);
+
     // Auto-approvable per category, and five of them to read (2026-11-18).
     const approvable = clusters.filter((c) => autoApprovable({ humanSourced: true, occurrenceCount: c.occurrenceCount, conflict: c.variants.length > 1, variants: c.variants, curationVerdict: c.curationVerdict, curationNote: c.curationNote, requiresLiveLookup: c.requiresLiveLookup }));
     const byCat: Record<string, number> = {};

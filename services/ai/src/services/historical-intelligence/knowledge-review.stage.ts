@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { prisma } from "@chatcenter/shared";
 import { structuredCall } from "./llm";
+import { randomUUID } from "crypto";
+import { consolidateTopic } from "./consolidation";
+import { dropCandidateVectors } from "./candidate-index";
 import { matchQuote } from "./knowledge-extraction.stage";
 import {
   recordEvent,
@@ -118,6 +121,8 @@ export function unresolvedConflict(c: { conflict: boolean; variants?: unknown })
   const vs = (Array.isArray(c.variants) ? c.variants : []).filter((v: any) => v && typeof v === "object") as Array<{ firstSeenAt?: string; lastSeenAt?: string }>;
   // Flagged without two variants to compare: nothing shows it settled.
   if (vs.length < 2) return true;
+  // Marked unresolved by the consolidation (the model saw them overlap): unresolved, whatever the dates say.
+  if (vs.some((v: any) => v.unresolved === true)) return true;
   const newest = [...vs].sort((a, b) => String(b.lastSeenAt ?? "").localeCompare(String(a.lastSeenAt ?? "")))[0];
   const start = String(newest.firstSeenAt ?? newest.lastSeenAt ?? "");
   if (!start) return true;
@@ -160,6 +165,8 @@ export async function buildReview(input: {
   humanSourced: ReadonlySet<string>;
   docs: Array<{ id: string; title: string; content: string }>;
   onContradiction?: (candidateId: string, note: string) => Promise<void>;
+  /** The topics as already decided (after consolidation): no topic call, and no cross-check (done once before). */
+  fixedGroups?: Array<{ label: string; category: string; ids: string[] }>;
 }): Promise<{
   topics: TopicGroup[]; topicCount: number; candidates: number; contradictions: number;
   foreignBusinessDocs: Array<{ documentId: string; title: string; names: string[] }>;
@@ -170,7 +177,7 @@ export async function buildReview(input: {
 
   // ── 1. The tenant's own documents ──
   let contradictions = 0;
-  const checkable = docs.length
+  const checkable = docs.length && !input.fixedGroups
     ? candidates.map((c) => ({ c, passages: relevantPassages(c.question, c.answer, docs) })).filter((x) => x.passages.length > 0)
     : [];
   for (let i = 0; i < checkable.length; i += 20) {
@@ -191,7 +198,7 @@ export async function buildReview(input: {
   }
 
   const foreign: Array<{ documentId: string; title: string; names: string[] }> = [];
-  await mapLimited(docs, 3, async (d) => {
+  await mapLimited(input.fixedGroups ? [] : docs, 3, async (d) => {
     const r = await structuredCall({
       tenantId, importId, schema: ForeignSchema, system: FOREIGN_PROMPT, tier: "import", maxTokens: 800,
       feature: "historical_knowledge_crosscheck",
@@ -208,8 +215,8 @@ export async function buildReview(input: {
     const k = c.category ?? "OTHER";
     byCategory.set(k, [...(byCategory.get(k) ?? []), c]);
   }
-  const groups: Array<{ label: string; category: string; ids: string[] }> = [];
-  for (const [category, items] of byCategory) {
+  const groups: Array<{ label: string; category: string; ids: string[] }> = input.fixedGroups ? input.fixedGroups.map((g) => ({ ...g, ids: g.ids.filter((id) => candidates.some((c) => c.id === id)) })).filter((g) => g.ids.length) : [];
+  for (const [category, items] of input.fixedGroups ? [] : byCategory) {
     const assigned = new Set<string>();
     if (items.length > 1) {
       const r = await structuredCall({
@@ -321,11 +328,70 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
     select: { candidateId: true, conversationId: true, questionText: true, answerText: true, occurredAt: true },
   });
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
-  const detail = await buildReview({
+  const first = await buildReview({
     tenantId, importId, language, tenantName: tenant?.name ?? "", candidates, evidence,
     humanSourced: await humanSourcedIds(tenantId, evidence), docs,
     onContradiction: async (id, note) => { await prisma.knowledgeCandidate.updateMany({ where: { id, tenantId, status: "PENDING" }, data: { curationNote: note } }); },
   });
+
+  // Consolidation: per topic, a small canonical set replaces its items (2026-11-18). The canonical rows take the
+  // items' evidence; the items and their vectors go, the way dedupe merges.
+  const fresh = await prisma.knowledgeCandidate.findMany({
+    where: { tenantId, importId, status: "PENDING" },
+    select: { id: true, topic: true, category: true, question: true, answer: true, reasoning: true, occurrenceCount: true, customerCount: true, firstSeenAt: true, lastSeenAt: true, curationVerdict: true, curationNote: true, requiresLiveLookup: true },
+  });
+  const freshById = new Map(fresh.map((c) => [c.id, c]));
+  const fixedGroups: Array<{ label: string; category: string; ids: string[] }> = [];
+  let canonicalCount = 0, replaced = 0, unresolved = 0, switched = 0;
+  // What each canonical item chose and what it replaced, for the review (read by GET /:id/topics).
+  const choices: Record<string, { chosen: unknown; previous: unknown; policy: boolean }> = {};
+  await mapLimited(first.topics, 4, async (t) => {
+    const members = t.candidateIds.map((id) => freshById.get(id)).filter(Boolean) as any[];
+    if (members.length < 2) { fixedGroups.push({ label: t.label, category: t.category ?? "OTHER", ids: members.map((m) => m.id) }); canonicalCount += members.length; return; }
+    const canon = await consolidateTopic({ tenantId, importId, language, label: t.label, members, docs });
+    const ids: string[] = [];
+    for (const c of canon) {
+      // An item placed alone and unchanged keeps its row.
+      if (c.sourceIds.length === 1 && c.status === "ok" && c.answer === freshById.get(c.sourceIds[0])?.answer) { ids.push(c.sourceIds[0]); continue; }
+      const src = c.sourceIds.map((id) => freshById.get(id)!).filter(Boolean);
+      const id = randomUUID();
+      await prisma.knowledgeCandidate.create({
+        data: {
+          id, tenantId, importId, topic: t.label.slice(0, 60), category: src[0]?.category ?? t.category ?? "OTHER", scope: "standing_rule",
+          question: c.question, answer: c.answer, reasoning: src.find((m) => m.reasoning)?.reasoning ?? null, clusterKey: id,
+          occurrenceCount: c.occurrences, customerCount: src.reduce((n, m) => n + (m.customerCount ?? 0), 0),
+          firstSeenAt: c.firstSeenAt, lastSeenAt: c.lastSeenAt, conflict: c.conflict, variants: c.variants as any,
+          requiresLiveLookup: c.requiresLiveLookup, curationVerdict: c.curationVerdict, curationNote: c.curationNote,
+        },
+      });
+      await prisma.knowledgeCandidateEvidence.updateMany({ where: { tenantId, candidateId: { in: c.sourceIds } }, data: { candidateId: id } });
+      const gone = c.sourceIds.filter((sid) => sid !== id);
+      await dropCandidateVectors(tenantId, gone).catch(() => undefined);
+      await prisma.knowledgeCandidate.deleteMany({ where: { tenantId, importId, status: "PENDING", id: { in: gone } } });
+      replaced += gone.length;
+      ids.push(id);
+      if (c.chosen || c.previous) choices[id] = { chosen: c.chosen, previous: c.previous, policy: c.policy };
+      if (c.status === "unresolved") unresolved++;
+      if (c.status === "switched") switched++;
+    }
+    canonicalCount += ids.length;
+    fixedGroups.push({ label: t.label, category: t.category ?? "OTHER", ids });
+  });
+
+  // The topics again, over the canonical items, with the same labels.
+  const after = await prisma.knowledgeCandidate.findMany({
+    where: { tenantId, importId, status: "PENDING" },
+    select: { id: true, topic: true, category: true, question: true, answer: true, occurrenceCount: true, customerCount: true, lastSeenAt: true, conflict: true, variants: true, curationVerdict: true, curationNote: true, requiresLiveLookup: true },
+  });
+  const evidence2 = await prisma.knowledgeCandidateEvidence.findMany({
+    where: { tenantId, candidateId: { in: after.map((c) => c.id) }, representative: true },
+    select: { candidateId: true, conversationId: true, questionText: true, answerText: true, occurredAt: true },
+  });
+  const second = await buildReview({
+    tenantId, importId, language, tenantName: tenant?.name ?? "", candidates: after, evidence: evidence2,
+    humanSourced: await humanSourcedIds(tenantId, evidence2), docs, fixedGroups,
+  });
+  const detail = { ...second, contradictions: first.contradictions, foreignBusinessDocs: first.foreignBusinessDocs, consolidation: { before: candidates.length, canonical: canonicalCount, replaced, switched, unresolved }, choices };
   await recordEvent(importId, "KNOWLEDGE_TOPICS", "SUCCESS", null, detail as any, Date.now() - startedAt);
   return { ok: true, detail: { topics: detail.topicCount, contradictions: detail.contradictions, foreign: detail.foreignBusinessDocs.length } };
 }
