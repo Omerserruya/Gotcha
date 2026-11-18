@@ -277,7 +277,7 @@ describe("one v2 turn, live", () => {
     const r = await runReplyEngineTurn(opts, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.escalation).toBeNull();
-    expect(r.reply).toBe("הנה מה שיש לנו שמתאים.");
+    expect(r.reply).toMatch(/^הנה מה שיש לנו שמתאים: .+\.$/);
     expect(h.staged).toEqual([{ products: [{ productId: "101", variantId: undefined }] }]);
   });
 
@@ -720,7 +720,7 @@ describe("prod replay 4 (2026-11-16), through a whole turn", () => {
     expect(r.reply ?? "").not.toMatch(/לא מוכרים/);
     // Nothing else was in the reply: the products the search returned, not a canned line.
     expect(r.trace.gate3.rewrite).toBe("fallback");
-    expect(r.reply).toBe("הנה מה שיש לנו שמתאים.");
+    expect(r.reply).toMatch(/^הנה מה שיש לנו שמתאים: .+\.$/);
   });
 });
 
@@ -1526,6 +1526,49 @@ describe("7af7c6d7 rating: engine passes", () => {
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "שיהיה תודה" }, "autonomous");
       expect(r.reply).toBe("בשמחה!");
     });
+  });
+});
+
+describe("d7782dd2 rating: engine passes", () => {
+  const held = "checking with the team: חויבתי פעמיים ואין הזמנה";
+  const withHeld = async (facts: any, fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: held, at: new Date().toISOString() }], turnCount: 10 });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  it("★ the thanks once per hold", async () => {
+    await withHeld({ _thanksTurn: "5" }, async () => {
+      h.responses.push({ toolCalls: [respond("d1", { reply: "בשמחה!" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "שיהיה תודה" }, "autonomous");
+      expect(r.reply ?? null).toBeNull();
+    });
+  });
+  it("★ a restatement after a silent turn gets the holding line; right after one, nothing", async () => {
+    await withHeld({ _holdLineTurn: "8", _spokeTurn: "8" }, async () => {
+      h.responses.push({ toolCalls: [respond("d2", { reply: "לא נוצרה הזמנה, נכון." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      const up = h.upserts[h.upserts.length - 1];
+      expect((up?.create ?? up?.update)?.facts?._spokeTurn).toBe("10");
+    });
+    await withHeld({ _holdLineTurn: "9", _spokeTurn: "9" }, async () => {
+      h.responses.push({ toolCalls: [respond("d3", { reply: "לא נוצרה הזמנה, נכון." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
+      expect(r.reply ?? null).toBeNull();
+    });
+  });
+  it("★ a count is set to its list", async () => {
+    h.responses.push({ toolCalls: [respond("cn1", { reply: "יש 3 גוונים: Sand, Medium ו-Hony, Medium Dark." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אילו גוונים יש?" }, "autonomous");
+    expect(r.reply).toMatch(/4 גוונים/);
+  });
+  it("★ the bare header with cards names what they show", async () => {
+    h.responses.push(
+      { toolCalls: [tc("bh1", "woocommerce.list_products", { query: "תיק" })] },
+      { toolCalls: [respond("bh2", { reply: "הנה מה שיש לנו שמתאים.", cards: ["PRODUCT_1"] })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(r.reply).toBe("הנה מה שיש לנו שמתאים: Canvas Tote.");
   });
 });
 

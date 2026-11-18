@@ -1111,6 +1111,15 @@ async function catalogNamed(
  * A Hebrew product ask, deterministic (see list_products). Logs which route
  * found it: [woo-search] hit=category:<id> | title | variant:<word> | none.
  */
+/**
+ * The customer's Hebrew words the model's query dropped (rating d7782dd2, Tehila: "בובון לקשירה נמוכה" searched
+ * as "מטפחת לקשירה נמוכה", and her bobbons were never searched). Their own route then runs too.
+ */
+export function droppedCustomerWords(own: string, modelQuery: string): string[] {
+  const theirs = new Set(searchWords(modelQuery).map((w) => hebrewStem(w)));
+  return searchWords(own).filter((w) => /[א-ת]/.test(w) && w.length >= 3 && !HEBREW_STOP.has(hebrewStem(w)) && !theirs.has(hebrewStem(w)));
+}
+
 async function hebrewProductSearch(
   auth: string, base: string, params: URLSearchParams, query: string, per: number, visible: (l: any) => any,
 ): Promise<any[]> {
@@ -1184,8 +1193,12 @@ async function hebrewProductSearch(
     const catIds = new Set(inCat.map((p: any) => String(p?.id)));
     // A product the words name AND in the category first ("מטפחת אנה"), then the category, then other title hits.
     const both = named.filter((p: any) => catIds.has(String(p?.id)));
+    // A title that holds a word of the customer's own the category does not account for wins over the
+    // category's other products (prod rating 2026-11-18, Tehila: "בובון לקשירה נמוכה" routed to scarves by
+    // "קשירה", and "בובון שטוח" sat after ten scarves).
+    const titled = named.filter((p: any) => !catIds.has(String(p?.id)) && rest.some((w) => nameHolds(p, w)));
     const seen = new Set<string>();
-    const out = [...both, ...inStockFirst(inCat), ...named].filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
+    const out = [...both, ...inStockFirst(titled), ...inStockFirst(inCat), ...named].filter((p: any) => !seen.has(String(p?.id)) && seen.add(String(p?.id)));
     log(`category:${cat!.id}`, out.length);
     return out.slice(0, per);
   }
@@ -1561,7 +1574,7 @@ const WooCommerceAdapter: ProviderAdapter = {
           }
         }
         const own = typeof args.customer_query === "string" ? args.customer_query.trim() : "";
-        if (own && /[א-ת]/.test(own) && (!/[א-ת]/.test(String(args.query ?? "")) || (genericStoreQuery(args.query) && !genericStoreQuery(own))) && !args.include && !args.category) {
+        if (own && /[א-ת]/.test(own) && (!/[א-ת]/.test(String(args.query ?? "")) || (genericStoreQuery(args.query) && !genericStoreQuery(own)) || droppedCustomerWords(own, String(args.query ?? "")).length > 0) && !args.include && !args.category) {
           const rest = { ...args, customer_query: undefined };
           if (await storeCatalogIsHebrew(auth, base, lang).catch(() => false)) {
             const per = Math.min(100, Number(args.per_page ?? 10));

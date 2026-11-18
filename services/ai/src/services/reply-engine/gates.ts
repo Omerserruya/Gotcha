@@ -230,7 +230,8 @@ export function gaveUpSearch(reply: string, tools: ToolRunRecord[], incoming = "
   const search = (t: ToolRunRecord) => /list_products|search_products|get_product|variation/i.test(t.tool);
   if (!tools.some((t) => search(t) && (t.outcome === "timeout" || t.outcome === "error"))) return false;
   if (tools.some((t) => search(t) && (t.outcome === "ok" || t.outcome === "empty"))) return false;
-  if (GAVE_UP.test(reply ?? "") || RETURNS_WORK.test(reply ?? "") || (teamQuestion && PRODUCT_WANT.test(incoming ?? ""))) return true;
+  // A product want sent to the team, by a team question or by the reply's words (rating d7782dd2, Tehila).
+  if (GAVE_UP.test(reply ?? "") || RETURNS_WORK.test(reply ?? "") || ((teamQuestion || teamPassIn(reply)) && PRODUCT_WANT.test(incoming ?? ""))) return true;
   return knowledgeAnswersIt(reply, incoming, teamQuestion, knowledge);
 }
 /** Sent to the team while the business's own knowledge speaks of what they asked. */
@@ -1716,4 +1717,20 @@ export const paymentMethodFailure = (incoming: string) => { const t = String(inc
 /** The reply's sentences about the failed payment (its method, the failure, a guess at why), cut whole. */
 export function cutPaymentFailure(reply: string): string {
   return ((String(reply ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []).filter((x) => x.trim() && !PAY_METHOD.test(x) && !FAILED.test(x) && !aboutHeld(x)).map((x) => x.trim())).join(" ").trim();
+}
+
+
+/**
+ * A count that disagrees with the list after it (rating d7782dd2, NE'A: "3 גוונים: Sand, Medium ו-Hony,
+ * Medium Dark", four names). The number is set to the list's own count; a number word becomes the digit.
+ */
+const COUNT_WORDS: Record<string, number> = { "שני": 2, "שתי": 2, "שניים": 2, "שתיים": 2, "שלושה": 3, "שלוש": 3, "ארבעה": 4, "ארבע": 4, "חמישה": 5, "חמש": 5, "two": 2, "three": 3, "four": 4, "five": 5 };
+const COUNTED_LIST = /(^|[^\p{L}\p{N}])(\d|שני|שתי|שניים|שתיים|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|two|three|four|five)(\s+[\p{L}'"״-]{2,}(?:\s+[\p{L}'"״-]{2,})?\s*:\s*)([^.!?\n]+)/giu;
+export function fixListCount(text: string): string {
+  return String(text ?? "").replace(COUNTED_LIST, (m, lead, num, mid, list) => {
+    const items = String(list).split(/\s*,\s*|\s+(?:ו-?|and\s+|or\s+|או\s+)(?=\S)/iu).map((x) => x.trim()).filter((x) => x && !/^(?:ו|and|or|או)$/i.test(x));
+    const said = /^\d$/.test(num) ? Number(num) : COUNT_WORDS[String(num).toLowerCase()];
+    if (items.length < 2 || !said || said === items.length) return m;
+    return `${lead}${items.length}${mid}${list}`;
+  });
 }

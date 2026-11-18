@@ -2300,7 +2300,9 @@ describe("0bf4e95e rating fixes", () => {
     const { gaveUpSearch, autoLookups } = await import("../services/reply-engine/gates");
     const timeout = [{ callId: "1", tool: "woocommerce.list_products", args: { query: "משטח" }, decision: "timeout", content: "", ms: 8000, outcome: "timeout" }] as any;
     expect(gaveUpSearch("אבדוק מול הצוות איזה מתאים.", timeout, "איזה משטח מתאים לנינג'ה קריספי?", false, "טבלת מכשירים: נינג'ה קריספי - משטח 30x40")).toBe(true);
-    expect(gaveUpSearch("אבדוק מול הצוות איזה מתאים.", timeout, "איזה משטח מתאים לנינג'ה קריספי?", false, "")).toBe(false);
+    // Without the knowledge it is still a give-up (a product want sent to the team), but not the knowledge path.
+    const { knowledgeAnswersIt } = await import("../services/reply-engine/gates");
+    expect(knowledgeAnswersIt("אבדוק מול הצוות איזה מתאים.", "איזה משטח מתאים לנינג'ה קריספי?", false, "")).toBe(false);
     const auto = autoLookups([{ kind: "gave_up_search", fromKnowledge: true }] as any, "איזה משטח מתאים לנינג'ה קריספי?", ["woocommerce.list_products", "search_knowledge"], timeout);
     expect(auto.map((x) => x.function.name)).toEqual(["woocommerce.list_products", "search_knowledge"]);
     // A plain give-up keeps the store retry alone.
@@ -2397,5 +2399,35 @@ describe("7af7c6d7 rating fixes", () => {
   it("★ a link in an earlier card or button counts as said", async () => {
     const { contradictsEarlier } = await import("../services/reply-engine/gates");
     expect(contradictsEarlier("אין לי כרגע קישור לסרטון.", ["הנה", ' {"buttons":[{"url":"https://youtu.be/x"}]}'])).toHaveLength(1);
+  });
+});
+
+/** Rating on d7782dd2 (2026-11-18, LIVE). */
+describe("d7782dd2 rating fixes", () => {
+  it("★ a count that disagrees with its list takes the list's count", async () => {
+    const { fixListCount } = await import("../services/reply-engine/gates");
+    expect(fixListCount("יש 3 גוונים: Sand, Medium ו-Hony, Medium Dark.")).toBe("יש 4 גוונים: Sand, Medium ו-Hony, Medium Dark.");
+    expect(fixListCount("יש שלושה צבעים: שחור, לבן ואפור.")).toBe("יש שלושה צבעים: שחור, לבן ואפור.");
+    expect(fixListCount("יש שני צבעים: שחור, לבן ואפור.")).toBe("יש 3 צבעים: שחור, לבן ואפור.");
+    expect(fixListCount("המחיר 3 ש\"ח.")).toBe("המחיר 3 ש\"ח.");
+  });
+  it("★ a timeout on a product want, sent to the team by the reply's words, is a give-up", async () => {
+    const { gaveUpSearch } = await import("../services/reply-engine/gates");
+    const timeout = [{ callId: "1", tool: "woocommerce.list_products", args: {}, decision: "timeout", content: "", ms: 8000, outcome: "timeout" }] as any;
+    expect(gaveUpSearch("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", timeout, "יש לכם בובון לקשירה נמוכה?", false, "")).toBe(true);
+  });
+  it("★ a how-to ask brings the guide's link chunk", async () => {
+    const { defaultKnowledge } = await import("../services/reply-engine/tools");
+    const chunk = (content: string, i: number) => ({ content, score: 0.9, documentTitle: "guide", chunkIndex: i, documentId: "d1" });
+    const out = await defaultKnowledge("t1", "איך מורחים את המייקאפ? יש סרטון?", "a1", {
+      vector: (async () => [chunk("המייקאפ נמרח בתנועות עדינות.", 1)]) as any,
+      lexical: (async (_t: string, q: string) => q.includes("youtu") ? [chunk("סרטון הדרכה: https://youtu.be/abc", 7)] : []) as any,
+    });
+    expect(out).toMatch(/youtu\.be\/abc/);
+    const plain = await defaultKnowledge("t1", "מה המחיר?", "a1", {
+      vector: (async () => [chunk("המחיר באתר.", 1)]) as any,
+      lexical: (async (_t: string, q: string) => q.includes("youtu") ? [chunk("סרטון הדרכה: https://youtu.be/abc", 7)] : []) as any,
+    });
+    expect(plain).not.toMatch(/youtu/);
   });
 });

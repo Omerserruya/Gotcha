@@ -131,12 +131,21 @@ export function mergeEnvelope(turn: TurnTools, env: ProductSearchEnvelope, local
   return offset ? summary.replace(/PRODUCT_(\d+)/g, (_, n) => `PRODUCT_${Number(n) + offset}`) : summary;
 }
 
-async function defaultKnowledge(tenantId: string, query: string, aiAgentId: string): Promise<string> {
-  const [vector, lexical] = await Promise.all([
-    retrieveRelevantChunks(tenantId, query, 5, aiAgentId),
-    lexicalKnowledge(tenantId, query, 5, aiAgentId).catch(() => []),
+/** A how-to or video ask: the business's linked guides are part of the answer (prod rating 2026-11-18, NE'A). */
+const HOWTO_ASK = /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|הדרכות|מדריך|קישור|לינק|איך)(?![\u0590-\u05FF])|\b(?:video|tutorial|guide|how to|how do|link)\b/iu;
+export async function defaultKnowledge(tenantId: string, query: string, aiAgentId: string, deps: { vector?: typeof retrieveRelevantChunks; lexical?: typeof lexicalKnowledge } = {}): Promise<string> {
+  const vec = deps.vector ?? retrieveRelevantChunks;
+  const lex = deps.lexical ?? lexicalKnowledge;
+  const howto = HOWTO_ASK.test(query);
+  const [vector, lexical, linked] = await Promise.all([
+    vec(tenantId, query, 5, aiAgentId),
+    lex(tenantId, query, 5, aiAgentId).catch(() => []),
+    // The chunks that carry a link, for the same words: a guide's YouTube link sits in its own chunk.
+    howto ? lex(tenantId, `${query} youtube youtu http`, 8, aiAgentId).then((l) => l.filter((c) => /https?:\/\//i.test(c.content))).catch(() => []) : Promise.resolve([]),
   ]);
-  const chunks = mergeKnowledge(vector, lexical, knowledgeLimit(query));
+  const merged = mergeKnowledge(vector, lexical, knowledgeLimit(query));
+  const seen = new Set(merged.map((c) => `${c.documentId ?? c.documentTitle}#${c.chunkIndex}`));
+  const chunks = [...merged, ...linked.filter((c) => !seen.has(`${c.documentId ?? c.documentTitle}#${c.chunkIndex}`)).slice(0, 2)];
   return buildKnowledgeContext(chunks, { dropWhenAllWeak: true, conflicts: "team" }) || "";
 }
 

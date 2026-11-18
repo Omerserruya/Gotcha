@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -475,6 +475,8 @@ export function assembleOnce(prose: string, list: string | null, titles: string[
 // The turns the holding line and the thanks went out on (holding mode's "not every turn").
 const HOLD_LINE_FACT = "_holdLineTurn";
 const THANKS_FACT = "_thanksTurn";
+// The turn the engine last sent something (holding mode: never silent twice running).
+const SPOKE_FACT = "_spokeTurn";
 // The part every holding line shares, whatever its noun (stillCheckingLine).
 const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "still being checked by the team" } as const;
 const HOLLOW_HEADER = /^(?:הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
@@ -1374,7 +1376,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (output?.reply) {
     const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
     // No price sentence left without its product (prod rating 2026-11-17).
-    let text = dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles);
+    let text = fixListCount(dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles));
     // A first name only from the profile or the customer's own signature (prod rating 2026-11-17: "היי אלה").
     text = dropUnaskedName(text, [firstName]);
     // Holding mode (prod rating 2026-11-17): a sensitive team item is open; nothing about its state, cause or
@@ -1406,12 +1408,23 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         if (customerAck(incomingNow) && !details) {
           // A thanks or an okay: a short "you're welcome" once, then nothing.
           const sinceThanks = turnNo - Number(state.facts?.[THANKS_FACT] ?? -99);
-          text = sinceThanks < 2 || lastTwo[0]?.trim() === thanks ? "" : thanks;
+          // Once per hold (rating d7782dd2: "בשמחה!" twice): never again once it went out.
+          text = state.facts?.[THANKS_FACT] || lastTwo[0]?.trim() === thanks ? "" : thanks;
           if (text) holdFacts[THANKS_FACT] = String(turnNo);
         } else {
+          // Silent last turn too (the bot's last word is 2+ turns back): say where it stands, not nothing
+          // (rating d7782dd2: "לא יצאה הזמנה" restated, and silence in both runs).
+          // From the state when v2 has spoken in this conversation; else from the history (the bot's message
+          // right before this one means it spoke last turn).
+          const lastOutIdx = history.map((m: any) => m?.direction).lastIndexOf("OUTBOUND");
+          const inboundSince = lastOutIdx < 0 ? 99 : history.slice(lastOutIdx + 1).filter((m: any) => m?.direction === "INBOUND").length;
+          // The holding line and the thanks are words the bot said too.
+          const spokeAt = Math.max(...[SPOKE_FACT, HOLD_LINE_FACT, THANKS_FACT].map((k) => (state.facts?.[k] != null ? Number(state.facts[k]) : -Infinity)));
+          const sinceSpoke = Number.isFinite(spokeAt) ? turnNo - spokeAt : inboundSince <= 1 ? 1 : 2;
+          const lineNow = !recentlyHeld || sinceSpoke >= 2 ? holdLine : "";
           text = onSubject
-            ? holdReply(text, recentlyHeld ? "" : holdLine, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
-            : (holdReply(text, "", { details: false, locale: holdLoc }) || (recentlyHeld ? "" : holdLine));
+            ? holdReply(text, lineNow, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
+            : (holdReply(text, "", { details: false, locale: holdLoc }) || lineNow);
           if (text.includes(HOLD_LINE_CORE[holdLoc])) holdFacts[HOLD_LINE_FACT] = String(turnNo);
         }
         (trace as any).holding = { details };
@@ -1562,8 +1575,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
   // alone on "טוש אני רוצה"): a question that moves the choice on instead. Cards on a cards channel are
   // what it introduces, so there it stays.
-  const cardsGoOut = cardChannel && (final.cards ?? []).some((k) => /PRODUCT_\d+/i.test(k));
-  if (HOLLOW_HEADER.test(reply.trim()) && !listed && !cardsGoOut) { reply = productQuestionLine(locale); (trace as any).hollowHeader = true; }
+  if (HOLLOW_HEADER.test(reply.trim()) && !listed) {
+    // Never the whole reply (rating d7782dd2: still alone twice). With cards, the header names what they
+    // show (store titles only); with nothing to show, the question that moves the choice on.
+    const shownCards = cardChannel ? [...new Set((final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length))]
+      .map((n) => candidates[n - 1]).filter((c: any) => c?.title && c.inventoryState !== "out_of_stock").slice(0, 3) : [];
+    reply = shownCards.length
+      ? `${locale === "en" ? "Here is what we have that fits" : "הנה מה שיש לנו שמתאים"}: ${shownCards.map((c: any) => c.title).join(", ")}.`
+      : productQuestionLine(locale);
+    (trace as any).hollowHeader = shownCards.length ? "named" : "question";
+  }
   if (listed) (trace as any).listedProducts = listed.keys;
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
@@ -1623,7 +1644,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: { ...holdFacts, ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
+    engineFacts: { ...holdFacts, ...(reply ? { [SPOKE_FACT]: String(Number(state.turnCount ?? 0)) } : {}), ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
