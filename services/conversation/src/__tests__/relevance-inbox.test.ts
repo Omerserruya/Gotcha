@@ -11,6 +11,8 @@ function ok(row: any, w: any): boolean {
     if (k === "NOT") return !ok(row, v);
     if (v && typeof v === "object" && !(v instanceof Date)) {
       // SQL: a NULL column is neither in nor not in a list.
+      // A relation filter: no related row matches nothing.
+      if ("is" in v) return row[k] != null && ok(row[k], v.is);
       if ("notIn" in v) return row[k] != null && !v.notIn.includes(row[k]);
       if ("in" in v) return v.in.includes(row[k]);
       if ("not" in v) return v.not === null ? row[k] != null : row[k] !== v.not;
@@ -98,6 +100,17 @@ describe("relevance in the inbox", () => {
     expect(await setRelevanceOverride("T", "nope", "business", { userId: "u9", role: "ADMIN" })).toBeNull();
     // Another tenant's conversation is not found.
     expect(await setRelevanceOverride("OTHER", "business", "personal", { userId: "u9", role: "ADMIN" })).toBeNull();
+  });
+  it("★ a channel whose filter is off: its labels are ignored; a person's override still counts", async () => {
+    const off = { relevanceFilterEnabled: false };
+    S.rows = [
+      c("off-personal", { relevanceCategory: "personal", channelAccountId: "a1", channelAccount: off }),
+      c("off-override", { relevanceCategory: "personal", channelAccountId: "a1", channelAccount: off, relevanceOverriddenBy: "u1" }),
+      c("on-personal", { relevanceCategory: "personal", channelAccountId: "a2", channelAccount: { relevanceFilterEnabled: true } }),
+      c("no-account", { relevanceCategory: "notice", channelAccountId: null, channelAccount: null }),
+    ];
+    expect(ids(await listWhere("T", { view: "irrelevant", ...admin } as any))).toEqual(["no-account", "off-override", "on-personal"]);
+    expect(ids(await listWhere("T", { includeAutomated: true, hideIrrelevant: true, ...admin } as any))).toEqual(["off-personal"]);
   });
   it("the row's relevance object; an unknown value reads as unclear", () => {
     expect(presentRelevance({ relevanceCategory: null })).toBeNull();

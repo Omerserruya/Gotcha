@@ -10,12 +10,27 @@ export type ConversationRelevanceCategory = (typeof RELEVANCE_CATEGORY_VALUES)[n
  * own chats) keeps the AI out but stays in the normal views with its own tag (2026-11-17).
  */
 export const IRRELEVANT_CATEGORIES: readonly ConversationRelevanceCategory[] = ["personal", "notice", "marketing", "auto_reply"];
+/**
+ * The channels the relevance filter applies to (2026-11-18): message channels where personal chats, notices
+ * and marketing arrive. On a site or store chat and on voice the visitor is always talking to the business:
+ * nothing is classified and the per-account flag means nothing.
+ */
+export const RELEVANCE_CHANNELS: ReadonlySet<string> = new Set(["WHATSAPP", "GMAIL", "OUTLOOK", "EMAIL", "INSTAGRAM", "MESSENGER"]);
+export const relevanceChannel = (channel: unknown) => RELEVANCE_CHANNELS.has(String(channel ?? "").toUpperCase());
+
 /** What a person may set by hand. */
 export const RELEVANCE_OVERRIDES: readonly ConversationRelevanceCategory[] = ["business", "personal"];
 
-/** Conversations labelled not relevant. */
+/**
+ * The channel account's relevance filter is on (its default), or the conversation has no account. A business
+ * can turn the filter off per channel (2026-11-18): that channel's labels are kept but ignored, unless a person
+ * set one by hand (an override wins either way).
+ */
+const FILTER_ON = { OR: [{ channelAccountId: null }, { channelAccount: { is: { relevanceFilterEnabled: true } } }] };
+
+/** Conversations labelled not relevant (on a channel whose filter is on, or by a person's override). */
 export function irrelevantWhere(): any {
-  return { relevanceCategory: { in: [...IRRELEVANT_CATEGORIES] } };
+  return { AND: [{ relevanceCategory: { in: [...IRRELEVANT_CATEGORIES] } }, { OR: [{ relevanceOverriddenBy: { not: null } }, FILTER_ON] }] };
 }
 
 /**
@@ -23,7 +38,14 @@ export function irrelevantWhere(): any {
  * NOT IN over a NULL column is NULL in SQL and would drop every conversation never classified.
  */
 export function notIrrelevantWhere(): any {
-  return { OR: [{ relevanceCategory: null }, { relevanceCategory: { notIn: [...IRRELEVANT_CATEGORIES] } }] };
+  return {
+    OR: [
+      { relevanceCategory: null },
+      { relevanceCategory: { notIn: [...IRRELEVANT_CATEGORIES] } },
+      // A label on a channel whose filter is off counts as no label, unless a person set it.
+      { AND: [{ relevanceOverriddenBy: null }, { channelAccount: { is: { relevanceFilterEnabled: false } } }] },
+    ],
+  };
 }
 
 export interface ConversationRelevanceView {
