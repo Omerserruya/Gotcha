@@ -1287,6 +1287,9 @@ services:
       # gateway): server calls then carry the browser's address, so a looping
       # tab fills only its own rate-limit bucket. Anything else means off.
       API_FORWARD_CLIENT: ${V2_API_FORWARD_CLIENT:-off}
+      # The inbox's "personal and not relevant" view (frontend-v2 INBOX_RELEVANCE).
+      # Only `on` turns it on; it needs the conversation routes' relevance contract.
+      INBOX_RELEVANCE: ${V2_INBOX_RELEVANCE:-off}
       # The browser talks to Authentik directly, so this is the PUBLIC issuer,
       # not internal service DNS. Defaulted from the platform's own value so
       # there is one place to change it.

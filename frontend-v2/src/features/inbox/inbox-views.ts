@@ -39,6 +39,7 @@ export const INBOX_VIEW_IDS = [
   'resolved',
   'all',
   'open',
+  'irrelevant',
 ] as const;
 export type InboxView = (typeof INBOX_VIEW_IDS)[number];
 
@@ -61,11 +62,46 @@ export type InboxView = (typeof INBOX_VIEW_IDS)[number];
  */
 export const SOLO_MERGED_VIEWS: readonly InboxView[] = ['queue', 'mine', 'active'];
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ PERSONAL AND NOT RELEVANT (Omer, 2026-11-17, `INBOX_RELEVANCE`)
+ * ════════════════════════════════════════════════════════════════════════════
+ * The platform labels each conversation (`relevance.ts`). What it, or a
+ * person, says is personal, a notice, marketing or an automatic reply has its own view,
+ * `irrelevant` (the route's `view=irrelevant`), after "Handled by GOTCHA".
+ * The main views ask the route to leave it out (`hideIrrelevant=true`), so
+ * the lists and their counts no longer hold it. "Resolved" and "All" keep
+ * it: they are records, not work.
+ *
+ * ⚠⚠ ALL OF IT ONLY WITH THE FLAG ON. Off, no view, no count (an unknown
+ *    view 400s the whole count read), no parameter: the inbox is today's.
+ */
+export const HIDES_IRRELEVANT: readonly InboxView[] = ['queue', 'mine', 'active', 'open', 'gotcha'];
+
+/**
+ * A view's query with the relevance rule applied: the route's
+ * `hideIrrelevant` on the main views, with the flag on. Wraps `viewQuery` or
+ * `phoneViewQuery`, so the website and the phone mean one thing by a view.
+ */
+export function withRelevance(
+  queryOf: (view: InboxView, meId: string | null) => Record<string, string> | null,
+  relevance: boolean,
+): (view: InboxView, meId: string | null) => Record<string, string> | null {
+  if (!relevance) return queryOf;
+  return (view, meId) => {
+    const query = queryOf(view, meId);
+    return query !== null && HIDES_IRRELEVANT.includes(view)
+      ? { ...query, hideIrrelevant: 'true' }
+      : query;
+  };
+}
+
 /** The views the inbox offers, in the rail's order. The phone adds "All" first. */
-export function railViews(soleHuman: boolean): readonly InboxView[] {
-  return soleHuman
-    ? ['open', 'gotcha', 'resolved']
-    : ['queue', 'mine', 'active', 'gotcha', 'resolved'];
+export function railViews(soleHuman: boolean, relevance = false): readonly InboxView[] {
+  const tail: readonly InboxView[] = relevance
+    ? ['gotcha', 'irrelevant', 'resolved']
+    : ['gotcha', 'resolved'];
+  return soleHuman ? ['open', ...tail] : ['queue', 'mine', 'active', ...tail];
 }
 
 /**
@@ -84,10 +120,8 @@ export function soloView(view: InboxView, soleHuman: boolean): InboxView | null 
  *   asks for it. Backend ships the flag and the view in one change, so a
  *   workspace that says `soleHuman` is served by a route that knows `open`.
  */
-export function countViews(soleHuman: boolean): readonly InboxView[] {
-  return soleHuman
-    ? ['open', 'gotcha', 'resolved', 'all']
-    : INBOX_VIEW_IDS.filter((v) => v !== 'open');
+export function countViews(soleHuman: boolean, relevance = false): readonly InboxView[] {
+  return [...railViews(soleHuman, relevance), 'all'];
 }
 
 /**
@@ -129,10 +163,14 @@ export function shownView(
   return view === 'mine' && !explicit && !meKnown ? 'active' : view;
 }
 
-/** An unknown or absent `?view=` is the default, never an error page. */
-export function parseInboxView(raw: string | undefined): InboxView {
+/**
+ * An unknown or absent `?view=` is the default, never an error page - and so
+ * is `irrelevant` with the relevance view off: the route would not know it.
+ */
+export function parseInboxView(raw: string | undefined, relevance = false): InboxView {
   const retired = retiredView(raw);
   if (retired !== null) return retired;
+  if (raw === 'irrelevant' && !relevance) return DEFAULT_INBOX_VIEW;
   return (INBOX_VIEW_IDS as readonly string[]).includes(raw ?? '')
     ? (raw as InboxView)
     : DEFAULT_INBOX_VIEW;
@@ -225,6 +263,12 @@ export function viewQuery(view: InboxView, meId: string | null): Record<string, 
        * `automatedOnly`, which already means both and nothing a person holds.
        */
       return { automatedOnly: 'true' };
+    case 'irrelevant':
+      /*
+       * Personal, a notice or marketing, by the platform or by a person
+       * (Backend, 2026-11-17): any status, automated ones included.
+       */
+      return { view: 'irrelevant' };
   }
 }
 
@@ -374,8 +418,8 @@ export function phoneCountView(view: InboxView): string {
  * the rail's own ids and `?view=`, so a view means here what it means on the
  * website - for one person, "Open" in place of three (`railViews`).
  */
-export function phoneViews(soleHuman: boolean): readonly InboxView[] {
-  return ['all', ...railViews(soleHuman)];
+export function phoneViews(soleHuman: boolean, relevance = false): readonly InboxView[] {
+  return ['all', ...railViews(soleHuman, relevance)];
 }
 
 /**
@@ -383,8 +427,8 @@ export function phoneViews(soleHuman: boolean): readonly InboxView[] {
  * the phone leaves out what was resolved (`phoneViewQuery`), so its count is
  * the route's `mine_open` - the number of rows the chip opens.
  */
-export function phoneCountViews(soleHuman: boolean): readonly string[] {
-  return phoneViews(soleHuman).map(phoneCountView);
+export function phoneCountViews(soleHuman: boolean, relevance = false): readonly string[] {
+  return phoneViews(soleHuman, relevance).map(phoneCountView);
 }
 
 /**

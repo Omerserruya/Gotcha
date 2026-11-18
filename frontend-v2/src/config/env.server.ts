@@ -99,6 +99,14 @@ const serverEnvSchema = z.object({
    */
   API_FORWARD_CLIENT: z.enum(['on', 'off']).catch('off').default('off'),
 
+  /**
+   * ★ THE INBOX'S "PERSONAL AND NOT RELEVANT" VIEW (Omer, 2026-11-17, dev
+   * first): the view, its count, the type tag and the override, and
+   * `hideIrrelevant` on the main views. Only the exact value `on`; unset,
+   * empty or a typo is off, and the inbox is today's (`relevance.ts`).
+   */
+  INBOX_RELEVANCE: z.enum(['on', 'off']).catch('off').default('off'),
+
   // --- Authentik OIDC (Authorization Code + PKCE, driven by the BFF) ---
   OIDC_ISSUER: z.url(),
   OIDC_CLIENT_ID: z.string().min(1),

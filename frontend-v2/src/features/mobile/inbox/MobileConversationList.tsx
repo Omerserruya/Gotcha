@@ -8,6 +8,7 @@ import {
   UNREAD_BADGE_MAX,
   unreadMark,
 } from '@/api/contracts/inbox';
+import { relevanceTag } from '@/features/inbox/relevance';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { PersonName } from '@/features/customers/PersonName';
@@ -41,6 +42,7 @@ export async function MobileConversationList({
   colleagues,
   filtered,
   soleHuman = false,
+  relevance = false,
 }: {
   /** `null` is a failed read, not an empty inbox. */
   readonly rows: readonly ConversationRow[] | null;
@@ -51,6 +53,8 @@ export async function MobileConversationList({
   readonly filtered: boolean;
   /** One person in the workspace: an unheld handoff is "waiting for you", not "in queue". */
   readonly soleHuman?: boolean;
+  /** `INBOX_RELEVANCE`: a row the platform calls not relevant wears its type. */
+  readonly relevance?: boolean;
 }) {
   const t = await getTranslations('mobile');
   const inbox = await getTranslations('inbox');
@@ -82,6 +86,7 @@ export async function MobileConversationList({
         const owner = rowOwner(row, meId, colleagues, soleHuman);
         /* Which number, when the workspace has two or more (Omer, 2026-11-16). */
         const account = channelAccountName(row);
+        const kind = relevance ? relevanceTag(row) : null;
         return (
           <li key={row.id}>
             <Link
@@ -147,7 +152,7 @@ export async function MobileConversationList({
                     </span>
                   )}
                 </span>
-                {owner === null && account === null ? null : (
+                {owner === null && account === null && kind === null ? null : (
                   <span className={ui.tags}>
                     {owner === null ? null : (
                       <span className={ui.tag} data-tone={owner.tone}>
@@ -161,6 +166,11 @@ export async function MobileConversationList({
                     {account === null ? null : (
                       <span className={ui.tag} data-testid={`mobile-account-${row.id}`}>
                         {channel} · <bdi dir="auto">{account}</bdi>
+                      </span>
+                    )}
+                    {kind === null ? null : (
+                      <span className={ui.tag} data-testid={`mobile-relevance-${row.id}`}>
+                        {inbox(`relevance.tag.${kind}`)}
                       </span>
                     )}
                   </span>

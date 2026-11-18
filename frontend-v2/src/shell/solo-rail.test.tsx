@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { railViews, SOLO_MERGED_VIEWS } from '@/features/inbox/inbox-views';
 import navigation from '@/i18n/messages/en/navigation.json';
+import { InboxRelevanceProvider } from '@/tenant/inbox-relevance-context';
 import { SoleHumanProvider } from '@/tenant/sole-human-context';
 
 const search = vi.hoisted(() => ({ value: '' }));
@@ -109,5 +110,43 @@ describe("★ the shell's copy of the views is inbox-views' own (the shell may n
     expect(views(true)).toEqual(['/inbox?view=open', '/inbox?view=gotcha', '/inbox?view=resolved']);
     expect(views(false)).toContain('/inbox?view=queue');
     expect(views(false)).not.toContain('/inbox?view=open');
+  });
+});
+
+describe('★★ "Personal and not relevant" in the rail only with its flag (INBOX_RELEVANCE)', () => {
+  const drawn = (on: boolean, solo = false) =>
+    renderToString(
+      <NextIntlClientProvider locale="en" messages={{ navigation }}>
+        <SoleHumanProvider soleHuman={solo}>
+          <InboxRelevanceProvider on={on}>
+            <PrimaryNavigation />
+          </InboxRelevanceProvider>
+        </SoleHumanProvider>
+      </NextIntlClientProvider>,
+    );
+
+  it('★★ off (and outside the provider): not drawn, not offered by ⌘K', () => {
+    expect(drawn(false)).not.toContain(navigation.inbox.irrelevant);
+    expect(renderToString(tree(false))).not.toContain(navigation.inbox.irrelevant);
+    expect(destinations(() => true, false).map((d) => d.href)).not.toContain(
+      '/inbox?view=irrelevant',
+    );
+  });
+
+  it('★★ on: drawn and offered, for a team and for one person', () => {
+    for (const solo of [false, true]) {
+      expect(drawn(true, solo)).toContain('/inbox?view=irrelevant');
+      expect(destinations(() => true, solo, true).map((d) => d.href)).toContain(
+        '/inbox?view=irrelevant',
+      );
+    }
+  });
+
+  it("★★ the shell's children are `railViews` with the flag, both ways", () => {
+    for (const solo of [false, true]) {
+      for (const on of [false, true]) {
+        expect(childrenFor(inbox, solo, on).map((c) => c.view)).toEqual(railViews(solo, on));
+      }
+    }
   });
 });

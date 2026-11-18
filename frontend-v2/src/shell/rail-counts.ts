@@ -77,7 +77,17 @@ export const RAIL_COUNTS_DEBOUNCE_MS = 1_000;
  * 0. An answer that arrives after a newer request was sent is dropped, so a
  * slow early read cannot overwrite a fresh one.
  */
-export function RailUnreadCounts({ views }: { readonly views: readonly string[] }) {
+export function RailUnreadCounts({
+  views,
+  hideIrrelevant = false,
+}: {
+  readonly views: readonly string[];
+  /**
+   * The inbox's relevance view is on: every count leaves out what is
+   * personal, a notice or marketing, as the lists do (`hideIrrelevant`).
+   */
+  readonly hideIrrelevant?: boolean;
+}) {
   const query = views.join(',');
   const sequence = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,7 +97,7 @@ export function RailUnreadCounts({ views }: { readonly views: readonly string[] 
     try {
       const body = await browserApi.get({
         endpoint: inboxEndpoints.unreadCounts(),
-        query: { views: query },
+        query: hideIrrelevant ? { views: query, hideIrrelevant: 'true' } : { views: query },
         payload: unreadCountsSchema,
       });
       if (mine !== sequence.current) return;
@@ -99,7 +109,7 @@ export function RailUnreadCounts({ views }: { readonly views: readonly string[] 
       else logger.warn('inbox.unread_counts_failed', { cause });
       set(null);
     }
-  }, [query]);
+  }, [query, hideIrrelevant]);
 
   useEffect(() => {
     void read();

@@ -697,4 +697,46 @@
     font-size: var(--font-size-body-sm);
     color: var(--text-muted);
   }
+
+  /* ── What the conversation is, and the one override (`RelevanceControl`) ── */
+  .relevanceStrip {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+    padding-block: var(--space-8);
+    padding-inline: var(--space-16);
+    background-color: var(--mobile-ground);
+  }
+
+  .relevanceButton {
+    margin-inline-start: auto;
+    min-block-size: var(--size-control);
+    padding-inline: var(--space-12);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-body-sm);
+    cursor: pointer;
+  }
+
+  .relevanceButton:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .relevanceButton:focus-visible {
+    outline: var(--border-width-thick) solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  .relevanceProblem {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: var(--font-size-body-sm);
+    color: var(--intent-urgent-text);
+  }
 }

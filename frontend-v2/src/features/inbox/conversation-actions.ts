@@ -356,3 +356,36 @@ async function sendRead(conversationId: string): Promise<void> {
     raw: true,
   });
 }
+
+/**
+ * ★ A PERSON'S WORD ON WHAT A CONVERSATION IS (`relevance.ts`): "This is a
+ * business enquiry" (`business`) or "Mark as not relevant" (`personal`).
+ * Nothing reaches the customer; the conversation only changes views.
+ *
+ * ⚠ The category is checked here: a server action's argument is whatever
+ *   the browser sent, and the route takes only these two.
+ */
+export async function setConversationRelevance(
+  conversationId: string,
+  category: string,
+): Promise<VerbResult> {
+  if (category !== 'business' && category !== 'personal') return { ok: false, reason: 'failed' };
+  try {
+    await serverApi().put({
+      endpoint: inboxEndpoints.relevance(conversationId),
+      body: { category },
+      payload: unchecked,
+      raw: true,
+    });
+    refresh();
+    return { ok: true };
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    if (isApiError(cause)) {
+      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+      if (cause.status === 403) return { ok: false, reason: 'not_allowed' };
+    }
+    logger.warn('inbox.relevance_failed', { cause });
+    return { ok: false, reason: 'failed' };
+  }
+}

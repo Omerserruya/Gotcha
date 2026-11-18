@@ -10,6 +10,8 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'he',
 }));
 vi.mock('server-only', () => ({}));
+const flag = vi.hoisted(() => ({ relevance: false }));
+vi.mock('@/api/client/inbox-relevance', () => ({ inboxRelevanceOn: () => flag.relevance }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a', useRouter: () => ({}), usePathname: () => '/' }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -18,6 +20,7 @@ vi.mock('next/navigation', () => ({
 
 import { Composer } from '@/features/inbox/Composer';
 import { CustomerWho } from '@/features/inbox/CustomerWho';
+import { RelevanceControl } from '@/features/inbox/RelevanceControl';
 
 const elements = (node: ReactNode, out: ReactElement[] = []): ReactElement[] => {
   if (Array.isArray(node)) node.forEach((n) => elements(n, out));
@@ -77,8 +80,15 @@ describe('★★ which number, on the phone thread (Omer, 2026-11-16)', () => {
   };
 
   it('★★ two numbers: the bar names the account, and the composer sends from it', async () => {
-    const all = await tree({ id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true });
-    const tag = all.find((e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account');
+    const all = await tree({
+      id: 'ch1',
+      channel: 'WHATSAPP',
+      displayName: 'Gotcha',
+      multipleOfChannel: true,
+    });
+    const tag = all.find(
+      (e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account',
+    );
     expect(tag?.type).toBe('bdi');
     expect((tag?.props as { children: unknown }).children).toBe('Gotcha');
     const composer = all.find((e) => e.type === Composer);
@@ -86,9 +96,20 @@ describe('★★ which number, on the phone thread (Omer, 2026-11-16)', () => {
   });
 
   it('★ one number: no account in the bar, none in the composer', async () => {
-    const all = await tree({ id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false });
-    expect(all.some((e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account')).toBe(false);
-    expect((all.find((e) => e.type === Composer)?.props as { accountName?: string | null }).accountName).toBeNull();
+    const all = await tree({
+      id: 'ch9',
+      channel: 'WHATSAPP',
+      displayName: 'Only',
+      multipleOfChannel: false,
+    });
+    expect(
+      all.some(
+        (e) => (e.props as { 'data-testid'?: string })['data-testid'] === 'mobile-thread-account',
+      ),
+    ).toBe(false);
+    expect(
+      (all.find((e) => e.type === Composer)?.props as { accountName?: string | null }).accountName,
+    ).toBeNull();
   });
 });
 
@@ -109,5 +130,44 @@ describe('★★ no name: the bar names the number (prod 2026-11-17)', () => {
     render(who[0]!);
     expect(screen.getByTestId('customer-handle')).toHaveTextContent('052-123-4567');
     expect(screen.queryByText('queue.unnamed')).toBeNull();
+  });
+});
+
+describe('★★ personal and not relevant, on the phone thread (INBOX_RELEVANCE)', () => {
+  const thread = async (relevance: unknown) => {
+    loadInbox.mockResolvedValue({
+      open: { ...open, relevance },
+      missing: null,
+      meId: 'me',
+      colleagues: [],
+      greeting: null,
+      detail: Promise.resolve({ messages: [], timeline: null, orders: null }),
+    });
+    const { default: Page } = await import('./page');
+    const tree = await Page({ params: Promise.resolve({ id: 'c1' }) });
+    return elements(tree).find((e) => e.type === RelevanceControl)?.props as
+      { tag: string | null; override: string; classes?: Record<string, string> } | undefined;
+  };
+
+  it('★★ off: not drawn', async () => {
+    flag.relevance = false;
+    expect(await thread({ category: 'personal' })).toBeUndefined();
+  });
+
+  it('★★ on: the tag and "business" for a personal one, in the phone’s look', async () => {
+    flag.relevance = true;
+    const control = await thread({ category: 'personal' });
+    expect(control).toMatchObject({ tag: 'personal', override: 'business' });
+    expect(Object.keys(control?.classes ?? {}).sort()).toEqual([
+      'button',
+      'group',
+      'problem',
+      'tag',
+    ]);
+  });
+
+  it('★ on: a normal one offers "not relevant", with no tag', async () => {
+    flag.relevance = true;
+    expect(await thread(null)).toMatchObject({ tag: null, override: 'personal' });
   });
 });

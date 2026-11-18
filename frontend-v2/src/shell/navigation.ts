@@ -44,6 +44,8 @@ export interface NavigationChild {
   /** `false`: the rail never draws this view's size, whatever the page sends. */
   readonly showsSize?: false;
   readonly permission?: PermissionString;
+  /** Drawn only with the inbox's relevance view on (`INBOX_RELEVANCE`). */
+  readonly relevance?: true;
 }
 
 export interface NavigationItem {
@@ -75,9 +77,17 @@ export interface NavigationItem {
   };
 }
 
-/** The children the rail draws for `item`: a one-person workspace's own, when it has them. */
-export function childrenFor(item: NavigationItem, soleHuman: boolean): readonly NavigationChild[] {
-  return (soleHuman ? item.solo?.children : undefined) ?? item.children ?? [];
+/**
+ * The children the rail draws for `item`: a one-person workspace's own, when
+ * it has them - and "Personal and not relevant" only with its flag on.
+ */
+export function childrenFor(
+  item: NavigationItem,
+  soleHuman: boolean,
+  relevance = false,
+): readonly NavigationChild[] {
+  const children = (soleHuman ? item.solo?.children : undefined) ?? item.children ?? [];
+  return relevance ? children : children.filter((child) => child.relevance !== true);
 }
 
 /** The view in force for `item`, given the address's `view` parameter (or null). */
@@ -129,6 +139,12 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
   { id: 'active', labelKey: 'inbox.active', view: 'active' },
   { id: 'gotcha', labelKey: 'inbox.gotcha', view: 'gotcha' },
   /*
+   * ★ PERSONAL AND NOT RELEVANT (Omer, 2026-11-17): what the platform's
+   *   classifier, or a person, said is personal, a notice or marketing. Out
+   *   of the views above (`hideIrrelevant`), so it has its own. Flagged.
+   */
+  { id: 'irrelevant', labelKey: 'inbox.irrelevant', view: 'irrelevant', relevance: true },
+  /*
    * No size (Omer, 2026-10-12): everything ever closed is a number that only
    * grows, and next to the views that need someone it reads as work waiting.
    */
@@ -143,7 +159,9 @@ const INBOX_VIEWS: readonly NavigationChild[] = [
  */
 const SOLO_INBOX_VIEWS: readonly NavigationChild[] = [
   { id: 'open', labelKey: 'inbox.open', view: 'open' },
-  ...INBOX_VIEWS.filter((child) => child.id === 'gotcha' || child.id === 'resolved'),
+  ...INBOX_VIEWS.filter(
+    (child) => child.id === 'gotcha' || child.id === 'irrelevant' || child.id === 'resolved',
+  ),
 ];
 
 /**

@@ -42,7 +42,12 @@ describe('★★ the inbox rail has one view for what GOTCHA handles, not two (O
       ['mine', 'inbox.mine'],
       ['active', 'inbox.active'],
       ['gotcha', 'inbox.gotcha'],
+      // Drawn only with INBOX_RELEVANCE on (`childrenFor`, solo-rail.test.tsx).
+      ['irrelevant', 'inbox.irrelevant'],
       ['resolved', 'inbox.resolved'],
+    ]);
+    expect(inbox.children!.filter((child) => child.relevance).map((c) => c.view)).toEqual([
+      'irrelevant',
     ]);
   });
 });

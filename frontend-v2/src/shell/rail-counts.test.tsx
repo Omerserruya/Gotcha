@@ -193,3 +193,19 @@ describe('⚠ no count is never a 0, and an old answer never wins', () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('★★ the relevance view on: every count leaves out what is not relevant', () => {
+  it('★★ asks with `hideIrrelevant=true`, and only when told to', async () => {
+    render(<RailUnreadCounts views={['queue', 'irrelevant']} hideIrrelevant />);
+    await settle();
+    expect(get.mock.calls[0]![0]).toMatchObject({
+      query: { views: 'queue,irrelevant', hideIrrelevant: 'true' },
+    });
+  });
+
+  it('★ off (the default): the request is today’s, with no parameter', async () => {
+    mount();
+    await settle();
+    expect(get.mock.calls[0]![0].query).toEqual({ views: 'queue,mine,gotcha' });
+  });
+});

@@ -35,6 +35,7 @@ import {
   type InboxView,
   type QueueChannelFilter,
 } from './inbox-views';
+import { relevanceTag } from './relevance';
 import { CustomerWho } from '@/features/inbox/CustomerWho';
 
 /**
@@ -79,6 +80,7 @@ export async function ConversationList({
   colleagues = [],
   greeting = null,
   view = DEFAULT_INBOX_VIEW,
+  relevance = false,
   channel = null,
   period = null,
   periodInvalid = false,
@@ -125,6 +127,8 @@ export async function ConversationList({
    *   the list under it is the same defect as a list that ignores the view.
    */
   readonly view?: InboxView;
+  /** `INBOX_RELEVANCE`: a row the platform calls not relevant wears its type. */
+  readonly relevance?: boolean;
   /** The channel filter in force; `null` is "All". */
   readonly channel?: QueueChannelFilter | null;
   /** The period the list is narrowed to (`?from=&to=`); kept by every link here. */
@@ -518,8 +522,28 @@ export async function ConversationList({
               {(() => {
                 const account = channelAccountName(conversation);
                 return account === null ? null : (
-                  <span className={styles.tagNeutral} data-testid={`tag-account-${conversation.id}`}>
+                  <span
+                    className={styles.tagNeutral}
+                    data-testid={`tag-account-${conversation.id}`}
+                  >
                     {badgeLabel} · <bdi dir="auto">{account}</bdi>
+                  </span>
+                );
+              })()}
+
+              {/*
+                ★ NOT RELEVANT, AND WHICH KIND (`INBOX_RELEVANCE`): personal,
+                a notice or marketing. A normal conversation - a reply to our
+                own message most of all - wears nothing.
+              */}
+              {(() => {
+                const kind = relevance ? relevanceTag(conversation) : null;
+                return kind === null ? null : (
+                  <span
+                    className={styles.tagNeutral}
+                    data-testid={`tag-relevance-${conversation.id}`}
+                  >
+                    {t(`relevance.tag.${kind}`)}
                   </span>
                 );
               })()}

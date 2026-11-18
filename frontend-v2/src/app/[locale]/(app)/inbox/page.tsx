@@ -18,6 +18,8 @@ import { CopilotWall, WallHeader } from '@/features/inbox/wall/CopilotWall';
 import styles from '@/features/inbox/Inbox.module.css';
 import {
   countViews,
+  withRelevance,
+  viewQuery,
   parseChannelFilter,
   parseInboxView,
   shownView,
@@ -31,6 +33,9 @@ import { loadFilterChips } from '@/features/inbox/load-filter-chips';
 import { loadSlaClock, loadSlaSettings } from '@/features/inbox/load-sla';
 import { loadInbox, QUEUE_CAP } from '@/features/inbox/load-inbox';
 import { PendingPane } from '@/features/inbox/PendingPane';
+import { RelevanceControl } from '@/features/inbox/RelevanceControl';
+import { relevanceOverride, relevanceTag } from '@/features/inbox/relevance';
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { StreamSkeleton } from '@/features/inbox/Skeletons';
 import { PageContainer } from '@/shell/PageContainer';
 import { RailUnreadCounts } from '@/shell/rail-counts';
@@ -117,7 +122,8 @@ export default async function Page({
       locale: await getLocale(),
     });
   }
-  const askedView = parseInboxView(rawView);
+  const relevance = inboxRelevanceOn();
+  const askedView = parseInboxView(rawView, relevance);
   const channel = parseChannelFilter(rawChannel);
   const asked = parsePeriod(from, to);
   // A period the route would refuse is not sent - and the list says it is not applied.
@@ -125,7 +131,16 @@ export default async function Page({
   // Named in the address, or the default standing in for an absent or unknown one.
   const explicit = rawView === askedView;
   const [data, slaSettings, chips] = await Promise.all([
-    loadInbox(c, cursor, askedView, channel, period, explicit),
+    loadInbox(
+      c,
+      cursor,
+      askedView,
+      channel,
+      period,
+      explicit,
+      null,
+      withRelevance(viewQuery, relevance),
+    ),
     loadSlaSettings(),
     loadFilterChips(channel),
   ]);
@@ -219,10 +234,14 @@ export default async function Page({
           Renders nothing: the rail's unread count per view - one read on
           load, then one per burst of events, never one per page render.
         */}
-        <RailUnreadCounts views={countViews(data.soleHuman)} />
+        <RailUnreadCounts
+          views={countViews(data.soleHuman, relevance)}
+          hideIrrelevant={relevance}
+        />
         <section className={styles.queueColumn} aria-label={t('queue.label')}>
           <ConversationList
             rows={data.rows}
+            relevance={relevance}
             cap={QUEUE_CAP}
             now={now}
             hasMore={data.hasMore}
@@ -355,6 +374,14 @@ export default async function Page({
                    */
                   resolved={data.open.status === 'CLOSED'}
                 />
+                {/* What it is, and the one-click override (`INBOX_RELEVANCE`). */}
+                {relevance ? (
+                  <RelevanceControl
+                    conversationId={data.open.id}
+                    tag={relevanceTag(data.open)}
+                    override={relevanceOverride(data.open)}
+                  />
+                ) : null}
               </div>
             </>
           )}

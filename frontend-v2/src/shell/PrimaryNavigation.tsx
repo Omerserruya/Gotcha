@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Link, usePathname } from '@/i18n/navigation';
 import { isSystemAdminRole } from '@/permissions/permission-set';
 import { usePermissions } from '@/permissions/permissions-context';
+import { useInboxRelevance } from '@/tenant/inbox-relevance-context';
 import { useSoleHuman } from '@/tenant/sole-human-context';
 
 import styles from './AppShell.module.css';
@@ -43,6 +44,7 @@ export function PrimaryNavigation() {
   const { canSee } = usePermissions();
   const counts = useRailCounts();
   const soleHuman = useSoleHuman();
+  const relevance = useInboxRelevance();
 
   const isPermitted = (entry: { permission?: string }) => canSee(entry.permission);
 
@@ -87,7 +89,7 @@ export function PrimaryNavigation() {
   );
 
   // One person: "Open" in place of the queue, "Assigned to me" and "Active".
-  const children = (active ? childrenFor(active, soleHuman) : []).filter(isPermitted);
+  const children = (active ? childrenFor(active, soleHuman, relevance) : []).filter(isPermitted);
   const groupLabel = active?.childrenLabelKey ? t(active.childrenLabelKey) : '';
 
   return (

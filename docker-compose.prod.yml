@@ -328,6 +328,9 @@ services:
       # gateway): server calls then carry the browser's address, so a looping
       # tab fills only its own rate-limit bucket. Anything else means off.
       API_FORWARD_CLIENT: ${V2_API_FORWARD_CLIENT:-off}
+      # The inbox's "personal and not relevant" view (frontend-v2 INBOX_RELEVANCE).
+      # Only `on` turns it on; it needs the conversation routes' relevance contract.
+      INBOX_RELEVANCE: ${V2_INBOX_RELEVANCE:-off}
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_CLIENT_ID: ${V2_OIDC_CLIENT_ID:-${OIDC_CLIENT_ID:-gotcha-app}}
       # Encrypts the app's own session cookie. Minted by Omer; at least 32

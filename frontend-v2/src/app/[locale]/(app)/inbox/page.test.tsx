@@ -15,7 +15,8 @@ import { PendingPane } from '@/features/inbox/PendingPane';
 import { InboxEscape } from '@/features/inbox/InboxEscape';
 import { ListLive } from '@/features/inbox/ListLive';
 import { MarkReadOnOpen } from '@/features/inbox/MarkReadOnOpen';
-import { INBOX_VIEW_IDS } from '@/features/inbox/inbox-views';
+import { INBOX_VIEW_IDS, viewQuery } from '@/features/inbox/inbox-views';
+import { RelevanceControl } from '@/features/inbox/RelevanceControl';
 import { RailUnreadCounts } from '@/shell/rail-counts';
 import { NothingOpen } from '@/features/inbox/NothingOpen';
 
@@ -56,6 +57,9 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'he',
 }));
 vi.mock('server-only', () => ({}));
+/* INBOX_RELEVANCE, off unless a test turns it on. */
+const flag = vi.hoisted(() => ({ relevance: false }));
+vi.mock('@/api/client/inbox-relevance', () => ({ inboxRelevanceOn: () => flag.relevance }));
 /* 02b's reads, only on a clear queue: no network here. */
 const loadClearQueue = vi.hoisted(() => vi.fn(async () => ({ overview: null, inFlight: null })));
 vi.mock('@/features/inbox/load-clear-queue', () => ({ loadClearQueue }));
@@ -186,6 +190,7 @@ const page = async (over: Record<string, unknown> = {}, query: Record<string, st
 beforeEach(() => {
   loadInbox.mockReset();
   redirect.mockClear();
+  flag.relevance = false;
 });
 
 describe('★★ four panels, and none of them inside another', () => {
@@ -560,7 +565,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
 
   it('★★ passes the view to the loader', async () => {
     await withView('resolved');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'resolved', null, null, true);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'resolved',
+      null,
+      null,
+      true,
+      null,
+      viewQuery,
+    );
   });
 
   it('★★ and to the list, so its heading names the view', async () => {
@@ -570,7 +584,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
 
   it('⚠ an invented view falls back to the default ("Assigned to me") rather than an error', async () => {
     await withView('../../admin');
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'mine',
+      null,
+      null,
+      false,
+      null,
+      viewQuery,
+    );
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -609,7 +632,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
   it('★ and `?view=gotcha` itself is read, not redirected', async () => {
     await withView('gotcha');
     expect(redirect).not.toHaveBeenCalled();
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'gotcha', null, null, true);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'gotcha',
+      null,
+      null,
+      true,
+      null,
+      viewQuery,
+    );
   });
 
   it('★★ reads `channel` too, and hands it to the loader and the list', async () => {
@@ -625,6 +657,8 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
       'MESSENGER',
       null,
       true,
+      null,
+      viewQuery,
     );
     expect(propsOf<{ channel?: string | null }>(tree, ConversationList)?.channel).toBe('MESSENGER');
   });
@@ -647,7 +681,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
       searchParams: Promise.resolve({ from: '2026-09-01', to: '2026-09-30' }),
     });
     const period = { from: '2026-09-01', to: '2026-09-30' };
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, period, false);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'mine',
+      null,
+      period,
+      false,
+      null,
+      viewQuery,
+    );
     const props = propsOf<{ period?: unknown; periodInvalid?: boolean }>(tree, ConversationList);
     expect(props).toMatchObject({ period, periodInvalid: false });
   });
@@ -658,7 +701,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     const tree = await Page({
       searchParams: Promise.resolve({ from: '2026-09-30', to: '2026-09-01' }),
     });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'mine',
+      null,
+      null,
+      false,
+      null,
+      viewQuery,
+    );
     expect(propsOf<{ periodInvalid?: boolean }>(tree, ConversationList)?.periodInvalid).toBe(true);
   });
 
@@ -666,7 +718,16 @@ describe('⚠⚠ the page READS `view` - the whole of the bug', () => {
     loadInbox.mockResolvedValue(data());
     const { default: Page } = await import('./page');
     await Page({ searchParams: Promise.resolve({ channel: 'SLACK' }) });
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'mine',
+      null,
+      null,
+      false,
+      null,
+      viewQuery,
+    );
   });
 });
 
@@ -835,7 +896,9 @@ describe('★★ opening reads it, for this person (MarkReadOnOpen)', () => {
     const tree = await page();
     expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)).toEqual({
       // ⚠ Never `open` for a team: the route 400s a view it does not know, and every count goes.
-      views: INBOX_VIEW_IDS.filter((view) => view !== 'open'),
+      // Nor `irrelevant` with its flag off (INBOX_RELEVANCE), for the same reason.
+      views: INBOX_VIEW_IDS.filter((view) => view !== 'open' && view !== 'irrelevant'),
+      hideIrrelevant: false,
     });
     expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)?.views).not.toContain(
       'open',
@@ -893,7 +956,16 @@ describe('★★ one person, one view: "Open" (Omer, 2026-11-15)', () => {
 describe('★★ a bare /inbox is "Assigned to me" - and "Active" when we cannot know who "me" is', () => {
   it('★★ no view named: the loader is asked for "mine", as the default', async () => {
     await page();
-    expect(loadInbox).toHaveBeenLastCalledWith(undefined, undefined, 'mine', null, null, false);
+    expect(loadInbox).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      'mine',
+      null,
+      null,
+      false,
+      null,
+      viewQuery,
+    );
     expect(propsOf<{ view?: string }>(await page(), ConversationList)?.view).toBe('mine');
   });
 
@@ -920,14 +992,80 @@ describe('★ the composer is told the channel, for an image Meta will take (202
 
 describe('★★ the composer is told which number it sends from (Omer, 2026-11-16)', () => {
   it('★★ two numbers: the open conversation’s account', async () => {
-    const tree = await page({ open: row({ channel: 'WHATSAPP', channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } }) });
+    const tree = await page({
+      open: row({
+        channel: 'WHATSAPP',
+        channelAccount: {
+          id: 'ch1',
+          channel: 'WHATSAPP',
+          displayName: 'Gotcha',
+          multipleOfChannel: true,
+        },
+      }),
+    });
     expect(propsOf<{ accountName?: string | null }>(tree, Composer)?.accountName).toBe('Gotcha');
   });
 
   it('★ one number: none', async () => {
     const tree = await page({
-      open: row({ channel: 'WHATSAPP', channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } }),
+      open: row({
+        channel: 'WHATSAPP',
+        channelAccount: {
+          id: 'ch9',
+          channel: 'WHATSAPP',
+          displayName: 'Only',
+          multipleOfChannel: false,
+        },
+      }),
     });
     expect(propsOf<{ accountName?: string | null }>(tree, Composer)?.accountName).toBeNull();
+  });
+});
+
+describe('★★ personal and not relevant (INBOX_RELEVANCE, Omer 2026-11-17)', () => {
+  type QueryOf = (view: string, meId: string | null) => Record<string, string> | null;
+  const queryOf = () => loadInbox.mock.calls.at(-1)![7] as QueryOf;
+
+  it('★★ off: no control, no tag, no parameter, and `?view=irrelevant` is the default', async () => {
+    const tree = await page({}, { view: 'irrelevant' });
+    expect(loadInbox.mock.calls.at(-1)![2]).toBe('mine');
+    expect(queryOf()).toBe(viewQuery);
+    expect(propsOf(tree, RelevanceControl)).toBeNull();
+    expect(propsOf<{ relevance?: boolean }>(tree, ConversationList)?.relevance).toBe(false);
+    expect(propsOf<{ views: readonly string[] }>(tree, RailUnreadCounts)?.views).not.toContain(
+      'irrelevant',
+    );
+  });
+
+  it('★★ on: the view is read, the main views leave it out, and so do the counts', async () => {
+    flag.relevance = true;
+    const tree = await page({}, { view: 'irrelevant' });
+    expect(loadInbox.mock.calls.at(-1)![2]).toBe('irrelevant');
+    expect(queryOf()('irrelevant', null)).toEqual({ view: 'irrelevant' });
+    expect(queryOf()('queue', null)).toEqual({ view: 'queue', hideIrrelevant: 'true' });
+    expect(queryOf()('resolved', null)).not.toHaveProperty('hideIrrelevant');
+    expect(propsOf(tree, RailUnreadCounts)).toEqual({
+      views: ['queue', 'mine', 'active', 'gotcha', 'irrelevant', 'resolved', 'all'],
+      hideIrrelevant: true,
+    });
+    expect(propsOf<{ relevance?: boolean }>(tree, ConversationList)?.relevance).toBe(true);
+  });
+
+  it('★★ on: the open conversation gets its tag and the override', async () => {
+    flag.relevance = true;
+    const tagged = await page({ open: row({ id: 'c3', relevance: { category: 'marketing' } }) });
+    expect(propsOf(tagged, RelevanceControl)).toEqual({
+      conversationId: 'c3',
+      tag: 'marketing',
+      override: 'business',
+    });
+    const normal = await page({
+      open: row({ id: 'c4', relevance: { category: 'reply_to_outbound' } }),
+    });
+    expect(propsOf(normal, RelevanceControl)).toEqual({
+      conversationId: 'c4',
+      tag: null,
+      override: 'personal',
+    });
   });
 });

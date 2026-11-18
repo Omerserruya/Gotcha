@@ -245,6 +245,29 @@ export const conversationRowSchema = z.object({
     })
     .nullish()
     .catch(null),
+  /**
+   * ★★ WHAT THE CONVERSATION IS ABOUT, AS THE PLATFORM CLASSIFIED IT (Backend,
+   * agreed 2026-11-17): on the list rows, GET /:id and `conversation:updated`.
+   * `category` is the effective one - after an override, the person's, with
+   * `overriddenBy` set (and the classifier never relabels it). Read through
+   * `relevance.ts`, never directly; drawn only with `INBOX_RELEVANCE` on.
+   *
+   * ★ Absent or null: not classified. An unknown category reads as "unclear"
+   *   (`relevanceCategory`), and nothing here ever fails a row.
+   */
+  relevance: z
+    .object({
+      category: z.string().nullish().catch(null),
+      confidence: z.number().min(0).max(1).nullish().catch(null),
+      reason: z.string().nullish().catch(null),
+      overriddenBy: z.string().nullish().catch(null),
+      overriddenAt: z.string().nullish().catch(null),
+      classifiedAt: z.string().nullish().catch(null),
+      /** 'fast' | 'model' | 'override' - free here, read by nothing yet. */
+      source: z.string().nullish().catch(null),
+    })
+    .nullish()
+    .catch(null),
   replyWindow: z
     .object({
       channel: z.string().nullish().catch(null),
