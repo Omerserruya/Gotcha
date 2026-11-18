@@ -2702,3 +2702,29 @@ describe("052f53ad rating fixes", () => {
     expect(padsFromText("מידות 31*41, סמובי אליס 31*41")).toEqual(["סמובי אליס 31*41"]);
   });
 });
+
+/** Prod 2026-11-18 (Smoovee, cmwlusggx): "https://smoovee-ltd.העברתי את השאלה לצוות". */
+describe("urlfix units", () => {
+  const URL = "https://smoovee-ltd.com/product/%d7%a1%d7%9e%d7%95%d7%91%d7%99-%d7%90%d7%9c%d7%9b%d7%a1%d7%94/";
+  const LIVE = "הקישור לסמובי אלכסה: https://smoovee-ltd.העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+  it("★ the sentence cuts keep a URL whole", async () => {
+    const g: any = await import("../services/reply-engine/gates");
+    const s = `הקישור לסמובי אלכסה: ${URL}\nהעברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.`;
+    expect(g.removeTeamLines(s)).toContain(URL);
+    expect(g.dropPersonPromises(`הנה: ${URL}\nנציג יחזור אלייך.`)).toContain(URL);
+    // The digits of a percent-encoded path are no numbers to ground.
+    expect(g.ungroundedNumbers(`הקישור: ${URL}`, "")).toEqual([]);
+    expect(g.ungroundedNumbers("זה 95% כותנה", "")).toHaveLength(1);
+  });
+  it("★ the exact live text: the cut link becomes the product's URL, the team line keeps its own sentence", async () => {
+    const { repairUrls } = await import("../services/reply-engine/gates");
+    const r = repairUrls(LIVE, `product: ${URL}`);
+    expect(r.text).toContain(URL);
+    expect(r.text).toMatch(/העברתי את השאלה לצוות/);
+    // Two product URLs: no way to tell which, so the cut link's sentence goes and the team line stays.
+    const two = repairUrls(LIVE, `${URL} https://smoovee-ltd.com/product/other/`);
+    expect(two.text).not.toMatch(/smoovee-ltd(?!\.com)/);
+    expect(two.text).toMatch(/^העברתי את השאלה לצוות/);
+    expect(two.dropped).toBe(1);
+  });
+});

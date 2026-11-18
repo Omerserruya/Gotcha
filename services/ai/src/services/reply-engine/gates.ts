@@ -405,7 +405,8 @@ export function orderStateWithoutLookup(reply: string, tools: ToolRunRecord[]): 
 export function ungroundedNumbers(reply: string, evidence: string): string[] {
   const known = numbersIn(evidence);
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
-    for (const m of x.matchAll(UNIT_NUMBER)) {
+    // Never the digits of a link ("95%d7" in a percent-encoded path read as "95%": prod 2026-11-18).
+    for (const m of x.replace(/https?:\/\/\S+/gi, " ").matchAll(UNIT_NUMBER)) {
       if ([m[1], m[2]].filter(Boolean).some((n) => !known.has(String(n).replace(",", ".")))) return true;
     }
     return false;
@@ -2021,7 +2022,9 @@ export function padsFromText(text: string): string[] {
  * percent-encoding). One that is not verbatim in a source is replaced by the source URL it starts like (same
  * host and the longest shared path), else its sentence goes. Run last, on the final text.
  */
-const URL_RE = /https?:\/\/[^\s<>"'״)\]]+[^\s<>"'״)\].,;:!?]/giu;
+// A raw Hebrew letter ends a URL: "https://smoovee-ltd.העברתי" is a cut link with a line glued on (prod 2026-11-18).
+const URL_RE = /https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]+[^\s<>"'״)\].,;:!?\u05D0-\u05EA]/giu;
+const URL_SENTENCES = /(?:https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]*[^\s<>"'״)\].,;:!?\u05D0-\u05EA]|[^.!?\n])+[.!?]*\s*|\n+/gu;
 export function repairUrls(text: string, sources: string): { text: string; fixed: number; dropped: number } {
   const known = [...new Set(String(sources ?? "").match(URL_RE) ?? [])];
   let fixed = 0, dropped = 0;
@@ -2037,11 +2040,14 @@ export function repairUrls(text: string, sources: string): { text: string; fixed
     for (const k of same) { let i = 0; while (i < k.length && i < u.length && k[i] === u[i]) i++; if (i > len) { len = i; best = k; } }
     // Shares its host and at least the start of the path: the source's own URL.
     if (best && len > `https://${host}/`.length) { fixed++; return best; }
+    // Cut short ("https://smoovee-ltd" of "https://smoovee-ltd.com/..."): the one source URL it begins.
+    const longer = known.filter((k) => k.startsWith(u) && k.length > u.length);
+    if (longer.length === 1) { fixed++; return longer[0]; }
     bad.add(u);
     return u;
   });
   if (bad.size) {
-    const parts = out.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [out];
+    const parts = out.match(URL_SENTENCES) ?? [out];
     out = parts.filter((x) => { const hit = [...bad].some((b) => x.includes(b)); if (hit) dropped++; return !hit; }).join("").trim();
   }
   return { text: out, fixed, dropped };
