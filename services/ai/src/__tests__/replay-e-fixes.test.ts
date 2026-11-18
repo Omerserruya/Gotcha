@@ -442,6 +442,12 @@ describe("b369e939 next-round items", () => {
     expect(referredCandidates(smoovee, "למכונת קפה קטנה כדאי לבחור בגפן.", "")).toEqual([0]);
     expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([0, 1]);
     expect(referredCandidates([{ title: "אסף לנינג'ה קריספי" }, { title: "גפן למכונות קפה" }], "אנחנו ממליצים על אסף.", "")).toEqual([0]);
+    // An everyday name by place marks nothing; it marks only through the all-words and companion rules.
+    expect(referredCandidates([{ title: "קרם יום" }, { title: "קרם לילה" }], "כדאי לבחור ביום אחר למשלוח.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "קרם יום" }, { title: "קרם לילה" }], "כדאי לבחור בקרם יום.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "Classic Tee Black" }, { title: "Zip Hoodie" }], "we recommend black for winter.", "")).toEqual([]);
+    // A time word is never the other name a short name is joined to ("בגפן ויום").
+    expect(referredCandidates([{ title: "גפן למכונות קפה" }, { title: "קרם יום" }], "בגפן ויום אחד נסדר את זה.", "")).toEqual([]);
     // Ordinary speech still marks nothing.
     expect(referredCandidates([{ title: "סרום ויטמין C" }, { title: "סרום לילה" }, { title: "קרם לחות" }, { title: "קרם יום" }], "תוך יום עסקים נשלח את הקרם.", "")).toEqual([]);
   });

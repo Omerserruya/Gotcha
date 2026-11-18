@@ -2555,6 +2555,7 @@ export function colourList(reply: string, candidates: Array<{ title?: string; de
  * title without its variant part, or a distinctive word of it (not shared by every product found), in the reply
  * or in the model's own intent; or the only product found, when the reply is about a product at all.
  */
+const TIME_WORDS = new Set(["יום", "לילה", "ערב", "בוקר", "צהריים", "שבוע", "חודש", "שנה", "day", "night", "evening", "morning", "week", "month", "year"]);
 const CHOICE_WORDS = new Set(["לבחור", "בחרו", "בחרי", "בוחרים", "ממליצים", "ממליצה", "ממליץ", "מומלץ", "מומלצת", "נמליץ", "recommend", "choose", "pick", "try"]);
 const NEAR_FILLER = new Set(["שלך", "שלכם", "שלי", "שלנו", "מתאים", "מתאימה", "מתאימים", "מתאימות", "your", "fits", "fit"]);
 const GREETINGS = new Set(["שלום", "היי", "הי", "hi", "hello", "hey"]);
@@ -2601,8 +2602,11 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
     // A unique word under 5 letters counts only with a companion ("תוך יום עסקים" is no "קרם יום").
     // Or a name by its place: right after a choice word ("כדאי לבחור בגפן", "ממליצים על אסף"), or joined by ו to
     // another found product's own name ("בגפן ובאריאל").
-    const otherNames = new Set(bases.flatMap((b, k) => (k === i ? [] : wordsOf(b).filter((x) => owners(x) === 1 && !VARIANT_WORDS.has(x) && !TITLE_STOP.has(x)))));
-    const byPlace = (w: string) => at(w).some((p) => {
+    const otherNames = new Set(bases.flatMap((b, k) => (k === i ? [] : wordsOf(b).filter((x) => owners(x) === 1 && !VARIANT_WORDS.has(x) && !TIME_WORDS.has(x) && !TITLE_STOP.has(x)))));
+    // Never an everyday word by place: a time word, a colour or size word, a word two found titles share; those mark
+    // only through the all-words and companion rules ("כדאי לבחור ביום אחר למשלוח" is no "קרם יום").
+    const placeName = (w: string) => !TIME_WORDS.has(w) && !VARIANT_WORDS.has(w) && owners(w) === 1;
+    const byPlace = (w: string) => placeName(w) && at(w).some((p) => {
       const prev = hayTokens[p - 1] ?? "", prev2 = hayTokens[p - 2] ?? "";
       if (CHOICE_WORDS.has(prev) || (prev === "על" && CHOICE_WORDS.has(prev2))) return true;
       const strip = (t: string) => t.replace(/^ו/u, "").replace(/^[הולבמשכ]{0,1}/u, "");
