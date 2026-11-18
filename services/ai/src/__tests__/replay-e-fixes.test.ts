@@ -9,10 +9,11 @@ const q = (calls: any[]) => calls.map((c) => [c.function.name, JSON.parse(c.func
 
 describe("1: the store is searched by her product words, never her sentence", () => {
   it("★ the question around the product goes", () => {
-    expect(storeQueryOf("מאיזה חומר השרשרת?")).toBe("שרשרת");
+    expect(storeQueryOf("מאיזה חומר השרשרת?")).toBe("השרשרת");
+    expect(storeQueryOf("מאיזה חומר השרשרת?", { substring: true })).toBe("שרשרת");
     expect(storeQueryOf("יש משטחי במבוק?")).toBe("משטחי במבוק");
     expect(storeQueryOf("what material is the chain made of?")).toBe("chain");
-    expect(storeQueryOf("המשטח מתאים לתמי 4?")).toBe("משטח לתמי 4");
+    expect(storeQueryOf("המשטח מתאים לתמי 4?", { substring: true })).toBe("משטח לתמי 4");
     expect(storeQueryOf("desk lamp")).toBe("desk lamp");
   });
   it("★ nothing of hers to search: null (no random product for \"איזה מוצר מתאים לי\" or \"אפשר להזמין\")", () => {
@@ -31,6 +32,43 @@ describe("1: the store is searched by her product words, never her sentence", ()
   });
   it("★ no product word of hers: the product in focus (NE'A: the marker lost to the literal sentence)", () => {
     expect(q(autoLookups([{ kind: "ungrounded_absence", claims: ["אין סרטון"] }] as any, "אשמח לסרטון הדרכה", WOO, [], "טוש גבות Miss eyebrows"))[0]).toEqual(["woocommerce.list_products", "טוש גבות Miss eyebrows"]);
+  });
+});
+
+describe("1 (verify of d5f288f6): a prefix letter comes off only where the search matches inside titles", () => {
+  // [sentence, as written for a word search (Shopify), for a substring search (WooCommerce)]
+  const cases: Array<[string, string, string]> = [
+    ["יש לכם בגדי הריון?", "בגדי הריון", "בגדי ריון"],
+    ["מחפשת הלבשה תחתונה", "הלבשה תחתונה", "לבשה תחתונה"],
+    ["היילייטר נוזלי", "היילייטר נוזלי", "יילייטר נוזלי"],
+    ["יש הדפסה אישית על חולצה?", "הדפסה אישית חולצה", "דפסה אישית חולצה"],
+    ["המלצה לשמפו לשיער יבש", "לשמפו לשיער יבש", "שמפו שיער יבש"],
+    ["רוצה לקנות היפוך", "היפוך", "יפוך"],
+  ];
+  it("★ a word search keeps every word as written (a root ה is never lost)", () => {
+    for (const [s, word] of cases) expect(storeQueryOf(s), s).toBe(word);
+  });
+  it("★ on a substring search the shorter form is inside the word as written: it can only add matches", () => {
+    for (const [s, word, sub] of cases) {
+      expect(storeQueryOf(s, { substring: true }), s).toBe(sub);
+      sub.split(" ").forEach((w, i) => expect(word.split(" ")[i], s).toContain(w));
+    }
+  });
+  it("★ the store decides: WooCommerce is substring, Shopify is not", () => {
+    expect(q(autoLookups([{ kind: "no_search" }] as any, "יש לכם בגדי הריון?", ["shopify.search_products"], []))[0]).toEqual(["shopify.search_products", "בגדי הריון"]);
+    expect(q(autoLookups([{ kind: "no_search" }] as any, "יש לכם בגדי הריון?", WOO, []))[0]).toEqual(["woocommerce.list_products", "בגדי ריון"]);
+  });
+  it("★ ask words never reach the store; an order, shipping or business ask searches no product", () => {
+    expect(storeQueryOf("איפה ההזמנה שלי")).toBeNull();
+    expect(storeQueryOf("כמה עולה משלוח לירושלים")).toBeNull();
+    expect(storeQueryOf("יש הנחה על המשטח?")).toBe("המשטח");
+    expect(storeQueryOf("מה המחיר של הסרום")).toBe("הסרום");
+    expect(storeQueryOf("מה המחיר של הסרום", { substring: true })).toBe("סרום");
+    expect(storeQueryOf("הכרית הזאת קיימת באפור?")).toBe("הכרית באפור");
+    // A size alone is no product: the product in focus is searched instead.
+    expect(storeQueryOf("יש לכם את זה במידה 42?")).toBeNull();
+    expect(q(autoLookups([{ kind: "no_search" }] as any, "יש לכם את זה במידה 42?", WOO, [], "שמלת ערב שחורה"))[0]).toEqual(["woocommerce.list_products", "שמלת ערב שחורה"]);
+    expect(autoLookups([{ kind: "no_search" }] as any, "איפה ההזמנה שלי", WOO, [])).toEqual([]);
   });
 });
 

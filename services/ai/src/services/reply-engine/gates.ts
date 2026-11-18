@@ -1355,12 +1355,23 @@ const queryStop = (w: string) => {
   const l = w.toLowerCase();
   return QUERY_STOP.has(l) || ASK_STOP.has(l) || STEM_STOP.has(l) || (/^[הוש][\u0590-\u05FF]{2,}$/u.test(l) && (QUERY_STOP.has(l.slice(1)) || STEM_STOP.has(l.slice(1))));
 };
-/** The customer's product words for a store search: the question around them off, four at most; null with none left. */
-export function storeQueryOf(incoming: string): string | null {
-  const words = (normalizeQuotes(String(incoming ?? "")).match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []).filter((w) => !queryStop(w));
-  // A definite ה off a Hebrew word of 5+ letters: a store's search matches inside titles ("השרשרת" never finds "שרשרת").
-  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (/^ה[\u0590-\u05FF]{4,}$/u.test(w) ? w.slice(1) : w));
-  return content.length ? content.slice(0, 4).join(" ") : null;
+// Words of the ask, never of the product (the Supervisor's probe on d5f288f6: "מחיר סרום" finds nothing on a search
+// that needs every word, where "סרום" finds the serum).
+const ASK_WORDS = new Set(["מחיר", "המחיר", "מחירים", "הנחה", "ההנחה", "הנחות", "מבצע", "מבצעים", "קיים", "קיימת", "קיימים", "קיימות", "המלצה", "המלצות", "ממליצים", "תמליצו", "הזמנה", "ההזמנה", "הזמנתי", "משלוח", "המשלוח", "משלוחים", "מידה", "במידה", "מידות", "במלאי", "מלאי", "price", "discount", "sale", "exists", "recommend", "recommendation", "order", "shipping", "size", "stock"]);
+/**
+ * The customer's product words for a store search: the question and the ask words off, four at most; null with no
+ * letter word left, or for an ask no product search answers (her order, shipping, a business fact, a coupon, a
+ * payment problem). `substring`: the store matches inside titles (WooCommerce's search is SQL LIKE on title and
+ * text), so one prefix letter (ה ו ל; never ב, which begins too many nouns) comes off a word of 5+ letters: the shorter form is a substring of the
+ * word as written and can only add matches there. On a word search (Shopify) the word stays as written.
+ */
+export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {}): string | null {
+  const t = normalizeQuotes(String(incoming ?? ""));
+  if (!productAskNow(t) && (MY_ORDER.test(t) || ORDER_ASK.test(t) || BUSINESS_ASK.test(t) || COUPON_ASK.test(t) || PAY_PROBLEM.test(t))) return null;
+  const words = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []).filter((w) => !queryStop(w) && !ASK_WORDS.has(w.toLowerCase()));
+  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && /^[הול][\u0590-\u05FF]{4,}$/u.test(w) ? w.slice(1) : w));
+  if (!content.some((w) => /\p{L}{2,}/u.test(w))) return null;
+  return content.slice(0, 4).join(" ");
 }
 // An explanation asked, no product wanted: "how do I know", "what is", "what's the difference" (the knowledge answers it).
 const EXPLAIN_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:אני\s+)?(?:אדע|נדע|יודעים|לדעת|מבדילים|בוחרים|מתאימים)|מה\s+(?:זה|זאת|ההבדל|הכוונה|המשמעות)|מה\s+ה[\u0590-\u05FF]{2,}\s+(?:שלי|שלך)|מהו|מהי)(?![\u0590-\u05FF])|\b(?:how (?:do|can) (?:i|we|you) (?:know|tell|choose|pick)|what(?:'s| is) the difference|what (?:is|does) .{1,30} mean)\b/iu;
@@ -1385,7 +1396,8 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   const explain = explanationAsk(words);
   // No product word of her own ("אשמח לסרטון הדרכה"): the product the conversation is about (prod replay on
   // 1b35c535, NE'A: the literal sentence lost the marker in focus).
-  const query = storeQueryOf(words) ?? (String(subject ?? "").trim().slice(0, 80) || null);
+  const substring = toolsOffered.some((n) => /^woocommerce\.(?:list_products|search_products)$/.test(n));
+  const query = storeQueryOf(words, { substring }) ?? (String(subject ?? "").trim().slice(0, 80) || null);
   const store = explain || !query ? undefined : toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
   const has = (k: ClaimProblem["kind"]) => problems.some((p) => p.kind === k);
   // Each store's own page-size argument (Shopify parity: its search takes "limit").
