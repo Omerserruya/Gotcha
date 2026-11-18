@@ -143,7 +143,7 @@ export type ClaimProblem =
   | { kind: "unread_order" }
   /** A coupon or policy question sent to the team without searching the knowledge. */
   | { kind: "unread_knowledge" }
-  | { kind: "gave_up_search" }
+  | { kind: "gave_up_search"; fromKnowledge?: boolean }
   | { kind: "ungrounded_absence"; claims: string[] }
   | { kind: "no_search" }
   | { kind: "ignored_yes" }

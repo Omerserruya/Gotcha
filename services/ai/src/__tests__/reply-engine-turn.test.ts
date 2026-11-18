@@ -841,6 +841,55 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     expect(r2.reply).not.toMatch(/הוא במבצע/);
   });
 
+  it("★ holding mode: the customer's digits go to the open payment item; the reply says nothing of the charge", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
+    try {
+      h.responses.push({ toolCalls: [respond("hm1", { reply: "תודה! ייתכן שאישור הויזה זמני ואינו חיוב סופי, והבדיקה מול ספק התשלום בתהליך." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "4 ספרות אחרונות 4155" }, "autonomous");
+      expect(r.reply).toMatch(new RegExp(`^${HOLD_ACK_HE}`));
+      expect(r.reply).toMatch(/בבדיקה אצל הצוות/);
+      expect(r.reply).not.toMatch(/ויזה|ספק התשלום|זמני/);
+      const up = h.upserts[h.upserts.length - 1];
+      const saved: any[] = up?.create?.pending ?? up?.update?.pending ?? [];
+      expect(saved.find((p: any) => /חויבתי פעמיים/.test(p.text))?.text).toMatch(/4155/);
+      // One item: no second one opened for the digits.
+      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(1);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ an unasked first name is dropped from the reply", async () => {
+    h.responses.push({ toolCalls: [respond("nm1", { reply: "היי אלה, אנחנו פתוחים א-ה 9-17." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+    expect(r.reply).not.toMatch(/אלה/);
+    expect(r.reply).toMatch(/9-17/);
+  });
+
+  it("★ holding mode: a team question the model raises on the held subject goes into the open item", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
+    try {
+      h.responses.push({ toolCalls: [respond("hm3", { reply: "קיבלתי את הספרות.", team_question: "4 ספרות אחרונות של הכרטיס 4155" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "4 ספרות אחרונות 4155" }, "autonomous");
+      const up = h.upserts[h.upserts.length - 1];
+      const saved: any[] = up?.create?.pending ?? up?.update?.pending ?? [];
+      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(1);
+      expect(saved[0].text).toMatch(/4155/);
+      expect(r.trace.teamQuestion ?? null).toBeNull();
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ holding mode: an unrelated question is answered", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
+    try {
+      h.responses.push({ toolCalls: [respond("hm2", { reply: "אנחנו פתוחים א-ה 9-17." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה שעות הפעילות שלכם בשבוע הבא?" }, "autonomous");
+      expect(r.reply).toMatch(/9-17/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
   it("★ a question after the canned line: one holding line, then silence", async () => {
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
     const holding = stillCheckingLine("איפה מזינים את הקופון?", "he");

@@ -2256,3 +2256,54 @@ describe("2c57725b rating fixes", () => {
     expect(fixNearTitles("We sell Canvass Tote.", ["Canvas Tote"])).toBe("We sell Canvas Tote.");
   });
 });
+
+/** Rating on 0bf4e95e (2026-11-17): the payment thread needs a mode, not patterns. */
+describe("0bf4e95e rating fixes", () => {
+  it("★ holding mode: a sensitive item puts the conversation on hold; ordinary items do not", async () => {
+    const { holdingItem } = await import("../services/reply-engine/gates");
+    expect(holdingItem(["חויבתי פעמיים ואין הזמנה"])).toMatch(/חויבתי/);
+    expect(holdingItem(["the customer was charged twice"])).toBeTruthy();
+    expect(holdingItem(["המוצר הגיע שבור"])).toBeTruthy();
+    expect(holdingItem(["האם יש משלוח לאילת"])).toBeNull();
+  });
+
+  it("★ holding mode: nothing about the state, cause or outcome; the ack and the holding line instead", async () => {
+    const { holdReply, HOLD_ACK_HE } = await import("../services/reply-engine/gates");
+    const line = "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.";
+    const a = holdReply("ייתכן שאישור הויזה זמני ואינו חיוב סופי. הבדיקה מול ספק התשלום בתהליך.", line, { details: false, locale: "he" });
+    expect(a).toBe(line);
+    const b = holdReply("הבדיקה של החיוב וההזמנה הכפולה עדיין אצל הצוות.", line, { details: true, locale: "he" });
+    expect(b).toBe(`${HOLD_ACK_HE} ${line}`);
+    // A sentence on anything else stays.
+    expect(holdReply("שעות הפעילות שלנו הן א-ה 9-17.", line, { details: false, locale: "he" })).toMatch(/שעות הפעילות/);
+  });
+
+  it("★ the team-pass shapes the runs repeated", async () => {
+    const { teamPassIn } = await import("../services/reply-engine/gates");
+    expect(teamPassIn("נעדכן כאן בצ'אט כשיתקבל מענה.")).toBe(true);
+    expect(teamPassIn("אבדוק מול הצוות ואחזור אלייך.")).toBe(true);
+    expect(teamPassIn("המשטח מתאים לנינג'ה קריספי.")).toBe(false);
+  });
+
+  it("★ a first name only from the profile or the customer's signature (never its second word)", async () => {
+    const { dropUnaskedName, signedNames } = await import("../services/reply-engine/gates");
+    expect(dropUnaskedName("היי אלה, איך אפשר לעזור?", [null])).toBe("היי, איך אפשר לעזור?");
+    expect(dropUnaskedName("בשמחה, רחל! הנה הקישור.", [])).toBe("בשמחה! הנה הקישור.");
+    expect(dropUnaskedName("היי דנה, איך אפשר לעזור?", ["דנה"])).toBe("היי דנה, איך אפשר לעזור?");
+    expect(dropUnaskedName("תודה רבה, נשמח לעזור.", [])).toBe("תודה רבה, נשמח לעזור.");
+    expect(signedNames(["שלום, יש לכם משטח?\nמיכל לוי"])).toEqual(["מיכל"]);
+    expect(signedNames(["יש לכם משטח?"])).toEqual([]);
+    expect(dropUnaskedName("היי לוי, הנה.", signedNames(["שאלה\nמיכל לוי"]))).toBe("היי, הנה.");
+  });
+
+  it("★ a search timeout sent to the team while the knowledge speaks of it: answered from the knowledge", async () => {
+    const { gaveUpSearch, autoLookups } = await import("../services/reply-engine/gates");
+    const timeout = [{ callId: "1", tool: "woocommerce.list_products", args: { query: "משטח" }, decision: "timeout", content: "", ms: 8000, outcome: "timeout" }] as any;
+    expect(gaveUpSearch("אבדוק מול הצוות איזה מתאים.", timeout, "איזה משטח מתאים לנינג'ה קריספי?", false, "טבלת מכשירים: נינג'ה קריספי - משטח 30x40")).toBe(true);
+    expect(gaveUpSearch("אבדוק מול הצוות איזה מתאים.", timeout, "איזה משטח מתאים לנינג'ה קריספי?", false, "")).toBe(false);
+    const auto = autoLookups([{ kind: "gave_up_search", fromKnowledge: true }] as any, "איזה משטח מתאים לנינג'ה קריספי?", ["woocommerce.list_products", "search_knowledge"], timeout);
+    expect(auto.map((x) => x.function.name)).toEqual(["woocommerce.list_products", "search_knowledge"]);
+    // A plain give-up keeps the store retry alone.
+    expect(autoLookups([{ kind: "gave_up_search" }] as any, "תיקים", ["woocommerce.list_products", "search_knowledge"], timeout).map((x) => x.function.name)).toEqual(["woocommerce.list_products"]);
+  });
+});

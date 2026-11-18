@@ -171,7 +171,7 @@ export const noInfo = (reply: string) => NO_INFO.test(reply ?? "");
 export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
 // Any statement that the team has it or will: past, present or future (prod replay 2026-11-17: the fixed line
 // appended after a sentence that already said it, six turns running).
-const TEAM_PASS_ANY = /(?<![\u0590-\u05FF])[וש]?(?:נעביר|אעביר|נשאל|אשאל|נבדוק|נברר|הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|בודק|יטפל))(?![\u0590-\u05FF])[^.!?\n]{0,40}(?:צוות|אצלנו)?|\b(?:pass(?:ed|ing)? (?:it|this|that|your \w+) (?:on )?to the team|the team (?:will|is going to|is) (?:check|look|get back|answer)\w*|(?:i|we)(?:'ll| will) (?:ask|check with) the team)\b/iu;
+const TEAM_PASS_ANY = /(?<![\u0590-\u05FF])[וש]?(?:נעביר|אעביר|נשאל|אשאל|נבדוק|אבדוק|נברר|אברר|נעדכן|אעדכן|נחזור\s+(?:אליך|אלייך|אליכם)|יתקבל\s+מענה|הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|בודק|יטפל))(?![\u0590-\u05FF])[^.!?\n]{0,40}(?:צוות|אצלנו)?|\b(?:pass(?:ed|ing)? (?:it|this|that|your \w+) (?:on )?to the team|the team (?:will|is going to|is) (?:check|look|get back|answer)\w*|(?:i|we)(?:'ll| will) (?:ask|check with) the team)\b/iu;
 /** The reply already says the team has it (or will): no team line is appended. */
 export const teamPassIn = (reply: string) => TEAM_LINE.test(reply ?? "") || WE_WILL_WITH_TEAM.test(reply ?? "") || TEAM_PASS_ANY.test(reply ?? "");
 export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).join("").trim();
@@ -226,11 +226,21 @@ export const returnsWork = (reply: string) => RETURNS_WORK.test(reply ?? "");
  * up: says it could not check, hands the work back to the customer, or sends a simple browse to
  * the team (prod replay 2026-11-17).
  */
-export function gaveUpSearch(reply: string, tools: ToolRunRecord[], incoming = "", teamQuestion = false): boolean {
+export function gaveUpSearch(reply: string, tools: ToolRunRecord[], incoming = "", teamQuestion = false, knowledge = ""): boolean {
   const search = (t: ToolRunRecord) => /list_products|search_products|get_product|variation/i.test(t.tool);
   if (!tools.some((t) => search(t) && (t.outcome === "timeout" || t.outcome === "error"))) return false;
   if (tools.some((t) => search(t) && (t.outcome === "ok" || t.outcome === "empty"))) return false;
-  return GAVE_UP.test(reply ?? "") || RETURNS_WORK.test(reply ?? "") || (teamQuestion && PRODUCT_WANT.test(incoming ?? ""));
+  if (GAVE_UP.test(reply ?? "") || RETURNS_WORK.test(reply ?? "") || (teamQuestion && PRODUCT_WANT.test(incoming ?? ""))) return true;
+  return knowledgeAnswersIt(reply, incoming, teamQuestion, knowledge);
+}
+/** Sent to the team while the business's own knowledge speaks of what they asked. */
+export function knowledgeAnswersIt(reply: string, incoming: string, teamQuestion: boolean, knowledge: string): boolean {
+  // Sent to the team while the business's own knowledge speaks of what they asked (prod rating 2026-11-17,
+  // Smoovee: an appliance size after a search timeout went to the team, not to the device table).
+  const passed = teamQuestion || teamPassIn(reply);
+  const k = String(knowledge ?? "").toLowerCase();
+  const theirs = (String(incoming ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).map((w) => w.replace(/^[הולבמש]/, ""));
+  return passed && !!k && theirs.some((w) => w.length >= 4 && k.includes(w));
 }
 
 /** A coupon or policy question sent to the team without searching the knowledge. */
@@ -1088,7 +1098,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (i.businessAddress) absent.push(...addressDenied(reply));
   if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
 
-  if (gaveUpSearch(reply, i.tools, i.incomingMessage, !!i.teamQuestion)) problems.push({ kind: "gave_up_search" });
+  if (gaveUpSearch(reply, i.tools, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "")) problems.push({ kind: "gave_up_search", ...(knowledgeAnswersIt(reply, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "") ? { fromKnowledge: true } : {}) });
   else if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_product" });
   else if (unreadBusinessInfo(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
   // "Still with the team" about a coupon or policy: the general answer is in the knowledge (prod replay 11: 3 times).
@@ -1290,6 +1300,9 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   }
   if (has("unread_knowledge") && toolsOffered.includes("search_knowledge")) {
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
+  } else if (problems.some((p: any) => p.kind === "gave_up_search" && p.fromKnowledge) && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
+    // The store timed out and the knowledge speaks of it: the business's own tables answer it (prod rating 2026-11-17).
+    out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
   }
   return out.slice(0, 2);
 }
@@ -1406,7 +1419,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "card_reference") lines.push("- No picture or card goes out with this reply: do not refer to one (\"בתמונה\", \"מצורף\"). Name the product instead.");
     if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
-    if (p.kind === "gave_up_search") lines.push("- The store search took too long. Call it once more with a narrower query (the category, or one or two words, per_page 5). If you still have nothing, answer from what you know (the categories, the knowledge, what was already shown) and ask what matters to the customer. Never say you could not check.");
+    if (p.kind === "gave_up_search") lines.push("- The store search took too long. Answer from the business's knowledge first (a device, size or compatibility table answers it; name the fitting products from it). Else call the search once more with a narrower query (one or two words, per_page 5). Never say you could not check, and do not send it to the team.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, colours, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {
@@ -1576,4 +1589,62 @@ export function fixNearTitles(text: string, titles: string[]): string {
     });
   }
   return s;
+}
+
+
+/**
+ * Holding mode (prod rating 2026-11-17: every run invented another story for one disputed charge, "the Visa
+ * approval may be temporary", "the check of the duplicate order"). While a sensitive team item is open
+ * (payment, charge, refund; damage; safety), the reply says nothing of that subject's state, cause or likely
+ * outcome: only a fixed acknowledgement of new details and the holding line. Other questions are answered.
+ */
+const SENSITIVE_ITEM = /(?<![֐-׿])[והשבל]?(?:חיוב|חויב|חויבתי|חיובים|תשלום|שילמתי|זיכוי|החזר|כרטיס|אשראי|ויזה|כפול|כפילות|פגום|פגומה|שבור|שבורה|נזק|נפגע|נפגעה|כוויה|אלרגיה|תגובה\s+אלרגית)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|credit card|visa|double|duplicate|damaged?|broken|injur\w*|burn\w*|allerg\w*)\b/iu;
+const HOLD_SUBJECT = /(?<![֐-׿])[והשבלמ]?(?:חיוב|חויב|חויבתי|חיובים|תשלום|התשלום|שילמת|שילמתי|זיכוי|החזר|כרטיס|אשראי|ויזה|סליקה|ספק|אישור|עסקה|כפול|כפילות|זמני|זמנית|הזמנה|ההזמנה|הזמנתך|בדיקה|הבדיקה|נבדק|נבדקת|בודקים|פגום|פגומה|שבור|נזק|החלפה|כוויה|אלרגיה)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|card|visa|authori[sz]ation|provider|duplicate|double|pending|temporary|order|damage[ds]?|broken|replacement|check(?:ing|ed)?)\b/iu;
+export const HOLD_ACK_HE = "קיבלתי, הוספתי את זה לבדיקה.";
+export const HOLD_ACK_EN = "Got it, I've added that to the check.";
+/** The open item that puts the conversation in holding mode, or null. */
+/** A text about the held subject (payment, the order, the check, damage). */
+export const aboutHeld = (text: string) => HOLD_SUBJECT.test(String(text ?? "")) || SENSITIVE_ITEM.test(String(text ?? ""));
+export function holdingItem(openItems: string[]): string | null {
+  return openItems.find((t) => SENSITIVE_ITEM.test(String(t ?? ""))) ?? null;
+}
+/** New details for the item: digits (a card's last four, an order number) or an attachment. */
+export function bringsDetails(incoming: string, attachment = false): boolean {
+  return attachment || /(?<!\d)\d{4,}(?!\d)/.test(String(incoming ?? ""));
+}
+/**
+ * The reply in holding mode: every sentence about the held subject is cut, whatever it says; the fixed
+ * acknowledgement (when the customer brought details) and the holding line take their place. Sentences on
+ * anything else stay.
+ */
+export function holdReply(reply: string, holdingLine: string, opts: { details: boolean; locale: "he" | "en" }): string {
+  const parts = (String(reply ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []);
+  const kept = parts.filter((x) => x.trim() && !HOLD_SUBJECT.test(x) && !TEAM_PASS_ANY.test(x) && !TEAM_LINE.test(x)).map((x) => x.trim());
+  const lines = [opts.details ? (opts.locale === "en" ? HOLD_ACK_EN : HOLD_ACK_HE) : null, holdingLine, ...kept].filter(Boolean) as string[];
+  return lines.join(" ").replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * A first name the customer never gave (prod rating 2026-11-17: "היי אלה", "בשמחה, רחל"). A name the reply
+ * addresses after a greeting is kept only when the profile has it or the customer signed it.
+ */
+const ADDRESS = /^(\s*(?:היי|הי|שלום|אהלן|בשמחה|תודה(?:\s+רבה)?|בוקר\s+טוב|ערב\s+טוב|hi|hey|hello|thanks|thank you|sure)),?\s+(\p{L}{2,})(?=[,!.]|\s*$)/iu;
+const NOT_NAMES = new Set(["רבה", "לך", "לכם", "לכן", "מאוד", "שוב", "גם", "על", "you", "so", "again", "there", "all", "everyone"]);
+/** A first name the customer signed a message with: the FIRST word of a short last line, never the second. */
+export function signedNames(inbound: string[]): string[] {
+  const out: string[] = [];
+  for (const m of inbound) {
+    const last = String(m ?? "").trim().split("\n").pop()?.trim() ?? "";
+    if (/^\p{L}{2,}(?:\s+\p{L}{2,})?$/u.test(last) && String(m).includes("\n")) out.push(last.split(/\s+/)[0]);
+  }
+  return out;
+}
+export function dropUnaskedName(reply: string, allowed: Array<string | null | undefined>): string {
+  const m = ADDRESS.exec(String(reply ?? ""));
+  if (!m) return reply;
+  const name = m[2];
+  if (NOT_NAMES.has(name.toLowerCase())) return reply;
+  const ok = allowed.filter(Boolean).map((a) => String(a).toLowerCase());
+  if (ok.includes(name.toLowerCase())) return reply;
+  return String(reply).replace(ADDRESS, (_x, lead) => lead).trim();
 }

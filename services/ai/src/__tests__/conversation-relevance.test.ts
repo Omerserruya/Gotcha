@@ -110,7 +110,11 @@ describe("conversation relevance", () => {
       expect(await classifyConversation("t1", biz, c, { generate: gen as any })).toMatchObject({ category: "auto_reply", source: "fast" });
       expect(gen).not.toHaveBeenCalled();
       expect(autoReply({ ...c, messages: [c.messages[0], { direction: "INBOUND", body: "הגעתם לסטודיו, כרגע אנחנו לא פנויים", createdAt: at(3) }] })).toBe(true);
-      expect(autoReply({ ...c, firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: "Thanks for reaching out! We'll get back to you.", createdAt: at(1) }] })).toBe(false);
+      // The contact wrote first with a machine's greeting: the shape alone (dry run 2, an away message).
+      expect(autoReply({ ...c, firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: "היי, הגעתם לסטודיו לעיצוב. תודה שפנית אלינו! כרגע אנחנו לא פנויים", createdAt: at(1) }] })).toBe(true);
+      // A short line or a question with the shape is a customer asking.
+      expect(autoReply({ ...c, firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: "מה שעות הפעילות שלכם?", createdAt: at(1) }] })).toBe(false);
+      expect(autoReply({ ...c, firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: "שעות הפעילות", createdAt: at(1) }] })).toBe(false);
       // A person who wrote after the greeting is not an auto-reply.
       expect(autoReply({ ...c, messages: [...c.messages, { direction: "INBOUND", body: "אני בעלת העסק, ספר לי עוד", createdAt: at(300) }] })).toBe(false);
       // A customer's own words are not the shape.
@@ -139,6 +143,11 @@ describe("conversation relevance", () => {
       const r = await classifyConversation("t1", biz, wa([["OUTBOUND", "do you sell clips?"], ["INBOUND", "אין צורך לרכוש את התופסן"]], "OUTBOUND"), { generate: gen as any });
       expect(r.category).toBe("reply_to_outbound");
       expect(relevancePrompt(biz, wa([["INBOUND", "x"]]))[0].content).toMatch(/HARD RULE: when the business wrote first/);
+      // A model label under 0.6 is unclear, which never silences (dry run 2).
+      const low = vi.fn(async () => ({ content: '{"category":"auto_reply","confidence":0.45,"reason":"r"}' } as any));
+      expect((await classifyConversation("t1", biz, wa([["INBOUND", "[Unsupported message]"]]), { generate: low as any })).category).toBe("unclear");
+      const ok6 = vi.fn(async () => ({ content: '{"category":"personal","confidence":0.6,"reason":"r"}' } as any));
+      expect((await classifyConversation("t1", biz, wa([["INBOUND", "dinner tonight"]]), { generate: ok6 as any })).category).toBe("personal");
     });
   });
 });

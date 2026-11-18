@@ -111,6 +111,10 @@ export function autoReply(c: RelevanceInput): boolean {
     const prevOut = [...msgs.slice(0, i)].reverse().find((x) => x.direction === "OUTBOUND");
     const fast = prevOut?.createdAt && m.createdAt ? new Date(m.createdAt).getTime() - new Date(prevOut.createdAt).getTime() <= AUTO_REPLY_WINDOW_MS : false;
     if (fast || c.firstDirection === "OUTBOUND") return true;
+    // The contact wrote first with a machine's greeting (dry run 2, ALEA): the shape alone, when it is a
+    // statement of some length, not a question ("שעות הפעילות שלכם?" is a customer asking).
+    const body = String(m.body ?? "");
+    if (!/[?؟]/.test(body) && (body.trim().split(/\s+/).length >= 6)) return true;
   }
   return false;
 }
@@ -177,6 +181,12 @@ export interface ClassifyDeps {
  * The first-mover rule, checked after the model (dry run 2026-11-17): the business wrote first and the model is
  * not sure the contact raised a new request of their own, so it is a reply to the business's message.
  */
+/** A model label under this is not a decision: unclear, which never silences (dry run 2: auto_reply at 0.45). */
+export const MIN_MODEL_CONFIDENCE = 0.6;
+export function lowConfidence(p: { category: RelevanceCategory; confidence: number; reason: string }) {
+  return p.confidence < MIN_MODEL_CONFIDENCE && p.category !== "unclear" ? { ...p, category: "unclear" as const, reason: `unsure: ${p.category} (${p.reason})`.slice(0, 120) } : p;
+}
+
 export function firstMover(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput) {
   if (c.firstDirection === "OUTBOUND" && p.category === "business" && p.confidence < 0.9) {
     return { category: "reply_to_outbound" as const, confidence: p.confidence, reason: `the business wrote first (${p.reason})`.slice(0, 120) };
@@ -202,7 +212,7 @@ export async function classifyConversation(tenantId: string, profile: RelevanceP
     reasoningEffort: "minimal",
     metadata: { type: "conversation_relevance" },
   }));
-  const parsed = firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c);
+  const parsed = lowConfidence(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c));
   return { ...parsed, source: "model", classifiedAt: now.toISOString() };
 }
 

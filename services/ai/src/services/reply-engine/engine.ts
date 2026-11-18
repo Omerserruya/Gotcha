@@ -31,7 +31,7 @@ import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -1336,10 +1336,38 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   mark("gate3");
   // Last line of defence, on every path: a price nothing grounds (prod replay 4),
   // and a character from another alphabet (prod replay 5: "כשמ折לים").
+  // A turn on a held subject (holding mode): no new team item may be opened for it.
+  let heldTurn = false;
+  let heldMerged = false;
   if (output?.reply) {
     const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
     // No price sentence left without its product (prod rating 2026-11-17).
-    const text = dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles);
+    let text = dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles);
+    // A first name only from the profile or the customer's own signature (prod rating 2026-11-17: "היי אלה").
+    text = dropUnaskedName(text, [firstName, ...signedNames(inbound)]);
+    // Holding mode (prod rating 2026-11-17): a sensitive team item is open; nothing about its state, cause or
+    // outcome goes out, only the acknowledgement and the holding line. A question on anything else is answered.
+    const held = output.handoff ? null : holdingItem(openTeam);
+    if (held) {
+      const incomingNow = String(opts.incomingMessage ?? "");
+      const lastInMsg: any = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
+      const details = bringsDetails(incomingNow, /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? "")));
+      // A nudge: a short message that asks nothing of its own ("נו?" asks, "מתי אתם פתוחים?" is a question).
+      const nudge = incomingNow.trim().split(/\s+/).length <= 3 && (!asksSomething(incomingNow) || /^\s*(?:נו|nu|\?+|so|any news|יש חדש|מה קורה)\s*\??\s*$/iu.test(incomingNow));
+      const onSubject = details || aboutHeld(incomingNow) || statusAsk(incomingNow) || nudge;
+      const subjectTurn = onSubject || aboutHeld(text);
+      if (subjectTurn) {
+        const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
+        text = onSubject
+          ? holdReply(text, stillCheckingLine(held, holdLoc), { details, locale: holdLoc })
+          : (holdReply(text, "", { details: false, locale: holdLoc }) || stillCheckingLine(held, holdLoc));
+        (trace as any).holding = { details };
+        // No new team item on the held subject: the open one holds it, and the details go there
+        // (prod rating 2026-11-17: "4 ספרות אחרונות 4155" opened a second item instead).
+        heldTurn = onSubject;
+        if (onSubject && output.teamQuestion) { output = { ...output, teamQuestion: null }; heldMerged = true; (trace as any).holding.teamQuestionMerged = true; }
+      }
+    }
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
     output = { ...output, reply: (leftover.length ? stripPrices(text, leftover) : text).trim() };
@@ -1382,7 +1410,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Every subject the customer raised, not only the message as a whole (prod replay 2026-11-17: white AND
   // a coupon, only the coupon open, and "the check on white and the coupon is still open").
   const uncovered = teamAlreadyOpen ? uncoveredSubjects(String(opts.incomingMessage ?? ""), openTeam) : [];
-  if (output?.reply && !output.handoff && !output.teamQuestion && teamAlreadyOpen && teamLineIn(output.reply) && !statusAsk(opts.incomingMessage ?? "") && uncovered.length) {
+  if (output?.reply && !output.handoff && !output.teamQuestion && !heldTurn && teamAlreadyOpen && teamLineIn(output.reply) && !statusAsk(opts.incomingMessage ?? "") && uncovered.length) {
     output = { ...output, teamQuestion: uncovered.join("; ").slice(0, 300) || null, reply: isCannedTeamLine(output.reply) ? safeFallback(locale) : output.reply };
     (trace as any).newSubjectToTeam = true;
   }
@@ -1500,12 +1528,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // the state. ONCE per open issue: a repeat of the open one is not recorded again.
   const newTeamQuestion = isNewTeamQuestion(final.teamQuestion) ? final.teamQuestion! : null;
   trace.teamQuestion = newTeamQuestion;
-  trace.teamQuestionRepeat = !!final.teamQuestion && !newTeamQuestion;
+  trace.teamQuestionRepeat = (!!final.teamQuestion && !newTeamQuestion) || heldMerged;
   // A repeat that brings new details (digits the customer gave: a card's last four, an order number)
   // updates the open item instead of being skipped (prod replay 2026-11-17: "4155" lost).
   let pendingNow = state.pending;
-  if (final.teamQuestion && !newTeamQuestion) {
-    const upd = withNewDetails(state.pending, final.teamQuestion, String(opts.incomingMessage ?? ""));
+  // In holding mode the customer's new details go to the held item even when the model asked nothing.
+  const heldItem = holdingItem(openTeam);
+  const detailsFor = final.teamQuestion && !newTeamQuestion ? final.teamQuestion : !final.teamQuestion && heldItem ? heldItem : null;
+  if (detailsFor) {
+    const upd = withNewDetails(state.pending, detailsFor, String(opts.incomingMessage ?? ""));
     if (upd) {
       pendingNow = upd.pending;
       (trace as any).teamItemUpdated = upd.added;
