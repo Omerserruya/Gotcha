@@ -45,6 +45,12 @@ export interface ConnectedRow {
    * `null` = not served, never coerced to 0.
    */
   readonly windowConversations: number | null;
+  /**
+   * The account's "personal and not relevant" filter: a boolean where the
+   * classifier runs, `null` where it never does (web chat, voice, Slack) or
+   * the backend did not say. Only a boolean draws a switch.
+   */
+  readonly relevanceFilter: boolean | null;
   /** Web chat's widget id - what its embed code carries. `null` on the rest. */
   readonly widgetId?: string | null;
 }
@@ -141,6 +147,21 @@ export function hasEmailTemplate(row: Pick<ConnectedRow, 'channel'>): boolean {
   return (EMAIL_TEMPLATE_CHANNELS as readonly ChannelType[]).includes(row.channel);
 }
 
+/**
+ * Each account's relevance filter, by its id: only the accounts whose value is
+ * a boolean (`null`, the classifier never runs there, is left out). What 13b's
+ * numbers and a mailbox's drawer look their switch up in.
+ */
+export function relevanceFiltersOf(
+  channels: readonly Pick<Channel, 'id' | 'relevanceFilterEnabled'>[],
+): Readonly<Record<string, boolean>> {
+  return Object.fromEntries(
+    channels.flatMap((c) =>
+      typeof c.relevanceFilterEnabled === 'boolean' ? [[c.id, c.relevanceFilterEnabled]] : [],
+    ),
+  );
+}
+
 export function canDisconnect(row: ConnectedRow): boolean {
   return (
     (DISCONNECTABLE_CHANNELS as readonly ChannelType[]).includes(row.channel) &&
@@ -185,6 +206,8 @@ export function buildChannelRows(
     windowConversations:
       typeof channel.conversationsInWindow === 'number' ? channel.conversationsInWindow : null,
     widgetId: channel.channel === 'WEBCHAT' ? (channel.externalId ?? null) : null,
+    relevanceFilter:
+      typeof channel.relevanceFilterEnabled === 'boolean' ? channel.relevanceFilterEnabled : null,
   }));
 
   /*
@@ -216,6 +239,8 @@ export function buildChannelRows(
       ),
       openConversations: null,
       windowConversations: null,
+      // The classifier never runs on calls.
+      relevanceFilter: null,
     });
   }
 

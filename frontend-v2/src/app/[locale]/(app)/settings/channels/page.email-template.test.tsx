@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { channelSchema } from '@/api/contracts/channels';
 import { EmailTemplateEditor } from '@/features/channels/EmailTemplateEditor';
+import { RelevanceFilterSwitch } from '@/features/channels/RelevanceFilterSwitch';
 import channels from '@/i18n/messages/en/channels.json';
 import { Drawer } from '@/shell/Drawer';
 
@@ -13,8 +14,15 @@ import { Drawer } from '@/shell/Drawer';
  * EMAIL account on this workspace's list; the reads are spies.
  */
 const ACCOUNTS = [
-  channelSchema.parse({ id: 'g1', channel: 'GMAIL', displayName: 'shop@halvo-dev.test' }),
+  channelSchema.parse({
+    id: 'g1',
+    channel: 'GMAIL',
+    displayName: 'shop@halvo-dev.test',
+    relevanceFilterEnabled: false,
+  }),
   channelSchema.parse({ id: 'm1', channel: 'MESSENGER', displayName: 'Halvo' }),
+  // A second mailbox the backend says nothing about (an older backend).
+  channelSchema.parse({ id: 'g2', channel: 'GMAIL', displayName: 'b@halvo-dev.test' }),
 ];
 const STORED = { enabled: false, html: '<p>{{content}}</p>', updatedAt: null };
 
@@ -48,6 +56,8 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'en',
 }));
 vi.mock('server-only', () => ({}));
+const flag = vi.hoisted(() => ({ on: true }));
+vi.mock('@/api/client/inbox-relevance', () => ({ inboxRelevanceOn: () => flag.on }));
 vi.mock('@/i18n/navigation', () => ({ Link: 'a', redirect: vi.fn() }));
 
 function find<P>(node: ReactNode, type: unknown): P | null {
@@ -74,6 +84,7 @@ const open = async (params: Record<string, string>) => {
 };
 
 beforeEach(() => {
+  flag.on = true;
   reads.template.mockReset();
   reads.template.mockResolvedValue({ state: 'ok', template: STORED });
   reads.names.mockClear();
@@ -121,5 +132,31 @@ describe('★ a mailbox’s template drawer', () => {
     const said = find<{ children: string; role: string }>(tree, 'p');
     expect(said?.role).toBe('alert');
     expect(said?.children).toContain(words);
+  });
+});
+
+describe('★★ the mailbox’s relevance filter, above its template', () => {
+  it('this mailbox’s switch, with its stored value, before the editor', async () => {
+    const tree = await open({ panel: 'email', id: 'g1' });
+    expect(find(tree, RelevanceFilterSwitch)).toEqual({ channelAccountId: 'g1', enabled: false });
+    const body = find<{ children: ReactNode[] }>(tree, 'div');
+    const order = (body?.children ?? []).map((child) =>
+      isValidElement(child) ? (child.type as unknown) : null,
+    );
+    expect(order.indexOf(RelevanceFilterSwitch)).toBeLessThan(order.indexOf(EmailTemplateEditor));
+    expect(order.indexOf(RelevanceFilterSwitch)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a mailbox with no value from the backend: no switch, the template as before', async () => {
+    const tree = await open({ panel: 'email', id: 'g2' });
+    expect(find(tree, RelevanceFilterSwitch)).toBeNull();
+    expect(find(tree, EmailTemplateEditor)).toMatchObject({ channelId: 'g2' });
+  });
+
+  it('★★ INBOX_RELEVANCE off: no switch', async () => {
+    flag.on = false;
+    const tree = await open({ panel: 'email', id: 'g1' });
+    expect(find(tree, RelevanceFilterSwitch)).toBeNull();
+    expect(find(tree, EmailTemplateEditor)).toMatchObject({ channelId: 'g1' });
   });
 });

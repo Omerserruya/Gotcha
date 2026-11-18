@@ -1071,6 +1071,17 @@
     "tag": "Nothing to set",
     "why": "The platform has no settings for this channel yet, so there is nothing to change here."
   },
+  "relevanceFilter": {
+    "label": "Filter out conversations that are not relevant",
+    "help": "Personal conversations, advertising and automatic messages move to the \"Personal and not relevant\" folder, and the bot does not answer them.",
+    "readOnly": "Only people who manage channels can change this.",
+    "problem": {
+      "not_applicable": "The filter is not available on this channel.",
+      "not_found": "This channel was not found. Refresh the page.",
+      "forbidden": "You don't have permission to change channel settings.",
+      "failed": "The change was not saved. Try again."
+    }
+  },
   "disconnect": {
     "action": "Disconnect",
     "title": "Disconnect {channel}?",

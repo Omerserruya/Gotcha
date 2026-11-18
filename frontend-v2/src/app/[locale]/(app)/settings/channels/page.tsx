@@ -1,6 +1,7 @@
 import { MessageCircle } from 'lucide-react';
 import { getLocale, getTranslations } from 'next-intl/server';
 
+import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { WIDGET_PATH } from '@/api/contracts/website-widget';
 
 import { ChannelList } from '@/features/channels/ChannelList';
@@ -15,9 +16,10 @@ import {
 import { channelName } from '@/api/contracts/inbox';
 import { ChannelTile } from '@/features/channels/ChannelTile';
 import { EmailTemplateEditor } from '@/features/channels/EmailTemplateEditor';
+import { RelevanceFilterSwitch } from '@/features/channels/RelevanceFilterSwitch';
 import { loadEmailTemplate, loadPreviewNames } from '@/features/channels/load-email-template';
 import { loadChannels } from '@/features/channels/load-channels';
-import { hasEmailTemplate } from '@/features/channels/rows';
+import { hasEmailTemplate, relevanceFiltersOf } from '@/features/channels/rows';
 import {
   loadEvidence,
   loadExclusions,
@@ -157,6 +159,13 @@ export default async function Page({
   const [mailboxTemplate, previewNames] = mailbox
     ? await Promise.all([loadEmailTemplate(mailbox.id), loadPreviewNames()])
     : [null, null];
+  /*
+    Each account's relevance filter, by id, while INBOX_RELEVANCE is on: a
+    number's switch in 13b, a mailbox's in its drawer. `null` (the classifier
+    never runs there) is left out, so it draws nothing.
+  */
+  const relevanceFilters = inboxRelevanceOn() ? relevanceFiltersOf(channels ?? []) : null;
+  const mailboxFilter = mailbox ? (relevanceFilters?.[mailbox.id] ?? null) : null;
   // 13b's open tab (`?tab=`), when 13b itself is what is open.
   const panelTab = tabOf(view === null ? params.tab : undefined);
 
@@ -271,6 +280,10 @@ export default async function Page({
           testId="drawer-email-template"
         >
           <div className={drawer.drawerBody}>
+            {/* Above the template: which of this mailbox's mail the bot answers. */}
+            {mailboxFilter !== null ? (
+              <RelevanceFilterSwitch channelAccountId={mailbox.id} enabled={mailboxFilter} />
+            ) : null}
             {mailboxTemplate.state === 'ok' ? (
               <EmailTemplateEditor
                 // A fresh editor per mailbox: one's unsaved html never shows on another.
@@ -340,6 +353,7 @@ export default async function Page({
             <>
               <WhatsAppNumbers
                 numbers={whatsapp[0]}
+                relevanceFilters={relevanceFilters}
                 connectable={
                   config.launches.coexistence?.configured === true ||
                   config.launches.newNumber?.configured === true
