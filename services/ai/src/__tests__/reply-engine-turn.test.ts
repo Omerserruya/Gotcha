@@ -2646,6 +2646,64 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     }
   });
 
+  it("★ (rating 9480dfb2, near-blocker 6) a waiting claim with no hand-over is cut; nothing left, the team line", async () => {
+    h.responses.push({ toolCalls: [respond("wt1", { reply: "נציגינו עסוקים בפניות קודמות ויתפנו בהקדם." })] }, { toolCalls: [respond("wt2", { reply: "נציגינו עסוקים בפניות קודמות ויתפנו בהקדם." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/עסוקים|יתפנו/);
+    expect(r.escalation).toBeNull();
+  });
+
+  it("★ (rating 9480dfb2, near-blocker 4) a fallback list after a cut fit claim says the fit is unconfirmed", async () => {
+    const { FIT_UNCONFIRMED_HE } = await import("../services/reply-engine/engine");
+    h.groundTitle = "טוש גבות Miss eyebrows";
+    h.extraTitle = "טוש טינט Lip Tint";
+    const fit = "טוש גבות Miss eyebrows מתאים לנינג'ה קריספי.";
+    h.responses.push({ toolCalls: [tc("fb1", "woocommerce.list_products", { query: "טוש" })] }, { toolCalls: [respond("fb2", { reply: fit })] }, { toolCalls: [respond("fb3", { reply: fit })] }, { toolCalls: [respond("fb4", { reply: fit })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "טוש אני רוצה" }, "autonomous");
+    if (r.trace.gate3.rewrite === "fallback" && ((r.trace as any).fallbackKinds ?? []).includes("ungrounded_positive_fit")) expect(r.reply).toContain(FIT_UNCONFIRMED_HE);
+    else throw new Error(`not the fallback path: ${JSON.stringify(r.trace.gate3)} ${JSON.stringify((r.trace as any).fallbackKinds)} ${r.reply}`);
+  });
+
+  it("★ (rating 9480dfb2, blocker 2) a cut that took the team pass on a question never sends the remnant", async () => {
+    const reply = "נכון, לא צירפנו סרטון. נבדוק עם הצוות ונחזור אלייך עם הסרטון.";
+    h.responses.push({ toolCalls: [respond("lp1", { reply })] }, { toolCalls: [respond("lp2", { reply })] }, { toolCalls: [respond("lp3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון?" }, "autonomous");
+    expect(r.reply).not.toBe("נכון, לא צירפנו סרטון.");
+    expect(r.reply ?? "").toMatch(/צוות/);
+  });
+
+  it("★ (rating 9480dfb2, near-blocker 5) every size answered by the table: no team pass, no team question", async () => {
+    h.groundTitle = "סמובי גפן 40x50";
+    h.extraTitle = "סמובי אליס 30x40";
+    h.responses.push({ toolCalls: [tc("sz1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("sz2", { reply: "למיקסר מתאים סמובי גפן 40x50. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "לא נמצאה התאמה למיקסר ולטוסטר" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "משטח למיקסר 35x45 וטוסטר 25x35" }, "autonomous");
+    if (!(r.trace as any).sizedItems) throw new Error(`the size table did not run: ${r.reply}`);
+    if ((r.trace as any).sizedItems.none === 0) {
+      expect(r.reply).not.toMatch(/העברתי את זה לצוות/);
+      expect(r.trace.teamQuestion ?? null).toBeNull();
+    } else {
+      expect(String(r.trace.teamQuestion ?? "")).toMatch(/^sizes with no fitting pad/);
+    }
+  });
+
+  it("★ (rating 9480dfb2, blocker 1) a video ask never gets a page link the bot sent earlier", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "יש לכם טוש גבות?", metadata: null },
+      { direction: "OUTBOUND", body: "כן, טוש גבות Miss eyebrows: https://shop.example/product/miss-eyebrows", senderName: "AI Bot", metadata: null },
+    ];
+    const pass = "העברנו לצוות את הבקשה לסרטון לטוש הגבות, והתשובה תגיע כאן בצ'אט.";
+    h.responses.push({ toolCalls: [respond("v1", { reply: pass, team_question: "סרטון לטוש הגבות" })] }, { toolCalls: [respond("v2", { reply: pass, team_question: "סרטון לטוש הגבות" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה לטוש הגבות" }, "autonomous");
+    expect(r.reply ?? "").not.toContain("https://shop.example/product/miss-eyebrows");
+  });
+
+  it("★ (rating 9480dfb2, blocker 2) a fragment left by a cut is never sent", async () => {
+    const reply = "התיק עולה ₪999. וגם הוא נוח מאוד לשימוש יומיומי.";
+    h.responses.push({ toolCalls: [respond("fr1", { reply })] }, { toolCalls: [respond("fr2", { reply })] }, { toolCalls: [respond("fr3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה עולה התיק?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/^\s*וגם/);
+  });
+
   it("★ the audit row carries the cut fields when something was cut", async () => {
     h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");

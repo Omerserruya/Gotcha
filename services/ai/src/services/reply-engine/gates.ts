@@ -257,6 +257,7 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
 // A note meant for the engine (a simulated or test run) must never reach the customer, in any lane.
 const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניסוי|טסט)|סימולציה|בסימולציה|לא בוצע(?:ה)? בפועל|שיחת (?:ה)?(?:בדיקה|ניסיון)|הודעת בדיקה)|\b(?:simulat(?:ed|ion)|sandbox|test (?:environment|conversation|mode)|not (?:actually|really) (?:performed|executed|sent))\b/iu;
 /** A test or simulation named in the reply; never when the business's own texts say the same words (a demo site's notice). */
+const CAVEAT = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
@@ -600,7 +601,7 @@ export function namelessProducts(reply: string, incoming: string, cards: string[
 }
 
 // "בתמונה", "מצורף", "below" with nothing attached (prod replay 7, Smoovee: twice).
-const PICTURE_REF = /(?<![\u0590-\u05FF])(?:[וש]?(?:הנה|שלחתי|שלחנו|מצרפת|מצרף|מצרפים|צירפתי|צירפנו)\s+(?:לך\s+|לכם\s+)?(?:את\s+)?(?:ה)?(?:תמונה|תמונות|צילום|צילומים)|(?:ה)?(?:תמונה|צילום)\s+(?:מצורפ\w*|עם\s+ה)|בתמונה|בתמונות|בכרטיס|בכרטיסים|מצורף|מצורפת|מצורפים|מצורפות|כאן\s+למטה|בהמשך\s+ההודעה|רואים\s+ב(?:תמונה|כרטיס))(?![\u0590-\u05FF])|\b(?:in the (?:picture|photo|card)s?|attached|see below|shown below)\b/iu;
+const PICTURE_REF = /(?<![\u0590-\u05FF])(?:[וש]?(?:הנה|שלחתי|שלחנו|מצרפת|מצרף|מצרפים|צירפתי|צירפנו)\s+(?:לך\s+|לכם\s+)?(?:את\s+)?(?:ה)?(?:תמונה|תמונות|צילום|צילומים)|(?:ה)?(?:תמונה|צילום)\s+(?:מצורפ\w*|עם\s+ה)|בתמונה|בתמונות|בכרטיס(?![\u0590-\u05FF])(?!\s+(?:ה?אשראי|חיוב|מתנה|דביט|ויזה))|בכרטיסים|מצורף|מצורפת|מצורפים|מצורפות|כאן\s+למטה|בהמשך\s+ההודעה|רואים\s+ב(?:תמונה|כרטיס))(?![\u0590-\u05FF])|\b(?:in the (?:picture|photo|card)s?|attached|see below|shown below)\b/iu;
 /** Sentences that point at a picture or card when none goes out with the reply. */
 export function cardReferences(reply: string, cardsShown: boolean): string[] {
   if (cardsShown) return [];
@@ -766,6 +767,14 @@ const TO_PLURAL: Record<string, string> = {
 const PLURAL_WORDS = Object.keys(TO_PLURAL).sort((a, b) => b.length - a.length).join("|");
 /** Second-person gendered verbs and participles as the plural ("תשלחי" -> "תשלחו"). Participles only where the customer is the subject ("את מחפשת", a question). */
 export function neutralSecondPerson(s: string): string {
+  // A sentence the plural reached says "לכם" too, never "כתבו ... יש לך" (prod replay of 9480dfb2, NE'A).
+  const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
+  return parts.map((p) => {
+    const q = neutralSecondPersonPart(p);
+    return q === p ? p : q.replace(/(?<![\u0590-\u05FF])(ו?)(?:לך)(?![\u0590-\u05FF])/gu, "$1לכם").replace(/(?<![\u0590-\u05FF])(ו?)(?:אלייך|אליך)(?![\u0590-\u05FF])/gu, "$1אליכם");
+  }).join("");
+}
+function neutralSecondPersonPart(s: string): string {
   return String(s ?? "")
     .replace(/(?<![\u0590-\u05FF])(?:את|אתה)\s+(מחפשת|מחפש|מעדיפה|מעדיף|מעוניינת|מעוניין|צריכה|צריך|רוצה)(?![\u0590-\u05FF])/gu, (_m, w) => TO_PLURAL[w] ?? ({ מחפש: "מחפשים", מעדיף: "מעדיפים", מעוניין: "מעוניינים", צריך: "צריכים" } as Record<string, string>)[w] ?? w)
     .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (_m, v, w) => `${v}${TO_PLURAL[w]}`)
@@ -1172,7 +1181,10 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   absent.push(...infoDeniedButKnown(reply, `${i.knowledge ?? ""}\n${i.grounding ?? ""}`));
   // "The address is not in my details" while the prompt gives one (prod replay 10, Tehila).
   if (i.businessAddress) absent.push(...addressDenied(reply));
-  if (absent.length) problems.push({ kind: "ungrounded_absence", claims: absent });
+  // A caveat that limits a claim ("אין במידע אישור לשימוש מתחת לעיניים") is never cut as an absence: cutting it turns
+  // the rest into the claim (prod replay of 9480dfb2, NE'A).
+  const claimedAbsent = absent.filter((x) => !CAVEAT.test(x));
+  if (claimedAbsent.length) problems.push({ kind: "ungrounded_absence", claims: claimedAbsent });
 
   // A fit or size ask: the business's device or size table answers it (rating 93f9fdff, Smoovee).
   if (gaveUpSearch(reply, i.tools, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "")) problems.push({ kind: "gave_up_search", ...(knowledgeAnswersIt(reply, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "") || FIT_ASK.test(i.incomingMessage ?? "") ? { fromKnowledge: true } : {}) });
@@ -1347,7 +1359,10 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
     }
     if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch" || p.kind === "ungrounded_negative_fit" || p.kind === "ungrounded_positive_fit") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
-      if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).reduce(joinKept, "").trim();
+      // A caveat that limits a claim is never cut by an absence, fit or device check: the rest would read as the
+      // claim (prod replay of 9480dfb2, NE'A: "אין במידע אישור לשימוש מתחת לעיניים").
+      const keepCaveat = (x: string) => CAVEAT.test(x) && (p.kind === "ungrounded_absence" || p.kind === "device_mismatch" || p.kind === "ungrounded_positive_fit" || p.kind === "ungrounded_negative_fit");
+      if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => keepCaveat(x) || !marks.some((m) => x.includes(m))).reduce(joinKept, "").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
       if (p.kind === "unsupported_action") s = dropSentences(dropSentences(dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE), RECORDED), WE_WILL_WITH_TEAM);
     }
@@ -1402,7 +1417,14 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
   if (nonProductAsk(t)) return null;
   const tokens = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []) as string[];
   const isContent = (w: string) => !queryStop(w) && !ASK_WORDS.has(w.toLowerCase()) && (w.length >= 2 || /^\d$/.test(w));
-  const words = tokens.filter((w, i) => isContent(w) && !attributeUse(tokens, i, isContent));
+  // A size and its value are never title text: "מידה 38" goes, and the ב comes off the word after it ("בנעל").
+  const sized = new Set<number>();
+  tokens.forEach((w, i) => {
+    if (!/^(?:מידה|מידות|size)$/iu.test(w) || !/^\d+$/.test(tokens[i + 1] ?? "")) return;
+    sized.add(i + 1);
+    if (/^ב[\u0590-\u05FF]{3,}$/u.test(tokens[i + 2] ?? "")) tokens[i + 2] = tokens[i + 2].slice(1);
+  });
+  const words = tokens.filter((w, i) => !sized.has(i) && isContent(w) && !attributeUse(tokens, i, isContent));
   const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && (/^ה[\u0590-\u05FF]{3,}$/u.test(w) || /^[ול][\u0590-\u05FF]{4,}$/u.test(w)) ? w.slice(1) : w));
   if (!content.some((w) => /\p{L}{2,}/u.test(w))) return null;
   return content.slice(0, 4).join(" ");
@@ -2314,17 +2336,24 @@ export function padsFromText(text: string): string[] {
  */
 const HOWTO_WORDS = new Set(["איך", "משתמשים", "שימוש", "להשתמש", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "אשמח", "תודה", "אפשר", "לקבל", "תשלחי", "תשלחו", "שלחי", "video", "link", "tutorial", "how", "use"]);
 const VIDEO_LINE = /סרטון|הדרכה|מדריך|video|youtu|vimeo/iu;
-export function howToLink(kb: string, subjects: string[]): string | null {
-  const lines = String(kb ?? "").split(/\n+/).filter((l) => (l.match(URL_RE) ?? []).length);
+// A media file is never "the link" (prod replay of 9480dfb2, NE'A: a product's .webp sent as the video).
+const MEDIA_FILE = /\.(?:webp|jpe?g|png|gif|svg|bmp|avif|ico|heic|tiff?)(?:[?#]|$)|\/wp-content\/uploads\/(?!.*\.(?:mp4|mov|webm|m4v)(?:[?#]|$))/i;
+const VIDEO_URL = /youtu\.?be|vimeo\.com|\.(?:mp4|mov|webm|m4v)(?:[?#]|$)/i;
+/** The ask wants a video (סרטון, הדרכה, video, tutorial), not only a link. */
+export const videoAsk = (incoming: string) => /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|לסרטון)(?![\u0590-\u05FF])|\b(?:video|tutorial)\b/iu.test(String(incoming ?? ""));
+export function howToLink(kb: string, subjects: string[], video = false): string | null {
+  // Media files out; for a video ask, a video link only (a host or a video file), never a page that merely mentions one.
+  const usable = (u: string) => !MEDIA_FILE.test(u) && (!video || VIDEO_URL.test(u));
+  const lines = String(kb ?? "").split(/\n+/).filter((l) => (l.match(URL_RE) ?? []).some(usable));
   if (!lines.length) return null;
-  const firstUrl = (l: string) => { const us = l.match(URL_RE) ?? []; return us.find((u) => /youtu|vimeo/i.test(u)) ?? us[0] ?? null; };
+  const firstUrl = (l: string) => { const us = (l.match(URL_RE) ?? []).filter(usable); return us.find((u) => VIDEO_URL.test(u)) ?? us[0] ?? null; };
   for (const subject of subjects) {
     const keys = [...new Set((String(subject ?? "").toLowerCase().match(/[\p{L}]{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w) && !STEM_STOP.has(w) && !HOWTO_WORDS.has(w) && !HOWTO_WORDS.has(w.replace(/^[הולבמש]/u, ""))).flatMap((w) => nounKeys(w)))];
     if (!keys.length) continue;
     const scored = lines.map((l) => { const text = l.replace(URL_RE, " ").toLowerCase(); return { l, s: keys.filter((k) => text.includes(k)).length + (VIDEO_LINE.test(l) ? 0.5 : 0) }; }).filter((x) => x.s >= 1);
     if (scored.length) return firstUrl(scored.sort((a, b) => b.s - a.s)[0].l);
   }
-  const videos = [...new Set(lines.flatMap((l) => (l.match(URL_RE) ?? []).filter((u) => /youtu|vimeo/i.test(u))))];
+  const videos = [...new Set(lines.flatMap((l) => (l.match(URL_RE) ?? []).filter((u) => usable(u) && VIDEO_URL.test(u))))];
   return videos.length === 1 ? videos[0] : null;
 }
 
@@ -2414,12 +2443,24 @@ export const SILENCE_PROMISE = /(?<![\u0590-\u05FF])(?:נשאיר\s+(?:את\s+ז
 const MEASURE = /(\d+(?:[.,]\d+)?)\s*(?:ס["״']?מ|מ["״']?מ|מטר|ק["״']?ג|גרם|ליטר|cm|mm|kg|g\b|m\b|inch|")/giu;
 const DERIVING = /(?<![\u0590-\u05FF])[וה]?(?:בערך|בקירוב|כ־|כ-|צלע|צלעות|אלכסון|היקף|שטח|קוטר|רדיוס|משולש|לאחר\s+קיפול|כשמקפלים|מקופל)(?![\u0590-\u05FF])|\b(?:about|approximately|roughly|side|diagonal|perimeter|area|diameter|radius|triangle|folded)\b/iu;
 const CLAUSES = /\s*[,;]\s*|\s+(?=ו?(?:כל\s+צלע|כלומר)(?![\u0590-\u05FF]))|\s+(?=(?:so|which means|that is)\b)/iu;
+const SHAPE_WORD = /(?<![\u0590-\u05FF])[וה]?(?:צלע|צלעות|אלכסון|היקף|שטח|קוטר|רדיוס|משולש|לאחר\s+קיפול|כשמקפלים|מקופל)(?![\u0590-\u05FF])|\b(?:side|diagonal|perimeter|area|diameter|radius|triangle|folded)\b/iu;
+function inSource(m: RegExpMatchArray, src: string): boolean {
+  const n = Number(String(m[1]).replace(",", "."));
+  const unit = String(m[0]).slice(String(m[1]).length).trim().toLowerCase();
+  const forms = new Set([String(m[1]), String(n)]);
+  if (/^(?:מטר|m)$/u.test(unit)) forms.add(String(Math.round(n * 100)));
+  if (/^(?:ס["״']?מ|cm)$/u.test(unit) && n >= 100) forms.add(String(n / 100));
+  return [...forms].some((f) => new RegExp(`(?<![\\d.,])${f.replace(".", "\\.")}(?![\\d])`).test(src));
+}
 export function derivedMeasure(reply: string, sources: string): string[] {
   const src = String(sources ?? "");
   const derived = (x: string) => {
     if (!DERIVING.test(x)) return false;
     const ms = [...x.matchAll(MEASURE)];
     if (!ms.length) return false;
+    // An approximation of a measure the source gives, with no shape word, is no derivation (prod replay of 9480dfb2,
+    // Tehila: "70 ס"מ על כ-2 מטר" for a 70x200 scarf was cut). The number as written, or in cm or m.
+    if (!SHAPE_WORD.test(x) && ms.every((m) => inSource(m, src))) return false;
     // The sentence as a source states it is no derivation; a number with a shape word that the source never
     // pairs with the shape word is.
     const shape = (x.match(DERIVING) ?? [""])[0];
@@ -2441,6 +2482,8 @@ export function withoutClauses(sentence: string, marks: string[]): string {
   const kept = clauses.filter((c) => !marks.some((m) => c.trim().includes(m) || (c.trim().length >= 3 && m.includes(c.trim()))));
   if (kept.length === clauses.length) return "";
   const text = kept.join(", ").trim();
+  // What is left opens with a connector or a subordinate ("וכשמקפלים אותה מתקבל משולש"): the whole sentence goes.
+  if (/^\s*(?:ו?כש[\u0590-\u05FF]+|ו(?:גם|לכן|אז|אבל|כך|אם)(?![\u0590-\u05FF])|(?:אבל|אז|לכן|כי|and|but|so|which|when)\b)/iu.test(text)) return "";
   return (text.match(/[\p{L}\p{N}]+/gu) ?? []).length >= 3 ? `${text}${end} ` : "";
 }
 
@@ -2506,6 +2549,8 @@ export function colourList(reply: string, candidates: Array<{ title?: string; de
  * title without its variant part, or a distinctive word of it (not shared by every product found), in the reply
  * or in the model's own intent; or the only product found, when the reply is about a product at all.
  */
+const NEAR_FILLER = new Set(["שלך", "שלכם", "שלי", "שלנו", "מתאים", "מתאימה", "מתאימים", "מתאימות", "your", "fits", "fit"]);
+const GREETINGS = new Set(["שלום", "היי", "הי", "hi", "hello", "hey"]);
 const TITLE_STOP = new Set(["the", "and", "for", "with", "new", "set", "pro", "one", "של", "עם", "את", "לכל", "כל", "סט", "חדש", "חדשה"]);
 const VARIANT_WORDS = new Set(["black", "white", "grey", "gray", "red", "blue", "green", "pink", "navy", "beige", "brown", "sand", "cream", "charcoal", "melange", "olive", "yellow", "orange", "purple", "silver", "gold", "small", "medium", "large", "xlarge", "size", "שחור", "שחורה", "לבן", "לבנה", "אפור", "אפורה", "אדום", "אדומה", "כחול", "כחולה", "ירוק", "ירוקה", "ורוד", "ורודה", "בז'", "חום", "חומה", "קרם", "זהב", "כסף", "צהוב", "כתום", "סגול", "קטן", "קטנה", "בינוני", "בינונית", "גדול", "גדולה", "מידה"]);
 export function referredCandidates(candidates: Array<{ title?: string }>, reply: string, intent: string, contactNames: Array<string | null | undefined> = []): number[] {
@@ -2513,6 +2558,7 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
   const apos = (x: string) => x.replace(/[׳’`]/g, "'");
   const hay = apos(`${String(reply ?? "")}\n${String(intent ?? "")}`.toLowerCase());
   const titles = candidates.map((c) => apos(String(c?.title ?? "").trim()));
+  const hayTokens = (hay.match(/[\p{L}\p{N}]+(?:'[\p{L}]+)*/gu) ?? []) as string[];
   const wordsOf = (t: string) => ((t.toLowerCase().match(/[\p{L}\p{N}]+(?:'[\p{L}]+)*/gu) ?? []) as string[]).filter((w) => w.replace(/'/g, "").length >= 3);
   // A word counts only when exactly one found title has it (the Supervisor's probe: "למכונות" in two of three titles
   // marked both).
@@ -2530,19 +2576,31 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
     const distinct = wordsOf(base).filter((w) => owners(w) === 1 && !/^\d+$/.test(w) && !VARIANT_WORDS.has(w) && !TITLE_STOP.has(w) && !names.has(w));
     // Never right after a greeting ("שלום אריאל": a person, not the mat).
     const said = (w: string) => new RegExp(`(?<!(?:שלום|היי|הי|hi|hello|hey)[,!\\s]+)(?<![\\p{L}])${/[\u0590-\u05FF]/.test(w) ? "[הולבמשכ]{0,2}" : ""}${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(hay);
-    // Another word of the same title in the reply or intent, by its first four letters ("משטח גפן", "קרם יום",
-    // "אסף ... לנינג'ה"; "למכונה" for "למכונות").
-    const hayWords = (hay.match(/[\p{L}\p{N}']{2,}/gu) ?? []) as string[];
-    // A colour or size word of the same title may be the companion ("ג'יני ... כחול"), never the distinctive word.
-    const companion = (w: string) => wordsOf(base).filter((x) => x !== w && !TITLE_STOP.has(x)).some((x) => {
-      const key = x.slice(0, 4);
-      return hayWords.some((h) => [h, h.slice(1), h.slice(2)].some((v) => v.length >= Math.min(3, key.length) && v.startsWith(key)));
+    // Near, never anywhere (the Supervisor's probe on f0986322: "תוך יום עסקים נשלח את הקרם" marked "קרם יום").
+    // A title word's places in the reply: whole word, up to two Hebrew prefix letters, never right after a greeting.
+    const at = (w: string) => hayTokens.flatMap((tok, p) => {
+      const hit = tok === w || (/[\u0590-\u05FF]/.test(w) && ((/^[הולבמשכ]/u.test(tok) && tok.slice(1) === w) || (/^[הולבמשכ]{2}/u.test(tok) && tok.slice(2) === w)));
+      return hit && !(p > 0 && GREETINGS.has(hayTokens[p - 1])) ? [p] : [];
     });
+    // A companion: another word of the same title within three words, by its first four letters ("משטח גפן", "קרם
+    // יום", "למכונה" for "למכונות"); a colour or size word of the title may be one, never the distinctive word.
+    // Distance in words that carry content: a possessive or the fit verb between them does not count ("למכונה שלך
+    // מתאים משטח גפן"); "הקרם שומר על לחות" is three words apart, too far.
+    const dist = (a: number, b: number) => { const [lo, hi] = a < b ? [a, b] : [b, a]; let d = 0; for (let k = lo + 1; k <= hi; k++) if (!NEAR_FILLER.has(hayTokens[k])) d++; return d; };
+    const companion = (w: string) => at(w).some((p) => wordsOf(base).filter((x) => x !== w && !TITLE_STOP.has(x)).some((x) => {
+      const key = x.slice(0, 4);
+      return hayTokens.some((h, q) => q !== p && dist(p, q) <= 2 && [h, h.slice(1), h.slice(2)].some((v) => v.length >= Math.min(3, key.length) && v.startsWith(key)));
+    }));
     // A unique word under 5 letters counts only with a companion ("תוך יום עסקים" is no "קרם יום").
     const counts = (w: string) => said(w) && (w.length >= 5 || companion(w));
-    // Every word of the title said (2+ words, colour and size words included): "הבובון השטוח", "קרם הלחות שלנו".
+    // Every word of the title within a run of (its word count + 1) reply words: "הבובון השטוח", "קרם הלחות שלנו",
+    // "הבובון שלנו שטוח"; never "הקרם שומר על לחות".
     const all = wordsOf(base).filter((w) => !TITLE_STOP.has(w));
-    const allSaid = all.length >= 2 && all.every(said);
+    const places = all.map(at);
+    const allSaid = all.length >= 2 && places.every((ps) => ps.length) && places[0].some((p0) => {
+      for (let st = Math.max(0, p0 - all.length); st <= p0; st++) if (places.every((ps) => ps.some((p) => p >= st && p <= st + all.length))) return true;
+      return false;
+    });
     if ((base.length >= 4 && hay.includes(base)) || allSaid || distinct.some(counts)) out.push(i);
   });
   // A title inside a longer one that is also said: only the longer counts ("Classic Tee Long Sleeve", never also

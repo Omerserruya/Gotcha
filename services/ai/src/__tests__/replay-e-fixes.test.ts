@@ -1,6 +1,7 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
-import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit } from "../services/reply-engine/gates";
+import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
+import { cutFragment } from "../services/reply-engine/engine";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -330,7 +331,7 @@ describe("658a3e2e verify: title matches", () => {
   });
   it("★ nits: a weight verb and a size number are no product words", () => {
     expect(storeQueryOf("כמה זה שוקל?")).toBeNull();
-    expect(storeQueryOf("יש מידה 38 בנעל הלבנה?")).toBe("38 בנעל הלבנה");
+    expect(storeQueryOf("יש מידה 38 בנעל הלבנה?")).toBe("נעל הלבנה");
   });
 });
 
@@ -360,5 +361,70 @@ describe("prod replay of 9480dfb2, Tehila: the cleanup", () => {
   it("★ the audit row and the replay line say which check cut", () => {
     expect(cutFields({ cutSentences: 1, cutWhy: ["ungrounded_positive_fit"], cutText: ["x"] })).toMatchObject({ cutWhy: ["ungrounded_positive_fit"] });
     expect(cutLine({ cutSentences: 1, cutWhy: ["ungrounded_positive_fit"] })).toContain("cutWhy=ungrounded_positive_fit");
+  });
+});
+
+describe("f0986322 verify: near, never anywhere", () => {
+  const cosm = [{ title: "סרום ויטמין C" }, { title: "סרום לילה" }, { title: "קרם לחות" }, { title: "קרם יום" }];
+  it("★ two everyday words far apart mark nothing", () => {
+    expect(referredCandidates(cosm, "תוך יום עסקים נשלח את הקרם.", "")).toEqual([]);
+    expect(referredCandidates(cosm, "הקרם שומר על לחות העור לאורך היום.", "")).toEqual([]);
+  });
+  it("★ still marked: near words, one filler, the companion within three words", () => {
+    expect(referredCandidates(cosm, "קרם הלחות שלנו במבצע.", "")).toEqual([2]);
+    expect(referredCandidates([{ title: "בובון שטוח" }, { title: "בובון חצי שטוח" }, { title: "מטפחת ג'יני כחולה" }], "הבובון שלנו שטוח לגמרי ונוח.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "Classic Tee" }, { title: "Classic Tee Long Sleeve" }, { title: "Zip Hoodie" }], "the long sleeve classic tee is in stock", "")).toEqual([1]);
+    expect(referredCandidates([{ title: "אסף לנינג'ה קריספי" }, { title: "גפן למכונות קפה" }], "אסף מתאים לנינג'ה.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }], "למכונה שלך מתאים משטח גפן.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "מטפחת ג'יני כחולה" }, { title: "מטפחת אלכסה" }], "יש את ג'יני בגווני כחול.", "")).toEqual([0]);
+    // Chosen: marked, the companion "סרום" is within three words of "לילה".
+    expect(referredCandidates(cosm, "הסרום מתאים גם ללילה.", "")).toEqual([1]);
+  });
+  it("★ nit: a size and its value are no title text; the ב comes off the word after them", () => {
+    expect(storeQueryOf("יש מידה 38 בנעל הלבנה?", { substring: true })).toBe("נעל לבנה");
+    expect(storeQueryOf("יש לכם מידה 42 בשמלה השחורה?", { substring: true })).toBe("שמלה שחורה");
+    expect(storeQueryOf("יש מידה 38?")).toBeNull();
+  });
+});
+
+describe("rating of the 9480dfb2 prod replay", () => {
+  it("★ blocker 1: a media file is never the link; a video ask takes a video link only", () => {
+    const kb = "Miss eyebrows טוש גבות: https://chanivainberger.co.il/wp-content/uploads/2025/12/Miss-eyebrows.webp";
+    expect(howToLink(kb, ["אשמח לסרטון הדרכה לטוש הגבות"], true)).toBeNull();
+    expect(howToLink(kb, ["קישור לטוש הגבות"], false)).toBeNull();
+    const page = "Miss eyebrows טוש גבות: https://chanivainberger.co.il/product/miss-eyebrows";
+    expect(howToLink(page, ["אשמח לסרטון הדרכה לטוש הגבות"], true)).toBeNull();
+    expect(howToLink(page, ["קישור לטוש הגבות"], false)).toBe("https://chanivainberger.co.il/product/miss-eyebrows");
+    expect(howToLink(`${kb}\nסרטון הדרכה לטוש הגבות: https://youtu.be/MypUj_xxA24`, ["אשמח לסרטון הדרכה לטוש הגבות"], true)).toBe("https://youtu.be/MypUj_xxA24");
+  });
+  it("★ blocker 2: a fragment after a cut is no reply; a derived clause never leaves a connector", () => {
+    expect(cutFragment("וכשמקפלים אותה מתקבל משולש.")).toBe(true);
+    expect(cutFragment("אבל זה תלוי בדגם.")).toBe(true);
+    expect(cutFragment("המטפחת בגודל 70x70 ס\"מ.")).toBe(false);
+    // The stated measure stays when the derived clause comes after it; a connector left in front goes whole.
+    const r = "המטפחת בגודל 70x70 ס\"מ, וכשמקפלים אותה מתקבל משולש בערך 99 ס\"מ.";
+    expect(stripFactProblems(r, [{ kind: "derived_measure", claims: derivedMeasure(r, "70x70 ס\"מ") }] as any)).toBe("המטפחת בגודל 70x70 ס\"מ.");
+    const r2 = "כל צלע בערך 99 ס\"מ, וכשמקפלים אותה מתקבל משולש.";
+    expect(stripFactProblems(r2, [{ kind: "derived_measure", claims: ["כל צלע בערך 99 ס\"מ"] }] as any)).toBe("");
+  });
+  it("★ blocker 2: the plural reaches the whole sentence (\"כתבו ... לכם\")", () => {
+    expect(neutralSecondPerson("כתבי איזה גוון עור יש לך.")).toBe("כתבו איזה גוון עור יש לכם.");
+    expect(neutralSecondPerson("יש לך משלוח חינם.")).toBe("יש לך משלוח חינם.");
+  });
+  it("★ near-blocker 3: a credit card is no product card; a rounded stated measure stays; a caveat is never an absence", async () => {
+    expect(cardReferences("אפשר לשלם באתר בכרטיס אשראי ישראלי או ב-PayPal.", false)).toEqual([]);
+    expect(cardReferences("רואים את זה בכרטיס.", false)).toHaveLength(1);
+    expect(derivedMeasure("המטפחת במידה 70 ס\"מ על כ-2 מטר.", "סולו כחולה 70x200 ס\"מ")).toEqual([]);
+    expect(derivedMeasure("כל צלע בערך 99 ס\"מ.", "70x70 ס\"מ")).toHaveLength(1);
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const base = { claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "אני רוצה גוון חום למתחת לעיניים", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any;
+    const caveat = "יש לנו טוש בגוון חום. אין לנו אישור שהוא מתאים לשימוש מתחת לעיניים.";
+    const withTool = { ...base, candidateCount: 1, candidateTitles: ["טוש גבות Miss eyebrows"], tools: [{ tool: "woocommerce.list_products", outcome: "ok", decision: "allow", args: { query: "טוש" } }], grounding: "טוש גבות Miss eyebrows", toolsOffered: ["woocommerce.list_products", "search_knowledge"] };
+    const v = gate3({ ...withTool, reply: caveat });
+    expect(v.problems.map((p: any) => p.kind)).not.toContain("ungrounded_absence");
+    // Whatever else flags it, the cleanup keeps the caveat.
+    expect(stripFactProblems(caveat, v.problems)).toContain("אין לנו אישור שהוא מתאים לשימוש מתחת לעיניים.");
+    // A real absence stays a claim.
+    expect(gate3({ ...withTool, reply: "יש טוש חום, אבל אין לנו מוצר שמאושר לשימוש מתחת לעיניים." }).problems.map((p: any) => p.kind)).toContain("ungrounded_absence");
   });
 });
