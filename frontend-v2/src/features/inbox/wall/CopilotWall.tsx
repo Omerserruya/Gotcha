@@ -197,6 +197,7 @@ async function PersonBlock({
         </span>
         {contactId ? (
           <Link
+            prefetch={false}
             className={styles.violetLink}
             href={`/customers/${contactId}`}
             data-testid="wall-profile"

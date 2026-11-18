@@ -47,7 +47,12 @@ export function SettingsSection({
       <div className={styles.header}>
         <div className={styles.heading}>
           {back ? (
-            <Link href={back.href} className={styles.back} data-testid="settings-back">
+            <Link
+              prefetch={false}
+              href={back.href}
+              className={styles.back}
+              data-testid="settings-back"
+            >
               ← {back.label}
             </Link>
           ) : null}

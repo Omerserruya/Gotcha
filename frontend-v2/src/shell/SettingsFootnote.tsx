@@ -35,7 +35,7 @@ export function SettingsFootnote() {
     <p className={styles.footnote}>
       {t.rich('settingsFootnote', {
         studio: (chunks) => (
-          <Link href="/studio" className={styles.footnoteLink}>
+          <Link prefetch={false} href="/studio" className={styles.footnoteLink}>
             {chunks}
           </Link>
         ),

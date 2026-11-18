@@ -120,7 +120,7 @@ export function TemplatePicker({
       ) : list.templates.length === 0 ? (
         <p className={styles.composerNote} data-testid="template-none">
           {t('template.none')}{' '}
-          <Link href="/outreach/templates" data-testid="template-none-link">
+          <Link prefetch={false} href="/outreach/templates" data-testid="template-none-link">
             {t('template.noneLink')}
           </Link>
         </p>

@@ -48,6 +48,7 @@ export function SettingsSections({
         const href = section.href ?? '/settings';
         return (
           <Link
+            prefetch={false}
             key={section.id}
             href={href}
             className={styles.link}

@@ -55,7 +55,7 @@ export async function AppShell({
           names are hashed and cannot be selected on. */}
       <div className={styles.rail} data-rail>
         <div className={styles.railTop}>
-          <Link href={consoleOnly ? '/system' : '/home'} className={styles.brand}>
+          <Link prefetch={false} href={consoleOnly ? '/system' : '/home'} className={styles.brand}>
             {/* No title: the wordmark beside it already names the product, and
                 announcing it twice is noise for a screen reader. */}
             <Logo variant="framed" size={26} />

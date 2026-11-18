@@ -54,7 +54,13 @@ export async function Drawer({
   const t = await getTranslations('common.actions');
   return (
     <div className={styles.layer} data-testid={testId}>
-      <Link href={closeHref} className={styles.scrim} aria-label={t('close')} tabIndex={-1} />
+      <Link
+        prefetch={false}
+        href={closeHref}
+        className={styles.scrim}
+        aria-label={t('close')}
+        tabIndex={-1}
+      />
       <DrawerPanel label={title} width={width}>
         <header className={styles.head}>
           {lead}
@@ -64,7 +70,13 @@ export async function Drawer({
               <p className={styles.line}>{userLine ? <UserText>{line}</UserText> : line}</p>
             ) : null}
           </div>
-          <Link href={closeHref} className={styles.close} aria-label={t('close')} data-sheet-close>
+          <Link
+            prefetch={false}
+            href={closeHref}
+            className={styles.close}
+            aria-label={t('close')}
+            data-sheet-close
+          >
             <X size={16} aria-hidden="true" />
           </Link>
         </header>
