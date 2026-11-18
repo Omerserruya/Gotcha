@@ -194,7 +194,7 @@ export async function ConversationList({
   if (rows === null) {
     return (
       <div className={styles.queue} data-testid="queue-unavailable">
-        <p className={styles.note}>{t('queue.unavailable')}</p>
+        <p className={`${styles.note} ${styles.listNote}`}>{t('queue.unavailable')}</p>
       </div>
     );
   }
@@ -766,7 +766,7 @@ export async function ConversationList({
               </Link>
             </div>
           ) : dated.length === 0 && undated.length === 0 ? (
-            <p className={styles.note} data-testid="queue-empty">
+            <p className={`${styles.note} ${styles.listNote}`} data-testid="queue-empty">
               {t('queue.empty')}
             </p>
           ) : (
@@ -834,7 +834,7 @@ export async function ConversationList({
               failed read - the caption falls back to what this page can see
               and says that is what it is.
             */}
-              <p className={styles.note}>
+              <p className={`${styles.note} ${styles.listNote}`}>
                 {undatedCount !== undefined
                   ? t('queue.undatedInView', { count: undatedCount })
                   : hasMore

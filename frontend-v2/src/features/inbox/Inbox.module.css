@@ -139,6 +139,16 @@
   }
 
   /*
+   * A line inside the list panel (empty, unread, the undated caption): the
+   * rows' own inline inset (02's 16px, `.queueRow`), so it never sits on the
+   * panel's edge - it read as clipped at 1440 and 390 (dev, 2026-11-18).
+   */
+  .listNote {
+    padding-block: 13px;
+    padding-inline: var(--space-16);
+  }
+
+  /*
    * ════════════════════════════════════════════════════════════════════════
    * ★★ "SEE THAT THEY'RE IN A SEPARATE PART" - THE QUEUE IS A CARD
    * ════════════════════════════════════════════════════════════════════════

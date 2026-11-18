@@ -17,6 +17,7 @@ import heNavigation from '@/i18n/messages/he/navigation.json';
 import heMessages from '@/i18n/messages/he/inbox.json';
 
 import { ConversationList } from './ConversationList';
+import inboxStyles from './Inbox.module.css';
 import { QUEUE_CHANNEL_FILTERS } from './inbox-views';
 
 /* Every chip there is: a workspace with every channel connected. */
@@ -364,6 +365,23 @@ describe('★ waiting time, and the row that has none', () => {
   it('an empty queue says nothing is waiting', async () => {
     await show([]);
     expect(screen.getByTestId('queue-empty')).toHaveTextContent(/nothing is waiting/i);
+  });
+
+  it('★ the empty and unread lines sit at the rows’ inset, never on the panel’s edge', async () => {
+    // Dev, 2026-11-18: "שום דבר לא ממתין." flush against the panel's edge read as clipped.
+    const rule = readFileSync('src/features/inbox/Inbox.module.css', 'utf8').match(
+      /\.listNote \{([^}]*)\}/,
+    )?.[1];
+    expect(rule).toMatch(/padding-inline:\s*var\(--space-16\)/);
+    await show([]);
+    expect(screen.getByTestId('queue-empty')).toHaveClass(inboxStyles.listNote!);
+  });
+
+  it('★ so does the unread line', async () => {
+    await show(null);
+    expect(within(screen.getByTestId('queue-unavailable')).getByText(/couldn't read/i)).toHaveClass(
+      inboxStyles.listNote!,
+    );
   });
 });
 
