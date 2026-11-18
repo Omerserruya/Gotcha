@@ -827,6 +827,16 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     }
   })();
 
+  // Relevance label (2026-11-17): every inbound of an enabled tenant (RELEVANCE_CLASSIFY_TENANTS), whatever
+  // handles the conversation (the AI, a flow, a person, the legacy engine). Debounced per conversation;
+  // classified by the ai service. Not for a sandbox rehearsal. Never blocks the message.
+  {
+    const labelConvId = conversation.id;
+    if (!String(conversation.customerExternalId ?? "").startsWith("sandbox:")) {
+      void import("@chatcenter/shared").then(({ enqueueRelevanceClassification }) => enqueueRelevanceClassification(tenantId, labelConvId)).catch(() => undefined);
+    }
+  }
+
   // Update conversation timestamp
   await prisma.conversation.update({
     where: { id: conversation.id },

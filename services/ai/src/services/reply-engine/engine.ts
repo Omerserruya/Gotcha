@@ -31,6 +31,7 @@ import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
+import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
@@ -746,7 +747,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (mode !== "off" && !opts.replay && !String(conversation.customerExternalId ?? "").startsWith("sandbox:")) {
       const loaded: any = await loadAll.catch(() => null);
       const company = loaded?.[3] ?? null;
-      const rel = await relevanceForTurn({ tenantId: opts.tenantId, conversation, history: loaded?.[1] ?? [], profile: company ? { ...company } : null, mode });
+      const rel = await relevanceForTurn({ tenantId: opts.tenantId, conversation, history: loaded?.[1] ?? [], profile: company ? { ...company } : null, mode, preferStored: relevanceClassifyEnabled(opts.tenantId) });
       (trace as any).relevance = rel;
       if (mode === "on" && rel.hold) {
         trace.gate1 = `relevance:${rel.category}`;

@@ -716,6 +716,10 @@ services:
       # this token and authenticate() accepts either. Empty default desyncs them.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatcenter-internal-2026}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Relevance (docs/architecture/conversation-relevance.md). RELEVANCE_GATE: off (default) | shadow (labels only)
+      # | on (holds the AI back). RELEVANCE_CLASSIFY_TENANTS: the async labels, empty = no tenant, * = all.
+      RELEVANCE_GATE: ${RELEVANCE_GATE:-off}
+      RELEVANCE_CLASSIFY_TENANTS: ${RELEVANCE_CLASSIFY_TENANTS:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
     # Debug-only: provides the inspect-deep preload referenced by NODE_OPTIONS.
     # Harmless when NODE_OPTIONS is unset (the file just isn't loaded).
@@ -1067,6 +1071,8 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Relevance labels on every inbound (docs/architecture/conversation-relevance.md): empty = no tenant, * = all.
+      RELEVANCE_CLASSIFY_TENANTS: ${RELEVANCE_CLASSIFY_TENANTS:-}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatcenter-internal-2026}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}

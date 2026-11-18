@@ -94,7 +94,8 @@ describe("conversation relevance", () => {
   });
 
   it("parses the dry-run arguments", () => {
-    expect(parseDryArgs(["--tenant", "t1"])).toEqual({ tenant: "t1", days: 60, out: "/tmp/classify-t1.md", limit: 2000 });
+    expect(parseDryArgs(["--tenant", "t1"])).toEqual({ tenant: "t1", days: 60, out: "/tmp/classify-t1.md", limit: 2000, write: false });
+    expect(parseDryArgs(["--tenant", "t1", "--write"]).write).toBe(true);
     expect(parseDryArgs(["--tenant", "t1", "--days", "900", "--out", "/x.md"]).days).toBe(365);
     expect(() => parseDryArgs([])).toThrow(/usage/);
   });

@@ -58,7 +58,7 @@ export interface RelevanceGateDeps {
 }
 
 /** Through the conversation service's internal write, never the table (it refuses to replace an override). */
-async function writeLabel(tenantId: string, conversationId: string, label: Relevance): Promise<void> {
+export async function writeLabel(tenantId: string, conversationId: string, label: Relevance): Promise<void> {
   const base = (process.env.CONVERSATION_SERVICE_URL || "http://conversation:4002").replace(/\/$/, "");
   const res = await fetch(`${base}/internal/conversations/${encodeURIComponent(conversationId)}/relevance`, {
     method: "PUT",
@@ -82,6 +82,8 @@ export async function relevanceForTurn(args: {
   history: any[];
   profile: RelevanceProfile | null;
   mode: RelevanceGateMode;
+  /** The async job labels this tenant's conversations: a stored label is used as it is (no second call). */
+  preferStored?: boolean;
 }, deps: RelevanceGateDeps = {}): Promise<RelevanceGateResult> {
   const { tenantId, conversation, history, profile, mode } = args;
   const off: RelevanceGateResult = { mode, category: null, confidence: null, source: null, hold: false };
@@ -93,7 +95,7 @@ export async function relevanceForTurn(args: {
   const now = deps.now?.() ?? new Date();
   const lastIn = [...(history ?? [])].reverse().find((m: any) => m?.direction === "INBOUND");
   const lastInAt = lastIn?.createdAt ? new Date(lastIn.createdAt) : now;
-  if (!shouldReclassify(stored, lastInAt, now)) {
+  if ((args.preferStored && stored.category) || !shouldReclassify(stored, lastInAt, now)) {
     return { mode, category: stored.category, confidence: stored.confidence, source: "stored", hold: holdsBack(stored.category, stored.confidence, false) };
   }
   const db = deps.db ?? prisma;

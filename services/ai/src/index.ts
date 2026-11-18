@@ -260,6 +260,9 @@ startPostCallAnalyzeWorker();
 // re-embeds what actually changed. See services/knowledge-sync.service.ts.
 import { startKnowledgeSyncScheduler } from "./services/knowledge-sync.service";
 startKnowledgeSyncScheduler();
+// Relevance labels for every conversation of an enabled tenant (RELEVANCE_CLASSIFY_TENANTS; empty = none).
+import { startRelevanceWorker } from "./workers/relevance/worker";
+startRelevanceWorker();
 
 // Historical Intelligence Import: the multi-stage analysis of a business's
 // imported conversation history. Ingest happens in incoming-worker; everything

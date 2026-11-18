@@ -58,6 +58,39 @@ export const flowResumeQueue = new Queue("flow-resume", { connection: { url: RED
  */
 export const historicalIntelligenceQueue = new Queue("historical-intelligence", { connection: { url: REDIS_URL } });
 
+/**
+ * Conversation relevance labels (2026-11-17, docs/architecture/conversation-relevance.md): one job per
+ * conversation per 2 minutes after an inbound, for EVERY conversation, independent of the reply engine.
+ * Its own queue: one small model call per job, never in front of a customer's message.
+ */
+export const RELEVANCE_QUEUE = "conversation-relevance";
+export const relevanceQueue = new Queue(RELEVANCE_QUEUE, { connection: { url: REDIS_URL } });
+export const RELEVANCE_DEBOUNCE_MS = 2 * 60_000;
+
+/** RELEVANCE_CLASSIFY_TENANTS: empty or unset = none, "*" = all, else a comma list of tenant ids. */
+export function relevanceClassifyEnabled(tenantId: string, env: Record<string, string | undefined> = process.env): boolean {
+  const v = String(env.RELEVANCE_CLASSIFY_TENANTS ?? "").trim();
+  if (!v) return false;
+  if (v === "*") return true;
+  return v.split(",").map((x) => x.trim()).filter(Boolean).includes(tenantId);
+}
+
+/**
+ * Enqueue a label for this conversation. The job id is the conversation's, so every inbound inside the
+ * 2-minute window joins the one waiting job (BullMQ ignores an add whose id exists); the job is removed
+ * when it runs, so the next inbound after it starts a new one. Never throws.
+ */
+export async function enqueueRelevanceClassification(tenantId: string, conversationId: string, queue: { add: (...a: any[]) => Promise<unknown> } = relevanceQueue): Promise<boolean> {
+  if (!relevanceClassifyEnabled(tenantId)) return false;
+  try {
+    await queue.add("classify", { tenantId, conversationId }, { jobId: `classify-relevance-${conversationId}`, delay: RELEVANCE_DEBOUNCE_MS, removeOnComplete: true, removeOnFail: true, attempts: 1 });
+    return true;
+  } catch (err) {
+    console.warn("[relevance] enqueue failed:", (err as Error)?.message);
+    return false;
+  }
+}
+
 // ─── Job types ──────────────────────────────────────────────
 
 export interface IncomingMessageJob {

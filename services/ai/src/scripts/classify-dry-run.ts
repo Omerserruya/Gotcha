@@ -9,16 +9,19 @@
  *   - 15 samples per category (channel, who wrote first, the subject or first line up to 80 characters,
  *     the label, the confidence, the reason);
  *   - every conversation a label would SILENCE (personal, notice, marketing) with confidence < 0.85.
- * Writes nothing to the database. The model calls are platform-paid ("_classify", outside the tenant's
+ * Writes nothing to the database, unless --write (NEEDS the a6459560 columns): then each label is written
+ * through the conversation service's internal route, never over a person's override (the backfill).
+ * The model calls are platform-paid ("_classify", outside the tenant's
  * budgets). The report holds message lines for the reviewer; the console prints counts only.
  */
 import fs from "fs";
 import { prisma, withCrossTenantAccess } from "@chatcenter/shared";
 import { initAIService } from "../services/ai.service";
 import { getCompanyContext } from "../services/company-context.service";
+import { writeLabel } from "../services/reply-engine/relevance-gate";
 import { classifyConversation, SILENCING, RELEVANCE_CATEGORIES, teamIdentityOf, type Relevance, type RelevanceInput, type RelevanceProfile } from "../services/conversation-relevance.service";
 
-export interface DryArgs { tenant: string; days: number; out: string; limit: number }
+export interface DryArgs { tenant: string; days: number; out: string; limit: number; write: boolean }
 export function parseDryArgs(argv: string[]): DryArgs {
   const get = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
   const tenant = get("--tenant");
@@ -30,6 +33,7 @@ export function parseDryArgs(argv: string[]): DryArgs {
     days: Number.isFinite(days) && days > 0 ? Math.min(365, Math.floor(days)) : 60,
     out: get("--out") ?? `/tmp/classify-${tenant}.md`,
     limit: Number.isFinite(limit) && limit > 0 ? Math.min(10000, Math.floor(limit)) : 2000,
+    write: argv.includes("--write"),
   };
 }
 
@@ -97,10 +101,12 @@ async function main() {
       where: { tenantId: a.tenant, lastMessageAt: { gte: since }, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
       orderBy: { lastMessageAt: "desc" },
       take: a.limit,
-      select: { id: true, channel: true, customerExternalId: true },
+      select: { id: true, channel: true, customerExternalId: true, ...(a.write ? { relevanceOverriddenBy: true } : {}) },
     });
     console.log(`[classify] tenant=${a.tenant} conversations=${convs.length}`);
     let done = 0;
+    let written = 0;
+    let writeFailed = 0;
     const rows = await pool(convs, 3, async (c): Promise<DryRow> => {
       const [last, first] = await Promise.all([
         (prisma as any).message.findMany({ where: { tenantId: a.tenant, conversationId: c.id }, orderBy: { createdAt: "desc" }, take: 12, select: { direction: true, body: true, createdAt: true, messageType: true, metadata: true } }),
@@ -111,13 +117,17 @@ async function main() {
       const subject = (lastIn?.metadata as any)?.email?.subject ?? null;
       const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, firstDirection: first?.direction ?? null, messages, subject, team };
       const label = await classifyConversation(a.tenant, profile, input).catch((err: any) => ({ category: "unclear" as const, confidence: 0, reason: `error: ${clip(err?.message ?? err, 60)}`, source: "model" as const, classifiedAt: new Date().toISOString() }));
+      // The backfill: never over a person's override, never an error's "unclear".
+      if (a.write && !c.relevanceOverriddenBy && !label.reason.startsWith("error:")) {
+        try { await writeLabel(a.tenant, c.id, label); written++; } catch { writeFailed++; }
+      }
       if (++done % 25 === 0) console.log(`[classify] ${done}/${convs.length}`);
       const firstIn = messages.find((m: any) => m.direction === "INBOUND" && clip(m.body, 1));
       return { conversationId: c.id, channel: String(c.channel), firstWriter: first?.direction === "OUTBOUND" ? "business" : first?.direction === "INBOUND" ? "contact" : "unknown", line: subject ?? clip(firstIn?.body, 80), label };
     });
     fs.writeFileSync(a.out, dryRunReport(a.tenant, a.days, rows));
     const counts = RELEVANCE_CATEGORIES.map((k) => `${k}=${rows.filter((r) => r.label.category === k).length}`).join(" ");
-    console.log(`[classify] done: ${counts}; silencing under 0.85: ${rows.filter((r) => SILENCING.has(r.label.category) && r.label.confidence < 0.85).length}; report ${a.out}`);
+    console.log(`[classify] done: ${counts}; silencing under 0.85: ${rows.filter((r) => SILENCING.has(r.label.category) && r.label.confidence < 0.85).length}; report ${a.out}${a.write ? `; written ${written}, write failed ${writeFailed}` : ""}`);
   });
 }
 
