@@ -101,7 +101,7 @@ async function main() {
       where: { tenantId: a.tenant, lastMessageAt: { gte: since }, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
       orderBy: { lastMessageAt: "desc" },
       take: a.limit,
-      select: { id: true, channel: true, customerExternalId: true, ...(a.write ? { relevanceOverriddenBy: true } : {}) },
+      select: { id: true, channel: true, customerExternalId: true, ...(a.write ? { relevanceOverriddenBy: true, channelAccount: { select: { relevanceFilterEnabled: true } } } : {}) },
     });
     console.log(`[classify] tenant=${a.tenant} conversations=${convs.length}`);
     let done = 0;
@@ -118,7 +118,8 @@ async function main() {
       const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, firstDirection: first?.direction ?? null, messages, subject, team };
       const label = await classifyConversation(a.tenant, profile, input).catch((err: any) => ({ category: "unclear" as const, confidence: 0, reason: `error: ${clip(err?.message ?? err, 60)}`, source: "model" as const, classifiedAt: new Date().toISOString() }));
       // The backfill: never over a person's override, never an error's "unclear".
-      if (a.write && !c.relevanceOverriddenBy && !label.reason.startsWith("error:")) {
+      // Never on an account whose filter the business turned off (2026-11-18).
+      if (a.write && !c.relevanceOverriddenBy && c.channelAccount?.relevanceFilterEnabled !== false && !label.reason.startsWith("error:")) {
         try { await writeLabel(a.tenant, c.id, label); written++; } catch { writeFailed++; }
       }
       if (++done % 25 === 0) console.log(`[classify] ${done}/${convs.length}`);

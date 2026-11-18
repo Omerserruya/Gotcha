@@ -1,3 +1,4 @@
+import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
@@ -251,6 +252,7 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
         lastError: true,
         lastHealthCheck: true,
         platformMeta: true,
+        relevanceFilterEnabled: true,
         createdAt: true,
         updatedAt: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
@@ -259,9 +261,11 @@ router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:
     });
 
     // The code a writer stored beside the sentence (lib/error-code), served apart.
-    const withCode = <T extends { lastError: string | null; platformMeta: unknown }>(a: T) => ({
+    // The relevance filter only means something on a message channel (null elsewhere: no switch to show).
+    const withCode = <T extends { lastError: string | null; platformMeta: unknown; channel: unknown; relevanceFilterEnabled?: boolean }>(a: T) => ({
       ...publicChannelAccount(a),
       ...splitErrorCode(a.lastError),
+      relevanceFilterEnabled: relevanceChannel(a.channel) ? a.relevanceFilterEnabled !== false : null,
     });
     if (!windowed) {
       res.json({ data: accounts.map(withCode) });
@@ -2300,6 +2304,28 @@ router.post("/messenger/select", authenticate, resolveTenant, requireChannelConn
 // stays, unread and unwritten, until its migration is approved.
 
 // ─── Disconnect Channel ──────────────────────────────────────
+
+/**
+ * PATCH /api/channels/:id/relevance-filter { relevanceFilterEnabled: boolean } -> { data: { id, relevanceFilterEnabled } }
+ * The business decides, per connected account, whether the relevance filter runs on it (2026-11-18, Omer).
+ * Off: no classification, no AI hold by a label, and none of its conversations show as not relevant; the labels
+ * are kept and come back when it is on. The same permission as the other channel settings.
+ */
+router.patch("/:id/relevance-filter", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
+  try {
+    const enabled = req.body?.relevanceFilterEnabled;
+    if (typeof enabled !== "boolean") { res.status(400).json({ error: "relevanceFilterEnabled must be true or false", code: "INVALID_RELEVANCE_FILTER" }); return; }
+    const found = await prisma.channelAccount.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! }, select: { id: true, channel: true } });
+    if (!found) { res.status(404).json({ error: "Channel not found", code: "CHANNEL_NOT_FOUND" }); return; }
+    // A site or store chat and voice have no relevance filter.
+    if (!relevanceChannel(found.channel)) { res.status(400).json({ error: "This channel has no relevance filter.", code: "RELEVANCE_FILTER_NOT_APPLICABLE" }); return; }
+    const row = await prisma.channelAccount.update({ where: { id: found.id }, data: { relevanceFilterEnabled: enabled }, select: { id: true, relevanceFilterEnabled: true } });
+    res.json({ data: row });
+  } catch (err: any) {
+    console.error("[channels] relevance filter failed:", err?.message);
+    res.status(500).json({ error: "We could not save the setting.", code: "RELEVANCE_FILTER_SAVE_FAILED" });
+  }
+});
 
 router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {

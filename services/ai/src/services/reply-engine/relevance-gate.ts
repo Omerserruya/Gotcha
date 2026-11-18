@@ -9,6 +9,7 @@
  *   reply_to_outbound (a person started it). business and unclear answer as today; so does any error.
  */
 import { prisma, getInternalServiceKey } from "@chatcenter/shared";
+import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { classifyConversation, shouldReclassify, SILENCING, teamIdentityOf, type Relevance, type RelevanceCategory, type RelevanceProfile } from "../conversation-relevance.service";
 
 export type RelevanceGateMode = "off" | "shadow" | "on";
@@ -18,6 +19,13 @@ export function relevanceGateMode(env = process.env): RelevanceGateMode {
 }
 
 export const GATE_CONFIDENCE = 0.7;
+
+/** The channel account's relevance filter (default on; a missing account or a failed read counts as on). */
+export async function filterOn(tenantId: string, channelAccountId: string | null | undefined, db: any = prisma): Promise<boolean> {
+  if (!channelAccountId) return true;
+  const a = await db.channelAccount?.findFirst?.({ where: { id: channelAccountId, tenantId }, select: { relevanceFilterEnabled: true } }).catch(() => null);
+  return !(a && a.relevanceFilterEnabled === false);
+}
 const HOLDS: ReadonlySet<RelevanceCategory> = new Set<RelevanceCategory>([...SILENCING, "reply_to_outbound"]);
 
 export interface StoredRelevance {
@@ -45,7 +53,7 @@ export interface RelevanceGateResult {
   mode: RelevanceGateMode;
   category: string | null;
   confidence: number | null;
-  source: "override" | "stored" | "fast" | "model" | "error" | null;
+  source: "override" | "stored" | "fast" | "model" | "error" | "filter_off" | null;
   hold: boolean;
 }
 
@@ -91,6 +99,12 @@ export async function relevanceForTurn(args: {
   const stored = storedRelevance(conversation);
   if (stored.overriddenBy) {
     return { mode, category: stored.category, confidence: stored.confidence, source: "override", hold: holdsBack(stored.category, stored.confidence, true) };
+  }
+  // Site and store chats and voice: a visitor is always talking to the business (2026-11-18). No label, no hold.
+  if (!relevanceChannel(conversation?.channel)) return { ...off, source: "filter_off" };
+  // The business turned the filter off on this channel account (2026-11-18): no label, no hold.
+  if (conversation?.channelAccountId && !(await filterOn(tenantId, conversation.channelAccountId, deps.db ?? prisma))) {
+    return { ...off, source: "filter_off" };
   }
   const now = deps.now?.() ?? new Date();
   const lastIn = [...(history ?? [])].reverse().find((m: any) => m?.direction === "INBOUND");

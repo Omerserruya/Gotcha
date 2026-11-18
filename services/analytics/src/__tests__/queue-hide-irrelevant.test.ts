@@ -12,6 +12,7 @@ function ok(r: any, w: any): boolean {
     if (k === "OR") return (v as any[]).some((x) => ok(r, x));
     if (k === "NOT") return !ok(r, v);
     if (v && typeof v === "object") {
+      if ("is" in v) return r[k] != null && ok(r[k], v.is);
       if ("notIn" in v) return r[k] != null && !v.notIn.includes(r[k]);
       if ("in" in v) return v.in.includes(r[k]);
       if ("startsWith" in v) return String(r[k] ?? "").startsWith(v.startsWith);

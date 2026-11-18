@@ -832,8 +832,20 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // classified by the ai service. Not for a sandbox rehearsal. Never blocks the message.
   {
     const labelConvId = conversation.id;
+    const labelAccountId = (conversation as { channelAccountId?: string | null }).channelAccountId ?? null;
     if (!String(conversation.customerExternalId ?? "").startsWith("sandbox:")) {
-      void import("@chatcenter/shared").then(({ enqueueRelevanceClassification }) => enqueueRelevanceClassification(tenantId, labelConvId)).catch(() => undefined);
+      void (async () => {
+        // Site and store chats and voice are never classified (2026-11-18).
+        const { relevanceChannel } = await import("@chatcenter/shared");
+        if (!relevanceChannel((conversation as { channel?: string }).channel)) return;
+        // The business turned the filter off on this account (2026-11-18): nothing is classified on it.
+        if (labelAccountId) {
+          const acct = await prisma.channelAccount.findFirst({ where: { id: labelAccountId, tenantId }, select: { relevanceFilterEnabled: true } }).catch(() => null);
+          if (acct && acct.relevanceFilterEnabled === false) return;
+        }
+        const { enqueueRelevanceClassification } = await import("@chatcenter/shared");
+        await enqueueRelevanceClassification(tenantId, labelConvId);
+      })().catch(() => undefined);
     }
   }
 

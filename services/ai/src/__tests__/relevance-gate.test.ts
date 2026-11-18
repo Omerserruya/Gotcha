@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 vi.mock("@chatcenter/shared", () => ({ prisma: {}, getInternalServiceKey: () => "k" }));
+// The channel rule is a pure module by its own path: not mocked.
 vi.mock("../services/ai.service", () => ({ generateResponse: vi.fn(), getDefaultModel: () => "m", platformPaidScope: { run: (_: any, f: any) => f() } }));
 import { relevanceGateMode, relevanceForTurn, holdsBack, GATE_CONFIDENCE } from "../services/reply-engine/relevance-gate";
 
@@ -62,5 +63,20 @@ describe("relevance gate", () => {
     for (const c of ["business", "unclear", null]) expect(holdsBack(c, 1, false)).toBe(false);
     for (const c of ["personal", "notice", "marketing", "auto_reply", "internal", "reply_to_outbound"]) expect(holdsBack(c, 0.7, false)).toBe(true);
     expect(holdsBack("personal", 0.69, false)).toBe(false);
+  });
+
+  it("★ a channel whose filter is off, or a site chat: no classification, no hold; an override still holds", async () => {
+    const classify = vi.fn(async () => label("personal", 0.95));
+    const dbOff = { ...db, channelAccount: { findFirst: async () => ({ relevanceFilterEnabled: false }) } };
+    const off = await relevanceForTurn({ tenantId: "t", conversation: conv({ channelAccountId: "a1" }), history: hist, profile: null, mode: "on" }, { classify: classify as any, db: dbOff, now: () => now });
+    expect(off).toMatchObject({ hold: false, source: "filter_off" });
+    const web = await relevanceForTurn({ tenantId: "t", conversation: conv({ channel: "WEBCHAT" }), history: hist, profile: null, mode: "on" }, { classify: classify as any, db, now: () => now });
+    expect(web).toMatchObject({ hold: false, source: "filter_off" });
+    expect(classify).not.toHaveBeenCalled();
+    const over = await relevanceForTurn({ tenantId: "t", conversation: conv({ channelAccountId: "a1", relevanceCategory: "personal", relevanceOverriddenBy: "u1" }), history: hist, profile: null, mode: "on" }, { classify: classify as any, db: dbOff, now: () => now });
+    expect(over.hold).toBe(true);
+    const onDb = { ...db, channelAccount: { findFirst: async () => ({ relevanceFilterEnabled: true }) } };
+    const on = await relevanceForTurn({ tenantId: "t", conversation: conv({ channelAccountId: "a1" }), history: hist, profile: null, mode: "on" }, { classify: classify as any, db: onDb, write: async () => undefined, now: () => now });
+    expect(on.hold).toBe(true);
   });
 });
