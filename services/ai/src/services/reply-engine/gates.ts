@@ -1809,7 +1809,7 @@ export function asksOtherTopic(incoming: string): boolean {
  * התקבלה התאמה לפי המידות", both wrong). Kept only when the product's own text says it does not fit, or the
  * customer's base is bigger than the pad on an axis (pad >= base on both, either way round).
  */
-const NEG_FIT = /(?:מתאים|מתאימה|מתאימים|מתאימות)[^.!?\n]{0,60}[,\s]\s*(?:אבל\s+|ו)?לא\s+ל[\u0590-\u05FF'"״]{3,}|(?<![֐-׿])(?:לא\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|מתאים\s+ל)|(?:אין|לא\s+(?:התקבלה|נמצאה|קיימת))\s+(?:לנו\s+)?התאמה)(?![֐-׿])|\b(?:(?:does|do|will)n'?t fit|(?:is|are) not compatible|no (?:matching|suitable) (?:pad|size|product))\b/iu;
+const NEG_FIT = /(?:מתאים|מתאימה|מתאימים|מתאימות)[^.!?\n]{0,60}[,\s]\s*(?:אבל\s+|ו)?לא\s+ל[\u0590-\u05FF'"״]{3,}|(?<![֐-׿])(?:לא\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|מתאים\s+ל)|(?:אין|לא\s+(?:התקבלה|נמצאה|קיימת|עלתה|עלו|נמצאו))\s+(?:לנו\s+)?התאמה)(?![֐-׿])|\b(?:(?:does|do|will)n'?t fit|(?:is|are) not compatible|no (?:matching|suitable) (?:pad|size|product))\b/iu;
 const SIZE_PAIR = /(\d{2,3}(?:\.\d)?)\s*(?:[x×*]|על)\s*(\d{2,3}(?:\.\d)?)/iu;
 export const sizePair = (t: string): [number, number] | null => { const m = SIZE_PAIR.exec(String(t ?? "")); return m ? [Number(m[1]), Number(m[2])] : null; };
 export const padFits = (pad: [number, number], base: [number, number]) => { const [a, b] = [...pad].sort((x, y) => x - y), [c, d] = [...base].sort((x, y) => x - y); return a >= c && b >= d; };
@@ -2004,3 +2004,8 @@ export function smallestFitting(base: [number, number], titles: string[]): strin
 
 /** An apology or thanks alone, a "you're right" in front allowed ("נכון, סליחה על הבלבול."). */
 export const apologyOnly = (text: string) => ackOnly(String(text ?? "").replace(/^\s*(?:נכון|אכן|צודקת|צודק|צודקים|you'?re right|right|true)[,!.]?\s*/iu, ""));
+
+/** Pads named with their size in the business's texts ("סמובי אליס 31*41"), as "<name> <WxD>" titles. */
+export function padsFromText(text: string): string[] {
+  return sizedItems(text).filter((x) => x.name).map((x) => `${x.name} ${x.size[0]}*${x.size[1]}`);
+}

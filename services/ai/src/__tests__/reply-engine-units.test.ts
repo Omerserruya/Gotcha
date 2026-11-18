@@ -2653,3 +2653,15 @@ describe("83086356 rating fixes", () => {
     expect(cleanSearchArgs({ query: "תיק", price_max: 200 }, "תיק עד 200").price_max).toBe(200);
   });
 });
+
+/** 6e6c306a five-devices (2026-11-18). */
+describe("6e6c306a five-devices", () => {
+  it("★ pads with their sizes from the business's texts", async () => {
+    const { padsFromText } = await import("../services/reply-engine/gates");
+    expect(padsFromText("מידות המשטחים: סמובי אליס 31*41, סמובי אסף 46*33")).toEqual(["סמובי אליס 31*41", "סמובי אסף 46*33"]);
+  });
+  it("★ 'לא עלתה התאמה' is a negative fit claim", async () => {
+    const { ungroundedNegativeFit } = await import("../services/reply-engine/gates");
+    expect(ungroundedNegativeFit("לטוסטר לא עלתה התאמה לפי המידות.", "טוסטר 24x15", ["סמובי גפן 26*20"], "")).toHaveLength(1);
+  });
+});

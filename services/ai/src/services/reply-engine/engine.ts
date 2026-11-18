@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -1430,13 +1430,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // pads' own sizes; one with none goes to the team (rating 83086356: two of five answered, no commas).
     {
       const items = sizedItems(String(opts.incomingMessage ?? ""));
-      const padTitles = titles.filter((t) => sizePair(t));
+      // The turn's pads, and the pads the business's texts give with their sizes (rating 6e6c306a: the mixer went to
+      // the team with two fitting pads outside the turn's two candidates).
+      const kbText = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
+      const padTitles = [...new Set([...titles.filter((t) => sizePair(t)), ...padsFromText(kbText)])];
       if (items.length >= 2 && padTitles.length) {
         const fmt = (s: [number, number]) => `${s[0]}×${s[1]}`;
         const lines: string[] = [];
         const none: string[] = [];
         for (const it of items) {
-          // Answered already, by its size or by its device name ("לסודה: גפן"): no second line.
+          // Answered already, by its size or by its device name ("לסודה: גפן"). A "no fit" about it never reaches here:
+          // the gate cuts it (ungrounded_negative_fit, "לא עלתה התאמה" included since 6e6c306a).
           const said = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => text.includes(k)) || namesItem(text, it.name, items.filter((o) => o !== it).map((o) => o.name));
           if (said) continue;
           const pad = smallestFitting(it.size, padTitles);
@@ -1444,8 +1448,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           else none.push(fmt(it.size));
         }
         if (lines.length || none.length) {
-          const tail = none.length ? (locale === "en" ? "The other sizes are with the team; the answer will come here in the chat." : "את שאר המידות העברתי לבדיקה של הצוות, והתשובה תגיע כאן בצ'אט.") : "";
-          text = [text.trim(), ...lines, tail].filter(Boolean).join("\n");
+          const tail = none.length ? (locale === "en" ? "I've passed the other sizes to the team, and the answer will come here in the chat." : "את שאר המידות העברתי לצוות, והתשובה תגיע כאן בצ'אט.") : "";
+          // Every size answered: the gate's fallback team line is no longer true, and goes with its question
+          // (rating 6e6c306a: "העברתי את השאלה לצוות" above three answered sizes).
+          const kept = !none.length && isCannedTeamLine(text.trim()) ? "" : text.trim();
+          if (!none.length && !kept && output.teamQuestion) output = { ...output, teamQuestion: null };
+          text = [kept, ...lines, tail].filter(Boolean).join("\n");
           if (none.length && !output.teamQuestion) output = { ...output, teamQuestion: `sizes with no fitting pad: ${none.join(", ")}` };
           (trace as any).sizedItems = { answered: lines.length, none: none.length };
         }
@@ -1614,7 +1622,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (output?.reply && !output.handoff && !heldTurn && candidates.length > 0) {
     const missing = unansweredItems(output.reply, String(opts.incomingMessage ?? ""));
     if (missing.length) {
-      const told = locale === "en" ? "The other items you asked about are with the team; the answer will come here in the chat." : "את שאר הפריטים ששאלת עליהם העברתי לבדיקה של הצוות, והתשובה תגיע כאן בצ'אט.";
+      const told = locale === "en" ? "I've passed the other items you asked about to the team, and the answer will come here in the chat." : "את שאר הפריטים ששאלת עליהם העברתי לצוות, והתשובה תגיע כאן בצ'אט.";
       output = { ...output, reply: `${output.reply.trim()} ${told}`, teamQuestion: output.teamQuestion ?? `items still to answer: ${missing.join(", ")} (${String(opts.incomingMessage ?? "").slice(0, 200)})` };
       (trace as any).itemsToTeam = missing;
     }

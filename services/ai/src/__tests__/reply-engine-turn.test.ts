@@ -1751,6 +1751,26 @@ describe("83086356 rating: engine passes", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "סודה 18x14 טוסטר קפיץ 24x15" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/18×14:|24×15:/);
   });
+  it("★ five devices: pads from the knowledge, a 'no fit' replaced, one team line, nothing nameless", async () => {
+    h.groundTitle = "סמובי גפן 26*20";
+    h.extraTitle = "סמובי קטן 15*15";
+    h.lexical = [{ content: "מידות המשטחים: סמובי אליס 31*41, סמובי אסף 46*33, סמובי גפן 26*20", score: 0.9, documentTitle: "sizes", chunkIndex: 2, documentId: "d2" }];
+    h.responses.push(
+      { toolCalls: [tc("fd1", "woocommerce.list_products", { query: "משטח" })] },
+      { toolCalls: [respond("fd2", { reply: "מתאימים משטחי ההזזה שמופיעים כאן. למיקסר, לטוסטר הקפיץ ולנינג'ה בלנדר לא עלתה התאמה לפי המידות שנמסרו." })] },
+      { toolCalls: [respond("fd3", { reply: "מתאימים משטחי ההזזה שמופיעים כאן. למיקסר, לטוסטר הקפיץ ולנינג'ה בלנדר לא עלתה התאמה לפי המידות שנמסרו." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר קפיץ 24x15 נינג׳ה בלנדר 24x18" }, "autonomous");
+    const reply = r.reply ?? "";
+    expect(reply).toMatch(/32×22: סמובי אליס 31\*41/);
+    expect(reply).toMatch(/24×15: סמובי גפן 26\*20/);
+    expect(reply).toMatch(/24×18: סמובי גפן 26\*20/);
+    expect(reply).not.toMatch(/לא עלתה התאמה/);
+    expect(reply).not.toMatch(/שמופיעים כאן/);
+    // Every size answered: no team line over them, and no team question.
+    expect(reply).not.toMatch(/העברתי/);
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+  });
   it("★ an older photo in the history is no new detail: no 'added it' ack", async () => {
     const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
     await withHeld({}, async () => {
