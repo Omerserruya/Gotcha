@@ -17,6 +17,7 @@ import { channelName } from '@/api/contracts/inbox';
 import { ChannelTile } from '@/features/channels/ChannelTile';
 import { EmailTemplateEditor } from '@/features/channels/EmailTemplateEditor';
 import { RelevanceFilterSwitch } from '@/features/channels/RelevanceFilterSwitch';
+import relevanceStyles from '@/features/channels/RelevanceFilter.module.css';
 import { loadEmailTemplate, loadPreviewNames } from '@/features/channels/load-email-template';
 import { loadChannels } from '@/features/channels/load-channels';
 import { hasEmailTemplate, relevanceFiltersOf } from '@/features/channels/rows';
@@ -280,23 +281,47 @@ export default async function Page({
           testId="drawer-email-template"
         >
           <div className={drawer.drawerBody}>
-            {/* Above the template: which of this mailbox's mail the bot answers. */}
+            {/*
+              Above the template: which of this mailbox's mail the bot
+              answers. Two parts, each named, a rule between them, so the
+              filter never reads as one of the template's settings.
+            */}
             {mailboxFilter !== null ? (
-              <RelevanceFilterSwitch channelAccountId={mailbox.id} enabled={mailboxFilter} />
+              <section
+                className={relevanceStyles.drawerPart}
+                aria-labelledby="mailbox-filter-heading"
+                data-testid="mailbox-filter-part"
+              >
+                <h3 className={drawer.sectionTitle} id="mailbox-filter-heading">
+                  {t('relevanceFilter.sectionFilter')}
+                </h3>
+                <RelevanceFilterSwitch channelAccountId={mailbox.id} enabled={mailboxFilter} />
+              </section>
             ) : null}
-            {mailboxTemplate.state === 'ok' ? (
-              <EmailTemplateEditor
-                // A fresh editor per mailbox: one's unsaved html never shows on another.
-                key={mailbox.id}
-                channelId={mailbox.id}
-                stored={mailboxTemplate.template}
-                names={previewNames}
-              />
-            ) : (
-              <p role="alert" data-testid="email-template-read">
-                {t(`emailTemplate.read.${mailboxTemplate.state}`)}
-              </p>
-            )}
+            <section
+              className={mailboxFilter !== null ? relevanceStyles.drawerPart : undefined}
+              aria-labelledby={mailboxFilter !== null ? 'mailbox-template-heading' : undefined}
+              data-testid="mailbox-template-part"
+            >
+              {mailboxFilter !== null ? (
+                <h3 className={drawer.sectionTitle} id="mailbox-template-heading">
+                  {t('relevanceFilter.sectionTemplate')}
+                </h3>
+              ) : null}
+              {mailboxTemplate.state === 'ok' ? (
+                <EmailTemplateEditor
+                  // A fresh editor per mailbox: one's unsaved html never shows on another.
+                  key={mailbox.id}
+                  channelId={mailbox.id}
+                  stored={mailboxTemplate.template}
+                  names={previewNames}
+                />
+              ) : (
+                <p role="alert" data-testid="email-template-read">
+                  {t(`emailTemplate.read.${mailboxTemplate.state}`)}
+                </p>
+              )}
+            </section>
           </div>
         </Drawer>
       ) : null}

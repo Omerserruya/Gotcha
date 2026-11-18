@@ -60,6 +60,7 @@ export function RelevanceFilterSwitch({
   return (
     <div
       className={inline ? styles.inline : styles.block}
+      data-readonly={canChange ? undefined : 'yes'}
       data-testid={`relevance-filter-${channelAccountId}`}
     >
       <button

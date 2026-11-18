@@ -1073,6 +1073,8 @@
   },
   "relevanceFilter": {
     "label": "Filter out conversations that are not relevant",
+    "sectionFilter": "Filtering",
+    "sectionTemplate": "Email template",
     "help": "Personal conversations, advertising and automatic messages move to the \"Personal and not relevant\" folder, and the bot does not answer them.",
     "readOnly": "Only people who manage channels can change this.",
     "problem": {

@@ -17,6 +17,34 @@
     line-height: normal;
   }
 
+  /*
+   * Without channels:manage:update: the whole row reads as unavailable
+   * (dimmed, not-allowed), never as the switch's off colour.
+   */
+  .block[data-readonly='yes'],
+  .inline[data-readonly='yes'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .block[data-readonly='yes'] .switch,
+  .inline[data-readonly='yes'] .switch {
+    cursor: not-allowed;
+  }
+
+  /* A mailbox's drawer: the filter and the template, two named parts. */
+  .drawerPart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+  }
+
+  .drawerPart + .drawerPart {
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
   /* On a channel row: the switch and its label, nothing under them. */
   .inline {
     display: inline-flex;
@@ -58,9 +86,9 @@
     inset-inline-start: 18px;
   }
 
+  /* Disabled only while a save is on its way: no dimming for a moment's wait. */
   .switch:disabled {
-    opacity: 0.6;
-    cursor: default;
+    cursor: progress;
   }
 
   .switch:focus-visible {

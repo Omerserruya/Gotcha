@@ -136,20 +136,35 @@ describe('★ a mailbox’s template drawer', () => {
 });
 
 describe('★★ the mailbox’s relevance filter, above its template', () => {
-  it('this mailbox’s switch, with its stored value, before the editor', async () => {
+  it('this mailbox’s switch, with its stored value, in a part of its own above the template', async () => {
     const tree = await open({ panel: 'email', id: 'g1' });
     expect(find(tree, RelevanceFilterSwitch)).toEqual({ channelAccountId: 'g1', enabled: false });
     const body = find<{ children: ReactNode[] }>(tree, 'div');
-    const order = (body?.children ?? []).map((child) =>
-      isValidElement(child) ? (child.type as unknown) : null,
+    const parts = (body?.children ?? []).filter(isValidElement) as ReactElement<
+      Record<string, unknown>
+    >[];
+    expect(parts.map((part) => part.props['data-testid'])).toEqual([
+      'mailbox-filter-part',
+      'mailbox-template-part',
+    ]);
+    const [filterPart, templatePart] = parts;
+    expect(find(filterPart, RelevanceFilterSwitch)).not.toBeNull();
+    expect(find(filterPart, EmailTemplateEditor)).toBeNull();
+    expect(find(templatePart, EmailTemplateEditor)).toMatchObject({ channelId: 'g1' });
+    // Each part named: "Filtering", then "Email template".
+    expect(find<{ children: string }>(filterPart, 'h3')?.children).toBe(
+      channels.relevanceFilter.sectionFilter,
     );
-    expect(order.indexOf(RelevanceFilterSwitch)).toBeLessThan(order.indexOf(EmailTemplateEditor));
-    expect(order.indexOf(RelevanceFilterSwitch)).toBeGreaterThanOrEqual(0);
+    expect(find<{ children: string }>(templatePart, 'h3')?.children).toBe(
+      channels.relevanceFilter.sectionTemplate,
+    );
   });
 
   it('a mailbox with no value from the backend: no switch, the template as before', async () => {
     const tree = await open({ panel: 'email', id: 'g2' });
     expect(find(tree, RelevanceFilterSwitch)).toBeNull();
+    // No lone "Email template" heading under a drawer already titled so.
+    expect(find(tree, 'h3')).toBeNull();
     expect(find(tree, EmailTemplateEditor)).toMatchObject({ channelId: 'g2' });
   });
 

@@ -59,6 +59,7 @@ beforeEach(() => {
 describe('★★ RelevanceFilterSwitch', () => {
   it.each([true, false])('draws the stored value (%s) as a labelled switch', (on) => {
     show({ enabled: on });
+    expect(screen.getByTestId('relevance-filter-ca1')).not.toHaveAttribute('data-readonly');
     expect(screen.getByRole('switch', { name: channels.relevanceFilter.label })).toBe(theSwitch());
     expect(theSwitch()).toHaveAttribute('aria-checked', String(on));
     expect(theSwitch()).toHaveAccessibleDescription(channels.relevanceFilter.help);
@@ -90,6 +91,8 @@ describe('★★ RelevanceFilterSwitch', () => {
   it('★★ without channels:manage:update: drawn, disabled, and says who can change it', async () => {
     show({ permissions: ['channels:manage:read'] });
     expect(theSwitch()).toBeDisabled();
+    // The whole row reads as unavailable, not as "off".
+    expect(screen.getByTestId('relevance-filter-ca1')).toHaveAttribute('data-readonly', 'yes');
     expect(theSwitch()).toHaveAccessibleDescription(
       `${channels.relevanceFilter.help} ${channels.relevanceFilter.readOnly}`,
     );
