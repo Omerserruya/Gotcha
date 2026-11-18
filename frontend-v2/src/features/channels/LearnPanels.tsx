@@ -3,6 +3,7 @@ import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { isRunning, workDone, type ImportStatus } from '@/api/contracts/historical-import';
+import { pendingByOccurrences, type ImportTopics } from '@/api/contracts/import-topics';
 import {
   groupOf,
   knowledgeDocumentOf,
@@ -18,6 +19,8 @@ import { Link } from '@/i18n/navigation';
 
 import { RerunFailed, ReportFoot } from './ReportFootActions';
 import { SuggestionActions } from './SuggestionActions';
+import { TopicReview } from './TopicReview';
+import { monthYear, topicView, validDate, type TopicWords } from './topic-view';
 import styles from './Channels.module.css';
 import { UserText } from '@/design-system/primitives/text/UserText';
 import { ltr } from '@/lib/bidi';
@@ -392,14 +395,22 @@ export async function ReportPanel({
   candidates,
   bulkMinConfidence,
   tab,
+  topics = null,
 }: {
   readonly status: ImportStatus;
   readonly candidates: readonly Candidate[];
   readonly bulkMinConfidence: number | undefined;
   readonly tab: string | undefined;
+  /**
+   * 13f by topic (Omer, 2026-11-18): with topics read, they replace the tabs
+   * and the flat cards; unread or empty, the flat list stays.
+   */
+  readonly topics?: ImportTopics | null;
 }) {
   const t = await getTranslations('channels.whatsapp');
+  const tt = await getTranslations('channels.whatsapp.topics');
   const locale = await getLocale();
+  const timeZone = await getTimeZone();
   const n = new Intl.NumberFormat(locale);
   const pct = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 });
   const inTab = (g: ReportTab) => candidates.filter((c) => tabOf(c, bulkMinConfidence) === g);
@@ -409,6 +420,24 @@ export async function ReportPanel({
     : 'needs_a_look';
   const shown = inTab(current);
   const ready = inTab('ready_to_add');
+  const byTopic = topics !== null && topics.topics.length > 0 ? topics : null;
+  const dayFormat = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', timeZone });
+  const monthFormat = new Intl.DateTimeFormat(locale, {
+    month: '2-digit',
+    year: 'numeric',
+    timeZone,
+  });
+  const words: TopicWords = {
+    t: (key, values) => tt(key as never, values as never),
+    day: (iso) => {
+      const date = validDate(iso);
+      return date ? dayFormat.format(date) : null;
+    },
+    month: (iso) => {
+      const date = validDate(iso);
+      return date ? monthYear(monthFormat, date) : null;
+    },
+  };
 
   /* 02: a chip only for a reason to look - never a figure, which sits on the right. */
   const chipOf = (c: Candidate): { text: string; tone: string } | null =>
@@ -471,123 +500,138 @@ export async function ReportPanel({
           </section>
         </div>
 
-        <nav className={styles.reportTabs} aria-label={t('review.heading')}>
-          {tabs.map((g) => (
-            <Link
-              key={g}
-              href={href('report', status.id, g)}
-              className={styles.reportTab}
-              aria-current={g === current ? 'page' : undefined}
-              data-testid={`report-tab-${g}`}
-              scroll={false}
-            >
-              {t(`learn.tab.${g}`)}
-              <span className={styles.reportTabCount}>{n.format(inTab(g).length)}</span>
-            </Link>
-          ))}
-          <span className={styles.reportTabsLabel}>{t('learn.qa')}</span>
-        </nav>
-
-        {shown.length === 0 ? (
-          <p className={styles.timelineSub} data-testid="report-empty">
-            {t('review.empty')}
-          </p>
+        {byTopic ? (
+          <TopicReview
+            importId={status.id}
+            pending={pendingByOccurrences(byTopic.topics).map((topic) => topicView(topic, words))}
+            auto={byTopic.topics
+              .filter((topic) => topic.status === 'auto')
+              .map((topic) => topicView(topic, words))}
+            progress={byTopic.progress}
+          />
         ) : (
-          <ul className={styles.reportGrid} title={t('review.evidenceNotTruth')}>
-            {shown.map((c) => {
-              const chip = chipOf(c);
-              // Most-seen first: the first is the one to use, the rest beside it.
-              const variants = [...variantsOf(c)].sort(
-                (x, y) => y.occurrenceCount - x.occurrenceCount,
-              );
-              const split = c.conflict && variants.length > 1;
-              return (
-                <li key={c.id} className={styles.reportItem} data-testid={`candidate-${c.id}`}>
-                  <p className={styles.reportItemHead}>
-                    {chip ? (
-                      <span
-                        className={styles.reportChip}
-                        data-tone={chip.tone}
-                        title={
-                          c.conflict
-                            ? t('review.conflict')
-                            : c.requiresLiveLookup
-                              ? t('review.liveLookup')
-                              : undefined
-                        }
-                      >
-                        {chip.text}
-                      </span>
-                    ) : null}
-                    {/* A count of nothing is not drawn: no "0 chats". */}
-                    <span className={styles.reportItemMeta}>
-                      {[
-                        c.occurrenceCount > 0
-                          ? t('learn.chats', { count: c.occurrenceCount })
-                          : null,
-                        c.conflict ? null : pct.format(c.confidence),
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </span>
-                  </p>
-                  <p className={styles.reportQuestion}>
-                    <UserText>{c.question}</UserText>
-                  </p>
-                  {split ? (
-                    // 02: "Your replies said 14 days in 61 chats and 30 days in 12."
-                    <p className={styles.reportAnswer} data-testid={`said-${c.id}`}>
-                      {t('learn.saidLead')}{' '}
-                      {variants.map((v, i) => (
-                        <span key={v.key}>
-                          {i > 0 ? ` ${t('learn.saidAnd')} ` : null}
-                          <strong className={styles.reportSaid}>{v.answer}</strong>{' '}
-                          {i === 0
-                            ? t('learn.saidIn', { count: v.occurrenceCount })
-                            : t('learn.saidInShort', { count: v.occurrenceCount })}
+          <>
+            <nav className={styles.reportTabs} aria-label={t('review.heading')}>
+              {tabs.map((g) => (
+                <Link
+                  key={g}
+                  href={href('report', status.id, g)}
+                  className={styles.reportTab}
+                  aria-current={g === current ? 'page' : undefined}
+                  data-testid={`report-tab-${g}`}
+                  scroll={false}
+                >
+                  {t(`learn.tab.${g}`)}
+                  <span className={styles.reportTabCount}>{n.format(inTab(g).length)}</span>
+                </Link>
+              ))}
+              <span className={styles.reportTabsLabel}>{t('learn.qa')}</span>
+            </nav>
+
+            {shown.length === 0 ? (
+              <p className={styles.timelineSub} data-testid="report-empty">
+                {t('review.empty')}
+              </p>
+            ) : (
+              <ul className={styles.reportGrid} title={t('review.evidenceNotTruth')}>
+                {shown.map((c) => {
+                  const chip = chipOf(c);
+                  // Most-seen first: the first is the one to use, the rest beside it.
+                  const variants = [...variantsOf(c)].sort(
+                    (x, y) => y.occurrenceCount - x.occurrenceCount,
+                  );
+                  const split = c.conflict && variants.length > 1;
+                  return (
+                    <li key={c.id} className={styles.reportItem} data-testid={`candidate-${c.id}`}>
+                      <p className={styles.reportItemHead}>
+                        {chip ? (
+                          <span
+                            className={styles.reportChip}
+                            data-tone={chip.tone}
+                            title={
+                              c.conflict
+                                ? t('review.conflict')
+                                : c.requiresLiveLookup
+                                  ? t('review.liveLookup')
+                                  : undefined
+                            }
+                          >
+                            {chip.text}
+                          </span>
+                        ) : null}
+                        {/* A count of nothing is not drawn: no "0 chats". */}
+                        <span className={styles.reportItemMeta}>
+                          {[
+                            c.occurrenceCount > 0
+                              ? t('learn.chats', { count: c.occurrenceCount })
+                              : null,
+                            c.conflict ? null : pct.format(c.confidence),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </span>
-                      ))}
-                      .
+                      </p>
+                      <p className={styles.reportQuestion}>
+                        <UserText>{c.question}</UserText>
+                      </p>
+                      {split ? (
+                        // 02: "Your replies said 14 days in 61 chats and 30 days in 12."
+                        <p className={styles.reportAnswer} data-testid={`said-${c.id}`}>
+                          {t('learn.saidLead')}{' '}
+                          {variants.map((v, i) => (
+                            <span key={v.key}>
+                              {i > 0 ? ` ${t('learn.saidAnd')} ` : null}
+                              <strong className={styles.reportSaid}>{v.answer}</strong>{' '}
+                              {i === 0
+                                ? t('learn.saidIn', { count: v.occurrenceCount })
+                                : t('learn.saidInShort', { count: v.occurrenceCount })}
+                            </span>
+                          ))}
+                          .
+                        </p>
+                      ) : (
+                        <p className={styles.reportAnswer}>
+                          {t('learn.quoted', { answer: c.answer })}
+                        </p>
+                      )}
+                      {tabOf(c, bulkMinConfidence) === 'needs_a_look' ||
+                      tabOf(c, bulkMinConfidence) === 'ready_to_add' ? (
+                        // Live (Omer, decision 13): approve, use a variant, edit, reject.
+                        <SuggestionActions
+                          id={c.id}
+                          question={c.question}
+                          answer={c.answer}
+                          reasoning={c.reasoning}
+                          liveLookup={c.requiresLiveLookup}
+                          variants={split ? variants.map((v) => v.answer) : []}
+                          seeChats={
+                            split
+                              ? { label: t('learn.seeChats'), href: chatsHref(status.id, c.id) }
+                              : null
+                          }
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
+                {current === 'needs_a_look' && ready.length > 0 ? (
+                  <li className={styles.reportReady} data-testid="report-ready-card">
+                    <p className={styles.reportItemMeta}>
+                      {t('learn.readyCard', { count: ready.length })}
                     </p>
-                  ) : (
-                    <p className={styles.reportAnswer}>{t('learn.quoted', { answer: c.answer })}</p>
-                  )}
-                  {tabOf(c, bulkMinConfidence) === 'needs_a_look' ||
-                  tabOf(c, bulkMinConfidence) === 'ready_to_add' ? (
-                    // Live (Omer, decision 13): approve, use a variant, edit, reject.
-                    <SuggestionActions
-                      id={c.id}
-                      question={c.question}
-                      answer={c.answer}
-                      reasoning={c.reasoning}
-                      liveLookup={c.requiresLiveLookup}
-                      variants={split ? variants.map((v) => v.answer) : []}
-                      seeChats={
-                        split
-                          ? { label: t('learn.seeChats'), href: chatsHref(status.id, c.id) }
-                          : null
-                      }
-                    />
-                  ) : null}
-                </li>
-              );
-            })}
-            {current === 'needs_a_look' && ready.length > 0 ? (
-              <li className={styles.reportReady} data-testid="report-ready-card">
-                <p className={styles.reportItemMeta}>
-                  {t('learn.readyCard', { count: ready.length })}
-                </p>
-                {ready.slice(0, 2).map((c) => (
-                  <p key={c.id} className={styles.reportReadyRow}>
-                    <span className={styles.reportReadyQ}>
-                      <UserText>{c.question}</UserText>
-                    </span>
-                    <span>{c.answer}</span>
-                  </p>
-                ))}
-              </li>
-            ) : null}
-          </ul>
+                    {ready.slice(0, 2).map((c) => (
+                      <p key={c.id} className={styles.reportReadyRow}>
+                        <span className={styles.reportReadyQ}>
+                          <UserText>{c.question}</UserText>
+                        </span>
+                        <span>{c.answer}</span>
+                      </p>
+                    ))}
+                  </li>
+                ) : null}
+              </ul>
+            )}
+          </>
         )}
       </div>
 

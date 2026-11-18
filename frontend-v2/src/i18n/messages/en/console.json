@@ -13,7 +13,9 @@
     "whatsapp": "GOTCHA's WhatsApp number",
     "whatsappLine": "The number platform alerts go out from: connecting it, its templates, which alerts it sends.",
     "tools": "MCP servers",
-    "toolsLine": "Businesses' MCP servers waiting for our approval: approve or reject."
+    "toolsLine": "Businesses' MCP servers waiting for our approval: approve or reject.",
+    "aiFailures": "Failed AI actions",
+    "aiFailuresLine": "The AI's tool calls that failed across tenants, by tool and error."
   },
   "tenants": {
     "title": "Tenants",
@@ -786,5 +788,45 @@
   "unread": {
     "title": "Couldn't open the console",
     "body": "We couldn't check your access just now, so nothing is shown. Nothing was changed. Try again in a moment."
+  },
+  "badge": "{count, plural, one {One failure group over the threshold in the last hour} other {# failure groups over the threshold in the last hour}}",
+  "aiFailures": {
+    "title": "Failed AI actions",
+    "description": "The AI's tool calls that failed, timed out or were refused, across tenants. Ours only, never a business's.",
+    "unread": "We couldn't read the failures. Refresh the page.",
+    "none": "{hours, plural, one {No action failed in the last hour.} other {No action failed in the last # hours.}}",
+    "total": "{count, plural, one {# failure} other {# failures}} {hours, plural, one {in the last hour} other {in the last # hours}}",
+    "noCode": "no code",
+    "filters": {
+      "hours": "Range",
+      "hoursOption": "{hours, plural, one {Last hour} other {Last # hours}}",
+      "tenant": "Tenant",
+      "tool": "Tool",
+      "all": "All",
+      "submit": "Show"
+    },
+    "groups": {
+      "title": "Failures by tool and error",
+      "tool": "Tool",
+      "error": "Error",
+      "count": "Times",
+      "tenants": "Tenants",
+      "lastAt": "Last"
+    },
+    "recent": {
+      "title": "{count, plural, one {The latest failure} other {The latest # failures}}",
+      "label": "The latest failures",
+      "at": "When",
+      "tenant": "Tenant",
+      "what": "Tool and error",
+      "ms": "ms",
+      "conversation": "Conversation"
+    },
+    "copy": {
+      "button": "Copy",
+      "label": "Copy conversation id {id}",
+      "copied": "Copied",
+      "refused": "The browser didn't allow copying"
+    }
   }
 }

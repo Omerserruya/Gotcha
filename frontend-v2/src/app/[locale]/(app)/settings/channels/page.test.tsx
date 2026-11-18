@@ -73,6 +73,8 @@ vi.mock('@/features/channels/load-whatsapp', () => ({
   loadNumberEvents: reads.events,
   loadWhatsAppNumbers: async () => DEV_NUMBERS,
   loadHistoryImport: async () => history.value,
+  // Unread: the report keeps its flat list (13f by topic has its own tests).
+  loadImportTopics: async () => null,
   loadChannelsConfig: async () => ({
     launches: { coexistence: null, newNumber: null },
     providers: null,

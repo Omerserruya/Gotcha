@@ -9,6 +9,8 @@ import { CONSOLE_SECTIONS } from '@/shell/navigation';
 
 /** The console's home and its layout: behind the door, and listing what exists. */
 const door = vi.hoisted(() => ({ open: true }));
+// The layout's badge read: unread, so no badge (ConsoleSections.test.tsx draws one).
+vi.mock('@/features/console/load-ai-failures', () => ({ loadAiAlertCount: async () => null }));
 vi.mock('@/shell/require-console', () => ({
   requireConsole: async () => {
     if (!door.open) throw new Error('NEXT_NOT_FOUND');

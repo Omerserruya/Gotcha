@@ -597,6 +597,58 @@
         "not_found": "This number isn't connected here anymore.",
         "failed": "It wasn't saved. Try again in a moment."
       }
+    },
+    "topics": {
+      "progress": "{done, number} of {total, number} topics approved",
+      "readOnly": "Approving topics needs permission to edit knowledge.",
+      "allDone": "Every topic is decided.",
+      "showMore": "Show more ({count, number})",
+      "meta": {
+        "chats": "{count, plural, one {# chat} other {# chats}}",
+        "customers": "{count, plural, one {# customer} other {# customers}}",
+        "lastSeen": "last seen {date}"
+      },
+      "docConflict": "Contradicts a knowledge document",
+      "whichIsRight": "Which is right?",
+      "chosen": {
+        "line": "Chosen: {value} ({basis})",
+        "latest": "the latest answer",
+        "latestOn": "the latest answer, {date}",
+        "policy": "per your policy",
+        "previous": "Before: {value}",
+        "previousUntil": "Before: {value} (until {until})"
+      },
+      "seen": "last said {date}",
+      "other": "Other",
+      "otherLabel": "Another answer to: {question}",
+      "counter": "{count, number} of {max, number} characters",
+      "approve": "Approve topic",
+      "reject": "Reject topic",
+      "left": "{count, plural, one {One question still needs an answer chosen} other {# questions still need an answer chosen}}",
+      "tooLong": "An answer is longer than {max, number} characters. Shorten it.",
+      "approved": "Topic approved. GOTCHA answers with it from now on.",
+      "rejected": "Topic rejected. GOTCHA won't use it.",
+      "partial": "{count, plural, one {One answer wasn't saved} other {# answers weren't saved}}. You can try again.",
+      "itemFailed": "Not saved",
+      "itemSaved": "Saved",
+      "itemStatus": {
+        "pending": "Waiting",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "refreshed": "The list was updated",
+      "refused": {
+        "unresolved": "Some questions still need an answer chosen.",
+        "too_long": "One of the answers is too long to save. Shorten it.",
+        "stale": "The list was updated",
+        "forbidden": "You don't have permission to change what GOTCHA knows.",
+        "failed": "That didn't go through. You can try again."
+      },
+      "auto": {
+        "heading": "Added automatically ({count, number})",
+        "undo": "Undo",
+        "undone": "Undone. The answers were removed from the knowledge."
+      }
     }
   },
   "rowSettings": "Settings",

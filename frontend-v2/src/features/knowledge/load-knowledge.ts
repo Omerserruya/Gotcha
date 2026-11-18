@@ -13,6 +13,7 @@ import {
   type Candidate,
 } from '@/api/contracts/knowledge-candidates';
 import { importListSchema } from '@/api/contracts/historical-import';
+import { importTopicsOf, topicsResponseSchema } from '@/api/contracts/import-topics';
 import { knowledgeEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
@@ -52,6 +53,12 @@ export interface KnowledgeData {
    * where nothing has ever looked, and those are opposite sentences.
    */
   readonly everImported: boolean;
+  /**
+   * 13f by topic: the newest import's topics still waiting for a person,
+   * for the line that opens them (Omer, 2026-11-18). `null` when there are
+   * none, or the read failed - the line is then not drawn.
+   */
+  readonly importReview: { readonly importId: string; readonly pending: number } | null;
 }
 
 export async function loadKnowledge(): Promise<KnowledgeData> {
@@ -102,6 +109,20 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
 
   const newest = imports?.[0] ?? null;
 
+  const topicsRead = newest
+    ? api
+        .get({
+          endpoint: knowledgeEndpoints.topics(newest.id),
+          payload: topicsResponseSchema,
+          raw: true,
+        })
+        .then((raw) => importTopicsOf(raw).topics.filter((t) => t.status === 'pending').length)
+        .catch((cause: unknown) => {
+          logger.warn('knowledge.topics_failed', { cause });
+          return null;
+        })
+    : Promise.resolve(null);
+
   const candidates = newest
     ? await api
         .get({
@@ -119,6 +140,8 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
         })
     : [];
 
+  const pending = await topicsRead;
+
   return {
     sources,
     unanswered,
@@ -126,5 +149,7 @@ export async function loadKnowledge(): Promise<KnowledgeData> {
     // `imports === null` is a failed read, not an absence of imports. Only
     // an empty ARRAY means nothing was ever imported.
     everImported: imports !== null && imports.length > 0,
+    importReview:
+      newest && pending !== null && pending > 0 ? { importId: newest.id, pending } : null,
   };
 }

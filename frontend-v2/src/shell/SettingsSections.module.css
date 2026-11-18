@@ -70,6 +70,18 @@
     flex: none;
   }
 
+  /* A count that needs attention (the console's AI failures): the same place as the dot. */
+  .count {
+    margin-inline-start: auto;
+    padding-inline: var(--space-6);
+    border-radius: var(--radius-badge);
+    background-color: var(--intent-urgent-edge);
+    font-size: var(--font-size-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--action-text);
+    flex: none;
+  }
+
   /*
    * ── Narrow: a strip, not a column ──────────────────────────────────────
    *

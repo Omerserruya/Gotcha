@@ -12,7 +12,16 @@ import styles from './SettingsSections.module.css';
  * product rather than legacy's second app. No permission filter: the whole
  * console is behind one door (`require-console.ts`).
  */
-export function ConsoleSections() {
+export function ConsoleSections({
+  badges = {},
+}: {
+  /**
+   * A count per section id, drawn beside its name when above 0 - the AI
+   * failures over Backend's threshold in the last hour. Read by the console
+   * layout on the server; absent when unread.
+   */
+  readonly badges?: Readonly<Record<string, number>>;
+} = {}) {
   const t = useTranslations('console');
   const tNav = useTranslations('navigation');
   const pathname = usePathname();
@@ -31,6 +40,18 @@ export function ConsoleSections() {
             aria-current={pathname === href || pathname.startsWith(`${href}/`) ? 'page' : undefined}
           >
             {t(section.labelKey)}
+            {(badges[section.id] ?? 0) > 0 ? (
+              <>
+                <span
+                  className={styles.count}
+                  aria-hidden="true"
+                  data-testid={`console-badge-${section.id}`}
+                >
+                  {badges[section.id]}
+                </span>
+                <span className="srOnly">{t('badge', { count: badges[section.id] ?? 0 })}</span>
+              </>
+            ) : null}
           </Link>
         );
       })}

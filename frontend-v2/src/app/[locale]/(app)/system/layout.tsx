@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { loadAiAlertCount } from '@/features/console/load-ai-failures';
 import { ConsoleSections } from '@/shell/ConsoleSections';
 import { ConsoleUnread } from '@/shell/ConsoleUnread';
 import { requireConsole } from '@/shell/require-console';
@@ -20,9 +21,11 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
     customer's server calls on prod (2026-11-16, `BackoffRetry`).
   */
   if ((await requireConsole()) === 'unread') return <ConsoleUnread />;
+  // The AI failures over Backend's threshold in the last hour (Omer, 2026-11-18): console only.
+  const alerts = await loadAiAlertCount();
   return (
     <div className={styles.split}>
-      <ConsoleSections />
+      <ConsoleSections badges={alerts ? { 'ai-failures': alerts } : {}} />
       <div className={styles.section}>{children}</div>
     </div>
   );

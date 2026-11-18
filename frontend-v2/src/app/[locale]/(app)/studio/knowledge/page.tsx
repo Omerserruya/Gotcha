@@ -74,11 +74,8 @@ export default async function Page({
   const kind = isKnowledgeKind(params.kind) ? params.kind : null;
   const search = params.q !== undefined ? await searchKnowledge(params.q) : null;
   const t = await getTranslations('knowledge');
-  const [{ sources, unanswered, conflicts, everImported }, workspace, scanRun] = await Promise.all([
-    loadKnowledge(),
-    loadWorkspaceFacts(),
-    loadScanRun(),
-  ]);
+  const [{ sources, unanswered, conflicts, everImported, importReview }, workspace, scanRun] =
+    await Promise.all([loadKnowledge(), loadWorkspaceFacts(), loadScanRun()]);
   /*
     "Scan again" (11b), moved here from Settings · Workspace (Omer,
     2026-10-11). Drawn only when the workspace read answers - the gate it had
@@ -131,6 +128,20 @@ export default async function Page({
       */}
       {/* `?section=gaps`: the unanswered questions, brought into view and focused. */}
       {params.section === 'gaps' ? <FocusSection testid="gaps-section" /> : null}
+      {/* 13f by topic: what an import learned, waiting for a person (Omer, 2026-11-18). */}
+      {importReview ? (
+        <Link
+          href={{
+            pathname: '/settings/channels',
+            query: { panel: 'whatsapp', import: importReview.importId, view: 'report' },
+          }}
+          prefetch={false}
+          className={styles.importReview}
+          data-testid="knowledge-import-review"
+        >
+          {t('importReview', { count: importReview.pending })}
+        </Link>
+      ) : null}
       {sources === null && unanswered === null ? (
         <p data-testid="knowledge-unavailable">{t('unavailable')}</p>
       ) : (

@@ -25,6 +25,7 @@ import {
   loadEvidence,
   loadExclusions,
   loadHistoryImport,
+  loadImportTopics,
   loadImportedThread,
   loadProfilePreview,
   loadChannelsConfig,
@@ -265,6 +266,7 @@ export default async function Page({
             candidates={whatsapp[1].candidates}
             bulkMinConfidence={whatsapp[1].bulkMinConfidence}
             tab={params.tab}
+            topics={await loadImportTopics(learn.id)}
           />
         </Drawer>
       ) : null}

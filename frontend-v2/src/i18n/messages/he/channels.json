@@ -597,6 +597,58 @@
         "not_found": "המספר הזה כבר לא מחובר כאן.",
         "failed": "זה לא נשמר. אפשר לנסות שוב בעוד רגע."
       }
+    },
+    "topics": {
+      "progress": "{done, number} מתוך {total, number} נושאים אושרו",
+      "readOnly": "אישור נושאים דורש הרשאה לעריכת הידע.",
+      "allDone": "כל הנושאים הוכרעו.",
+      "showMore": "להציג עוד ({count, number})",
+      "meta": {
+        "chats": "{count, plural, one {שיחה אחת} other {# שיחות}}",
+        "customers": "{count, plural, one {לקוח אחד} other {# לקוחות}}",
+        "lastSeen": "נראה לאחרונה {date}"
+      },
+      "docConflict": "סותר מסמך ידע",
+      "whichIsRight": "מה נכון?",
+      "chosen": {
+        "line": "נבחר: {value} ({basis})",
+        "latest": "התשובה העדכנית",
+        "latestOn": "התשובה העדכנית, {date}",
+        "policy": "לפי התקנון",
+        "previous": "קודם: {value}",
+        "previousUntil": "קודם: {value} (עד {until})"
+      },
+      "seen": "נאמר לאחרונה {date}",
+      "other": "אחר",
+      "otherLabel": "תשובה אחרת לשאלה: {question}",
+      "counter": "{count, number} מתוך {max, number} תווים",
+      "approve": "אישור הנושא",
+      "reject": "דחיית הנושא",
+      "left": "{count, plural, one {נשארה שאלה אחת לבחירת תשובה} other {נשארו # שאלות לבחירת תשובה}}",
+      "tooLong": "תשובה ארוכה מ‑{max, number} תווים. כדאי לקצר.",
+      "approved": "הנושא אושר. GOTCHA עונה לפיו מעכשיו.",
+      "rejected": "הנושא נדחה. GOTCHA לא תשתמש בו.",
+      "partial": "{count, plural, one {תשובה אחת לא נשמרה} other {# תשובות לא נשמרו}}. אפשר לנסות שוב.",
+      "itemFailed": "לא נשמרה",
+      "itemSaved": "נשמרה",
+      "itemStatus": {
+        "pending": "ממתינה",
+        "approved": "אושרה",
+        "rejected": "נדחתה"
+      },
+      "refreshed": "הרשימה עודכנה",
+      "refused": {
+        "unresolved": "יש שאלות שעוד צריך לבחור להן תשובה.",
+        "too_long": "אחת התשובות ארוכה מדי לשמירה. כדאי לקצר.",
+        "stale": "הרשימה עודכנה",
+        "forbidden": "אין לכם הרשאה לשנות את מה ש‑GOTCHA יודעת.",
+        "failed": "זה לא עבר. אפשר לנסות שוב."
+      },
+      "auto": {
+        "heading": "נוסף אוטומטית ({count, number})",
+        "undo": "ביטול",
+        "undone": "בוטל. התשובות הוסרו מהידע."
+      }
     }
   },
   "rowSettings": "הגדרות",

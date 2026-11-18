@@ -407,4 +407,5 @@ export const CONSOLE_SECTIONS: readonly NavigationChild[] = [
   { id: 'security', labelKey: 'sections.security', href: '/system/security' },
   { id: 'whatsapp', labelKey: 'sections.whatsapp', href: '/system/whatsapp' },
   { id: 'tools', labelKey: 'sections.tools', href: '/system/tools' },
+  { id: 'ai-failures', labelKey: 'sections.aiFailures', href: '/system/ai-failures' },
 ];

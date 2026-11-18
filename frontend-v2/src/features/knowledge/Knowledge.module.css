@@ -21,6 +21,15 @@
   }
 
   /* The body's column; the bottom row takes what is left of the frame. */
+  /* 13f by topic: the topics an import found, waiting - one line that opens them. */
+  .importReview {
+    align-self: flex-start;
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
   .screen {
     flex: 1;
     display: flex;

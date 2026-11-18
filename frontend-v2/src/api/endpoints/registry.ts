@@ -1765,6 +1765,16 @@ export const knowledgeEndpoints = {
   /** 13f's Reject / Skip: `{ ok: true }`; 404 when gone or already decided. */
   rejectCandidate: (candidateId: string) =>
     endpoint('/api/historical-imports/candidates/{candidateId}/reject', { candidateId }),
+  /** 13f by topic: `{ topics, progress, … }` - see `contracts/import-topics.ts`. */
+  topics: (importId: string) => endpoint('/api/historical-imports/{importId}/topics', { importId }),
+  /**
+   * `{ importId, topicId, items? }`: every pending item of the topic, each
+   * listed one with its answer. 400 UNRESOLVED_ITEM | ANSWER_TOO_LONG, 404
+   * TOPIC_NOT_FOUND; `ai:knowledge:write` or ADMIN.
+   */
+  approveTopic: () => endpoint('/api/historical-imports/topics/approve'),
+  /** `{ importId, topicId }`; also the undo of an automatic approval. */
+  rejectTopic: () => endpoint('/api/historical-imports/topics/reject'),
 } as const;
 
 /**
@@ -2225,6 +2235,14 @@ export const consoleEndpoints = {
   /** POST - idempotent; 404 `support_session_not_found` for another admin's. */
   endSupportSession: (sessionId: string) =>
     endpoint('/api/system/support-sessions/{sessionId}/end', { sessionId }),
+  /**
+   * The AI's tool calls that failed, timed out or were refused, across tenants
+   * (system.ts:1805): `?hours=1..336&tenantId=&tool=` → `{ hours, total,
+   * groups, recent }`, raw. SYSTEM_ADMIN only.
+   */
+  aiFailures: () => endpoint('/api/system/ai-actions/failures'),
+  /** The console badge (system.ts:1770): `{ threshold, count, groups }` for the last hour. */
+  aiAlerts: () => endpoint('/api/system/ai-actions/alerts'),
 } as const;
 
 /**

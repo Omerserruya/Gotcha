@@ -332,3 +332,31 @@
     border: 0;
   }
 }
+
+@layer features {
+  /* ── A conversation id to copy (AI failures) ───────────────────────── */
+  .copyId {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-6);
+    min-inline-size: 0;
+  }
+
+  .copyButton {
+    padding-block: var(--space-2);
+    padding-inline: var(--space-8);
+    background-color: var(--panel-base);
+    border: var(--border-width-thin) solid var(--border-default);
+    border-radius: var(--radius-control);
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .copySaid {
+    font-size: var(--font-size-label);
+    color: var(--text-subtle);
+  }
+}

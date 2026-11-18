@@ -2,6 +2,11 @@ import 'server-only';
 
 import { importListSchema, type ImportStatus } from '@/api/contracts/historical-import';
 import {
+  importTopicsOf,
+  topicsResponseSchema,
+  type ImportTopics,
+} from '@/api/contracts/import-topics';
+import {
   candidateEvidenceSchema,
   candidateListSchema,
   importCustomersSchema,
@@ -151,6 +156,29 @@ export async function loadHistoryImport(importId?: string): Promise<HistoryImpor
     candidates: page?.candidates ?? null,
     bulkMinConfidence: page?.bulkApproveMinConfidence,
   };
+}
+
+/**
+ * 13f by topic: the import's topics. `null` when unread - the report then
+ * falls back to the flat list of suggestions, which still reads.
+ */
+export async function loadImportTopics(importId: string): Promise<ImportTopics | null> {
+  return serverApi()
+    .get({
+      endpoint: knowledgeEndpoints.topics(importId),
+      payload: topicsResponseSchema,
+      // `topics` is a sibling of `progress`, never an envelope to unwrap.
+      raw: true,
+    })
+    .then((raw) => {
+      const read = importTopicsOf(raw);
+      if (read.dropped > 0) logger.warn('whatsapp.topics_dropped', { dropped: read.dropped });
+      return read;
+    })
+    .catch((cause: unknown) => {
+      logger.warn('whatsapp.topics_failed', { cause });
+      return null;
+    });
 }
 
 /** 13f's "See the chats": the exchanges behind one suggestion. `null`: unread. */
