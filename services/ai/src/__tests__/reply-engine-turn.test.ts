@@ -334,16 +334,18 @@ describe("one v2 turn, live", () => {
     expect(h.calls[0].messages[0].content).not.toMatch(/- role_/);
   });
 
-  it("A08: \"no info\" without reading the product -> it reads the product, then answers", async () => {
+  it("A08: \"no info\" without reading the product -> the engine reads it (her product words), then answers", async () => {
     const q = { ...opts, incomingMessage: "הסוודר מרינו מגרד?" };
+    // The store's search finds the sweater, with its own text in the result.
+    h.groundTitle = "סוודר 100% כותנה אורגנית";
     h.responses.push(
       { toolCalls: [respond("a1", { reply: "אין לי כאן מידע על זה, אפשר לבדוק מול הצוות." })] },
-      { toolCalls: [tc("a2", "woocommerce.get_product", { product_id: "55" })] },
       { toolCalls: [respond("a3", { reply: "הוא בכלל מכותנה אורגנית 100%, לא מרינו, אז לא מגרד." })] },
     );
     const r = await runReplyEngineTurn(q, "autonomous");
-    expect(h.calls[1].toolChoice).toBe("required");
-    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.get_product");
+    // Replay on 1b35c535: the engine's own lookup, no model tool round; the store by the product words only.
+    expect(h.calls[1].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("סוודר מרינו מגרד");
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toMatch(/כותנה/);
   });
@@ -561,16 +563,15 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
     expect(r.reply).toBe("אפשר לשלם בתשלומים בקופה באתר.");
   });
 
-  it("★ unread product: the rewrite round reads the product (one tool round), then answers; two model calls at most", async () => {
+  it("★ unread product: the engine reads the product itself (store and knowledge), then one answer; two model calls in all", async () => {
     h.responses.push(
       { toolCalls: [respond("u1", { reply: "אין לי כאן מידע על זה, אבדוק מול הצוות." })] },
-      { toolCalls: [tc("u3", "woocommerce.get_product", { product_id: "55" })] },
       { toolCalls: [respond("u4", { reply: "הוא מכותנה אורגנית, נעים ולא מגרד." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הסוודר מגרד?" }, "autonomous");
-    expect(h.calls.map((c) => c.toolChoice)).toEqual(["required", "required", { type: "function", function: { name: "respond" } }]);
-    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.get_product");
-    expect((r.trace as any).rewriteRounds).toBe(2);
+    expect(h.calls.map((c) => c.toolChoice)).toEqual(["required", { type: "function", function: { name: "respond" } }]);
+    expect(h.dispatched.map((d) => d.name)).toContain("woocommerce.list_products");
+    expect((r.trace as any).rewriteRounds).toBe(1);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
     expect(r.reply).toMatch(/כותנה/);
   });
@@ -721,8 +722,8 @@ describe("prod replay 4 (2026-11-16), through a whole turn", () => {
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטחי במבוק?" }, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_absence");
-    // The engine searched the customer's own words itself; one model call for the answer.
-    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("יש משטחי במבוק?");
+    // The engine searched the customer's own product words itself (never "יש" and the question mark); one model call for the answer.
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("משטחי במבוק");
     expect(h.calls).toHaveLength(2);
     expect(r.trace.gate3.rewrite).toBe("rewritten");
   });
@@ -2451,5 +2452,114 @@ describe("replay d (the cab0f40e rating) through a whole turn", () => {
     h.responses.push({ toolCalls: [respond("sp2", { reply: "כן, יש לנו שירות התקנה." })] });
     const c = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם שירות התקנה?" }, "autonomous");
     expect(String(c.trace.gate1 ?? "")).not.toMatch(/^automated/);
+  });
+});
+
+/** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18), through a whole turn. */
+describe("replay e: engine passes", () => {
+  const held = "checking with the team: חויבתי פעמיים ואין הזמנה";
+  const withState = async (pending: string, fn: () => Promise<void>, offeredItems: any[] = []) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems, pending: [{ kind: "promise", text: pending, at: new Date().toISOString() }], turnCount: 10 });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  const savedPending = (): any[] => { const up = h.upserts[h.upserts.length - 1]; return up?.create?.pending ?? up?.update?.pending ?? []; };
+
+  it("★ 3: \"כן מעדיפה להיות שקטה\" in a hold is peace of mind: the fixed noted line, the note on the item, never \"we'll keep quiet\"", async () => {
+    const { HOLD_SETTLED_HE, SETTLED_NOTE } = await import("../services/reply-engine/gates");
+    await withState(held, async () => {
+      h.responses.push({ toolCalls: [respond("e1", { reply: "בסדר גמור, נשאיר את זה בשקט ולא נשלח הודעות נוספות." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן מעדיפה להיות שקטה" }, "autonomous");
+      expect(r.reply).toContain(HOLD_SETTLED_HE);
+      expect(r.reply).not.toMatch(/בשקט|לא נשלח/);
+      const item = savedPending().find((p: any) => /חויבתי פעמיים/.test(p.text));
+      expect(item.text).toContain(SETTLED_NOTE);
+      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(1);
+    });
+  });
+
+  it("★ 3: a yes to the bot's own urgency question in a hold: the same noted line", async () => {
+    const { HOLD_SETTLED_HE } = await import("../services/reply-engine/gates");
+    h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: "החיוב בבדיקה אצל הצוות. זה דחוף עבורך?", senderName: "AI Bot", metadata: null }];
+    await withState(held, async () => {
+      h.responses.push({ toolCalls: [respond("e2", { reply: "בסדר." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+      expect(r.reply).toContain(HOLD_SETTLED_HE);
+    });
+  });
+
+  it("★ 4: \"הוספתי את זה לבדיקה\" never goes out unless her words reached the open item", async () => {
+    for (const [pending, incoming] of [["checking with the team: האם יש משטח שמתאים לתמי 5", "זה בשביל מתנה ליום ההולדת של אמא שלי"], [held, "שילמתי בביט ולא בכרטיס"]] as const) {
+      h.upserts.length = 0;
+      await withState(pending, async () => {
+        h.responses.push({ toolCalls: [respond("e3", { reply: "הוספתי את זה לבדיקה, והתשובה תגיע כאן בצ'אט.", team_question: pending.slice("checking with the team: ".length) })] }, { toolCalls: [respond("e3b", { reply: "הוספתי את זה לבדיקה, והתשובה תגיע כאן בצ'אט." })] });
+        const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+        const item = savedPending().find((p: any) => p.text.startsWith(pending.slice(0, 40)))?.text ?? pending;
+        if (/הוספתי את זה/.test(r.reply ?? "")) expect(item, incoming).toContain(`customer added: "${incoming}"`);
+      });
+    }
+  });
+
+  it("★ 4: a thanks adds nothing: the claim goes", async () => {
+    const open = "checking with the team: האם יש משטח שמתאים לתמי 5";
+    await withState(open, async () => {
+      h.responses.push({ toolCalls: [respond("e4", { reply: "הוספתי את זה לבדיקה.", team_question: "האם יש משטח שמתאים לתמי 5" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/הוספתי/);
+      expect(savedPending().find((p: any) => /תמי 5/.test(p.text))?.text ?? open).not.toMatch(/customer added/);
+    });
+  });
+
+  it("★ 4: a photo in a hold: the acknowledgement, and the item records it", async () => {
+    const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
+    await withState(held, async () => {
+      h.responses.push({ toolCalls: [respond("e5", { reply: "קיבלתי את התמונה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[image]" }, "autonomous");
+      expect(r.reply).toMatch(new RegExp(`^${HOLD_ACK_HE}`));
+      expect(savedPending().find((p: any) => /חויבתי פעמיים/.test(p.text)).text).toContain("customer sent 1 attachment");
+    });
+  });
+
+  it("★ 5e: the video the bot itself sent earlier is the answer when she asks for it again, never a team pass", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "איך משתמשים בטוש הגבות?", metadata: null },
+      { direction: "OUTBOUND", body: "לפני השימוש כדאי להניח את הטוש עם הפקק כלפי מטה. יש גם סרטון הדרכה לטוש הגבות: https://youtu.be/MypUj_xxA24", senderName: "AI Bot", metadata: null },
+    ];
+    h.responses.push(
+      { toolCalls: [respond("e6", { reply: "העברנו לצוות את הבקשה לסרטון שימוש בטוש הגבות, והתשובה תגיע כאן בצ'אט.", team_question: "האם יש סרטון לטוש הגבות?" })] },
+      { toolCalls: [respond("e6b", { reply: "העברנו לצוות את הבקשה לסרטון שימוש בטוש הגבות, והתשובה תגיע כאן בצ'אט.", team_question: "האם יש סרטון לטוש הגבות?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה" }, "autonomous");
+    expect(r.reply).toContain("https://youtu.be/MypUj_xxA24");
+    expect(r.reply).not.toMatch(/העברנו לצוות/);
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+  });
+
+  it("★ 5a: \"ביררנו\" with nothing looked up this turn goes, the rest stays", async () => {
+    h.responses.push({ toolCalls: [respond("e9", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("e9b", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+    expect(r.reply).not.toMatch(/ביררנו/);
+    expect(r.reply).toMatch(/9-17/);
+  });
+
+  it("★ 5d: \"אני אחפש לבד\" gets that help is here, not a bare okay", async () => {
+    h.responses.push({ toolCalls: [respond("e7", { reply: "בסדר גמור 🙂" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני אחפש לבד" }, "autonomous");
+    expect(r.reply).toMatch(/^בסדר גמור/);
+    expect(r.reply).toMatch(/עזרה בבחירה, אנחנו כאן/);
+  });
+
+  it("★ 5b: the rewrite keeps the first draft's closing question it dropped", async () => {
+    h.responses.push(
+      { toolCalls: [respond("e8", { reply: "כן, אפשר להזמין באתר. איזה מכשיר מחפשים עבורו משטח?" })] },
+      { toolCalls: [respond("e8b", { reply: "כן, אפשר להזמין באתר." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר להזמין?" }, "autonomous");
+    if (r.trace.gate3.rewrite === "rewritten" || r.trace.gate3.rewrite === "cleaned") {
+      expect(r.reply).toMatch(/איזה מכשיר מחפשים עבורו משטח\?/);
+      expect((r.reply ?? "").match(/\?/g) ?? []).toHaveLength(1);
+    } else {
+      expect(r.reply).toMatch(/איזה מכשיר/);
+    }
   });
 });

@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -380,15 +380,34 @@ export function openTeamQuestions(state: { pending?: Array<{ kind?: string; text
 const FILLER = new Set(["הלקוח", "הלקוחה", "לקוח", "לקוחה", "שואל", "שואלת", "שואלים", "מבקש", "מבקשת", "רוצה", "האם", "אם", "יש", "אין", "של", "את", "על", "עם", "זה", "זו", "לו", "לה", "לי", "גם", "או", "כי", "מה", "איך", "מתי", "איפה", "אפשר", "לגבי", "בנוגע", "the", "customer", "asks", "asked", "wants", "whether", "if", "is", "are", "there", "can", "about", "for", "of", "to", "and", "or", "a", "an"]);
 const words = (s: string) => new Set(String(s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2 && !FILLER.has(w)));
 /** Two team questions about the same issue: enough shared words (a reworded repeat still counts). */
-/** The open team item a repeat belongs to, with the digits the customer just gave that it lacks. */
-export function withNewDetails(pending: Array<{ kind?: string; text?: string; at?: string }>, question: string, incoming: string): { pending: any[]; added: string[]; text: string } | null {
-  const digits = [...new Set(String(incoming ?? "").match(/\d{4,}/g) ?? [])];
-  if (!digits.length) return null;
+/**
+ * The open team item a repeat belongs to, with what the customer just gave that it lacks: digits (a card's last
+ * four, an order number); with `extra`, an attachment, her own words, or a note (prod replay on 1b35c535: "הוספתי
+ * את זה לבדיקה" was said and nothing reached the item).
+ */
+export function withNewDetails(pending: Array<{ kind?: string; text?: string; at?: string }>, question: string, incoming: string, extra: { attachment?: boolean; words?: boolean; note?: string | null } = {}): { pending: any[]; added: string[]; text: string } | null {
   const i = pending.findIndex((p) => isTeamPromise(p) && sameIssue(String(p.text ?? "").slice(TEAM_PROMISE_PREFIX.length), question));
   if (i < 0) return null;
-  const added = digits.filter((d) => !String(pending[i].text ?? "").includes(d));
+  const was = String(pending[i].text ?? "");
+  const digits = [...new Set(String(incoming ?? "").match(/\d{4,}/g) ?? [])].filter((d) => !was.includes(d));
+  const added: string[] = [];
+  let text = was;
+  if (digits.length) { text += ` (customer gave: ${digits.join(", ")})`; added.push(...digits); }
+  if (extra.note && !was.includes(extra.note)) { text += ` (${extra.note})`; added.push(extra.note); }
+  if (extra.attachment) {
+    const n = Number(/\(customer sent (\d+) attachments?\)/.exec(text)?.[1] ?? 0) + 1;
+    const mark = `(customer sent ${n} attachment${n > 1 ? "s" : ""})`;
+    text = n > 1 ? text.replace(/\(customer sent \d+ attachments?\)/, mark) : `${text} ${mark}`;
+    added.push(mark.slice(1, -1));
+  }
+  // Her own words, when she said more than a thanks or an okay and no digits carried it.
+  const words = String(incoming ?? "").replace(/\s+/g, " ").trim();
+  if (extra.words && !digits.length && !extra.note && words.split(" ").length >= 2 && !customerAck(words) && !was.includes(words.slice(0, 60))) {
+    text += ` (customer added: "${words.slice(0, 120)}")`;
+    added.push(words.slice(0, 120));
+  }
   if (!added.length) return null;
-  const text = `${pending[i].text} (customer gave: ${added.join(", ")})`.slice(0, 260);
+  text = text.slice(0, 480);
   return { pending: pending.map((p, k) => (k === i ? { ...p, text } : p)), added, text: text.slice(TEAM_PROMISE_PREFIX.length) };
 }
 
@@ -544,8 +563,9 @@ export function danglingQuestion(reply: string, incoming: string): boolean {
  * The fixed team line once, and no other sentence that offers or tells the same pass: an offer is untrue once it
  * is done ("אפשר להעביר לצוות" before "העברתי את זה לצוות"). Unchanged when the fixed line is not there.
  */
-const FIXED_PASS = /(?<![\u0590-\u05FF])העברתי\s+(?:את\s+(?:זה|השאלה|הבקשה)\s+)?לצוות|\bI've passed (?:this|it|the question) to the team\b/iu;
-const OTHER_PASS = /(?<![\u0590-\u05FF])(?:להעביר|אעביר|נעביר|לשאול\s+את|אשאל\s+את|נשאל\s+את|לבדוק\s+עם)\s+(?:\S+\s+){0,3}?(?:[לה]|לה)?צוות|והתשובה\s+תגיע\s+כאן|\b(?:pass (?:it|this) (?:on )?to the team|ask the team|check with the team|the answer will come here)\b/iu;
+// "העברנו" is the same told pass (prod replay on 1b35c535, Bimi payment: two team clauses in one reply).
+const FIXED_PASS = /(?<![\u0590-\u05FF])[ו]?(?:העברתי|העברנו)\s+(?:את\s+(?:זה|השאלה|הבקשה|הפנייה|הבדיקה|הנושא)\s+)?לצוות|\b(?:I|we)'ve passed (?:this|it|the question) to the team\b/iu;
+const OTHER_PASS = /(?<![\u0590-\u05FF])(?:להעביר|אעביר|נעביר|לשאול\s+את|אשאל\s+את|נשאל\s+את|לבדוק\s+עם)\s+(?:\S+\s+){0,3}?(?:[לה]|לה)?צוות|והתשובה\s+תגיע\s+כאן|(?<![\u0590-\u05FF])ו?הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|יטפל)(?![\u0590-\u05FF])|\b(?:pass (?:it|this) (?:on )?to the team|ask the team|check with the team|the answer will come here)\b/iu;
 export function oneTeamPass(reply: string): string {
   const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
   if (!parts.some((p) => FIXED_PASS.test(p))) return reply;
@@ -565,10 +585,38 @@ export function oneTeamPass(reply: string): string {
   const kept = parts.map((p) => {
     if (FIXED_PASS.test(p)) return p === keep ? p : withoutPass(p, FIXED_PASS);
     // The holding lines are their own fixed text, never cut here.
-    if (p.includes(HOLD_LINE_CORE.he) || p.includes(HOLD_LINE_CORE.en)) return p;
+    if (p.includes(HOLD_LINE_CORE.he) || p.includes(HOLD_LINE_CORE.en) || p.includes(HOLD_SETTLED_HE) || p.includes(HOLD_SETTLED_EN)) return p;
     return OTHER_PASS.test(p) ? withoutPass(p, OTHER_PASS) : p;
   }).filter((p) => p !== "");
   return kept.join("").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+/** The customer will look on their own ("אני אחפש לבד", "אסתכל באתר", "I'll look myself"). */
+const SELF_SEARCH = /(?<![\u0590-\u05FF])(?:(?:אני\s+)?(?:אחפש|אסתכל|אבדוק|אעבור|אציץ)\s+(?:לבד|בעצמי|באתר|על\s+האתר)|(?:אני\s+)?אסתדר\s+(?:לבד|בעצמי))(?![\u0590-\u05FF])|\b(?:i'?ll (?:look|search|browse|check) (?:myself|on my own|on the (?:site|website))|i'?ll find it myself)\b/iu;
+export const selfSearch = (incoming: string) => SELF_SEARCH.test(normalizeQuotes(String(incoming ?? "")));
+/**
+ * The first draft's closing question, when the rewrite answered without one (prod replay on 1b35c535, Smoovee:
+ * "אפשר להזמין?" got the link and lost "איזה מכשיר מחפשים עבורו משטח?"): one question, not asked before, kept.
+ */
+export function withClosingQuestion<T extends { reply: string }>(rewrite: T, original: { reply: string } | null, previousBotReplies: string[]): T {
+  if (!original || /\?/.test(rewrite.reply ?? "")) return rewrite;
+  const parts = String(original.reply ?? "").trim().match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*/g) ?? [];
+  const q = parts.at(-1)?.trim() ?? "";
+  if (!/\?$/.test(q) || q.split(/\s+/).length < 3 || /PRODUCT_\d|https?:\/\/|\d/.test(q) || teamPassIn(q)) return rewrite;
+  if (previousBotReplies.some((b) => repeatsQuestion(q, b)) || String(rewrite.reply ?? "").includes(q)) return rewrite;
+  return { ...rewrite, reply: `${String(rewrite.reply ?? "").trim()} ${q}`.trim() };
+}
+/** The reply without its "we checked" clauses (a sentence that says nothing else goes). */
+const CHECKED_CLAIM = /(?<![\u0590-\u05FF])[ושכ]?(?:ביררנו|ביררתי|בדקנו|בדקתי|וידאנו|וידאתי)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ve| have)? (?:checked|verified|looked into it))\b/iu;
+export function withoutCheckedClaims(reply: string): string {
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
+  if (!parts.some((p) => CHECKED_CLAIM.test(p))) return reply;
+  return parts.map((p) => {
+    if (!CHECKED_CLAIM.test(p)) return p;
+    const end = /[.!?]+\s*$/.exec(p)?.[0]?.trim()[0] ?? ".";
+    const rest = p.replace(/[.!?]+\s*$/, "").split(/,\s*/).filter((c) => !CHECKED_CLAIM.test(c));
+    const words = rest.join(" ").trim().split(/\s+/).filter(Boolean).length;
+    return words >= 3 ? `${rest.join(", ").trim().replace(/^ו(?=[\u0590-\u05FF])/u, "")}${end} ` : "";
+  }).filter((p) => p !== "").join("").replace(/[ \t]{2,}/g, " ").trim();
 }
 /** A fit claim: "מתאים", "מתאימים", "יתאים", "נכנס", "fits". */
 const FIT_WORD = /(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|יתאימו|נכנס|נכנסת|ייכנס)(?![\u0590-\u05FF])|\bfits?\b/iu;
@@ -1288,6 +1336,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     else messages.push({ role: "system", content: correctionNote(verdict.problems, locale) });
     const first = verdict;
     const original = output;
+    // The first draft's question may be kept only when no check was about a question (asked before, already known).
+    const questionOk = !first.problems.some((p) => p.kind === "style" && p.codes.some((c) => c === "asks_known" || c === "repeated_ask" || c === "repeated_sentence" || c === "statement_question"));
     let second: ModelTurnOutput | null = null;
     // The customer is waiting (prod replay 6: a one-round rewrite at p95 27s). The
     // rewrite fits in what is left of the turn's budget, or is skipped and the
@@ -1307,17 +1357,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (left() < 4000) { (trace as any).rewriteCut = "budget"; throw Object.assign(new Error("no time left for a rewrite"), { name: "RewriteDeadline" }); }
       // The lookups the engine can make itself run first, with no model round:
       // the customer's own words in the store, or in the knowledge. Short, and only with time for an answer after.
-      const auto = left() > 8000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records) : [];
+      // A lookup is a second or two; with the rewrite's own time kept after it (prod replay on 1b35c535: a question
+      // the product's text answered went to the team with no lookup at all).
+      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, String(state.offeredItems?.at(-1)?.title ?? "").trim() || null) : [];
       if (auto.length) {
         const ta = Date.now();
         messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-        await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs) }, auto);
+        await runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 4500)) }, auto);
         for (const c of auto) messages.push({ role: "tool", tool_call_id: c.id, content: turnTools.records.find((x) => x.callId === c.id)?.content ?? "" });
         candidates = turnTools.envelope?.candidates ?? [];
         (trace as any).autoLookupMs = Date.now() - ta;
       }
       // A lookup only the model can make (which product, which order) gets one tool round, if there is time for two calls.
-      const modelRead = left() > 9000 && first.problems.some((p) => p.kind === "unread_product" || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
+      const modelRead = left() > 9000 && first.problems.some((p) => (p.kind === "unread_product" && !auto.length) || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
       let r = await rewriteCall(modelRead ? "required" : forceRespond);
       if (modelRead) {
         const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
@@ -1343,7 +1395,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     (trace as any).rewriteMs = Date.now() - t0 - (stageMs.model ?? 0);
     const v2 = second ? gate3(g3Input(second)) : null;
     if (second && v2?.ok) {
-      output = second; verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
+      output = withClosingQuestion(second, questionOk ? original : null, previousBotReplies); verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
+      if (output !== second) (trace as any).closingQuestionKept = true;
     } else {
       // Not clean: what is left is cleaned and sent. A FACT problem (a price, a
       // product, an absence or an action no tool backs) loses its sentence; the
@@ -1412,6 +1465,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
         // How many sentences the cut took (a "cleaned" verdict may remove nothing, e.g. no_search).
         (trace as any).cutSentences = kept.removed?.length ?? 0;
+        // The bot's own cut words, short, for the replay printout (prod replay on 1b35c535, Tehila: a noun fragment
+        // opened the reply and nothing showed what was cut).
+        if (kept.removed?.length) (trace as any).cutText = kept.removed.slice(0, 4).map((x: string) => x.slice(0, 120));
+        if (kept === fromSecond && fromSecond) { const q = withClosingQuestion(kept.o, questionOk ? original : null, previousBotReplies); if (q !== kept.o) { output = q; (trace as any).closingQuestionKept = true; } }
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
@@ -1510,16 +1567,29 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   let heldTurn = false;
   const holdFacts: Record<string, string> = {};
   let heldMerged = false;
+  // THIS message's attachment, never an older one in the history (rating 83086356: "הוספתי את זה לבדיקה" every
+  // turn after a photo sent earlier).
+  const attachmentThisTurn = (() => {
+    const incomingNow = String(opts.incomingMessage ?? "");
+    const lastInMsg: any = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
+    return /^\s*\[(?:image|photo|video|voice|audio|document|file|sticker|תמונה|סרטון|מסמך|קובץ)[^\]]*\]/iu.test(incomingNow)
+      || (String(lastInMsg?.body ?? "").trim() === incomingNow.trim() && /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? "")));
+  })();
+  // In a hold, "להיות שקטה" or a yes to the bot's urgency question: it matters to her (prod replay on 1b35c535).
+  const settledNow = !output?.handoff && !!holdingItem(openTeam) && wantsItSettled(String(opts.incomingMessage ?? ""), previousBotReplies.at(-1) ?? "");
   if (output?.reply) {
     const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
     // No price sentence left without its product (prod rating 2026-11-17).
     let text = fixListCount(dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles));
     // A conditional left without the model it was about ("אם זה דגם אחר...") goes (rating ed780586).
     text = dropOrphanConditional(text, titles);
-    // "I've added it to the check" only when something was added this turn (rating 83086356: said with nothing new).
+    // "I've added it to the check" only when something is added this turn (rating 83086356: said with nothing new),
+    // and then it IS added: her words, a file or the note go to the open item (prod replay on 1b35c535). A repeat of
+    // an open question adds to that item, never counts as added by itself.
     {
       const heldIt = holdingItem(openTeam);
-      const addedNow = !!output.teamQuestion || (!!heldIt && !!withNewDetails(state.pending, heldIt, String(opts.incomingMessage ?? "")));
+      const target = output.teamQuestion ? (isNewTeamQuestion(output.teamQuestion) ? null : output.teamQuestion) : heldIt;
+      const addedNow = isNewTeamQuestion(output.teamQuestion) || (!!target && !!withNewDetails(state.pending, target, String(opts.incomingMessage ?? ""), { attachment: attachmentThisTurn, words: true, note: settledNow ? SETTLED_NOTE : null }));
       if (!addedNow && ADDED_CLAIM.test(text)) { text = dropSentencesBy(text, ADDED_CLAIM); (trace as any).addedClaimCut = true; }
     }
     // Sizes given for several items: each gets the smallest pad that takes its base (either way round), from the
@@ -1593,15 +1663,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const held = output.handoff ? null : holdingItem(openTeam);
     if (held) {
       const incomingNow = String(opts.incomingMessage ?? "");
-      const lastInMsg: any = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
-      // THIS message's attachment, never an older one in the history (rating 83086356: "הוספתי את זה לבדיקה" every
-      // turn after a photo sent earlier).
-      const attachmentNow = /^\s*\[(?:image|photo|video|voice|audio|document|file|sticker|תמונה|סרטון|מסמך|קובץ)[^\]]*\]/iu.test(incomingNow)
-        || (String(lastInMsg?.body ?? "").trim() === incomingNow.trim() && /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? "")));
+      const attachmentNow = attachmentThisTurn;
       const details = bringsDetails(incomingNow, attachmentNow);
       // A nudge: a short message that asks nothing of its own ("נו?" asks, "מתי אתם פתוחים?" is a question).
       const nudge = incomingNow.trim().split(/\s+/).length <= 3 && (!asksSomething(incomingNow) || /^\s*(?:נו|nu|\?+|so|any news|יש חדש|מה קורה)\s*\??\s*$/iu.test(incomingNow));
-      const onSubject = details || aboutHeld(incomingNow) || statusAsk(incomingNow) || nudge;
+      const onSubject = details || aboutHeld(incomingNow) || statusAsk(incomingNow) || nudge || settledNow;
       const subjectTurn = onSubject || aboutHeld(text);
       if (subjectTurn) {
         const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
@@ -1641,7 +1707,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // A held return and "how do I return it?": the steps from the business's texts, never silence (87076cab
           // replay, 97837: the hold line the turn before, then nothing at all).
           const returnHowTo = isReturnSubject(held) && returnHowToAsk(incomingNow);
-          text = returnHowTo
+          // "It matters to me": the fixed line that the team has it noted, once in a row; never "we'll keep quiet".
+          const settledLine = holdLoc === "en" ? HOLD_SETTLED_EN : HOLD_SETTLED_HE;
+          text = settledNow
+            ? holdReply(text, (lastTwo[0] ?? "").includes(settledLine) ? lineNow : settledLine, { details: false, locale: holdLoc, keepOther: asksOtherTopic(incomingNow) })
+            : returnHowTo
             ? returnSteps([knowledge ?? "", ...turnTools.knowledgeText].join("\n"), text, holdLoc)
             : onSubject
             // Another topic's sentences only when the customer asked about one this turn (rating 93f9fdff: a size
@@ -1699,13 +1769,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     }
     // A video or link ask the model passed to the team while the business's own texts hold the link (rating
     // 1771ba14, NE'A: the video was in the knowledge, later asks went to the team): the link, not the team.
-    if (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && !/https?:\/\//i.test(text) && teamPassIn(text) && !safetyConversation && !heldTurn) {
-      const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
+    // A link the bot itself sent earlier in this conversation is grounded too (prod replay on 1b35c535, NE'A: the
+    // video sent in turn 1, then "passed to the team" and "still checking" when she asked for it again).
+    const stillChecking = /(?<![\u0590-\u05FF])עדיין\s+(?:בודקים|בבדיקה|נבדק|נבדקת)(?![\u0590-\u05FF])|\bstill (?:checking|being checked)\b/iu;
+    if (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && !/https?:\/\//i.test(text) && (teamPassIn(text) || stillChecking.test(text)) && !safetyConversation && !heldTurn) {
+      const kb = [knowledge ?? "", ...turnTools.knowledgeText, earlierOutboundText].join("\n");
       // The link of the product being discussed, never the first link the texts have (C pinned rating, NE'A).
       const link = howToLink(kb, linkSubjects());
       if (link) {
-        const rest = removeTeamLines(text);
-        text = `${rest ? `${rest} ` : ""}${locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`}`;
+        const rest = dropSentencesBy(removeTeamLines(text), stillChecking);
+        text = `${rest && !teamPassIn(rest) ? `${rest} ` : ""}${locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`}`;
         output = { ...output, teamQuestion: null };
         (trace as any).linkInsteadOfTeam = true;
       }
@@ -1990,6 +2063,26 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // One team pass per reply (replay d, NE'A: "אפשר להעביר לצוות... והתשובה תגיע כאן בצ'אט." before the fixed line).
     const one = oneTeamPass(reply ?? "");
     if (one !== (reply ?? "")) { reply = one; (trace as any).teamPassDeduped = true; }
+    // "We checked" with nothing looked up this turn is untrue (prod replay on 1b35c535, Bimi payment: "ביררנו").
+    if (!turnTools.records.some((t) => t.outcome === "ok" || t.outcome === "empty")) {
+      const unchecked = withoutCheckedClaims(reply ?? "");
+      if (unchecked !== (reply ?? "")) { reply = unchecked; (trace as any).checkedClaimCut = true; }
+    }
+    // "I'll look myself" gets the way to look, not a bare okay (prod replay on 1b35c535: "אני אחפש לבד" got only
+    // "בסדר גמור"): the site, and that help is here. Fixed wording.
+    if (reply && selfSearch(String(opts.incomingMessage ?? "")) && !/https?:\/\//i.test(reply) && reply.trim().split(/\s+/).length <= 6) {
+      const url = site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : "";
+      const he = locale !== "en";
+      const look = url ? (he ? `כל המוצרים באתר: ${url}` : `Everything is on the site: ${url}`) : "";
+      const help = he ? "ואם צריך עזרה בבחירה, אנחנו כאן." : "And if you'd like help choosing, we're here.";
+      reply = [reply.trim().replace(/[.!]*$/, "."), look ? `${look} ` : "", help].filter(Boolean).join(" ").replace(/\s{2,}/g, " ");
+      (trace as any).selfSearchHelp = true;
+    }
+    // A size line names its product; "several colours" names them, from the product's own data (prod replay on 1b35c535).
+    if (reply) {
+      const named = colourList(nameSizeLines(reply, candidates as any[]), candidates as any[], locale === "en" ? "en" : "he");
+      if (named !== reply) { reply = named; (trace as any).namedFromData = true; }
+    }
     if (reply) reply = spaceSentences(reply);
   }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
@@ -2076,7 +2169,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const heldItem = holdingItem(openTeam);
   const detailsFor = final.teamQuestion && !newTeamQuestion ? final.teamQuestion : !final.teamQuestion && heldItem ? heldItem : null;
   if (detailsFor) {
-    const upd = withNewDetails(state.pending, detailsFor, String(opts.incomingMessage ?? ""));
+    // What the reply says was added is added: her words when it says so, a file, the urgency note.
+    const upd = withNewDetails(state.pending, detailsFor, String(opts.incomingMessage ?? ""), { attachment: attachmentThisTurn, words: ADDED_CLAIM.test(reply), note: settledNow ? SETTLED_NOTE : null });
     if (upd) {
       pendingNow = upd.pending;
       (trace as any).teamItemUpdated = upd.added;

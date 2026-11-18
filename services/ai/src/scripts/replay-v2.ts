@@ -104,6 +104,20 @@ export function gateAsOf(msgs: any[], i: number, handovers: Array<{ toHandler: s
  * Where one turn's time went, numbers and tool names only (no customer text): the
  * engine's cumulative stage marks, rounds, the rewrite and its own lookups, and each tool.
  */
+/**
+ * What the cleanup cut and why the rewrite stopped (replay on 1b35c535, Tehila: a noun fragment opened the reply and
+ * the printout could not show what was cut). The bot's own words only, never the customer's.
+ */
+export function cutLine(trace: any): string {
+  const parts: string[] = [];
+  if (trace?.cutSentences != null) parts.push(`cutSentences=${trace.cutSentences}`);
+  if (trace?.rewriteCut) parts.push(`rewriteCut=${trace.rewriteCut}`);
+  if (Array.isArray(trace?.fallbackKinds) && trace.fallbackKinds.length) parts.push(`fallback=${trace.fallbackKinds.join("/")}`);
+  if (Array.isArray(trace?.cutText) && trace.cutText.length) parts.push(`cut: ${trace.cutText.map((x: string) => JSON.stringify(String(x).slice(0, 120))).join(" ")}`);
+  for (const k of ["closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut"]) if (trace?.[k]) parts.push(k);
+  return parts.length ? ` | ${parts.join(" | ")}` : "";
+}
+
 /** The store searches as the store got them: the query, the customer's own words, the filters (60 characters each). */
 export function searchArgsLine(list: any[]): string {
   const q = (v: unknown) => JSON.stringify(String(v ?? "").slice(0, 60));
@@ -329,7 +343,7 @@ async function main() {
           `- tools: ${tools.length ? tools.map((x) => `${x.tool} ${x.outcome ?? x.decision}${x.errorKind ? `[${x.errorKind}]` : ""}${x.resultCount != null ? ` (${x.resultCount})` : ""} ${x.ms}ms${x.retried ? " retried" : ""} args[${Object.keys(x.args ?? {}).join(",")}]`).join("; ") : "none"}`,
           `- cards: ${(r.trace?.cards ?? []).length ? `[${r.trace.cards.join(", ")}]` : "none"}; text list: ${(r.trace?.listedProducts ?? []).length ? `[${r.trace.listedProducts.join(", ")}] (part of the reply above, as live)` : "none"}${r.trace?.handoffSetInCode ? "; handoff set in code" : ""}`,
           ...(r.trace?.gate1 && r.trace.gate1 !== "reply" ? [`- gate1: ${r.trace.gate1} (no model call)`] : []),
-          `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}`,
+          `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}${cutLine(r.trace)}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
           stagesLine(r.trace),

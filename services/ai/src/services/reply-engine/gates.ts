@@ -1292,7 +1292,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
 export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_attribute", "price_of_other_product", "derived_measure", "ungrounded_negative_fit", "ungrounded_positive_fit"] as any);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
-const SENTENCES = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g;
+// A decimal point is no sentence end ("99.5 ס"מ": the derived-measure claim spans it and was never cut).
+const SENTENCES = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*/g;
 const dropSentences = (s: string, re: RegExp) => (s.match(SENTENCES) ?? [s]).filter((x) => !re.test(x)).reduce(joinKept, "").trim();
 
 // The employee's gendered first person -> the team's plural ("שמחה ש" -> "שמחים ש").
@@ -1322,7 +1323,14 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
   let s = normalizeQuotes(String(reply ?? ""));
   for (const p of problems) {
     // A made-up price loses its sentence ("התיק עולה ₪120." would leave "התיק עולה.").
-    if ((p.kind as string) === "ungrounded_attribute" || (p.kind as string) === "price_of_other_product" || (p.kind as string) === "derived_measure") {
+    if ((p.kind as string) === "derived_measure") {
+      // The derived clause goes, the measure the source states stays (prod replay on 1b35c535, Tehila: "the
+      // triangle is 70 by 70, each side about 70" lost the whole sentence and the answer became a team line).
+      const marks = (((p as any).claims ?? []) as string[]).map((c) => String(c ?? "").trim()).filter((m) => m.length >= 3);
+      if (marks.length) s = (s.match(SENTENCES) ?? [s]).map((x) => (marks.some((m) => x.includes(m.slice(0, 40))) ? withoutClauses(x, marks) : x)).filter(Boolean).reduce(joinKept, "").trim();
+      continue;
+    }
+    if ((p.kind as string) === "ungrounded_attribute" || (p.kind as string) === "price_of_other_product") {
       const marks = (((p as any).claims ?? []) as string[]).map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).reduce(joinKept, "").trim();
     }
@@ -1340,6 +1348,28 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
   return s.trim();
 }
 
+// The question around the product: never a store search word (prod replay on 1b35c535: "איך אדע מה התת גוון"
+// searched as written found a powder; "מאיזה חומר השרשרת" found head coverings).
+const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "חומר", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "material", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please"]);
+const queryStop = (w: string) => {
+  const l = w.toLowerCase();
+  return QUERY_STOP.has(l) || ASK_STOP.has(l) || STEM_STOP.has(l) || (/^[הוש][\u0590-\u05FF]{2,}$/u.test(l) && (QUERY_STOP.has(l.slice(1)) || STEM_STOP.has(l.slice(1))));
+};
+/** The customer's product words for a store search: the question around them off, four at most; null with none left. */
+export function storeQueryOf(incoming: string): string | null {
+  const words = (normalizeQuotes(String(incoming ?? "")).match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []).filter((w) => !queryStop(w));
+  // A definite ה off a Hebrew word of 5+ letters: a store's search matches inside titles ("השרשרת" never finds "שרשרת").
+  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (/^ה[\u0590-\u05FF]{4,}$/u.test(w) ? w.slice(1) : w));
+  return content.length ? content.slice(0, 4).join(" ") : null;
+}
+// An explanation asked, no product wanted: "how do I know", "what is", "what's the difference" (the knowledge answers it).
+const EXPLAIN_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:אני\s+)?(?:אדע|נדע|יודעים|לדעת|מבדילים|בוחרים|מתאימים)|מה\s+(?:זה|זאת|ההבדל|הכוונה|המשמעות)|מה\s+ה[\u0590-\u05FF]{2,}\s+(?:שלי|שלך)|מהו|מהי)(?![\u0590-\u05FF])|\b(?:how (?:do|can) (?:i|we|you) (?:know|tell|choose|pick)|what(?:'s| is) the difference|what (?:is|does) .{1,30} mean)\b/iu;
+/** An explanation or a how-to the store's search cannot answer: no product named for purchase. */
+export function explanationAsk(incoming: string): boolean {
+  const t = normalizeQuotes(incoming ?? "");
+  return (EXPLAIN_ASK.test(t) || HOW_TO.test(t)) && !PURCHASE.test(t) && !NAMES_A_PRODUCT.test(t) && !/(?<![\u0590-\u05FF])(?:יש\s+לכם|מחפש|מחפשת|רוצה\s+(?:לקנות|להזמין))(?![\u0590-\u05FF])|\b(?:do you have|looking for)\b/iu.test(t);
+}
+
 /**
  * The lookups a rewrite needs that the engine can make itself, with no model
  * round: the customer's own words in the store (an absence, a photo asked
@@ -1347,11 +1377,16 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
  * fact). Two at most. Product and order reads need the model (which product,
  * which order) and are not here.
  */
-export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOffered: string[], done: ToolRunRecord[]): Array<{ id: string; function: { name: string; arguments: string } }> {
+export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOffered: string[], done: ToolRunRecord[], subject: string | null = null): Array<{ id: string; function: { name: string; arguments: string } }> {
   const out: Array<{ id: string; function: { name: string; arguments: string } }> = [];
   const words = String(incoming ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
   if (!words) return out;
-  const store = toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
+  // The store is searched by the product words only, and never for an explanation (the knowledge is).
+  const explain = explanationAsk(words);
+  // No product word of her own ("אשמח לסרטון הדרכה"): the product the conversation is about (prod replay on
+  // 1b35c535, NE'A: the literal sentence lost the marker in focus).
+  const query = storeQueryOf(words) ?? (String(subject ?? "").trim().slice(0, 80) || null);
+  const store = explain || !query ? undefined : toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
   const has = (k: ClaimProblem["kind"]) => problems.some((p) => p.kind === k);
   // Each store's own page-size argument (Shopify parity: its search takes "limit").
   // Each store's own page-size argument; Shopify's search is in stock only unless told otherwise,
@@ -1378,10 +1413,15 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   })();
   const orderOnly = !!absence && absence.claims.every((c) => ORDER_ABSENCE.test(c)) && !has("no_search");
   if (store && !orderOnly && (has("ungrounded_absence") || has("no_search"))) {
-    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? words, ...few, ...(shopifyLike && has("ungrounded_absence") ? { in_stock_only: false } : {}) }) } });
-  } else if (store && problems.some((p: any) => p.kind === "style" && p.codes?.includes("internal_reasoning")) && !done.some((t) => t.tool === store && String((t.args as any)?.query ?? "") === words)) {
-    // The model turned the results down in its own words: search with the customer's own words.
-    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: words, ...few }) } });
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? (has("unread_product") && String(subject ?? "").trim() ? String(subject).trim().slice(0, 80) : query), ...few, ...(shopifyLike && has("ungrounded_absence") ? { in_stock_only: false } : {}) }) } });
+  } else if (store && problems.some((p: any) => p.kind === "style" && p.codes?.includes("internal_reasoning")) && !done.some((t) => t.tool === store && String((t.args as any)?.query ?? "") === query)) {
+    // The model turned the results down in its own words: search with the customer's own product words.
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query, ...few }) } });
+  } else if (store && has("unread_product") && !done.some((t) => PRODUCT_TOOL.test(t.tool))) {
+    // A question about the product itself with nothing read (prod replay on 1b35c535, Smoovee: a stopper question
+    // went to the team): the product the conversation is about, by its name, else the customer's product words.
+    const q = String(subject ?? "").trim().slice(0, 80) || query;
+    out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
   } else if (store && has("gave_up_search")) {
     const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
     const narrow = String((last?.args as any)?.query ?? words).split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
@@ -1392,7 +1432,10 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   if (ownOrders && absence && absence.claims.some((c) => ORDER_ABSENCE.test(c)) && !done.some((t) => ORDER_LOOKUP_TOOL.test(t.tool))) {
     out.unshift({ id: "auto_orders_1", function: { name: ownOrders, arguments: JSON.stringify({}) } });
   }
-  if (has("unread_knowledge") && toolsOffered.includes("search_knowledge")) {
+  // An explanation the model answered without a lookup: the knowledge, by the customer's words.
+  if (explain && (has("no_search") || has("ungrounded_absence") || has("gave_up_search")) && !has("unread_knowledge") && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
+    out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
+  } else if ((has("unread_knowledge") || has("unread_product")) && toolsOffered.includes("search_knowledge") && !(has("unread_product") && done.some((t) => t.tool === "search_knowledge"))) {
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
   } else if (problems.some((p: any) => p.kind === "gave_up_search" && p.fromKnowledge) && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
     // The store timed out and the knowledge speaks of it: the business's own tables answer it (prod rating 2026-11-17).
@@ -1710,6 +1753,22 @@ const SENSITIVE_ITEM = /(?<![֐-׿])[והשבל]?(?:חיוב|חויב|חויבת
 const HOLD_SUBJECT = /(?<![֐-׿])[והשבלמ]?(?:חיוב|חויב|חויבתי|חיובים|תשלום|התשלום|שילמת|שילמתי|זיכוי|החזר|כרטיס|אשראי|ויזה|סליקה|ספק|אישור|עסקה|כפול|כפילות|זמני|זמנית|הזמנה|ההזמנה|הזמנתך|בדיקה|הבדיקה|נבדק|נבדקת|בודקים|פגום|פגומה|שבור|נזק|החלפה|כוויה|אלרגיה)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|card|visa|authori[sz]ation|provider|duplicate|double|pending|temporary|order|damage[ds]?|broken|replacement|check(?:ing|ed)?)\b/iu;
 export const HOLD_ACK_HE = "קיבלתי, הוספתי את זה לבדיקה.";
 export const HOLD_ACK_EN = "Got it, I've added that to the check.";
+/**
+ * "להיות שקטה" is peace of mind, never "stay quiet" (prod replay on 1b35c535, both Smoovee runs: "כן מעדיפה להיות
+ * שקטה" in a hold was read as a wish for silence). With a "yes" to the bot's own urgency question it is the same
+ * answer: it matters to her, the team should know. Fixed wording; the note goes to the open item.
+ */
+const PEACE_OF_MIND = /(?<![\u0590-\u05FF])(?:(?:להיות|שאהיה|אהיה|להרגיש|נהיה)\s+(?:יותר\s+)?(?:שקטה|שקט|שקטים|רגועה|רגוע|רגועים)|ראש\s+שקט|לישון\s+בשקט|שיהיה\s+לי\s+שקט|שקט\s+נפשי|לב\s+שקט)(?![\u0590-\u05FF])|\bpeace of mind\b/iu;
+const URGENCY_Q = /(?<![\u0590-\u05FF])[וש]?(?:דחוף|דחופה|חשוב\s+(?:לך|לכם)|בעדיפות|בהקדם|מהר)(?![\u0590-\u05FF])|\b(?:urgent|a priority|asap|as soon as possible)\b/iu;
+export function wantsItSettled(incoming: string, lastBotReply: string | null | undefined): boolean {
+  const t = normalizeQuotes(String(incoming ?? ""));
+  if (PEACE_OF_MIND.test(t)) return true;
+  const askedUrgency = (String(lastBotReply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+\?/g) ?? []).some((q) => URGENCY_Q.test(q));
+  return askedUrgency && /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|מאוד|ברור|בטח|בהחלט|yes|yeah|yep|very|sure)(?:[\s,.!]|$)/iu.test(t);
+}
+export const HOLD_SETTLED_HE = "רשמנו שזה חשוב לך, והצוות יחזור עם תשובה כאן בצ'אט.";
+export const HOLD_SETTLED_EN = "We've noted that this matters to you, and the team will come back to you here in the chat.";
+export const SETTLED_NOTE = "the customer says it is urgent";
 /** The open item that puts the conversation in holding mode, or null. */
 /** A text about the held subject (payment, the order, the check, damage). */
 export const aboutHeld = (text: string) => HOLD_SUBJECT.test(String(text ?? "")) || SENSITIVE_ITEM.test(String(text ?? ""));
@@ -2301,9 +2360,10 @@ export const SILENCE_PROMISE = /(?<![\u0590-\u05FF])(?:נשאיר\s+(?:את\s+ז
  */
 const MEASURE = /(\d+(?:[.,]\d+)?)\s*(?:ס["״']?מ|מ["״']?מ|מטר|ק["״']?ג|גרם|ליטר|cm|mm|kg|g\b|m\b|inch|")/giu;
 const DERIVING = /(?<![\u0590-\u05FF])[וה]?(?:בערך|בקירוב|כ־|כ-|צלע|צלעות|אלכסון|היקף|שטח|קוטר|רדיוס|משולש|לאחר\s+קיפול|כשמקפלים|מקופל)(?![\u0590-\u05FF])|\b(?:about|approximately|roughly|side|diagonal|perimeter|area|diameter|radius|triangle|folded)\b/iu;
+const CLAUSES = /\s*[,;]\s*|\s+(?=ו?(?:כל\s+צלע|כלומר)(?![\u0590-\u05FF]))|\s+(?=(?:so|which means|that is)\b)/iu;
 export function derivedMeasure(reply: string, sources: string): string[] {
   const src = String(sources ?? "");
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
+  const derived = (x: string) => {
     if (!DERIVING.test(x)) return false;
     const ms = [...x.matchAll(MEASURE)];
     if (!ms.length) return false;
@@ -2311,9 +2371,25 @@ export function derivedMeasure(reply: string, sources: string): string[] {
     // pairs with the shape word is.
     const shape = (x.match(DERIVING) ?? [""])[0];
     return !src.split(/\n|(?<=[.!?])\s+/).some((l) => DERIVING.test(l) && l.includes(shape.replace(/^[וה]/, "")) && ms.every((m) => l.includes(m[1])));
+  };
+  // The derived clause itself when the sentence has one (the stated measure beside it stays); else the sentence.
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*/g) ?? []).filter(derived).flatMap((x) => {
+    const parts = x.replace(/[.!?]+\s*$/, "").split(CLAUSES).filter((c) => derived(c));
+    return parts.length && parts.length < x.split(CLAUSES).length ? parts : [x];
   }).map((x) => x.trim().slice(0, 120));
 }
 
+
+/** A sentence without the named clauses; "" when fewer than three words are left. */
+export function withoutClauses(sentence: string, marks: string[]): string {
+  const x = String(sentence ?? "");
+  const end = (/[.!?]+\s*$/.exec(x)?.[0] ?? "").trim() || ".";
+  const clauses = x.replace(/[.!?]+\s*$/, "").split(CLAUSES);
+  const kept = clauses.filter((c) => !marks.some((m) => c.trim().includes(m) || (c.trim().length >= 3 && m.includes(c.trim()))));
+  if (kept.length === clauses.length) return "";
+  const text = kept.join(", ").trim();
+  return (text.match(/[\p{L}\p{N}]+/gu) ?? []).length >= 3 ? `${text}${end} ` : "";
+}
 
 /**
  * A held RETURN and a how-to ask ("מה לעשות? איך להחזיר את המוצר ולהזדכות?", 87076cab replay, 97837): the
@@ -2331,4 +2407,41 @@ export function returnSteps(knowledge: string, modelText: string, locale: "he" |
   const steps = [...new Set(lines.length ? lines : fromModel)].slice(0, 4);
   const team = locale === "en" ? "The team will confirm the refund details here." : "את פרטי הזיכוי הצוות יאשר כאן.";
   return [...steps, team].join(" ").replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * A size line with no product named (prod replay on 1b35c535, Smoovee: "40x50 ס"מ" listed with no tray names): the
+ * one product whose own size (title, fit or text) is that pair gets its name in front. Unchanged when none or
+ * several have it.
+ */
+export function nameSizeLines(reply: string, candidates: Array<{ title?: string; fit?: string; details?: string }>): string {
+  const titles = candidates.map((c) => String(c?.title ?? "")).filter(Boolean);
+  if (!titles.length) return reply;
+  const same = (a: [number, number] | null, b: [number, number] | null) => !!a && !!b && ((a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]));
+  return String(reply ?? "").split("\n").map((line) => {
+    const pair = sizePair(line);
+    if (!pair || namesCandidate(line, titles)) return line;
+    const owners = candidates.filter((c) => c?.title && [c.title, c.fit ?? "", c.details ?? ""].some((t) => same(sizePair(String(t)), pair)));
+    if (owners.length !== 1) return line;
+    const m = /^(\s*(?:[-*•]|\d+[.)])?\s*)(.*)$/u.exec(line)!;
+    return `${m[1]}${owners[0].title}: ${m[2]}`;
+  }).join("\n");
+}
+
+/**
+ * "יש כמה צבעים" with no colour named (prod replay on 1b35c535): the colours the product's own data lists are added.
+ * The product the reply names, else the only one shown; unchanged when its data names no colours.
+ */
+const SEVERAL_COLOURS = /(?<![֐-׿])(?:(?:יש|מגיע|מגיעה|מגיעים|קיים|קיימת|זמין|זמינה)\s+(?:גם\s+)?(?:ב)?(?:כמה|מספר|מגוון|כמה\s+וכמה)\s+(?:צבעים|גוונים)|(?:ב)?(?:כמה|מספר|מגוון)\s+(?:צבעים|גוונים))(?![֐-׿])|\b(?:(?:several|multiple|a few|various|a range of|many) colou?rs)\b/iu;
+const COLOUR_FACT = /(?:^|\||\n|\s)(?:צבע|צבעים|גוון|גוונים|colou?rs?)\s*:\s*([^|\n.]+)/iu;
+export function colourList(reply: string, candidates: Array<{ title?: string; details?: string; attributes?: Record<string, unknown> }>, locale: "he" | "en"): string {
+  const text = String(reply ?? "");
+  if (!SEVERAL_COLOURS.test(text)) return text;
+  const named = candidates.filter((c) => c?.title && namesCandidate(text, [String(c.title)]));
+  const c = named.length === 1 ? named[0] : candidates.length === 1 ? candidates[0] : null;
+  if (!c) return text;
+  const raw = String((c.attributes as any)?.color ?? (c.attributes as any)?.colour ?? COLOUR_FACT.exec(String(c.details ?? ""))?.[1] ?? "");
+  const colours = raw.split(/\s*,\s*|\s+\/\s+/).map((x) => x.trim()).filter((x) => x && x.length <= 30).slice(0, 12);
+  if (colours.length < 2 || colours.some((x) => text.includes(x))) return text;
+  return `${text.trim()} ${locale === "en" ? `The colours: ${colours.join(", ")}.` : `הצבעים: ${colours.join(", ")}.`}`;
 }

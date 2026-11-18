@@ -685,10 +685,12 @@ describe("prod replay 5 (2026-11-16)", () => {
   it("★ the engine's own lookups for a rewrite: the customer's words, two at most, none it cannot make", async () => {
     const { autoLookups } = await import("../services/reply-engine/gates");
     const a = autoLookups([{ kind: "ungrounded_absence", claims: ["x"] }, { kind: "unread_knowledge" }] as any, "יש משטחי במבוק?", STORE, []);
-    expect(a.map((c) => [c.function.name, JSON.parse(c.function.arguments).query])).toEqual([["woocommerce.list_products", "יש משטחי במבוק?"], ["search_knowledge", "יש משטחי במבוק?"]]);
+    expect(a.map((c) => [c.function.name, JSON.parse(c.function.arguments).query])).toEqual([["woocommerce.list_products", "משטחי במבוק"], ["search_knowledge", "יש משטחי במבוק?"]]);
     const narrow = autoLookups([{ kind: "gave_up_search" }] as any, "תיקים", STORE, [{ tool: "woocommerce.list_products", outcome: "timeout", args: { query: "תיקי בד לחוף קיץ" } } as any]);
     expect(JSON.parse(narrow[0].function.arguments)).toEqual({ query: "תיקי בד", per_page: 5 });
-    expect(autoLookups([{ kind: "unread_product" }, { kind: "unread_order" }] as any, "x", STORE, [])).toEqual([]);
+    // An order read needs the model; a product question with no product word of hers and none in focus gets the knowledge only.
+    expect(autoLookups([{ kind: "unread_order" }] as any, "x", STORE, [])).toEqual([]);
+    expect(autoLookups([{ kind: "unread_product" }, { kind: "unread_order" }] as any, "x", STORE, []).map((c) => c.function.name)).toEqual(["search_knowledge"]);
     expect(autoLookups([{ kind: "no_search" }] as any, "x", ["search_knowledge"], [])).toEqual([]);
   });
 
