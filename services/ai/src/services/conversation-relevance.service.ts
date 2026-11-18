@@ -103,7 +103,14 @@ export function teamSender(c: RelevanceInput): boolean {
 const BUSINESS_VOICE = /(?<![\u0590-\u05FF])(?:תודה(?:\s+רבה)?\s+(?:ש(?:פנית|פניתם|פנית\s+אלינו|פניתם\s+אלינו|יצרת|יצרתם)(?:\s+(?:אלינו|קשר))?|על\s+(?:פנייתך|פנייתכם|הפנייה|פנייתך\s+אלינו))|(?:פנייתך|פנייתכם|הפנייה|ההודעה\s+שלך|הודעתך)\s+(?:התקבלה|נקלטה|הגיעה\s+אלינו)|נחזור\s+(?:אליך|אלייך|אליכם)|(?:נציג|נציגה|נציגינו)\s+(?:יחזור|תחזור|יחזרו|יחזרו\s+אליך)|(?:כרגע|כעת|ברגע\s+זה)\s+(?:אנחנו\s+|אנו\s+)?(?:לא|אינם|איננו)\s+(?:פנויים|זמינים)|(?:אנחנו|אנו)\s+(?:לא|אינם)\s+(?:פנויים|זמינים)\s+(?:כרגע|כעת)|הגעתם\s+ל|שעות\s+(?:ה)?פעילות\s+שלנו|(?:זוהי\s+)?הודעה\s+אוטומטית|מענה\s+אוטומטי)(?![\u0590-\u05FF])|\b(?:thank(?:s| you) for (?:contacting us|reaching out(?: to us)?|your (?:message|email|inquiry))|we(?:'ll| will) get back to you|out of (?:the )?office|our (?:business|opening) hours|we are currently (?:unavailable|away|closed)|auto(?:matic|mated)?[- ]reply|this is an automated)\b/iu;
 /** A person speaking: a question, a question word, the business addressed, or an intent. In doubt, a person. */
 const PERSON_SIGNAL = /[?؟]|(?<![\u0590-\u05FF])[וש]?(?:מה|מתי|איך|האם|אפשר|כמה|איפה|למה|מי|איזה|איזו|שלכם|אתם|אצלכם|לכם|רוצה|רוצים|ארצה|להזמין|הזמנתי|מחיר|מעוניין|מעוניינת|מעוניינים|לקנות|קניתי|מחפש|מחפשת|צריך|צריכה|אשמח|תשלחו|שלחו)(?![\u0590-\u05FF])|\b(?:what|when|how|can|could|would|do you|does|is there|are you|where|why|which|who|want|wanna|order|buy|price|interested|looking for|need|i'?d like)\b/iu;
-export const machineVoice = (body: unknown) => { const b = String(body ?? ""); return BUSINESS_VOICE.test(b) && !PERSON_SIGNAL.test(b); };
+/**
+ * The first person singular is a person: a machine speaks as "we", a customer as "I" (R3 round 3: "פניתי אליכם
+ * אתמול ואמרו לי נחזור אליך ואף אחד לא חזר" quoted the business's promise back). A first person past verb is a
+ * word of 4+ letters ending in "תי" (פניתי, הזמנתי, קיבלתי, התקשרתי; "אמיתי" too, which is fine: in doubt a
+ * person). "אליכם" counts unless it is the machine's own "נחזור אליכם".
+ */
+const FIRST_PERSON = /(?<![\u0590-\u05FF])[וש]?(?:אני|לי|אליי|אותי|שלי|איתי|אמרתם|עדיין)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])[\u0590-\u05FF]{2,}תי(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?<!(?:נחזור|יחזור|יחזרו|נשוב|תחזור)\s+)אליכם(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])אף\s+אחד(?![\u0590-\u05FF])|\b(?:i|my|me|i've|i'm|nobody|no one|still|you said|you told)\b/iu;
+export const machineVoice = (body: unknown) => { const b = String(body ?? ""); return BUSINESS_VOICE.test(b) && !PERSON_SIGNAL.test(b) && !FIRST_PERSON.test(b); };
 
 export function autoReply(c: RelevanceInput): boolean {
   // Every message the contact sent in view must be the machine's: one person's line and it is a person.

@@ -173,3 +173,21 @@ describe("R3 fix: the branches of autoReply", () => {
     expect(autoReply({ channel: "WHATSAPP", firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: a, createdAt: t(0) }] })).toBe(true);
   });
 });
+
+describe("R3 round 3: the first person singular is a person", () => {
+  const t = (n: number) => new Date(Date.UTC(2026, 10, 18, 12, 0, n));
+  for (const s of ["פניתי אליכם אתמול ואמרו לי נחזור אליך ואף אחד לא חזר", "אמרתם שתחזרו אליי ועדיין לא חזרתם", "התקשרתי פעמיים ואמרו לי שנציג יחזור אליי", "you said we will get back to you and nobody did", "פניתי לפני שבוע. נציג יחזור אליך בהקדם"]) {
+    it(`★ R3 is no machine, an opener quoting the business's promise: ${s}`, () => {
+      expect(machineInbound("WHATSAPP", [], s)).toBeNull();
+      expect(autoReply({ channel: "WHATSAPP", firstDirection: "INBOUND", messages: [{ direction: "INBOUND", body: s, createdAt: t(0) }] })).toBe(false);
+    });
+  }
+  it("★ R3 the machines stay machines, a contact's opener in the business's voice included", () => {
+    const opener = "תודה שפניתם אלינו! פנייתך התקבלה ונציג יחזור אליך בהקדם האפשרי.";
+    expect(machineInbound("WHATSAPP", [], opener)).toBe("auto_reply");
+    const a = "תודה שפניתם אלינו! נחזור אליכם בהקדם האפשרי.";
+    expect(machineInbound("WHATSAPP", [{ direction: "OUTBOUND", body: "היי, רציתי להציע לכם שירות", createdAt: t(0) }, { direction: "INBOUND", body: a, createdAt: t(4) }], a)).toBe("auto_reply");
+    const en = "Thank you for contacting us. We are currently closed and we will get back to you tomorrow.";
+    expect(machineInbound("WHATSAPP", [{ direction: "OUTBOUND", body: "Hi, a quick offer for you", createdAt: t(0) }, { direction: "INBOUND", body: en, createdAt: t(4) }], en)).toBe("auto_reply");
+  });
+});

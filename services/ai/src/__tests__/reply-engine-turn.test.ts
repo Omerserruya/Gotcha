@@ -2362,3 +2362,12 @@ describe("relevance R3 fix through a whole turn: the Supervisor's five customers
     expect(r.trace.gate1).toBe("automated:auto_reply");
   });
 });
+
+describe("relevance R3 round 3 through a whole turn", () => {
+  it("★ R3 turn: an angry customer quoting the business's promise is answered", async () => {
+    h.history = null;
+    h.responses.push({ toolCalls: [respond("r3ang", { reply: "סליחה על ההמתנה, אני בודקת את זה עכשיו." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "פניתי אליכם אתמול ואמרו לי נחזור אליך ואף אחד לא חזר" }, "autonomous");
+    expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
+  });
+});
