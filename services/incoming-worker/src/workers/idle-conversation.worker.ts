@@ -592,8 +592,35 @@ const lastNonSystem = async (conversationId: string) =>
   prisma.message.findFirst({
     where: { conversationId, messageType: { not: "system" } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, direction: true, createdAt: true, metadata: true, senderName: true },
+    select: { id: true, direction: true, createdAt: true, metadata: true, senderName: true, body: true },
   });
+
+/** A team pass in the bot's own words ("העברתי את זה לצוות", "עדיין בבדיקה אצל הצוות"). */
+const TEAM_PASS = /(?<![\u0590-\u05FF])(?:העברתי|העברנו)\s+(?:את\s+)?(?:\S+\s+){0,4}(?:ל)?צוות|(?:בבדיקה|נבדק|נבדקת)\s+(?:אצל|עם)\s+(?:ה)?צוות|(?:ה)?צוות\s+(?:יחזור|יחזרו|יבדוק|יבדקו|ייצור|יעדכן)|\b(?:passed (?:this|it|your \w+) (?:on )?to the team|the team will (?:get back|check|reply))\b/iu;
+/** A return, refund or exchange asked for. */
+const RETURN_ASK = /(?<![\u0590-\u05FF])[והלשב]?(?:החזרה|החזרת|להחזיר|מחזירה|מחזיר|החזר|זיכוי|לבטל|ביטול|החלפה|להחליף)(?![\u0590-\u05FF])|\b(?:return|refund|exchange|cancel(?:lation)?)\b/iu;
+/** The engine's open team items: "checking with the team: …" promises younger than 72h (reply-engine state.ts). */
+const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
+export function hasOpenTeamItem(pending: unknown, now = Date.now()): boolean {
+  return Array.isArray(pending) && pending.some((p: any) => p?.kind === "promise" && String(p?.text ?? "").startsWith("checking with the team: ") && !(now - Date.parse(p?.at ?? "") > TEAM_OPEN_MS));
+}
+
+/**
+ * Never remind or close a conversation that waits on the business (2026-11-18, Smoovee: "העברתי את השאלה לצוות",
+ * then "עדיין כאן?", then "סוגרת את השיחה"; a return request closed). Blocked by an open team item, the bot's
+ * last message being a team pass, or a return asked for in the last 3 days. Handoffs are out by botOwned already.
+ */
+export async function botIdleBlocked(tenantId: string, conversationId: string, lastBody: string | null | undefined): Promise<string | null> {
+  if (TEAM_PASS.test(String(lastBody ?? ""))) return "team_pass_last";
+  const state = await (prisma as any).conversationState?.findFirst?.({ where: { tenantId, conversationId, lane: "live" }, select: { pending: true } }).catch(() => null);
+  if (hasOpenTeamItem(state?.pending)) return "open_team_item";
+  const asked = await prisma.message.findMany({
+    where: { tenantId, conversationId, direction: "INBOUND", createdAt: { gte: new Date(Date.now() - TEAM_OPEN_MS) } },
+    select: { body: true }, orderBy: { createdAt: "desc" }, take: 30,
+  }).catch(() => [] as Array<{ body: string }>);
+  if (asked.some((m) => RETURN_ASK.test(String(m.body ?? "")))) return "return_requested";
+  return null;
+}
 
 export async function botIdleForTenant(tenantId: string): Promise<{ reminders: number; closes: number }> {
   let reminders = 0, closes = 0;
@@ -617,6 +644,9 @@ export async function botIdleForTenant(tenantId: string): Promise<{ reminders: n
       const still = await prisma.conversation.findFirst({ where: { id: conv.id, tenantId, ...botOwned(cfg.channels) } as any, select: { id: true } });
       const newest = await lastNonSystem(conv.id);
       if (!still || newest?.id !== last.id) continue;
+      // Waiting on the business: neither a reminder nor a close (2026-11-18).
+      const blocked = await botIdleBlocked(tenantId, conv.id, (last as any).body);
+      if (blocked) { console.log(`[idle-check][bot] ${step} skipped (${blocked}) conv=${conv.id}`); continue; }
       const text = step === "remind" ? cfg.reminderMessage : cfg.autoCloseMessage;
       const allowed = !!(text && conv.channelAccount) && (await messageAllowed(conv as any));
       if (allowed) {

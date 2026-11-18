@@ -15,7 +15,7 @@ import { makeScheduleMeetingHandler, makeCheckAvailabilityHandler, makeReschedul
 import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
 import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "../discovery-integration.service";
-import { resolveProductRef } from "../product-search.service";
+import { resolveProductRef, salePriceLine } from "../product-search.service";
 import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
 import { takeShowLine, ungroundedPrices, stripPrices, asksSomething } from "../reply-style-check.service";
@@ -32,8 +32,8 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, repairUrls, howToSafetyAsk, padLabel, noHowToInfo, nounKeys } from "./gates";
-import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
+import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -359,13 +359,15 @@ export function placeholderOnly(text: string | null | undefined): boolean {
 export function dedupeSentences(reply: string): string {
   const seen = new Set<string>();
   const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g) ?? [String(reply ?? "")];
-  return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("").trim();
+  return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).reduce(joinKept, "").trim();
 }
 
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
 
 /** The team questions still open in this conversation's state (younger than TEAM_OPEN_MS). */
+/** The frame words of a model's team question ("הלקוחה שואלת אם..."), never her topic. */
+const TEAM_Q_FILLER = new Set(["הלקוח", "הלקוחה", "לקוח", "לקוחה", "שואל", "שואלת", "שואלים", "מבקש", "מבקשת", "רוצה", "האם", "לגבי", "בנוגע", "אפשר", "יש", "customer", "asks", "asked", "wants", "whether", "about", "the", "there", "can"]);
 export function openTeamQuestions(state: { pending?: Array<{ kind?: string; text?: string; at?: string }> } | null | undefined, now = Date.now()): string[] {
   return (state?.pending ?? [])
     .filter((p) => isTeamPromise(p) && !(now - Date.parse(p.at ?? new Date(now).toISOString()) > TEAM_OPEN_MS))
@@ -415,9 +417,12 @@ export async function handedBackSince(tenantId: string, conversationId: string, 
 }
 
 // The subject of an open item as a fixed noun, never its text (prod replay 2026-11-17).
+// A return, refund or exchange is "the request", before the charge: "החיוב" only for a charge itself (prod
+// 2026-11-18, Smoovee: "החיוב עדיין בבדיקה" on a return).
 const SUBJECT_NOUNS: Array<[RegExp, string, string]> = [
   [/קופון|קוד\s*(?:הנחה|קופון)?|coupon|promo|discount code/iu, "הקופון", "the coupon"],
-  [/חיוב|חויב|תשלום|שילמ|כסף|זיכוי|החזר\s+כספי|charge|payment|refund/iu, "החיוב", "the charge"],
+  [/החזרה|החזרת|להחזיר|החזר|זיכוי|החלפה|להחליף|ביטול|לבטל|return|refund|exchange|cancel/iu, "הבקשה", "your request"],
+  [/חיוב|חויב|תשלום|שילמ|כסף|charge|payment/iu, "החיוב", "the charge"],
   [/משלוח|חבילה|שליח|delivery|shipping|package|parcel/iu, "המשלוח", "the delivery"],
   [/הזמנה|order/iu, "ההזמנה", "your order"],
   [/החלפה|החזרה|exchange|return/iu, "ההחזרה", "the return"],
@@ -1166,6 +1171,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     knowledge: [knowledge ?? "", ...turnTools.knowledgeText].join("\n"),
     previousBotReplies,
     candidateTitles: candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean),
+    candidates: candidates.map((c: any) => ({ title: c?.title, price: c?.price, discount: c?.discount ?? null })),
     cardsChannel: cardChannel,
     listAppended: !cardChannel && candidates.length > 0,
     customerText: inbound.join("\n"),
@@ -1449,7 +1455,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           if (said) continue;
           const pad = smallestFitting(it.size, padTitles);
           // The pad's own name (its title without the size), never a size alone (rating 052f53ad).
-          if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${padLabel(pad)}.` : `למידה ${fmt(it.size)}: ${padLabel(pad)}.`);
+          // Its distinguishing name, never a generic noun (rating 1771ba14: "משטח הזזה" three times).
+          const name = pad ? padName(pad, padTitles, padsFromText(kbText)) : "";
+          if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${name}.` : `למידה ${fmt(it.size)}: ${name}.`);
           else none.push(fmt(it.size));
         }
         if (lines.length || none.length) {
@@ -1511,12 +1519,26 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // The holding line and the thanks are words the bot said too.
           const spokeAt = Math.max(...[SPOKE_FACT, HOLD_LINE_FACT, THANKS_FACT].map((k) => (state.facts?.[k] != null ? Number(state.facts[k]) : -Infinity)));
           const sinceSpoke = Number.isFinite(spokeAt) ? turnNo - spokeAt : inboundSince <= 1 ? 1 : 2;
-          const lineNow = !recentlyHeld || sinceSpoke >= 2 ? holdLine : "";
-          text = onSubject
+          // Never the identical line twice in a row (rating 1771ba14: the same line at turns 9 and 11): the last
+          // bot message already says it, on screen.
+          const lastIsLine = (lastTwo[0] ?? "").includes(holdLine) || (lastTwo[0] ?? "").trim() === holdLine.trim();
+          const lineNow = (!recentlyHeld || sinceSpoke >= 2) && !lastIsLine ? holdLine : "";
+          // A held return and "how do I return it?": the steps from the business's texts, never silence (87076cab
+          // replay, 97837: the hold line the turn before, then nothing at all).
+          const returnHowTo = isReturnSubject(held) && returnHowToAsk(incomingNow);
+          text = returnHowTo
+            ? returnSteps([knowledge ?? "", ...turnTools.knowledgeText].join("\n"), text, holdLoc)
+            : onSubject
             // Another topic's sentences only when the customer asked about one this turn (rating 93f9fdff: a size
             // sentence hung on the holding line).
             ? holdReply(text, lineNow, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow), keepOther: asksOtherTopic(incomingNow) })
             : (holdReply(text, "", { details: false, locale: holdLoc }) || lineNow);
+          // "We'll keep it quiet, no more messages" never replaces the team's hold (rating 1771ba14, payment B
+          // after "כן"): cut, and the holding line stays when nothing else is left.
+          if (SILENCE_PROMISE.test(text)) {
+            text = dropSentencesBy(text, SILENCE_PROMISE) || holdLine;
+            (trace as any).silencePromiseCut = true;
+          }
           if (text.includes(HOLD_LINE_CORE[holdLoc])) holdFacts[HOLD_LINE_FACT] = String(turnNo);
         }
         (trace as any).holding = { details };
@@ -1548,6 +1570,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // The link answers it: no team question; else the question goes to the team.
       output = link ? { ...output, teamQuestion: null } : output.teamQuestion ? output : { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
       (trace as any).apologyOnly = link ? "link" : "team";
+    }
+    // A video or link ask the model passed to the team while the business's own texts hold the link (rating
+    // 1771ba14, NE'A: the video was in the knowledge, later asks went to the team): the link, not the team.
+    if (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && !/https?:\/\//i.test(text) && teamPassIn(text) && !safetyConversation && !heldTurn) {
+      const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
+      const videoLine = kb.split("\n").find((l) => /https?:\/\//i.test(l) && /סרטון|הדרכה|מדריך|video|youtu|vimeo/iu.test(l));
+      const link = /https?:\/\/[^\s)\]"'״]+[^\s.,;:!?)\]"'״]/.exec(videoLine ?? kb)?.[0];
+      if (link) {
+        const rest = removeTeamLines(text);
+        text = `${rest ? `${rest} ` : ""}${locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`}`;
+        output = { ...output, teamQuestion: null };
+        (trace as any).linkInsteadOfTeam = true;
+      }
     }
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
@@ -1670,6 +1705,62 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     output = { ...output, reply: rest ? `${rest} ${told}` : told, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
     (trace as any).paymentFailureToTeam = true;
   }
+  // Only what she asked goes to the team (prod 2026-11-18, Smoovee cbajlg: "אני מתעניינת בכמה משטחים" became a
+  // quantity-discount question, and later "לגבי הנחת כמות, השאלה עדיין עם הצוות"). The model's team question is
+  // dropped, with the team line it added, when the message asks nothing, or when no word of it is hers.
+  if (output?.reply && output.teamQuestion && !output.handoff && isNewTeamQuestion(output.teamQuestion)) {
+    const said = [...inbound.slice(-3), String(opts.incomingMessage ?? "")].join(" ").toLowerCase();
+    const qWords = (String(output.teamQuestion).toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((w) => !TEAM_Q_FILLER.has(w));
+    const key = (w: string) => { const b = w.replace(/^[הובלמש](?=[\u0590-\u05FF]{3,})/u, ""); return b.length >= 5 ? b.slice(0, 4) : b; };
+    // Her words are checked only in her script: a team question in English for a Hebrew message is not judged so.
+    const heb = /[\u0590-\u05FF]/;
+    const sameScript = heb.test(String(output.teamQuestion)) === heb.test(said);
+    const hers = !sameScript || qWords.some((w) => key(w).length >= 3 && said.includes(key(w)));
+    // A statement of interest with no question in it ("אני מתעניינת בכמה משטחים") asks the team nothing.
+    const interestOnly = /(?<![\u0590-\u05FF])(?:מתעניין|מתעניינת|מתעניינים|מעוניין|מעוניינת|מעוניינים|חושב|חושבת|שוקל|שוקלת)(?![\u0590-\u05FF])|\b(?:interested in|thinking about|considering)\b/iu.test(String(opts.incomingMessage ?? "")) && !/\?/.test(String(opts.incomingMessage ?? ""));
+    if (interestOnly || !hers) {
+      output = { ...output, teamQuestion: null as any, reply: removeTeamLines(output.reply) || output.reply };
+      (trace as any).teamQuestionDropped = !hers ? "not_hers" : "no_ask";
+    }
+  }
+  // A return, refund or exchange REQUEST goes to the team now (prod 2026-11-18, Smoovee 376b13): the reply keeps
+  // its policy facts; a failure it narrates and a reason she already gave are cut; the fixed line says it is passed.
+  if (output?.reply && !output.handoff && !output.teamQuestion && returnRequest(opts.incomingMessage ?? "") && !openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? "")))) {
+    // A failure it narrates is cut by the failure rule right after (it becomes a team item there).
+    let rest = output.reply;
+    if (gaveReason([...inbound.slice(-6), String(opts.incomingMessage ?? "")])) rest = dropSentencesMatching(rest, asksReasonRe);
+    rest = removeTeamLines(rest);
+    const told = locale === "en" ? "I've passed your request to the team, and the answer will come here in the chat." : "העברתי את הבקשה לצוות, והתשובה תגיע כאן בצ'אט.";
+    output = { ...output, reply: rest ? `${rest} ${told}` : told, teamQuestion: `return request: ${String(opts.incomingMessage ?? "").slice(0, 260)}` };
+    (trace as any).returnToTeam = true;
+  }
+  // A failure told to the customer ("לא הצלחתי לבדוק") becomes a team item naming the action that failed.
+  {
+    const failedRecs = turnTools.records.filter((r) => r.outcome === "timeout" || r.outcome === "error");
+    const failed = failedRecs.map((r) => r.tool);
+    // An order read that timed out or failed is the team's now, whatever the reply says (prod 2026-11-18,
+    // Smoovee 376b13: get_order 97837 timed out, "לא הצלחתי לבדוק", no team).
+    const orderFailed = failedRecs.filter((r) => ORDER_READ_TOOL.test(r.tool));
+    if (output?.reply && !output.handoff && orderFailed.length && !FAILURE_TOLD.test(output.reply)) {
+      const o = orderFailed[0];
+      const ref = String((o.args as any)?.order_id ?? (o.args as any)?.order_number ?? (o.args as any)?.id ?? "").slice(0, 40);
+      const told = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+      output = { ...output, reply: teamPassIn(output.reply) ? output.reply : `${output.reply.trim()} ${told}`, teamQuestion: output.teamQuestion ?? `${o.tool}${ref ? ` ${ref}` : ""} ${o.outcome}: ${String(opts.incomingMessage ?? "").slice(0, 220)}` };
+      (trace as any).orderFailureToTeam = o.tool;
+    }
+    // A real failure: a tool failed this turn, or the reply says a check or access failed (not "couldn't find").
+    const checkFailed = failed.length > 0 || /(?:לבדוק|לגשת|לקבל|לטעון|לשלוף|גישה|תקלה|בעיה)|\b(?:check|access|load|retrieve|look up|problem|issue|error)\b/iu.test(output?.reply ?? "");
+    if (output?.reply && !output.handoff && checkFailed && FAILURE_TOLD.test(output.reply)) {
+      const rest = dropSentencesMatching(output.reply, FAILURE_TOLD);
+      const told = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+      output = {
+        ...output,
+        reply: teamPassIn(rest) ? rest : rest ? `${rest} ${told}` : told,
+        teamQuestion: output.teamQuestion ?? `${failed.length ? `${[...new Set(failed)].join(", ")} failed` : "a check failed"}: ${String(opts.incomingMessage ?? "").slice(0, 240)}`,
+      };
+      (trace as any).failureToTeam = failed;
+    }
+  }
   if (output?.teamQuestion) {
     const q = teamQuestionText(output.teamQuestion, String(opts.incomingMessage ?? ""), state, openTeam);
     output = { ...output, teamQuestion: q };
@@ -1740,14 +1831,37 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const clean = sanitizeReply(prose);
   if (clean !== prose) (trace as any).sanitized = true;
   // One message, no product twice and no line twice (prod replay 2026-11-17, both Smoovee runs).
+  // The card is the product the reply names (prod 2026-11-18, a08a83: Alexa named, Ariel's card sent).
+  {
+    const one = namedOnce(clean, candidates);
+    if (one >= 0 && output && (output.cards ?? []).length && !(output.cards ?? []).includes(`PRODUCT_${one + 1}`)) {
+      output = { ...output, cards: [`PRODUCT_${one + 1}`] };
+      (trace as any).cardToNamed = true;
+    }
+  }
   let reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
-  // Every URL as a source has it (rating 052f53ad: a Hebrew letter inside a percent-encoding): else the source's
-  // own URL with the same start, else its sentence goes. Sources: the tools, the knowledge, the products, what was sent.
+  // A sale price is said as one (Omer 2026-11-18): the named product's own sale line when the reply has none.
+  {
+    const one = namedOnce(reply ?? "", candidates);
+    const c: any = one >= 0 ? candidates[one] : null;
+    const now = Number(String(c?.discount?.now ?? "").replace(",", "."));
+    if (reply && c?.discount && now > 0 && !/(?<![\u0590-\u05FF])(?:מבצע|במבצע|במקום)(?![\u0590-\u05FF])|\b(?:sale|instead of)\b/iu.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
+      const line = salePriceLine(c, locale);
+      if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; }
+    }
+  }
+  // Every URL as a source has it (prod 2026-11-18, Smoovee: "https://smoovee-ltd." cut at the domain): else the
+  // source's own URL with the same start, else its sentence goes. Sources: the tools, the knowledge, the products,
+  // what was sent, the site. Then a space after every sentence end (an appended line never glued on).
   {
     const site = String((company as any)?.websiteDomain ?? "").trim();
     const sources = [groundingNow(), knowledge ?? "", ...turnTools.knowledgeText, candidates.map((c: any) => `${c?.url ?? ""} ${c?.imageUrl ?? ""}`).join(" "), earlierOutboundText, site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : ""].join("\n");
-    const r = repairUrls(reply, sources);
+    const r = repairUrls(reply ?? "", sources);
     if (r.fixed || r.dropped) { reply = r.text; (trace as any).urlsRepaired = { fixed: r.fixed, dropped: r.dropped }; }
+    // A fragment with an unbalanced bracket goes (rating 1771ba14).
+    const f = dropBrokenFragments(reply ?? "");
+    if (f.dropped) { reply = f.text; (trace as any).brokenFragments = f.dropped; }
+    if (reply) reply = spaceSentences(reply);
   }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
   // alone on "טוש אני רוצה"): a question that moves the choice on instead. Cards on a cards channel are
@@ -1773,7 +1887,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (customerAck(incomingNow)) {
         const thanksLine = locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE;
         if (!state.facts?.[THANKS_FACT] && lastOutBody.trim() !== thanksLine) { reply = thanksLine; holdFacts[THANKS_FACT] = String(turnNo); (trace as any).holdingFloor = "thanks"; }
-      } else if (silentLong || (direct && sinceLine >= 2)) {
+      } else if ((silentLong || (direct && sinceLine >= 2)) && !lastOutBody.includes(stillCheckingLine(heldNow, locale === "en" ? "en" : "he"))) {
         reply = stillCheckingLine(heldNow, locale === "en" ? "en" : "he");
         holdFacts[HOLD_LINE_FACT] = String(turnNo);
         (trace as any).holdingFloor = true;

@@ -353,6 +353,10 @@ function classifyToolForNotification(toolFunctionName: string): SystemEventType 
   return null;
 }
 
+/** The email channels the AI does not answer for an engine tenant until REPLY_ENGINE_EMAIL=on (2026-11-18). */
+export const EMAIL_CHANNELS: ReadonlySet<string> = new Set(["EMAIL", "GMAIL", "OUTLOOK"]);
+export const emailRepliesOn = (env: NodeJS.ProcessEnv = process.env) => /^(1|true|yes|on)$/i.test(String(env.REPLY_ENGINE_EMAIL ?? "").trim());
+
 export interface AIBotReplyResult {
   reply: string | null;
   /**
@@ -1215,6 +1219,12 @@ export async function generateAIBotReply(opts: {
     // state lane, platform-paid, writes simulated, output only audited.
     // Never for the onboarding test or a sandbox run (they keep their own rules).
     const engineMode = opts.onboardingTest || opts.sandbox ? "off" : replyEngineMode(opts.tenantId);
+    // Email is not answered by the AI for an engine tenant yet, on purpose (2026-11-18, Omer): no engine reply and
+    // no legacy fallback. The conversation stays in the inbox for a person. REPLY_ENGINE_EMAIL=on lifts it.
+    if (engineMode !== "off" && !emailRepliesOn() && EMAIL_CHANNELS.has(String((await prisma.conversation.findFirst({ where: { id: opts.conversationId, tenantId: opts.tenantId }, select: { channel: true } }).catch(() => null))?.channel ?? ""))) {
+      console.log(`[reply-engine] email conversation ${opts.conversationId}: not answered (engine tenant, email off)`);
+      return { reply: null, escalation: null, awaitingApproval: null, toolCallLog: [], modelUsed: "none", totalTokens: 0 };
+    }
     if (engineMode === "autonomous") {
       try {
         const r = await runReplyEngineTurn(opts, "autonomous", turn.signal);

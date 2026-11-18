@@ -66,6 +66,13 @@ export interface PolicyResult {
 /** See the branch in evaluatePolicies; ai woo-chat-turn.service builds and runs it. */
 export const WOO_COMPLEMENTARY_TOOL_NAME = "woocommerce.complementary_products";
 
+/**
+ * Refunds, coupons and discounts on every store. NOT applied yet (2026-11-18): a floor over the workspace's own
+ * choice changes what a tenant's "Execute" means, and that is Omer's product decision (high-risk-autorun-gate
+ * pins today's rule: the workspace may loosen a HIGH financial tool).
+ */
+export const ALWAYS_APPROVAL = /^(?:(?:woocommerce|shopify)\.(?:create_refund|refund_order|issue_refund|create_coupon|create_discount|create_discount_code|apply_discount)|issue_refund|refund|apply_discount)$/;
+
 const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // Low-risk / context tools - always allowed.
   link_customer_identifier:    { mode: "never" },

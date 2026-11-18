@@ -18,6 +18,10 @@ import {
   type HistoricalImportStatus,
 } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
+import { createHash } from "crypto";
+import { deleteByDocumentId } from "../services/qdrant.service";
+import { unresolvedConflict } from "../services/historical-intelligence/knowledge-review.stage";
+import { knowledgeDocumentBody, resolveTargetKnowledgeBase, approveOne } from "../services/historical-intelligence/approve";
 import { findExistingKnowledge } from "../services/historical-intelligence/candidate-index";
 import { BULK_APPROVE_MIN_CONFIDENCE } from "../services/historical-intelligence/knowledge-clustering.stage";
 import { rerunIntelligence, historicalFailureCode } from "../services/historical-intelligence";
@@ -219,39 +223,82 @@ router.get("/:id/events", async (req: Request, res: Response) => {
 // ─── Knowledge review ────────────────────────────────────────
 
 /**
- * GET /api/historical-imports/:id/topics (2026-11-18)
- *
- * The review by topic: the latest KNOWLEDGE_TOPICS grouping, each topic with its merged answer, occurrences,
- * last seen and source quotes, limited to candidates still PENDING (a decided one leaves its topic). Plus the
- * knowledge documents that present another business as this one. 404 for another tenant's import; topics []
- * before the stage has run.
+ * The topics of an import's latest review (KNOWLEDGE_TOPICS), each with a stable topicId (a hash of the import,
+ * the label and that review's event id: stable within one run, new after a rerun) and its items in every status.
+ */
+async function loadTopics(tenantId: string, importId: string) {
+  const event = await prisma.historicalImportEvent.findFirst({
+    where: { importId, step: "KNOWLEDGE_TOPICS", outcome: "SUCCESS" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, detail: true, createdAt: true },
+  });
+  const detail = (event?.detail ?? {}) as any;
+  const raw: any[] = Array.isArray(detail.topics) ? detail.topics : [];
+  const topics = raw.map((t) => ({ ...t, topicId: createHash("sha1").update(`${importId}|${t.label}|${event?.id ?? ""}`).digest("hex").slice(0, 16) }));
+  const ids = [...new Set(topics.flatMap((t) => t.candidateIds ?? []))] as string[];
+  const rows = ids.length ? await prisma.knowledgeCandidate.findMany({
+    where: { tenantId, importId, id: { in: ids } },
+    select: {
+      id: true, topic: true, category: true, question: true, answer: true, editedAnswer: true, status: true, conflict: true, confidence: true,
+      requiresLiveLookup: true, reasoning: true, curationVerdict: true, curationNote: true, occurrenceCount: true,
+      customerCount: true, firstSeenAt: true, lastSeenAt: true, variants: true, duplicateOfDocumentId: true,
+      approvedDocumentId: true, decidedBy: true,
+    },
+  }) : [];
+  const evidence = ids.length ? await prisma.knowledgeCandidateEvidence.findMany({
+    where: { tenantId, candidateId: { in: ids }, representative: true },
+    orderBy: { occurredAt: "desc" },
+    select: { candidateId: true, questionText: true, answerText: true, occurredAt: true },
+  }) : [];
+  return { event, detail, topics, rows: new Map(rows.map((r) => [r.id, r])), evidence };
+}
+
+/** A topic's status from its items: rejected, auto (all approved automatically), approved, else pending. */
+export function topicStatus(items: Array<{ status: string; decidedBy?: string | null }>): "pending" | "approved" | "auto" | "rejected" {
+  if (!items.length) return "pending";
+  if (items.some((i) => i.status === "PENDING")) return "pending";
+  if (items.every((i) => i.status === "REJECTED")) return "rejected";
+  const approved = items.filter((i) => i.status === "APPROVED" || i.status === "SUPERSEDED");
+  if (approved.length && approved.every((i) => i.decidedBy === "auto" || i.status === "SUPERSEDED") && approved.some((i) => i.decidedBy === "auto")) return "auto";
+  return "approved";
+}
+
+/**
+ * GET /api/historical-imports/:id/topics (Frontend contract, 2026-11-18)
+ * { topics: [{ topicId, label, category, status: pending|approved|auto|rejected, mergedAnswer, occurrences,
+ *   customers, lastSeenAt, conflict, unresolvedConflicts, docConflict, autoApprovable, quotes,
+ *   items: [{ candidateId, status, question, answer, quotes, chosen: {value, basis: latest|policy, at}|null,
+ *   previous: {value, until}|null, unresolved, variants: [{answer, lastSeenAt}] }],
+ *   candidateIds (PENDING), candidates (PENDING rows, the /:id/candidates shape) }],
+ *   progress: { total (topics not rejected), done (approved + auto) }, generatedAt, foreignBusinessDocs,
+ *   contradictions, autoApproveEnabled }. 404 for another tenant's import; topics [] before a review ran.
  */
 router.get("/:id/topics", async (req: Request, res: Response) => {
   try {
-    const row = await prisma.historicalImport.findFirst({
-      where: { id: req.params.id as string, tenantId: req.tenantId! },
-      select: { id: true },
+    const row = await prisma.historicalImport.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! }, select: { id: true } });
+    if (!row) { res.status(404).json({ error: "Import not found" }); return; }
+    const { event, detail, topics, rows, evidence } = await loadTopics(req.tenantId!, row.id);
+    const choices = (detail.choices ?? {}) as Record<string, { chosen?: any; previous?: any }>;
+    const out = topics.map((t) => {
+      const members = (t.candidateIds ?? []).map((id: string) => rows.get(id)).filter(Boolean) as any[];
+      const items = members.map((c) => ({
+        candidateId: c.id, status: c.status, question: c.question, answer: c.editedAnswer ?? c.answer,
+        quotes: evidence.filter((e) => e.candidateId === c.id).slice(0, 2).map((e) => ({ question: e.questionText, answer: e.answerText, occurredAt: e.occurredAt })),
+        chosen: choices[c.id]?.chosen ?? null, previous: choices[c.id]?.previous ?? null,
+        unresolved: unresolvedConflict(c),
+        variants: (Array.isArray(c.variants) ? c.variants : []).map((v: any) => ({ answer: String(v?.answer ?? ""), lastSeenAt: v?.lastSeenAt ?? null })),
+      }));
+      const pending = members.filter((c) => c.status === "PENDING");
+      return {
+        ...t, status: topicStatus(members), items,
+        candidateIds: pending.map((c) => c.id),
+        candidates: pending.map(({ decidedBy, approvedDocumentId, editedAnswer, ...c }: any) => c),
+      };
     });
-    if (!row) {
-      res.status(404).json({ error: "Import not found" });
-      return;
-    }
-    const event = await prisma.historicalImportEvent.findFirst({
-      where: { importId: row.id, step: "KNOWLEDGE_TOPICS", outcome: "SUCCESS" },
-      orderBy: { createdAt: "desc" },
-      select: { detail: true, createdAt: true },
-    });
-    const detail = (event?.detail ?? {}) as any;
-    const all: any[] = Array.isArray(detail.topics) ? detail.topics : [];
-    const pending = new Set((await prisma.knowledgeCandidate.findMany({
-      where: { tenantId: req.tenantId!, importId: row.id, status: "PENDING", id: { in: all.flatMap((t) => t.candidateIds ?? []) } },
-      select: { id: true },
-    })).map((c) => c.id));
-    const topics = all
-      .map((t) => ({ ...t, candidateIds: (t.candidateIds ?? []).filter((id: string) => pending.has(id)) }))
-      .filter((t) => t.candidateIds.length > 0);
+    const live = out.filter((t) => t.status !== "rejected");
     res.json({
-      topics,
+      topics: out,
+      progress: { total: live.length, done: live.filter((t) => t.status === "approved" || t.status === "auto").length },
       generatedAt: event?.createdAt ?? null,
       foreignBusinessDocs: Array.isArray(detail.foreignBusinessDocs) ? detail.foreignBusinessDocs : [],
       contradictions: Number(detail.contradictions ?? 0),
@@ -583,6 +630,86 @@ router.post("/candidates/:candidateId/reject", writeGuard, async (req: Request, 
 });
 
 /**
+ * POST /api/historical-imports/topics/approve { importId, topicId, items?: [{ candidateId, answer }] }
+ * Approves ALL the topic's PENDING items, through the single-approve path (a knowledge document, the duplicate
+ * check, the embedding, the audit). items lists only those with a person's answer (an edit when it differs).
+ * An unresolved item with no answer: 400 UNRESOLVED_ITEM { candidateIds }. 404 TOPIC_NOT_FOUND.
+ */
+router.post("/topics/approve", writeGuard, async (req: Request, res: Response) => {
+  try {
+    const { importId, topicId } = req.body ?? {};
+    const items: any[] = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (typeof importId !== "string" || !importId || typeof topicId !== "string" || !topicId || items.length > 200
+      || items.some((i) => !i || typeof i.candidateId !== "string" || typeof i.answer !== "string")) {
+      res.status(400).json({ error: "INVALID_TOPIC_APPROVAL", message: "importId, topicId and items [{candidateId, answer}] are required" });
+      return;
+    }
+    if (items.some((i) => i.answer.trim().length > MAX_APPROVED_ANSWER)) {
+      res.status(400).json({ error: "ANSWER_TOO_LONG", code: "ANSWER_TOO_LONG", max: MAX_APPROVED_ANSWER });
+      return;
+    }
+    const imp = await prisma.historicalImport.findFirst({ where: { id: importId, tenantId: req.tenantId! }, select: { id: true } });
+    const loaded = imp ? await loadTopics(req.tenantId!, imp.id) : null;
+    const topic = loaded?.topics.find((t) => t.topicId === topicId);
+    if (!loaded || !topic) { res.status(404).json({ error: "TOPIC_NOT_FOUND" }); return; }
+    const pending = (topic.candidateIds ?? []).map((id: string) => loaded.rows.get(id)).filter((c: any) => c?.status === "PENDING") as any[];
+    const answers = new Map(items.map((i) => [i.candidateId, i.answer.trim()]));
+    const open = pending.filter((c) => unresolvedConflict(c) && !answers.get(c.id));
+    if (open.length) { res.status(400).json({ error: "UNRESOLVED_ITEM", code: "UNRESOLVED_ITEM", candidateIds: open.map((c) => c.id) }); return; }
+    const results: Array<{ candidateId: string; ok: boolean; reason?: string; documentId?: string }> = [];
+    for (const c of pending) {
+      // A settled conflict approves its chosen answer (the canonical one) unless the person wrote another.
+      const r = await approveOne(req.tenantId!, c.id, req.user!.userId, { answer: answers.get(c.id) ?? (c.conflict ? c.answer : null), importId: imp!.id });
+      results.push({ candidateId: c.id, ...r });
+    }
+    res.json({ ok: true, topicId, approved: results.filter((r) => r.ok).length, results });
+  } catch (err: any) {
+    console.error("[historical-import] topic approve failed:", err?.message);
+    res.status(500).json({ error: "Failed to approve the topic" });
+  }
+});
+
+/**
+ * POST /api/historical-imports/topics/reject { importId, topicId }: the topic's PENDING items are rejected, and an
+ * auto-approved topic is undone: its items approved automatically are rejected and the documents they created
+ * removed (vectors too). A person's approval is never undone here.
+ */
+router.post("/topics/reject", writeGuard, async (req: Request, res: Response) => {
+  try {
+    const { importId, topicId } = req.body ?? {};
+    if (typeof importId !== "string" || !importId || typeof topicId !== "string" || !topicId) {
+      res.status(400).json({ error: "INVALID_TOPIC_REJECTION", message: "importId and topicId are required" });
+      return;
+    }
+    const imp = await prisma.historicalImport.findFirst({ where: { id: importId, tenantId: req.tenantId! }, select: { id: true } });
+    const loaded = imp ? await loadTopics(req.tenantId!, imp.id) : null;
+    const topic = loaded?.topics.find((t) => t.topicId === topicId);
+    if (!loaded || !topic) { res.status(404).json({ error: "TOPIC_NOT_FOUND" }); return; }
+    const members = (topic.candidateIds ?? []).map((id: string) => loaded.rows.get(id)).filter(Boolean) as any[];
+    const pendingIds = members.filter((c) => c.status === "PENDING").map((c) => c.id);
+    const autoOnes = members.filter((c) => c.status === "APPROVED" && c.decidedBy === "auto");
+    const docIds = autoOnes.map((c) => c.approvedDocumentId).filter(Boolean) as string[];
+    for (const c of autoOnes) {
+      if (c.approvedDocumentId) {
+        await deleteByDocumentId(c.approvedDocumentId).catch((err: any) => console.warn("[historical-import] vector delete failed:", err?.message));
+        await prisma.knowledgeDocument.deleteMany({ where: { id: c.approvedDocumentId, tenantId: req.tenantId! } });
+      }
+    }
+    const rejected = await prisma.knowledgeCandidate.updateMany({
+      where: { tenantId: req.tenantId!, importId: imp!.id, OR: [{ id: { in: pendingIds }, status: "PENDING" }, { id: { in: autoOnes.map((c) => c.id) }, status: "APPROVED", decidedBy: "auto" }] },
+      data: { status: "REJECTED", decidedAt: new Date(), decidedBy: req.user!.userId, approvedDocumentId: null },
+    });
+    if (autoOnes.length) {
+      await writeAudit({ tenantId: req.tenantId!, actorType: "user", actorId: req.user!.userId, action: AuditAction.KNOWLEDGE_HISTORICAL_APPROVED, targetType: "historical_topic", targetId: topicId, metadata: { undoAuto: true, candidates: autoOnes.map((c) => c.id), documents: docIds } }).catch(() => undefined);
+    }
+    res.json({ ok: true, topicId, rejected: rejected.count, documentsRemoved: docIds.length });
+  } catch (err: any) {
+    console.error("[historical-import] topic reject failed:", err?.message);
+    res.status(500).json({ error: "Failed to reject the topic" });
+  }
+});
+
+/**
  * POST /api/historical-imports/:id/bulk-approve
  *
  * Only ever touches items the API itself classified as safe: no conflicts, and
@@ -806,38 +933,6 @@ router.get("/conversations/:conversationId/messages", async (req: Request, res: 
  * the backend, the frontend mirror and the tests all agree on what
  * "analyzing" means and when a percentage is honest.
  */
-/**
- * The KB document body for an approved suggestion.
- *
- * The reasoning is part of the document, not metadata, because it has to reach
- * the model the same way the answer does - through retrieval. A document that
- * carries only the rule answers the question it was mined from and fails the
- * next variation of it, which is the whole difference between an FAQ and
- * knowing the job. Labelled so the model reads it as background rather than as
- * something to recite back to the customer.
- */
-function knowledgeDocumentBody(
-  question: string,
-  answer: string,
-  reasoning: string | null,
-  requiresLiveLookup = false,
-): string {
-  const parts = [question.trim(), "", answer.trim()];
-  if (requiresLiveLookup) {
-    // Inside the document, not in metadata, because only what is in the body
-    // reaches the model through retrieval. Without it an agent reads "usually
-    // Thursday and Friday" and promises a slot nobody checked.
-    parts.push(
-      "",
-      "This depends on live availability. Treat it as the usual pattern, not a commitment: check the calendar or current stock before telling a customer anything specific.",
-    );
-  }
-  if (reasoning && reasoning.trim()) {
-    parts.push("", `How we approach this: ${reasoning.trim()}`);
-  }
-  return parts.join("\n");
-}
-
 function toStatusView(row: {
   id: string;
   source: string;
@@ -901,116 +996,6 @@ function confidenceLabel(confidence: number): "high" | "medium" | "low" {
   if (confidence >= BULK_APPROVE_MIN_CONFIDENCE) return "high";
   if (confidence >= 0.45) return "medium";
   return "low";
-}
-
-/**
- * Where an approved suggestion lands.
- *
- * The explicitly chosen base if the caller named one, otherwise the tenant's
- * first active general-scope base. Never creates one: a knowledge base is a
- * deliberate object with a name and a scope, and manufacturing one as a side
- * effect of an approval would put the customer's knowledge somewhere they never
- * chose.
- */
-async function resolveTargetKnowledgeBase(
-  tenantId: string,
-  requestedId?: unknown,
-): Promise<{ id: string } | null> {
-  if (typeof requestedId === "string" && requestedId) {
-    const explicit = await prisma.knowledgeBase.findFirst({
-      where: { id: requestedId, tenantId, isActive: true },
-      select: { id: true },
-    });
-    if (explicit) return explicit;
-  }
-  return prisma.knowledgeBase.findFirst({
-    where: { tenantId, isActive: true, scope: "all" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-}
-
-/**
- * The single-candidate approval used by the bulk path.
- *
- * Shares the duplicate check and the provenance stamping with the single
- * endpoint above, so a bulk approve cannot take a shortcut the individual one
- * refuses.
- */
-async function approveOne(
-  tenantId: string,
-  candidateId: string,
-  userId: string,
-): Promise<{ ok: boolean; reason?: string }> {
-  const candidate = await prisma.knowledgeCandidate.findFirst({
-    where: { id: candidateId, tenantId, status: "PENDING", conflict: false },
-  });
-  if (!candidate) return { ok: false, reason: "not eligible" };
-
-  const target = await resolveTargetKnowledgeBase(tenantId);
-  if (!target) return { ok: false, reason: "no knowledge base" };
-
-  const existing = await findExistingKnowledge({
-    tenantId,
-    question: candidate.question,
-    answer: candidate.answer,
-  });
-  if (existing) {
-    await prisma.knowledgeCandidate.updateMany({
-      where: { id: candidate.id, tenantId },
-      data: { status: "SUPERSEDED", duplicateOfDocumentId: existing.documentId },
-    });
-    return { ok: false, reason: "already covered" };
-  }
-
-  const document = await prisma.knowledgeDocument.create({
-    data: {
-      knowledgeBaseId: target.id,
-      tenantId,
-      title: candidate.question.slice(0, 200),
-      content: knowledgeDocumentBody(candidate.question, candidate.answer, candidate.reasoning, candidate.requiresLiveLookup),
-      sourceType: "historical_conversations",
-      status: "pending",
-      metadata: {
-        origin: "historical_import",
-        sourceType: "historical_conversations",
-        topic: candidate.topic,
-      },
-    },
-  });
-
-  await prisma.knowledgeCandidate.updateMany({
-    where: { id: candidate.id, tenantId },
-    data: {
-      status: "APPROVED",
-      approvedDocumentId: document.id,
-      decidedAt: new Date(),
-      decidedBy: userId,
-    },
-  });
-
-  try {
-    await processDocument(document.id);
-  } catch (err: any) {
-    console.error(`[historical-import] embedding failed for ${document.id}: ${err?.message}`);
-  }
-
-  await writeAudit({
-    tenantId,
-    actorType: "user",
-    actorId: userId,
-    action: AuditAction.KNOWLEDGE_HISTORICAL_APPROVED,
-    targetType: "knowledge_document",
-    targetId: document.id,
-    metadata: {
-      source: "historical_conversations",
-      sourceProvider: "whatsapp_business_app",
-      candidateId: candidate.id,
-      bulk: true,
-    },
-  });
-
-  return { ok: true };
 }
 
 export default router;

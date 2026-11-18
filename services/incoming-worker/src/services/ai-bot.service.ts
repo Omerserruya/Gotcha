@@ -77,6 +77,21 @@ interface AIBotReplyResult {
   }>;
 }
 
+/** How long a turn waits for a message right behind its own (TURN_SETTLE_MS, default 1500, 0 to 5000). */
+export function turnSettleMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.TURN_SETTLE_MS);
+  return Number.isFinite(n) && n >= 0 && n <= 5000 ? n : 1500;
+}
+/** A newer customer message than the one this turn answers. */
+export async function overtaken(tenantId: string, conversationId: string, triggerMessageId: string): Promise<boolean> {
+  const newest = await prisma.message.findFirst({
+    where: { tenantId, conversationId, direction: "INBOUND", messageType: { not: "system" } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true },
+  }).catch(() => null);
+  return !!newest && newest.id !== triggerMessageId;
+}
+
 export async function processAIBot(
   tenantId: string,
   conversationId: string,
@@ -85,6 +100,9 @@ export async function processAIBot(
   // An automation's "Run a skill": the employee starts this business skill
   // on this turn instead of choosing one.
   startSkillId?: string | null,
+  // The inbound message this turn answers. With it, a turn a newer message overtook is skipped or its reply
+  // dropped: the newer turn answers both (prod 2026-11-18, Smoovee: two near-identical replies seconds apart).
+  triggerMessageId?: string | null,
 ): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -92,6 +110,15 @@ export async function processAIBot(
   });
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
+
+  // A message a second behind this one: let it land, and leave the turn to the newest.
+  if (triggerMessageId) {
+    await new Promise((r) => setTimeout(r, turnSettleMs()));
+    if (await overtaken(tenantId, conversationId, triggerMessageId)) {
+      console.log(`[AI-Bot] conv=${conversationId}: a newer message arrived, its turn answers (msg=${triggerMessageId} skipped)`);
+      return true;
+    }
+  }
 
   // The routing automation that gave this conversation to the AI was turned
   // off: the AI stops here, for either reply engine (routing-withdrawn.service).
@@ -392,6 +419,11 @@ export async function processAIBot(
 
   // Side-effect: send the AI reply.
   if (!result.reply) return false;
+  // Overtaken while the AI worked: the newer turn answers with this message in its history; never two replies.
+  if (triggerMessageId && (await overtaken(tenantId, conversationId, triggerMessageId))) {
+    console.log(`[AI-Bot] conv=${conversationId}: reply dropped, a newer message's turn answers (msg=${triggerMessageId})`);
+    return true;
+  }
 
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) {

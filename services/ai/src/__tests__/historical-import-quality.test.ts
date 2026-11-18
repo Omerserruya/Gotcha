@@ -137,14 +137,22 @@ describe("5. one-offs and fluff", () => {
 });
 
 describe("6 and 7. review aids", () => {
-  it("★ auto-approve only: a person's, 3+, no conflict either way, kept, no live data", () => {
+  it("★ auto-approve per candidate: a person's, 3+, no UNRESOLVED conflict, no doc conflict, kept or rewritten, no live data", () => {
     const ok = { humanSourced: true, occurrenceCount: 3, conflict: false, curationVerdict: "kept", curationNote: null, requiresLiveLookup: false };
     expect(autoApprovable(ok)).toBe(true);
     expect(autoApprovable({ ...ok, humanSourced: false })).toBe(false);
     expect(autoApprovable({ ...ok, occurrenceCount: 2 })).toBe(false);
     expect(autoApprovable({ ...ok, conflict: true })).toBe(false);
+    // Settled by the newest answer (a clean switch): not blocking.
+    const switched = [{ answer: "נשר", firstSeenAt: "2026-01-01", lastSeenAt: "2026-05-01" }, { answer: "טבעון", firstSeenAt: "2026-06-01", lastSeenAt: "2026-10-01" }];
+    expect(autoApprovable({ ...ok, conflict: true, variants: switched })).toBe(true);
+    // Still alternating: blocking.
+    const alternating = [{ answer: "נשר", firstSeenAt: "2026-01-01", lastSeenAt: "2026-09-01" }, { answer: "טבעון", firstSeenAt: "2026-06-01", lastSeenAt: "2026-10-01" }];
+    expect(autoApprovable({ ...ok, conflict: true, variants: alternating })).toBe(false);
+    expect(autoApprovable({ ...ok, conflict: true, variants: [{ answer: "a" }, { answer: "b" }] })).toBe(false);
     expect(autoApprovable({ ...ok, curationNote: `${DOC_CONFLICT} price differs` })).toBe(false);
-    expect(autoApprovable({ ...ok, curationVerdict: "rewritten" })).toBe(false);
+    expect(autoApprovable({ ...ok, curationVerdict: "rewritten" })).toBe(true);
+    expect(autoApprovable({ ...ok, curationVerdict: "unjudged" })).toBe(false);
     expect(autoApprovable({ ...ok, requiresLiveLookup: true })).toBe(false);
   });
   it("the passages sent along share words with the question", () => {

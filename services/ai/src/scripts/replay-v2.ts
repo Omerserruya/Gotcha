@@ -110,6 +110,14 @@ export function searchArgsLine(list: any[]): string {
   return list.map((a) => `${String(a?.tool ?? "").replace(/^.*\./, "")} q=${q(a?.q)}${a?.cq ? ` cq=${q(a.cq)}` : ""}${a?.audience ? ` audience=${a.audience}` : ""}${a?.in_stock != null ? ` in_stock=${a.in_stock}` : ""}${a?.price?.some((x: any) => x != null) ? ` price=${a.price.map((x: any) => x ?? "-").join("..")}` : ""}`).join("; ");
 }
 
+export function searchLine(trace: any): string {
+  const asked = Array.isArray(trace?.searchArgs) && trace.searchArgs.length ? searchArgsLine(trace.searchArgs) : "";
+  const ran = (Array.isArray(trace?.tools) ? trace.tools : [])
+    .filter((t: any) => /(?:list_products|search_products|get_product|complementary_products)$/.test(String(t?.tool ?? "")))
+    .map((t: any) => `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}`);
+  return [asked, ran.length ? `ran: ${ran.join("; ")}` : ""].filter(Boolean).join(" | ") || "none";
+}
+
 export function stagesLine(trace: any): string {
   const st = trace?.stageMs ?? {};
   const marks = Object.entries(st).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => `${k}=${Number(v)}`).join(" ");
@@ -319,7 +327,9 @@ async function main() {
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
           stagesLine(r.trace),
-          ...(Array.isArray((r.trace as any)?.searchArgs) && (r.trace as any).searchArgs.length ? [`- search: ${searchArgsLine((r.trace as any).searchArgs)}`] : []),
+          // Always a search line (rating 1771ba14: none for the "בובות" turn): the args the store was asked, and
+          // every product search the turn's tools ran with its outcome and count, or "none".
+          `- search: ${searchLine(r.trace as any)}`,
           "",
         );
       } catch (err: any) {
