@@ -259,8 +259,8 @@ describe("b77ec0d1 verify: the focus rules", () => {
     expect(referredCandidates(smoovee, "המשטח של מלאני מתאים.", "")).toEqual([2]);
     // The companion word carries a prefix letter in the reply ("למכונה" for "מכונות").
     expect(referredCandidates([{ title: "גפן מכונות קפה" }, { title: "אריאל מכונות קפה" }], "למכונה שלך מתאים גפן.", "")).toEqual([0]);
-    // A short name alone, no other word of its title (13afc633 verify): not enough; a 5-letter name is.
-    expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([1]);
+    // Joined by ו to another found name, a short name counts (b369e939 review, item 3).
+    expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([0, 1]);
     expect(referredCandidates([{ title: "אסף לנינג'ה קריספי" }, { title: "גפן למכונות קפה" }], "אסף מתאים לנינג'ה.", "")).toEqual([0]);
     expect(referredCandidates([{ title: "אסף למיקסר" }, { title: "גפן למכונות קפה" }], "וגם אסף מתאים.", "")).toEqual([]);
     expect(referredCandidates([{ title: "Zip Hoodie" }, { title: "Cropped Hoodie" }, { title: "Heavyweight Hoodie" }], "יש לנו zip וגם cropped", "")).toEqual([1]);
@@ -426,5 +426,28 @@ describe("rating of the 9480dfb2 prod replay", () => {
     expect(stripFactProblems(caveat, v.problems)).toContain("אין לנו אישור שהוא מתאים לשימוש מתחת לעיניים.");
     // A real absence stays a claim.
     expect(gate3({ ...withTool, reply: "יש טוש חום, אבל אין לנו מוצר שמאושר לשימוש מתחת לעיניים." }).problems.map((p: any) => p.kind)).toContain("ungrounded_absence");
+  });
+});
+
+describe("b369e939 next-round items", () => {
+  it("★ a size letter or adjective goes with the size word; the ב comes off an apostrophe word after them", () => {
+    expect(storeQueryOf("יש מידה L בקפוצ'ון?")).toBe("קפוצ'ון");
+    expect(storeQueryOf("יש מידה L בקפוצ'ון?", { substring: true })).toBe("קפוצ'ון");
+    expect(storeQueryOf("יש לכם מידה גדולה בחולצה?")).toBe("חולצה");
+    expect(storeQueryOf("יש לכם סרט מידה?")).toBe("סרט מידה");
+    expect(storeQueryOf("יש מידה 38 בנעל הלבנה?", { substring: true })).toBe("נעל לבנה");
+  });
+  it("★ a short name by its place: after a choice word, or joined by ו to another found name", () => {
+    const smoovee = [{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }];
+    expect(referredCandidates(smoovee, "למכונת קפה קטנה כדאי לבחור בגפן.", "")).toEqual([0]);
+    expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([0, 1]);
+    expect(referredCandidates([{ title: "אסף לנינג'ה קריספי" }, { title: "גפן למכונות קפה" }], "אנחנו ממליצים על אסף.", "")).toEqual([0]);
+    // Ordinary speech still marks nothing.
+    expect(referredCandidates([{ title: "סרום ויטמין C" }, { title: "סרום לילה" }, { title: "קרם לחות" }, { title: "קרם יום" }], "תוך יום עסקים נשלח את הקרם.", "")).toEqual([]);
+  });
+  it("★ an instructions PDF answers a plain how-to ask, never a video ask; an image never", () => {
+    const kb = "הוראות שימוש במסקרה: https://shop.example/wp-content/uploads/2025/10/guide.pdf\nתמונת מסקרה: https://shop.example/wp-content/uploads/2025/10/mascara.jpg";
+    expect(howToLink(kb, ["איך משתמשים במסקרה? יש הוראות?"], false)).toBe("https://shop.example/wp-content/uploads/2025/10/guide.pdf");
+    expect(howToLink(kb, ["אשמח לסרטון הדרכה למסקרה"], true)).toBeNull();
   });
 });

@@ -1472,8 +1472,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
         // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
         const lostPass = removed.some((x) => teamPassIn(x)) && !teamPassIn(cleaned.reply) && (asksSomething(opts.incomingMessage ?? "") || imperativeAsk(opts.incomingMessage ?? ""));
-        const hollow = thin || fragment || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
-        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass };
+        // A video or link ask whose answer was the cut sentence (dev live round on b369e939: "אין לנו כרגע סרטון" cut,
+        // the care-label advice sent alone): what is left does not answer it, so the team line (or the link) instead.
+        const linkAskNow = videoAsk(opts.incomingMessage ?? "") || HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? ""));
+        const lostLink = linkAskNow && removed.some((x) => /סרטון|הדרכה|מדריך|קישור|לינק|video|tutorial|guide|link/iu.test(x)) && !/https?:\/\//i.test(cleaned.reply) && !teamPassIn(cleaned.reply);
+        const hollow = thin || fragment || lostLink || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
+        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass: lostPass || lostLink };
       };
       const fromSecond = salvage(second);
       const fromOriginal = salvage(original);

@@ -2704,6 +2704,30 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     expect(r.reply ?? "").not.toMatch(/^\s*וגם/);
   });
 
+  it("★ (dev live round on b369e939, 1) a video ask shaped like a product ask gets the team line, never the product question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", stage: "choosing", intent: "Zip Hoodie", facts: {}, offeredItems: [{ ref: "id:9", title: "Zip Hoodie", productId: "9", at: new Date().toISOString() }], pending: [], turnCount: 3 });
+    try {
+      const no = "אין לנו מידע על סרטון הדרכה לכביסה.";
+      h.responses.push({ toolCalls: [respond("vd1", { reply: no })] }, { toolCalls: [respond("vd2", { reply: no })] }, { toolCalls: [respond("vd3", { reply: no })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם סרטון הדרכה לכביסה?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/לאיזה דגם|באיזו מידה/);
+      expect(r.reply ?? "").toMatch(/צוות|https?:\/\//);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ (dev live round on b369e939, 2) a video ask whose answer was cut gets the team line and a team question", async () => {
+    const reply = "אין לנו כרגע סרטון הדרכה לכביסה. כדאי לפעול לפי תווית הטיפול שעל הקפוצ'ון, כי הוראות הכביסה תלויות בה.";
+    h.responses.push({ toolCalls: [respond("vc1", { reply })] }, { toolCalls: [respond("vc2", { reply })] }, { toolCalls: [respond("vc3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה איך מכבסים אותו" }, "autonomous");
+    if (Number((r.trace as any).cutSentences ?? 0) > 0 || r.trace.gate3.rewrite === "fallback") {
+      expect(r.reply ?? "").toMatch(/צוות/);
+      expect(r.trace.teamQuestion ?? null).not.toBeNull();
+    } else {
+      throw new Error(`the absence was not cut: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
+    }
+  });
+
   it("★ the audit row carries the cut fields when something was cut", async () => {
     h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");

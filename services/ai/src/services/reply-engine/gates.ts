@@ -953,7 +953,8 @@ export function productAskNow(incoming: string): boolean {
   // Products answer a product ask only: never a support case (payment, an order of theirs, a complaint),
   // a policy or coupon question, or a how-to (prod replay 2026-11-17: the list replaced a policy answer).
   const t = normalizeQuotes(incoming ?? "");
-  if (PAY_PROBLEM.test(t) || MY_ORDER.test(t) || STRONG_CASE.test(t) || COUPON_ASK.test(t) || HOW_TO.test(t)) return false;
+  // A video or tutorial ask is no product ask, whatever its shape ("יש לכם סרטון הדרכה לכביסה?", dev live round on b369e939).
+  if (PAY_PROBLEM.test(t) || MY_ORDER.test(t) || STRONG_CASE.test(t) || COUPON_ASK.test(t) || HOW_TO.test(t) || videoAsk(t)) return false;
   return PRODUCT_WANT.test(t) || PURCHASE.test(t) || PRODUCT_ASK.test(t) || NAMES_A_PRODUCT.test(t) || /\bhow (?:do|can) (?:i|we) (?:order|buy|purchase)\b/i.test(t);
 }
 
@@ -1419,10 +1420,13 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
   const isContent = (w: string) => !queryStop(w) && !ASK_WORDS.has(w.toLowerCase()) && (w.length >= 2 || /^\d$/.test(w));
   // A size and its value are never title text: "מידה 38" goes, and the ב comes off the word after it ("בנעל").
   const sized = new Set<number>();
+  // The value: a number, a size letter ("L", "XL") or a size adjective ("מידה גדולה"); the size word goes with it.
+  const SIZE_VALUE = /^(?:\d+|xxs|xs|s|m|l|xl|xxl|xxxl|גדולה|גדול|גדולות|קטנה|קטן|קטנות|בינונית|בינוני|large|small|medium)$/iu;
   tokens.forEach((w, i) => {
-    if (!/^(?:מידה|מידות|size)$/iu.test(w) || !/^\d+$/.test(tokens[i + 1] ?? "")) return;
-    sized.add(i + 1);
-    if (/^ב[\u0590-\u05FF]{3,}$/u.test(tokens[i + 2] ?? "")) tokens[i + 2] = tokens[i + 2].slice(1);
+    if (!/^(?:מידה|מידות|size)$/iu.test(w) || !SIZE_VALUE.test(tokens[i + 1] ?? "")) return;
+    sized.add(i); sized.add(i + 1);
+    // The ב comes off the word after them, an apostrophe word too ("בקפוצ'ון").
+    if (/^ב[\u0590-\u05FF]{2,}(?:['"״][\u0590-\u05FF]+)*$/u.test(tokens[i + 2] ?? "") && tokens[i + 2].replace(/['"״]/g, "").length >= 4) tokens[i + 2] = tokens[i + 2].slice(1);
   });
   const words = tokens.filter((w, i) => !sized.has(i) && isContent(w) && !attributeUse(tokens, i, isContent));
   const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && (/^ה[\u0590-\u05FF]{3,}$/u.test(w) || /^[ול][\u0590-\u05FF]{4,}$/u.test(w)) ? w.slice(1) : w));
@@ -2338,12 +2342,14 @@ const HOWTO_WORDS = new Set(["איך", "משתמשים", "שימוש", "להשת
 const VIDEO_LINE = /סרטון|הדרכה|מדריך|video|youtu|vimeo/iu;
 // A media file is never "the link" (prod replay of 9480dfb2, NE'A: a product's .webp sent as the video).
 const MEDIA_FILE = /\.(?:webp|jpe?g|png|gif|svg|bmp|avif|ico|heic|tiff?)(?:[?#]|$)|\/wp-content\/uploads\/(?!.*\.(?:mp4|mov|webm|m4v)(?:[?#]|$))/i;
+const PDF_FILE = /\.pdf(?:[?#]|$)/i;
 const VIDEO_URL = /youtu\.?be|vimeo\.com|\.(?:mp4|mov|webm|m4v)(?:[?#]|$)/i;
 /** The ask wants a video (סרטון, הדרכה, video, tutorial), not only a link. */
 export const videoAsk = (incoming: string) => /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|לסרטון)(?![\u0590-\u05FF])|\b(?:video|tutorial)\b/iu.test(String(incoming ?? ""));
 export function howToLink(kb: string, subjects: string[], video = false): string | null {
   // Media files out; for a video ask, a video link only (a host or a video file), never a page that merely mentions one.
-  const usable = (u: string) => !MEDIA_FILE.test(u) && (!video || VIDEO_URL.test(u));
+  // An instructions PDF is a fine answer to a plain how-to ask (never to a video ask).
+  const usable = (u: string) => (!MEDIA_FILE.test(u) || (!video && PDF_FILE.test(u))) && (!video || VIDEO_URL.test(u));
   const lines = String(kb ?? "").split(/\n+/).filter((l) => (l.match(URL_RE) ?? []).some(usable));
   if (!lines.length) return null;
   const firstUrl = (l: string) => { const us = (l.match(URL_RE) ?? []).filter(usable); return us.find((u) => VIDEO_URL.test(u)) ?? us[0] ?? null; };
@@ -2549,6 +2555,7 @@ export function colourList(reply: string, candidates: Array<{ title?: string; de
  * title without its variant part, or a distinctive word of it (not shared by every product found), in the reply
  * or in the model's own intent; or the only product found, when the reply is about a product at all.
  */
+const CHOICE_WORDS = new Set(["לבחור", "בחרו", "בחרי", "בוחרים", "ממליצים", "ממליצה", "ממליץ", "מומלץ", "מומלצת", "נמליץ", "recommend", "choose", "pick", "try"]);
 const NEAR_FILLER = new Set(["שלך", "שלכם", "שלי", "שלנו", "מתאים", "מתאימה", "מתאימים", "מתאימות", "your", "fits", "fit"]);
 const GREETINGS = new Set(["שלום", "היי", "הי", "hi", "hello", "hey"]);
 const TITLE_STOP = new Set(["the", "and", "for", "with", "new", "set", "pro", "one", "של", "עם", "את", "לכל", "כל", "סט", "חדש", "חדשה"]);
@@ -2592,7 +2599,18 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
       return hayTokens.some((h, q) => q !== p && dist(p, q) <= 2 && [h, h.slice(1), h.slice(2)].some((v) => v.length >= Math.min(3, key.length) && v.startsWith(key)));
     }));
     // A unique word under 5 letters counts only with a companion ("תוך יום עסקים" is no "קרם יום").
-    const counts = (w: string) => said(w) && (w.length >= 5 || companion(w));
+    // Or a name by its place: right after a choice word ("כדאי לבחור בגפן", "ממליצים על אסף"), or joined by ו to
+    // another found product's own name ("בגפן ובאריאל").
+    const otherNames = new Set(bases.flatMap((b, k) => (k === i ? [] : wordsOf(b).filter((x) => owners(x) === 1 && !VARIANT_WORDS.has(x) && !TITLE_STOP.has(x)))));
+    const byPlace = (w: string) => at(w).some((p) => {
+      const prev = hayTokens[p - 1] ?? "", prev2 = hayTokens[p - 2] ?? "";
+      if (CHOICE_WORDS.has(prev) || (prev === "על" && CHOICE_WORDS.has(prev2))) return true;
+      const strip = (t: string) => t.replace(/^ו/u, "").replace(/^[הולבמשכ]{0,1}/u, "");
+      const next = hayTokens[p + 1] ?? "";
+      const joined = (t: string, viaVav: boolean) => !!t && (viaVav ? /^ו/u.test(t) : true) && [...otherNames].some((n) => [t, t.slice(1), t.slice(2)].includes(n) || strip(t) === n);
+      return joined(next, true) || (/^ו/u.test(hayTokens[p] ?? "") && joined(prev, false));
+    });
+    const counts = (w: string) => said(w) && (w.length >= 5 || companion(w) || byPlace(w));
     // Every word of the title within a run of (its word count + 1) reply words: "הבובון השטוח", "קרם הלחות שלנו",
     // "הבובון שלנו שטוח"; never "הקרם שומר על לחות".
     const all = wordsOf(base).filter((w) => !TITLE_STOP.has(w));
