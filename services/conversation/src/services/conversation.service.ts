@@ -1,5 +1,5 @@
 // A pure module by its own path, so the many tests that mock "@chatcenter/shared" keep the real rule.
-import { irrelevantWhere, notIrrelevantWhere, withRelevance, RELEVANCE_OVERRIDES, type ConversationRelevanceView } from "@chatcenter/shared/src/lib/conversation-relevance";
+import { irrelevantWhere, notIrrelevantWhere, withRelevance, RELEVANCE_OVERRIDES, RELEVANCE_CATEGORY_VALUES, type ConversationRelevanceView } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { getInternalServiceKey, readDurableSetting, recordHandover, waitingForPersonClause, parseBusinessHours, isWorkspaceDay, dayStart, nextWorkspaceDay } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
 import { prisma, publishEvent, outgoingMessageQueue, withHistoricalRecords, notificationsQueue, replyWindowsFor, type ReplyWindow } from "@chatcenter/shared";
@@ -1149,4 +1149,39 @@ export async function setRelevanceOverride(
   // The list moves the row live; a partial payload, merged by id.
   emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
   return relevance;
+}
+
+
+/**
+ * The classifier's label (internal write, 2026-11-17). Validated here, written only when no person has
+ * overridden it (the update is conditioned on overriddenBy null, so a race cannot replace an override).
+ * Null when there is no such conversation in this tenant.
+ */
+export async function setClassifiedRelevance(
+  tenantId: string,
+  conversationId: string,
+  body: { category?: unknown; confidence?: unknown; reason?: unknown; source?: unknown; classifiedAt?: unknown },
+): Promise<{ relevance: ConversationRelevanceView | null; written: boolean } | null> {
+  const category = String(body.category ?? "");
+  if (!(RELEVANCE_CATEGORY_VALUES as readonly string[]).includes(category)) {
+    throw Object.assign(new Error(`invalid_category: one of ${RELEVANCE_CATEGORY_VALUES.join(", ")}`), { status: 400 });
+  }
+  const source = body.source === "fast" || body.source === "model" ? body.source : null;
+  if (!source) throw Object.assign(new Error("invalid_source: fast or model"), { status: 400 });
+  const n = Number(body.confidence);
+  const confidence = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null;
+  const at = typeof body.classifiedAt === "string" && Number.isFinite(Date.parse(body.classifiedAt)) ? new Date(body.classifiedAt) : new Date();
+  const reason = typeof body.reason === "string" ? body.reason.replace(/\s+/g, " ").trim().slice(0, 120) || null : null;
+
+  const before = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId }, select: { id: true, relevanceCategory: true } as any });
+  if (!before) return null;
+  const done = await prisma.conversation.updateMany({
+    where: { id: conversationId, tenantId, relevanceOverriddenBy: null } as any,
+    data: { relevanceCategory: category, relevanceConfidence: confidence, relevanceReason: reason, relevanceSource: source, relevanceClassifiedAt: at } as any,
+  });
+  const row = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  const relevance = withRelevance((row ?? {}) as any).relevance;
+  // The list moves the row live when the label changed.
+  if (done.count > 0 && (before as any).relevanceCategory !== category) emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
+  return { relevance, written: done.count > 0 };
 }

@@ -26,6 +26,7 @@ import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 import { uploadsStatic } from "./lib/uploads-static";
 import { widgetImagesRouter } from "./routes/widget-images";
 import { internalUploadsRouter } from "./routes/internal-uploads";
+import { internalRelevanceRouter } from "./routes/internal-relevance";
 import { signedMediaHandler } from "./lib/media-serving";
 import { relayBusEvent } from "./lib/socket-bridge";
 import { relayToVisitor, relayConversationState } from "./subscribers/shopify-visitor-relay";
@@ -107,6 +108,7 @@ if (!uploadsProbe.ok) {
 // The widget's logo and cover (W3/W4): a signed-in POST, before the static files.
 // Tenant delete: remove its stored files by name (internal key, not under /api).
 app.use(internalUploadsRouter(uploadsDir));
+app.use(internalRelevanceRouter());
 app.use("/api/uploads", widgetImagesRouter(uploadsDir));
 app.use("/api/uploads", uploadsStatic(uploadsDir));
 // Short-lived signed media links for providers that fetch with no login (Meta,

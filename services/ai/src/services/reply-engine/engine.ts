@@ -30,6 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
+import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
@@ -735,6 +736,23 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       (trace as any).automated = automated;
       trace.gate3 = { ok: true, problems: [], rewrite: "none" };
       return empty({ reply: null });
+    }
+  }
+  // Relevance (2026-11-17): personal, notices, marketing, another business's auto-reply, the team's
+  // own chats, and a reply to something a person sent first. Off by default; "shadow" only records.
+  // A person's override wins over every rule. Not on a replay or a sandbox rehearsal.
+  {
+    const mode = relevanceGateMode();
+    if (mode !== "off" && !opts.replay && !String(conversation.customerExternalId ?? "").startsWith("sandbox:")) {
+      const loaded: any = await loadAll.catch(() => null);
+      const company = loaded?.[3] ?? null;
+      const rel = await relevanceForTurn({ tenantId: opts.tenantId, conversation, history: loaded?.[1] ?? [], profile: company ? { ...company } : null, mode });
+      (trace as any).relevance = rel;
+      if (mode === "on" && rel.hold) {
+        trace.gate1 = `relevance:${rel.category}`;
+        trace.gate3 = { ok: true, problems: [], rewrite: "none" };
+        return empty({ reply: null });
+      }
     }
   }
   if (placeholderOnly(opts.incomingMessage)) {
