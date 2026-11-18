@@ -44,6 +44,8 @@ export interface RunnerEnv {
   skills: EngineSkill[];
   /** Tighten-only approval hook (the active business skill's approvalOverAmount). */
   tightenApproval?: (a: { tool: string; args?: unknown }) => string | null;
+  /** Why this call may not run on this turn (an unasked write or order read), on every lane; null = it may. */
+  refuse?: (tool: string, args: Record<string, unknown>) => string | null;
   toolTimeoutMs: number;
   /** Mutable, turn-wide. */
   turn: TurnTools;
@@ -185,6 +187,10 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     return deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, ctx);
   };
   const exec = async (): Promise<{ decision: ToolGateDecision | "simulated"; r: AgentToolDispatchResult }> => {
+    // Refused on this turn, on every lane, before anything is proposed or simulated (prod rating 2026-11-18:
+    // a simulated add_order_note ran on a closing turn, unasked).
+    const refused = env.refuse?.(tool, args) ?? null;
+    if (refused) return { decision: "deny", r: { toolCallId: call.id, content: JSON.stringify({ ok: false, failure: "refused", reason: refused }) } };
     // Shadow and replay: nothing is written, nothing is proposed.
     if (env.lane !== "live") {
       const v = await deps.evaluate({ tenantId: env.tenantId, toolName: tool, aiAgentId: env.aiAgentId, args });

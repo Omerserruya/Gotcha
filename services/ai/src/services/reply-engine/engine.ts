@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -472,6 +472,13 @@ export function assembleOnce(prose: string, list: string | null, titles: string[
 }
 
 /** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */
+// The part every holding line shares, whatever its noun (stillCheckingLine).
+const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "still being checked by the team" } as const;
+const HOLLOW_HEADER = /^(?:הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
+/** "What is it called?" about what was shown. */
+const NAME_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:קוראים|נקרא|נקראת)\s*(?:ל(?:ו|ה|זה|זו|מוצר))?|מה\s+(?:השם|שמו|שמה)(?:\s+של)?)(?![\u0590-\u05FF])|\bwhat(?:'s| is) (?:it|its name|the name|that) called\b|\bwhat(?:'s| is) the name\b/iu;
+export const nameAsk = (incoming: string) => NAME_ASK.test(String(incoming ?? ""));
+
 export function productQuestionLine(locale: "he" | "en"): string {
   return locale === "he" ? "כדי למצוא את המתאים: לאיזה דגם או שימוש זה, ובאיזו מידה?" : "To find the right one: which model or use is it for, and what size?";
 }
@@ -652,7 +659,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       : loadRecentHistory<any>(opts.tenantId, opts.conversationId, 60)),
     timed("contact", prisma.contact.findFirst({
       where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
-      select: { id: true, email: true, phone: true },
+      select: { id: true, email: true, phone: true, displayName: true },
     }).catch(() => null) as Promise<any>),
     timed("company", getCompanyContext(opts.tenantId)),
     timed("shopify", prepareShopifyTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
@@ -902,7 +909,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // Without them the guard supplies the customer's own; with none, the adapter refuses.
       // Orders are read only on a turn about them (prod rating 2026-11-17, Tehila: a "thanks" turn
       // looked up her orders and the reply volunteered one).
-      const notAsked = refuseOrderRead(toolFunctionName, opts.incomingMessage ?? "", history);
+      const notAsked = refuseOrderRead(toolFunctionName, opts.incomingMessage ?? "", history) ?? refuseWrite(toolFunctionName, opts.incomingMessage ?? "");
       if (notAsked) return { ok: false as const, failure: "refused", reason: notAsked } as any;
       const dropped = droppedOrderSelectors(toolFunctionName, effective);
       effective = scrubOrderSelectors(toolFunctionName, effective);
@@ -930,6 +937,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardChannel,
     ctx,
     skills,
+    refuse: (tool) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? ""),
     tightenApproval: (a) => {
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
@@ -963,8 +971,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   const knowledge = buildKnowledgeContext(knowledgeChunks as any, { dropWhenAllWeak: true, conflicts: "team" }) || null;
   const customerName = String((conversation as any).customerName ?? "").trim();
-  // A first name only when it reads as one (prod replay 2026-11-17: "היי SharonKampinski").
-  const firstName = greetingName(customerName);
+  // A first name only from the contact's profile, when it reads as one (prod replay 2026-11-17: "היי
+  // SharonKampinski"); never from a signature or the channel's display name (prod rating 2026-11-18:
+  // "היי רוברטה", "בשמחה, רחל" from a "יונה רחל" signature).
+  const firstName = greetingName(String(contactRow?.displayName ?? "").trim());
   const customerLine = firstName ? `Name: ${firstName}` : null;
   const turnPart = buildTurnPart({
     stateText: renderState(state),
@@ -1282,9 +1292,21 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const asked = asksSomething(opts.incomingMessage ?? "");
         const holding = stillCheckingLine(opts.incomingMessage ?? "", locale === "en" ? "en" : "he");
         const lastOutBody = String([...history].reverse().find((m: any) => m?.direction === "OUTBOUND")?.body ?? "").trim();
-        const questionLine = (): { reply: string; teamQuestion: string | null } =>
-          !cannedSent ? { reply: safeFallback(locale, teamAlreadyOpen), teamQuestion: teamAlreadyOpen ? null : question }
-            : { reply: lastOutBody === holding ? "" : holding, teamQuestion: question };
+        // The holding line only for a question on an open item it repeats, or on the held subject; a product's
+        // name from what was shown; anything else is a new question for the team (prod rating 2026-11-18, NE'A:
+        // "זה עדיין בבדיקה אצל הצוות" on "איך קוראים לו?").
+        const incomingQ = String(opts.incomingMessage ?? "");
+        const openSame = openTeam.find((t) => sameIssue(t, incomingQ)) ?? (holdingItem(openTeam) && aboutHeld(incomingQ) ? holdingItem(openTeam) : null);
+        const shownName = NAME_ASK.test(incomingQ) ? String(state.offeredItems?.at(-1)?.title ?? "").trim() : "";
+        const questionLine = (): { reply: string; teamQuestion: string | null } => {
+          if (openSame) {
+            const line = stillCheckingLine(openSame, locale === "en" ? "en" : "he");
+            return { reply: lastOutBody === line ? "" : line, teamQuestion: null };
+          }
+          if (shownName) return { reply: locale === "en" ? `It's ${shownName}.` : `זה ${shownName}.`, teamQuestion: null };
+          if (!cannedSent) return { reply: safeFallback(locale, teamAlreadyOpen), teamQuestion: question };
+          return { reply: locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", teamQuestion: question };
+        };
         if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "") && asked) {
           const q = questionLine();
           output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
@@ -1345,7 +1367,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // No price sentence left without its product (prod rating 2026-11-17).
     let text = dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles);
     // A first name only from the profile or the customer's own signature (prod rating 2026-11-17: "היי אלה").
-    text = dropUnaskedName(text, [firstName, ...signedNames(inbound)]);
+    text = dropUnaskedName(text, [firstName]);
     // Holding mode (prod rating 2026-11-17): a sensitive team item is open; nothing about its state, cause or
     // outcome goes out, only the acknowledgement and the holding line. A question on anything else is answered.
     const held = output.handoff ? null : holdingItem(openTeam);
@@ -1359,9 +1381,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const subjectTurn = onSubject || aboutHeld(text);
       if (subjectTurn) {
         const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
-        text = onSubject
-          ? holdReply(text, stillCheckingLine(held, holdLoc), { details, locale: holdLoc })
-          : (holdReply(text, "", { details: false, locale: holdLoc }) || stillCheckingLine(held, holdLoc));
+        const holdLine = stillCheckingLine(held, holdLoc);
+        // At most every third turn (prod rating 2026-11-18: eight times in a row, "תודה" included).
+        const lastTwo = [...history].reverse().filter((m: any) => m?.direction === "OUTBOUND").slice(0, 2).map((m: any) => String(m.body ?? ""));
+        const recentlyHeld = lastTwo.some((b) => b.includes(holdLine) || b.includes(HOLD_LINE_CORE[holdLoc]));
+        const thanks = holdLoc === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE;
+        if (customerAck(incomingNow) && !details) {
+          // A thanks or an okay: a short "you're welcome" once, then nothing.
+          text = lastTwo[0]?.trim() === thanks ? "" : thanks;
+        } else {
+          text = onSubject
+            ? holdReply(text, recentlyHeld ? "" : holdLine, { details, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
+            : (holdReply(text, "", { details: false, locale: holdLoc }) || (recentlyHeld ? "" : holdLine));
+        }
         (trace as any).holding = { details };
         // No new team item on the held subject: the open one holds it, and the details go there
         // (prod rating 2026-11-17: "4 ספרות אחרונות 4155" opened a second item instead).
@@ -1441,6 +1473,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A team question is a short subject plus the ask, never the raw message alone, and a status ask
   // ("יש חדש?") on an open item is no new question (prod replay 2026-11-17).
+  // A payment method that failed is a support case (prod rating 2026-11-18, BuyMe: a garbled guess, no team):
+  // the guesses about it are cut, the question goes to the team, and the fixed line says so.
+  if (output?.reply && !output.handoff && !output.teamQuestion && !heldTurn && paymentMethodFailure(opts.incomingMessage ?? "") && !openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? "")))) {
+    const rest = cutPaymentFailure(output.reply);
+    const told = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    output = { ...output, reply: rest ? `${rest} ${told}` : told, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
+    (trace as any).paymentFailureToTeam = true;
+  }
   if (output?.teamQuestion) {
     const q = teamQuestionText(output.teamQuestion, String(opts.incomingMessage ?? ""), state, openTeam);
     output = { ...output, teamQuestion: q };
@@ -1464,7 +1504,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // row): the second time it names what is being checked instead.
   const canned = output?.reply ? endsWithCannedTeamLine(output.reply) : null;
   const cannedBefore = cannedSent || history.some((m: any) => m.direction === "OUTBOUND" && !!endsWithCannedTeamLine(m.body));
-  if (output?.reply && canned && cannedBefore) {
+  // Not on a turn that records a NEW question: that one is passed to the team now, not "still being checked".
+  const newQuestionNow = !!output?.teamQuestion && isNewTeamQuestion(output.teamQuestion);
+  if (output?.reply && canned && cannedBefore && !newQuestionNow) {
     const named = stillCheckingLine(String(output.teamQuestion ?? openTeam.at(-1) ?? opts.incomingMessage ?? ""), locale);
     const head = output.reply.slice(0, output.reply.length - canned.length).trim();
     output = { ...output, reply: head ? `${head} ${named}` : named };
@@ -1496,7 +1538,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const clean = sanitizeReply(prose);
   if (clean !== prose) (trace as any).sanitized = true;
   // One message, no product twice and no line twice (prod replay 2026-11-17, both Smoovee runs).
-  const reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
+  let reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
+  // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
+  // alone on "טוש אני רוצה"): a question that moves the choice on instead. Cards on a cards channel are
+  // what it introduces, so there it stays.
+  const cardsGoOut = cardChannel && (final.cards ?? []).some((k) => /PRODUCT_\d+/i.test(k));
+  if (HOLLOW_HEADER.test(reply.trim()) && !listed && !cardsGoOut) { reply = productQuestionLine(locale); (trace as any).hollowHeader = true; }
   if (listed) (trace as any).listedProducts = listed.keys;
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();

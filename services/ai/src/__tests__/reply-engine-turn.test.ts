@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   staged: [] as any[],
   agentStatus: "ACTIVE",
   textChannel: false,
+  offerWrite: false,
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
   historyQueries: [] as any[],
@@ -54,6 +55,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     buildAgentToolsForAIAgent: async () => [
       { type: "function", function: { name: "escalate_to_human", description: "hand over", parameters: { type: "object", properties: {} } } },
       { type: "function", function: { name: "send_product_card", description: "card", parameters: { type: "object", properties: {} } } },
+      ...(h.offerWrite ? [{ type: "function", function: { name: "woocommerce.add_order_note", description: "note", parameters: { type: "object", properties: {} } } }] : []),
     ],
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
     dispatchToolCall: async (tc: any, ctx: any) => {
@@ -150,6 +152,7 @@ beforeEach(() => {
   h.failReads = 0;
   h.slowReads = 0;
   h.textChannel = false;
+  h.offerWrite = false;
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
@@ -890,23 +893,69 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
-  it("★ a question after the canned line: one holding line, then silence", async () => {
-    const { stillCheckingLine } = await import("../services/reply-engine/engine");
-    const holding = stillCheckingLine("איפה מזינים את הקופון?", "he");
+  it("★ a question after the canned line: a new question goes to the team; its repeat gets the holding line once, then silence", async () => {
     const { prisma } = await import("@chatcenter/shared");
-    const withState = async (row: any, fn: () => Promise<void>) => {
-      (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [], turnCount: 3, ...row });
-      try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
-    };
-    await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() } }, async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    const q = "איפה מזינים את הקופון?";
+    const st = (pending: any[]) => { (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [], pending, turnCount: 3 }); };
+    try {
+      st([]);
       h.responses.push({ toolCalls: [respond("h1", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h2", { reply: "בטח, ₪150 בלבד." })] });
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה מזינים את הקופון?" }, "autonomous");
-      expect(r.reply).toBe(holding);
-      h.history = [{ direction: "INBOUND", body: "איפה מזינים את הקופון?", metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
+      expect(r.reply).toBe("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.");
+      expect(r.trace.teamQuestion).toBeTruthy();
+      const item = [{ kind: "promise", text: `checking with the team: ${q}`, at: new Date().toISOString() }];
+      st(item);
+      const holding = stillCheckingLine(q, "he");
       h.responses.push({ toolCalls: [respond("h3", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h4", { reply: "בטח, ₪150 בלבד." })] });
-      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה מזינים את הקופון?" }, "autonomous");
+      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
+      expect(r2.reply).toBe(holding);
+      h.history = [{ direction: "INBOUND", body: q, metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("h5", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h6", { reply: "בטח, ₪150 בלבד." })] });
+      const r3 = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
+      expect(r3.reply ?? null).toBeNull();
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ a name question after a failed reply: the last shown product, never the holding line", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [{ productId: "9", title: "Cocoa 2" }], pending: [{ kind: "promise", text: "checking with the team: הגוון של קרם הלחות", at: new Date().toISOString() }], turnCount: 5 });
+    try {
+      h.responses.push({ toolCalls: [respond("n1", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("n2", { reply: "בטח, ₪150 בלבד." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך קוראים לו?" }, "autonomous");
+      expect(r.reply).toBe("זה Cocoa 2.");
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ holding mode: a thanks gets a short welcome once, then nothing; the holding line at most every third turn", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    const item = "חויבתי פעמיים ואין הזמנה";
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: `checking with the team: ${item}`, at: new Date().toISOString() }], turnCount: 6 });
+    const holding = stillCheckingLine(item, "he");
+    try {
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("t1", { reply: "בשמחה! הבדיקה עדיין אצל הצוות." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
+      expect(r.reply).toBe("בשמחה!");
+      h.history = [...h.history, { direction: "INBOUND", body: "תודה", metadata: null }, { direction: "OUTBOUND", body: "בשמחה!", senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("t2", { reply: "בשמחה!" })] });
+      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה רבה" }, "autonomous");
       expect(r2.reply ?? null).toBeNull();
-    });
+      // A status ask right after a holding line: not the line again.
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("t3", { reply: "החיוב עדיין בבדיקה." })] });
+      const r3 = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+      expect(r3.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ a failed payment method: the guesses are cut, the question goes to the team with the fixed line", async () => {
+    h.responses.push({ toolCalls: [respond("p1", { reply: "האם גם אחד מהם נכשל? ייתכן שהתשלום לא עבר בגלל תקלה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ניסיתי לשלם בביימי וזה נכשל" }, "autonomous");
+    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    expect(r.reply).not.toMatch(/ייתכן|נכשל\?/);
+    expect(r.trace.teamQuestion).toBeTruthy();
   });
 
   it("★ the rewrite respects the turn budget: none when the turn is already late", async () => {
@@ -1254,7 +1303,7 @@ describe("4511b79c rating: engine passes", () => {
     expect(sanitizeReply("אופס 😅 טעות שלנו")).toBe("אופס טעות שלנו");
     expect(sanitizeReply("תודה 🙏")).toBe("תודה 🙏");
   });
-  it("★ the engine's own team line once per conversation; the second time names what is checked", async () => {
+  it("★ a NEW request after an earlier team line is passed now, not \"still being checked\" (b8ec6dcf rating)", async () => {
     h.history = [
       { direction: "INBOUND", body: "האם יש הנחה לכמות?", metadata: null },
       { direction: "OUTBOUND", body: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", senderName: "AI Bot", metadata: null },
@@ -1263,10 +1312,23 @@ describe("4511b79c rating: engine passes", () => {
     // A call request: the engine adds its own team line, and one was already sent in this conversation.
     h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר שתתקשרו אליי לגבי משלוח לאילת?" }, "autonomous");
-    // Not the same team line again: "<a fixed noun> is still being checked", never the question's own text.
-    expect(r.reply ?? "").not.toMatch(/העברתי לצוות את הבקשה לשיחה/);
-    expect(r.reply ?? "").toMatch(/עדיין בבדיקה אצל הצוות/);
+    // A new request is passed to the team now and says so; "still being checked" is only for an open item.
+    expect(r.reply ?? "").toMatch(/העברתי לצוות את הבקשה לשיחה/);
+    expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה אצל הצוות/);
     expect(r.reply ?? "").not.toMatch(/"/);
+  });
+  it("★ the same team line again on a repeat: it names what is checked instead", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: הנחה לכמות", at: new Date().toISOString() }], turnCount: 4 });
+    try {
+      h.history = [
+        { direction: "INBOUND", body: "האם יש הנחה לכמות?", metadata: null },
+        { direction: "OUTBOUND", body: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", senderName: "AI Bot", metadata: null },
+      ];
+      h.responses.push({ toolCalls: [respond("rp1", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "הנחה לכמות" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אז יש הנחה לכמות?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/העברתי את השאלה לצוות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
   it("★ back on an open team subject: the reply says it is with the team", async () => {
     const { prisma } = await import("@chatcenter/shared");
@@ -1347,6 +1409,57 @@ describe("person_recent respects a hand-back to the AI", () => {
     expect(asked[0].where).toMatchObject({ tenantId: "t1", conversationId: "c1", toHandler: "ai_agent", at: { gt: since } });
     const none = { conversationHandover: { findFirst: async () => null } };
     expect(await handedBackSince("t1", "c1", since, [], null, none)).toBe(false);
+  });
+});
+
+describe("b8ec6dcf rating: engine passes", () => {
+  it("★ a name only from the contact's profile; never the channel's display name", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const conv = (prisma as any).conversation.findFirst;
+    const contact = (prisma as any).contact.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "WEBCHAT", customerExternalId: "v1", customerName: "Roberta" });
+    try {
+      h.responses.push({ toolCalls: [respond("nm1", { reply: "היי Roberta, במה אפשר לעזור?" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous");
+      expect(r.reply).not.toMatch(/Roberta/);
+      expect(JSON.stringify(h.calls.at(-1).messages)).not.toMatch(/Name: Roberta/);
+      (prisma as any).contact.findFirst = async () => ({ id: "k1", email: null, phone: null, displayName: "דנה כהן" });
+      h.responses.push({ toolCalls: [respond("nm2", { reply: "היי דנה, במה אפשר לעזור?" })] });
+      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous");
+      expect(r2.reply).toMatch(/היי דנה/);
+      expect(JSON.stringify(h.calls.at(-1).messages)).toMatch(/Name: דנה/);
+    } finally { (prisma as any).conversation.findFirst = conv; (prisma as any).contact.findFirst = contact; }
+  });
+
+  it("★ a write the customer did not ask for is refused before it runs, on any lane", async () => {
+    h.offerWrite = true;
+    h.responses.push(
+      { toolCalls: [tc("w1", "woocommerce.add_order_note", { order_id: "5", note: "x", customer_visible: true })] },
+      { toolCalls: [respond("w2", { reply: "בשמחה!" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה רבה!" }, "autonomous");
+    expect(h.dispatched.some((d: any) => d.name === "woocommerce.add_order_note")).toBe(false);
+    expect(JSON.stringify(r.trace.tools ?? [])).toMatch(/not_asked/);
+  });
+
+  it("★ holding mode: \"if I order again?\" gets the fixed advice", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const { HOLD_ADVICE_HE } = await import("../services/reply-engine/gates");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
+    try {
+      h.responses.push({ toolCalls: [respond("pa1", { reply: "לא אמורה להיות כפילות בהזמנה החדשה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אם אזמין שוב תהיה כפילות?" }, "autonomous");
+      expect(r.reply).toMatch(new RegExp(HOLD_ADVICE_HE.slice(0, 20)));
+      expect(r.reply).not.toMatch(/לא אמורה להיות כפילות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ the bare header with nothing under it is never sent alone", async () => {
+    // Nothing listed can follow it (no product ask, no search): the header alone would say nothing.
+    h.textChannel = true;
+    h.responses.push({ toolCalls: [respond("hh1", { reply: "הנה מה שיש לנו שמתאים." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה לגבי הגוון?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/^הנה מה שיש לנו שמתאים\.?$/);
   });
 });
 

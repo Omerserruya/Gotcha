@@ -2307,3 +2307,61 @@ describe("0bf4e95e rating fixes", () => {
     expect(autoLookups([{ kind: "gave_up_search" }] as any, "תיקים", ["woocommerce.list_products", "search_knowledge"], timeout).map((x) => x.function.name)).toEqual(["woocommerce.list_products"]);
   });
 });
+
+/** Rating on b8ec6dcf (2026-11-18): holding held; the fallbacks and the repeats did not. */
+describe("b8ec6dcf rating fixes", () => {
+  it("★ 'the photo came through' with no photo is cut", async () => {
+    const { claimsAttachment } = await import("../services/reply-engine/gates");
+    expect(claimsAttachment("התמונה התקבלה, תודה.", ["שלחתי"])).toHaveLength(1);
+    expect(claimsAttachment("הצילום התקבל אצלנו.", ["שלחתי"])).toHaveLength(1);
+    expect(claimsAttachment("קיבלנו תמונה.", ["שלחתי"])).toHaveLength(1);
+    expect(claimsAttachment("Your photo came through.", ["sent"])).toHaveLength(1);
+    expect(claimsAttachment("התמונה התקבלה, תודה.", ["[image]"])).toEqual([]);
+  });
+
+  it("★ holding mode: a what-should-I-do ask gets fixed advice, never the state", async () => {
+    const { holdReply, proceduralAsk, HOLD_ADVICE_HE } = await import("../services/reply-engine/gates");
+    expect(proceduralAsk("אם אזמין שוב תהיה כפילות?")).toBe(true);
+    expect(proceduralAsk("מה אני צריכה לעשות עכשיו?")).toBe(true);
+    expect(proceduralAsk("מה שעות הפעילות?")).toBe(false);
+    const out = holdReply("לא אמורה להיות כפילות בהזמנה החדשה.", "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.", { details: false, locale: "he", procedural: true });
+    expect(out).toMatch(new RegExp(HOLD_ADVICE_HE.slice(0, 20)));
+    expect(out).not.toMatch(/לא אמורה להיות כפילות/);
+  });
+
+  it("★ a customer's thanks or okay", async () => {
+    const { customerAck } = await import("../services/reply-engine/gates");
+    for (const t of ["תודה", "תודה רבה!", "אוקיי", "סבבה 👍", "thanks", "ok"]) expect(customerAck(t), t).toBe(true);
+    for (const t of ["תודה, ומה עם המשלוח?", "אוקיי אז מתי?"]) expect(customerAck(t), t).toBe(false);
+  });
+
+  it("★ a write runs only on an explicit ask; cards, booking and handoff keep their own flows", async () => {
+    const { refuseWrite } = await import("../services/reply-engine/gates");
+    expect(refuseWrite("woocommerce.add_order_note", "תודה רבה!")).toMatch(/^not_asked/);
+    expect(refuseWrite("woocommerce.add_order_note", "ההזמנה הגיעה")).toMatch(/^not_asked/);
+    expect(refuseWrite("woocommerce.add_order_note", "תוסיפו בבקשה הערה שזה מתנה")).toBeNull();
+    expect(refuseWrite("shopify.cancel_order", "אפשר לבטל את ההזמנה?")).toBeNull();
+    expect(refuseWrite("woocommerce.list_products", "תודה")).toBeNull();
+    expect(refuseWrite("send_product_card", "תודה")).toBeNull();
+    expect(refuseWrite("schedule_meeting", "ביום שלישי")).toBeNull();
+    expect(refuseWrite("close_conversation", "תודה")).toBeNull();
+    expect(refuseWrite("integration_create_lead", "שמי דנה")).toBeNull();
+    expect(refuseWrite("woocommerce.update_order", "תודה, הכל טוב")).toMatch(/^not_asked/);
+  });
+
+  it("★ a failed payment method is a support case", async () => {
+    const { paymentMethodFailure } = await import("../services/reply-engine/gates");
+    expect(paymentMethodFailure("ניסיתי לשלם בביימי וזה נכשל")).toBe(true);
+    expect(paymentMethodFailure("הכרטיס לא עובר")).toBe(true);
+    expect(paymentMethodFailure("my card was declined")).toBe(true);
+    expect(paymentMethodFailure("אפשר לשלם בביימי?")).toBe(false);
+  });
+
+  it("★ the name question and the hollow header", async () => {
+    const { nameAsk } = await import("../services/reply-engine/engine");
+    expect(nameAsk("איך קוראים לו?")).toBe(true);
+    expect(nameAsk("מה השם של הגוון?")).toBe(true);
+    expect(nameAsk("what's it called?")).toBe(true);
+    expect(nameAsk("איזה גוון מתאים לי?")).toBe(false);
+  });
+});

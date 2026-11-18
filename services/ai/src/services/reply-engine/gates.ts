@@ -945,7 +945,7 @@ export function notNarrowed(reply: string, incoming: string, titles: string[]): 
 }
 
 // "We got the photo" with no photo, video or file in the customer's last messages (prod replay 2026-11-17).
-const GOT_MEDIA = /(?<![\u0590-\u05FF])(?:קיבלנו|קיבלתי|ראינו|ראיתי|תודה\s+על)\s+(?:את\s+)?(?:ה)?(?:תמונה|תמונות|צילום|צילומים|סרטון|קובץ|מסמך)(?![\u0590-\u05FF])|\b(?:(?:we|i)(?:'ve| have)? (?:got|received|seen) (?:the|your) (?:photo|picture|image|video|file|document)s?|thanks for the (?:photo|picture|image|video|file)s?)\b/iu;
+const GOT_MEDIA = /(?<![\u0590-\u05FF])(?:קיבלנו|קיבלתי|ראינו|ראיתי|תודה\s+על)\s+(?:את\s+)?(?:ה)?(?:תמונה|תמונות|צילום|צילומים|סרטון|קובץ|מסמך)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ה)?(?:תמונה|תמונות|צילום|צילומים|סרטון|קובץ|מסמך)\s+(?:התקבל|התקבלה|התקבלו|הגיע|הגיעה|הגיעו)(?![\u0590-\u05FF])|\b(?:the |your )?(?:photo|picture|image|video|file|document)s? (?:came through|arrived|(?:was|were|has been|have been) received)\b|\b(?:(?:we|i)(?:'ve| have)? (?:got|received|seen) (?:the|your) (?:photo|picture|image|video|file|document)s?|thanks for the (?:photo|picture|image|video|file)s?)\b/iu;
 const MEDIA_SENT = /\[(?:image|photo|video|voice|audio|document|file|sticker|תמונה|סרטון|הודעה קולית|מסמך|קובץ)[^\]]*\]|(?:^|\s)(?:IMG|VID|DOC)[-_]\d/iu;
 /** Sentences claiming a photo or file came when none of the customer's last three messages carried one. */
 export function claimsAttachment(reply: string, recentInbound: string[]): string[] {
@@ -1617,10 +1617,10 @@ export function bringsDetails(incoming: string, attachment = false): boolean {
  * acknowledgement (when the customer brought details) and the holding line take their place. Sentences on
  * anything else stay.
  */
-export function holdReply(reply: string, holdingLine: string, opts: { details: boolean; locale: "he" | "en" }): string {
+export function holdReply(reply: string, holdingLine: string, opts: { details: boolean; locale: "he" | "en"; procedural?: boolean }): string {
   const parts = (String(reply ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []);
   const kept = parts.filter((x) => x.trim() && !HOLD_SUBJECT.test(x) && !TEAM_PASS_ANY.test(x) && !TEAM_LINE.test(x)).map((x) => x.trim());
-  const lines = [opts.details ? (opts.locale === "en" ? HOLD_ACK_EN : HOLD_ACK_HE) : null, holdingLine, ...kept].filter(Boolean) as string[];
+  const lines = [opts.details ? (opts.locale === "en" ? HOLD_ACK_EN : HOLD_ACK_HE) : null, opts.procedural ? (opts.locale === "en" ? HOLD_ADVICE_EN : HOLD_ADVICE_HE) : null, holdingLine, ...kept].filter(Boolean) as string[];
   return lines.join(" ").replace(/\s{2,}/g, " ").trim();
 }
 
@@ -1647,4 +1647,46 @@ export function dropUnaskedName(reply: string, allowed: Array<string | null | un
   const ok = allowed.filter(Boolean).map((a) => String(a).toLowerCase());
   if (ok.includes(name.toLowerCase())) return reply;
   return String(reply).replace(ADDRESS, (_x, lead) => lead).trim();
+}
+
+
+/** The customer only acknowledges ("תודה", "אוקיי", "סבבה"): nothing to answer (prod rating 2026-11-18). */
+const CUSTOMER_ACK = /^[\s"'“”]*(?:תודה(?:\s+רבה)?(?:\s+לך|\s+לכם)?|אוקיי?|אוקי|אוקיי?\s+תודה|סבבה|מעולה|בסדר|יופי|נהדר|ok(?:ay)?|thanks?(?:\s+you)?|thank you|great|cool|perfect)[\s!.,🙏👍❤️😊]*$/iu;
+export const customerAck = (incoming: string) => CUSTOMER_ACK.test(String(incoming ?? "").trim());
+
+/**
+ * A "what should I do now" ask on a held subject (prod rating 2026-11-18: "if I re-order, will there be a
+ * duplicate?"). Answered with fixed procedural advice, never with the payment's or order's state.
+ */
+const PROCEDURAL_ASK = /(?<![֐-׿])(?:(?:אם|אז)\s+(?:אזמין|נזמין|אני\s+אזמין)|להזמין\s+(?:שוב|מחדש|עוד\s+פעם)|לבצע\s+(?:שוב|מחדש)|לשלם\s+(?:שוב|מחדש)|מה\s+(?:אני\s+)?(?:צריך|צריכה|צריכים)\s+לעשות|מה\s+לעשות|מה\s+עושים|לחכות|כדאי\s+ל)|\b(?:(?:should|can) i (?:re-?order|order again|pay again|wait)|what (?:should|do) i do|order again|re-?order)\b/iu;
+export const proceduralAsk = (incoming: string) => PROCEDURAL_ASK.test(String(incoming ?? ""));
+export const HOLD_ADVICE_HE = "כדאי לא להזמין או לשלם שוב, ולשמור את אישור התשלום, עד שהצוות יחזור אלייך כאן.";
+export const HOLD_ADVICE_EN = "It is best not to order or pay again, and to keep the payment confirmation, until the team gets back to you here.";
+export const THANKS_REPLY_HE = "בשמחה!";
+export const THANKS_REPLY_EN = "You're welcome!";
+
+/**
+ * A write tool (an order note, a change, a cancellation, a message) runs only on an explicit ask (prod
+ * rating 2026-11-18: an add_order_note on a cancelled order on a closing turn, unasked). Never on an
+ * acknowledgement or a closing turn, and only when the message asks for something.
+ */
+// Record writes only: cards, booking and the team handoff have their own flows and checks.
+const WRITE_TOOL = /(?:^|\.)(?:add|create|update|edit|cancel|delete|remove|refund|set|apply|change|mark|close)_[a-z_]+$/i;
+const OWN_FLOW = /(?:^|\.)(?:send_product_card|escalate_to_human|schedule_meeting|check_availability|close_conversation|schedule_followup|link_identifier|integration_create_lead|create_lead|create_contact)$/i;
+const REQUEST_WORDS = /(?<![֐-׿])(?:תוסיפו|תוסיפי|תוסיף|להוסיף|תשנו|תשני|תשנה|לשנות|תבטלו|תבטלי|תבטל|לבטל|תעדכנו|תעדכני|לעדכן|תרשמו|תרשמי|לרשום|תשלחו|תשלחי|לשלוח|תקבעו|לקבוע|אפשר|אפשרי|רוצה|רוצים|מבקש|מבקשת|בבקשה|תעשו|תחזירו|להחזיר|לזכות)(?![֐-׿])|\b(?:please|can you|could you|i want|i'd like|cancel|change|add|update|book|schedule|refund)\b/iu;
+export function refuseWrite(toolName: string, incoming: string): string | null {
+  if (!WRITE_TOOL.test(String(toolName ?? "")) || OWN_FLOW.test(String(toolName ?? ""))) return null;
+  const t = String(incoming ?? "");
+  if (customerAck(t)) return "not_asked: the customer only acknowledged; nothing is written on this turn";
+  if (!REQUEST_WORDS.test(t) && !/[?؟]/.test(t)) return "not_asked: the customer did not ask for this change; do not write anything they did not ask for";
+  return null;
+}
+
+/** A payment method that failed (prod rating 2026-11-18, BuyMe): a support case for the team, never a guess. */
+const PAY_METHOD = /(?<![֐-׿])[בושה]?(?:ביימי|באיימי|ביט|פייבוקס|פייפאל|אשראי|כרטיס|תשלום|התשלום|שובר|גיפט\s*קארד|כרטיס\s+מתנה|קופון)(?![֐-׿])|\b(?:buyme|bit|paybox|paypal|credit card|card|payment|voucher|gift ?card|coupon)\b/iu;
+const FAILED = /(?<![֐-׿])(?:נכשל|נכשלה|נכשלו|לא\s+עבר|לא\s+עברה|לא\s+עובר|לא\s+עובד|לא\s+עובדת|לא\s+הצליח|לא\s+הצליחה|לא\s+מצליח|לא\s+מצליחה|נדחה|נדחתה|שגיאה|תקוע|נתקע)(?![֐-׿])|\b(?:failed|declined|rejected|doesn'?t work|isn'?t working|not working|error|won'?t go through|didn'?t go through)\b/iu;
+export const paymentMethodFailure = (incoming: string) => { const t = String(incoming ?? ""); return PAY_METHOD.test(t) && FAILED.test(t); };
+/** The reply's sentences about the failed payment (its method, the failure, a guess at why), cut whole. */
+export function cutPaymentFailure(reply: string): string {
+  return ((String(reply ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []).filter((x) => x.trim() && !PAY_METHOD.test(x) && !FAILED.test(x) && !aboutHeld(x)).map((x) => x.trim())).join(" ").trim();
 }
