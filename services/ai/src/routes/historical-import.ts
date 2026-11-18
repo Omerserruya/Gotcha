@@ -243,12 +243,22 @@ router.get("/:id/topics", async (req: Request, res: Response) => {
     });
     const detail = (event?.detail ?? {}) as any;
     const all: any[] = Array.isArray(detail.topics) ? detail.topics : [];
-    const pending = new Set((await prisma.knowledgeCandidate.findMany({
+    // Each topic carries its PENDING candidates inline, in the row shape /:id/candidates returns (no evidence:
+    // /candidates/:id/evidence on demand), so a review of 700 needs one read and no 200-row cap.
+    const rows = await prisma.knowledgeCandidate.findMany({
       where: { tenantId: req.tenantId!, importId: row.id, status: "PENDING", id: { in: all.flatMap((t) => t.candidateIds ?? []) } },
-      select: { id: true },
-    })).map((c) => c.id));
+      select: {
+        id: true, topic: true, category: true, question: true, answer: true, status: true, conflict: true, confidence: true,
+        requiresLiveLookup: true, reasoning: true, curationVerdict: true, curationNote: true, occurrenceCount: true,
+        customerCount: true, firstSeenAt: true, lastSeenAt: true, variants: true, duplicateOfDocumentId: true,
+      },
+    });
+    const byId = new Map(rows.map((c) => [c.id, c]));
     const topics = all
-      .map((t) => ({ ...t, candidateIds: (t.candidateIds ?? []).filter((id: string) => pending.has(id)) }))
+      .map((t) => {
+        const candidates = (t.candidateIds ?? []).map((id: string) => byId.get(id)).filter(Boolean);
+        return { ...t, candidateIds: candidates.map((c: any) => c.id), candidates };
+      })
       .filter((t) => t.candidateIds.length > 0);
     res.json({
       topics,

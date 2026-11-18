@@ -73,7 +73,9 @@ export interface TopicGroup {
   occurrences: number;
   customers: number;
   lastSeenAt: string | null;
+  /** A candidate in it whose conflict the newest answer does not settle (per question, not per topic). */
   conflict: boolean;
+  unresolvedConflicts: number;
   docConflict: boolean;
   quotes: Array<{ question: string; answer: string; occurredAt: string | null }>;
   autoApprovable: number;
@@ -92,16 +94,34 @@ export function autoApprovable(c: {
   humanSourced: boolean;
   occurrenceCount: number;
   conflict: boolean;
+  variants?: unknown;
   curationVerdict: string | null;
   curationNote: string | null;
   requiresLiveLookup: boolean;
 }): boolean {
   return c.humanSourced
     && c.occurrenceCount >= 3
-    && !c.conflict
+    && !unresolvedConflict(c)
     && !String(c.curationNote ?? "").startsWith(DOC_CONFLICT)
-    && c.curationVerdict === "kept"
+    && (c.curationVerdict === "kept" || c.curationVerdict === "rewritten")
     && !c.requiresLiveLookup;
+}
+
+/**
+ * A conflict the newest person answer does NOT settle (dry run 2026-11-18: 45 of 103 topics "conflicted", every
+ * big one). Settled when the newest answer first appeared after every other answer was last given: the business
+ * switched (Nesher to Tivon). Unsettled when the answers alternate, share a last date, or are undated. Judged per
+ * candidate (one question), never per topic: a topic holds different questions.
+ */
+export function unresolvedConflict(c: { conflict: boolean; variants?: unknown }): boolean {
+  if (!c.conflict) return false;
+  const vs = (Array.isArray(c.variants) ? c.variants : []).filter((v: any) => v && typeof v === "object") as Array<{ firstSeenAt?: string; lastSeenAt?: string }>;
+  // Flagged without two variants to compare: nothing shows it settled.
+  if (vs.length < 2) return true;
+  const newest = [...vs].sort((a, b) => String(b.lastSeenAt ?? "").localeCompare(String(a.lastSeenAt ?? "")))[0];
+  const start = String(newest.firstSeenAt ?? newest.lastSeenAt ?? "");
+  if (!start) return true;
+  return vs.some((v) => v !== newest && (!v.lastSeenAt || String(v.lastSeenAt) >= start));
 }
 
 /** The stems a question and a passage share: enough to send the passage along, never a verdict. */
@@ -121,7 +141,7 @@ export function relevantPassages(question: string, answer: string, docs: Array<{
 
 export interface ReviewCandidate {
   id: string; topic: string; category: string | null; question: string; answer: string;
-  occurrenceCount: number; customerCount: number; lastSeenAt: Date | null; conflict: boolean;
+  occurrenceCount: number; customerCount: number; lastSeenAt: Date | null; conflict: boolean; variants?: unknown;
   curationVerdict: string | null; curationNote: string | null; requiresLiveLookup: boolean;
 }
 export interface ReviewEvidence { candidateId: string; conversationId: string | null; questionText: string; answerText: string; occurredAt: Date | null }
@@ -237,7 +257,8 @@ export async function buildReview(input: {
       occurrences: members.reduce((n, c) => n + c.occurrenceCount, 0),
       customers: members.reduce((n, c) => n + c.customerCount, 0),
       lastSeenAt: last ? new Date(last).toISOString() : null,
-      conflict: members.some((c) => c.conflict),
+      conflict: members.some((c) => unresolvedConflict(c)),
+      unresolvedConflicts: members.filter((c) => unresolvedConflict(c)).length,
       docConflict: members.some((c) => String(c.curationNote ?? "").startsWith(DOC_CONFLICT)),
       quotes,
       autoApprovable: members.filter((c) => autoApprovable({ ...c, humanSourced: humanSourced.has(c.id) })).length,
@@ -282,7 +303,7 @@ export async function runKnowledgeReviewStage(args: { tenantId: string; importId
     orderBy: [{ category: "asc" }, { topic: "asc" }],
     select: {
       id: true, topic: true, category: true, question: true, answer: true, occurrenceCount: true, customerCount: true,
-      lastSeenAt: true, conflict: true, curationVerdict: true, curationNote: true, requiresLiveLookup: true,
+      lastSeenAt: true, conflict: true, variants: true, curationVerdict: true, curationNote: true, requiresLiveLookup: true,
     },
   });
   if (candidates.length === 0) {
