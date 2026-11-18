@@ -2365,3 +2365,37 @@ describe("b8ec6dcf rating fixes", () => {
     expect(nameAsk("איזה גוון מתאים לי?")).toBe(false);
   });
 });
+
+/** Rating on 7af7c6d7 (2026-11-18): the holding behaviours did not fire in the real thread. */
+describe("7af7c6d7 rating fixes", () => {
+  it("★ the real procedural ask (3rd person, a typo, 'שלא יהיה כפילות')", async () => {
+    const { proceduralAsk } = await import("../services/reply-engine/gates");
+    expect(proceduralAsk("אם הזמין שנית שלא יהיה כפילות")).toBe(true);
+    expect(proceduralAsk("אני יכולה לשלם שוב?")).toBe(true);
+    expect(proceduralAsk("will it double if I order again?")).toBe(true);
+    expect(proceduralAsk("שוב תודה")).toBe(false);
+    expect(proceduralAsk("מה עם ההזמנה?")).toBe(false);
+  });
+  it("★ a thanks with filler is a thanks", async () => {
+    const { customerAck } = await import("../services/reply-engine/gates");
+    for (const t of ["שיהיה תודה", "יאללה תודה", "אז אוקיי", "ותודה רבה", "שתודה"]) expect(customerAck(t), t).toBe(true);
+    for (const t of ["שיהיה מהר בבקשה", "תודה אבל מתי זה יגיע?"]) expect(customerAck(t), t).toBe(false);
+  });
+  it("★ 'לכאורה' on a payment is cut, and never in holding mode", async () => {
+    const { ungroundedPayment, holdReply } = await import("../services/reply-engine/gates");
+    expect(ungroundedPayment("החיוב שאושר לכאורה יבוטל.", [])).toHaveLength(1);
+    expect(holdReply("לכאורה זה בסדר.", "", { details: false, locale: "he" })).toBe("");
+  });
+  it("★ a pick by its kind with no name is unnamed", async () => {
+    const { unnamedRecommendation } = await import("../services/reply-engine/gates");
+    expect(unnamedRecommendation("משטח הזזה עם גלגלים הכי מתאים לך.", ["סמובי גפן 40*50", "סמובי אלכסה"])).toBe(true);
+    expect(unnamedRecommendation("סמובי גפן הכי מתאים לך.", ["סמובי גפן 40*50", "סמובי אלכסה"])).toBe(false);
+    expect(unnamedRecommendation("משטח הזזה מתאים לך.", [])).toBe(false);
+    // Asking whether it fits is not a pick.
+    expect(unnamedRecommendation("יש תיק בד קנבס ב-₪79, מתאים לך?", ["Canvas Tote"])).toBe(false);
+  });
+  it("★ a link in an earlier card or button counts as said", async () => {
+    const { contradictsEarlier } = await import("../services/reply-engine/gates");
+    expect(contradictsEarlier("אין לי כרגע קישור לסרטון.", ["הנה", ' {"buttons":[{"url":"https://youtu.be/x"}]}'])).toHaveLength(1);
+  });
+});

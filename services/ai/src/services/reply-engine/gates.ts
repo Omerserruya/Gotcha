@@ -760,7 +760,7 @@ const PAYMENT_EVIDENCE = /refund|financial_status|date_paid|payment_status|trans
 /** Payment or charge sentences that no tool result this turn backs. */
 // Speculation about what happened to a payment ("maybe the approval did not become a charge"): never a
 // fact, whatever a tool returned (prod replay 2026-11-17, Smoovee severe).
-const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])(?:לא\s+)?(?:אמור|אמורה|אמורים)\s+(?:לא\s+)?להיות\s+(?:(?:ה)?כפילות|(?:ה)?חיוב(?:\s+כפול)?|(?:ה)?תשלום\s+כפול)|\b(?:there\s+)?(?:should(?:n'?t| not)?|is(?:n'?t)? (?:supposed|meant) to)\s+(?:not\s+)?be\s+(?:a\s+)?(?:double|duplicate|second)\s+(?:charge|payment)|(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
+const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])[^.!?\n]{0,60}(?:חיוב|חויב|תשלום|אישור|עסקה|הזמנה)[^.!?\n]{0,40}(?:לכאורה|כביכול)|(?<![\u0590-\u05FF])(?:לכאורה|כביכול)[^.!?\n]{0,60}(?:חיוב|חויב|תשלום|אישור|עסקה|הזמנה)|(?<![\u0590-\u05FF])(?:לא\s+)?(?:אמור|אמורה|אמורים)\s+(?:לא\s+)?להיות\s+(?:(?:ה)?כפילות|(?:ה)?חיוב(?:\s+כפול)?|(?:ה)?תשלום\s+כפול)|\b(?:there\s+)?(?:should(?:n'?t| not)?|is(?:n'?t)? (?:supposed|meant) to)\s+(?:not\s+)?be\s+(?:a\s+)?(?:double|duplicate|second)\s+(?:charge|payment)|(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
 export function ungroundedPayment(reply: string, tools: ToolRunRecord[]): string[] {
   const sentences = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
   const speculation = sentences.filter((x) => PAYMENT_SPECULATION.test(x)).map((x) => x.trim().slice(0, 120));
@@ -978,10 +978,23 @@ export function asksKnown(reply: string, incoming: string): string[] {
 // "One product that fits..." with no product named (live 2026-11-17, NE'A): a recommendation names it.
 const UNNAMED_PICK = /(?<![֐-׿])(?:מוצר|פריט|דגם)\s+(?:אחד\s+)?ש?(?:מתאים|יתאים|מתאימה|עונה)|\b(?:one|a) (?:product|item|option|model) that (?:fits|suits|works|matches)\b/iu;
 /** The reply recommends a product by description, naming none of this turn's products. */
+// A pick by its kind with no name (rating 7af7c6d7, Smoovee: "משטח הזזה עם גלגלים" is what fits, no title).
+const PICK_WORDS = /(?<![\u0590-\u05FF])(?:הכי\s+מתאים|הכי\s+מתאימה|מתאים|מתאימה|יתאים|תתאים|מומלץ|מומלצת|ממליץ|ממליצה|ממליצים|אמליץ|הייתי\s+(?:ממליץ|ממליצה|הולך|הולכת))(?![\u0590-\u05FF])|\b(?:fits|suits|recommend|best (?:option|choice) (?:is|would be)|i'?d go with)\b/iu;
 export function unnamedRecommendation(reply: string, titles: string[]): boolean {
-  if (!UNNAMED_PICK.test(reply ?? "")) return false;
   const t = String(reply ?? "").toLowerCase();
-  return !titles.some((x) => x && t.includes(String(x).toLowerCase()));
+  const named = titles.some((x) => {
+    const low = String(x ?? "").toLowerCase().trim();
+    if (!low) return false;
+    if (t.includes(low)) return true;
+    const head = low.split(/\s+/).slice(0, 2).join(" ");
+    return head.split(" ").length === 2 && t.includes(head);
+  });
+  if (named) return false;
+  if (UNNAMED_PICK.test(reply ?? "")) return true;
+  // There are products this turn, the reply recommends one, and it names none of them.
+  // A statement that picks ("X is the one that fits"), not a question asking whether it fits ("מתאים לך?").
+  const statements = (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => !/[?؟]\s*$/.test(x));
+  return titles.filter(Boolean).length > 0 && statements.some((x) => PICK_WORDS.test(x));
 }
 
 /**
@@ -1034,6 +1047,8 @@ export interface Gate3Input {
   teamAlreadyOpen?: boolean;
   /** This turn's team question is a NEW issue (not a repeat of the open one). */
   newTeamQuestion?: boolean;
+  /** Everything the business sent recently (cards, links, buttons included), for "we never said that" checks. */
+  earlierOutboundText?: string;
   /** The business's own words this turn: the knowledge shown and search_knowledge results. */
   knowledge?: string;
   /** The employee's own earlier replies in this conversation, oldest first (never a person's). */
@@ -1091,7 +1106,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
   absent.push(...ungroundedOrderAbsence(reply, i.tools).filter((x) => !absent.includes(x)));
-  absent.push(...contradictsEarlier(reply, i.previousBotReplies ?? []).filter((x) => !absent.includes(x)));
+  absent.push(...contradictsEarlier(reply, [...(i.previousBotReplies ?? []), i.earlierOutboundText ?? ""]).filter((x) => !absent.includes(x)));
   // "Not on file" about something the knowledge does mention (prod replay 12: pickup "בתיאום מראש").
   absent.push(...infoDeniedButKnown(reply, i.knowledge ?? ""));
   // "The address is not in my details" while the prompt gives one (prod replay 10, Tehila).
@@ -1619,7 +1634,8 @@ export function bringsDetails(incoming: string, attachment = false): boolean {
  */
 export function holdReply(reply: string, holdingLine: string, opts: { details: boolean; locale: "he" | "en"; procedural?: boolean }): string {
   const parts = (String(reply ?? "").match(/(?:[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []);
-  const kept = parts.filter((x) => x.trim() && !HOLD_SUBJECT.test(x) && !TEAM_PASS_ANY.test(x) && !TEAM_LINE.test(x)).map((x) => x.trim());
+  // A hedge hints at findings ("לכאורה"): never in holding mode (rating 7af7c6d7).
+  const kept = parts.filter((x) => x.trim() && !HOLD_SUBJECT.test(x) && !TEAM_PASS_ANY.test(x) && !TEAM_LINE.test(x) && !/(?<![\u0590-\u05FF])(?:לכאורה|כביכול)(?![\u0590-\u05FF])|\bsupposedly\b|\bapparently\b/iu.test(x)).map((x) => x.trim());
   const lines = [opts.details ? (opts.locale === "en" ? HOLD_ACK_EN : HOLD_ACK_HE) : null, opts.procedural ? (opts.locale === "en" ? HOLD_ADVICE_EN : HOLD_ADVICE_HE) : null, holdingLine, ...kept].filter(Boolean) as string[];
   return lines.join(" ").replace(/\s{2,}/g, " ").trim();
 }
@@ -1652,14 +1668,25 @@ export function dropUnaskedName(reply: string, allowed: Array<string | null | un
 
 /** The customer only acknowledges ("תודה", "אוקיי", "סבבה"): nothing to answer (prod rating 2026-11-18). */
 const CUSTOMER_ACK = /^[\s"'“”]*(?:תודה(?:\s+רבה)?(?:\s+לך|\s+לכם)?|אוקיי?|אוקי|אוקיי?\s+תודה|סבבה|מעולה|בסדר|יופי|נהדר|ok(?:ay)?|thanks?(?:\s+you)?|thank you|great|cool|perfect)[\s!.,🙏👍❤️😊]*$/iu;
-export const customerAck = (incoming: string) => CUSTOMER_ACK.test(String(incoming ?? "").trim());
+// Filler around a thanks ("שיהיה תודה", "יאללה תודה", "אז אוקיי"), and a ש/ו prefix on the thanks itself.
+const ACK_FILLER = new Set(["שיהיה", "יאללה", "אז", "טוב", "וואו", "ממש", "אחלה", "סבבה", "עוד", "שוב", "יופי", "בסדר", "so", "well", "ok", "okay", "many", "again"]);
+export const customerAck = (incoming: string) => {
+  const t = String(incoming ?? "").trim();
+  if (CUSTOMER_ACK.test(t)) return true;
+  const words = t.replace(/[!.,?🙏👍❤️😊]+/gu, " ").split(/\s+/).filter(Boolean).map((w) => w.replace(/^[וש](?=תודה|אוקי)/u, ""));
+  const core = words.filter((w) => !ACK_FILLER.has(w.toLowerCase()));
+  return words.length <= 5 && core.length >= 1 && CUSTOMER_ACK.test(core.join(" ")) || (words.length <= 5 && core.length === 0 && words.length > 0);
+};
 
 /**
  * A "what should I do now" ask on a held subject (prod rating 2026-11-18: "if I re-order, will there be a
  * duplicate?"). Answered with fixed procedural advice, never with the payment's or order's state.
  */
 const PROCEDURAL_ASK = /(?<![֐-׿])(?:(?:אם|אז)\s+(?:אזמין|נזמין|אני\s+אזמין)|להזמין\s+(?:שוב|מחדש|עוד\s+פעם)|לבצע\s+(?:שוב|מחדש)|לשלם\s+(?:שוב|מחדש)|מה\s+(?:אני\s+)?(?:צריך|צריכה|צריכים)\s+לעשות|מה\s+לעשות|מה\s+עושים|לחכות|כדאי\s+ל)|\b(?:(?:should|can) i (?:re-?order|order again|pay again|wait)|what (?:should|do) i do|order again|re-?order)\b/iu;
-export const proceduralAsk = (incoming: string) => PROCEDURAL_ASK.test(String(incoming ?? ""));
+// Any wording of "will it double if I order or pay again" (rating 7af7c6d7: "אם הזמין שנית שלא יהיה כפילות").
+const AGAIN_WORDS = /(?<![֐-׿])[וש]?(?:כפילות|כפול|כפולה|שוב|שנית|מחדש|עוד\s+פעם|פעם\s+נוספת)(?![֐-׿])|\b(?:again|twice|double|duplicate)\b/iu;
+const ORDER_PAY_WORDS = /(?<![֐-׿])[והשבל]?(?:הזמנה|להזמין|הזמין|אזמין|נזמין|יזמין|תזמין|הזמנתי|לשלם|לשלם|אשלם|נשלם|תשלום|שילמתי|לקנות|אקנה)(?![֐-׿])|\b(?:order|re-?order|pay|payment|buy)\b/iu;
+export const proceduralAsk = (incoming: string) => { const t = String(incoming ?? ""); return PROCEDURAL_ASK.test(t) || (AGAIN_WORDS.test(t) && ORDER_PAY_WORDS.test(t)); };
 export const HOLD_ADVICE_HE = "כדאי לא להזמין או לשלם שוב, ולשמור את אישור התשלום, עד שהצוות יחזור אלייך כאן.";
 export const HOLD_ADVICE_EN = "It is best not to order or pay again, and to keep the payment confirmation, until the team gets back to you here.";
 export const THANKS_REPLY_HE = "בשמחה!";

@@ -1463,6 +1463,72 @@ describe("b8ec6dcf rating: engine passes", () => {
   });
 });
 
+describe("7af7c6d7 rating: engine passes", () => {
+  const held = "checking with the team: חויבתי פעמיים ואין הזמנה";
+  const withHeld = async (facts: any, fn: () => Promise<void>, extraPending = "") => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: held + extraPending, at: new Date().toISOString() }], turnCount: 10 });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  it("★ the exact procedural ask gets the advice", async () => {
+    const { HOLD_ADVICE_HE } = await import("../services/reply-engine/gates");
+    await withHeld({}, async () => {
+      h.responses.push({ toolCalls: [respond("q1", { reply: "לא אמורה להיות כפילות." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אם הזמין שנית שלא יהיה כפילות" }, "autonomous");
+      expect(r.reply).toMatch(new RegExp(HOLD_ADVICE_HE.slice(0, 20)));
+    });
+  });
+  it("★ the holding line at most every third turn, counted in the state (a replay's history is another engine's)", async () => {
+    await withHeld({ _holdLineTurn: "9" }, async () => {
+      h.responses.push({ toolCalls: [respond("q2", { reply: "החיוב עדיין בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
+    });
+    await withHeld({ _holdLineTurn: "6" }, async () => {
+      h.responses.push({ toolCalls: [respond("q3", { reply: "החיוב עדיין בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      const up = h.upserts[h.upserts.length - 1];
+      expect((up?.create ?? up?.update)?.facts?._holdLineTurn).toBe("10");
+    });
+  });
+  it("★ 'I've added it to the check' only when something new was added", async () => {
+    const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
+    await withHeld({}, async () => {
+      h.responses.push({ toolCalls: [respond("q4", { reply: "קיבלתי." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כבר שלחתי לכם 4155" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(new RegExp(HOLD_ACK_HE.slice(0, 12)));
+    }, " (customer gave: 4155)");
+  });
+  it("★ the thanks once, counted in the state too", async () => {
+    await withHeld({ _thanksTurn: "9" }, async () => {
+      h.responses.push({ toolCalls: [respond("q6", { reply: "בשמחה!" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
+      expect(r.reply ?? null).toBeNull();
+    });
+  });
+  it("★ a link sent earlier in a card's metadata: never 'there is no link'", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "יש סרטון הדרכה?", metadata: null },
+      { direction: "OUTBOUND", body: "הנה הסרטון", senderName: "AI Bot", messageType: "interactive", metadata: { buttons: [{ url: "https://youtu.be/abc" }] } },
+      { direction: "INBOUND", body: "איפה הסרטון?", metadata: null },
+    ];
+    h.responses.push(
+      { toolCalls: [respond("lk1", { reply: "אין לי כרגע קישור לסרטון." })] },
+      { toolCalls: [respond("lk2", { reply: "אין לי כרגע קישור לסרטון." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/אין לי כרגע קישור/);
+  });
+  it("★ 'שיהיה תודה' is a thanks: no status line", async () => {
+    await withHeld({}, async () => {
+      h.responses.push({ toolCalls: [respond("q5", { reply: "בשמחה! החיוב עדיין בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "שיהיה תודה" }, "autonomous");
+      expect(r.reply).toBe("בשמחה!");
+    });
+  });
+});
+
 describe("39b65d68 regression: engine passes", () => {
   it("★ a raw handle never reaches the greeting, and the model sees no name", async () => {
     const { prisma } = await import("@chatcenter/shared");

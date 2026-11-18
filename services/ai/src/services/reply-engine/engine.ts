@@ -472,6 +472,9 @@ export function assembleOnce(prose: string, list: string | null, titles: string[
 }
 
 /** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */
+// The turns the holding line and the thanks went out on (holding mode's "not every turn").
+const HOLD_LINE_FACT = "_holdLineTurn";
+const THANKS_FACT = "_thanksTurn";
 // The part every holding line shares, whatever its noun (stillCheckingLine).
 const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "still being checked by the team" } as const;
 const HOLLOW_HEADER = /^(?:הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
@@ -1093,7 +1096,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const previousBotReplies = history
     .filter((m: any) => m.direction === "OUTBOUND" && !isPersonOutbound(m) && String(m.body ?? "").trim() && !/product|system/.test(String(m.messageType ?? "")) && !["interim_ack", "holding"].includes((m.metadata as any)?.kind))
     .map((m: any) => String(m.body)).slice(-6);
+  // Everything sent recently, cards and links included, for "we never said that" (rating 7af7c6d7, NE'A: a
+  // YouTube link two turns back, then "there is no link").
+  const earlierOutboundText = history.filter((m: any) => m.direction === "OUTBOUND").slice(-12)
+    .map((m: any) => `${String(m.body ?? "")} ${m.metadata ? JSON.stringify(m.metadata).slice(0, 2000) : ""}`).join("\n");
   const g3Input = (o: ModelTurnOutput) => ({
+    earlierOutboundText,
     reply: resolveKeysInText(o.reply, candidates),
     claims: o.claims,
     cards: o.cards ?? [],
@@ -1361,6 +1369,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // and a character from another alphabet (prod replay 5: "כשמ折לים").
   // A turn on a held subject (holding mode): no new team item may be opened for it.
   let heldTurn = false;
+  const holdFacts: Record<string, string> = {};
   let heldMerged = false;
   if (output?.reply) {
     const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
@@ -1374,7 +1383,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (held) {
       const incomingNow = String(opts.incomingMessage ?? "");
       const lastInMsg: any = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
-      const details = bringsDetails(incomingNow, /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? "")));
+      const attachmentNow = /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? ""));
+      const details = bringsDetails(incomingNow, attachmentNow);
       // A nudge: a short message that asks nothing of its own ("נו?" asks, "מתי אתם פתוחים?" is a question).
       const nudge = incomingNow.trim().split(/\s+/).length <= 3 && (!asksSomething(incomingNow) || /^\s*(?:נו|nu|\?+|so|any news|יש חדש|מה קורה)\s*\??\s*$/iu.test(incomingNow));
       const onSubject = details || aboutHeld(incomingNow) || statusAsk(incomingNow) || nudge;
@@ -1383,16 +1393,26 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
         const holdLine = stillCheckingLine(held, holdLoc);
         // At most every third turn (prod rating 2026-11-18: eight times in a row, "תודה" included).
+        // Counted in the conversation's state as well as the visible history: a replay rebuilds each turn on the
+        // real history (another engine's replies), so the history alone never saw the last line (rating 7af7c6d7:
+        // the line in 7 of 8 turns).
         const lastTwo = [...history].reverse().filter((m: any) => m?.direction === "OUTBOUND").slice(0, 2).map((m: any) => String(m.body ?? ""));
-        const recentlyHeld = lastTwo.some((b) => b.includes(holdLine) || b.includes(HOLD_LINE_CORE[holdLoc]));
+        const turnNo = Number(state.turnCount ?? 0);
+        const sinceLine = turnNo - Number(state.facts?.[HOLD_LINE_FACT] ?? -99);
+        const recentlyHeld = sinceLine < 3 || lastTwo.some((b) => b.includes(HOLD_LINE_CORE[holdLoc]));
         const thanks = holdLoc === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE;
+        // "I've added it to the check" only when something was added this turn (rating 7af7c6d7).
+        const appended = details && (attachmentNow || !!withNewDetails(state.pending, held, incomingNow));
         if (customerAck(incomingNow) && !details) {
           // A thanks or an okay: a short "you're welcome" once, then nothing.
-          text = lastTwo[0]?.trim() === thanks ? "" : thanks;
+          const sinceThanks = turnNo - Number(state.facts?.[THANKS_FACT] ?? -99);
+          text = sinceThanks < 2 || lastTwo[0]?.trim() === thanks ? "" : thanks;
+          if (text) holdFacts[THANKS_FACT] = String(turnNo);
         } else {
           text = onSubject
-            ? holdReply(text, recentlyHeld ? "" : holdLine, { details, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
+            ? holdReply(text, recentlyHeld ? "" : holdLine, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
             : (holdReply(text, "", { details: false, locale: holdLoc }) || (recentlyHeld ? "" : holdLine));
+          if (text.includes(HOLD_LINE_CORE[holdLoc])) holdFacts[HOLD_LINE_FACT] = String(turnNo);
         }
         (trace as any).holding = { details };
         // No new team item on the held subject: the open one holds it, and the details go there
@@ -1603,7 +1623,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     offered,
     activeSkill: turnTools.openedSkill ?? undefined,
     approvals: [...turnTools.approvals.map((a) => ({ kind: "approval" as const, text: `waiting for approval: ${a.tool}`, tool: a.tool, at: now })), ...teamPromise],
-    engineFacts: { ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
+    engineFacts: { ...holdFacts, ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
