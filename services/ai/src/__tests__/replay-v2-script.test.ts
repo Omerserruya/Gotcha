@@ -29,6 +29,18 @@ describe("replay-v2 plan", () => {
     expect(d.calls.conv[0].orderBy).toEqual({ lastMessageAt: "desc" });
     expect(d.calls.conv[0].take).toBe(15);
   });
+  it("★ --before freezes the set: only conversations whose last message is before it; per-tenant and cap unchanged", async () => {
+    const { parseBefore } = await import("../scripts/replay-v2");
+    const d = db([], {});
+    await planReplay(parseArgs(["--tenants", "t1", "--before", "2026-11-18T00:00:00Z"]), d);
+    expect(d.calls.conv[0].where.lastMessageAt).toEqual({ lt: new Date("2026-11-18T00:00:00Z") });
+    expect(d.calls.conv[0].take).toBe(15);
+    const d2 = db([], {});
+    await planReplay(parseArgs(["--tenants", "t1"]), d2);
+    expect(d2.calls.conv[0].where.lastMessageAt).toBeUndefined();
+    expect(() => parseBefore("yesterday")).toThrow(/ISO/);
+    expect(parseBefore(undefined)).toBeNull();
+  });
   it("one turn per customer message, as of it, with what was actually sent after it; the assigned employee first", async () => {
     const d = db([{ id: "c1", assignedAiAgentId: "maya" }, { id: "c2", assignedAiAgentId: null }], {
       c1: [

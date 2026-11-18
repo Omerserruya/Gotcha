@@ -28,7 +28,7 @@ import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
 import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
 
-interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string }
+interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null }
 
 export function parseArgs(argv: string[]): Args {
   const get = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
@@ -43,7 +43,18 @@ export function parseArgs(argv: string[]): Args {
     keep: argv.includes("--keep"),
     // Each run its own file: the default carries the run's time, and "{run}" in --out is replaced by it.
     out: reportPath(get("--out")),
+    // A frozen set: only conversations whose last message is before this time (2026-11-18: new live chats pushed
+    // the payment thread out of the 15 most recent, so two runs replayed different conversations).
+    before: parseBefore(get("--before")),
   };
+}
+
+/** "--before <ISO>": a valid time, or null when absent; an invalid one is refused, never ignored. */
+export function parseBefore(v: string | undefined): Date | null {
+  if (v === undefined) return null;
+  const t = Date.parse(v);
+  if (!Number.isFinite(t)) throw new Error(`--before must be an ISO time, got ${JSON.stringify(v)}`);
+  return new Date(t);
 }
 
 export interface PlannedTurn { conversationId: string; messageId: string; asOf: Date; body: string; sentAfter: string[]; aiAgentId: string; skip?: ReplaySkip }
@@ -113,6 +124,7 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
         tenantId, isTest: false, origin: "LIVE",
         NOT: { customerExternalId: { startsWith: "sandbox:" } },
         messages: { some: { direction: "INBOUND" } },
+        ...(args.before ? { lastMessageAt: { lt: args.before } } : {}),
       },
       orderBy: { lastMessageAt: "desc" },
       take: args.perTenant,
