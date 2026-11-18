@@ -219,6 +219,51 @@ router.get("/:id/events", async (req: Request, res: Response) => {
 // ─── Knowledge review ────────────────────────────────────────
 
 /**
+ * GET /api/historical-imports/:id/topics (2026-11-18)
+ *
+ * The review by topic: the latest KNOWLEDGE_TOPICS grouping, each topic with its merged answer, occurrences,
+ * last seen and source quotes, limited to candidates still PENDING (a decided one leaves its topic). Plus the
+ * knowledge documents that present another business as this one. 404 for another tenant's import; topics []
+ * before the stage has run.
+ */
+router.get("/:id/topics", async (req: Request, res: Response) => {
+  try {
+    const row = await prisma.historicalImport.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+      select: { id: true },
+    });
+    if (!row) {
+      res.status(404).json({ error: "Import not found" });
+      return;
+    }
+    const event = await prisma.historicalImportEvent.findFirst({
+      where: { importId: row.id, step: "KNOWLEDGE_TOPICS", outcome: "SUCCESS" },
+      orderBy: { createdAt: "desc" },
+      select: { detail: true, createdAt: true },
+    });
+    const detail = (event?.detail ?? {}) as any;
+    const all: any[] = Array.isArray(detail.topics) ? detail.topics : [];
+    const pending = new Set((await prisma.knowledgeCandidate.findMany({
+      where: { tenantId: req.tenantId!, importId: row.id, status: "PENDING", id: { in: all.flatMap((t) => t.candidateIds ?? []) } },
+      select: { id: true },
+    })).map((c) => c.id));
+    const topics = all
+      .map((t) => ({ ...t, candidateIds: (t.candidateIds ?? []).filter((id: string) => pending.has(id)) }))
+      .filter((t) => t.candidateIds.length > 0);
+    res.json({
+      topics,
+      generatedAt: event?.createdAt ?? null,
+      foreignBusinessDocs: Array.isArray(detail.foreignBusinessDocs) ? detail.foreignBusinessDocs : [],
+      contradictions: Number(detail.contradictions ?? 0),
+      autoApproveEnabled: !!detail.autoApproveEnabled,
+    });
+  } catch (err: any) {
+    console.error("[historical-import] topics failed:", err?.message);
+    res.status(500).json({ error: "Failed to load topics" });
+  }
+});
+
+/**
  * GET /api/historical-imports/:id/candidates
  *
  * The review queue. Evidence is included but capped: the reviewer needs two or
@@ -372,6 +417,9 @@ const writeGuard = requirePermissionOrRole("ai:knowledge:write", "ADMIN");
  * human on the other end of it. The body may carry an edited answer, which is
  * stored separately from the observed one so the original stays auditable.
  */
+/** The longest answer a person may approve (2026-11-18); the frontend caps its textarea at the same. */
+export const MAX_APPROVED_ANSWER = 4000;
+
 router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
@@ -389,10 +437,14 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
       return;
     }
 
-    const editedAnswer =
-      typeof req.body?.answer === "string" && req.body.answer.trim().length > 0
-        ? String(req.body.answer).trim().slice(0, 4000)
-        : null;
+    // The answer the person sent (2026-11-18): over 4000 is refused, never cut silently. The suggestion sent back
+    // unchanged is a CHOICE, not an edit: editedAnswer stays null and edited is false.
+    const sentAnswer = typeof req.body?.answer === "string" && req.body.answer.trim().length > 0 ? String(req.body.answer).trim() : null;
+    if (sentAnswer && sentAnswer.length > MAX_APPROVED_ANSWER) {
+      res.status(400).json({ error: "ANSWER_TOO_LONG", code: "ANSWER_TOO_LONG", max: MAX_APPROVED_ANSWER });
+      return;
+    }
+    const editedAnswer = sentAnswer && sentAnswer !== String(candidate.answer ?? "").trim() ? sentAnswer : null;
     const finalAnswer = editedAnswer ?? candidate.answer;
     const questionOverride =
       typeof req.body?.question === "string" && req.body.question.trim().length > 0
@@ -403,7 +455,8 @@ router.post("/candidates/:candidateId/approve", writeGuard, async (req: Request,
     // "the" answer to approve - that is what conflicted means - so the owner
     // has to say which one is right, and the API refuses rather than silently
     // enshrining whichever variant happened to be most common.
-    if (candidate.conflict && !editedAnswer) {
+    // Choosing the suggested answer by sending it counts as choosing it.
+    if (candidate.conflict && !sentAnswer) {
       res.status(400).json({
         error: "conflict_requires_answer",
         message:

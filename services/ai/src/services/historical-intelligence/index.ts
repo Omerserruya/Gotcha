@@ -12,6 +12,7 @@ import { runKnowledgeExtractionStage } from "./knowledge-extraction.stage";
 import { runKnowledgeClusteringStage } from "./knowledge-clustering.stage";
 import { runKnowledgeDedupeStage } from "./knowledge-dedupe.stage";
 import { runKnowledgeCurationStage } from "./knowledge-curation.stage";
+import { runKnowledgeReviewStage } from "./knowledge-review.stage";
 import { runBrandVoiceStage } from "./brand-voice.stage";
 import { runAnalyticsStage } from "./analytics.stage";
 import { runFinalizeStage } from "./finalize.stage";
@@ -146,6 +147,12 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       // before analytics so the topic counts describe what survived.
       case "knowledge-curation": {
         await runKnowledgeCurationStage({ tenantId, importId });
+        // The cross-check and the topics for review (2026-11-18). A failure here costs the review aids, never
+        // the import; only a billing refusal still stops it.
+        await runKnowledgeReviewStage({ tenantId, importId }).catch(async (err: any) => {
+          if (isAiAccessDenied(err)) throw err;
+          await recordEvent(importId, "KNOWLEDGE_TOPICS", "FAILED", String(err?.message ?? err).slice(0, 200), {});
+        });
         await enqueue(tenantId, importId, NEXT_STAGE[stage]);
         return;
       }

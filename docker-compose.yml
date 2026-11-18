@@ -568,6 +568,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
+      # History import knowledge stages (2026-11-18): the strongest model; platform-paid only when set.
+      HISTORICAL_IMPORT_MODEL: ${HISTORICAL_IMPORT_MODEL:-gpt-6.2-sol}
+      HISTORICAL_IMPORT_PLATFORM_PAID: ${HISTORICAL_IMPORT_PLATFORM_PAID:-false}
       # The micro tier (per-turn helper calls); unset keeps gpt-5-nano. Any model
       # works: the request shape comes from packages/shared lib/model-caps.
       OPENAI_MICRO_MODEL: ${OPENAI_MICRO_MODEL:-gpt-5-nano}

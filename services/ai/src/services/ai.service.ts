@@ -379,9 +379,11 @@ export function inReplayLane(): boolean {
 }
 /** The conversation relevance classifier's calls (2026-11-17): platform-paid, never the tenant's usage. */
 export const CLASSIFY_FEATURE_SUFFIX = "_classify";
+/** A history import run platform-paid (HISTORICAL_IMPORT_PLATFORM_PAID, 2026-11-18): never the tenant's usage. */
+export const IMPORT_FEATURE_SUFFIX = "_import";
 const laneSuffix = (): string | null => {
   const reason = platformPaidScope.getStore()?.reason;
-  return reason === "reply_engine_replay" ? REPLAY_FEATURE_SUFFIX : reason === "conversation_classify" ? CLASSIFY_FEATURE_SUFFIX : null;
+  return reason === "reply_engine_replay" ? REPLAY_FEATURE_SUFFIX : reason === "conversation_classify" ? CLASSIFY_FEATURE_SUFFIX : reason === "historical_import" ? IMPORT_FEATURE_SUFFIX : null;
 };
 export function laneFeature(feature: string): string {
   const suffix = laneSuffix();

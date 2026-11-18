@@ -67,8 +67,10 @@ vi.mock("../../prisma", () => ({
     usageLog: {
       // Applies the replay exclusion the module sends (feature null, or not ending in "_replay").
       findMany: async ({ where }: any = {}) => db.logs.filter((l) => {
-        const excl = (where?.AND ?? []).some((c: any) => Array.isArray(c?.OR) && c.OR.some((x: any) => x?.NOT?.feature?.endsWith));
-        return !excl || l.feature == null || !String(l.feature).endsWith("_replay");
+        // The lanes the caller's where leaves out, read from it ("_replay", "_classify", "_import"): the double
+        // follows the filter as written, so widening it is tested, not assumed.
+        const suffixes = [...JSON.stringify(where?.AND ?? []).matchAll(/"endsWith":"([^"]+)"/g)].map((m) => m[1]);
+        return l.feature == null || !suffixes.some((s) => String(l.feature).endsWith(s));
       }),
     },
     conversationUsageAggregate: {
@@ -237,6 +239,9 @@ describe("conversation usage - attribution", () => {
     seedLog({ id: "l1", unitsConsumed: 2, promptTokens: 1000, completionTokens: 100, costUsd: 0.002 });
     seedLog({ id: "r1", feature: "ai_bot_replay", unitsConsumed: 0, promptTokens: 900000, completionTokens: 9000, costUsd: 0 });
     seedLog({ id: "r2", feature: "embedding_replay", unitsConsumed: 0, promptTokens: 5000, completionTokens: 0, costUsd: 0 });
+    // The classifier's and a platform-paid import's rows are not the conversation's usage either (2026-11-18).
+    seedLog({ id: "k1", feature: "relevance_classify", unitsConsumed: 0, promptTokens: 700, completionTokens: 10, costUsd: 0 });
+    seedLog({ id: "i1", feature: "historical_knowledge_extraction_import", unitsConsumed: 0, promptTokens: 800, completionTokens: 20, costUsd: 0 });
     const r = await aggregateConversation(C, { now: NOW });
     expect(r?.linkedEvents).toBe(1);
     expect(db.aggregates[0].totalInputTokens).toBe(1000);

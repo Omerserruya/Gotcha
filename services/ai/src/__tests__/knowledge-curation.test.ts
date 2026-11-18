@@ -29,9 +29,10 @@ describe("curation cannot quietly discard the rare content", () => {
 
   it("keeps an item when the model fails or stays silent about it", () => {
     // Losing knowledge because an LLM call failed is the worst available
-    // failure mode, so silence must mean keep and never mean drop.
-    expect(SRC).toMatch(/if \(!result\) \{\s*\n\s*unjudged \+= batch\.length;\s*\n\s*continue;/);
-    expect(SRC).toMatch(/if \(!v\) \{[\s\S]{0,200}?unjudged \+= 1;\s*\n\s*continue;/);
+    // failure mode, so silence must mean keep and never mean drop. Since
+    // 2026-11-18 a failed batch is retried and split first (judgeAll), and an
+    // item no call could judge is kept AND recorded as "unjudged".
+    expect(SRC).toMatch(/if \(!v\) \{[\s\S]{0,300}?unjudged \+= 1;[\s\S]{0,300}?curationVerdict: "unjudged"[\s\S]{0,40}?continue;/);
   });
 
   it("does not blank a real answer when a rewrite verdict arrives with no rewrite", () => {

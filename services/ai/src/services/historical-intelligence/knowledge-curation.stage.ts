@@ -58,11 +58,11 @@ const Verdict = z.object({
   note: z.string().max(200).optional(),
 });
 
-const CurationSchema = z.object({
+export const CurationSchema = z.object({
   verdicts: z.array(Verdict).max(80),
 });
 
-const SYSTEM_PROMPT = `You are reviewing question/answer pairs mined from a business's real customer conversations, before a human sees them. Decide what each one is.
+export const CURATION_PROMPT = `You are reviewing question/answer pairs mined from a business's real customer conversations, before a human sees them. Decide what each one is.
 
 VERDICTS
 - "keep": the answer is correct, complete, and reads as an answer on its own.
@@ -86,15 +86,61 @@ Reply with ONLY a JSON object: {"verdicts":[{"id":"...","verdict":"keep"},{"id":
  */
 const BATCH = 40;
 
+type Item = { id: string; question: string; answer: string; topic: string; occurrenceCount: number };
+type CurationVerdict = z.infer<typeof Verdict>;
+
+/**
+ * Verdicts for a batch, never fewer than it has (2026-11-18: 351 of Smoovee's 711 had none). A failed call is
+ * retried once; a batch that still fails is split in halves down to single items; ids the model left out are
+ * judged again on their own. A single item no call could judge comes back null: "unjudged", recorded as such.
+ */
+export async function judgeAll(
+  batch: Item[],
+  call: (items: Item[]) => Promise<{ verdicts: CurationVerdict[] } | null>,
+  depth = 0,
+): Promise<Map<string, CurationVerdict | null>> {
+  const out = new Map<string, CurationVerdict | null>();
+  if (batch.length === 0) return out;
+  let result = await call(batch);
+  if (!result) result = await call(batch);
+  if (!result) {
+    if (batch.length === 1) { out.set(batch[0].id, null); return out; }
+    const mid = Math.ceil(batch.length / 2);
+    for (const half of [batch.slice(0, mid), batch.slice(mid)]) for (const [k, v] of await judgeAll(half, call, depth + 1)) out.set(k, v);
+    return out;
+  }
+  const byId = new Map(result.verdicts.map((v) => [v.id, v]));
+  const missing = batch.filter((c) => !byId.has(c.id));
+  for (const c of batch) if (byId.has(c.id)) out.set(c.id, byId.get(c.id)!);
+  if (missing.length) {
+    // Left out: judged again on their own. When the model answered none of a batch, that is a failure: split.
+    if (missing.length === batch.length) {
+      if (batch.length === 1) { out.set(batch[0].id, null); return out; }
+      const mid = Math.ceil(batch.length / 2);
+      for (const half of [batch.slice(0, mid), batch.slice(mid)]) for (const [k, v] of await judgeAll(half, call, depth + 1)) out.set(k, v);
+    } else if (depth < 6) {
+      for (const [k, v] of await judgeAll(missing, call, depth + 1)) out.set(k, v);
+    } else for (const c of missing) out.set(c.id, null);
+  }
+  return out;
+}
+
 export async function runKnowledgeCurationStage(args: {
   tenantId: string;
   importId: string;
+  /** Only candidates with no verdict yet (or "unjudged"): finishing a curation that stopped (finish-curation). */
+  onlyUncurated?: boolean;
 }): Promise<StageResult> {
   const { tenantId, importId } = args;
   const startedAt = Date.now();
 
   const candidates = await prisma.knowledgeCandidate.findMany({
-    where: { tenantId, importId, status: "PENDING" },
+    where: {
+      tenantId,
+      importId,
+      status: "PENDING",
+      ...(args.onlyUncurated ? { OR: [{ curationVerdict: null }, { curationVerdict: "unjudged" }] } : {}),
+    },
     // Same ordering rationale as dedupe: related items must share a batch or
     // the duplicate verdict can never fire.
     orderBy: [{ category: "asc" }, { topic: "asc" }, { question: "asc" }],
@@ -118,38 +164,30 @@ export async function runKnowledgeCurationStage(args: {
   let singletonsSeen = 0;
   let singletonsDropped = 0;
 
+  const call = (items: Item[]) => structuredCall({
+    tenantId,
+    importId,
+    schema: CurationSchema,
+    system: CURATION_PROMPT + languageDirective(language),
+    user: `Review these ${items.length} items:\n\n${items.map((c) => `${c.id}\n  topic: ${c.topic}\n  Q: ${c.question}\n  A: ${c.answer}`).join("\n\n")}`,
+    feature: "historical_knowledge_curation",
+    tier: "import",
+    maxTokens: 6000,
+  });
+
   for (let i = 0; i < candidates.length; i += BATCH) {
     const batch = candidates.slice(i, i + BATCH);
-    const listing = batch
-      .map((c) => `${c.id}\n  topic: ${c.topic}\n  Q: ${c.question}\n  A: ${c.answer}`)
-      .join("\n\n");
+    const verdicts = await judgeAll(batch, call);
 
-    const result = await structuredCall({
-      tenantId,
-      importId,
-      schema: CurationSchema,
-      system: SYSTEM_PROMPT + languageDirective(language),
-      user: `Review these ${batch.length} items:\n\n${listing}`,
-      feature: "historical_knowledge_curation",
-      maxTokens: 6000,
-    });
-
-    // A batch the model could not judge is KEPT, not dropped. Losing knowledge
-    // because a call failed would be the worst possible failure mode here.
-    if (!result) {
-      unjudged += batch.length;
-      continue;
-    }
-
-    const byId = new Map(result.verdicts.map((v) => [v.id, v]));
     for (const c of batch) {
       const isSingleton = c.occurrenceCount <= 1;
       if (isSingleton) singletonsSeen += 1;
 
-      const v = byId.get(c.id);
+      const v = verdicts.get(c.id) ?? null;
       if (!v) {
-        // Same rule as a failed batch: silence means keep.
+        // No call could judge it: KEPT, and recorded as unjudged so the finish script picks it up again.
         unjudged += 1;
+        await prisma.knowledgeCandidate.updateMany({ where: { id: c.id, tenantId, status: "PENDING" }, data: { curationVerdict: "unjudged" } });
         continue;
       }
 
@@ -170,6 +208,7 @@ export async function runKnowledgeCurationStage(args: {
         // rather than blanking a real answer.
         if (!answer) {
           kept += 1;
+          await prisma.knowledgeCandidate.updateMany({ where: { id: c.id, tenantId, status: "PENDING" }, data: { curationVerdict: "kept" } });
           continue;
         }
         await prisma.knowledgeCandidate.updateMany({
@@ -186,7 +225,9 @@ export async function runKnowledgeCurationStage(args: {
         continue;
       }
 
+      // A keep is a verdict too (2026-11-18): before, it wrote nothing, so a kept item read as never curated.
       kept += 1;
+      await prisma.knowledgeCandidate.updateMany({ where: { id: c.id, tenantId, status: "PENDING" }, data: { curationVerdict: "kept", ...(v.note?.trim() ? { curationNote: v.note.trim() } : {}) } });
     }
   }
 

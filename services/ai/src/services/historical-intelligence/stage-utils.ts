@@ -1,4 +1,5 @@
 import { prisma, withHistoricalRecords } from "@chatcenter/shared";
+import { isPersonOutbound } from "../conversation-history.service";
 
 export interface StageResult {
   ok: boolean;
@@ -50,11 +51,66 @@ export async function recordEvent(
  * fifty messages are disproportionately about whatever happened most recently,
  * which is exactly the transient state that must NOT become permanent truth.
  */
+/**
+ * Who wrote a line (2026-11-18). "business" is a PERSON on the business side: the inbox (an email), the owner on
+ * the WhatsApp Business app (an echo), or imported history (before the connection every business message was the
+ * app). Everything else outbound is "bot": the old AI bot ("AI Bot"), our engine, an agent's display name,
+ * "System", "Broadcast", and a text sent verbatim in many conversations (the app's greeting and away messages).
+ * A bot line is context only and never the source of an answer. An allow-list: it fails by missing a person,
+ * never by taking the bot for one.
+ */
+export type Speaker = "customer" | "business" | "bot";
+export type TranscriptLine = { direction: "INBOUND" | "OUTBOUND"; body: string; at: Date; speaker?: Speaker };
+
+export function speakerOf(row: { direction: string; body?: string | null; senderName?: string | null; origin?: string | null; metadata?: unknown }, automated?: ReadonlySet<string>): Speaker {
+  if (row.direction !== "OUTBOUND") return "customer";
+  if (automated?.has(normalizeBody(row.body))) return "bot";
+  return isPersonOutbound({ direction: row.direction, body: row.body ?? "", senderName: row.senderName ?? null, origin: row.origin ?? null, metadata: row.metadata }) ? "business" : "bot";
+}
+
+export const normalizeBody = (b: unknown) => String(b ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** An outbound text sent verbatim in this many conversations is automated, whoever the row says sent it. */
+export const AUTOMATED_MIN_CONVERSATIONS = 10;
+const automatedCache = new Map<string, { at: number; set: Set<string> }>();
+/**
+ * The tenant's automated outbound texts: verbatim in AUTOMATED_MIN_CONVERSATIONS or more conversations (prod
+ * 2026-11-18, Smoovee: 32 such texts). Cached for 10 minutes per tenant; a failed read is an empty set.
+ */
+export async function automatedOutboundTexts(tenantId: string, db: any = prisma, minConversations = AUTOMATED_MIN_CONVERSATIONS): Promise<Set<string>> {
+  const hit = automatedCache.get(tenantId);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.set;
+  const set = new Set<string>();
+  try {
+    const groups: Array<{ body: string; _count: { _all: number } }> = await withHistoricalRecords(() => db.message.groupBy({
+      by: ["body"],
+      where: { tenantId, direction: "OUTBOUND", NOT: { body: "" } },
+      _count: { _all: true },
+      having: { body: { _count: { gte: minConversations } } },
+    }));
+    for (const g of groups.slice(0, 500)) {
+      const convs: any[] = await withHistoricalRecords(() => db.message.findMany({
+        where: { tenantId, direction: "OUTBOUND", body: g.body },
+        distinct: ["conversationId"],
+        select: { conversationId: true },
+        take: minConversations,
+      }));
+      if (convs.length >= minConversations) set.add(normalizeBody(g.body));
+    }
+  } catch (err: any) {
+    console.warn(`[historical-intelligence] automated texts read failed: ${err?.message}`);
+  }
+  automatedCache.set(tenantId, { at: Date.now(), set });
+  return set;
+}
+
 export async function loadConversationTranscript(args: {
   tenantId: string;
   conversationId: string;
   limit?: number;
-}): Promise<Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; at: Date }>> {
+  /** The tenant's automated texts (automatedOutboundTexts): those lines are the bot's. */
+  automated?: ReadonlySet<string>;
+}): Promise<TranscriptLine[]> {
   const rows = await withHistoricalRecords(() =>
     prisma.message.findMany({
       where: {
@@ -64,15 +120,16 @@ export async function loadConversationTranscript(args: {
         // reader and would waste a slot in the bounded window.
         NOT: { body: "" },
       },
-      select: { direction: true, body: true, createdAt: true },
+      select: { direction: true, body: true, createdAt: true, senderName: true, origin: true, metadata: true },
       orderBy: { createdAt: "asc" },
       take: args.limit ?? 400,
     }),
   );
-  return rows.map((r) => ({
+  return rows.map((r: any) => ({
     direction: r.direction as "INBOUND" | "OUTBOUND",
     body: r.body,
     at: r.createdAt,
+    speaker: speakerOf(r, args.automated),
   }));
 }
 
@@ -85,14 +142,15 @@ export async function loadConversationTranscript(args: {
  * customer better than one that sees the first tenth of it verbatim.
  */
 export function renderTranscript(
-  messages: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; at: Date }>,
+  messages: TranscriptLine[],
   maxChars = 12000,
 ): string {
   const PER_MESSAGE = 400;
   const lines: string[] = [];
   let used = 0;
   for (const m of messages) {
-    const who = m.direction === "INBOUND" ? "Customer" : "Business";
+    // "Bot:" lines are context only (2026-11-18); a line with no speaker reads by its direction as before.
+    const who = m.direction === "INBOUND" ? "Customer" : m.speaker === "bot" ? "Bot" : "Business";
     const day = m.at.toISOString().slice(0, 10);
     const text = m.body.length > PER_MESSAGE ? `${m.body.slice(0, PER_MESSAGE)}...` : m.body;
     const line = `[${day}] ${who}: ${text}`;

@@ -132,7 +132,7 @@ export function createTurnBudget(opts: CreateTurnBudgetOpts): TurnBudget {
  * tokens filled Smoovee's 24h cap and live replies were refused). A row with no feature
  * counts (SQL: NOT on a NULL is NULL, so the null branch is explicit).
  */
-export const NOT_REPLAY = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }] }] };
+export const NOT_REPLAY = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }, { NOT: { feature: { endsWith: "_import" } } }] }] };
 
 async function sumUsage(scope: { tenantId?: string; conversationId?: string; since?: Date }): Promise<number> {
   try {

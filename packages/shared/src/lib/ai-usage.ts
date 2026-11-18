@@ -23,6 +23,12 @@ import { prisma } from "./prisma";
  * when the provider reports cached tokens - expressed here explicitly).
  */
 export const AI_MODEL_PRICING: Record<string, { prompt: number; completion: number; cachedPrompt?: number }> = {
+  // The gpt-6.x family on the platform account (2026-11-18). gpt-6-luna was priced as gpt-5-mini before.
+  "gpt-6.2-sol":            { prompt: 2.00,  completion: 10.00, cachedPrompt: 0.10   },
+  "gpt-6.1-sol":            { prompt: 2.00,  completion: 10.00, cachedPrompt: 0.10   },
+  "gpt-6.1-terra":          { prompt: 1.00,  completion: 5.00,  cachedPrompt: 0.05   },
+  "gpt-6-sol":              { prompt: 2.00,  completion: 10.00, cachedPrompt: 0.20   },
+  "gpt-6-luna":             { prompt: 0.10,  completion: 0.50,  cachedPrompt: 0.01   },
   "gpt-5":                  { prompt: 1.25,  completion: 10.00, cachedPrompt: 0.125  },
   "gpt-5-mini":             { prompt: 0.25,  completion: 2.00,  cachedPrompt: 0.025  },
   "gpt-5-nano":             { prompt: 0.05,  completion: 0.40,  cachedPrompt: 0.005  },
@@ -87,8 +93,9 @@ export function computeAICostUsd(opts: {
  * every tenant-facing usage figure leaves those rows out. A row with no feature counts
  * (SQL NOT on a NULL is NULL, so the null branch is explicit).
  */
-// The relevance classifier's calls ("_classify", 2026-11-17) are platform-paid too.
-export const NOT_REPLAY_USAGE = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }] }] };
+// The relevance classifier's calls ("_classify", 2026-11-17) are platform-paid too, and so is a history
+// import run with HISTORICAL_IMPORT_PLATFORM_PAID ("_import", 2026-11-18).
+export const NOT_REPLAY_USAGE = { OR: [{ feature: null }, { AND: [{ NOT: { feature: { endsWith: "_replay" } } }, { NOT: { feature: { endsWith: "_classify" } } }, { NOT: { feature: { endsWith: "_import" } } }] }] };
 
 export interface AIUsageEvent {
   tenantId: string;

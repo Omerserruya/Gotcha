@@ -3,11 +3,12 @@ import { randomUUID } from "crypto";
 import { prisma } from "@chatcenter/shared";
 import { structuredCall } from "./llm";
 import { clusterText, embedForCluster, findCluster, indexCluster } from "./candidate-index";
-import { judgeSpecificity, redactSpecifics } from "./specificity";
+import { judgeSpecificity, redactSpecifics, oneOffOrFluff } from "./specificity";
 import {
   recordEvent,
   loadConversationTranscript,
   renderTranscript,
+  automatedOutboundTexts,
   mapLimited,
   tenantPromptLanguage,
   languageDirective,
@@ -260,7 +261,8 @@ EXTRACT knowledge that would help answer a DIFFERENT customer in future:
 - procedures the business follows
 
 WHO SAID WHAT - ABSOLUTE:
-- Every transcript line is labeled "Customer:" or "Business:". An answer may come ONLY from a "Business:" line. A question may come ONLY from a "Customer:" line. Never swap these roles, no matter how much a Customer line sounds like a policy statement.
+- Every transcript line is labeled "Customer:", "Business:" or "Bot:". An answer may come ONLY from a "Business:" line: a person at the business. A question may come ONLY from a "Customer:" line. Never swap these roles, no matter how much a Customer line sounds like a policy statement.
+- "Bot:" lines are automated messages the business's systems sent: an earlier AI assistant, greetings, away messages, reminders. They are context only. NEVER take an answer from a "Bot:" line and never quote one, even when it reads like policy and even when no person answered: an automated answer may be wrong, and nobody at the business stood behind it.
 - Some conversations in this history are the business owner talking to OTHER businesses (suppliers, service centers, bots). There the "Customer:" side is another company's agent or auto-reply ("your request has been received", "here is our service bot"). That is the OTHER business's knowledge, not this one's. Extract NOTHING from such a conversation - an empty list is the correct answer.
 
 NEVER extract:
@@ -277,7 +279,7 @@ HOW TO PHRASE IT
 - question: generalize away the individual. "Can I exchange the shirt I bought on Sunday?" becomes "Can an item be exchanged after purchase?"
 - answer: state it as a rule that applies to anyone, in the business's own terms. Do not add conditions the business did not state, and do not soften an answer that was given plainly.
 - Keep the business's own numbers exactly. If they said 45 days, write 45 days.
-- quotedQuestion: the exact "Customer:" line the question came from, verbatim. quotedAnswer: the exact "Business:" line the answer came from, verbatim. Items whose quotes are not found in the transcript on the correct side are discarded.
+- quotedQuestion: the exact "Customer:" line the question came from, verbatim. quotedAnswer: the exact "Business:" line the answer came from, verbatim (never a "Bot:" line). Items whose quotes are not found in the transcript on the correct side are discarded.
 
 COVERAGE - READ THIS TWICE
 Extract EVERY reusable exchange in this conversation, not the most typical ones. A question asked by one customer once is worth exactly as much as one asked by two hundred, PROVIDED the answer would serve a different customer tomorrow. The rare questions are the valuable ones: the common ones are already known to everyone who works here, and the unusual ones are what a new agent gets wrong. Do not skip an exchange because it seems niche, because you already returned a similar topic, or because it feels too small. Breadth is the goal; the only floor is reusability.
@@ -391,11 +393,16 @@ export async function runKnowledgeExtractionStage(args: {
   let rejectedBySpecificity = 0;
   let redeemedByRedaction = 0;
   let droppedByShape = 0;
+  let rejectedByOneOff = 0;
+
+  // Texts sent verbatim in many conversations are automated, whoever the row says sent them (2026-11-18).
+  const automated = await automatedOutboundTexts(tenantId);
 
   await mapLimited(customers, CONCURRENCY, async (customer) => {
     const transcript = await loadConversationTranscript({
       tenantId,
       conversationId: customer.conversationId!,
+      automated,
     });
     const rendered = renderTranscript(transcript);
     if (!rendered.trim()) return;
@@ -407,6 +414,7 @@ export async function runKnowledgeExtractionStage(args: {
       system: SYSTEM_PROMPT + languageDirective(language),
       user: `Conversation history between a business and one of its customers:\n\n${rendered}`,
       feature: "historical_knowledge_extraction",
+      tier: "import",
       maxTokens: 4000,
     });
 
@@ -430,10 +438,10 @@ export async function runKnowledgeExtractionStage(args: {
       // exactly like policy. The model mined them as this business's answers.
       // Knowledge may enter the pipeline ONLY from the business's own
       // messages; questions only from the customer's.
-      if (
-        !quoteMatchesDirection(transcript, item.quotedAnswer, "OUTBOUND") ||
-        !quoteMatchesDirection(transcript, item.quotedQuestion, "INBOUND")
-      ) {
+      // And the answer must be a PERSON's (2026-11-18): a quote of the old AI bot, an auto-reply or our engine
+      // is rejected here, whatever the model was told.
+      const answerLine = matchQuote(transcript, item.quotedAnswer, "OUTBOUND");
+      if (!answerLine || !matchQuote(transcript, item.quotedQuestion, "INBOUND")) {
         rejectedByDirection += 1;
         continue;
       }
@@ -467,6 +475,12 @@ export async function runKnowledgeExtractionStage(args: {
       }
       item = gated;
 
+      // A one-off or a pleasantry is no knowledge (2026-11-18): a code, a name, a greeting.
+      if (oneOffOrFluff(item)) {
+        rejectedByOneOff += 1;
+        continue;
+      }
+
       extracted += 1;
       const outcome = await mergeIntoCluster({
         tenantId,
@@ -474,7 +488,8 @@ export async function runKnowledgeExtractionStage(args: {
         item,
         conversationId: customer.conversationId!,
         customerKey,
-        occurredAt,
+        // The answer's own time, not the conversation's last message: the newest answer wins a conflict.
+        occurredAt: answerLine.at ?? occurredAt,
       });
       if (outcome === "created") created += 1;
       else if (outcome === "merged") merged += 1;
@@ -509,6 +524,8 @@ export async function runKnowledgeExtractionStage(args: {
       rejectedBySpecificity,
       redeemedByRedaction,
       droppedByShape,
+      rejectedByOneOff,
+      automatedTexts: automated.size,
       // A silent coercion is a silent quality loss. 263 of 266 candidates once
       // came back as OTHER and nothing in the events said so; the number was
       // only visible by counting rows afterwards.
@@ -536,19 +553,32 @@ export async function runKnowledgeExtractionStage(args: {
  * from matching everything.
  */
 export function quoteMatchesDirection(
-  transcript: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string }>,
+  transcript: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; speaker?: string }>,
   quote: string,
   direction: "INBOUND" | "OUTBOUND",
 ): boolean {
+  return !!matchQuote(transcript, quote, direction);
+}
+
+/**
+ * The transcript line the quote came from, on the claimed side. An OUTBOUND quote matches only a PERSON's line
+ * (2026-11-18): a "bot" line is never a source, even when it is the only match.
+ */
+export function matchQuote<T extends { direction: "INBOUND" | "OUTBOUND"; body: string; speaker?: string }>(
+  transcript: T[],
+  quote: string,
+  direction: "INBOUND" | "OUTBOUND",
+): T | null {
   const q = normalizeForMatch(quote);
-  if (q.length < 5) return false;
+  if (q.length < 5) return null;
   const head = q.slice(0, 60);
-  return transcript.some((m) => {
+  return transcript.find((m) => {
     if (m.direction !== direction) return false;
+    if (direction === "OUTBOUND" && m.speaker === "bot") return false;
     const b = normalizeForMatch(m.body);
     if (b.length === 0) return false;
     return b.includes(head) || (b.length >= 20 && q.includes(b.slice(0, 60)));
-  });
+  }) ?? null;
 }
 
 function normalizeForMatch(text: string): string {
@@ -605,6 +635,7 @@ async function mergeIntoCluster(args: {
               answer: item.answer.trim(),
               occurrenceCount: 1,
               customerCount: 1,
+              ...(occurredAt ? { firstSeenAt: occurredAt.toISOString(), lastSeenAt: occurredAt.toISOString() } : {}),
             },
           ] as unknown as object,
         },
@@ -679,16 +710,20 @@ async function mergeIntoExisting(args: {
   const existingVariant = variants.find((v) => v.key === key);
 
   let isNewVariant = false;
+  const at = occurredAt ? occurredAt.toISOString() : undefined;
   if (existingVariant) {
     existingVariant.occurrenceCount += 1;
-  } else if (variants.length < MAX_VARIANTS) {
-    variants.push({
-      key,
-      answer: item.answer.trim(),
-      occurrenceCount: 1,
-      customerCount: 1,
-    });
-    isNewVariant = true;
+    if (at && (!existingVariant.lastSeenAt || at > existingVariant.lastSeenAt)) existingVariant.lastSeenAt = at;
+    if (at && (!existingVariant.firstSeenAt || at < existingVariant.firstSeenAt)) existingVariant.firstSeenAt = at;
+  } else {
+    // At the cap, a NEWER answer replaces the oldest variant: the business's current answer must never be the
+    // one left out (2026-11-18, pickup moved from Nesher to Tivon).
+    const oldest = variants.length >= MAX_VARIANTS ? [...variants].sort((a, b) => String(a.lastSeenAt ?? "").localeCompare(String(b.lastSeenAt ?? "")))[0] : null;
+    if (variants.length < MAX_VARIANTS || (oldest && at && at > String(oldest.lastSeenAt ?? ""))) {
+      if (oldest && variants.length >= MAX_VARIANTS) variants.splice(variants.indexOf(oldest), 1);
+      variants.push({ key, answer: item.answer.trim(), occurrenceCount: 1, customerCount: 1, ...(at ? { firstSeenAt: at, lastSeenAt: at } : {}) });
+      isNewVariant = true;
+    }
   }
 
   // Distinct customers, counted from the evidence rows rather than incremented.
@@ -701,7 +736,7 @@ async function mergeIntoExisting(args: {
   // The variant the business actually gave most often becomes the headline
   // answer. It is still only a suggestion, and on a conflicted candidate the UI
   // shows every variant rather than this one.
-  const dominant = [...variants].sort((a, b) => b.occurrenceCount - a.occurrenceCount)[0];
+  const dominant = currentVariant(variants);
 
   await prisma.knowledgeCandidate.updateMany({
     where: { id: candidateId, tenantId, status: "PENDING" },
@@ -748,6 +783,18 @@ interface Variant {
   answer: string;
   occurrenceCount: number;
   customerCount: number;
+  /** ISO times of the first and the last time a person gave this answer (2026-11-18). */
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+}
+
+/**
+ * The headline answer of a cluster: the one a person gave MOST RECENTLY (2026-11-18). A business changes its
+ * answers (pickup moved from Nesher to Tivon), and the old answer, however often it was given, is now wrong. The
+ * older ones stay as variants with their dates for the reviewer. Undated variants fall back to the most given.
+ */
+export function currentVariant<V extends { occurrenceCount: number; lastSeenAt?: string }>(variants: V[]): V | undefined {
+  return [...variants].sort((a, b) => String(b.lastSeenAt ?? "").localeCompare(String(a.lastSeenAt ?? "")) || b.occurrenceCount - a.occurrenceCount)[0];
 }
 
 function normalizeVariants(raw: unknown): Variant[] {
@@ -759,6 +806,8 @@ function normalizeVariants(raw: unknown): Variant[] {
       answer: String(v.answer ?? ""),
       occurrenceCount: Number(v.occurrenceCount ?? 0) || 0,
       customerCount: Number(v.customerCount ?? 0) || 0,
+      ...(typeof v.firstSeenAt === "string" ? { firstSeenAt: v.firstSeenAt } : {}),
+      ...(typeof v.lastSeenAt === "string" ? { lastSeenAt: v.lastSeenAt } : {}),
     }))
     .filter((v) => v.answer.length > 0);
 }

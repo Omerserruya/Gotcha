@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { generateResponse, callWithRetry, getDefaultModel, getMicroModel } from "../ai.service";
+import { generateResponse, callWithRetry, getDefaultModel, getMicroModel, platformPaidScope } from "../ai.service";
 import { isAiAccessDenied } from "./stage-utils";
 
 /**
@@ -22,8 +22,11 @@ export interface StructuredCallArgs<T extends z.ZodTypeAny> {
   schema: T;
   system: string;
   user: string;
-  /** Cheap, bounded extraction work routes to the micro tier. */
-  tier?: "default" | "micro";
+  /**
+   * Cheap, bounded extraction work routes to the micro tier. "import": the knowledge stages (extraction,
+   * dedupe, curation and the passes after them) run on the strongest model (2026-11-18, Omer).
+   */
+  tier?: "default" | "micro" | "import";
   maxTokens?: number;
   /** `metadata.type` on the usage record, so cost is attributable per stage. */
   feature: string;
@@ -37,10 +40,19 @@ export interface StructuredCallArgs<T extends z.ZodTypeAny> {
   importId?: string;
 }
 
+/** The import tier's model: HISTORICAL_IMPORT_MODEL, else gpt-6.2-sol (2026-11-18; verified on dev: JSON in the asked shape). */
+export function getImportModel(env: NodeJS.ProcessEnv = process.env): string {
+  return String(env.HISTORICAL_IMPORT_MODEL ?? "").trim() || "gpt-6.2-sol";
+}
+/** HISTORICAL_IMPORT_PLATFORM_PAID=true|1: the import's calls are the platform's, not the tenant's (default off). */
+export function importPlatformPaid(env: NodeJS.ProcessEnv = process.env): boolean {
+  return /^(1|true|yes|on)$/i.test(String(env.HISTORICAL_IMPORT_PLATFORM_PAID ?? "").trim());
+}
+
 export async function structuredCall<T extends z.ZodTypeAny>(
   args: StructuredCallArgs<T>,
 ): Promise<z.infer<T> | null> {
-  const model = args.tier === "micro" ? getMicroModel() : getDefaultModel();
+  const model = args.tier === "micro" ? getMicroModel() : args.tier === "import" ? getImportModel() : getDefaultModel();
   const messages = [
     { role: "system" as const, content: args.system },
     { role: "user" as const, content: args.user },
@@ -64,7 +76,7 @@ export async function structuredCall<T extends z.ZodTypeAny>(
 
     let raw: string;
     try {
-      const res = await callWithRetry(() =>
+      const call = () => callWithRetry(() =>
         generateResponse({
           tenantId: args.tenantId,
           model,
@@ -84,6 +96,9 @@ export async function structuredCall<T extends z.ZodTypeAny>(
           metadata: { type: args.feature, ...(args.importId ? { importId: args.importId } : {}) },
         }),
       );
+      // Platform-paid when the flag says so: the "_import" feature suffix keeps every row out of the tenant's
+      // budgets and usage figures, and a billing refusal can no longer stop the import.
+      const res = importPlatformPaid() && args.importId ? await platformPaidScope.run({ reason: "historical_import" }, call) : await call();
       raw = res.content;
     } catch (err: any) {
       // Inside an import a billing refusal stops the import (index.ts): every

@@ -45,9 +45,9 @@ const GroupSchema = z.object({
   topic: z.string().min(2).max(60),
 });
 
-const DedupeSchema = z.object({ groups: z.array(GroupSchema) });
+export const DedupeSchema = z.object({ groups: z.array(GroupSchema) });
 
-const SYSTEM_PROMPT = `You are given a list of question/answer candidates mined from one business's past conversations. Several of them are THE SAME QUESTION phrased differently, because they were written from different conversations.
+export const DEDUPE_PROMPT = `You are given a list of question/answer candidates mined from one business's past conversations. Several of them are THE SAME QUESTION phrased differently, because they were written from different conversations.
 
 Group them.
 
@@ -138,9 +138,10 @@ export async function runKnowledgeDedupeStage(args: {
       tenantId,
       importId,
       schema: DedupeSchema,
-      system: SYSTEM_PROMPT + languageDirective(language),
+      system: DEDUPE_PROMPT + languageDirective(language),
       user: `Candidates (id | topic | question):\n\n${listing}`,
       feature: "historical_knowledge_dedupe",
+      tier: "import",
       maxTokens: 4000,
     });
     if (!result) continue;
@@ -237,6 +238,8 @@ async function mergeInto(args: {
       customerCount,
       conflict,
       variants: variants.length > 0 ? (variants as any) : undefined,
+      // The headline is the newest person answer of the family (2026-11-18), not the survivor's own.
+      ...(variants[0]?.answer ? { answer: variants[0].answer } : {}),
       confidence: scoreConfidence({ occurrenceCount, customerCount, conflict }),
       firstSeenAt,
       lastSeenAt,
@@ -255,6 +258,8 @@ interface Variant {
   key: string;
   answer: string;
   occurrenceCount: number;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
 }
 
 export function mergeVariants(members: Member[]): Variant[] {
@@ -270,19 +275,26 @@ export function mergeVariants(members: Member[]): Variant[] {
               key: String(o?.key ?? variantKey(answer)),
               answer,
               occurrenceCount: Number(o?.occurrenceCount ?? 1) || 1,
+              ...(typeof o?.firstSeenAt === "string" ? { firstSeenAt: o.firstSeenAt as string } : {}),
+              ...(typeof o?.lastSeenAt === "string" ? { lastSeenAt: o.lastSeenAt as string } : {}),
             };
           })
           .filter((v) => v.answer.length > 0)
-      : [{ key: variantKey(m.editedAnswer ?? m.answer), answer: m.editedAnswer ?? m.answer, occurrenceCount: m.occurrenceCount || 1 }];
+      : [{ key: variantKey(m.editedAnswer ?? m.answer), answer: m.editedAnswer ?? m.answer, occurrenceCount: m.occurrenceCount || 1, ...(m.lastSeenAt ? { lastSeenAt: new Date(m.lastSeenAt).toISOString() } : {}), ...(m.firstSeenAt ? { firstSeenAt: new Date(m.firstSeenAt).toISOString() } : {}) }];
 
     for (const v of fromRow) {
       const hit = byKey.get(v.key);
-      if (hit) hit.occurrenceCount += v.occurrenceCount;
-      else byKey.set(v.key, { ...v });
+      if (hit) {
+        hit.occurrenceCount += v.occurrenceCount;
+        if (v.lastSeenAt && (!hit.lastSeenAt || v.lastSeenAt > hit.lastSeenAt)) hit.lastSeenAt = v.lastSeenAt;
+        if (v.firstSeenAt && (!hit.firstSeenAt || v.firstSeenAt < hit.firstSeenAt)) hit.firstSeenAt = v.firstSeenAt;
+      } else byKey.set(v.key, { ...v });
     }
   }
+  // The newest answer first (2026-11-18): the business's current answer heads the list and is never cut by
+  // the cap; undated variants order by how often they were given.
   return [...byKey.values()]
-    .sort((a, b) => b.occurrenceCount - a.occurrenceCount)
+    .sort((a, b) => String(b.lastSeenAt ?? "").localeCompare(String(a.lastSeenAt ?? "")) || b.occurrenceCount - a.occurrenceCount)
     .slice(0, MAX_VARIANTS);
 }
 

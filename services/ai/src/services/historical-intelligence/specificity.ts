@@ -168,3 +168,28 @@ export function redactSpecifics(text: string): string {
   // Collapse the damage: "order … ships …" reads better than "order… ships…".
   return out.replace(/\s*…\s*/g, " … ").replace(/\s{2,}/g, " ").trim();
 }
+
+// ── One-off and fluff (2026-11-18) ──────────────────────────
+//
+// What the patterns above miss: a code or an order number of one customer that is short, a greeting with a
+// first name, and an "answer" that is only a pleasantry ("איזה יופי ששאלת"). None of these serve the next
+// customer, and the reviewer should not have to read them.
+
+/** A code given to one customer: "קוד: SMV2024", "your code is ab12cd". A word with letters AND digits. */
+const CUSTOMER_CODE = /(?:קוד|קופון|code|coupon|voucher|שובר)(?:\s*(?:שלך|שלכם|הוא|היא|is|your|:|-))*\s*(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{4,}\b/iu;
+/** One order by its number: "הזמנה 1234", "order #882", "מספר הזמנה 4521". */
+const ORDER_REF = /(?:הזמנה|הזמנתך|ההזמנה|order)\s*(?:מס(?:פר|['׳])?\.?\s*|no\.?\s*|number\s*)?#?\s*\d{3,}\b/iu;
+/** A greeting to someone by name opens the answer: "היי דנה,", "שלום רינה!". */
+const NAMED_GREETING = /^\s*(?:היי|הי|שלום|בוקר טוב|ערב טוב|hi|hello|hey|dear)\s+[\p{L}]{2,}\s*[,!]/iu;
+/** Pleasantries that carry no knowledge of their own. */
+const PLEASANTRY = /(?:היי|הי|שלום|תודה(?:\s+רבה)?|בשמחה|בכיף|אין\s+בעד\s+מה|בבקשה|יופי|איזה\s+יופי|יופי\s+ששאלת|שאלה\s+(?:מצוינת|טובה)|בהצלחה|יום\s+(?:טוב|נעים|מקסים)|ערב\s+טוב|בוקר\s+טוב|אשמח\s+לעזור|נשמח\s+לעזור|מה\s+שלומך|thanks?(?:\s+you)?|you'?re\s+welcome|great\s+question|have\s+a\s+(?:nice|great)\s+day|happy\s+to\s+help)/giu;
+
+/** Does the item hold one customer's code, order, or name, or is its answer only a pleasantry? */
+export function oneOffOrFluff(item: { question: string; answer: string }): boolean {
+  const a = String(item?.answer ?? "");
+  const both = `${item?.question ?? ""}\n${a}`;
+  if (CUSTOMER_CODE.test(both) || ORDER_REF.test(both)) return true;
+  if (NAMED_GREETING.test(a) && contentWords(a.replace(NAMED_GREETING, " ")) < 3) return true;
+  return contentWords(a.replace(PLEASANTRY, " ")) < 2;
+}
+const contentWords = (t: string) => (String(t).match(/[\p{L}\p{N}]{2,}/gu) ?? []).length;
