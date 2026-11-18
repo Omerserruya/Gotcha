@@ -20,7 +20,7 @@ import {
 
 const item = (over: Record<string, unknown> = {}) => ({
   candidateId: 'c1',
-  status: 'pending',
+  status: 'PENDING',
   question: 'How long is delivery?',
   answer: '3 days',
   quotes: [],
@@ -95,7 +95,7 @@ describe('★★ the topics read is lenient per element', () => {
     const only = got.topics[0]!;
     expect(only.occurrences).toBe(0);
     expect(only.items[0]).toMatchObject({
-      status: 'pending',
+      status: 'superseded',
       chosen: null,
       previous: null,
       unresolved: false,
@@ -114,6 +114,23 @@ describe('★★ the topics read is lenient per element', () => {
       item({ chosen: { value: 449, basis: 'latest', at: '2026-11-12' } }),
     );
     expect(parsed.chosen).toEqual({ value: '449', basis: 'latest', at: '2026-11-12' });
+  });
+});
+
+describe('★★ an item’s status is the database’s, in capitals', () => {
+  it.each([
+    ['PENDING', 'pending'],
+    ['APPROVED', 'approved'],
+    ['REJECTED', 'rejected'],
+    ['SUPERSEDED', 'superseded'],
+    ['pending', 'pending'],
+  ])('%s reads as %s', (raw, want) => {
+    expect(topicItemSchema.parse(item({ status: raw })).status).toBe(want);
+  });
+
+  it('★ an unknown or missing status is never offered for a decision', () => {
+    expect(topicItemSchema.parse(item({ status: 'ARCHIVED' })).status).toBe('superseded');
+    expect(topicItemSchema.parse(item({ status: undefined })).status).toBe('superseded');
   });
 });
 

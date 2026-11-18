@@ -634,7 +634,8 @@
       "itemStatus": {
         "pending": "Waiting",
         "approved": "Approved",
-        "rejected": "Rejected"
+        "rejected": "Rejected",
+        "superseded": "Replaced"
       },
       "refreshed": "The list was updated",
       "refused": {

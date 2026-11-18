@@ -20,7 +20,7 @@ import { ANSWER_MAX_CHARS } from './knowledge-candidates';
 export const TOPIC_STATUSES = ['pending', 'approved', 'auto', 'rejected'] as const;
 export type TopicStatus = (typeof TOPIC_STATUSES)[number];
 
-const ITEM_STATUSES = ['pending', 'approved', 'rejected'] as const;
+const ITEM_STATUSES = ['pending', 'approved', 'rejected', 'superseded'] as const;
 export type TopicItemStatus = (typeof ITEM_STATUSES)[number];
 
 /** A value the server chose: a price, a period. Shown as it comes. */
@@ -51,7 +51,16 @@ function lenientArray<T extends z.ZodType>(element: T) {
 
 export const topicItemSchema = z.object({
   candidateId: z.string().min(1),
-  status: z.enum(ITEM_STATUSES).catch('pending'),
+  /*
+   * ★ The candidate's own status, as the database writes it (PENDING, APPROVED,
+   *   REJECTED, SUPERSEDED - routes/historical-import.ts `c.status`). An
+   *   unknown one is never offered for a decision: it reads as superseded.
+   */
+  status: z
+    .string()
+    .transform((v) => v.toLowerCase())
+    .pipe(z.enum(ITEM_STATUSES))
+    .catch('superseded'),
   question: z.string(),
   answer: z.string(),
   quotes: lenientArray(quoteSchema).transform((q) =>

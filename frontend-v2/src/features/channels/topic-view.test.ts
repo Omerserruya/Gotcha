@@ -48,7 +48,13 @@ const w: TopicWords = {
 };
 
 const item = (over: Record<string, unknown>) =>
-  topicItemSchema.parse({ candidateId: 'c1', question: 'q', answer: 'a', ...over });
+  topicItemSchema.parse({
+    candidateId: 'c1',
+    status: 'PENDING',
+    question: 'q',
+    answer: 'a',
+    ...over,
+  });
 
 describe('★★ the chosen-value line', () => {
   it('★ the latest answer with its day, and the one before with its month', () => {

@@ -634,7 +634,8 @@
       "itemStatus": {
         "pending": "ממתינה",
         "approved": "אושרה",
-        "rejected": "נדחתה"
+        "rejected": "נדחתה",
+        "superseded": "הוחלפה"
       },
       "refreshed": "הרשימה עודכנה",
       "refused": {
