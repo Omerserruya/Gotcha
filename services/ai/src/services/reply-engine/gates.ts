@@ -860,7 +860,8 @@ export function wrongSelfName(reply: string, employeeName: string | null | undef
 // 2026-11-17: "קריספי" answered with "קרמי"). Their distinguishing word must be in the product's
 // title, or the reply must say it is a different, close option.
 const ALTERNATIVE = /(?<![֐-׿])(?:דומה|דומים|קרוב|קרובה|במקום|חלופה|חלופי|אחר|אחרת|לא\s+(?:מצאתי|מצאנו|מוצא|מוצאים|נמצא)|אין\s+(?:לנו|כרגע)|בשם\s+הזה)(?![֐-׿])|\b(?:similar|closest|close (?:option|match)|instead|alternative|different (?:model|one)|not (?:found|by that name)|didn'?t find)\b/iu;
-const ASK_STOP = new Set(["יש", "לכם", "לך", "אני", "מחפש", "מחפשת", "מחפשים", "רוצה", "רוצים", "צריך", "צריכה", "אפשר", "דגם", "דגמים", "מוצר", "מתאים", "מתאימה", "כמה", "עולה", "מחיר", "איזה", "איזו", "בבקשה", "תודה", "have", "want", "need", "looking", "model", "price", "does", "with", "please", "thanks"]);
+// Greetings are no noun (C pinned rating, Tehila: "היי מחפשת את הבובון" read "היי", and scarves came back).
+const ASK_STOP = new Set(["היי", "הייי", "שלום", "אהלן", "הלו", "בוקר", "ערב", "טוב", "hey", "hello", "יש", "לכם", "לך", "אני", "מחפש", "מחפשת", "מחפשים", "רוצה", "רוצים", "צריך", "צריכה", "אפשר", "דגם", "דגמים", "מוצר", "מתאים", "מתאימה", "כמה", "עולה", "מחיר", "איזה", "איזו", "בבקשה", "תודה", "have", "want", "need", "looking", "model", "price", "does", "with", "please", "thanks"]);
 const close = (w: string, a: string) => w !== a && !w.includes(a) && !a.includes(w) && w.length >= 3 && w.slice(0, 2) === a.slice(0, 2) && Math.abs(w.length - a.length) <= 3;
 // "fits <Y>" / "מתאימה ל<Y>": the device or model the reply attributes the product to.
 const FITS_TARGET = /(?<![\u0590-\u05FF])(?:מתאים|מתאימה|מתאימים|מתאימות|מיועד|מיועדת|תואם|תואמת)\s+ל([\u0590-\u05FF'"׳״-]+(?:\s+[\u0590-\u05FF'"׳״-]+)?)|\b(?:fits|suits|works with|is for|made for|compatible with)\s+(?:the\s+|a\s+|your\s+)?(\S+(?:\s+\S+)?)/giu;
@@ -1702,7 +1703,10 @@ export function fixNearTitles(text: string, titles: string[]): string {
  * (payment, charge, refund; damage; safety), the reply says nothing of that subject's state, cause or likely
  * outcome: only a fixed acknowledgement of new details and the holding line. Other questions are answered.
  */
-const SENSITIVE_ITEM = /(?<![֐-׿])[והשבל]?(?:חיוב|חויב|חויבתי|חיובים|תשלום|שילמתי|זיכוי|החזר|כרטיס|אשראי|ויזה|כפול|כפילות|פגום|פגומה|שבור|שבורה|נזק|נפגע|נפגעה|כוויה|אלרגיה|תגובה\s+אלרגית)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|credit card|visa|double|duplicate|damaged?|broken|injur\w*|burn\w*|allerg\w*)\b/iu;
+// Held kinds ONLY: payment (a refund included), damage and safety; a return request has its own path (C pinned rating, Tehila: an open shipping question held
+// "מאיזה חומר עשויות השרשראות?" behind "המשלוח עדיין בבדיקה"). Weak words that also name shipping or stock
+// ("paid", "double", "כפול", "כרטיס") no longer make an item held on their own: a double charge says "חויב" too.
+const SENSITIVE_ITEM = /(?<![֐-׿])[והשבל]?(?:חיוב|חויב|חויבתי|חויבה|חיובים|תשלום|שילמתי|זיכוי|החזר|אשראי|פגום|פגומה|פגומים|שבור|שבורה|נזק|נפגע|נפגעה|כוויה|אלרגיה|תגובה\s+אלרגית)(?![֐-׿])|\b(?:charge[ds]?|payment|refund|credit card|damaged?|broken|injur\w*|burn\w*|allerg\w*)\b/iu;
 const HOLD_SUBJECT = /(?<![֐-׿])[והשבלמ]?(?:חיוב|חויב|חויבתי|חיובים|תשלום|התשלום|שילמת|שילמתי|זיכוי|החזר|כרטיס|אשראי|ויזה|סליקה|ספק|אישור|עסקה|כפול|כפילות|זמני|זמנית|הזמנה|ההזמנה|הזמנתך|בדיקה|הבדיקה|נבדק|נבדקת|בודקים|פגום|פגומה|שבור|נזק|החלפה|כוויה|אלרגיה)(?![֐-׿])|\b(?:charge[ds]?|payment|paid|refund|card|visa|authori[sz]ation|provider|duplicate|double|pending|temporary|order|damage[ds]?|broken|replacement|check(?:ing|ed)?)\b/iu;
 export const HOLD_ACK_HE = "קיבלתי, הוספתי את זה לבדיקה.";
 export const HOLD_ACK_EN = "Got it, I've added that to the check.";
@@ -1721,6 +1725,16 @@ export function bringsDetails(incoming: string, attachment = false): boolean {
  * acknowledgement (when the customer brought details) and the holding line take their place. Sentences on
  * anything else stay.
  */
+/**
+ * A question on another topic during a hold is answered (C pinned rating, Tehila): only the sentences on the held
+ * subject itself (its payment, damage, safety or return words) and team lines go; order and check words alone
+ * ("הזמנה", "בדיקה") do not. Empty when nothing else is left.
+ */
+export function offTopicHoldReply(reply: string): string {
+  const parts = (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []);
+  return parts.filter((x) => x.trim() && !SENSITIVE_ITEM.test(x) && !TEAM_PASS_ANY.test(x) && !TEAM_LINE.test(x) && !STILL_CHECKING.test(x)).join("").replace(/\s{2,}/g, " ").trim();
+}
+const STILL_CHECKING = /(?<![\u0590-\u05FF])(?:עדיין\s+(?:בבדיקה|נבדק|נבדקת|בודקים)|הצוות\s+(?:עדיין\s+)?בודק)|\bstill being checked\b/iu;
 export function holdReply(reply: string, holdingLine: string, opts: { details: boolean; locale: "he" | "en"; procedural?: boolean; keepOther?: boolean }): string {
   const parts = (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? []);
   // A hedge hints at findings ("לכאורה"): never in holding mode (rating 7af7c6d7).
@@ -2179,6 +2193,28 @@ export function padsFromText(text: string): string[] {
 }
 
 
+
+/**
+ * The link for a how-to or video ask, from the business's own texts (C pinned rating, NE'A: "אשמח לסרטון הדרכה"
+ * about an eyebrow pen got the first link in the knowledge, a mascara's page). A line with a link that shares a
+ * product word of the subject (her messages first, then the bot's last ones) wins, a video line first among
+ * equals; else the one video link the texts have; else none, and the turn goes to the team.
+ */
+const HOWTO_WORDS = new Set(["איך", "משתמשים", "שימוש", "להשתמש", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "אשמח", "תודה", "אפשר", "לקבל", "תשלחי", "תשלחו", "שלחי", "video", "link", "tutorial", "how", "use"]);
+const VIDEO_LINE = /סרטון|הדרכה|מדריך|video|youtu|vimeo/iu;
+export function howToLink(kb: string, subjects: string[]): string | null {
+  const lines = String(kb ?? "").split(/\n+/).filter((l) => (l.match(URL_RE) ?? []).length);
+  if (!lines.length) return null;
+  const firstUrl = (l: string) => { const us = l.match(URL_RE) ?? []; return us.find((u) => /youtu|vimeo/i.test(u)) ?? us[0] ?? null; };
+  for (const subject of subjects) {
+    const keys = [...new Set((String(subject ?? "").toLowerCase().match(/[\p{L}]{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w) && !STEM_STOP.has(w) && !HOWTO_WORDS.has(w) && !HOWTO_WORDS.has(w.replace(/^[הולבמש]/u, ""))).flatMap((w) => nounKeys(w)))];
+    if (!keys.length) continue;
+    const scored = lines.map((l) => { const text = l.replace(URL_RE, " ").toLowerCase(); return { l, s: keys.filter((k) => text.includes(k)).length + (VIDEO_LINE.test(l) ? 0.5 : 0) }; }).filter((x) => x.s >= 1);
+    if (scored.length) return firstUrl(scored.sort((a, b) => b.s - a.s)[0].l);
+  }
+  const videos = [...new Set(lines.flatMap((l) => (l.match(URL_RE) ?? []).filter((u) => /youtu|vimeo/i.test(u))))];
+  return videos.length === 1 ? videos[0] : null;
+}
 
 /** "No link" while the business's data has one (rating 052f53ad: youtu.be in the product data). */
 export function deniesKnownLink(reply: string, sources: string): string[] {

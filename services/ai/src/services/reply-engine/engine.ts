@@ -33,7 +33,7 @@ import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./promp
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -503,6 +503,23 @@ const SEARCH_FILLER = new Set(["היי", "הי", "שלום", "אהלן", "אני
 const HOWTO_LINK_ASK = /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|מדריך|קישור|לינק)(?![\u0590-\u05FF])|\b(?:video|tutorial|guide|link)\b/iu;
 // The part every holding line shares, whatever its noun (stillCheckingLine).
 const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "still being checked by the team" } as const;
+/**
+ * The second fixed holding line (C pinned rating: the same line in sent messages 3 and 5 after a silent 4, and
+ * 9 and 11). When the last message SENT was the holding line and the hold must still say something, this one.
+ */
+/** "No match came up" or "send me the sizes" (C pinned rating: said to a customer who had just sent them). */
+const NO_MATCH_SEND_SIZES = /(?<![\u0590-\u05FF])(?:לא\s+(?:הופיעה|הופיע|נמצאה|נמצא|עלתה|עלה|מצאתי|מצאנו)\s+(?:לי\s+)?התאמה|(?:שלחי|תשלחי|שלח|תשלח|שלחו|תשלחו)\s+(?:לי\s+)?(?:את\s+)?(?:ה)?מידות)|\b(?:no match (?:came up|found)|send (?:me )?(?:the )?(?:sizes|measurements))\b/iu;
+export const HOLD_LINE_ALT = { he: "אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.", en: "I'm here, and the team's answer will come here in the chat as soon as it's ready." } as const;
+/**
+ * The last message the bot SENT was the holding line: the state says the line came on the last turn the bot
+ * spoke (a silent turn in between changes nothing), else the history's last bot message has it.
+ */
+export function lastSentHoldLine(facts: Record<string, unknown> | null | undefined, lastOutBody: string, loc: "he" | "en"): boolean {
+  const n = (k: string) => (facts?.[k] != null ? Number(facts[k]) : -Infinity);
+  const line = n("_holdLineTurn");
+  if (Number.isFinite(line) && line >= n("_spokeTurn") && line >= n("_thanksTurn")) return true;
+  return String(lastOutBody ?? "").includes(HOLD_LINE_CORE[loc]);
+}
 const HOLLOW_HEADER = /^(?:הנה\s+כמה\s+אפשרויות|Here are some options|הנה\s+מה\s+שמצאתי|Here is what I found|הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
 /** "What is it called?" about what was shown. */
 const NAME_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:קוראים|נקרא|נקראת)\s*(?:ל(?:ו|ה|זה|זו|מוצר))?|מה\s+(?:השם|שמו|שמה)(?:\s+של)?)(?![\u0590-\u05FF])|\bwhat(?:'s| is) (?:it|its name|the name|that) called\b|\bwhat(?:'s| is) the name\b/iu;
@@ -976,6 +993,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The active business skill (opened via read_skill this turn or kept in state) tightens approval.
   const skillByName = (n: string | null) => skills.find((s) => s.name === n)?.candidate ?? null;
   const env: RunnerEnv = {
+    incoming: String(opts.incomingMessage ?? ""),
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     aiAgentId: config.id,
@@ -1443,20 +1461,31 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // The turn's pads, and the pads the business's texts give with their sizes (rating 6e6c306a: the mixer went to
       // the team with two fitting pads outside the turn's two candidates).
       const kbText = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
-      const padTitles = [...new Set([...titles.filter((t) => sizePair(t)), ...padsFromText(kbText)])];
+      const kbPads = padsFromText(kbText);
+      const padTitles = [...new Set([...titles.filter((t) => sizePair(t)), ...kbPads])];
       if (items.length >= 2 && padTitles.length) {
+        // She sent the sizes: "no match came up, send the sizes" is untrue now (C pinned rating, A: the toaster and
+        // the blender). It goes; every size gets its line below, or the team.
+        if (NO_MATCH_SEND_SIZES.test(text)) { text = dropSentencesBy(text, NO_MATCH_SEND_SIZES); (trace as any).noMatchAskCut = true; }
         const fmt = (s: [number, number]) => `${s[0]}×${s[1]}`;
+        // An item is answered only by a sentence that names it (or its size) AND a pad (C pinned rating, B: the
+        // mixer named without a pad counted as answered and got no line).
+        const padKeys = [...new Set(padTitles.map((p) => padLabel(p).toLowerCase()).filter((k) => k.length >= 3))];
+        const sentencesNow = () => text.match(/[^.!?\n]+[.!?]*/g) ?? [];
         const lines: string[] = [];
         const none: string[] = [];
         for (const it of items) {
           // Answered already, by its size or by its device name ("לסודה: גפן"). A "no fit" about it never reaches here:
           // the gate cuts it (ungrounded_negative_fit, "לא עלתה התאמה" included since 6e6c306a).
-          const said = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => text.includes(k)) || namesItem(text, it.name, items.filter((o) => o !== it).map((o) => o.name));
+          const keys = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`];
+          const said = sentencesNow().some((s) => (keys.some((k) => s.includes(k)) || namesItem(s, it.name, items.filter((o) => o !== it).map((o) => o.name))) && padKeys.some((k) => s.toLowerCase().includes(k)));
           if (said) continue;
-          const pad = smallestFitting(it.size, padTitles);
+          // The pad for a size comes from the knowledge's size table when it has one (C pinned rating, B: the
+          // store's two generic "משטח הזזה" titles answered every appliance); the store's titles otherwise.
+          const pad = smallestFitting(it.size, kbPads.length ? kbPads : padTitles);
           // The pad's own name (its title without the size), never a size alone (rating 052f53ad).
           // Its distinguishing name, never a generic noun (rating 1771ba14: "משטח הזזה" three times).
-          const name = pad ? padName(pad, padTitles, padsFromText(kbText)) : "";
+          const name = pad ? padName(pad, kbPads.length ? kbPads : padTitles, kbPads) : "";
           if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${name}.` : `למידה ${fmt(it.size)}: ${name}.`);
           else none.push(fmt(it.size));
         }
@@ -1521,8 +1550,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const sinceSpoke = Number.isFinite(spokeAt) ? turnNo - spokeAt : inboundSince <= 1 ? 1 : 2;
           // Never the identical line twice in a row (rating 1771ba14: the same line at turns 9 and 11): the last
           // bot message already says it, on screen.
-          const lastIsLine = (lastTwo[0] ?? "").includes(holdLine) || (lastTwo[0] ?? "").trim() === holdLine.trim();
-          const lineNow = (!recentlyHeld || sinceSpoke >= 2) && !lastIsLine ? holdLine : "";
+          // Counted on what was SENT (C pinned rating): a silent turn in between does not make the line new again.
+          const lastIsLine = lastSentHoldLine(state.facts, lastTwo[0] ?? "", holdLoc) || (lastTwo[0] ?? "").trim() === holdLine.trim();
+          const lineNow = !recentlyHeld || sinceSpoke >= 2 ? (lastIsLine ? HOLD_LINE_ALT[holdLoc] : holdLine) : "";
           // A held return and "how do I return it?": the steps from the business's texts, never silence (87076cab
           // replay, 97837: the hold line the turn before, then nothing at all).
           const returnHowTo = isReturnSubject(held) && returnHowToAsk(incomingNow);
@@ -1532,11 +1562,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
             // Another topic's sentences only when the customer asked about one this turn (rating 93f9fdff: a size
             // sentence hung on the holding line).
             ? holdReply(text, lineNow, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow), keepOther: asksOtherTopic(incomingNow) })
-            : (holdReply(text, "", { details: false, locale: holdLoc }) || lineNow);
+            // A question on another topic is answered, never swapped for the hold line (C pinned rating, Tehila).
+            : (offTopicHoldReply(text) || lineNow);
           // "We'll keep it quiet, no more messages" never replaces the team's hold (rating 1771ba14, payment B
           // after "כן"): cut, and the holding line stays when nothing else is left.
           if (SILENCE_PROMISE.test(text)) {
-            text = dropSentencesBy(text, SILENCE_PROMISE) || holdLine;
+            text = dropSentencesBy(text, SILENCE_PROMISE) || (lastIsLine ? HOLD_LINE_ALT[holdLoc] : holdLine);
             (trace as any).silencePromiseCut = true;
           }
           if (text.includes(HOLD_LINE_CORE[holdLoc])) holdFacts[HOLD_LINE_FACT] = String(turnNo);
@@ -1562,10 +1593,18 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // על הבלבול." on "איפה הסרטון"): a link from the business's own texts for a how-to ask, else the team.
     // Only what a cleanup LEFT (the gate cut the rest), never a safety conversation's short reply.
     // The gate's own team line on a how-to ask whose link the business's texts hold is the link too.
+    // What the conversation is about, for a how-to link: her messages (this one and the three before), then the
+    // bot's last two.
+    const linkSubjects = () => {
+      const msgs = [...history].reverse();
+      const her = [String(opts.incomingMessage ?? ""), ...msgs.filter((m: any) => m?.direction === "INBOUND").slice(0, 3).map((m: any) => String(m.body ?? ""))].join("\n");
+      const bot = msgs.filter((m: any) => m?.direction === "OUTBOUND").slice(0, 2).map((m: any) => String(m.body ?? "")).join("\n");
+      return [her, bot];
+    };
     const leftOver = apologyOnly(text) || (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && isCannedTeamLine(text));
     if (leftOver && String(trace.gate3?.rewrite ?? "none") !== "none" && !safetyConversation && (asksSomething(String(opts.incomingMessage ?? "")) || imperativeAsk(String(opts.incomingMessage ?? ""))) && !heldTurn) {
       const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
-      const link = HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) ? /https?:\/\/[^\s)\]"'״]+[^\s.,;:!?)\]"'״]/.exec(kb)?.[0] : null;
+      const link = HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) ? howToLink(kb, linkSubjects()) : null;
       text = link ? (locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`) : (locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.");
       // The link answers it: no team question; else the question goes to the team.
       output = link ? { ...output, teamQuestion: null } : output.teamQuestion ? output : { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
@@ -1575,8 +1614,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // 1771ba14, NE'A: the video was in the knowledge, later asks went to the team): the link, not the team.
     if (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && !/https?:\/\//i.test(text) && teamPassIn(text) && !safetyConversation && !heldTurn) {
       const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
-      const videoLine = kb.split("\n").find((l) => /https?:\/\//i.test(l) && /סרטון|הדרכה|מדריך|video|youtu|vimeo/iu.test(l));
-      const link = /https?:\/\/[^\s)\]"'״]+[^\s.,;:!?)\]"'״]/.exec(videoLine ?? kb)?.[0];
+      // The link of the product being discussed, never the first link the texts have (C pinned rating, NE'A).
+      const link = howToLink(kb, linkSubjects());
       if (link) {
         const rest = removeTeamLines(text);
         text = `${rest ? `${rest} ` : ""}${locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`}`;
@@ -1887,10 +1926,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (customerAck(incomingNow)) {
         const thanksLine = locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE;
         if (!state.facts?.[THANKS_FACT] && lastOutBody.trim() !== thanksLine) { reply = thanksLine; holdFacts[THANKS_FACT] = String(turnNo); (trace as any).holdingFloor = "thanks"; }
-      } else if ((silentLong || (direct && sinceLine >= 2)) && !lastOutBody.includes(stillCheckingLine(heldNow, locale === "en" ? "en" : "he"))) {
-        reply = stillCheckingLine(heldNow, locale === "en" ? "en" : "he");
-        holdFacts[HOLD_LINE_FACT] = String(turnNo);
-        (trace as any).holdingFloor = true;
+      } else if (silentLong || (direct && sinceLine >= 2)) {
+        // Never the same line as the last SENT message (C pinned rating): the second fixed line then.
+        const loc: "he" | "en" = locale === "en" ? "en" : "he";
+        const again = lastSentHoldLine(state.facts, lastOutBody, loc) || lastOutBody.includes(stillCheckingLine(heldNow, loc));
+        reply = again ? HOLD_LINE_ALT[loc] : stillCheckingLine(heldNow, loc);
+        if (!again) holdFacts[HOLD_LINE_FACT] = String(turnNo);
+        (trace as any).holdingFloor = again ? "alt" : true;
       }
     }
   }

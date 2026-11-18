@@ -114,8 +114,14 @@ export function searchLine(trace: any): string {
   const asked = Array.isArray(trace?.searchArgs) && trace.searchArgs.length ? searchArgsLine(trace.searchArgs) : "";
   const ran = (Array.isArray(trace?.tools) ? trace.tools : [])
     .filter((t: any) => /(?:list_products|search_products|get_product|complementary_products)$/.test(String(t?.tool ?? "")))
-    .map((t: any) => `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}`);
-  return [asked, ran.length ? `ran: ${ran.join("; ")}` : ""].filter(Boolean).join(" | ") || "none";
+    .map((t: any) => {
+      // The first three products it returned (C pinned rating: which two titles answered every appliance).
+      const titles = [...String(t.content ?? "").matchAll(/PRODUCT_\d+:\s*"([^"]+)"/g)].slice(0, 3).map((m) => JSON.stringify(m[1].slice(0, 60)));
+      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
+    });
+  // "sent": the args the store got, cleaned; "model args": what the model asked for (an audience there may
+  // never have been sent).
+  return [asked ? `sent: ${asked}` : "", ran.length ? `model args: ${ran.join("; ")}` : ""].filter(Boolean).join(" | ") || "none";
 }
 
 export function stagesLine(trace: any): string {

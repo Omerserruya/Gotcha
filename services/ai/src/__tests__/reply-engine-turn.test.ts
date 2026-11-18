@@ -36,6 +36,8 @@ const h = vi.hoisted(() => ({
   extraTitle: "",
   docAddress: null as string | null,
   groundStatus: "ok" as string,
+  /** Titles per search, in order (a retried search sees the next); empty: groundTitle every time. */
+  groundSeq: [] as string[],
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -119,11 +121,11 @@ vi.mock("../services/discovery-integration.service", () => ({
   isComplementaryTool: () => false,
   complementaryAnchorAllowed: async () => ({ ok: true }),
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
-  groundProductSearchResult: async () => ({
+  groundProductSearchResult: async () => ((title: string) => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
-    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: h.groundUrl, attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
-    appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
-  }),
+    candidates: [{ title, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: h.groundUrl, attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
+    appliedFilters: [], unavailableFilters: [], safeModelSummary: title,
+  }))(h.groundSeq.length ? h.groundSeq.shift()! : h.groundTitle),
 }));
 vi.mock("../services/knowledge.service", () => ({
   retrieveRelevantChunks: async () => [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
@@ -166,6 +168,7 @@ beforeEach(() => {
   h.history = null;
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
+  h.groundSeq = [];
   h.groundUrl = "u";
   h.groundCategory = "";
   h.extraTitle = "";
@@ -1501,9 +1504,11 @@ describe("7af7c6d7 rating: engine passes", () => {
     await withHeld({ _holdLineTurn: "6" }, async () => {
       h.responses.push({ toolCalls: [respond("q3", { reply: "החיוב עדיין בבדיקה." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
-      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      // The line was the last message sent (nothing since turn 6): the second fixed line, never the same one
+      // (C pinned rating c24439a1).
+      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
       const up = h.upserts[h.upserts.length - 1];
-      expect((up?.create ?? up?.update)?.facts?._holdLineTurn).toBe("10");
+      expect((up?.create ?? up?.update)?.facts?._spokeTurn).toBe("10");
     });
   });
   it("★ 'I've added it to the check' only when something new was added", async () => {
@@ -1557,11 +1562,12 @@ describe("d7782dd2 rating: engine passes", () => {
       expect(r.reply ?? null).toBeNull();
     });
   });
-  it("★ a restatement after a silent turn gets the holding line; right after one, nothing", async () => {
+  it("★ a restatement after a silent turn gets a holding line (the second one after the first); right after one, nothing", async () => {
     await withHeld({ _holdLineTurn: "8", _spokeTurn: "8" }, async () => {
       h.responses.push({ toolCalls: [respond("d2", { reply: "לא נוצרה הזמנה, נכון." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
-      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      // The line at 8, silent at 9: the second line at 10, never the same one twice in a row (C pinned rating).
+      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
       const up = h.upserts[h.upserts.length - 1];
       expect((up?.create ?? up?.update)?.facts?._spokeTurn).toBe("10");
     });
@@ -1618,7 +1624,8 @@ describe("657e5f85 rating: engine passes", () => {
     try {
       h.responses.push({ toolCalls: [respond("fl1", { reply: "ההזמנה בוטלה כי התשלום לא נקלט." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תעדכנו בבקשה ושלחו לי מספר הזמנה" }, "autonomous");
-      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      // Never left without a reply; the line was the last sent, so the second line (C pinned rating).
+      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
   it("★ holding mode's floor after the gate went silent: the bot quiet 2+ turns gets the holding line", async () => {
@@ -2167,5 +2174,132 @@ describe("1771ba14 items and the 87076cab replay: wiring", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לבטל את ההזמנה?" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/חיפוש/);
     expect(r.reply ?? "").toMatch(/14 יום/);
+  });
+});
+
+/** C pinned rating (c24439a1): Tehila, NE'A and the Smoovee devices. */
+describe("C pinned rating c24439a1: wiring", () => {
+  const held = (text: string, facts: any = {}, turnCount = 6) => async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: `checking with the team: ${text}`, at: new Date().toISOString() }], turnCount });
+  const withState = async (fn: any, body: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversationState.findUnique;
+    (prisma as any).conversationState.findUnique = fn;
+    try { await body(); } finally { (prisma as any).conversationState.findUnique = before; }
+  };
+  it("★ 1a: an open shipping question is no hold: a question on another topic is answered", async () => {
+    await withState(held("Customer asks whether shipping is paid and when the package ships"), async () => {
+      h.lexical = [{ content: "שרשראות: כסף 925.", score: 0.9, documentTitle: "materials", chunkIndex: 1, documentId: "d" }];
+      h.responses.push({ toolCalls: [respond("ts1", { reply: "השרשראות עשויות כסף 925, ואפשר להזמין אותן באתר." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מאיזה חומר עשויות השרשראות?" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/כסף 925/);
+      expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה/);
+    });
+  });
+  it("★ 1b: in a real hold, a question on another topic is answered, not swapped for the hold line", async () => {
+    await withState(held("חויבתי פעמיים על אותה הזמנה"), async () => {
+      h.lexical = [{ content: "שרשראות: כסף 925.", score: 0.9, documentTitle: "materials", chunkIndex: 1, documentId: "d" }];
+      // "הזמנה" in the answer: the held subject's broad words never take an answer on another topic.
+      h.responses.push({ toolCalls: [respond("ts2", { reply: "השרשראות עשויות כסף 925, וכל הזמנה מגיעה באריזת מתנה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מאיזה חומר עשויות השרשראות?" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/כסף 925/);
+      expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה/);
+    });
+  });
+  it("★ 2: a video ask gets the link of the product discussed, never the first link the texts have", async () => {
+    h.lexical = [{ content: "מיס ריס מסקרה: https://shop.example/product/miss-lash\nעט גבות פדרה, סרטון הדרכה: https://youtu.be/brow123", score: 0.9, documentTitle: "links", chunkIndex: 1, documentId: "d" }];
+    h.history = [
+      { direction: "INBOUND", body: "יש לכם עט גבות?", metadata: null, createdAt: new Date(Date.now() - 3 * 60_000) },
+      { direction: "OUTBOUND", body: "כן, עט הגבות פדרה.", senderName: "AI Bot", metadata: null, createdAt: new Date(Date.now() - 2 * 60_000) },
+    ];
+    h.responses.push({ toolCalls: [respond("vl1", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "סרטון לעט גבות" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה" }, "autonomous");
+    expect(r.reply ?? "").toContain("https://youtu.be/brow123");
+    expect(r.reply ?? "").not.toMatch(/miss-lash/);
+  });
+  it("★ 2b: no link of the product discussed and more than one video: the team, never a wrong link", async () => {
+    h.lexical = [{ content: "מיס ריס מסקרה: https://shop.example/product/miss-lash\nסרטון שפתון: https://youtu.be/lip1\nסרטון סומק: https://youtu.be/blush1", score: 0.9, documentTitle: "links", chunkIndex: 1, documentId: "d" }];
+    h.history = [{ direction: "INBOUND", body: "יש לכם עט גבות?", metadata: null, createdAt: new Date(Date.now() - 3 * 60_000) }];
+    h.responses.push({ toolCalls: [respond("vl2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "סרטון לעט גבות" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/https?:\/\//);
+  });
+  it("★ 4: sizes she sent: 'no match, send the sizes' is cut and each size gets its pad", async () => {
+    h.groundTitle = "סמובי אליס 31*41";
+    h.extraTitle = "סמובי גפן 26*20";
+    h.responses.push({ toolCalls: [tc("fd1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fd2", { reply: "לא הופיעה התאמה לטוסטר ולבלנדר, שלחי לי את המידות." })] }, { toolCalls: [respond("fd3", { reply: "לא הופיעה התאמה לטוסטר ולבלנדר, שלחי לי את המידות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "טוסטר 30x22 בלנדר 24x15" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/לא הופיעה התאמה|שלחי לי את המידות/);
+    expect(r.reply ?? "").toMatch(/30×22: סמובי אליס/);
+    expect(r.reply ?? "").toMatch(/24×15: סמובי גפן/);
+  });
+  it("★ 4b: an item named without a pad is not answered: it gets its line", async () => {
+    h.groundTitle = "סמובי אליס 31*41";
+    h.extraTitle = "סמובי גפן 26*20";
+    h.responses.push({ toolCalls: [tc("fd4", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fd5", { reply: "לטוסטר מתאים סמובי גפן. את המיקסר כדאי למדוד שוב." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 30x22 טוסטר 24x15" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/30×22: סמובי אליס/);
+  });
+  it("★ 5: the hold line was the last message SENT (a silent turn since): the second line, never the same one", async () => {
+    const line = "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.";
+    const { HOLD_LINE_ALT } = await import("../services/reply-engine/engine");
+    h.history = [
+      { direction: "INBOUND", body: "חויבתי פעמיים", metadata: null, createdAt: new Date(Date.now() - 5 * 60_000) },
+      { direction: "OUTBOUND", body: line, senderName: "AI Bot", metadata: null, createdAt: new Date(Date.now() - 4 * 60_000) },
+      { direction: "INBOUND", body: "נו?", metadata: null, createdAt: new Date(Date.now() - 3 * 60_000) },
+      { direction: "INBOUND", body: "מה עם החיוב?", metadata: null, createdAt: new Date(Date.now() - 60_000) },
+    ];
+    // The line at turn 3, silent at 4, now 5.
+    await withState(held("חויבתי פעמיים על אותה הזמנה", { _holdLineTurn: "3", _spokeTurn: "3" }, 5), async () => {
+      h.responses.push({ toolCalls: [respond("al1", { reply: "החיוב עדיין נבדק." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם החיוב?" }, "autonomous");
+      expect(r.reply ?? "").not.toContain(line);
+      expect(r.reply ?? "").toContain(HOLD_LINE_ALT.he);
+    });
+  });
+});
+
+describe("C pinned rating c24439a1: the holding floor", () => {
+  it("★ 5b: the floor after the gate went silent: the second line when the line was the last message sent", async () => {
+    const { HOLD_LINE_ALT } = await import("../services/reply-engine/engine");
+    const { prisma } = await import("@chatcenter/shared");
+    const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
+    // The line went out at 7 and nothing since (the state); the history's last bot message is another engine's.
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString(), _holdLineTurn: "7", _spokeTurn: "7" }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
+    try {
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "נו", metadata: null }];
+      h.responses.push({ toolCalls: [respond("fa1", { reply: para })] }, { toolCalls: [respond("fa2", { reply: para })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
+      expect(r.reply ?? "").toContain(HOLD_LINE_ALT.he);
+      expect(r.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+});
+
+describe("C pinned rating c24439a1: the search on her noun", () => {
+  it("★ 3b: results with none of her noun: once more on the noun alone, and its products are used", async () => {
+    h.groundSeq = ["מטפחת משי ורודה", "בובון קטיפה לקשירה נמוכה"];
+    h.responses.push({ toolCalls: [tc("bn1", "woocommerce.list_products", { query: "בובון לקשירה נמוכה" })] }, { toolCalls: [respond("bn2", { reply: "יש לנו בובון קטיפה לקשירה נמוכה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי מחפשת את הבובון לקשירה נמוכה" }, "autonomous");
+    const t = (r.trace as any).tools.find((x: any) => x.tool === "woocommerce.list_products");
+    expect(t.args.query).toBe("בובון");
+    expect(String(t.content)).toMatch(/בובון קטיפה/);
+    expect(String(t.content)).not.toMatch(/מטפחת/);
+  });
+  it("★ 3c: results that hold her noun are not searched again", async () => {
+    h.groundSeq = ["בובון קטיפה לקשירה נמוכה", "מטפחת משי ורודה"];
+    h.responses.push({ toolCalls: [tc("bn3", "woocommerce.list_products", { query: "בובון לקשירה נמוכה" })] }, { toolCalls: [respond("bn4", { reply: "יש לנו בובון קטיפה לקשירה נמוכה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי מחפשת את הבובון לקשירה נמוכה" }, "autonomous");
+    const t = (r.trace as any).tools.find((x: any) => x.tool === "woocommerce.list_products");
+    expect(t.args.query).toBe("בובון לקשירה נמוכה");
+    expect(h.groundSeq).toEqual(["מטפחת משי ורודה"]);
+  });
+  it("★ 4c: the pad for a size comes from the knowledge's table, not the store's generic title", async () => {
+    h.groundTitle = "משטח הזזה 20*25";
+    h.lexical = [{ content: "טבלת מידות: סמובי גפן 26*20, סמובי אליס 31*41", score: 0.9, documentTitle: "sizes", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [tc("kp1", "woocommerce.list_products", { query: "מיקסר" })] }, { toolCalls: [respond("kp2", { reply: "הנה ההתאמות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 30x22 טוסטר 24x15" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/24×15: סמובי גפן/);
+    expect(r.reply ?? "").toMatch(/30×22: סמובי אליס/);
+    expect(r.reply ?? "").not.toMatch(/משטח הזזה 20\*25/);
   });
 });

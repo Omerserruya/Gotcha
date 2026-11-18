@@ -26,6 +26,7 @@ import { buildKeyedModelSummary, type ProductSearchEnvelope } from "../product-s
 import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge, knowledgeLimit } from "../knowledge.service";
 import type { ToolRunRecord, ToolGateDecision, StateLane } from "./contract";
 import { findSkill, type EngineSkill } from "./skills";
+import { headNoun, productsOfNoun } from "./gates";
 import { runMcpTool } from "../mcp-servers.service";
 
 export interface ModelToolCall {
@@ -34,6 +35,8 @@ export interface ModelToolCall {
 }
 
 export interface RunnerEnv {
+  /** The customer's message this turn: a search with none of her noun's products is retried on the noun. */
+  incoming?: string;
   tenantId: string;
   conversationId: string;
   aiAgentId: string;
@@ -152,7 +155,7 @@ export async function defaultKnowledge(tenantId: string, query: string, aiAgentI
 async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecord & { side?: AgentToolDispatchResult["sideEffect"] }> {
   const t0 = Date.now();
   const tool = call.function?.name ?? "";
-  const args = redactCardDetailsInArgs(parseArgs(call.function?.arguments));
+  let args = redactCardDetailsInArgs(parseArgs(call.function?.arguments));
   const deps: RunnerDeps = {
     dispatch: dispatchToolCall,
     mcp: runMcpTool,
@@ -262,7 +265,29 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   let content = outcome.r.content;
   let resultCount: number | undefined;
   if (isProductSearchTool(tool) && outcome.decision === "allow") {
-    const envlp = await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: content }).catch(() => null);
+    let envlp = await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: content }).catch(() => null);
+    // Results, and none of them is her noun (C pinned rating, Tehila: "בובון לקשירה נמוכה" gave 10 and the cards
+    // were scarves): once more on the noun alone, and its results are used when they hold her noun.
+    const noun = env.incoming ? headNoun(env.incoming) : null;
+    const bare = noun ? noun.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "") : "";
+    // Only titles in her noun's own script are evidence of another kind ("Canvas Tote" may be the "תיק" she asked).
+    const sameScript = (x: string) => /[\u0590-\u05FF]/.test(x) === /[\u0590-\u05FF]/.test(bare);
+    if (envlp?.status === "ok" && envlp.candidates.length && bare && envlp.candidates.every((c: any) => sameScript(String(c?.title ?? ""))) && !productsOfNoun(envlp.candidates as any[], env.incoming ?? "") && String(args.query ?? "").trim() !== bare) {
+      const before = args;
+      args = { ...args, query: bare };
+      delete (args as any).customer_query;
+      const again: any = await attempt();
+      const second = again !== TIMEOUT && !("thrown" in again) && again.decision === "allow"
+        ? await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: again.r.content }).catch(() => null)
+        : null;
+      if (second?.status === "ok" && productsOfNoun(second.candidates as any[], env.incoming ?? "")) {
+        envlp = second;
+        outcome = again as Exclude<typeof outcome, typeof TIMEOUT>;
+        (env.turn as any).nounResearch = { query: bare, count: second.candidates.length };
+      } else {
+        args = before;
+      }
+    }
     if (envlp) {
       content = mergeEnvelope(env.turn, envlp, env.locale, env.cardChannel);
       // The shared summary tells the model to say it can't check the catalogue and offer a

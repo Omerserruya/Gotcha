@@ -2852,7 +2852,11 @@ describe("1771ba14 rating items", () => {
   it("★ 6: the replay always prints a search line", async () => {
     const { searchLine } = await import("../scripts/replay-v2");
     expect(searchLine({})).toBe("none");
-    expect(searchLine({ tools: [{ tool: "woocommerce.list_products", args: { query: "בובות" }, outcome: "empty", resultCount: 0 }] })).toMatch(/ran: list_products \{"query":"בובות"\} -> empty \(0\)/);
+    expect(searchLine({ tools: [{ tool: "woocommerce.list_products", args: { query: "בובות" }, outcome: "empty", resultCount: 0 }] })).toMatch(/model args: list_products \{"query":"בובות"\} -> empty \(0\)/);
+    // The titles it returned, the first three, 60 characters each; what was sent is labelled apart.
+    const l = searchLine({ searchArgs: [{ tool: "woocommerce.list_products", q: "מיקסר" }], tools: [{ tool: "woocommerce.list_products", args: { query: "מיקסר", audience: "men" }, outcome: "ok", resultCount: 2, content: 'PRODUCT_1: "משטח הזזה 20*25" | ILS 99\nPRODUCT_2: "משטח הזזה 31*41" | ILS 129' }] });
+    expect(l).toMatch(/^sent: list_products q="מיקסר" \| model args: /);
+    expect(l).toMatch(/\["משטח הזזה 20\*25", "משטח הזזה 31\*41"\]/);
   });
   it("★ 7: a derived measure no source states", async () => {
     const { derivedMeasure } = await import("../services/reply-engine/gates");
@@ -2862,5 +2866,48 @@ describe("1771ba14 rating items", () => {
   it("★ 9: 'אין כאן מידע על גוונים' while the product data has the shades", async () => {
     const { infoDeniedButKnown } = await import("../services/reply-engine/gates");
     expect(infoDeniedButKnown("אין כאן מידע על גוונים של הבסיס.", "גוונים: Sand, Medium, Honey")).toHaveLength(1);
+  });
+});
+
+describe("C pinned rating c24439a1: units", () => {
+  it("★ a guessed audience never reaches the store: not hers, not on a kitchen-pad ask", async () => {
+    const { cleanSearchArgs } = await import("../services/reply-engine/engine");
+    expect((cleanSearchArgs({ query: "בובון", audience: "women" } as any, "היי מחפשת את הבובון לקשירה נמוכה") as any).audience).toBeUndefined();
+    expect((cleanSearchArgs({ query: "מיקסר", audience: "men" } as any, "מיקסר 30x22 טוסטר 24x15") as any).audience).toBeUndefined();
+    expect((cleanSearchArgs({ query: "חולצה", audience: "men" } as any, "חולצה לגבר") as any).audience).toBe("men");
+  });
+  it("★ 3: a greeting is no noun: 'היי מחפשת את הבובון' is about the bubon", async () => {
+    const { headNoun, productsOfNoun } = await import("../services/reply-engine/gates");
+    expect(headNoun("היי מחפשת את הבובון לקשירה נמוכה")).toBe("הבובון");
+    const c = [{ title: "מטפחת משי" }, { title: "בובון קטיפה לקשירה נמוכה" }];
+    expect(productsOfNoun(c, "היי מחפשת את הבובון לקשירה נמוכה")?.map((x) => x.title)).toEqual(["בובון קטיפה לקשירה נמוכה"]);
+  });
+  it("★ 2: howToLink picks the discussed product's line, else the only video, else none", async () => {
+    const { howToLink } = await import("../services/reply-engine/gates");
+    const kb = "מיס ריס מסקרה: https://shop.example/product/miss-lash\nעט גבות פדרה, סרטון הדרכה: https://youtu.be/brow123";
+    expect(howToLink(kb, ["יש לכם עט גבות? אשמח לסרטון הדרכה"])).toBe("https://youtu.be/brow123");
+    expect(howToLink(kb, ["אשמח לסרטון הדרכה", "כן, מיס ריס מסקרה."])).toBe("https://shop.example/product/miss-lash");
+    expect(howToLink("מסקרה: https://shop.example/a\nסרטון: https://youtu.be/only", ["אשמח לסרטון"])).toBe("https://youtu.be/only");
+    expect(howToLink("סרטון א: https://youtu.be/a\nסרטון ב: https://youtu.be/b", ["אשמח לסרטון"])).toBeNull();
+  });
+  it("★ 1: held kinds are payment (a refund included), damage and safety only", async () => {
+    const { holdingItem } = await import("../services/reply-engine/gates");
+    expect(holdingItem(["Customer asks whether shipping is paid"])).toBeNull();
+    expect(holdingItem(["האם המשלוח כפול"])).toBeNull();
+    expect(holdingItem(["חויבתי פעמיים"])).not.toBeNull();
+    expect(holdingItem(["המשטח הגיע שבור"])).not.toBeNull();
+    expect(holdingItem(["החזר כספי על המשטח"])).not.toBeNull();
+  });
+  it("★ 5: the last message sent was the hold line, a silent turn between", async () => {
+    const { lastSentHoldLine } = await import("../services/reply-engine/engine");
+    expect(lastSentHoldLine({ _holdLineTurn: "3", _spokeTurn: "3" }, "", "he")).toBe(true);
+    expect(lastSentHoldLine({ _holdLineTurn: "3", _spokeTurn: "4" }, "", "he")).toBe(false);
+    expect(lastSentHoldLine({}, "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.", "he")).toBe(true);
+  });
+  it("★ 6: general know-how is never a team question, a follow-up on it is answered", async () => {
+    const { PLATFORM_RULES } = await import("../services/reply-engine/prompt");
+    const all = PLATFORM_RULES;
+    expect(all).toMatch(/never a team question: answer it yourself/);
+    expect(all).toMatch(/unless you can answer it now from the knowledge, a tool or general know-how/);
   });
 });
