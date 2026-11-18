@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine } from "../services/reply-engine/engine";
-import { ungroundedAttribute, unlabelledInactiveOrders } from "../services/reply-engine/gates";
+import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -502,5 +502,53 @@ describe("rating of the b369e939 prod replay", () => {
     expect(withoutSlashForms("נכון/ת, קודם לא דייקנו.")).toBe("נכון, קודם לא דייקנו.");
     expect(withoutSlashForms("https://shop.example/a/ת")).toBe("https://shop.example/a/ת");
     expect(productQuestionLine("he")).not.toMatch(/דגם|מידה/);
+  });
+});
+
+describe("48f3a261 verify", () => {
+  const titles = ["סמובי אסף", "סמובי אליס"];
+  const ask = "מה מתאים לנינג'ה קריספי?";
+  it("★ must-fix 1: a set phrase across a comma never clears a device fit", () => {
+    for (const r of ["אין בעיה, סמובי אסף מתאים לנינג'ה קריספי.", "לא רק זה, סמובי אסף גם מתאים לנינג'ה קריספי.", "אם לא מצאת, סמובי אסף מתאים לנינג'ה קריספי.", "ללא ספק סמובי אסף מתאים לנינג'ה קריספי.", "אין צורך למדוד, סמובי אסף מתאים לנינג'ה קריספי.", "לא לדאוג, סמובי אליס יתאים לנינג'ה קריספי."]) {
+      expect(ungroundedPositiveFit(r, ask, titles, "", ""), r).toHaveLength(1);
+    }
+  });
+  it("★ must-fix 1: a negation that governs the fit stays unflagged", () => {
+    for (const r of ["הטוש החום שמופיע כאן מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים.", "לא מצוין שסמובי אסף מתאים לנינג'ה קריספי.", "אין לנו אישור שסמובי אסף מתאים לנינג'ה קריספי.", "סמובי אסף לא מתאים לנינג'ה קריספי."]) {
+      expect(ungroundedPositiveFit(r, ask, titles, "", ""), r).toEqual([]);
+    }
+  });
+  it("★ must-fix 2: a colour said of a product is checked on an explanation ask too", () => {
+    const ev = "מייקאפ Cover me גוונים: Sand, Beige. שמלת ערב צבעים: שחור, אדום";
+    expect(ungroundedAttribute("המייקאפ מגיע גם בגוון כחול.", ev, "איך אדע מה התת גוון")).toHaveLength(1);
+    expect(ungroundedAttribute("השמלה מגיעה גם בכחול ובירוק.", ev, "איך אדע איזה צבעים יש לשמלה?")).toHaveLength(1);
+    expect(ungroundedAttribute("שמלת הערב מגיעה גם בירוק.", ev, "איך יודעים איזה צבע מתאים לי?")).toHaveLength(1);
+    // A product named as the subject, with no "מגיע": still a claim.
+    expect(ungroundedAttribute("המייקאפ בגוון כחול עמוק.", ev, "איך אדע מה התת גוון")).toHaveLength(1);
+    expect(ungroundedAttribute("אפשר לבדוק את הוורידים בפרק כף היד: כחולים או סגולים מצביעים על תת-גוון קר, ירוקים על חם.", ev, "איך אדע מה התת גוון")).toEqual([]);
+  });
+  it("★ 3: a video word heads a video ask; one that qualifies a product does not", () => {
+    expect(videoAsk("יש לכם מעמד לצילום סרטונים?")).toBe(false);
+    expect(productAskNow("יש לכם מעמד לצילום סרטונים?")).toBe(true);
+    for (const v of ["יש לכם סרטון הדרכה לכביסה?", "אשמח לסרטון הדרכה", "איפה הסרטון", "אשמח להסבר /סרטון", "do you have a video for it?"]) expect(videoAsk(v), v).toBe(true);
+  });
+  it("★ 4: a full sentence that opens with a size or a price is no fragment", () => {
+    expect(cutFragment("20×30 ס\"מ היא המידה של אליס.")).toBe(false);
+    expect(cutFragment("ב-₪69 אפשר לקבל את אסף.")).toBe(false);
+    expect(cutFragment("15.4×23 ס\"מ, ב-₪69. למיקסר צריך להוסיף מעצור.")).toBe(true);
+    expect(cutFragment("ב-₪69 בלבד.")).toBe(true);
+  });
+  it("★ 5: an adjective after the word makes it a common noun, never a name by place", () => {
+    const cosm = [{ title: "קרם יום" }, { title: "סרום לילה" }, { title: "קרם לחות" }];
+    expect(referredCandidates(cosm, "כדאי לבחור בלחות גבוהה.", "")).toEqual([]);
+    const smoovee = [{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }];
+    expect(referredCandidates(smoovee, "כדאי לבחור בגפן.", "")).toEqual([0]);
+    expect(referredCandidates(smoovee, "בגפן ובאריאל יש ידית.", "")).toEqual([0, 1]);
+  });
+  it("★ 6: \"no date yet\" holds only while no source gives a date", async () => {
+    const x = "אין לנו כרגע תאריך לחידוש המלאי של הדגם השחור.";
+    expect(caveatHolds(x, "")).toBe(true);
+    expect(caveatHolds(x, "הדגם השחור יחזור למלאי ב-12.12")).toBe(false);
+    expect(stripFactProblems(x, [{ kind: "ungrounded_absence", claims: [x] }] as any)).toBe("");
   });
 });

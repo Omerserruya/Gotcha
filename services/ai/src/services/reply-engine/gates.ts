@@ -257,6 +257,11 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
 // A note meant for the engine (a simulated or test run) must never reach the customer, in any lane.
 const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניסוי|טסט)|סימולציה|בסימולציה|לא בוצע(?:ה)? בפועל|שיחת (?:ה)?(?:בדיקה|ניסיון)|הודעת בדיקה)|\b(?:simulat(?:ed|ion)|sandbox|test (?:environment|conversation|mode)|not (?:actually|really) (?:performed|executed|sent))\b/iu;
 /** A test or simulation named in the reply; never when the business's own texts say the same words (a demo site's notice). */
+// "No date yet" is honest only while no source gives one; it is the one caveat that can be wrong (a date in the
+// knowledge or a tool result makes it a claim to cut or correct).
+const DATE_CAVEAT = /(?<![\u0590-\u05FF])ו?אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)(?![\u0590-\u05FF])|\bno (?:date|eta|estimate)\b/iu;
+const DATE_IN_SOURCE = /\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b|(?<![\u0590-\u05FF])(?:צפי|יחזור\s+למלאי|יגיע\s+למלאי|בתאריך|עד\s+סוף\s+ה?(?:חודש|שבוע))(?![\u0590-\u05FF])|\b(?:back in stock on|restock(?:ed|ing)? (?:on|by)|expected (?:on|by))\b/iu;
+export const caveatHolds = (x: string, sources: string) => CAVEAT.test(x) && !(DATE_CAVEAT.test(x) && DATE_IN_SOURCE.test(String(sources ?? "")));
 const CAVEAT = /(?<![\u0590-\u05FF])ו?(?:אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)|אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
@@ -1184,7 +1189,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (i.businessAddress) absent.push(...addressDenied(reply));
   // A caveat that limits a claim ("אין במידע אישור לשימוש מתחת לעיניים") is never cut as an absence: cutting it turns
   // the rest into the claim (prod replay of 9480dfb2, NE'A).
-  const claimedAbsent = absent.filter((x) => !CAVEAT.test(x));
+  const claimedAbsent = absent.filter((x) => !caveatHolds(x, `${i.knowledge ?? ""}\n${i.grounding ?? ""}\n${i.tools.map((t) => String(t.content ?? "")).join("\n")}`));
   if (claimedAbsent.length) problems.push({ kind: "ungrounded_absence", claims: claimedAbsent });
 
   // A fit or size ask: the business's device or size table answers it (rating 93f9fdff, Smoovee).
@@ -1362,7 +1367,8 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       // A caveat that limits a claim is never cut by an absence, fit or device check: the rest would read as the
       // claim (prod replay of 9480dfb2, NE'A: "אין במידע אישור לשימוש מתחת לעיניים").
-      const keepCaveat = (x: string) => CAVEAT.test(x) && (p.kind === "ungrounded_absence" || p.kind === "device_mismatch" || p.kind === "ungrounded_positive_fit" || p.kind === "ungrounded_negative_fit");
+      // A date caveat comes to the cut only when a source gives the date (caveatHolds above): then it goes.
+      const keepCaveat = (x: string) => CAVEAT.test(x) && !DATE_CAVEAT.test(x) && (p.kind === "ungrounded_absence" || p.kind === "device_mismatch" || p.kind === "ungrounded_positive_fit" || p.kind === "ungrounded_negative_fit");
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => keepCaveat(x) || !marks.some((m) => x.includes(m))).reduce(joinKept, "").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
       if (p.kind === "unsupported_action") s = dropSentences(dropSentences(dropSentences(dropSentences(s, TEAM_LINE), FUTURE_PROMISE), RECORDED), WE_WILL_WITH_TEAM);
@@ -2067,14 +2073,21 @@ const ATTRIBUTES: RegExp[] = [
 const COLOURS = ["שחור", "לבן", "אדום", "כחול", "ירוק", "צהוב", "ורוד", "אפור", "חום", "סגול", "כתום", "זהב", "כסף", "בז'", "black", "white", "red", "blue", "green", "yellow", "pink", "grey", "gray", "brown", "purple", "orange", "gold", "silver", "beige"];
 const COLOUR_RE = (c: string) => new RegExp(/^[a-z]/i.test(c) ? `\\b${c}\\b` : `(?<![\\u0590-\\u05FF])[הובמ]?${c.replace("'", "['׳]")}(?:ה|ים|ות)?(?![\\u0590-\\u05FF])`, "iu");
 const NOT_A_CLAIM = /(?<![\u0590-\u05FF])(?:לא|אין|אינו|אינה|אינם|ללא)(?![\u0590-\u05FF])|\b(?:not|no|without)\b|\?\s*$/iu;
+const PRODUCT_COLOUR_SAID = /(?<![\u0590-\u05FF])[וש]?(?:מגיע|מגיעה|מגיעים|מגיעות|קיים|קיימת|קיימים|קיימות|יש|זמין|זמינה|זמינים|זמינות|נמכר|נמכרת|מוצע|מוצעת)(?![\u0590-\u05FF])[^.!?\n]{0,30}(?<![\u0590-\u05FF])(?:גם\s+)?ב[\u0590-\u05FF]{2,}|\b(?:comes? in|available in|also in)\b/iu;
+/** The sentence's subject is a product the evidence names (a title word of 4+ letters from the evidence's own lines). */
+function evidenceSubject(sentence: string, evidence: string): boolean {
+  const words = new Set((evidence.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).filter((w) => !COLOURS.includes(w) && !/^(?:גוונים|צבעים|גוון|צבע|colou?rs?)$/u.test(w)));
+  return (sentence.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []).some((w) => words.has(w) || words.has(w.replace(/^[הולבמש]/u, "")));
+}
 export function ungroundedAttribute(reply: string, evidence: string, incoming = ""): string[] {
   const ev = unfinal(String(evidence ?? "").toLowerCase());
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (NOT_A_CLAIM.test(x) || NO_INFO.test(x)) return false;
     const t = unfinal(x.toLowerCase());
     if (ATTRIBUTES.some((re) => { const u = new RegExp(unfinal(re.source), re.flags); return u.test(t) && !u.test(ev); })) return true;
-    // A colour the data does not give; never in a general explanation ("איך אדע מה התת גוון": the veins' colours).
-    if (explanationAsk(incoming)) return false;
+    // A colour the data does not give. In a general explanation a colour that is said of no product passes ("איך אדע
+    // מה התת גוון": the veins' colours); one said of a product ("מגיע/קיים/יש ... בגוון", a product's name) never does.
+    if (explanationAsk(incoming) && !PRODUCT_COLOUR_SAID.test(x) && !evidenceSubject(x, String(evidence ?? ""))) return false;
     return COLOURS.some((c) => COLOUR_RE(c).test(x) && !COLOUR_RE(c).test(String(evidence ?? "")));
   }).map((x) => x.trim().slice(0, 120));
 }
@@ -2194,6 +2207,8 @@ const FIT_CLAIM = /(?<![֐-׿])[שו]?(?:מתאים|מתאימה|מתאימים|
 const FIT_CLAIM_REV = /(?<![\u0590-\u05FF])ו?ל(?!כם|ך|י\b)([\u0590-\u05FF'"״A-Za-z0-9 -]{3,40}?)\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|(?:מופיע|מופיעה|מופיעים|מופיעות)\s+כ(?:מתאים|מתאימה|מתאימים|מתאימות))(?![\u0590-\u05FF])/u;
 const ALT_OFFER = /(?<![\u0590-\u05FF])(?:או|לחלופין|אפשר\s+גם|כאלטרנטיבה|כחלופה|במקום\s+זה)(?![\u0590-\u05FF])|\b(?:alternatively|instead|or you could|as an alternative)\b/iu;
 const USE_WORDS = new Set(["כיסוי", "שימוש", "יום", "יומיום", "ערב", "ערבים", "אירוע", "אירועים", "חג", "חגים", "קיץ", "חורף", "אביב", "סתיו", "עבודה", "משרד", "ים", "חוף", "טיול", "טיולים", "שיער", "עור", "פנים", "גוף", "ילדים", "ילדות", "נשים", "גברים", "מתנה", "מתנות", "קשירה", "חתונה", "שבת", "ספורט", "כל", "רוב", "מראה", "סגנון", "use", "everyday", "daily", "evening", "summer", "winter", "work", "office", "travel", "beach", "hair", "skin", "kids", "gift", "gifts", "weddings", "wedding", "sport", "sports"]);
+const NEG_GOVERNS_FIT = /(?<![\u0590-\u05FF])ו?(?:לא|אינו|אינה|אינם|אינן)\s+(?:בטוח\s+ש|ברור\s+ש)?[\u0590-\u05FF]*\s*(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:לנו\s+|לי\s+|כרגע\s+)*(?:מצוין|מצוינת|כתוב|כתובה|ידוע|ידועה|אישור|מידע|מופיע|מופיעה)(?![\u0590-\u05FF])[^,.!?\n]{0,20}?(?<![\u0590-\u05FF])ש[\u0590-\u05FF]/u;
+const NEG_GOVERNS_FIT_EN = /\b(?:does ?n[o']t|won'?t|will not|is ?n[o']t|not)\s+(?:fit|suit|work with)|\bno (?:confirmation|information|indication|record)\b[^,.!?\n]{0,30}\bthat\b|\bnot (?:stated|listed|confirmed)\b[^,.!?\n]{0,10}\bthat\b/iu;
 export function ungroundedPositiveFit(reply: string, incoming: string, titles: string[], grounding: string, knowledge: string): string[] {
   const proofText = `${grounding ?? ""}\n${knowledge ?? ""}`;
   const lines = proofText.split(/\n|;|(?<=\.)\s+/).map((l) => l.toLowerCase()).filter(Boolean);
@@ -2204,7 +2219,9 @@ export function ungroundedPositiveFit(reply: string, incoming: string, titles: s
     if (SIMILAR_MODEL.test(x)) return true;
     if (NEG_FIT.test(x)) return false;
     // "ולא מצוין שהוא מתאים למתחת לעיניים" says the fit is NOT known (prod replay of b369e939, NE'A): no claim.
-    if (CAVEAT.test(x) || /(?<![\u0590-\u05FF])ו?(?:לא|אין|ללא)(?![\u0590-\u05FF])[^.!?\n]{0,30}(?:מתאים|מתאימה|מתאימים|יתאים)/u.test(x) || /\b(?:not|no|isn'?t)\b[^.!?\n]{0,30}\bfits?\b/iu.test(x)) return false;
+    // Only a negation that governs the fit verb: right before it, or through "מצוין/כתוב/ידוע/אישור/מידע ... ש"; never a
+    // set phrase across a comma ("אין בעיה, X מתאים", "ללא ספק X מתאים", "לא רק זה": the 48f3a261 probe).
+    if (NEG_GOVERNS_FIT.test(x) || NEG_GOVERNS_FIT_EN.test(x)) return false;
     const m = FIT_CLAIM_REV.exec(x) ?? FIT_CLAIM.exec(x);
     if (!m) return false;
     const named = namedTitles(x, titles);
@@ -2348,7 +2365,16 @@ const MEDIA_FILE = /\.(?:webp|jpe?g|png|gif|svg|bmp|avif|ico|heic|tiff?)(?:[?#]|
 const PDF_FILE = /\.pdf(?:[?#]|$)/i;
 const VIDEO_URL = /youtu\.?be|vimeo\.com|\.(?:mp4|mov|webm|m4v)(?:[?#]|$)/i;
 /** The ask wants a video (סרטון, הדרכה, video, tutorial), not only a link. */
-export const videoAsk = (incoming: string) => /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|לסרטון)(?![\u0590-\u05FF])|\b(?:video|tutorial)\b/iu.test(String(incoming ?? ""));
+// The video word must head the ask ("יש לכם סרטון הדרכה", "אשמח לסרטון", "איפה הסרטון"), never qualify a product
+// ("יש לכם מעמד לצילום סרטונים?", the 48f3a261 probe).
+const VIDEO_WORD = /^[והל]{0,2}(?:סרטון|סרטונים|הדרכה|הסבר|הסברים|video|videos|tutorial|tutorials)$/iu;
+const VIDEO_LEAD = new Set(["יש", "לכם", "לך", "אשמח", "אפשר", "תשלחו", "שלחו", "תשלחי", "איפה", "מה", "עם", "את", "גם", "רוצה", "רציתי", "צריך", "צריכה", "בבקשה", "היי", "שלום", "do", "you", "have", "a", "the", "is", "where", "can", "i", "get", "send", "me", "please", "any", "hi"]);
+export const videoAsk = (incoming: string) => {
+  const t = String(incoming ?? "");
+  if (!/(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|לסרטון)(?![\u0590-\u05FF])|\b(?:video|tutorial)s?\b/iu.test(t)) return false;
+  const head = ((t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []) as string[]).find((w) => !VIDEO_LEAD.has(w.toLowerCase()));
+  return !!head && VIDEO_WORD.test(head);
+};
 export function howToLink(kb: string, subjects: string[], video = false): string | null {
   // Media files out; for a video ask, a video link only (a host or a video file), never a page that merely mentions one.
   // An instructions PDF is a fine answer to a plain how-to ask (never to a video ask).
@@ -2609,7 +2635,10 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
     // Never an everyday word by place: a time word, a colour or size word, a word two found titles share; those mark
     // only through the all-words and companion rules ("כדאי לבחור ביום אחר למשלוח" is no "קרם יום").
     const placeName = (w: string) => !TIME_WORDS.has(w) && !VARIANT_WORDS.has(w) && owners(w) === 1;
+    // A word an adjective follows is a common noun ("כדאי לבחור בלחות גבוהה"), never a name.
+    const adjectiveAfter = (p: number) => { const n = hayTokens[p + 1] ?? ""; return /^[\u0590-\u05FF]{3,}(?:ה|ית|ים|ות)$/u.test(n) && !/^[ולב]/u.test(n) && !bases.some((b) => wordsOf(b).includes(n)); };
     const byPlace = (w: string) => placeName(w) && at(w).some((p) => {
+      if (adjectiveAfter(p)) return false;
       const prev = hayTokens[p - 1] ?? "", prev2 = hayTokens[p - 2] ?? "";
       if (CHOICE_WORDS.has(prev) || (prev === "על" && CHOICE_WORDS.has(prev2))) return true;
       const strip = (t: string) => t.replace(/^ו/u, "").replace(/^[הולבמשכ]{0,1}/u, "");

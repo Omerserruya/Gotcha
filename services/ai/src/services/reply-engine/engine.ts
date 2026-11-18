@@ -510,7 +510,15 @@ const SPOKE_FACT = "_spokeTurn";
 const FRAGMENT_OPEN = /^\s*(?:\d+(?:[.,]\d+)?\s*[×x*]\s*\d|ב-?₪|ו?כש[\u0590-\u05FF]+|ו(?:גם|לכן|אז|אבל|בנוסף|כך|כן|אם)(?![\u0590-\u05FF])|(?:אבל|אז|גם|לכן|כי|כך\s+ש|בנוסף|מה\s+ש|שזה|שהיא|שהוא)(?![\u0590-\u05FF])|(?:and|but|so|also|because|which|when|while)\b)/iu;
 export function cutFragment(text: string): boolean {
   const t = String(text ?? "").trim();
-  return !!t && FRAGMENT_OPEN.test(t);
+  if (!t || !FRAGMENT_OPEN.test(t)) return false;
+  // A size or price opening a full sentence ("20×30 ס"מ היא המידה של אליס.") is no fragment: only when its clause
+  // holds nothing but the measure or the price ("15.4×23 ס"מ, ב-₪69.").
+  if (/^\s*(?:\d|ב-?₪)/u.test(t)) {
+    const clause = t.split(/[,.!?;]\s/u)[0];
+    const rest = clause.replace(/\d+(?:[.,]\d+)?/g, " ").replace(/ס["״']?מ|מ["״']?מ|ש["״']?ח|₪|ב-|[×x*]|\b(?:cm|mm)\b|(?<![\u0590-\u05FF])(?:בלבד|בערך|כ-)(?![\u0590-\u05FF])|\bonly\b/giu, " ");
+    return !/[\p{L}]{2,}/u.test(rest);
+  }
+  return true;
 }
 const WAITING_CLAIM = /(?<![\u0590-\u05FF])(?:(?:ה)?נציג(?:ים|ות|ינו|ותינו|ה)?\s+(?:שלנו\s+)?(?:עסוק|עסוקה|עסוקים|עסוקות|יתפנו|יתפנה|יתפנה|יחזרו\s+בהקדם)|(?:כל\s+)?(?:ה)?נציגים\s+תפוסים|(?:מטפלים|עונים)\s+(?:כעת\s+)?בפניות\s+(?:קודמות|לפי\s+הסדר)|יתפנו\s+בהקדם)(?![\u0590-\u05FF])|\b(?:(?:our|all) (?:agents|representatives) are (?:busy|currently busy|occupied)|will be (?:with you|available) shortly)\b/iu;
 export const FIT_UNCONFIRMED_HE = "אין לנו אישור שהם מתאימים בדיוק למה שביקשת.";
@@ -522,7 +530,7 @@ export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -1300,7 +1308,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // one damaged-delivery thread recorded the same question on 8 turns in a row).
   const openTeam = openTeamQuestions(state);
   const teamAlreadyOpen = openTeam.length > 0;
-  const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q));
+  // A second link or video ask while one is open is the same item (prod replay of b369e939, NE'A: "איפה הסרטון" opened
+  // a second team question): no new question; the reply says it is still being checked.
+  const linkKind = (t: string) => videoAsk(t) || HOWTO_LINK_ASK.test(String(t ?? ""));
+  // On the same focus: the new ask names no product of its own, or one the open item names too.
+  const sameFocus = (t: string) => { const q = storeQueryOf(String(opts.incomingMessage ?? "")); return !q || q.split(/\s+/).some((w) => nounKeys(w).some((k) => k.length >= 3 && String(t).toLowerCase().includes(k))); };
+  const sameKindOpen = linkKind(String(opts.incomingMessage ?? "")) ? openTeam.find((t) => linkKind(t) && sameFocus(t)) ?? null : null;
+  const isNewTeamQuestion = (q: string | null | undefined) => !!q && !openTeam.some((t) => sameIssue(t, q)) && !sameKindOpen;
   // The employee's own earlier replies (never a person's): repeated asks, a "yes" to its own offer.
   // Once a safety or damage complaint is seen, the conversation stays one (prod replay 11:
   // the tipping complaint had left the window when "it doesn't stop it rolling back" came).
@@ -1675,6 +1689,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     let text = fixListCount(dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles));
     // A conditional left without the model it was about ("אם זה דגם אחר...") goes (rating ed780586).
     text = dropOrphanConditional(text, titles);
+    // The joined ask: the team line becomes the holding line for the open item.
+    if (sameKindOpen && !output.handoff && teamPassIn(text) && !/https?:\/\//i.test(text)) {
+      text = stillCheckingLine(sameKindOpen, locale === "en" ? "en" : "he");
+      output = { ...output, teamQuestion: null };
+      (trace as any).teamItemJoined = true;
+    }
     // "Our agents are busy and will be free soon" with no hand-over behind it (prod replay of 9480dfb2, Smoovee B, copied
     // from the old bot's message): cut; nothing left, the team line and a question for the team.
     if (!output.handoff && WAITING_CLAIM.test(text)) {

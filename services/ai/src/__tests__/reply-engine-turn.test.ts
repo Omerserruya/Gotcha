@@ -2783,6 +2783,19 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     expect(r.reply).toBe("אנחנו פתוחים א-ה 9-17.");
   });
 
+  it("★ (48f3a261 verify, 7) a second video ask while one is open joins it: the holding line, no second team question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: האם יש סרטון הדרכה לטוש הגבות", at: new Date().toISOString() }], turnCount: 4 });
+    try {
+      const pass = "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+      h.responses.push({ toolCalls: [respond("j1", { reply: pass, team_question: "איפה הסרטון" })] }, { toolCalls: [respond("j2", { reply: pass, team_question: "איפה הסרטון" })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון" }, "autonomous");
+      expect(h.teamQuestions).toHaveLength(0);
+      expect(r.reply ?? "").not.toBe(pass);
+      expect((r.trace as any).teamItemJoined).toBe(true);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
   it("★ the audit row carries the cut fields when something was cut", async () => {
     h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
