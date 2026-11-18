@@ -31,6 +31,7 @@ import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
+import { autoReply, oneTimeCode } from "../conversation-relevance.service";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
 import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
@@ -509,6 +510,18 @@ const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "s
  */
 /** "No match came up" or "send me the sizes" (C pinned rating: said to a customer who had just sent them). */
 const NO_MATCH_SEND_SIZES = /(?<![\u0590-\u05FF])(?:לא\s+(?:הופיעה|הופיע|נמצאה|נמצא|עלתה|עלה|מצאתי|מצאנו)\s+(?:לי\s+)?התאמה|(?:שלחי|תשלחי|שלח|תשלח|שלחו|תשלחו)\s+(?:לי\s+)?(?:את\s+)?(?:ה)?מידות)|\b(?:no match (?:came up|found)|send (?:me )?(?:the )?(?:sizes|measurements))\b/iu;
+/**
+ * A machine wrote it: a one-time code, or another business's automated greeting or away message (the relevance
+ * fast rules, the same shape and timing). Null when a person may have.
+ */
+export function machineInbound(channel: string, history: any[], incoming: string): "one_time_code" | "auto_reply" | null {
+  if (oneTimeCode(incoming)) return "one_time_code";
+  const msgs = (history ?? []).map((m: any) => ({ direction: m?.direction, body: m?.body, createdAt: m?.createdAt, messageType: m?.messageType, metadata: m?.metadata }));
+  const lastIn = [...msgs].reverse().find((m) => m.direction === "INBOUND");
+  if (incoming && String(lastIn?.body ?? "").trim() !== incoming.trim()) msgs.push({ direction: "INBOUND", body: incoming, createdAt: new Date(), messageType: null, metadata: null });
+  const first = msgs.find((m) => m.messageType !== "system" && String(m.body ?? "").trim());
+  return autoReply({ channel, messages: msgs, firstDirection: first?.direction === "OUTBOUND" ? "OUTBOUND" : first ? "INBOUND" : null }) ? "auto_reply" : null;
+}
 export const HOLD_LINE_ALT = { he: "אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.", en: "I'm here, and the team's answer will come here in the chat as soon as it's ready." } as const;
 /**
  * The last message the bot SENT was the holding line: the state says the line came on the last turn the bot
@@ -795,9 +808,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const lastIn = [...hist0].reverse().find((m: any) => m.direction === "INBOUND");
     const platformSender = /<([^>]+)>/.exec(String(process.env.SMTP_FROM ?? ""))?.[1] ?? process.env.SMTP_FROM ?? null;
     const automated = automatedInbound({ channel: String(conversation.channel ?? ""), sender: conversation.customerExternalId, body: opts.incomingMessage ?? lastIn?.body, metadata: lastIn?.metadata, platformSender });
-    if (automated) {
-      trace.gate1 = `automated:${automated}`;
-      (trace as any).automated = automated;
+    // Another business's away message or a one-time code (dev relevance test 2026-11-18: "ההודעה נשמעת כמו מענה
+    // אוטומטי." and "חשוב לא לשתף קודי אימות"): silent too, by fast rules, whatever RELEVANCE_GATE says.
+    const machine = automated ? null : machineInbound(String(conversation.channel ?? ""), hist0, String(opts.incomingMessage ?? lastIn?.body ?? ""));
+    if (automated || machine) {
+      trace.gate1 = `automated:${automated ?? machine}`;
+      (trace as any).automated = automated ?? machine;
       trace.gate3 = { ok: true, problems: [], rewrite: "none" };
       return empty({ reply: null });
     }

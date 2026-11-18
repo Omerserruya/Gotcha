@@ -2303,3 +2303,33 @@ describe("C pinned rating c24439a1: the search on her noun", () => {
     expect(r.reply ?? "").not.toMatch(/משטח הזזה 20\*25/);
   });
 });
+
+describe("relevance R3 through a whole turn: machines silent, customers answered", () => {
+  it("★ R3 turn: a one-time code gets no reply, no handoff and no team question", async () => {
+    h.responses.push({ toolCalls: [respond("ot1", { reply: "חשוב לא לשתף קודי אימות בצ׳אט." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "Your verification code is 482913" }, "autonomous");
+    expect(r.reply ?? null).toBeNull();
+    expect(r.trace.gate1).toBe("automated:one_time_code");
+    expect(r.trace.teamQuestion ?? null).toBeNull();
+  });
+  it("★ R3a turn: a customer's opening statement of 6+ words is answered as today", async () => {
+    h.responses.push({ toolCalls: [respond("ot2", { reply: "בשמחה, איזה מיקסר יש לך?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני מחפשת משטח הזזה למיקסר החדש שקניתי השבוע" }, "autonomous");
+    expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
+    expect(r.reply ?? "").toMatch(/מיקסר/);
+  });
+  it("★ R3b turn: a customer complaining about a code is answered", async () => {
+    for (const msg of ["הקוד 123456 לא הגיע לי", "קיבלתי קוד 4821 מה עושים איתו"]) {
+      h.responses.push({ toolCalls: [respond("ot3", { reply: "אני בודקת את זה בשבילך." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: msg }, "autonomous");
+      expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
+    }
+  });
+  it("★ R3c turn: a coupon code or an order number next to קוד is answered", async () => {
+    for (const msg of ["קוד קופון 2024", "קוד הזמנה 97837"]) {
+      h.responses.push({ toolCalls: [respond("ot4", { reply: "בודקת." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: msg }, "autonomous");
+      expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
+    }
+  });
+});

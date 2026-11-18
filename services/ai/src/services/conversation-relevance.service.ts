@@ -119,6 +119,18 @@ export function autoReply(c: RelevanceInput): boolean {
   return false;
 }
 
+/**
+ * A one-time code (dev relevance test 2026-11-18: a verification code got "חשוב לא לשתף קודי אימות" from the
+ * engine and no label). A code phrase and a 4 to 8 digit number, with no complaint or question ("קוד האימות
+ * 123456 לא עובד" is a customer).
+ */
+const OTP_PHRASE = /(?<![\u0590-\u05FF])(?:קוד\s+(?:ה)?(?:אימות|כניסה|אבטחה|גישה)|קוד\s+חד[-\s]?פעמי|סיסמה\s+חד[-\s]?פעמית|הקוד\s+שלך)(?![\u0590-\u05FF])|\b(?:verification code|one[-\s]?time (?:pass(?:word|code)?|code)|security code|login code|sign[-\s]?in code|OTP|your code is)\b/iu;
+const OTP_NOT = /(?<![\u0590-\u05FF])(?:לא|לא\s+עובד|קיבלתי|מקבלת|מקבל|עזרה)(?![\u0590-\u05FF])|\b(?:didn'?t|doesn'?t|not|help|isn'?t)\b|\?/iu;
+export function oneTimeCode(body: unknown): boolean {
+  const b = String(body ?? "");
+  return OTP_PHRASE.test(b) && /(?<!\d)\d{4,8}(?!\d)/.test(b) && !OTP_NOT.test(b);
+}
+
 /** The fast path: mail no person wrote, decided with no model call. Null when it does not apply. */
 export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | null {
   const at = now.toISOString();
@@ -126,6 +138,7 @@ export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | 
   if (autoReply(c)) return { category: "auto_reply", confidence: 0.9, reason: "an automated greeting or away message", source: "fast", classifiedAt: at };
   const lastIn = [...c.messages].reverse().find((m) => m.direction === "INBOUND");
   if (!lastIn) return null;
+  if (oneTimeCode(lastIn.body)) return { category: "notice", confidence: 0.95, reason: "a one-time code", source: "fast", classifiedAt: at };
   const why = automatedInbound({ channel: c.channel, sender: c.customerExternalId, body: lastIn.body, metadata: lastIn.metadata });
   if (!why) return null;
   // A list or a sending subdomain is marketing; a no-reply or system sender, or a notice's footer, is a notice.
@@ -157,7 +170,7 @@ export function relevancePrompt(profile: RelevanceProfile | null, c: RelevanceIn
     : "Business: (no profile)";
   const lines = realMessages(c.messages).slice(-8).map((m) => `[${m.direction === "OUTBOUND" ? "business" : "contact"}] ${clip(m.body, 300)}`);
   const email = /^(?:EMAIL|GMAIL|OUTLOOK)$/i.test(c.channel) ? `\nEmail from: ${clip(c.customerExternalId, 80)}${c.subject ? `\nSubject: ${clip(c.subject, 120)}` : ""}` : "";
-  const user = `${biz}\n\nChannel: ${c.channel}\nWho wrote first: ${c.firstDirection === "OUTBOUND" ? "the business" : c.firstDirection === "INBOUND" ? "the contact" : "unknown"}${email}\n\nLast messages (oldest first):\n${lines.join("\n") || "(none)"}`;
+  const user = `${biz}\n\nChannel: ${c.channel}\nWho wrote first: ${c.firstDirection === "OUTBOUND" ? "the business" : c.firstDirection === "INBOUND" ? "the contact (so NOT reply_to_outbound: the business answering the contact's opener never makes it one)" : "unknown"}${email}\n\nLast messages (oldest first):\n${lines.join("\n") || "(none)"}`;
   return [{ role: "system", content: RUBRIC }, { role: "user", content: user }];
 }
 
@@ -187,6 +200,19 @@ export function lowConfidence(p: { category: RelevanceCategory; confidence: numb
   return p.confidence < MIN_MODEL_CONFIDENCE && p.category !== "unclear" ? { ...p, category: "unclear" as const, reason: `unsure: ${p.category} (${p.reason})`.slice(0, 120) } : p;
 }
 
+/**
+ * reply_to_outbound only when the conversation's FIRST message is the business's own (a person, a broadcast, a
+ * campaign). A reply, the bot's or a person's, to the contact's opener never makes it one (dev relevance test
+ * 2026-11-18: a cold SEOBoost pitch became reply_to_outbound 0.99 once the bot answered it). Decided here from
+ * the first message's direction, never by the model: otherwise unclear, which never silences.
+ */
+export function onlyAfterOwnOutbound(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput) {
+  if (p.category === "reply_to_outbound" && c.firstDirection !== "OUTBOUND") {
+    return { category: "unclear" as const, confidence: 0, reason: `the contact wrote first (${p.reason})`.slice(0, 120) };
+  }
+  return p;
+}
+
 export function firstMover(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput) {
   if (c.firstDirection === "OUTBOUND" && p.category === "business" && p.confidence < 0.9) {
     return { category: "reply_to_outbound" as const, confidence: p.confidence, reason: `the business wrote first (${p.reason})`.slice(0, 120) };
@@ -212,7 +238,7 @@ export async function classifyConversation(tenantId: string, profile: RelevanceP
     reasoningEffort: "minimal",
     metadata: { type: "conversation_relevance" },
   }));
-  const parsed = lowConfidence(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c));
+  const parsed = lowConfidence(onlyAfterOwnOutbound(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c), c));
   return { ...parsed, source: "model", classifiedAt: now.toISOString() };
 }
 

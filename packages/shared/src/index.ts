@@ -685,6 +685,7 @@ export {
   historicalIntelligenceQueue,
   relevanceQueue,
   RELEVANCE_QUEUE,
+  RELEVANCE_ATTEMPTS,
   RELEVANCE_DEBOUNCE_MS,
   relevanceClassifyEnabled,
   enqueueRelevanceClassification,

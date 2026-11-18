@@ -64,6 +64,8 @@ export const historicalIntelligenceQueue = new Queue("historical-intelligence", 
  * Its own queue: one small model call per job, never in front of a customer's message.
  */
 export const RELEVANCE_QUEUE = "conversation-relevance";
+/** A label that failed (a slow model) is tried again, 15s then 30s later (dev relevance test 2026-11-18). */
+export const RELEVANCE_ATTEMPTS = 3;
 export const relevanceQueue = new Queue(RELEVANCE_QUEUE, { connection: { url: REDIS_URL } });
 export const RELEVANCE_DEBOUNCE_MS = 2 * 60_000;
 
@@ -83,7 +85,7 @@ export function relevanceClassifyEnabled(tenantId: string, env: Record<string, s
 export async function enqueueRelevanceClassification(tenantId: string, conversationId: string, queue: { add: (...a: any[]) => Promise<unknown> } = relevanceQueue): Promise<boolean> {
   if (!relevanceClassifyEnabled(tenantId)) return false;
   try {
-    await queue.add("classify", { tenantId, conversationId }, { jobId: `classify-relevance-${conversationId}`, delay: RELEVANCE_DEBOUNCE_MS, removeOnComplete: true, removeOnFail: true, attempts: 1 });
+    await queue.add("classify", { tenantId, conversationId }, { jobId: `classify-relevance-${conversationId}`, delay: RELEVANCE_DEBOUNCE_MS, removeOnComplete: true, removeOnFail: true, attempts: RELEVANCE_ATTEMPTS, backoff: { type: "exponential", delay: 15_000 } });
     return true;
   } catch (err) {
     console.warn("[relevance] enqueue failed:", (err as Error)?.message);
