@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -477,9 +477,28 @@ const HOLD_LINE_FACT = "_holdLineTurn";
 const THANKS_FACT = "_thanksTurn";
 // The turn the engine last sent something (holding mode: never silent twice running).
 const SPOKE_FACT = "_spokeTurn";
+/** A store search's args, cleaned (rating 83086356): no 0..0 price, an audience only when she names one, never her whole message as the query. */
+export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming: string): T {
+  const ea: any = { ...args };
+  if (!(Number(ea.price_min) > 0)) delete ea.price_min;
+  if (!(Number(ea.price_max) > 0)) delete ea.price_max;
+  if (ea.audience && !AUDIENCE_WORDS.test(String(incoming ?? ""))) delete ea.audience;
+  const whole = String(incoming ?? "").trim();
+  if (typeof ea.query === "string" && (ea.query.trim() === whole || ea.query.length > 60)) {
+    const words = (ea.query.match(/[\p{L}\p{N}'׳-]{2,}/gu) ?? []).filter((w: string) => !SEARCH_FILLER.has(w.toLowerCase()));
+    ea.query = words.slice(0, 4).join(" ") || ea.query;
+  }
+  return ea;
+}
+/** She asks for men's or women's items in so many words (not her own verb's gender). */
+const AUDIENCE_WORDS = /(?<![\u0590-\u05FF])[ו]?(?:לגבר|לגברים|לבעלי|לבן\s+הזוג|גברים|גברי|לאישה|לאשה|לנשים|נשים|נשי|לאשתי|לבת\s+הזוג|לבחור|לבחורה|לילד|לילדה)(?![\u0590-\u05FF])|\b(?:men'?s|women'?s|for (?:men|women|him|her|my (?:husband|wife|boyfriend|girlfriend)))\b/iu;
+/** The words a query never needs ("היי", "אני מחפשת", "יש לכם"). */
+const SEARCH_FILLER = new Set(["היי", "הי", "שלום", "אהלן", "אני", "מחפשת", "מחפש", "מחפשים", "רוצה", "רוצים", "צריכה", "צריך", "יש", "לכם", "לך", "את", "של", "על", "עם", "זה", "אם", "בבקשה", "תודה", "hi", "hello", "i", "am", "looking", "for", "want", "need", "do", "you", "have", "please", "the", "a"]);
+/** A how-to or video ask, for the link fallback. */
+const HOWTO_LINK_ASK = /(?<![\u0590-\u05FF])[וה]?(?:סרטון|סרטונים|הדרכה|מדריך|קישור|לינק)(?![\u0590-\u05FF])|\b(?:video|tutorial|guide|link)\b/iu;
 // The part every holding line shares, whatever its noun (stillCheckingLine).
 const HOLD_LINE_CORE = { he: "עדיין בבדיקה אצל הצוות", en: "still being checked by the team" } as const;
-const HOLLOW_HEADER = /^(?:הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
+const HOLLOW_HEADER = /^(?:הנה\s+כמה\s+אפשרויות|Here are some options|הנה\s+מה\s+שמצאתי|Here is what I found|הנה\s+מה\s+שיש\s+לנו\s+שמתאים|Here is what we have that fits)\s*[.:!]?$/iu;
 /** "What is it called?" about what was shown. */
 const NAME_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:קוראים|נקרא|נקראת)\s*(?:ל(?:ו|ה|זה|זו|מוצר))?|מה\s+(?:השם|שמו|שמה)(?:\s+של)?)(?![\u0590-\u05FF])|\bwhat(?:'s| is) (?:it|its name|the name|that) called\b|\bwhat(?:'s| is) the name\b/iu;
 export const nameAsk = (incoming: string) => NAME_ASK.test(String(incoming ?? ""));
@@ -926,6 +945,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // looked up her orders and the reply volunteered one).
       const notAsked = refuseOrderRead(toolFunctionName, opts.incomingMessage ?? "", history) ?? refuseWrite(toolFunctionName, opts.incomingMessage ?? "");
       if (notAsked) return { ok: false as const, failure: "refused", reason: notAsked } as any;
+      // Search hygiene (rating 83086356): a 0..0 price is no price filter; an audience only when she asks for men's
+      // or women's items in so many words, never from her own verb ("מחפשת"); her whole message is no query.
+      if (/(?:list_products|search_products)$/.test(toolFunctionName)) effective = cleanSearchArgs(effective, String(opts.incomingMessage ?? ""));
       // What the store was really asked, for the replay report (rating ed780586: only arg names were shown).
       if (/(?:list_products|search_products)$/.test(toolFunctionName)) {
         const sa = ((trace as any).searchArgs ??= []) as any[];
@@ -1398,6 +1420,37 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     let text = fixListCount(dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles));
     // A conditional left without the model it was about ("אם זה דגם אחר...") goes (rating ed780586).
     text = dropOrphanConditional(text, titles);
+    // "I've added it to the check" only when something was added this turn (rating 83086356: said with nothing new).
+    {
+      const heldIt = holdingItem(openTeam);
+      const addedNow = !!output.teamQuestion || (!!heldIt && !!withNewDetails(state.pending, heldIt, String(opts.incomingMessage ?? "")));
+      if (!addedNow && ADDED_CLAIM.test(text)) { text = dropSentencesBy(text, ADDED_CLAIM); (trace as any).addedClaimCut = true; }
+    }
+    // Sizes given for several items: each gets the smallest pad that takes its base (either way round), from the
+    // pads' own sizes; one with none goes to the team (rating 83086356: two of five answered, no commas).
+    {
+      const items = sizedItems(String(opts.incomingMessage ?? ""));
+      const padTitles = titles.filter((t) => sizePair(t));
+      if (items.length >= 2 && padTitles.length) {
+        const fmt = (s: [number, number]) => `${s[0]}×${s[1]}`;
+        const lines: string[] = [];
+        const none: string[] = [];
+        for (const it of items) {
+          // Answered already, by its size or by its device name ("לסודה: גפן"): no second line.
+          const said = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => text.includes(k)) || namesItem(text, it.name, items.filter((o) => o !== it).map((o) => o.name));
+          if (said) continue;
+          const pad = smallestFitting(it.size, padTitles);
+          if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${pad}.` : `למידה ${fmt(it.size)}: ${pad}.`);
+          else none.push(fmt(it.size));
+        }
+        if (lines.length || none.length) {
+          const tail = none.length ? (locale === "en" ? "The other sizes are with the team; the answer will come here in the chat." : "את שאר המידות העברתי לבדיקה של הצוות, והתשובה תגיע כאן בצ'אט.") : "";
+          text = [text.trim(), ...lines, tail].filter(Boolean).join("\n");
+          if (none.length && !output.teamQuestion) output = { ...output, teamQuestion: `sizes with no fitting pad: ${none.join(", ")}` };
+          (trace as any).sizedItems = { answered: lines.length, none: none.length };
+        }
+      }
+    }
     // A first name only from the profile or the customer's own signature (prod rating 2026-11-17: "היי אלה").
     text = dropUnaskedName(text, [firstName]);
     // Holding mode (prod rating 2026-11-17): a sensitive team item is open; nothing about its state, cause or
@@ -1406,7 +1459,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (held) {
       const incomingNow = String(opts.incomingMessage ?? "");
       const lastInMsg: any = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
-      const attachmentNow = /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? ""));
+      // THIS message's attachment, never an older one in the history (rating 83086356: "הוספתי את זה לבדיקה" every
+      // turn after a photo sent earlier).
+      const attachmentNow = /^\s*\[(?:image|photo|video|voice|audio|document|file|sticker|תמונה|סרטון|מסמך|קובץ)[^\]]*\]/iu.test(incomingNow)
+        || (String(lastInMsg?.body ?? "").trim() === incomingNow.trim() && /image|document|video|audio|sticker|file/i.test(String(lastInMsg?.messageType ?? "")));
       const details = bringsDetails(incomingNow, attachmentNow);
       // A nudge: a short message that asks nothing of its own ("נו?" asks, "מתי אתם פתוחים?" is a question).
       const nudge = incomingNow.trim().split(/\s+/).length <= 3 && (!asksSomething(incomingNow) || /^\s*(?:נו|nu|\?+|so|any news|יש חדש|מה קורה)\s*\??\s*$/iu.test(incomingNow));
@@ -1466,6 +1522,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (!output.handoff && !output.teamQuestion) output = { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
       heldTurn = true;
       (trace as any).holdingOpened = true;
+    }
+    // An apology or thanks alone, the rest cut, on a real question is no answer (rating 83086356: "נכון, סליחה
+    // על הבלבול." on "איפה הסרטון"): a link from the business's own texts for a how-to ask, else the team.
+    // Only what a cleanup LEFT (the gate cut the rest), never a safety conversation's short reply.
+    // The gate's own team line on a how-to ask whose link the business's texts hold is the link too.
+    const leftOver = apologyOnly(text) || (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && isCannedTeamLine(text));
+    if (leftOver && String(trace.gate3?.rewrite ?? "none") !== "none" && !safetyConversation && (asksSomething(String(opts.incomingMessage ?? "")) || imperativeAsk(String(opts.incomingMessage ?? ""))) && !heldTurn) {
+      const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
+      const link = HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) ? /https?:\/\/[^\s)\]"'״]+[^\s.,;:!?)\]"'״]/.exec(kb)?.[0] : null;
+      text = link ? (locale === "en" ? `Here is the link: ${link}` : `הנה הקישור: ${link}`) : (locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.");
+      // The link answers it: no team question; else the question goes to the team.
+      output = link ? { ...output, teamQuestion: null } : output.teamQuestion ? output : { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
+      (trace as any).apologyOnly = link ? "link" : "team";
     }
     const leftover = ungroundedPrices(text, groundingNow());
     if (leftover.length) (trace as any).priceStripped = leftover.length;
@@ -1661,7 +1730,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // Not on a thanks; a direct ask right after the line (last turn) may stay quiet (the every-third cap).
       const lastOutBody = lastOutIdx >= 0 ? String(history[lastOutIdx]?.body ?? "") : "";
       const sinceLine = state.facts?.[HOLD_LINE_FACT] != null ? turnNo - Number(state.facts[HOLD_LINE_FACT]) : lastOutBody.includes(HOLD_LINE_CORE[locale === "en" ? "en" : "he"]) && inboundSince <= 1 ? 1 : 99;
-      if (!customerAck(incomingNow) && (silentLong || (asksSomething(incomingNow) && sinceLine >= 2))) {
+      // An imperative is a direct ask too ("תעדכנו בבקשה ושלחו לי מספר הזמנה", rating 83086356, after a SILENT
+      // gate verdict); a thanks gets the welcome once per hold.
+      const direct = asksSomething(incomingNow) || imperativeAsk(incomingNow);
+      if (customerAck(incomingNow)) {
+        const thanksLine = locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE;
+        if (!state.facts?.[THANKS_FACT] && lastOutBody.trim() !== thanksLine) { reply = thanksLine; holdFacts[THANKS_FACT] = String(turnNo); (trace as any).holdingFloor = "thanks"; }
+      } else if (silentLong || (direct && sinceLine >= 2)) {
         reply = stillCheckingLine(heldNow, locale === "en" ? "en" : "he");
         holdFacts[HOLD_LINE_FACT] = String(turnNo);
         (trace as any).holdingFloor = true;
@@ -1674,7 +1749,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const shownCards = cardChannel ? [...new Set((final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length))]
       .map((n) => candidates[n - 1]).filter((c: any) => c?.title && c.inventoryState !== "out_of_stock").slice(0, 3) : [];
     reply = shownCards.length
-      ? `${locale === "en" ? "Here is what we have that fits" : "הנה מה שיש לנו שמתאים"}: ${shownCards.map((c: any) => c.title).join(", ")}.`
+      ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownCards.map((c: any) => c.title).join(", ")}.`
       : productQuestionLine(locale);
     (trace as any).hollowHeader = shownCards.length ? "named" : "question";
   }

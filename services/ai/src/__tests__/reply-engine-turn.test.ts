@@ -283,7 +283,7 @@ describe("one v2 turn, live", () => {
     const r = await runReplyEngineTurn(opts, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.escalation).toBeNull();
-    expect(r.reply).toMatch(/^הנה מה שיש לנו שמתאים: .+\.$/);
+    expect(r.reply).toMatch(/^הנה כמה אפשרויות: .+\.$/);
     expect(h.staged).toEqual([{ products: [{ productId: "101", variantId: undefined }] }]);
   });
 
@@ -726,7 +726,7 @@ describe("prod replay 4 (2026-11-16), through a whole turn", () => {
     expect(r.reply ?? "").not.toMatch(/לא מוכרים/);
     // Nothing else was in the reply: the products the search returned, not a canned line.
     expect(r.trace.gate3.rewrite).toBe("fallback");
-    expect(r.reply).toMatch(/^הנה מה שיש לנו שמתאים: .+\.$/);
+    expect(r.reply).toMatch(/^הנה כמה אפשרויות: .+\.$/);
   });
 });
 
@@ -1574,7 +1574,7 @@ describe("d7782dd2 rating: engine passes", () => {
       { toolCalls: [respond("bh2", { reply: "הנה מה שיש לנו שמתאים.", cards: ["PRODUCT_1"] })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
-    expect(r.reply).toBe("הנה מה שיש לנו שמתאים: Canvas Tote.");
+    expect(r.reply).toBe("הנה כמה אפשרויות: Canvas Tote.");
   });
 });
 
@@ -1717,6 +1717,94 @@ describe("ed780586 rating: engine passes", () => {
   });
 });
 
+describe("83086356 rating: engine passes", () => {
+  const withHeld = async (facts: any, fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  it("★ an imperative ask after a silent gate gets the holding line", async () => {
+    await withHeld({ _holdLineTurn: "7", _spokeTurn: "9", _cannedTeamLineAt: new Date().toISOString() }, async () => {
+      const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("im1", { reply: para })] }, { toolCalls: [respond("im2", { reply: para })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תעדכנו בבקשה ושלחו לי מספר הזמנה" }, "autonomous");
+      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+    });
+  });
+  it("★ a thanks after a silent gate in a hold gets the welcome once", async () => {
+    await withHeld({ _cannedTeamLineAt: new Date().toISOString(), _spokeTurn: "9" }, async () => {
+      const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
+      h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [respond("th1", { reply: para })] }, { toolCalls: [respond("th2", { reply: para })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
+      expect(r.reply).toBe("בשמחה!");
+    });
+  });
+  it("★ sizes the reply answered by device name get no second line", async () => {
+    h.groundTitle = "סמובי אליס 31*41";
+    h.extraTitle = "סמובי אסף 46*33";
+    h.responses.push(
+      { toolCalls: [tc("sn1", "woocommerce.list_products", { query: "משטח" })] },
+      { toolCalls: [respond("sn2", { reply: "לסודה ולטוסטר קפיץ: סמובי אליס 31*41." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "סודה 18x14 טוסטר קפיץ 24x15" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/18×14:|24×15:/);
+  });
+  it("★ an older photo in the history is no new detail: no 'added it' ack", async () => {
+    const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
+    await withHeld({}, async () => {
+      h.history = [{ direction: "INBOUND", body: "[Image]", messageType: "image", metadata: null }, { direction: "OUTBOUND", body: "קיבלתי.", senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "שלחתי צילום", messageType: "image", metadata: null }];
+      h.responses.push({ toolCalls: [respond("ph1", { reply: "החיוב עדיין בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש לגבי החיוב?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(new RegExp(HOLD_ACK_HE.slice(0, 12)));
+    });
+  });
+  it("★ 'I've added it to the check' with nothing added is cut", async () => {
+    h.responses.push({ toolCalls: [respond("ad1", { reply: "עדכנתי את הצוות. אנחנו פתוחים א-ה 9-17." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה שעות הפעילות?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/עדכנתי/);
+    expect(r.reply ?? "").toMatch(/9-17/);
+  });
+  it("★ sizes for several items, no commas: each gets the smallest pad that takes it", async () => {
+    h.groundTitle = "סמובי אליס 31*41";
+    h.extraTitle = "סמובי אסף 46*33";
+    h.responses.push(
+      { toolCalls: [tc("sz1", "woocommerce.list_products", { query: "משטח" })] },
+      { toolCalls: [respond("sz2", { reply: "לנינג'ה קרמה 28x18 ולמיקסר 32x22 מתאים סמובי אליס 31*41." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אלה המידות של מוצרי החשמל שיש לי - איזה מוצרי סמובי אני צריכה? נינג׳ה קרמה 28x18 מיקסר 32x22 סודה 18x14 טוסטר קפיץ 24x15 נינג׳ה בלנדר 24x18" }, "autonomous");
+    // Every size is answered once, whatever the gate did to the model's reply.
+    for (const s of ["28[x×]18", "32[x×]22", "18×14", "24×15", "24×18"]) expect(((r.reply ?? "").match(new RegExp(s, "g")) ?? []).length, s).toBe(1);
+  });
+  it("★ an apology alone on a how-to ask: the link from the business's own texts", async () => {
+    h.lexical = [{ content: "סרטון הדרכה: https://youtu.be/abc123", score: 0.9, documentTitle: "guide", chunkIndex: 1, documentId: "d1" }];
+    // The gate cuts the made-up price; the apology is all that is left.
+    h.responses.push({ toolCalls: [respond("ap1", { reply: "נכון, סליחה על הבלבול. הסרטון עולה ₪50." })] }, { toolCalls: [respond("ap1b", { reply: "נכון, סליחה על הבלבול. הסרטון עולה ₪50." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון?" }, "autonomous");
+    expect(r.reply).toBe("הנה הקישור: https://youtu.be/abc123");
+  });
+});
+
+describe("Crispy, verified (2026-11-18, the real Smoovee table line)", () => {
+  it("★ 'ולנינגה קריספי' (no geresh) brings the device table into the prompt, with the category instruction", async () => {
+    const { lexicalTerms } = await vi.importActual<any>("../services/knowledge.service");
+    const chunk = { content: "סיר טיגון ללא שמן נינג'ה: סמובי אליס\nנינג'ה גריל XL: סמובי אליס, סמובי אסף\nמיקסר דאבו: סמובי אליס", score: 0.5, documentTitle: "devices", chunkIndex: 0, documentId: "kb1" };
+    // As the store's lexical search does: the chunk comes back when one of the query's terms is in it.
+    h.lexicalFor = (q: string) => (lexicalTerms(q).own.some((w: string) => chunk.content.toLowerCase().includes(w)) ? [chunk] : []);
+    h.history = [{ direction: "INBOUND", body: "איזה משטח מתאים לסיר שלי?", metadata: null }, { direction: "OUTBOUND", body: "לאיזה מכשיר?", senderName: "AI Bot", metadata: null }];
+    h.responses.push({ toolCalls: [respond("cr1", { reply: "לנינג'ה קריספי, שהוא סיר טיגון ללא שמן, מתאים סמובי אליס." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "ולנינגה קריספי" }, "autonomous");
+    const prompt = JSON.stringify(h.calls[0].messages);
+    expect(prompt).toMatch(/סיר טיגון ללא שמן נינג/);
+    expect(prompt).toMatch(/map it to its category/);
+  });
+  it("★ 'מתאים לנינג'ה סלושי, לא לקריספי' is a negative fit claim", async () => {
+    const { ungroundedNegativeFit } = await import("../services/reply-engine/gates");
+    expect(ungroundedNegativeFit("המשטח שמופיע כאן מתאים לפי היצרן לנינג'ה סלושי, לא לקריספי.", "ולנינגה קריספי", ["סמובי אליס 31*41"], "")).toHaveLength(1);
+  });
+});
+
 describe("39b65d68 regression: engine passes", () => {
   it("★ a raw handle never reaches the greeting, and the model sees no name", async () => {
     const { prisma } = await import("@chatcenter/shared");
@@ -1802,6 +1890,6 @@ describe("1f510cc4 rating: engine passes", () => {
     expect(((r.reply ?? "").match(/Canvas Tote/g) ?? []).length).toBe(1);
     // The fallback writes its header only; the list carries each product once (no inline bullets).
     expect(r.reply).not.toMatch(/•/);
-    expect(((r.reply ?? "").match(/הנה מה שיש לנו שמתאים/g) ?? []).length).toBe(1);
+    expect(((r.reply ?? "").match(/הנה כמה אפשרויות/g) ?? []).length).toBe(1);
   });
 });

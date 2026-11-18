@@ -561,9 +561,14 @@ const OFFERED_PERSON = /(?<![\u0590-\u05FF])[וש]?(?:דחוף|דחופה|להע
 const YES = /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|ברור|בטח|אשמח|בהחלט|yes|yeah|yep|please|sure)(?:[\s,.!]|$)/iu;
 /** The customer accepted the employee's own offer of a person, and the reply does neither hand over nor record it. */
 // A person offered, in the question itself (rating ed780586: "כן" after "לבדוק עם הצוות?" became a handoff).
-const PERSON_OFFER = /(?<![\u0590-\u05FF])[וש]?[לה]?(?:דחוף|דחופה|נציג|נציגה|נציגים|מישהו\s+מהצוות|מישהי\s+מהצוות|אחד\s+מהצוות|לדבר\s+עם\s+(?:נציג|נציגה|מישהו|אדם)|לחבר\s+אותך|להעביר\s+אותך|שאעביר\s+אותך|שנעביר\s+אותך|שיחזרו\s+אלי+(?:ך|כם)|שיחזור\s+אלי+(?:ך|כם)|שיתקשרו|שיתקשר)(?![\u0590-\u05FF])|\b(?:urgent|connect you|transfer you|pass you (?:on|to)|talk to (?:someone|a person|a human|an agent)|(?:a|an) (?:person|agent|representative|human))\b/iu;
+const PERSON_OFFER = /(?<![\u0590-\u05FF])[וש]?[לה]?(?:נציג|נציגה|נציגים|מישהו\s+מהצוות|מישהי\s+מהצוות|אחד\s+מהצוות|לדבר\s+עם\s+(?:נציג|נציגה|מישהו|אדם)|לחבר\s+אותך|להעביר\s+אותך|שאעביר\s+אותך|שנעביר\s+אותך|שיחזרו\s+אלי+(?:ך|כם)|שיחזור\s+אלי+(?:ך|כם)|שיתקשרו|שיתקשר)(?![\u0590-\u05FF])|\b(?:connect you|transfer you|pass you (?:on|to)|talk to (?:someone|a person|a human|an agent)|(?:a|an) (?:person|agent|representative|human))\b/iu;
 export function offeredPerson(lastBotReply: string | null | undefined): boolean {
-  return (String(lastBotReply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+\?/g) ?? []).some((q) => PERSON_OFFER.test(q));
+  const t = String(lastBotReply ?? "");
+  // A question that offers a person, or a question whose "if so" offers one ("זה דחוף? אם כן אעביר לנציג").
+  // Urgency or priority alone is no person (rating 83086356: "כן" to a high-priority check became a handoff).
+  if ((t.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+\?/g) ?? []).some((q) => PERSON_OFFER.test(q))) return true;
+  const ifSo = /\?\s*(?:ו?אם\s+כן|if so)[^.!?\n]{0,80}/iu.exec(t);
+  return !!ifSo && PERSON_OFFER.test(ifSo[0]);
 }
 export function ignoredYes(incoming: string, lastBotReply: string | null | undefined, handedOff: boolean, teamQuestion: boolean): boolean {
   if (handedOff || teamQuestion || !lastBotReply) return false;
@@ -1584,10 +1589,11 @@ export function groundedProductFallback(
 ): string | null {
   const shown = candidates.filter((c) => c?.title && c.inventoryState !== "out_of_stock").slice(0, 3);
   if (!shown.length) return null;
-  if (cards) return locale === "he" ? "הנה מה שיש לנו שמתאים." : "Here is what we have that fits.";
+  // "שמתאים" asserts a fit nothing checked (rating 83086356: a lip tint "that fits" an under-eye ask).
+  if (cards) return locale === "he" ? "הנה כמה אפשרויות." : "Here are some options.";
   const cur = (c: string | null | undefined) => (c === "ILS" || !c ? "₪" : `${c} `);
   const line = (c: (typeof shown)[number]) => (c.price != null && !c.priceOnSite ? `${c.title}, ${cur(c.currency)}${c.price}` : c.title);
-  return (locale === "he" ? "הנה מה שיש לנו שמתאים:\n" : "Here is what we have that fits:\n") + shown.map((c) => `• ${line(c)}`).join("\n");
+  return (locale === "he" ? "הנה כמה אפשרויות:\n" : "Here are some options:\n") + shown.map((c) => `• ${line(c)}`).join("\n");
 }
 
 
@@ -1803,7 +1809,7 @@ export function asksOtherTopic(incoming: string): boolean {
  * התקבלה התאמה לפי המידות", both wrong). Kept only when the product's own text says it does not fit, or the
  * customer's base is bigger than the pad on an axis (pad >= base on both, either way round).
  */
-const NEG_FIT = /(?<![֐-׿])(?:לא\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|מתאים\s+ל)|(?:אין|לא\s+(?:התקבלה|נמצאה|קיימת))\s+(?:לנו\s+)?התאמה)(?![֐-׿])|\b(?:(?:does|do|will)n'?t fit|(?:is|are) not compatible|no (?:matching|suitable) (?:pad|size|product))\b/iu;
+const NEG_FIT = /(?:מתאים|מתאימה|מתאימים|מתאימות)[^.!?\n]{0,60}[,\s]\s*(?:אבל\s+|ו)?לא\s+ל[\u0590-\u05FF'"״]{3,}|(?<![֐-׿])(?:לא\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|מתאים\s+ל)|(?:אין|לא\s+(?:התקבלה|נמצאה|קיימת))\s+(?:לנו\s+)?התאמה)(?![֐-׿])|\b(?:(?:does|do|will)n'?t fit|(?:is|are) not compatible|no (?:matching|suitable) (?:pad|size|product))\b/iu;
 const SIZE_PAIR = /(\d{2,3}(?:\.\d)?)\s*(?:[x×*]|על)\s*(\d{2,3}(?:\.\d)?)/iu;
 export const sizePair = (t: string): [number, number] | null => { const m = SIZE_PAIR.exec(String(t ?? "")); return m ? [Number(m[1]), Number(m[2])] : null; };
 export const padFits = (pad: [number, number], base: [number, number]) => { const [a, b] = [...pad].sort((x, y) => x - y), [c, d] = [...base].sort((x, y) => x - y); return a >= c && b >= d; };
@@ -1959,3 +1965,42 @@ export function dropOrphanConditional(text: string, titles: string[]): string {
 export const RETURNS_WORK_RE = RETURNS_WORK;
 export const NO_INFO_RE = NO_INFO;
 export const dropSentencesBy = (s: string, re: RegExp) => dropSentences(s, re);
+
+
+/** A request made as an imperative, with no "?" ("תעדכנו בבקשה ושלחו לי מספר הזמנה"): a direct ask. */
+const IMPERATIVE_ASK = /(?<![֐-׿])[ו]?(?:שלחו|תשלחו|שלחי|תשלחי|שלח|תשלח|עדכנו|תעדכנו|עדכני|תעדכני|עדכן|תעדכן|תבדקו|תבדקי|תגידו|תגידי|תחזרו|תחזרי|תסבירו|תסבירי|תכתבו|תכתבי|תודיעו|תודיעי)(?![֐-׿])|\b(?:please (?:send|update|tell|check|let me know)|send me|let me know|tell me)\b/iu;
+export const imperativeAsk = (incoming: string) => IMPERATIVE_ASK.test(String(incoming ?? ""));
+
+/** A claim that something was added or passed on ("הוספתי את זה לבדיקה", "עדכנתי את הצוות"). */
+export const ADDED_CLAIM = /(?<![֐-׿])(?:הוספתי|הוספנו|צירפתי|צירפנו|עדכנתי|עדכנו)\s+(?:את\s+)?(?:זה|הפרטים|המידע|המספר|הצוות|לבדיקה|לתיק|לפנייה)|\b(?:i(?:'ve| have) (?:added|attached|updated) (?:it|this|the (?:details|team)))\b/iu;
+
+/** Each item the customer gave with its base size: "<words> 28x18" (x, ×, *), commas or not. */
+export function sizedItems(incoming: string): Array<{ size: [number, number]; at: number; name: string }> {
+  const t = String(incoming ?? "");
+  const out: Array<{ size: [number, number]; at: number; name: string }> = [];
+  let from = 0;
+  for (const m of t.matchAll(/(\d{2,3}(?:\.\d)?)\s*[x×*X]\s*(\d{2,3}(?:\.\d)?)/gu)) {
+    const at = m.index ?? 0;
+    // The item's name: the last two words before its size ("נינג׳ה קרמה 28x18", "סודה 18x14").
+    const words = (t.slice(from, at).match(/[\p{L}'׳"]{2,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase()));
+    out.push({ size: [Number(m[1]), Number(m[2])], at, name: words.slice(-2).join(" ") });
+    from = at + m[0].length;
+  }
+  return out;
+}
+/** The reply already answers this item by its device name ("לסודה: גפן"). */
+export function namesItem(reply: string, name: string, otherNames: string[] = []): boolean {
+  const r = String(reply ?? "").toLowerCase();
+  // A word another item shares (the brand "נינג׳ה" of two Ninja devices) tells neither apart.
+  const others = otherNames.flatMap((n) => String(n ?? "").match(/[\p{L}]{3,}/gu) ?? []).flatMap((w) => nounKeys(w));
+  return (String(name ?? "").match(/[\p{L}]{3,}/gu) ?? []).filter((w) => !nounKeys(w).some((k) => others.includes(k))).some((w) => nounKeys(w).some((k) => r.includes(k)));
+}
+/** The smallest pad (by area) whose size takes the base, either way round; null when none does. */
+export function smallestFitting(base: [number, number], titles: string[]): string | null {
+  const fits = titles.map((t) => ({ t, pad: sizePair(t) })).filter((x): x is { t: string; pad: [number, number] } => !!x.pad && padFits(x.pad, base));
+  fits.sort((a, b) => a.pad[0] * a.pad[1] - b.pad[0] * b.pad[1]);
+  return fits[0]?.t ?? null;
+}
+
+/** An apology or thanks alone, a "you're right" in front allowed ("נכון, סליחה על הבלבול."). */
+export const apologyOnly = (text: string) => ackOnly(String(text ?? "").replace(/^\s*(?:נכון|אכן|צודקת|צודק|צודקים|you'?re right|right|true)[,!.]?\s*/iu, ""));

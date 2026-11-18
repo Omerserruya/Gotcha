@@ -184,7 +184,7 @@ describe("Gate 3", () => {
     const text = groundedProductFallback(c, "he", false)!;
     expect(text).toContain("Canvas Tote, ₪79");
     expect(text).not.toContain("Old Bag");
-    expect(groundedProductFallback(c, "he", true)).toBe("הנה מה שיש לנו שמתאים.");
+    expect(groundedProductFallback(c, "he", true)).toBe("הנה כמה אפשרויות.");
     expect(groundedProductFallback([], "he", false)).toBeNull();
     // The card form goes out WITH its cards; without them it would name nothing (nameless_products).
     expect(gate3({ ...baseG3, reply: groundedProductFallback(c, "he", true)!, grounding: "", cards: ["PRODUCT_1"], candidateCount: 1 }).ok).toBe(true);
@@ -2614,5 +2614,42 @@ describe("83086356 spot check: a geresh left out", () => {
     const table = "סיר טיגון ללא שמן נינג'ה: סמובי אליס";
     const three = ["סמובי אליס 31*41", "סמובי אסף 46*33"];
     expect(ungroundedPositiveFit("נינגה קריספי הוא סיר טיגון ללא שמן, ולנינגה קריספי מתאים סמובי אליס.", "ולנינגה קריספי", three, "", table)).toEqual([]);
+  });
+});
+
+/** Rating on 83086356 (2026-11-18). */
+describe("83086356 rating fixes", () => {
+  it("★ urgency is no offer of a person; an 'if so' that names one is", async () => {
+    const { offeredPerson } = await import("../services/reply-engine/gates");
+    expect(offeredPerson("זה דחוף? נבדוק בעדיפות גבוהה.")).toBe(false);
+    expect(offeredPerson("לסמן את זה כדחוף?")).toBe(false);
+    expect(offeredPerson("זה דחוף? אם כן אעביר לנציג.")).toBe(true);
+  });
+  it("★ an imperative is a direct ask", async () => {
+    const { imperativeAsk } = await import("../services/reply-engine/gates");
+    expect(imperativeAsk("תעדכנו בבקשה ושלחו לי מספר הזמנה")).toBe(true);
+    expect(imperativeAsk("please send me the order number")).toBe(true);
+    expect(imperativeAsk("תודה רבה")).toBe(false);
+  });
+  it("★ sized items and the smallest pad that takes each", async () => {
+    const { sizedItems, smallestFitting } = await import("../services/reply-engine/gates");
+    expect(sizedItems("נינג׳ה קרמה 28x18 מיקסר 32x22 סודה 18x14").map((x) => x.size)).toEqual([[28, 18], [32, 22], [18, 14]]);
+    expect(smallestFitting([32, 22], ["סמובי אסף 46*33", "סמובי אליס 31*41", "סמובי קטן 20*20"])).toBe("סמובי אליס 31*41");
+    expect(smallestFitting([50, 40], ["סמובי אסף 46*33"])).toBeNull();
+    const items = sizedItems("איזה מוצרי סמובי אני צריכה? נינג׳ה קרמה 28x18 מיקסר 32x22 סודה 18x14");
+    expect(items.map((x) => x.name)).toEqual(["נינג׳ה קרמה", "מיקסר", "סודה"]);
+    const { namesItem } = await import("../services/reply-engine/gates");
+    expect(namesItem("לסודה: סמובי גפן.", "סודה")).toBe(true);
+    expect(namesItem("למיקסר: סמובי אליס.", "סודה")).toBe(false);
+    // The shared brand of two Ninja devices answers neither.
+    expect(namesItem("לנינג'ה קרמה: סמובי אליס.", "נינג׳ה בלנדר", ["נינג׳ה קרמה"])).toBe(false);
+    expect(namesItem("לנינג'ה קרמה: סמובי אליס.", "נינג׳ה קרמה", ["נינג׳ה בלנדר"])).toBe(true);
+  });
+  it("★ search hygiene: no 0..0 price, an audience only when she names one, never her whole message", async () => {
+    const { cleanSearchArgs } = await import("../services/reply-engine/engine");
+    expect(cleanSearchArgs({ query: "משטח", price_min: 0, price_max: 0, audience: "women" }, "היי מחפשת משטח")).toEqual({ query: "משטח" });
+    expect(cleanSearchArgs({ query: "צעיף", audience: "men" }, "צעיף לבעלי")).toEqual({ query: "צעיף", audience: "men" });
+    expect(cleanSearchArgs({ query: "היי מחפשת את הבובון לקשירה נמוכה" }, "היי מחפשת את הבובון לקשירה נמוכה").query).toBe("הבובון לקשירה נמוכה");
+    expect(cleanSearchArgs({ query: "תיק", price_max: 200 }, "תיק עד 200").price_max).toBe(200);
   });
 });
