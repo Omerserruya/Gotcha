@@ -110,7 +110,7 @@ export function knowledgeHazard(incoming: string, knowledge: string): boolean {
   if (!knowledge || !WENT_WRONG.test(incoming ?? "")) return false;
   const mine = contentStems(incoming);
   if (mine.length < 2) return false;
-  const warnings = (String(knowledge).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => WARNS.test(x)).map((x) => unfinal(x.toLowerCase()));
+  const warnings = (String(knowledge).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => WARNS.test(x)).map((x) => unfinal(x.toLowerCase()));
   return warnings.some((w) => mine.filter((m) => w.includes(m)).length >= 2);
 }
 export const safetyCase = (inbound: string[], knowledge = "") => SAFETY.test(inbound.join("\n")) || (!!knowledge && knowledgeHazard(inbound.at(-1) ?? "", knowledge));
@@ -175,7 +175,7 @@ export const teamLineIn = (reply: string) => TEAM_LINE.test(reply ?? "");
 const TEAM_PASS_ANY = /(?<![\u0590-\u05FF])[וש]?(?:נעביר|אעביר|נשאל|אשאל|נבדוק|אבדוק|נברר|אברר|נעדכן|אעדכן|נחזור\s+(?:אליך|אלייך|אליכם)|יתקבל\s+מענה|הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|בודק|יטפל))(?![\u0590-\u05FF])[^.!?\n]{0,40}(?:צוות|אצלנו)?|\b(?:pass(?:ed|ing)? (?:it|this|that|your \w+) (?:on )?to the team|the team (?:will|is going to|is) (?:check|look|get back|answer)\w*|(?:i|we)(?:'ll| will) (?:ask|check with) the team)\b/iu;
 /** The reply already says the team has it (or will): no team line is appended. */
 export const teamPassIn = (reply: string) => TEAM_LINE.test(reply ?? "") || WE_WILL_WITH_TEAM.test(reply ?? "") || TEAM_PASS_ANY.test(reply ?? "");
-export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).reduce(joinKept, "").trim();
+export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).reduce(joinKept, "").trim();
 
 // A material answered from the business description without reading the product (prod replay 12:
 // "stainless steel" from the product data in one conversation, something else from the description in another).
@@ -257,7 +257,7 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
 // A note meant for the engine (a simulated or test run) must never reach the customer, in any lane.
 const SIMULATION_LEAK = /(?:סביבת (?:ה)?(?:בדיקה|בדיקות|ניסוי|טסט)|סימולציה|בסימולציה|לא בוצע(?:ה)? בפועל|שיחת (?:ה)?(?:בדיקה|ניסיון)|הודעת בדיקה)|\b(?:simulat(?:ed|ion)|sandbox|test (?:environment|conversation|mode)|not (?:actually|really) (?:performed|executed|sent))\b/iu;
 /** A test or simulation named in the reply; never when the business's own texts say the same words (a demo site's notice). */
-const CAVEAT = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
+const CAVEAT = /(?<![\u0590-\u05FF])ו?(?:אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)|אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
@@ -286,7 +286,7 @@ export function unbackedRecords(reply: string, tools: ToolRunRecord[]): string[]
   // the business made (the Supervisor, 2026-11-17).
   const wrote = tools.some((t) => t.decision === "allow" && t.outcome === "ok" && !READ_TOOL.test(String(t.tool).split(".").pop() ?? "") && t.tool !== "search_knowledge" && t.tool !== "read_skill");
   if (wrote) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => RECORDED.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => RECORDED.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 /** "Passed to the team" or a promise of a later action, with nothing in this turn carrying it (no team question, no handoff, nothing open). */
@@ -331,7 +331,7 @@ const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
  * ("אין לנו כזה"), any product search that ran this turn grounds it.
  */
 export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowledge = ""): string[] {
-  const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? [];
+  const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? [];
   const searches = tools.filter((t) => SEARCH_TOOL.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
   const out: string[] = [];
   // What the business itself says it cannot do (prod replay 5: "we can't arrange a
@@ -384,7 +384,7 @@ export function priceAgainstStore(reply: string, candidates: Array<{ title: stri
   const read = tools.some((t) => /list_products|search_products|get_product|variation/i.test(t.tool) && t.outcome === "ok");
   const toolText = tools.map((t) => String(t.content ?? "")).join("\n");
   const out: string[] = [];
-  for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []) {
+  for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []) {
     const prices = [...x.matchAll(PRICE_IN)].map((m) => Number(String(m[1] ?? m[2]).replace(",", ".")));
     if (!prices.length) continue;
     const named = candidates.filter((c) => c?.title && x.toLowerCase().includes(String(c.title).toLowerCase()) && c.price != null);
@@ -403,13 +403,13 @@ const ORDER_WORD = /(?<![\u0590-\u05FF])[וש]?ה?(?:הזמנה|ההזמנה|ח�
 export function orderStateWithoutLookup(reply: string, tools: ToolRunRecord[]): string[] {
   const orders = tools.filter((t) => ORDER_LOOKUP_TOOL.test(t.tool) || /tracking|fulfil?lment|shipment/i.test(t.tool));
   if (!orders.length || orders.some((t) => t.outcome === "ok" || t.outcome === "empty")) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => ORDER_STATE.test(x) && ORDER_WORD.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => ORDER_STATE.test(x) && ORDER_WORD.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 /** Sentences stating a number with a unit that no evidence this turn holds. */
 export function ungroundedNumbers(reply: string, evidence: string): string[] {
   const known = numbersIn(evidence);
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     // Never the digits of a link ("95%d7" in a percent-encoded path read as "95%": prod 2026-11-18).
     for (const m of x.replace(/https?:\/\/\S+/gi, " ").matchAll(UNIT_NUMBER)) {
       if ([m[1], m[2]].filter(Boolean).some((n) => !known.has(String(n).replace(",", ".")))) return true;
@@ -425,7 +425,7 @@ const INFO_STOP = new Set(["פרטי", "פרטים", "מידע", "כרגע", "א
 export function infoDeniedButKnown(reply: string, knowledge: string): string[] {
   const k = unfinal(String(knowledge ?? "").toLowerCase());
   if (!k) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (!INFO_DENIED.test(x)) return false;
     const stems = (x.match(/\p{L}{4,}/giu) ?? []).filter((w) => !INFO_STOP.has(w)).map(stem).filter((w) => w.length >= 3);
     const hits = stems.filter((w) => k.includes(w));
@@ -441,7 +441,7 @@ const DENIES_PRICE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)\s+(?:את\
 export function contradictsEarlier(reply: string, previousBotReplies: string[]): string[] {
   const said = previousBotReplies.join("\n");
   const hadLink = /https?:\/\//i.test(said), hadPrice = /₪\s*\d|\d\s*(?:₪|ש["״']?ח)/.test(said);
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => (hadLink && DENIES_LINK.test(x)) || (hadPrice && DENIES_PRICE.test(x))).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => (hadLink && DENIES_LINK.test(x)) || (hadPrice && DENIES_PRICE.test(x))).map((x) => x.trim().slice(0, 120));
 }
 
 // A return question answered with half the policy (prod replay 2026-11-17, Tehila: refunds only).
@@ -456,7 +456,7 @@ export function partialReturnPolicy(reply: string, incoming: string, knowledge: 
 
 /** Sentences that say the address is not known. */
 export function addressDenied(reply: string): string[] {
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => ADDRESS_DENIED.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => ADDRESS_DENIED.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 /**
@@ -515,9 +515,9 @@ const CODE_CONTEXT = new RegExp(String.raw`${OBTAINABLE}|\b(?:code|coupon|vouche
 export function ungroundedSource(incoming: string, reply: string, context: string, knowledge: string): string[] {
   const asks = GET_IT.test(incoming ?? "") || (GET_PRONOUN.test(incoming ?? "") && CODE_CONTEXT.test(context ?? ""));
   if (!asks) return [];
-  const known = (String(knowledge ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).some((x) => CODE_CONTEXT.test(x) && OBTAIN_ANY.test(x));
+  const known = (String(knowledge ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).some((x) => CODE_CONTEXT.test(x) && OBTAIN_ANY.test(x));
   if (known) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => OBTAIN_ANY.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => OBTAIN_ANY.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
 }
 // How a thing is obtained, wider than OBTAIN: from someone ("מקבלים מהצוות"), by mail, at purchase.
 const OBTAIN_ANY = new RegExp(`${OBTAIN.source}|(?<![\\u0590-\\u05FF])(?:מקבלים|מקבל|מקבלת|תקבל|תקבלי|תקבלו|מגיע|מגיעה|נשלח|נשלחת)\\s+(?:מ|ב|אחרי|לאחר|עם)[\\u0590-\\u05FF]*|\\b(?:you (?:get|receive) (?:it|one|the code) (?:from|by|after|with|when))\\b`, "iu");
@@ -530,7 +530,7 @@ export function couponSourceMissed(incoming: string, reply: string, context = ""
 
 /** The reply presents or names products for a product ask, and no store search ran. */
 // A recommendation names products as much as "here are" does (a statement; "מתאים לך?" asks).
-const statementsOf = (t: string) => (String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => !x.trim().endsWith("?")).join(" ");
+const statementsOf = (t: string) => (String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => !x.trim().endsWith("?")).join(" ");
 const RECOMMENDS_SRC = String.raw`(?<![\u0590-\u05FF])(?:מתאים\s+(?:לך|לכם|לזה)|מתאימה\s+(?:לך|לכם)|מומלץ|ממליצים|הכי\s+מתאים)(?![\u0590-\u05FF])|\b(?:i(?:'d| would) recommend|we recommend|would suit|fits you|best (?:fit|option))\b`;
 const RECOMMENDS = /(?<![\u0590-\u05FF])(?:מתאים\s+(?:לך|לכם|לזה)|מתאימה\s+(?:לך|לכם)|מומלץ|ממליצים|הכי\s+מתאים|כדאי\s+(?:לך\s+)?(?:את|ב))(?![\u0590-\u05FF])|\b(?:i(?:'d| would) recommend|we recommend|would suit|fits you|best (?:fit|option))\b/iu;
 export function namesProductsUnsearched(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
@@ -589,7 +589,7 @@ export function ignoredYes(incoming: string, lastBotReply: string | null | undef
 const PERSON_CONTINUES = /(?<![\u0590-\u05FF])(?:(?:נציג|נציגה|מישהו|מישהי|אחד\s+מהצוות)\s+(?:מהצוות\s+)?(?:ימשיך|תמשיך|יחזור|תחזור|יטפל|תטפל|יענה|תענה|ייצור\s+קשר|תיצור\s+קשר|יצור\s+קשר)|(?:מעביר|מעבירה|מעבירים)\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה|צוות)|העברתי\s+(?:אותך\s+|את\s+השיחה\s+)?ל(?:נציג|נציגה)|הצוות\s+(?:יחזור|ימשיך|ייצור\s+קשר)(?:\s+אלי(?:ך|כם))?)(?![\u0590-\u05FF])|\b(?:a (?:person|team member|representative|human) (?:will|is going to) (?:continue|take over|get back)|(?:i'?m|we'?re) (?:transferring|passing) you)\b/iu;
 export const promisesPerson = (reply: string) => PERSON_CONTINUES.test(reply ?? "");
 /** The reply without its sentences that say a person continues (used when a needless handoff is removed). */
-export const dropPersonPromises = (reply: string) => (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !PERSON_CONTINUES.test(x)).reduce(joinKept, "").trim();
+export const dropPersonPromises = (reply: string) => (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !PERSON_CONTINUES.test(x)).reduce(joinKept, "").trim();
 
 // "הנה בנדנות מרובעות" with no name, price or card (prod replay 6, Tehila).
 const PRESENTS = /(?<![\u0590-\u05FF])(?:הנה|יש\s+לנו|יש\s+כמה|אפשרויות|דגמים|כמה\s+סוגים|שני\s+סוגים)(?![\u0590-\u05FF])|\b(?:here (?:are|is)|we have|options)\b/iu;
@@ -605,7 +605,7 @@ const PICTURE_REF = /(?<![\u0590-\u05FF])(?:[וש]?(?:הנה|שלחתי|שלחנ
 /** Sentences that point at a picture or card when none goes out with the reply. */
 export function cardReferences(reply: string, cardsShown: boolean): string[] {
   if (cardsShown) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => PICTURE_REF.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => PICTURE_REF.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // A size the customer typed, stated back as a product's own (prod replay 9: "90×90"
@@ -624,7 +624,7 @@ export function echoedSizes(reply: string, customerText: string, sourceText: str
   // The store's own product words (this turn's titles) name a product as well as "המוצר" does.
   const titleStems = [...new Set(productTitles.flatMap((t) => contentStems(t)).filter((w) => w.length >= 3))];
   const namesProduct = (x: string) => PRODUCT_NOUN.test(x) || titleStems.some((w) => unfinal(x.toLowerCase()).includes(w));
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     const echoed = [...sizeKeys(x)].some((k) => theirs.has(k) && !known.has(k));
     return echoed && namesProduct(x) && !THEIR_DEVICE.test(x);
   }).map((x) => x.trim().slice(0, 120));
@@ -640,7 +640,7 @@ export function unsafeTips(reply: string, knowledge: string, safety: boolean): s
   if (!safety) return [];
   const k = unfinal(String(knowledge ?? "").toLowerCase());
   // By stem ("שהמעצור" is "המעצור"), final letters plain.
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => TIP.test(x) && !STOP_USE.test(x) && tipWords(x).map(stem).filter((w) => k.includes(w)).length < 2).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => TIP.test(x) && !STOP_USE.test(x) && tipWords(x).map(stem).filter((w) => k.includes(w)).length < 2).map((x) => x.trim().slice(0, 120));
 }
 export const hasStopUse = (reply: string) => STOP_USE.test(reply ?? "");
 
@@ -660,8 +660,8 @@ export function nearDuplicate(reply: string, previousBotReplies: string[]): bool
 // One sentence again, inside an otherwise new reply (prod replay 10: "3-7 ימי עסקים" four times).
 /** Sentences (6+ words) that repeat one of the employee's last five replies. */
 export function repeatedSentences(reply: string, previousBotReplies: string[]): string[] {
-  const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).map(qWords).filter((w) => w.size >= 6);
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).map(qWords).filter((w) => w.size >= 6);
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     const mine = qWords(x);
     if (mine.size < 6) return false;
     return before.some((b) => { let n = 0; for (const w of mine) if (b.has(w)) n++; return n / Math.max(mine.size, b.size) >= 0.8; });
@@ -712,7 +712,7 @@ const HAS_LIST = /(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s+\S/;
 /** Sentences that point at a list or cards that do not go out with the reply. */
 export function danglingReferences(reply: string, carriesList: boolean): string[] {
   if (carriesList || HAS_LIST.test(reply ?? "")) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => DANGLING.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => DANGLING.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // The same advice or warning again, in other words (prod replay 2026-11-17: one warning in five
@@ -721,10 +721,10 @@ const ADVICE = new RegExp([TIP.source, STOP_USE.source, String.raw`(?<![֐-׿])(
 const adviceStems = (x: string) => contentStems(x).filter((w) => w.length >= 3);
 /** Advice sentences that repeat one already given (3+ shared stems), unless the customer asks about it again. */
 export function repeatedAdvice(reply: string, previousBotReplies: string[], incoming = ""): string[] {
-  const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => ADVICE.test(x)).map(adviceStems);
+  const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => ADVICE.test(x)).map(adviceStems);
   if (!before.length) return [];
   const asked = new Set(adviceStems(incoming));
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (!ADVICE.test(x)) return false;
     const mine = adviceStems(x);
     if (mine.filter((w) => asked.has(w)).length >= 2) return false;
@@ -768,7 +768,7 @@ const PLURAL_WORDS = Object.keys(TO_PLURAL).sort((a, b) => b.length - a.length).
 /** Second-person gendered verbs and participles as the plural ("תשלחי" -> "תשלחו"). Participles only where the customer is the subject ("את מחפשת", a question). */
 export function neutralSecondPerson(s: string): string {
   // A sentence the plural reached says "לכם" too, never "כתבו ... יש לך" (prod replay of 9480dfb2, NE'A).
-  const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
+  const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
   return parts.map((p) => {
     const q = neutralSecondPersonPart(p);
     return q === p ? p : q.replace(/(?<![\u0590-\u05FF])(ו?)(?:לך)(?![\u0590-\u05FF])/gu, "$1לכם").replace(/(?<![\u0590-\u05FF])(ו?)(?:אלייך|אליך)(?![\u0590-\u05FF])/gu, "$1אליכם");
@@ -786,7 +786,7 @@ function neutralSecondPersonPart(s: string): string {
 // no Hebrew, not a product's own title or a link.
 export function foreignLanguageSentences(reply: string, titles: string[] = []): string[] {
   if (!/[֐-׿]/.test(reply ?? "")) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (/[֐-׿]/.test(x) || /https?:\/\/|PRODUCT_\d+/i.test(x)) return false;
     if (titles.some((t) => t && x.toLowerCase().includes(t.toLowerCase()))) return false;
     return (x.match(/[A-Za-z]{2,}/g) ?? []).length >= 4;
@@ -803,7 +803,7 @@ const PAYMENT_EVIDENCE = /refund|financial_status|date_paid|payment_status|trans
 // fact, whatever a tool returned (prod replay 2026-11-17, Smoovee severe).
 const PAYMENT_SPECULATION = /(?<![\u0590-\u05FF])[^.!?\n]{0,60}(?:חיוב|חויב|תשלום|אישור|עסקה|הזמנה)[^.!?\n]{0,40}(?:לכאורה|כביכול)|(?<![\u0590-\u05FF])(?:לכאורה|כביכול)[^.!?\n]{0,60}(?:חיוב|חויב|תשלום|אישור|עסקה|הזמנה)|(?<![\u0590-\u05FF])(?:לא\s+)?(?:אמור|אמורה|אמורים)\s+(?:לא\s+)?להיות\s+(?:(?:ה)?כפילות|(?:ה)?חיוב(?:\s+כפול)?|(?:ה)?תשלום\s+כפול)|\b(?:there\s+)?(?:should(?:n'?t| not)?|is(?:n'?t)? (?:supposed|meant) to)\s+(?:not\s+)?be\s+(?:a\s+)?(?:double|duplicate|second)\s+(?:charge|payment)|(?<![\u0590-\u05FF])(?:יכול\s+להיות|ייתכן|יתכן|אולי|כנראה|ככל\s+הנראה)\s+ש[^.!?\n]{0,70}(?:חיוב|חויב|תשלום|אישור\s+(?:ה)?(?:עסקה|אשראי|ויזה)|כסף|הזמנה\s+לא\s+נוצרה|לא\s+(?:הפך|הפכה|נהיה|נהייתה)\s+ל)|\b(?:maybe|perhaps|probably|it(?:'s| is) possible that|(?:the|your) (?:charge|payment|authori[sz]ation) (?:may|might))[^.!?\n]{0,70}(?:charge|payment|authori[sz]ation|order (?:was not|wasn'?t) created|never went through|did not (?:go through|become))/iu;
 export function ungroundedPayment(reply: string, tools: ToolRunRecord[]): string[] {
-  const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? [];
+  const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? [];
   const speculation = sentences.filter((x) => PAYMENT_SPECULATION.test(x)).map((x) => x.trim().slice(0, 120));
   if (tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return speculation;
   return [...new Set([...sentences.filter((x) => PAYMENT_CLAIM.test(x)).map((x) => x.trim().slice(0, 120)), ...speculation])];
@@ -825,7 +825,7 @@ export const PAYMENT_WORDS = /(?<![֐-׿])[וש]?(?:חיוב|חויב|חויבת
 
 // A cancelled, failed or refunded order given as the customer's without its status (prod replay
 // 2026-11-17): every number of an order marked inactive this turn must come with what it is.
-const INACTIVE_WORDS = /(?<![֐-׿])[וש]?(?:בוטל|בוטלה|מבוטל|מבוטלת|ביטול|הוחזר|הוחזרה|זוכה|נכשל|נכשלה|לא\s+פעיל|לא\s+פעילה)(?![֐-׿])|\b(?:cancel(?:l)?ed|refunded|failed|voided|inactive|not active)\b/iu;
+const INACTIVE_WORDS = /(?<![֐-׿])[וש]?כ?(?:בוטל|בוטלה|מבוטל|מבוטלת|ביטול|הוחזר|הוחזרה|זוכה|נכשל|נכשלה|לא\s+פעיל|לא\s+פעילה)(?![֐-׿])|\b(?:cancel(?:l)?ed|refunded|failed|voided|inactive|not active)\b/iu;
 function inactiveOrderNumbers(tools: ToolRunRecord[]): Set<string> {
   const out = new Set<string>();
   const walk = (v: any) => {
@@ -843,7 +843,7 @@ export const inactiveOrdersIn = (tools: ToolRunRecord[]) => [...inactiveOrderNum
 export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[], known: string[] = []): string[] {
   const nums = new Set([...inactiveOrderNumbers(tools), ...known]);
   if (!nums.size) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => (x.match(/\d{3,}/g) ?? []).some((d) => nums.has(d)) && !INACTIVE_WORDS.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => (x.match(/\d{3,}/g) ?? []).some((d) => nums.has(d)) && !INACTIVE_WORDS.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // Presenting as a named person who is not this employee (prod replay 2026-11-17, GOTCHA: "מתן",
@@ -937,7 +937,7 @@ export function optionClaimsWithoutVariations(reply: string, incoming: string, t
   // Variation data this turn: a variation read, or a product read that carries its variants with stock.
   const read = tools.some((t) => t.outcome === "ok" && (VARIATION_TOOL.test(t.tool) || /"variants?"\s*:\s*\[\s*\{[^\]]*(?:available|inventory|stock)/i.test(String(t.content ?? ""))));
   if (read) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => STOCK_WORDS.test(x) && OPTION_WORDS.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => STOCK_WORDS.test(x) && OPTION_WORDS.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
 }
 
 // A payment or checkout failure is a support case, never a product list (prod replay 2026-11-17:
@@ -968,7 +968,7 @@ export function ungroundedOrderAbsence(reply: string, tools: ToolRunRecord[]): s
   // "no order was created" while the lookup found 97858, cancelled). Only no lookup at all, or found orders, flag it.
   const lookups = tools.filter((t) => ORDER_LOOKUP_TOOL.test(t.tool));
   if (lookups.some((t) => t.outcome === "empty") && !lookups.some((t) => t.outcome === "ok")) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => ORDER_ABSENCE.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => ORDER_ABSENCE.test(x)).map((x) => x.trim().slice(0, 120));
 }
 // "Per the terms" as the reason not to help (the same Smoovee turn): never the answer.
 const TERMS_REFUSAL = /(?<![֐-׿])(?:(?:לפי|על\s+פי|בהתאם\s+ל)\s*(?:ה)?(?:תקנון|תנאים|תנאי\s+(?:ה)?שימוש|מדיניות))[^.!?\n]{0,60}(?:לא\s+(?:ניתן|נוכל|אפשר)|אין\s+אפשרות|אי\s+אפשר)|(?:לא\s+(?:ניתן|נוכל|אפשר)|אין\s+אפשרות|אי\s+אפשר)[^.!?\n]{0,60}(?:לפי|על\s+פי|בהתאם\s+ל)\s*(?:ה)?(?:תקנון|תנאים|תנאי\s+(?:ה)?שימוש)(?![֐-׿])|\b(?:(?:per|according to|under) (?:our|the) (?:terms|policy)[^.!?\n]{0,60}(?:can'?t|cannot|unable|not able)|(?:can'?t|cannot|unable)[^.!?\n]{0,60}(?:per|according to|under) (?:our|the) terms)\b/iu;
@@ -993,7 +993,7 @@ const MEDIA_SENT = /\[(?:image|photo|video|voice|audio|document|file|sticker|ת�
 /** Sentences claiming a photo or file came when none of the customer's last three messages carried one. */
 export function claimsAttachment(reply: string, recentInbound: string[]): string[] {
   if (recentInbound.slice(-3).some((m) => MEDIA_SENT.test(String(m ?? "")))) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => GOT_MEDIA.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => GOT_MEDIA.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // The employee as "the assistant" with no name (prod replay 2026-11-17, GOTCHA: "זה העוזר של GOTCHA" for Daniel).
@@ -1059,7 +1059,7 @@ export function unnamedRecommendation(reply: string, titles: string[]): boolean 
   if (strictlyNamed || namesCandidate(reply, titles)) return false;
   // There are products this turn, the reply recommends one, and it names none of them.
   // A statement that picks ("X is the one that fits"), not a question asking whether it fits ("מתאים לך?").
-  const statements = (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => !/[?؟]\s*$/.test(x));
+  const statements = (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => !/[?؟]\s*$/.test(x));
   return titles.filter(Boolean).length > 0 && statements.some((x) => PICK_WORDS.test(x));
 }
 
@@ -1072,7 +1072,7 @@ export function deviceMismatch(reply: string, incoming: string, grounding = ""):
   const theirs = (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase())).map((w) => stem(w));
   if (theirs.length < 2) return [];
   const out: string[] = [];
-  for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []) {
+  for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []) {
     for (const m of x.matchAll(FITS_TARGET)) {
       const target = (String(m[1] ?? m[2] ?? "").match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
       const shared = target.filter((w) => theirs.some((a) => a === w || (a.length >= 4 && (a.includes(w) || w.includes(a)))));
@@ -1373,7 +1373,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
 
 // The question around the product: never a store search word (prod replay on 1b35c535: "איך אדע מה התת גוון"
 // searched as written found a powder; "מאיזה חומר השרשרת" found head coverings).
-const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please", "או", "or", "באילו", "באיזה", "באיזו", "שוקל", "שוקלת", "שוקלים", "weigh", "weighs", "שלו", "שלה", "שלהם", "שלהן", "חשוב", "important"]);
+const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please", "או", "or", "באילו", "באיזה", "באיזו", "שוקל", "שוקלת", "שוקלים", "weigh", "weighs", "יתאים", "יתאימו", "תתאים", "מתאים", "מתאימה", "מתאימים", "שלו", "שלה", "שלהם", "שלהן", "חשוב", "important"]);
 // Attribute words: what is asked about a product, never its name (the Supervisor's probe on b77ec0d1: "יש כמה
 // צבעים?" searched "צבעים", "מאיזה בד הוא עשוי?" searched "בד").
 // The bare forms; a ה or ב form ("האורך", "בצבע") is always the attribute.
@@ -1404,7 +1404,7 @@ const ASK_WORDS = new Set(["מחיר", "המחיר", "מחירים", "הנחה",
 /** An ask no product search answers: her order, shipping, a business fact, a coupon, a payment problem (no product wanted). */
 export function nonProductAsk(incoming: string): boolean {
   const t = normalizeQuotes(String(incoming ?? ""));
-  return !productAskNow(t) && (MY_ORDER.test(t) || ORDER_ASK.test(t) || BUSINESS_ASK.test(t) || COUPON_ASK.test(t) || PAY_PROBLEM.test(t));
+  return !productAskNow(t) && (MY_ORDER.test(t) || ORDER_ASK.test(t) || BUSINESS_ASK.test(t) || COUPON_ASK.test(t) || PAY_PROBLEM.test(t) || STATUS_ASK.test(t));
 }
 /**
  * The customer's product words for a store search: the question and the ask words off, four at most; null with no
@@ -1749,7 +1749,7 @@ export function groundedProductFallback(
 export function orderNumberDiffers(reply: string, incoming: string): string[] {
   const typed: string[] = [...(String(incoming ?? "").match(/(?<!\d)\d{4,8}(?!\d)/g) ?? [])];
   if (!typed.length) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (/\?\s*$/.test(x)) return false;
     if (!/(?<![֐-׿])[והשב]?(?:הזמנה|ההזמנה|הזמנתך)|\border\b/iu.test(x)) return false;
     const nums = x.match(/(?<!\d)\d{4,8}(?!\d)/g) ?? [];
@@ -1979,7 +1979,7 @@ export function fixListCount(text: string): string {
  */
 // A raw Hebrew letter ends a URL: "https://smoovee-ltd.העברתי" is a cut link with a line glued on (prod 2026-11-18).
 const URL_RE = /https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]+[^\s<>"'״)\].,;:!?\u05D0-\u05EA]/giu;
-const URL_SENTENCES = /(?:https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]*[^\s<>"'״)\].,;:!?\u05D0-\u05EA]|[^.!?\n])+[.!?]*\s*|\n+/gu;
+const URL_SENTENCES = /(?:https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]*[^\s<>"'״)\].,;:!?\u05D0-\u05EA]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*|\n+/gu;
 export function repairUrls(text: string, sources: string): { text: string; fixed: number; dropped: number } {
   const known = [...new Set(String(sources ?? "").match(URL_RE) ?? [])];
   let fixed = 0, dropped = 0;
@@ -2073,7 +2073,8 @@ export function ungroundedAttribute(reply: string, evidence: string, incoming = 
     if (NOT_A_CLAIM.test(x) || NO_INFO.test(x)) return false;
     const t = unfinal(x.toLowerCase());
     if (ATTRIBUTES.some((re) => { const u = new RegExp(unfinal(re.source), re.flags); return u.test(t) && !u.test(ev); })) return true;
-    // A colour the data does not give.
+    // A colour the data does not give; never in a general explanation ("איך אדע מה התת גוון": the veins' colours).
+    if (explanationAsk(incoming)) return false;
     return COLOURS.some((c) => COLOUR_RE(c).test(x) && !COLOUR_RE(c).test(String(evidence ?? "")));
   }).map((x) => x.trim().slice(0, 120));
 }
@@ -2122,7 +2123,7 @@ export const padFits = (pad: [number, number], base: [number, number]) => { cons
 export function ungroundedNegativeFit(reply: string, incoming: string, titles: string[], grounding: string): string[] {
   const base = sizePair(incoming);
   const groundedNo = NEG_FIT.test(String(grounding ?? ""));
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (!NEG_FIT.test(x)) return false;
     if (groundedNo) return false;
     // The sentence's product, by its title, and its size from the title.
@@ -2199,9 +2200,11 @@ export function ungroundedPositiveFit(reply: string, incoming: string, titles: s
   const base = sizePair(incoming);
   const whole = String(reply ?? "").toLowerCase();
   const FILL = new Set(["שלך", "שלכם", "שלכן", "שלי", "שלו", "שלה", "הזה", "הזו", "הזאת", "ביותר", "מאוד", "לגמרי", "בדיוק", "your", "yours", "mine", "exactly"]);
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => {
     if (SIMILAR_MODEL.test(x)) return true;
     if (NEG_FIT.test(x)) return false;
+    // "ולא מצוין שהוא מתאים למתחת לעיניים" says the fit is NOT known (prod replay of b369e939, NE'A): no claim.
+    if (CAVEAT.test(x) || /(?<![\u0590-\u05FF])ו?(?:לא|אין|ללא)(?![\u0590-\u05FF])[^.!?\n]{0,30}(?:מתאים|מתאימה|מתאימים|יתאים)/u.test(x) || /\b(?:not|no|isn'?t)\b[^.!?\n]{0,30}\bfits?\b/iu.test(x)) return false;
     const m = FIT_CLAIM_REV.exec(x) ?? FIT_CLAIM.exec(x);
     if (!m) return false;
     const named = namedTitles(x, titles);
@@ -2366,7 +2369,7 @@ export function howToLink(kb: string, subjects: string[], video = false): string
 /** "No link" while the business's data has one (rating 052f53ad: youtu.be in the product data). */
 export function deniesKnownLink(reply: string, sources: string): string[] {
   if (!(String(sources ?? "").match(URL_RE) ?? []).length) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => DENIES_LINK.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => DENIES_LINK.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 /** "No information" in a how-to answer: "אין לי כאן הנחיה", besides the general no-info forms. */
@@ -2434,7 +2437,7 @@ export function nameMissUnasked(reply: string, incoming: string): string[] {
   const inc = String(incoming ?? "");
   const named = /\d|[A-Za-z]{2,}|["״'׳][^"״'׳]{2,}["״'׳]/.test(inc);
   if (named) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => NAME_MISS.test(x)).map((x) => x.trim().slice(0, 120));
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => NAME_MISS.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
 

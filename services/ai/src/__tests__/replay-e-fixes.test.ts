@@ -1,7 +1,8 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
-import { cutFragment } from "../services/reply-engine/engine";
+import { cutFragment, withoutSlashForms, productQuestionLine } from "../services/reply-engine/engine";
+import { ungroundedAttribute, unlabelledInactiveOrders } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -455,5 +456,51 @@ describe("b369e939 next-round items", () => {
     const kb = "הוראות שימוש במסקרה: https://shop.example/wp-content/uploads/2025/10/guide.pdf\nתמונת מסקרה: https://shop.example/wp-content/uploads/2025/10/mascara.jpg";
     expect(howToLink(kb, ["איך משתמשים במסקרה? יש הוראות?"], false)).toBe("https://shop.example/wp-content/uploads/2025/10/guide.pdf");
     expect(howToLink(kb, ["אשמח לסרטון הדרכה למסקרה"], true)).toBeNull();
+  });
+});
+
+describe("rating of the b369e939 prod replay", () => {
+  const base = { claims: [], cards: [], candidateCount: 1, candidateTitles: ["טוש גבות חום"], tools: [{ tool: "woocommerce.list_products", outcome: "ok", decision: "allow", args: { query: "טוש" } }], grounding: "טוש גבות חום", locale: "he", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: ["woocommerce.list_products", "search_knowledge"], shopFloor: false, handedOff: false, approvalPending: false } as any;
+  it("★ blocker 1 (NE'A \"טוש אני רוצה\"): \"ולא מצוין שהוא מתאים למתחת לעיניים\" is a caveat: no absence, no fit claim, never cut", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const reply = "הטוש החום שמופיע כאן מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים.";
+    // On the cards channel the product is shown ("שמופיע כאן" points at its card).
+    const v = gate3({ ...base, cards: ["PRODUCT_1"], cardsChannel: true, reply, incomingMessage: "טוש אני רוצה" });
+    const kinds = v.problems.map((p: any) => p.kind);
+    expect(kinds).not.toContain("ungrounded_absence");
+    expect(kinds).not.toContain("ungrounded_positive_fit");
+    expect(stripFactProblems(reply, v.problems)).toContain("ולא מצוין שהוא מתאים למתחת לעיניים");
+    expect(ungroundedPositiveFit("הטוש החום לא מתאים למתחת לעיניים לפי היצרן.", "טוש", ["טוש גבות חום"], "", "")).toEqual([]);
+  });
+  it("★ blocker 1 (NE'A \"איך אדע מה התת גוון\"): the veins' colours in an explanation are no product attribute", () => {
+    expect(ungroundedAttribute("בודקים את צבע הוורידים בפרק כף היד: כחול או סגול מעיד על תת גוון קר, ירוק על חם.", "", "איך אדע מה התת גוון")).toEqual([]);
+    // A product's colour the data does not give is still a claim.
+    expect(ungroundedAttribute("הטוש מגיע גם בכחול.", "טוש גבות חום", "יש לכם טוש?")).toHaveLength(1);
+  });
+  it("★ blocker 2 (run B, five appliances): a size or a price opening the remnant is a fragment; a decimal is never a sentence end", () => {
+    expect(cutFragment("15.4×23 ס\"מ, ב-₪69. למיקסר צריך להוסיף מעצור.")).toBe(true);
+    expect(cutFragment("ב-₪69 בלבד.")).toBe(true);
+    expect(cutFragment("סמובי אליס 15.4×23 ס\"מ מתאים למיקסר.")).toBe(false);
+    const r = "למיקסר מתאים סמובי אליס 15.4×23 ס\"מ, ב-₪69. לטוסטר מתאים גפן.";
+    expect(stripFactProblems(r, [{ kind: "echoed_size", claims: ["למיקסר מתאים סמובי אליס 15.4×23 ס\"מ, ב-₪69."] }] as any)).toBe("לטוסטר מתאים גפן.");
+  });
+  it("★ near: a cancelled order said as cancelled is labelled, a date in it splits nothing", () => {
+    expect(unlabelledInactiveOrders("הזמנה 97858 מסומנת כמבוטלת, והבירור עדיין בטיפול הצוות.", [], ["97858"])).toEqual([]);
+    expect(unlabelledInactiveOrders("נמצאה הזמנה 97858 מתאריך 15.11, והיא מסומנת כמבוטלת.", [], ["97858"])).toEqual([]);
+    expect(unlabelledInactiveOrders("נמצאה הזמנה 97858 מתאריך 15.11.", [], ["97858"])).toHaveLength(1);
+  });
+  it("★ near: \"no restock date\" is honest, never an absence claim; \"יש חדש?\" searches no product", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const kinds = gate3({ ...base, reply: "אין לנו כרגע תאריך לחידוש המלאי של הדגם השחור.", incomingMessage: "מתי יחזור למלאי השחור?" }).problems.map((p: any) => p.kind);
+    expect(kinds).not.toContain("ungrounded_absence");
+    expect(storeQueryOf("יש חדש?")).toBeNull();
+    expect(storeQueryOf("יש עדכון?")).toBeNull();
+    expect(storeQueryOf("יש לכם קולקציה חדשה של מטפחות?")).not.toBeNull();
+  });
+  it("★ near: slash forms and the product question in a store with no models", () => {
+    expect(withoutSlashForms("אם תשלחו/י את רוחב ועומק הבסיס, נבדוק.")).toBe("אם תשלחו את רוחב ועומק הבסיס, נבדוק.");
+    expect(withoutSlashForms("נכון/ת, קודם לא דייקנו.")).toBe("נכון, קודם לא דייקנו.");
+    expect(withoutSlashForms("https://shop.example/a/ת")).toBe("https://shop.example/a/ת");
+    expect(productQuestionLine("he")).not.toMatch(/דגם|מידה/);
   });
 });

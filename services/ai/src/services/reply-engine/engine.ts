@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -301,7 +301,7 @@ const wordCount = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9
 /** The sentences of `before` that are not in `after` (what a cleanup cut). */
 export function removedSentences(before: string, after: string): string[] {
   const keep = String(after ?? "");
-  return (String(before ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
+  return (String(before ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
 }
 
 /** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
@@ -360,7 +360,7 @@ export function placeholderOnly(text: string | null | undefined): boolean {
 /** Drops a sentence that repeats one already in the same reply. */
 export function dedupeSentences(reply: string): string {
   const seen = new Set<string>();
-  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g) ?? [String(reply ?? "")];
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*/g) ?? [String(reply ?? "")];
   return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).reduce(joinKept, "").trim();
 }
 
@@ -507,7 +507,7 @@ const SPOKE_FACT = "_spokeTurn";
  * What a cut left that is no sentence of its own: it opens with a connector or a subordinate ("וכש...", "כש...",
  * "אבל", "וגם", "and", "but", "which"), or with "ו" before a verb-like clause after the cut took what it joined.
  */
-const FRAGMENT_OPEN = /^\s*(?:ו?כש[\u0590-\u05FF]+|ו(?:גם|לכן|אז|אבל|בנוסף|כך|כן|אם)(?![\u0590-\u05FF])|(?:אבל|אז|גם|לכן|כי|כך\s+ש|בנוסף|מה\s+ש|שזה|שהיא|שהוא)(?![\u0590-\u05FF])|(?:and|but|so|also|because|which|when|while)\b)/iu;
+const FRAGMENT_OPEN = /^\s*(?:\d+(?:[.,]\d+)?\s*[×x*]\s*\d|ב-?₪|ו?כש[\u0590-\u05FF]+|ו(?:גם|לכן|אז|אבל|בנוסף|כך|כן|אם)(?![\u0590-\u05FF])|(?:אבל|אז|גם|לכן|כי|כך\s+ש|בנוסף|מה\s+ש|שזה|שהיא|שהוא)(?![\u0590-\u05FF])|(?:and|but|so|also|because|which|when|while)\b)/iu;
 export function cutFragment(text: string): boolean {
   const t = String(text ?? "").trim();
   return !!t && FRAGMENT_OPEN.test(t);
@@ -517,8 +517,12 @@ export const FIT_UNCONFIRMED_HE = "אין לנו אישור שהם מתאימי�
 export const FIT_UNCONFIRMED_EN = "We can't confirm they suit exactly what you asked for.";
 // A sentence whose point is a team pass ("אעביר את זה לצוות", "the team will check").
 const TEAM_PASS_SENTENCE = /(?<![\u0590-\u05FF])[וש]?(?:אעביר|נעביר|העברתי|העברנו|אבדוק\s+עם|נבדוק\s+עם|אשאל\s+את|נשאל\s+את)(?![\u0590-\u05FF])[^.!?\n]{0,40}צוות|\b(?:pass(?:ed)? (?:it|this) (?:on )?to the team|check with the team|the team will)\b/iu;
+/** "תשלחו/י" -> "תשלחו", "נכון/ת" -> "נכון": a gender slash ending off, outside links. */
+export function withoutSlashForms(text: string): string {
+  return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
+}
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -669,7 +673,8 @@ const NAME_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:קוראים|נקרא|נק�
 export const nameAsk = (incoming: string) => NAME_ASK.test(String(incoming ?? ""));
 
 export function productQuestionLine(locale: "he" | "en"): string {
-  return locale === "he" ? "כדי למצוא את המתאים: לאיזה דגם או שימוש זה, ובאיזו מידה?" : "To find the right one: which model or use is it for, and what size?";
+  // Neutral for any store (prod replay of b369e939, Tehila: "לאיזה דגם... ובאיזו מידה?" in a scarf shop).
+  return locale === "he" ? "כדי למצוא את המתאים: מה הכי חשוב לך, ולאיזה שימוש?" : "To find the right one: what matters most to you, and what is it for?";
 }
 
 /** The inactive-orders fact after this turn: the known numbers plus this turn's, at most 20. */
@@ -1476,8 +1481,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // the care-label advice sent alone): what is left does not answer it, so the team line (or the link) instead.
         const linkAskNow = videoAsk(opts.incomingMessage ?? "") || HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? ""));
         const lostLink = linkAskNow && removed.some((x) => /סרטון|הדרכה|מדריך|קישור|לינק|video|tutorial|guide|link/iu.test(x)) && !/https?:\/\//i.test(cleaned.reply) && !teamPassIn(cleaned.reply);
-        const hollow = thin || fragment || lostLink || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
-        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass: lostPass || lostLink };
+        const hollow = thin || fragment || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
+        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass, lostLink };
       };
       const fromSecond = salvage(second);
       const fromOriginal = salvage(original);
@@ -1515,12 +1520,40 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // Why: the checks that cut (prod replay of 9480dfb2, Tehila: the recommendation sentence went and the line
         // could not say which check took it).
         if (kept.removed?.length) (trace as any).cutWhy = [...new Set((kept.problems ?? []).map((p: any) => (p.kind === "style" ? `style:${(p.codes ?? []).join("/")}` : p.kind)))].slice(0, 6);
+        // A video or link ask whose answer was cut: the grounded rest stays and the team line follows (prod replay of
+        // b369e939, NE'A: the usage tip was lost to a bare team line).
+        if (kept.lostLink) {
+          const line = teamAlreadyOpen ? stillCheckingLine(String(opts.incomingMessage ?? ""), locale === "en" ? "en" : "he") : safeFallback(locale, false);
+          output = { ...output, reply: `${String(output.reply ?? "").trim()} ${line}`.trim(), teamQuestion: teamAlreadyOpen ? output.teamQuestion ?? null : output.teamQuestion ?? (String(opts.incomingMessage ?? "").slice(0, 300) || null) };
+          (trace as any).linkAnswerToTeam = true;
+        }
         if (kept === fromSecond && fromSecond) { const q = withClosingQuestion(kept.o, questionOk ? original : null, previousBotReplies); if (q !== kept.o) { output = q; (trace as any).closingQuestionKept = true; } }
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
         const factLeft = factualProblems((v2 ?? first).problems).map((p) => p.kind);
         (trace as any).fallbackKinds = factLeft.length ? factLeft : ["thin_or_empty"];
+        // A product ask that ran no store search falls back to the store's products, never to the team line alone (prod
+        // replay of b369e939, NE'A: "איזה גוון מייקאפ יתאים לעור שלי?" with only the knowledge searched).
+        {
+          const inc = String(opts.incomingMessage ?? "");
+          const store = surface.names.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
+          const ran = turnTools.records.some((t) => /list_products|search_products/.test(t.tool));
+          // Never when the customer's words call for a person, or products were shown before (that turn gets a question).
+          if (store && !ran && !(candidates as any[]).length && productAskNow(inc) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && !(state.offeredItems?.length ?? 0)) {
+            const q = storeQueryOf(inc, { substring: /^woocommerce\./.test(store) }) ?? (nonProductAsk(inc) ? null : focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title));
+            if (q) {
+              const few = /(?:^|\.)search_products$/.test(store) && !/^woocommerce\./.test(store) ? { limit: 5 } : { per_page: 5 };
+              try {
+                await runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 1000)) }, [{ id: "auto_store_fallback", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } }]);
+                candidates = turnTools.envelope?.candidates ?? [];
+                (trace as any).fallbackSearch = q.slice(0, 60);
+              } catch (err: any) {
+                if ((err as any)?.name === "AbortError") throw err;
+              }
+            }
+          }
+        }
         // A product turn is answered from what the tools returned, never handed to a person.
         // Products as the fallback only for a product ask (prod replay 2026-11-17: a payment problem got cards).
         // The header only, on every channel: cards show the products, and on a text channel the list
@@ -1577,7 +1610,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // The fit the model claimed was cut: the products go out with that said, never as a fit (prod replay of
           // 9480dfb2, NE'A: "טוש אני רוצה" got the list with no word that the under-eye use is unconfirmed).
           const fitCut = factLeft.includes("ungrounded_positive_fit" as any) || factLeft.includes("ungrounded_negative_fit" as any);
-          output = { reply: fitCut ? `${grounded} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+          // With the caveat, the products by name on a cards channel (a bare header and a caveat reads as a shrug).
+          const shownNames = (candidates as any[]).filter((c: any) => c?.title && c.inventoryState !== "out_of_stock" && (!noun || ofNoun(c, noun))).slice(0, 3).map((c: any) => String(c.title));
+          const header = fitCut && cardChannel && shownNames.length ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownNames.join(", ")}.` : grounded;
+          output = { reply: fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // A simple product ask with nothing grounded to show: one question that moves the choice on,
           // never a question for the team (prod replay 2026-11-17: "רוצה לבן" sent to the team).
@@ -1593,7 +1629,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         } else if (productAskNow(opts.incomingMessage ?? "")) {
           // Never silent on a product ask (prod replay 2026-11-17, Tehila): one question that moves the
           // choice on, and the question still reaches the team.
-          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
+          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
         } else if (asked) {
           // The canned line already went out: a question still gets one holding line (not twice in a row).
           const q = questionLine();
@@ -1604,6 +1640,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // still reaches the team (once per issue) so the owner sees it.
           output = { reply: "", stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
           trace.gate3 = { ...first, rewrite: "silent" };
+        }
+        // Never the same fallback twice in a row (prod replay of b369e939, NE'A: one line on two turns).
+        if (output?.reply && output.reply.trim() === lastOutBody) {
+          const alt = productAskNow(opts.incomingMessage ?? "") ? productQuestionLine(locale) : teamAlreadyOpen ? HOLD_LINE_ALT[locale === "en" ? "en" : "he"] : "";
+          output = { ...output, reply: alt.trim() !== lastOutBody ? alt : "" };
+          (trace as any).fallbackRepeatAvoided = true;
         }
       }
     }
@@ -2151,6 +2193,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // After a cut, "גם כן" points at a sentence that is gone ("ברוקלין היא אפשרות קלילה ונשפכת גם כן.").
       if (Number((trace as any).cutSentences ?? 0) > 0) { const a = dropOrphanAlso(reply); if (a !== reply) { reply = a; (trace as any).orphanAlsoCut = true; } }
     }
+    // A slash form ("תשלחו/י", "נכון/ת") is never sent: the neutral form stays (prod replay of b369e939).
+    if (reply) { const sl = withoutSlashForms(reply); if (sl !== reply) { reply = sl; (trace as any).slashFormFixed = true; } }
+    // A reply that ends on a bare word ("הנה כמה אפשרויות שיש כרגע במלאי") gets its full stop.
+    if (reply && /[\p{L}\p{N}]$/u.test(reply.trim()) && !/https?:\/\/\S+$/i.test(reply.trim())) reply = `${reply.trim()}.`;
     if (reply) reply = spaceSentences(reply);
   }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."

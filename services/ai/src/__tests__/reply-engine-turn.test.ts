@@ -232,10 +232,11 @@ describe("one v2 turn, live", () => {
 
   it("Gate 3: one targeted rewrite, then the safe reply; nothing asked for a person, so a team question, not a handoff", async () => {
     h.responses.push(
-      { toolCalls: [respond("r1", { reply: "התיק עולה ₪120." })] },
-      { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד." })] },
+      { toolCalls: [respond("r1", { reply: "אפשר לשלם בתשלומים, ₪120 לחודש." })] },
+      { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד לחודש." })] },
     );
-    const r = await runReplyEngineTurn(opts, "autonomous");
+    // A question no product search answers (a product ask now falls back to the store's products, below).
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
     // Nothing of either draft survives: ONE more targeted rewrite is tried (prod replay 9), then the fallback.
     expect(h.calls).toHaveLength(3);
     expect(h.calls[1].toolChoice).toEqual({ type: "function", function: { name: "respond" } });
@@ -591,10 +592,10 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
 
   it("★ the canned line goes out once: it is marked in the state (hidden from the model)", async () => {
     h.responses.push(
-      { toolCalls: [respond("c1", { reply: "התיק עולה ₪120." })] },
-      { toolCalls: [respond("c2", { reply: "בטח, ₪150 בלבד." })] },
+      { toolCalls: [respond("c1", { reply: "אפשר לשלם בתשלומים, ₪120 לחודש." })] },
+      { toolCalls: [respond("c2", { reply: "בטח, ₪150 בלבד לחודש." })] },
     );
-    const r = await runReplyEngineTurn(opts, "autonomous");
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
     expect(h.upserts[0].create.facts._cannedTeamLineAt).toBeTruthy();
@@ -1062,10 +1063,10 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
     h.responses.push({ toolCalls: [respond("t1", { reply: "זה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט." })] });
     let r: any;
-    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ויש את התיק בצבע ירוק זית?" }, "autonomous"); }
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה עם משלוח לאילת?" }, "autonomous"); }
     finally { (prisma as any).conversationState.findUnique = async () => null; }
     expect((r.trace as any).newSubjectToTeam).toBe(true);
-    expect(h.teamQuestions.map((q) => q.question)).toEqual(["ויש את התיק בצבע ירוק זית?"]);
+    expect(h.teamQuestions.map((q) => q.question)).toEqual(["ומה עם משלוח לאילת?"]);
     expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
   });
 });
@@ -1923,7 +1924,7 @@ describe("39b65d68 regression: engine passes", () => {
     try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה לבן" }, "autonomous"); }
     finally { (prisma as any).conversationState.findUnique = async () => null; }
     expect(r.trace.teamQuestion ?? null).toBeNull();
-    expect(r.reply).toMatch(/דגם|מידה/);
+    expect(r.reply).toMatch(/מה הכי חשוב לך/);
   });
 });
 
@@ -1948,7 +1949,24 @@ describe("never silent on a product ask (prod replay 2026-11-17, Tehila)", () =>
     finally { (prisma as any).conversationState.findUnique = async () => null; }
     expect(r.reply ?? "").not.toBe("");
     expect(r.trace.gate3.rewrite).not.toBe("silent");
-    expect(h.teamQuestions).toHaveLength(1);
+    // No search ran: the fallback searches the store and shows its products (prod replay of b369e939, Tehila c55b9:
+    // live showed two cards), never the product question with a second team question.
+    expect((r.trace as any).fallbackSearch).toBeTruthy();
+    expect(r.reply).toMatch(/Canvas Tote/);
+  });
+
+  it("★ (rating b369e939, blocker 1) a product ask with no store search falls back to the store's products", async () => {
+    h.responses.push(
+      { toolCalls: [respond("fs1", { reply: "התיק עולה ₪120." })] },
+      { toolCalls: [respond("fs2", { reply: "בטח, ₪150 בלבד." })] },
+      { toolCalls: [respond("fs3", { reply: "בטח, ₪150 בלבד." })] },
+    );
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("תיק בד");
+    expect(r.reply).toMatch(/Canvas Tote/);
+    expect(r.reply).not.toMatch(/₪1[25]0/);
+    expect(r.escalation).toBeNull();
   });
 });
 
@@ -2660,8 +2678,16 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     const fit = "טוש גבות Miss eyebrows מתאים לנינג'ה קריספי.";
     h.responses.push({ toolCalls: [tc("fb1", "woocommerce.list_products", { query: "טוש" })] }, { toolCalls: [respond("fb2", { reply: fit })] }, { toolCalls: [respond("fb3", { reply: fit })] }, { toolCalls: [respond("fb4", { reply: fit })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "טוש אני רוצה" }, "autonomous");
-    if (r.trace.gate3.rewrite === "fallback" && ((r.trace as any).fallbackKinds ?? []).includes("ungrounded_positive_fit")) expect(r.reply).toContain(FIT_UNCONFIRMED_HE);
-    else throw new Error(`not the fallback path: ${JSON.stringify(r.trace.gate3)} ${JSON.stringify((r.trace as any).fallbackKinds)} ${r.reply}`);
+    if (r.trace.gate3.rewrite === "fallback" && ((r.trace as any).fallbackKinds ?? []).includes("ungrounded_positive_fit")) {
+      expect(r.reply).toContain(FIT_UNCONFIRMED_HE);
+      // With the caveat, the products by name (rating b369e939: a bare header and a caveat read as a shrug).
+      expect(r.reply).toMatch(/טוש גבות Miss eyebrows/);
+      // The same fallback on the next turn is never sent twice in a row.
+      h.history = [{ direction: "INBOUND", body: "טוש אני רוצה", metadata: null }, { direction: "OUTBOUND", body: r.reply, senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [tc("fb5", "woocommerce.list_products", { query: "טוש" })] }, { toolCalls: [respond("fb6", { reply: fit })] }, { toolCalls: [respond("fb7", { reply: fit })] }, { toolCalls: [respond("fb8", { reply: fit })] });
+      const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "טוש אני רוצה" }, "autonomous");
+      expect((r2.reply ?? "").trim()).not.toBe(String(r.reply).trim());
+    } else throw new Error(`not the fallback path: ${JSON.stringify(r.trace.gate3)} ${JSON.stringify((r.trace as any).fallbackKinds)} ${r.reply}`);
   });
 
   it("★ (rating 9480dfb2, blocker 2) a cut that took the team pass on a question never sends the remnant", async () => {
@@ -2723,9 +2749,38 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     if (Number((r.trace as any).cutSentences ?? 0) > 0 || r.trace.gate3.rewrite === "fallback") {
       expect(r.reply ?? "").toMatch(/צוות/);
       expect(r.trace.teamQuestion ?? null).not.toBeNull();
+      // The grounded rest stays in front of the team line (rating b369e939: NE'A's usage tip was lost).
+      if (r.trace.gate3.rewrite !== "fallback") expect(r.reply ?? "").toMatch(/תווית הטיפול/);
     } else {
       throw new Error(`the absence was not cut: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
     }
+  });
+
+  it("★ (rating b369e939, blocker 1) never the same fallback line twice in a row", async () => {
+    const pass = "אפשר לשלם בתשלומים, ₪120 לחודש.";
+    const canned = "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+    h.history = [{ direction: "INBOUND", body: "אפשר לשלם בתשלומים?", metadata: null }, { direction: "OUTBOUND", body: canned, senderName: "AI Bot", metadata: null }];
+    h.responses.push({ toolCalls: [respond("rp1", { reply: pass })] }, { toolCalls: [respond("rp2", { reply: pass })] }, { toolCalls: [respond("rp3", { reply: pass })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
+    expect((r.reply ?? "").trim()).not.toBe(canned);
+  });
+
+  it("★ (rating b369e939, near) the product question after the canned line opens no second team question", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: מתי יגיע המשלוח שלי", at: new Date().toISOString() }], turnCount: 3 });
+    h.groundCategory = "תיקים";
+    try {
+      h.responses.push({ toolCalls: [respond("pq1", { reply: "השמלה עולה ₪120." })] }, { toolCalls: [respond("pq2", { reply: "בטח, ₪150 בלבד." })] }, { toolCalls: [respond("pq3", { reply: "בטח, ₪150 בלבד." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת שמלה חגיגית" }, "autonomous");
+      if (!/מה הכי חשוב לך/.test(r.reply ?? "")) throw new Error(`not the product question: ${r.reply}`);
+      expect(r.trace.teamQuestion ?? null).toBeNull();
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+
+  it("★ (rating b369e939) a reply that ends on a bare word gets its full stop", async () => {
+    h.responses.push({ toolCalls: [respond("pt1", { reply: "אנחנו פתוחים א-ה 9-17" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+    expect(r.reply).toBe("אנחנו פתוחים א-ה 9-17.");
   });
 
   it("★ the audit row carries the cut fields when something was cut", async () => {
