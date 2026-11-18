@@ -134,6 +134,8 @@ import { isAgentArchitectureEnabled } from "@chatcenter/shared";
 import { runShadowEvaluationInBackground, toShadowContext } from "./reasoner/shadow-runner";
 import { agentLoopMode } from "./agent-loop/flags";
 import { replyEngineMode, runReplyEngineTurn } from "./reply-engine";
+import { machineInbound } from "./reply-engine/engine";
+import { automatedInbound } from "./reply-engine/gates";
 import { agentKernelEligible } from "./agent-loop/operation-status"; // TEMPORARY migration routing floor
 import { runAgentLoopForBotTurn } from "./agent-loop/bot-loop-adapter";
 import { executeAction, type PlannedAction } from "./action-executor.service";
@@ -351,6 +353,34 @@ function classifyToolForNotification(toolFunctionName: string): SystemEventType 
   if (lower.includes("discount")) return "discount.applied";
   if (lower.includes("schedule_meeting") || lower.includes("book_meeting") || lower.startsWith("book_")) return "meeting.scheduled";
   return null;
+}
+
+/**
+ * A machine wrote it, so the legacy bot does not answer (2026-11-18, the dev relevance run: Urban Supply's legacy bot
+ * answered a verification code, an away message, an invoice and an out-of-office mail). The engine's own rules,
+ * not a copy: machineInbound() on every channel (a one-time code, another business's automated greeting or away
+ * message), automatedInbound() on email (bulk headers, no-reply senders, our own alerts, automated footers).
+ * Whatever RELEVANCE_GATE or the channel's relevance filter say. Null when a person may have written it.
+ */
+export async function legacyMachineSilence(opts: { tenantId: string; conversationId: string; incomingMessage?: string | null }, db: any = prisma): Promise<string | null> {
+  const conversation = await db.conversation.findFirst({ where: { id: opts.conversationId, tenantId: opts.tenantId }, select: { channel: true, customerExternalId: true } }).catch(() => null);
+  if (!conversation) return null;
+  const recent: any[] = await db.message.findMany({
+    where: { tenantId: opts.tenantId, conversationId: opts.conversationId },
+    orderBy: { createdAt: "desc" },
+    take: 12,
+    select: { direction: true, body: true, createdAt: true, messageType: true, metadata: true },
+  }).catch(() => []);
+  const history = [...recent].reverse();
+  const channel = String(conversation.channel ?? "");
+  const lastIn = [...history].reverse().find((m: any) => m?.direction === "INBOUND");
+  const incoming = String(opts.incomingMessage ?? lastIn?.body ?? "");
+  if (EMAIL_CHANNELS.has(channel)) {
+    const platformSender = /<([^>]+)>/.exec(String(process.env.SMTP_FROM ?? ""))?.[1] ?? process.env.SMTP_FROM ?? null;
+    const why = automatedInbound({ channel, sender: conversation.customerExternalId, body: incoming, metadata: lastIn?.metadata, platformSender });
+    if (why) return why;
+  }
+  return machineInbound(channel, history, incoming);
 }
 
 /** The email channels the AI does not answer for an engine tenant until REPLY_ENGINE_EMAIL=on (2026-11-18). */
@@ -1249,6 +1279,15 @@ export async function generateAIBotReply(opts: {
           },
         }))
         .catch((e) => { if (!isAbortError(e)) console.warn("[reply-engine][shadow] failed:", (e as any)?.message ?? e); });
+    }
+    // ── Legacy: a machine's message gets no reply (the engine's Gate 1 rules; 2026-11-18) ──
+    // No reply, no handoff, no team question, no escalation: the inbox shows it to a person as any unanswered message.
+    {
+      const machine = await legacyMachineSilence(opts).catch(() => null);
+      if (machine) {
+        console.log(`[ai-bot] conv=${opts.conversationId}: not answered (automated:${machine})`);
+        return { reply: null, escalation: null, awaitingApproval: null, toolCallLog: [], modelUsed: "none", totalTokens: 0 };
+      }
     }
     // ── Agent Loop (flag-gated, beside the Planner) ───────────────────────────
     // Capability lifecycle: off → shadow → autonomous (see agent-loop/flags.ts).
