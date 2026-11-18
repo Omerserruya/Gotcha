@@ -1168,6 +1168,8 @@ async function hebrewProductSearch(
     get(params).then((l) => l.filter((p: any) => words.some((w) => nameHolds(p, w)))),
     // The same words the store's search is asked for, by name, from the cached
     // catalogue: the store's index can miss a name it holds.
+    // Every word of hers, the ones a category name accounts for too (rating ed780586: a category whose name
+    // holds "בובון" took the word, and the bobbon titles were never looked up).
     catalogNamed(auth, base, params, words.length > 1 ? rest.slice(0, 2) : rest, visible),
     ...(words.length > 1 ? rest.slice(0, 2).map(restSearch) : []),
   ]);
@@ -1541,6 +1543,18 @@ const WooCommerceAdapter: ProviderAdapter = {
           } as any);
           if (!cat || !Array.isArray(found)) return Array.isArray(found) ? found.slice(0, per) : found;
           const forThem = found.filter((p: any) => (p?.categories ?? []).some((c: any) => String(c?.id) === cat));
+          // A product she named is hers whatever category it sits in (rating ed780586, Tehila: "מחפשת" made the
+          // model pass audience=women, and the bobbons, outside the Women category, were dropped for scarves).
+          const herWords = searchWords(String(args.customer_query ?? args.query ?? "")).filter((w) => w.length >= 3 && !HEBREW_STOP.has(hebrewStem(w)) && !STOCK_ASK.has(hebrewStem(w)));
+          const holds = (p: any) => herWords.some((w) => nameHolds(p, w));
+          if (forThem.length && !forThem.some(holds)) {
+            const other = await audienceCategory(auth, base, audience === "men" ? "women" : "men").catch(() => null);
+            const extra = found.filter((p: any) => !forThem.includes(p) && holds(p) && !(other && (p?.categories ?? []).some((c: any) => String(c?.id) === other)));
+            if (extra.length) {
+              console.log(`[woo-search] audience=${audience} named_outside=${extra.length} for_audience=${forThem.length}`);
+              return [...extra.map((p: any) => ({ ...p, outside_audience: audience })), ...forThem].slice(0, per);
+            }
+          }
           if (forThem.length || !found.length) return forThem.slice(0, per);
           // None in the store's Men / Women category (unisex socks): what the
           // search found, each marked, so the bot never says the store lacks it.

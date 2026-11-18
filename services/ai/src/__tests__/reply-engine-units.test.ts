@@ -445,7 +445,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "ungrounded_absence", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_positive_fit", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {
@@ -994,9 +994,11 @@ describe("prod replay 8 (2026-11-17)", () => {
 
   it("★ any offer of a person or the team, then yes -> ignored_yes", async () => {
     const { ignoredYes } = await import("../services/reply-engine/gates");
-    for (const offer of ["רוצה שאעביר את זה לצוות?", "להעביר אותך?", "שנציג יחזור אלייך?", "שמישהו מהצוות יחזור אלייך?", "רוצה שיחזרו אלייך?"]) {
+    for (const offer of ["להעביר אותך?", "שנציג יחזור אלייך?", "שמישהו מהצוות יחזור אלייך?", "רוצה שיחזרו אלייך?"]) {
       expect(ignoredYes("כן", offer, false, false), offer).toBe(true);
     }
+    // Passing the QUESTION to the team is no offer of a person (rating ed780586: "כן" became a handoff).
+    expect(ignoredYes("כן", "רוצה שאעביר את זה לצוות?", false, false)).toBe(false);
     expect(ignoredYes("כן", "רוצה לראות עוד צבעים?", false, false)).toBe(false);
   });
 
@@ -2537,5 +2539,62 @@ describe("657e5f85 rating fixes", () => {
     const { customerSearchQuery } = await import("../services/woo-chat-turn.service");
     const msgs = [{ direction: "INBOUND", body: "יש לכם בובון לקשירה נמוכה?" }, { direction: "OUTBOUND", body: "באיזה צבע?" }, { direction: "INBOUND", body: "כן" }, { direction: "INBOUND", body: "שחור" }];
     expect(customerSearchQuery(msgs, "שחור", "מטפחת שחורה")).toMatch(/בובון/);
+  });
+});
+
+/** Rating on ed780586 (2026-11-18): product matching. */
+describe("ed780586 rating fixes", () => {
+  it("★ 'yes' hands over only after a real offer of a person, in the question itself", async () => {
+    const { ignoredYes, offeredPerson } = await import("../services/reply-engine/gates");
+    expect(offeredPerson("לבדוק את זה עם הצוות?")).toBe(false);
+    expect(offeredPerson("תרצי שאעביר את השאלה לצוות?")).toBe(false);
+    expect(offeredPerson("תרצי שנציג יחזור אלייך?")).toBe(true);
+    expect(offeredPerson("זה דחוף? אם כן אעביר לנציג.")).toBe(true);
+    expect(ignoredYes("כן", "לבדוק את זה עם הצוות?", false, false)).toBe(false);
+    expect(ignoredYes("כן", "תרצי לדבר עם נציג?", false, false)).toBe(true);
+  });
+  it("★ a fit with nothing behind it, or from a similar model, is cut; the data or a size keeps it", async () => {
+    const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
+    const titles = ["סמובי אסף 46*33", "סמובי אליס 31*41"];
+    expect(ungroundedPositiveFit("סמובי אסף מתאים גם לנינג'ה קריספי.", "יש לנינג'ה קריספי?", titles, "סמובי אסף מתאים ל: נינג'ה גריל XL", "")).toHaveLength(1);
+    expect(ungroundedPositiveFit("הוא מופיע במפרט כמתאים לדגם דומה.", "", titles, "", "")).toHaveLength(1);
+    expect(ungroundedPositiveFit("סמובי אסף מתאים לנינג'ה קריספי.", "יש לנינג'ה קריספי?", titles, "סמובי אסף מתאים ל: נינג'ה קריספי", "")).toEqual([]);
+    expect(ungroundedPositiveFit("סמובי אסף מתאים לנינג'ה קריספי שלך.", "", titles, "", "טבלה: אייר פרייר נינג'ה קריספי - סמובי אסף")).toEqual([]);
+    expect(ungroundedPositiveFit("סמובי אליס מתאים למיקסר.", "מיקסר 32x22", titles, "", "")).toEqual([]);
+    expect(ungroundedPositiveFit("זה מתאים לך מאוד.", "", titles, "", "")).toEqual([]);
+    // The device table lists CATEGORIES (prod Smoovee, 2026-11-18): a model mapped to its category, named, stands;
+    // products the category does not list are an over-claim.
+    const table = "סיר טיגון ללא שמן נינג'ה: סמובי אליס\nנינג'ה גריל XL: סמובי אליס, סמובי אסף\nמיקסר דאבו: סמובי אליס";
+    const three = ["סמובי אליס 31*41", "סמובי אסף 46*33", "סמובי כריסטינה 30*40"];
+    expect(ungroundedPositiveFit("נינג'ה קריספי הוא סיר טיגון ללא שמן, ולנינג'ה קריספי מתאים סמובי אליס.", "יש לנינג'ה קריספי?", three, "", table)).toEqual([]);
+    expect(ungroundedPositiveFit("לנינג'ה קריספי מופיעים כמתאימים סמובי אליס, סמובי אסף וסמובי כריסטינה.", "יש לנינג'ה קריספי?", three, "", table)).toHaveLength(1);
+    expect(ungroundedPositiveFit("לנינג'ה גריל XL מתאים סמובי אסף.", "", three, "", table)).toEqual([]);
+    // One product backed, one not, in one sentence: cut.
+    expect(ungroundedPositiveFit("לנינג'ה גריל XL מתאימים סמובי אליס וסמובי כריסטינה.", "", three, "", table)).toHaveLength(1);
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const base = { claims: [], cards: [], tools: [], locale: "he", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: true, handedOff: false, approvalPending: false };
+    const g = gate3({ ...base, reply: "סמובי אסף מתאים לנינג'ה קריספי.", candidateCount: 2, candidateTitles: titles, grounding: "", knowledge: "", incomingMessage: "יש לנינג'ה קריספי?" } as any);
+    expect(g.problems.map((p: any) => p.kind)).toContain("ungrounded_positive_fit");
+    const w = gate3({ ...base, reply: "עט נמשים הוא מה שאת מחפשת.", candidateCount: 2, candidateTitles: ["עט נמשים", "טינט שפתיים עם מברשת"], grounding: "", knowledge: "", incomingMessage: "טינט שיש בסוף מברשת" } as any);
+    expect(w.problems.some((p: any) => p.kind === "style" && p.codes.includes("wrong_product_type"))).toBe(true);
+  });
+  it("★ restock asks, a repeated question, an orphan conditional", async () => {
+    const { restockAsk, repeatsQuestion, dropOrphanConditional } = await import("../services/reply-engine/gates");
+    expect(restockAsk("מתי יתחדש המלאי אליס שחור")).toBe(true);
+    expect(restockAsk("מתי יחזור למלאי?")).toBe(true);
+    expect(restockAsk("when is it back in stock?")).toBe(true);
+    expect(restockAsk("יש במלאי?")).toBe(false);
+    expect(repeatsQuestion("על מה מדובר?", "על מה מדובר?")).toBe(true);
+    expect(repeatsQuestion("על מה מדובר?", "איזה צבע?")).toBe(false);
+    expect(dropOrphanConditional("אם זה דגם אחר, תכתבי לי.", ["סמובי אליס"])).toBe("");
+    expect(dropOrphanConditional("סמובי אליס מתאים. אם זה דגם אחר, תכתבי לי.", ["סמובי אליס"])).toMatch(/אם זה דגם אחר/);
+  });
+  it("★ her noun: only products of it, and a reply naming another kind", async () => {
+    const { productsOfNoun, wrongProductType } = await import("../services/reply-engine/gates");
+    const c = [{ title: "עט נמשים" }, { title: "טינט שפתיים עם מברשת" }];
+    expect(productsOfNoun(c, "טינט שיש בסוף מברשת")?.map((x) => x.title)).toEqual(["טינט שפתיים עם מברשת"]);
+    expect(productsOfNoun(c, "שפתון אדום")).toBeNull();
+    expect(wrongProductType("עט נמשים הוא מה שאת מחפשת.", "טינט שיש בסוף מברשת", c.map((x) => x.title))).toBe(true);
+    expect(wrongProductType("טינט שפתיים עם מברשת מתאים.", "טינט שיש בסוף מברשת", c.map((x) => x.title))).toBe(false);
   });
 });

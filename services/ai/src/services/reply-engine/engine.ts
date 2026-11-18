@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -926,6 +926,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // looked up her orders and the reply volunteered one).
       const notAsked = refuseOrderRead(toolFunctionName, opts.incomingMessage ?? "", history) ?? refuseWrite(toolFunctionName, opts.incomingMessage ?? "");
       if (notAsked) return { ok: false as const, failure: "refused", reason: notAsked } as any;
+      // What the store was really asked, for the replay report (rating ed780586: only arg names were shown).
+      if (/(?:list_products|search_products)$/.test(toolFunctionName)) {
+        const sa = ((trace as any).searchArgs ??= []) as any[];
+        if (sa.length < 6) sa.push({ tool: toolFunctionName, q: String((effective as any).query ?? "").slice(0, 60), cq: String((effective as any).customer_query ?? "").slice(0, 60), audience: (effective as any).audience ?? null, in_stock: (effective as any).in_stock ?? null, price: [(effective as any).price_min ?? null, (effective as any).price_max ?? null] });
+      }
       const dropped = droppedOrderSelectors(toolFunctionName, effective);
       effective = scrubOrderSelectors(toolFunctionName, effective);
       const out: any = await executeAdapterTool({
@@ -1391,6 +1396,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const titles = candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean);
     // No price sentence left without its product (prod rating 2026-11-17).
     let text = fixListCount(dropDanglingPrice(normalizeDashes(stripForeignScript(resolveKeysInText(output.reply, candidates), inbound.join("\n"))), titles));
+    // A conditional left without the model it was about ("אם זה דגם אחר...") goes (rating ed780586).
+    text = dropOrphanConditional(text, titles);
     // A first name only from the profile or the customer's own signature (prod rating 2026-11-17: "היי אלה").
     text = dropUnaskedName(text, [firstName]);
     // Holding mode (prod rating 2026-11-17): a sensitive team item is open; nothing about its state, cause or
@@ -1474,7 +1481,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const lineLocale: "he" | "en" = output?.reply && /[\u0590-\u05FF]/.test(output.reply) ? "he" : output?.reply && /[A-Za-z]{2,}/.test(output.reply) && !/[\u0590-\u05FF]/.test(output.reply) ? "en" : locale;
   const handoffLine = lineLocale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.";
   if (output && !turnTools.escalation) {
-    const accepted = previousBotReplies.slice(-2).some((b) => ignoredYes(opts.incomingMessage ?? "", b, false, false));
+    // Only the bot's last message, and only a real offer of a person (rating ed780586: "כן" became a handoff).
+    const accepted = ignoredYes(opts.incomingMessage ?? "", previousBotReplies.at(-1) ?? "", false, false);
     if (accepted) {
       if (!output.handoff || output.reply !== handoffLine) (trace as any).handoffSetInCode = true;
       output = { ...output, handoff: output.handoff ?? "the customer accepted the offer of a person", reply: handoffLine, cards: [], teamQuestion: null };
@@ -1532,6 +1540,33 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // A team question is a short subject plus the ask, never the raw message alone, and a status ask
   // ("יש חדש?") on an open item is no new question (prod replay 2026-11-17).
+  // Several items asked and some never answered: never dropped silently (rating ed780586: a toaster and a
+  // blender of five devices). The rest go to the team, and a fixed line says so.
+  if (output?.reply && !output.handoff && !heldTurn && candidates.length > 0) {
+    const missing = unansweredItems(output.reply, String(opts.incomingMessage ?? ""));
+    if (missing.length) {
+      const told = locale === "en" ? "The other items you asked about are with the team; the answer will come here in the chat." : "את שאר הפריטים ששאלת עליהם העברתי לבדיקה של הצוות, והתשובה תגיע כאן בצ'אט.";
+      output = { ...output, reply: `${output.reply.trim()} ${told}`, teamQuestion: output.teamQuestion ?? `items still to answer: ${missing.join(", ")} (${String(opts.incomingMessage ?? "").slice(0, 200)})` };
+      (trace as any).itemsToTeam = missing;
+    }
+  }
+  // A restock or date ask with nothing to go on is the team's (rating ed780586: "בדקי בדף המוצר"):
+  // "check the page" and "no information" go, and the question is passed on with the fixed line.
+  if (output?.reply && !output.handoff && !output.teamQuestion && !heldTurn && restockAsk(opts.incomingMessage ?? "") && !teamPassIn(output.reply)) {
+    const rest = dropSentencesBy(dropSentencesBy(output.reply, RETURNS_WORK_RE), NO_INFO_RE);
+    const told = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    output = { ...output, reply: rest ? `${rest} ${told}` : told, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
+    (trace as any).restockToTeam = true;
+  }
+  // The same clarifying question twice in a row (rating ed780586: "על מה מדובר" twice): the open item's line,
+  // else the question goes to the team.
+  if (output?.reply && !output.handoff && repeatsQuestion(output.reply, previousBotReplies.at(-1) ?? "")) {
+    const open = openTeam.at(-1);
+    output = open
+      ? { ...output, reply: stillCheckingLine(open, locale === "en" ? "en" : "he") }
+      : { ...output, reply: locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", teamQuestion: output.teamQuestion ?? String(opts.incomingMessage ?? "").slice(0, 300) };
+    (trace as any).repeatedQuestion = true;
+  }
   // A payment method that failed is a support case (prod rating 2026-11-18, BuyMe: a garbled guess, no team):
   // the guesses about it are cut, the question goes to the team, and the fixed line says so.
   if (output?.reply && !output.handoff && !output.teamQuestion && !heldTurn && paymentMethodFailure(opts.incomingMessage ?? "") && !openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? "")))) {
@@ -1577,7 +1612,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
-  const final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
+  let final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
   (trace as any).cards = final.cards ?? [];
 
   // ── Send shape ──
@@ -1591,7 +1626,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // no card and no link on 56 turns; the product summary tells the model the
   // system attaches them, and legacy did).
   // Products are listed for a product ask only (prod replay 2026-11-17: a coupon question got a list).
-  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") ? textProductList(final, prose, candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  // The customer named the kind in so many words ("בובון", "טינט") and some products ARE that kind: the cards
+  // and the list show only those (rating ed780586: scarves for "בובון" a third time, a freckle pen for "טינט").
+  const hers = productsOfNoun(candidates as any[], String(opts.incomingMessage ?? ""));
+  const herIdx = hers ? new Set(hers.map((c: any) => candidates.indexOf(c) + 1)) : null;
+  if (herIdx) {
+    const keep = (final.cards ?? []).filter((k) => herIdx.has(Number(/PRODUCT_(\d+)/i.exec(k)?.[1])));
+    const cardsNow = keep.length || !(final.cards ?? []).length ? keep : [...herIdx].slice(0, 3).map((n) => `PRODUCT_${n}`);
+    if (cardsNow.join() !== (final.cards ?? []).join()) (trace as any).cardsByNoun = cardsNow;
+    final = { ...final, cards: cardsNow };
+  }
+  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);

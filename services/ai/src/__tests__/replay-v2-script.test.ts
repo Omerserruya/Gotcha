@@ -127,3 +127,12 @@ describe("each run its own report file", () => {
     expect(reportPath("/tmp/r.md", now)).toBe("/tmp/r.md");
   });
 });
+
+describe("the store searches in the report (rating ed780586)", () => {
+  it("★ the query, her own words and the filters, cut to 60 characters", async () => {
+    const { searchArgsLine } = await import("../scripts/replay-v2");
+    const line = searchArgsLine([{ tool: "woocommerce.list_products", q: "מטפחת לקשירה נמוכה", cq: "היי מחפשת את הבובון לקשירה נמוכה", audience: "women", in_stock: true, price: [null, 200] }]);
+    expect(line).toBe('list_products q="מטפחת לקשירה נמוכה" cq="היי מחפשת את הבובון לקשירה נמוכה" audience=women in_stock=true price=-..200');
+    expect(searchArgsLine([{ tool: "x.list_products", q: "a".repeat(80), price: [null, null] }])).toBe(`list_products q="${"a".repeat(60)}"`);
+  });
+});

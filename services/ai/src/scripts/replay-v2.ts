@@ -82,6 +82,12 @@ export function gateAsOf(msgs: any[], i: number, handovers: Array<{ toHandler: s
  * Where one turn's time went, numbers and tool names only (no customer text): the
  * engine's cumulative stage marks, rounds, the rewrite and its own lookups, and each tool.
  */
+/** The store searches as the store got them: the query, the customer's own words, the filters (60 characters each). */
+export function searchArgsLine(list: any[]): string {
+  const q = (v: unknown) => JSON.stringify(String(v ?? "").slice(0, 60));
+  return list.map((a) => `${String(a?.tool ?? "").replace(/^.*\./, "")} q=${q(a?.q)}${a?.cq ? ` cq=${q(a.cq)}` : ""}${a?.audience ? ` audience=${a.audience}` : ""}${a?.in_stock != null ? ` in_stock=${a.in_stock}` : ""}${a?.price?.some((x: any) => x != null) ? ` price=${a.price.map((x: any) => x ?? "-").join("..")}` : ""}`).join("; ");
+}
+
 export function stagesLine(trace: any): string {
   const st = trace?.stageMs ?? {};
   const marks = Object.entries(st).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => `${k}=${Number(v)}`).join(" ");
@@ -288,6 +294,7 @@ async function main() {
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
           stagesLine(r.trace),
+          ...(Array.isArray((r.trace as any)?.searchArgs) && (r.trace as any).searchArgs.length ? [`- search: ${searchArgsLine((r.trace as any).searchArgs)}`] : []),
           "",
         );
       } catch (err: any) {

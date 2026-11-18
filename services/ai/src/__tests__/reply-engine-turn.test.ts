@@ -30,6 +30,7 @@ const h = vi.hoisted(() => ({
   lexical: [] as any[],
   groundTitle: "Canvas Tote",
   groundCategory: "",
+  extraTitle: "",
   docAddress: null as string | null,
   groundStatus: "ok" as string,
 }));
@@ -116,7 +117,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
-    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }],
+    candidates: [{ title: h.groundTitle, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: "u", attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
     appliedFilters: [], unavailableFilters: [], safeModelSummary: h.groundTitle,
   }),
 }));
@@ -160,6 +161,7 @@ beforeEach(() => {
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
   h.groundCategory = "";
+  h.extraTitle = "";
   h.docAddress = null;
   h.groundStatus = "ok";
   h.agentStatus = "ACTIVE";
@@ -1650,6 +1652,68 @@ describe("657e5f85 Crispy trace: the device table on a fit ask", () => {
     h.responses.push({ toolCalls: [respond("dt2", { reply: "אנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מה שעות הפעילות?" }, "autonomous");
     expect(JSON.stringify(h.calls[0].messages)).not.toMatch(/אייר פרייר/);
+  });
+});
+
+describe("ed780586 rating: engine passes", () => {
+  it("★ items never dropped silently: the rest go to the team", async () => {
+    h.responses.push(
+      { toolCalls: [tc("it1", "woocommerce.list_products", { query: "משטח" })] },
+      { toolCalls: [respond("it2", { reply: "למיקסר מתאים Canvas Tote." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר, טוסטר ובלנדר" }, "autonomous");
+    expect(r.reply).toMatch(/שאר הפריטים/);
+    expect(String(r.trace.teamQuestion ?? "")).toMatch(/טוסטר/);
+  });
+  it("★ a restock ask with no data: the team, never 'check the product page'", async () => {
+    h.responses.push({ toolCalls: [respond("rs1", { reply: "בדקי בדף המוצר, שם מופיע המלאי." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יתחדש המלאי של אליס שחור?" }, "autonomous");
+    expect(r.reply).not.toMatch(/בדף המוצר/);
+    expect(r.reply).toMatch(/העברתי את (?:זה|השאלה) לצוות/);
+  });
+  it("★ 'yes' after an offer to ask the team is no handoff", async () => {
+    h.history = [{ direction: "INBOUND", body: "יש הנחה?", metadata: null }, { direction: "OUTBOUND", body: "לבדוק את זה עם הצוות?", senderName: "AI Bot", metadata: null }];
+    h.responses.push({ toolCalls: [respond("y1", { reply: "בדקתי, אין כרגע הנחה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+    expect(r.escalation ?? null).toBeNull();
+  });
+  it("★ the same clarifying question twice: not again", async () => {
+    h.history = [{ direction: "INBOUND", body: "יש חדש?", metadata: null }, { direction: "OUTBOUND", body: "על מה מדובר?", senderName: "AI Bot", metadata: null }];
+    h.responses.push({ toolCalls: [respond("rq1", { reply: "על מה מדובר?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+    expect(r.reply).not.toMatch(/על מה מדובר/);
+  });
+  it("★ cards show only products of her noun", async () => {
+    h.groundTitle = "מטפחת אנה";
+    h.extraTitle = "בובון שטוח";
+    h.responses.push(
+      { toolCalls: [tc("bb1", "woocommerce.list_products", { query: "בובון" })] },
+      { toolCalls: [respond("bb2", { reply: "הנה מה שמצאתי.", cards: ["PRODUCT_1"] })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת את הבובון לקשירה נמוכה" }, "autonomous");
+    expect((r.trace as any).cardsByNoun).toEqual(["PRODUCT_2"]);
+  });
+  it("★ 'yes' to an offer of a person two messages back is no handoff", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "הקופון לא עובד", metadata: null },
+      { direction: "OUTBOUND", body: "רוצה שאעביר לנציג?", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "רגע", metadata: null },
+      { direction: "OUTBOUND", body: "את הקופון מזינים בעמוד התשלום. רוצה שאשלח קישור?", senderName: "AI Bot", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("ol1", { reply: "הנה הקישור לעמוד התשלום." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
+    expect(r.escalation ?? null).toBeNull();
+  });
+  it("★ a restock ask the gate lets through still goes to the team", async () => {
+    h.responses.push({ toolCalls: [respond("rs2", { reply: "המלאי מתעדכן מדי פעם." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יחזור למלאי האליס השחור?" }, "autonomous");
+    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+  });
+  it("★ an orphan 'if it's another model' is dropped", async () => {
+    h.responses.push({ toolCalls: [respond("or1", { reply: "כדאי לנקות את התחתית במים ולייבש היטב. אם זה דגם אחר, אפשר לכתוב לנו את שמו." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "המשטח מחליק לי על השיש" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/לנקות/);
+    expect(r.reply ?? "").not.toMatch(/דגם אחר/);
   });
 });
 

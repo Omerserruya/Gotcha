@@ -220,7 +220,7 @@ export function unreadBusinessInfo(reply: string, incoming: string, tools: ToolR
 // got that where legacy named the category).
 const GAVE_UP = /(?:החיפוש\s+לא\s+(?:החזיר|מצא|העלה)|הקטלוג\s+לא\s+(?:נפתח|נטען)|לא\s+נפתח\s+לי|תקלה|לא (?:הצלחתי|הצלחנו|יכולתי|יכולנו|מצליח|מצליחה) (?:לבדוק|לגשת|לראות|לחפש)|(?:אין|אין לי) (?:גישה|אפשרות לבדוק)|כרגע (?:לא ניתן|אי אפשר) לבדוק|לבדוק (?:את זה )?כרגע)|\b(?:could(?:n'?t| not) (?:check|look|access|search)|unable to (?:check|look|access))\b/iu;
 // The work handed back to the customer (prod replay 2026-11-17, Smoovee: "נסי שם אחר", "כדאי לבדוק באתר").
-const RETURNS_WORK = /(?<![\u0590-\u05FF])(?:(?:נסי|נסה|נסו|תנסי|תנסה|תנסו)\s+(?:שם|מילה|ניסוח|לחפש)|(?:כדאי|אפשר|מומלץ)\s+(?:לבדוק|לחפש|להיכנס|לראות)\s+(?:ב|את\s+ה)?אתר|(?:תבדקי|תבדוק|תבדקו|תחפשי|תחפש|תחפשו)\s+(?:ב|את\s+ה)?אתר|(?:אפשר|כדאי)\s+לחפש\s+בעצמ)(?![\u0590-\u05FF])|\b(?:try (?:another|a different) (?:name|word|search)|search (?:for it )?(?:on|in) (?:our|the) (?:website|site|store)|check (?:on |at )?(?:our|the) (?:website|site))\b/iu;
+const RETURNS_WORK = /(?<![\u0590-\u05FF])(?:(?:נסי|נסה|נסו|תנסי|תנסה|תנסו)\s+(?:שם|מילה|ניסוח|לחפש)|(?:כדאי|אפשר|מומלץ)\s+(?:לבדוק|לחפש|להיכנס|לראות)\s+(?:ב|את\s+ה)?אתר|(?:תבדקי|תבדוק|תבדקו|תחפשי|תחפש|תחפשו)\s+(?:ב|את\s+ה)?אתר|(?:בדקי|בדקו|בדוק|תבדקי|תבדוק|תבדקו|כדאי\s+לבדוק|אפשר\s+לבדוק|אפשר\s+לראות)\s+(?:ב|את\s+)?(?:דף|עמוד)\s+(?:ה)?מוצר|(?:אפשר|כדאי)\s+לחפש\s+בעצמ)(?![\u0590-\u05FF])|\b(?:try (?:another|a different) (?:name|word|search)|search (?:for it )?(?:on|in) (?:our|the) (?:website|site|store)|check (?:on |at )?(?:our|the) (?:website|site))\b/iu;
 export const returnsWork = (reply: string) => RETURNS_WORK.test(reply ?? "");
 /**
  * A product search timed out or failed, nothing else was found this turn, and the reply gives
@@ -560,9 +560,14 @@ export function repeatedAsk(reply: string, previousBotReplies: string[]): boolea
 const OFFERED_PERSON = /(?<![\u0590-\u05FF])[וש]?(?:דחוף|דחופה|להעביר|שאעביר|שנעביר|אעביר|נעביר|נציג|נציגה|נציגים|צוות|הצוות|לצוות|מהצוות|מישהו|מישהי|שיחזרו|שיחזור|שתחזור|שנחזור|לחבר\s+אותך|שיתקשרו|שיתקשר|לדבר\s+עם)(?![\u0590-\u05FF])|\b(?:urgent|connect you|pass (?:this|you) (?:on|to)|talk to (?:someone|a person))\b/iu;
 const YES = /^\s*(?:כן|כן\s+בבקשה|כן\s+דחוף|דחוף|ברור|בטח|אשמח|בהחלט|yes|yeah|yep|please|sure)(?:[\s,.!]|$)/iu;
 /** The customer accepted the employee's own offer of a person, and the reply does neither hand over nor record it. */
+// A person offered, in the question itself (rating ed780586: "כן" after "לבדוק עם הצוות?" became a handoff).
+const PERSON_OFFER = /(?<![\u0590-\u05FF])[וש]?[לה]?(?:דחוף|דחופה|נציג|נציגה|נציגים|מישהו\s+מהצוות|מישהי\s+מהצוות|אחד\s+מהצוות|לדבר\s+עם\s+(?:נציג|נציגה|מישהו|אדם)|לחבר\s+אותך|להעביר\s+אותך|שאעביר\s+אותך|שנעביר\s+אותך|שיחזרו\s+אלי+(?:ך|כם)|שיחזור\s+אלי+(?:ך|כם)|שיתקשרו|שיתקשר)(?![\u0590-\u05FF])|\b(?:urgent|connect you|transfer you|pass you (?:on|to)|talk to (?:someone|a person|a human|an agent)|(?:a|an) (?:person|agent|representative|human))\b/iu;
+export function offeredPerson(lastBotReply: string | null | undefined): boolean {
+  return (String(lastBotReply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+\?/g) ?? []).some((q) => PERSON_OFFER.test(q));
+}
 export function ignoredYes(incoming: string, lastBotReply: string | null | undefined, handedOff: boolean, teamQuestion: boolean): boolean {
   if (handedOff || teamQuestion || !lastBotReply) return false;
-  return /\?/.test(lastBotReply) && OFFERED_PERSON.test(lastBotReply) && YES.test(incoming ?? "");
+  return offeredPerson(lastBotReply) && YES.test(incoming ?? "");
 }
 
 // The reply tells the customer a person will continue (prod replay 6: three
@@ -1002,6 +1007,16 @@ export function namesCandidate(reply: string, titles: string[]): boolean {
   const inReply = new Set(wordsOf(t));
   return list.some((x) => t.includes(x) || wordsOf(x).some((w) => !shared.has(w) && inReply.has(w)));
 }
+/** The titles the text names, each by its full title or a word that tells it apart from the others. */
+export function namedTitles(text: string, titles: string[]): string[] {
+  const t = String(text ?? "").toLowerCase();
+  const list = titles.map((x) => String(x ?? "").toLowerCase().trim());
+  const wordsOf = (x: string): string[] => [...(x.match(/\p{L}{3,}/gu) ?? [])];
+  const nonEmpty = list.filter(Boolean);
+  const shared = nonEmpty.length > 1 ? new Set(wordsOf(nonEmpty[0]).filter((w) => nonEmpty.every((x) => wordsOf(x).includes(w)))) : new Set<string>();
+  const inText = new Set(wordsOf(t));
+  return titles.filter((_, i) => list[i] && (t.includes(list[i]) || wordsOf(list[i]).some((w) => !shared.has(w) && inText.has(w))));
+}
 export function unnamedRecommendation(reply: string, titles: string[]): boolean {
   // "One product that fits is..." must name the product itself: its title or the title's first two words.
   const t = String(reply ?? "").toLowerCase();
@@ -1184,6 +1199,9 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (partialReturnPolicy(reply, i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "partial_return_policy" });
   const mismatch = deviceMismatch(reply, i.incomingMessage, i.grounding ?? "");
   const negFit = ungroundedNegativeFit(reply, i.incomingMessage, i.candidateTitles ?? [], i.grounding ?? "");
+  const posFit = ungroundedPositiveFit(reply, i.incomingMessage, i.candidateTitles ?? [], i.grounding ?? "", i.knowledge ?? "");
+  if (posFit.length) problems.push({ kind: "ungrounded_positive_fit", claims: posFit } as any);
+  const wrongType = wrongProductType(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (negFit.length) problems.push({ kind: "ungrounded_negative_fit", claims: negFit, fits: fittingBySize(i.incomingMessage, i.candidateTitles ?? []).slice(0, 3) } as any);
   if (mismatch.length) problems.push({ kind: "device_mismatch", claims: mismatch });
   const near = nearNameAsExact(reply, i.incomingMessage, i.candidateTitles ?? []);
@@ -1227,6 +1245,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
+  if (wrongType) style.push("wrong_product_type");
   // Products this turn: several items asked, some never answered (a mixer, a toaster, a blender).
   if (i.candidateCount > 0 && unansweredItems(reply, i.incomingMessage).length) style.push("unanswered_items");
   if (orderNumberDiffers(reply, i.incomingMessage).length) style.push("order_number_differs");
@@ -1246,7 +1265,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_negative_fit"]);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_negative_fit", "ungrounded_positive_fit"]);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 const SENTENCES = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g;
@@ -1283,7 +1302,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).join("").trim();
     }
-    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch" || p.kind === "ungrounded_negative_fit") {
+    if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch" || p.kind === "ungrounded_negative_fit" || p.kind === "ungrounded_positive_fit") {
       const marks = p.claims.map((c) => String(c ?? "").trim().slice(0, 40)).filter((m) => m.length >= 3);
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).join("").trim();
       // The honesty check names some claims by kind only: "passed to the team" and promises go by pattern.
@@ -1452,6 +1471,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
+    if (p.kind === "ungrounded_positive_fit") lines.push(`- You said a product fits a device with nothing showing it (${p.claims.join("; ")}). Say it fits only when the product's own text or the business's device table names that device, or its size takes the customer's base. Never reason from a similar or other model.`);
     if (p.kind === "ungrounded_negative_fit") lines.push(`- You said a product does not fit with nothing showing it (${p.claims.join("; ")}). Say it does not fit only when its own text says so or its size is smaller than the customer's base.${(p as any).fits?.length ? ` By size, these take the customer's base: ${(p as any).fits.join(", ")}.` : ""}`);
     if (p.kind === "device_mismatch") lines.push(`- You offered a product for another device than the customer's (${p.claims.join("; ")}). Offer only what fits their own device, from the search or the knowledge's device table; if nothing does, say so and ask.`);
     if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
@@ -1492,6 +1512,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
       if (c.has("terms_refusal")) lines.push("- Never give the terms as the reason not to help: look it up (the customer's own order lookup, the knowledge) or say what the team will do.");
       if (c.has("nameless_self")) lines.push("- When you introduce yourself, use your own name (Name above), not \"the assistant\".");
+      if (c.has("wrong_product_type")) lines.push("- The customer named the kind of product they want. Name and show only products of that kind; the others are not what they asked for.");
       if (c.has("unanswered_items")) lines.push("- The customer asked about several items and your reply skips some of them. Answer every item they named, or say which ones you are still checking.");
       if (c.has("asks_known")) lines.push("- Do not ask about a detail the customer already gave in their message; use it.");
       if (c.has("order_number_differs")) lines.push("- The order you found has another number than the one the customer typed. Say which order you found (its number and date) and ask whether that is the one they mean; never call it their order or their previous order.");
@@ -1844,3 +1865,97 @@ function nounKeys(noun: string): string[] {
   const bare = full.replace(/^[הובלמש](?=[\u0590-\u05FF]{3,})/u, "");
   return [...new Set([full, bare].map((x) => (x.length >= 5 ? x.slice(0, 4) : x)))];
 }
+
+
+/**
+ * "<product> fits <device>" with nothing behind it (rating ed780586: "סמובי אסף מתאים גם לנינג'ה קריספי...
+ * מופיע במפרט כמתאים לנינג'ה גריל XL", reasoning from another model). Kept when the device's own words are in
+ * the product data or the knowledge, or a size comparison takes the customer's base; "similar model"
+ * reasoning is cut.
+ */
+const SIMILAR_MODEL = /(?<![֐-׿])[לבכמוה]?(?:דגם\s+דומה|בדומה\s+ל|דומה\s+ל(?:דגם|מכשיר)|מכשיר\s+דומה|כמו\s+(?:ה)?דגם)(?![֐-׿])|\b(?:a similar model|similar to the|like the .{1,30} model)\b/iu;
+const FIT_CLAIM = /(?<![֐-׿])(?:מתאים|מתאימה|מתאימים|יתאים|תתאים)\s+(?:גם\s+)?ל(?!כם|ך|י\b)([֐-׿'"״A-Za-z0-9 -]{3,40})/u;
+// The device first: "לנינג'ה קריספי מתאים סמובי אליס", "לנינג'ה קריספי מופיעים כמתאימים ..." (rating ed780586, B).
+const FIT_CLAIM_REV = /(?<![\u0590-\u05FF])ו?ל(?!כם|ך|י\b)([\u0590-\u05FF'"״A-Za-z0-9 -]{3,40}?)\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|(?:מופיע|מופיעה|מופיעים|מופיעות)\s+כ(?:מתאים|מתאימה|מתאימים|מתאימות))(?![\u0590-\u05FF])/u;
+export function ungroundedPositiveFit(reply: string, incoming: string, titles: string[], grounding: string, knowledge: string): string[] {
+  const proofText = `${grounding ?? ""}\n${knowledge ?? ""}`;
+  const lines = proofText.split(/\n|;|(?<=\.)\s+/).map((l) => l.toLowerCase()).filter(Boolean);
+  const base = sizePair(incoming);
+  const whole = String(reply ?? "").toLowerCase();
+  const FILL = new Set(["שלך", "שלכם", "שלכן", "שלי", "שלו", "שלה", "הזה", "הזו", "הזאת", "ביותר", "מאוד", "לגמרי", "בדיוק", "your", "yours", "mine", "exactly"]);
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => {
+    if (SIMILAR_MODEL.test(x)) return true;
+    if (NEG_FIT.test(x)) return false;
+    const m = FIT_CLAIM_REV.exec(x) ?? FIT_CLAIM.exec(x);
+    if (!m) return false;
+    const named = namedTitles(x, titles);
+    if (!named.length) return false;
+    const target = (m[1].match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase()) && !FILL.has(w.toLowerCase()));
+    if (!target.length) return false;
+    // Each product the sentence claims needs its own proof (rating ed780586: Alice is right, Assaf and
+    // Christina were added).
+    return named.some((title) => {
+      const pad = sizePair(title);
+      if (base && pad && padFits(pad, base)) return false;
+      const own = (title.toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((w) => titles.length < 2 || !titles.every((t) => t.toLowerCase().includes(w)));
+      const ofIt = lines.filter((l) => own.some((w) => l.includes(w)));
+      // The device's own words in a line about this product (its fit list, the device table).
+      if (ofIt.some((l) => target.every((w) => nounKeys(w).some((k) => l.includes(k))))) return false;
+      // A table CATEGORY the reply names ("סיר טיגון ללא שמן נינג'ה: סמובי אליס"): the model mapped her model
+      // to its category, and says so.
+      const byCategory = ofIt.some((l) => {
+        // A table line: the category before the colon, this product after it (not "<product> מתאים ל: ...").
+        const [cat0, ...after] = l.includes(":") ? l.split(":") : [""];
+        const cat = own.some((w) => cat0.includes(w)) || !own.some((w) => after.join(":").includes(w)) ? "" : cat0.trim();
+        const words = (cat.match(/\p{L}{3,}/gu) ?? []).filter((w) => !STEM_STOP.has(w));
+        return words.length >= 2 && words.filter((w) => whole.includes(w)).length >= Math.min(2, words.length);
+      });
+      return !byCategory;
+    });
+  }).map((x) => x.trim().slice(0, 120));
+}
+
+/** A restock or availability-date ask ("מתי יחזור למלאי", "when is it back in stock"). */
+export const restockAsk = (incoming: string) => /(?<![֐-׿])(?:מתי\s+(?:י|ת)?(?:חזור|חזרו|תחדש|גיע|גיעו|יהיה|תהיה)|(?:יחזור|תחזור|יחזרו|יתחדש|יתמלא)\s+(?:ל)?(?:ה)?מלאי|חידוש\s+(?:ה)?מלאי|חזרה\s+למלאי|ייכנס\s+למלאי)(?![֐-׿])|\b(?:restock|back in stock|in stock again|when will .{1,30} (?:be )?(?:available|back))\b/iu.test(String(incoming ?? ""));
+
+/** The same clarifying question asked again (rating ed780586: "על מה מדובר" twice in a row). */
+export function repeatsQuestion(reply: string, lastBotReply: string): boolean {
+  const q = (t: string) => (String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+\?/g) ?? []).map((x) => x.replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase()).filter((x) => x.length >= 4);
+  const mine = q(reply), before = new Set(q(lastBotReply));
+  return mine.length > 0 && mine.some((x) => before.has(x));
+}
+
+/** The customer named the product kind in so many words ("טינט", "בובון"): the products that are that kind. */
+export function productsOfNoun<T extends { title?: string }>(candidates: T[], incoming: string): T[] | null {
+  const noun = headNoun(incoming);
+  if (!noun) return null;
+  const keys = nounKeys(noun);
+  const hit = candidates.filter((c) => keys.some((k) => String(c?.title ?? "").toLowerCase().includes(k)));
+  return hit.length ? hit : null;
+}
+/** The reply names a product of another kind while some products ARE her noun (rating ed780586, NE'A: a freckle pen for "טינט"). */
+export function wrongProductType(reply: string, incoming: string, titles: string[]): boolean {
+  const mine = productsOfNoun(titles.map((title) => ({ title })), incoming);
+  if (!mine) return false;
+  const ofHers = new Set(mine.map((m) => m.title));
+  const others = titles.filter((t) => !ofHers.has(t));
+  return others.some((t) => namesCandidate(reply, [t])) && !mine.some((m) => namesCandidate(reply, [String(m.title)]));
+}
+
+/** "אם זה דגם אחר..." left after a cut took the model it was about (rating ed780586). */
+const OTHER_MODEL_IF = /^\s*(?:ו?אם\s+(?:זה|מדובר\s+ב|יש\s+לך)\s*(?:ה)?(?:דגם|מכשיר|גודל)\s+(?:אחר|שונה)|if (?:it'?s|you have) a different (?:model|device|size))/iu;
+export function dropOrphanConditional(text: string, titles: string[]): string {
+  const parts = String(text ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [String(text ?? "")];
+  let before = "";
+  const out: string[] = [];
+  for (const x of parts) {
+    if (OTHER_MODEL_IF.test(x) && !namesCandidate(before, titles) && !/\d/.test(before)) continue;
+    out.push(x); before += x;
+  }
+  return out.join("").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** For the engine's own cuts (restock, payment): the same patterns the checks use. */
+export const RETURNS_WORK_RE = RETURNS_WORK;
+export const NO_INFO_RE = NO_INFO;
+export const dropSentencesBy = (s: string, re: RegExp) => dropSentences(s, re);
