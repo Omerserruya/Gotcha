@@ -2371,3 +2371,85 @@ describe("relevance R3 round 3 through a whole turn", () => {
     expect(String(r.trace.gate1 ?? "")).not.toMatch(/^automated/);
   });
 });
+
+describe("replay d (the cab0f40e rating) through a whole turn", () => {
+  it("★ 1: a fit claim that the computed size match does not support goes; each size gets its own pad", async () => {
+    h.groundTitle = "משטח הזזה 20*30";
+    h.lexical = [{ content: "טבלת מידות: סמובי אליס 20*30, סמובי גפן 23*40", score: 0.9, documentTitle: "sizes", chunkIndex: 1, documentId: "d" }];
+    const claim = "גם בסיס המיקסר והטוסטר מתאימים למשטח הזה.";
+    h.responses.push({ toolCalls: [tc("fc1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fc2", { reply: claim })] }, { toolCalls: [respond("fc3", { reply: claim })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר 18x25" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/מתאימים למשטח הזה/);
+    expect(r.reply ?? "").toMatch(/32×22: סמובי גפן/);
+    expect(r.reply ?? "").toMatch(/18×25: סמובי אליס/);
+  });
+  it("★ 1b: a fit claim naming the right pad stays and counts as the answer", async () => {
+    h.groundTitle = "משטח הזזה 20*30";
+    h.lexical = [{ content: "טבלת מידות: סמובי אליס 20*30, סמובי גפן 23*40", score: 0.9, documentTitle: "sizes", chunkIndex: 1, documentId: "d" }];
+    const ok = "למיקסר מתאים סמובי גפן.";
+    h.responses.push({ toolCalls: [tc("fc4", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fc5", { reply: ok })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר 18x25" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/למיקסר מתאים סמובי גפן/);
+    expect(r.reply ?? "").not.toMatch(/32×22:/);
+    expect(r.reply ?? "").toMatch(/18×25: סמובי אליס/);
+  });
+  it("★ 1c: an item named with ANOTHER pad is not answered: it gets its own pad's line", async () => {
+    h.groundTitle = "משטח הזזה 20*30";
+    h.lexical = [{ content: "טבלת מידות: סמובי אליס 20*30, סמובי גפן 23*40", score: 0.9, documentTitle: "sizes", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [tc("fc6", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fc7", { reply: "למיקסר: סמובי אליס." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר 18x25" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/32×22: סמובי גפן/);
+  });
+  it("★ 1d: generic store titles, no table: a fit claim to the generic name is cut, the line keeps the size", async () => {
+    h.groundTitle = "משטח הזזה 20*30";
+    h.extraTitle = "משטח הזזה 23*40";
+    h.responses.push({ toolCalls: [tc("fc8", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("fc9", { reply: "המיקסר מתאים למשטח הזזה." })] }, { toolCalls: [respond("fc10", { reply: "המיקסר מתאים למשטח הזזה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר 18x25" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/המיקסר מתאים למשטח הזזה\./);
+    expect(r.reply ?? "").toMatch(/32×22: משטח הזזה 23\*40/);
+  });
+  it("★ 2: a counter-question the cut left on a direct question is never the whole reply", async () => {
+    const body = "לפי הנתונים, 73% מהלקוחות עם ורידים כחולים בוחרים גוון בהיר. מה נראה אצלך?";
+    h.responses.push({ toolCalls: [respond("dq1", { reply: body })] }, { toolCalls: [respond("dq2", { reply: body })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך אדע מה התת גוון שלי?" }, "autonomous");
+    expect((r.reply ?? "").trim()).not.toBe("מה נראה אצלך?");
+    expect(r.reply ?? "").toMatch(/לצוות|https?:\/\//);
+  });
+  it("★ 2b: a short clarifying question the model wrote with no gate cut is sent as it is", async () => {
+    // An explanation ask, so only "no cut this turn" keeps the model's question.
+    h.responses.push({ toolCalls: [respond("cq1", { reply: "לאיזה מכשיר?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך בוחרים איזה משטח מתאים לי?" }, "autonomous");
+    // No sentence cut this turn (a no_search verdict may "clean" and remove nothing): sent as the model wrote it.
+    expect(Number((r.trace as any).cutSentences ?? 0)).toBe(0);
+    expect((r.reply ?? "").trim()).toBe("לאיזה מכשיר?");
+  });
+  it("★ 4: the team pass once in a reply", async () => {
+    h.responses.push({ toolCalls: [respond("tp1", { reply: "אפשר להעביר את זה לצוות, והתשובה תגיע כאן בצ'אט. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "משלוח לאילת" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משלוח לאילת?" }, "autonomous");
+    expect((r.reply ?? "").match(/לצוות/g) ?? []).toHaveLength(1);
+    expect(r.reply ?? "").not.toMatch(/אפשר להעביר/);
+  });
+  it("★ 5 and 6: a story mention and a seller's pitch get no reply; a customer's ask with a service word is answered", async () => {
+    h.responses.push({ toolCalls: [respond("sm1", { reply: "תודה! מה מחפשים?" })] });
+    const a = await runReplyEngineTurn({ ...opts, incomingMessage: "[Story mention]" }, "autonomous");
+    expect(a.reply ?? null).toBeNull();
+    expect(a.trace.gate1).toBe("automated:story_mention");
+    // A pitch on Messenger (the harness's conversation is web chat, where a pitch is answered).
+    const { prisma } = await import("@chatcenter/shared");
+    const before = (prisma as any).conversation.findFirst;
+    (prisma as any).conversation.findFirst = async () => ({ id: "c1", tenantId: "t1", channel: "MESSENGER", customerExternalId: "fb1" });
+    try {
+      h.responses.push({ toolCalls: [respond("sp1", { reply: "לא מצאתי דגם בשם הזה." })] });
+      const b = await runReplyEngineTurn({ ...opts, incomingMessage: "שלום, אנחנו מציעים שירותי בניית אתרים במחיר מבצע, רוצים הצעת מחיר?" }, "autonomous");
+      expect(b.reply ?? null).toBeNull();
+      expect(b.trace.gate1).toBe("automated:seller_pitch");
+    } finally { (prisma as any).conversation.findFirst = before; }
+    // On web chat it is answered.
+    h.responses.push({ toolCalls: [respond("sp3", { reply: "תודה, נעביר לבעלי העסק." })] });
+    const w = await runReplyEngineTurn({ ...opts, incomingMessage: "שלום, אנחנו מציעים שירותי בניית אתרים במחיר מבצע, רוצים הצעת מחיר?" }, "autonomous");
+    expect(String(w.trace.gate1 ?? "")).not.toMatch(/^automated/);
+    h.responses.push({ toolCalls: [respond("sp2", { reply: "כן, יש לנו שירות התקנה." })] });
+    const c = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם שירות התקנה?" }, "autonomous");
+    expect(String(c.trace.gate1 ?? "")).not.toMatch(/^automated/);
+  });
+});

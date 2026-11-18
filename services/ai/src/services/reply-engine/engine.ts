@@ -31,7 +31,8 @@ import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
-import { autoReply, oneTimeCode } from "../conversation-relevance.service";
+import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conversation-relevance.service";
+import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
 import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject } from "./gates";
@@ -514,14 +515,63 @@ const NO_MATCH_SEND_SIZES = /(?<![\u0590-\u05FF])(?:לא\s+(?:הופיעה|הו�
  * A machine wrote it: a one-time code, or another business's automated greeting or away message (the relevance
  * fast rules, the same shape and timing). Null when a person may have.
  */
-export function machineInbound(channel: string, history: any[], incoming: string): "one_time_code" | "auto_reply" | null {
+export function machineInbound(channel: string, history: any[], incoming: string): "one_time_code" | "auto_reply" | "seller_pitch" | "story_mention" | null {
   if (oneTimeCode(incoming)) return "one_time_code";
+  // Asks nothing of us: a seller's offer to the business, a story mention with no words (replay d, 2026-11-18).
+  // Not on the business's own site chat or voice (never labelled either: a visitor there is the business's).
+  if (relevanceChannel(channel) && sellerPitch(incoming)) return "seller_pitch";
+  if (storyMentionOnly(incoming)) return "story_mention";
   const msgs = (history ?? []).map((m: any) => ({ direction: m?.direction, body: m?.body, createdAt: m?.createdAt, messageType: m?.messageType, metadata: m?.metadata }));
   const lastIn = [...msgs].reverse().find((m) => m.direction === "INBOUND");
   if (incoming && String(lastIn?.body ?? "").trim() !== incoming.trim()) msgs.push({ direction: "INBOUND", body: incoming, createdAt: new Date(), messageType: null, metadata: null });
   const first = msgs.find((m) => m.messageType !== "system" && String(m.body ?? "").trim());
   return autoReply({ channel, messages: msgs, firstDirection: first?.direction === "OUTBOUND" ? "OUTBOUND" : first ? "INBOUND" : null }) ? "auto_reply" : null;
 }
+/**
+ * The reply is only one short counter-question while she asked a direct question ("how", "what", "which", "is
+ * it"): what a cut leaves, no answer. 8 words or fewer, one sentence, ending in "?".
+ */
+// Asks for an EXPLANATION only: a counter-question cannot answer one. A value ask may need a detail first ("כמה
+// עולה משלוח?" answered by "לאיזו עיר?").
+const DIRECT_ASK = /(?<![\u0590-\u05FF])[וש]?(?:איך|כיצד|למה|מדוע|מה\s+ההבדל|מה\s+זה|מהו|מהי|מה\s+המשמעות)(?![\u0590-\u05FF])|\b(?:how|why|what is|what's|what are|what's the difference)\b/iu;
+export function danglingQuestion(reply: string, incoming: string): boolean {
+  const r = String(reply ?? "").trim();
+  if (!r || !/[?\u061F]\s*$/u.test(r)) return false;
+  if ((r.match(/[.!?](?=\s+\S)/g) ?? []).length > 0) return false;
+  return r.split(/\s+/).length <= 8 && DIRECT_ASK.test(String(incoming ?? ""));
+}
+/**
+ * The fixed team line once, and no other sentence that offers or tells the same pass: an offer is untrue once it
+ * is done ("אפשר להעביר לצוות" before "העברתי את זה לצוות"). Unchanged when the fixed line is not there.
+ */
+const FIXED_PASS = /(?<![\u0590-\u05FF])העברתי\s+(?:את\s+(?:זה|השאלה|הבקשה)\s+)?לצוות|\bI've passed (?:this|it|the question) to the team\b/iu;
+const OTHER_PASS = /(?<![\u0590-\u05FF])(?:להעביר|אעביר|נעביר|לשאול\s+את|אשאל\s+את|נשאל\s+את|לבדוק\s+עם)\s+(?:\S+\s+){0,3}?(?:[לה]|לה)?צוות|והתשובה\s+תגיע\s+כאן|\b(?:pass (?:it|this) (?:on )?to the team|ask the team|check with the team|the answer will come here)\b/iu;
+export function oneTeamPass(reply: string): string {
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
+  if (!parts.some((p) => FIXED_PASS.test(p))) return reply;
+  // The most specific told pass stays ("את שאר הפריטים העברתי לצוות" over the generic line), the others go.
+  const keep = parts.filter((p) => FIXED_PASS.test(p)).sort((a, b) => b.trim().length - a.trim().length)[0];
+  // A sentence goes only when the pass is all it says; with other content only its pass clause goes
+  // ("גפן מתאים למיקסר, ולגבי הטוסטר אשאל את הצוות." keeps "גפן מתאים למיקסר.").
+  const withoutPass = (p: string, re: RegExp): string => {
+    const end = /[.!?]+\s*$/.exec(p)?.[0] ?? "";
+    const body = p.slice(0, p.length - end.length);
+    const clauses = body.split(/,\s*/);
+    const rest = clauses.filter((c) => !re.test(c) && !FIXED_PASS.test(c) && !OTHER_PASS.test(c) && !/^\s*(?:ו|and\b)?\s*(?:ולגבי|לגבי)?\s*$/iu.test(c));
+    if (rest.length === clauses.length) return "";
+    const words = rest.join(" ").trim().split(/\s+/).filter(Boolean).length;
+    return words >= 2 ? `${rest.join(", ").trim()}${end.trim() ? end.trim()[0] : "."} ` : "";
+  };
+  const kept = parts.map((p) => {
+    if (FIXED_PASS.test(p)) return p === keep ? p : withoutPass(p, FIXED_PASS);
+    // The holding lines are their own fixed text, never cut here.
+    if (p.includes(HOLD_LINE_CORE.he) || p.includes(HOLD_LINE_CORE.en)) return p;
+    return OTHER_PASS.test(p) ? withoutPass(p, OTHER_PASS) : p;
+  }).filter((p) => p !== "");
+  return kept.join("").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+/** A fit claim: "מתאים", "מתאימים", "יתאים", "נכנס", "fits". */
+const FIT_WORD = /(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|תתאים|יתאימו|נכנס|נכנסת|ייכנס)(?![\u0590-\u05FF])|\bfits?\b/iu;
 export const HOLD_LINE_ALT = { he: "אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.", en: "I'm here, and the team's answer will come here in the chat as soon as it's ready." } as const;
 /**
  * The last message the bot SENT was the holding line: the state says the line came on the last turn the bot
@@ -1360,6 +1410,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (!kept && !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
+        // How many sentences the cut took (a "cleaned" verdict may remove nothing, e.g. no_search).
+        (trace as any).cutSentences = kept.removed?.length ?? 0;
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };
@@ -1488,17 +1540,34 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // mixer named without a pad counted as answered and got no line).
         const padKeys = [...new Set(padTitles.map((p) => padLabel(p).toLowerCase()).filter((k) => k.length >= 3))];
         const sentencesNow = () => text.match(/[^.!?\n]+[.!?]*/g) ?? [];
+        // The computed match is the truth (replay d, Smoovee B: "גם בסיס המיקסר, הטוסטר והנינג'ה בלנדר מתאימים
+        // למשטח הזה" above "למידה 32×22: משטח הזזה 23*40"). Each item's pad first; a sentence claiming a fit for an
+        // item without naming THAT pad goes.
+        const pool = kbPads.length ? kbPads : padTitles;
+        const padOf = new Map(items.map((it) => [it, smallestFitting(it.size, pool)] as const));
+        // Its distinguishing name only: a generic "משטח הזזה" names every pad, so padName keeps the size then.
+        const namesOf = (pad: string | null) => (pad ? [padName(pad, pool, kbPads)].map((x) => x.toLowerCase()).filter((x) => x.length >= 3) : []);
+        const itemIn = (s: string, it: (typeof items)[number]) => [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => s.includes(k)) || namesItem(s, it.name, items.filter((o) => o !== it).map((o) => o.name));
+        {
+          const wrong = sentencesNow().filter((s) => FIT_WORD.test(s) && items.some((it) => itemIn(s, it) && padOf.get(it) && !namesOf(padOf.get(it)!).some((n) => s.toLowerCase().includes(n))));
+          if (wrong.length) {
+            text = sentencesNow().filter((s) => !wrong.includes(s)).join("").replace(/[ \t]{2,}/g, " ").trim();
+            (trace as any).fitClaimCut = wrong.length;
+          }
+        }
         const lines: string[] = [];
         const none: string[] = [];
         for (const it of items) {
           // Answered already, by its size or by its device name ("לסודה: גפן"). A "no fit" about it never reaches here:
           // the gate cuts it (ungrounded_negative_fit, "לא עלתה התאמה" included since 6e6c306a).
           const keys = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`];
-          const said = sentencesNow().some((s) => (keys.some((k) => s.includes(k)) || namesItem(s, it.name, items.filter((o) => o !== it).map((o) => o.name))) && padKeys.some((k) => s.toLowerCase().includes(k)));
+          // Answered only by a sentence naming it with ITS pad (another pad's name is no answer).
+          const own = namesOf(padOf.get(it) ?? null);
+          const said = sentencesNow().some((s) => (keys.some((k) => s.includes(k)) || namesItem(s, it.name, items.filter((o) => o !== it).map((o) => o.name))) && (own.length ? own : padKeys).some((k) => s.toLowerCase().includes(k)));
           if (said) continue;
           // The pad for a size comes from the knowledge's size table when it has one (C pinned rating, B: the
           // store's two generic "משטח הזזה" titles answered every appliance); the store's titles otherwise.
-          const pad = smallestFitting(it.size, kbPads.length ? kbPads : padTitles);
+          const pad = padOf.get(it) ?? null;
           // The pad's own name (its title without the size), never a size alone (rating 052f53ad).
           // Its distinguishing name, never a generic noun (rating 1771ba14: "משטח הזזה" three times).
           const name = pad ? padName(pad, kbPads.length ? kbPads : padTitles, kbPads) : "";
@@ -1617,7 +1686,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const bot = msgs.filter((m: any) => m?.direction === "OUTBOUND").slice(0, 2).map((m: any) => String(m.body ?? "")).join("\n");
       return [her, bot];
     };
-    const leftOver = apologyOnly(text) || (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && isCannedTeamLine(text));
+    // Or only a counter-question the cut left, on her direct question (replay d, NE'A: "איך אדע מה התת גוון" got
+    // "מה נראה אצלך?" once the gate took the explanation): never the whole reply.
+    const leftOver = apologyOnly(text) || (HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) && isCannedTeamLine(text)) || (Number((trace as any).cutSentences ?? 0) > 0 && danglingQuestion(text, String(opts.incomingMessage ?? "")));
     if (leftOver && String(trace.gate3?.rewrite ?? "none") !== "none" && !safetyConversation && (asksSomething(String(opts.incomingMessage ?? "")) || imperativeAsk(String(opts.incomingMessage ?? ""))) && !heldTurn) {
       const kb = [knowledge ?? "", ...turnTools.knowledgeText].join("\n");
       const link = HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? "")) ? howToLink(kb, linkSubjects()) : null;
@@ -1916,6 +1987,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // A fragment with an unbalanced bracket goes (rating 1771ba14).
     const f = dropBrokenFragments(reply ?? "");
     if (f.dropped) { reply = f.text; (trace as any).brokenFragments = f.dropped; }
+    // One team pass per reply (replay d, NE'A: "אפשר להעביר לצוות... והתשובה תגיע כאן בצ'אט." before the fixed line).
+    const one = oneTeamPass(reply ?? "");
+    if (one !== (reply ?? "")) { reply = one; (trace as any).teamPassDeduped = true; }
     if (reply) reply = spaceSentences(reply);
   }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."

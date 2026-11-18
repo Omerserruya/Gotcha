@@ -134,6 +134,27 @@ export function oneTimeCode(body: unknown): boolean {
   return OTP_PHRASE.test(b) && /(?<!\d)\d{4,8}(?!\d)/.test(b) && !OTP_NOT.test(b);
 }
 
+/**
+ * A seller's pitch TO the business (replay d on dev, Messenger: "שלום, אנחנו מציעים שירותי בניית אתרים במחיר מבצע,
+ * רוצים הצעת מחיר?" went to the product search and "לא מצאתי דגם"). The offering voice (we offer, we provide, I
+ * wanted to offer you) AND a service word; never with a word of her own order or purchase. In doubt, a customer.
+ */
+const OFFER_VOICE = /(?<![\u0590-\u05FF])(?:(?:אנחנו|אנו)\s+(?:\S+\s+)?(?:מציעים|מספקים|מתמחים|מקדמים|בונים|מעניקים)|(?:נשמח|אשמח)\s+להציע\s+(?:לכם|לך|לעסק)|(?:רצינו|רציתי)\s+להציע\s+(?:לכם|לך|לעסק))(?![\u0590-\u05FF])|\b(?:we (?:offer|provide|specialize in|help businesses)|(?:i|we) (?:would like|wanted) to offer you|our (?:agency|company) (?:offers|provides))\b/iu;
+const SERVICE_WORD = /(?<![\u0590-\u05FF])[ול]?(?:שירות|שירותי|בניית\s+אתרים|אתרים|קידום|שיווק|פרסום|לידים|עיצוב|פיתוח|ניהול\s+(?:רשתות|סושיאל|קמפיינים)|אריזות|הלוואות|מימון)(?![\u0590-\u05FF])|\b(?:services?|seo|marketing|websites?|web design|leads|advertising|development|social media|packaging|financing|loans)\b/iu;
+const OWN_PURCHASE = /(?<![\u0590-\u05FF])[וש]?(?:הזמנתי|ההזמנה\s+שלי|קניתי|רכשתי|המשלוח\s+שלי|הזמנה\s+מספר|להחזיר|החזרה)(?![\u0590-\u05FF])|\b(?:my order|i (?:bought|ordered|purchased)|order (?:number|#))\b/iu;
+/**
+ * A buyer introducing their own business ("אנחנו מספקים שירותי קייטרינג ורוצים להזמין מכם 50 משטחים"): an intent
+ * to order, buy or get a price FROM the business. A wholesale lead is never a pitch. "רוצים הצעת מחיר?" offered TO
+ * the business is not this.
+ */
+const BUYING = /(?<![\u0590-\u05FF])[וש]?(?:להזמין|לקנות|לרכוש|מכם|אצלכם|מעוניינים\s+ב|מעוניין\s+ב|מעוניינת\s+ב|ספק\s+(?:של\s+)?(?:\S+\s+)?(?:משטחים|מוצרים|ל)|מחפשים\s+ספק|מחיר\s+(?:לכמות|לסיטונאי|ל-?\d)|הנחת\s+כמות|כמות\s+גדולה)(?![\u0590-\u05FF])|\b(?:(?:want|would like|looking|need) to (?:order|buy|purchase)|from you|bulk|wholesale|price for \d|quote for \d|looking for a supplier)\b/iu;
+export function sellerPitch(body: unknown): boolean {
+  const b = String(body ?? "");
+  return OFFER_VOICE.test(b) && SERVICE_WORD.test(b) && !OWN_PURCHASE.test(b) && !BUYING.test(b);
+}
+/** An Instagram story mention with nothing written: it asks nothing (replay d, Smoovee A: "[Story mention]" got a question). */
+export const storyMentionOnly = (body: unknown) => /^\s*\[(?:story[ _]mention|story mention reply|אזכור\s+בסטורי|תיוג\s+בסטורי)\]\s*$/iu.test(String(body ?? ""));
+
 /** The fast path: mail no person wrote, decided with no model call. Null when it does not apply. */
 export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | null {
   const at = now.toISOString();
@@ -142,6 +163,7 @@ export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | 
   const lastIn = [...c.messages].reverse().find((m) => m.direction === "INBOUND");
   if (!lastIn) return null;
   if (oneTimeCode(lastIn.body)) return { category: "notice", confidence: 0.95, reason: "a one-time code", source: "fast", classifiedAt: at };
+  if (sellerPitch(lastIn.body)) return { category: "marketing", confidence: 0.9, reason: "a seller's offer to the business", source: "fast", classifiedAt: at };
   const why = automatedInbound({ channel: c.channel, sender: c.customerExternalId, body: lastIn.body, metadata: lastIn.metadata });
   if (!why) return null;
   // A list or a sending subdomain is marketing; a no-reply or system sender, or a notice's footer, is a notice.
