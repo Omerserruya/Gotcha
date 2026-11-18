@@ -998,7 +998,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         });
         if (picked.handled && picked.assignedAiAgentId) {
           const { processAIBot } = await import("../services/ai-bot.service");
-          const took = await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId);
+          const took = await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId, null, message.id);
           if (!took) await announceNoBotAnswers();
           return;
         }
@@ -1037,7 +1037,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         // duplicate ApprovalRequest rows. Dedupe in the dispatcher is the
         // belt-and-suspenders second line of defense.
         const { processAIBot } = await import("../services/ai-bot.service");
-        const took = await processAIBot(tenantId, conversation.id, body);
+        const took = await processAIBot(tenantId, conversation.id, body, null, null, message.id);
         // The AI did not take it (its routing automation was turned off, the
         // employee is gone): the message waits for a person, who hears it.
         if (!took) await announceNoBotAnswers();

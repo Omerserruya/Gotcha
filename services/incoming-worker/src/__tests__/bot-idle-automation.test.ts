@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const H = vi.hoisted(() => ({ config: null as any, convs: [] as any[], msgs: [] as any[], queued: [] as any[], seq: 0 }));
+const H = vi.hoisted(() => ({ config: null as any, convs: [] as any[], msgs: [] as any[], queued: [] as any[], seq: 0, states: {} as Record<string, any> }));
 
 function matches(row: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
@@ -34,7 +34,9 @@ vi.mock("@chatcenter/shared", async () => ({
         return rows.sort((x, y) => +y.createdAt - +x.createdAt)[0] ?? null;
       }),
       create: vi.fn(async (a: any) => { const m = { id: `m${++H.seq}`, createdAt: new Date(), ...a.data }; H.msgs.push(m); return m; }),
+      findMany: vi.fn(async (a: any) => H.msgs.filter((m) => m.conversationId === a.where.conversationId && m.direction === a.where.direction && (!a.where.createdAt?.gte || m.createdAt >= a.where.createdAt.gte))),
     },
+    conversationState: { findFirst: vi.fn(async (a: any) => H.states[a.where.conversationId] ?? null) },
   },
   createWorker: vi.fn(),
   idleConversationQueue: { add: vi.fn() },
@@ -60,8 +62,44 @@ const msg = (conversationId: string, direction: string, minutesAgo: number, over
 const sent = (id: string) => H.queued.filter((q) => q.conversationId === id).map((q) => q.body);
 
 beforeEach(() => {
-  H.convs = []; H.msgs = []; H.queued = []; H.seq = 0;
+  H.convs = []; H.msgs = []; H.queued = []; H.seq = 0; H.states = {};
   H.config = { reminderEnabled: true, reminderDelayMinutes: 10, reminderMessage: A, autoCloseEnabled: true, autoCloseDelayMinutes: 10, autoCloseMessage: B, channels: ["WEBCHAT"] };
+});
+
+describe("waiting on the business: no reminder, no close (2026-11-18)", () => {
+  it("★ the bot's last message passed it to the team: nothing", async () => {
+    H.convs = [conv("tp")];
+    msg("tp", "INBOUND", 13);
+    msg("tp", "OUTBOUND", 12, { body: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט." });
+    await botIdleForTenant("T");
+    expect(sent("tp")).toEqual([]);
+  });
+  it("★ an open team item in the engine's state: no reminder and, after one, no close", async () => {
+    H.convs = [conv("oi"), conv("oi2")];
+    H.states = { oi: { pending: [{ kind: "promise", text: "checking with the team: מלאי של נינג'ה שחור", at: new Date().toISOString() }] }, oi2: { pending: [{ kind: "promise", text: "checking with the team: x", at: new Date().toISOString() }] } };
+    msg("oi", "INBOUND", 13);
+    msg("oi", "OUTBOUND", 12, { body: "בדקתי." });
+    msg("oi2", "OUTBOUND", 12, { body: A, metadata: { source: "idle_reminder" } });
+    await botIdleForTenant("T");
+    expect(sent("oi")).toEqual([]);
+    expect(sent("oi2")).toEqual([]);
+    expect(H.convs.find((c) => c.id === "oi2").status).toBe("OPEN");
+  });
+  it("★ a return asked for in the last days: nothing", async () => {
+    H.convs = [conv("rt")];
+    msg("rt", "INBOUND", 14, { body: "אני רוצה להחזיר את המשטח" });
+    msg("rt", "OUTBOUND", 12, { body: "אשמח לעזור." });
+    await botIdleForTenant("T");
+    expect(sent("rt")).toEqual([]);
+  });
+  it("a team item older than 3 days no longer blocks", async () => {
+    H.convs = [conv("old")];
+    H.states = { old: { pending: [{ kind: "promise", text: "checking with the team: x", at: new Date(Date.now() - 4 * 24 * 3600_000).toISOString() }] } };
+    msg("old", "INBOUND", 13);
+    msg("old", "OUTBOUND", 12, { body: "בדקתי." });
+    await botIdleForTenant("T");
+    expect(sent("old")).toEqual([A]);
+  });
 });
 
 describe("the bot's conversation: reminder, then close", () => {

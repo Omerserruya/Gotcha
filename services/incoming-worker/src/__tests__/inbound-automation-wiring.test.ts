@@ -136,7 +136,8 @@ describe("★ one responder per inbound", () => {
     const location = { latitude: 29.5577, longitude: 34.9519, name: "נמל אילת", url: "https://www.google.com/maps?q=29.5577,34.9519" };
     const body = "[Shared location: נמל אילת (29.5577, 34.9519)]";
     await dispatch({ ...JOB, data: { ...JOB.data, normalizedMessage: { ...JOB.data.normalizedMessage, contentType: "location", messageType: "location", body, metadata: { location } } } });
-    expect(mocks.processAIBot).toHaveBeenCalledWith("t1", "c1", body);
+    // The turn carries the inbound message's id since 2026-11-18 (one reply per burst).
+    expect(mocks.processAIBot).toHaveBeenCalledWith("t1", "c1", body, null, null, expect.any(String));
     expect(outgoingMessageQueue.add).not.toHaveBeenCalled();
     expect(prisma.message.create).toHaveBeenCalledTimes(1);
     expect(prisma.message.create.mock.calls[0][0].data).toMatchObject({ direction: "INBOUND", messageType: "location", body, metadata: { location } });
@@ -146,7 +147,7 @@ describe("★ one responder per inbound", () => {
     S.conv = baseConv({ handledBy: "ai_agent", assignedAiAgentId: "maya" });
     S.messageCount = 4;
     await dispatch(JOB);
-    expect(mocks.processAIBot).toHaveBeenCalledWith("t1", "c1", "hello");
+    expect(mocks.processAIBot).toHaveBeenCalledWith("t1", "c1", "hello", null, null, expect.any(String));
   });
 
   it("an automation assigned a person while it ran: nothing else answers", async () => {
