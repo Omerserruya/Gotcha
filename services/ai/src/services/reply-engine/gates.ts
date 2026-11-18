@@ -429,7 +429,7 @@ export function infoDeniedButKnown(reply: string, knowledge: string): string[] {
 
 // Denying what the employee itself sent earlier in this conversation (prod replay 2026-11-17: a YouTube
 // link sent, then "no video link available"): its own earlier facts stand.
-const DENIES_LINK = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)?\s*(?:כרגע\s+)?(?:קישור|לינק|סרטון)|לא\s+(?:מצאתי|מצאנו|קיים|זמין)\s+(?:קישור|לינק|סרטון)|(?:קישור|לינק|סרטון)[^.!?\n]{0,20}(?:לא\s+(?:זמין|קיים|מופיע)|אין))(?![\u0590-\u05FF])|\b(?:no (?:video|link|url)\b|(?:link|video) (?:is not|isn'?t) available|(?:don'?t|do not) have (?:a|the) (?:link|video))/iu;
+const DENIES_LINK = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)?\s*(?:(?:כרגע|כאן)\s+)*(?:קישור|לינק|סרטון)|לא\s+(?:מצאתי|מצאנו|קיים|זמין)\s+(?:קישור|לינק|סרטון)|(?:קישור|לינק|סרטון)[^.!?\n]{0,20}(?:לא\s+(?:זמין|קיים|מופיע)|אין))(?![\u0590-\u05FF])|\b(?:no (?:video|link|url)\b|(?:link|video) (?:is not|isn'?t) available|(?:don'?t|do not) have (?:a|the) (?:link|video))/iu;
 const DENIES_PRICE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)\s+(?:את\s+)?(?:ה)?מחיר|המחיר\s+לא\s+(?:מופיע|זמין|ידוע))(?![\u0590-\u05FF])|\b(?:(?:price|pricing) (?:is not|isn'?t) (?:available|listed)|(?:don'?t|do not) have the price)\b/iu;
 /** Sentences denying a link, a video or a price the employee itself gave earlier in this conversation. */
 export function contradictsEarlier(reply: string, previousBotReplies: string[]): string[] {
@@ -1150,6 +1150,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
   absent.push(...ungroundedOrderAbsence(reply, i.tools).filter((x) => !absent.includes(x)));
   absent.push(...contradictsEarlier(reply, [...(i.previousBotReplies ?? []), i.earlierOutboundText ?? ""]).filter((x) => !absent.includes(x)));
+  absent.push(...deniesKnownLink(reply, `${i.grounding ?? ""}\n${i.knowledge ?? ""}`).filter((x) => !absent.includes(x)));
   // "Not on file" about something the knowledge does mention (prod replay 12: pickup "בתיאום מראש").
   absent.push(...infoDeniedButKnown(reply, i.knowledge ?? ""));
   // "The address is not in my details" while the prompt gives one (prod replay 10, Tehila).
@@ -1851,7 +1852,9 @@ export function unansweredItems(reply: string, incoming: string): string[] {
 
 /** The customer's head noun: the first content word of the ask ("מטפחת" in "מטפחת חגיגית בגווני כחול"). */
 export function headNoun(incoming: string): string | null {
-  return (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).find((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase())) ?? null;
+  // A joined "ו" is no noun of its own ("ומה עם מטפחת": rating 052f53ad read "ומה").
+  const stop = (w: string) => ASK_STOP.has(w) || STEM_STOP.has(w);
+  return (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).find((w) => { const l = w.toLowerCase(); return !stop(l) && !(/^ו[\u0590-\u05FF]{2,}/u.test(l) && stop(l.slice(1))); }) ?? null;
 }
 /**
  * Is the product of the customer's noun's kind? Its title, category or own text holds the noun. A product is
@@ -1866,7 +1869,7 @@ export function ofNoun(c: { title?: string; attributes?: Record<string, unknown>
   return !(cat && hebrew.test(cat) === hebrew.test(noun));
 }
 /** A noun's match keys: its first four letters, with and without a possible prefix letter ("מטפחת" keeps its מ). */
-function nounKeys(noun: string): string[] {
+export function nounKeys(noun: string): string[] {
   const full = String(noun ?? "").toLowerCase();
   const bare = full.replace(/^[הובלמש](?=[\u0590-\u05FF]{3,})/u, "");
   return [...new Set([full, bare].map((x) => (x.length >= 5 ? x.slice(0, 4) : x)))];
@@ -2006,6 +2009,55 @@ export function smallestFitting(base: [number, number], titles: string[]): strin
 export const apologyOnly = (text: string) => ackOnly(String(text ?? "").replace(/^\s*(?:נכון|אכן|צודקת|צודק|צודקים|you'?re right|right|true)[,!.]?\s*/iu, ""));
 
 /** Pads named with their size in the business's texts ("סמובי אליס 31*41"), as "<name> <WxD>" titles. */
+const SIZE_WORDS = new Set(["מידות", "מידה", "גודל", "גדלים", "בגודל", "במידה", "במידות", "size", "sizes", "cm", "סמ", "ס\"מ", "x"]);
 export function padsFromText(text: string): string[] {
-  return sizedItems(text).filter((x) => x.name).map((x) => `${x.name} ${x.size[0]}*${x.size[1]}`);
+  // A name that is a real word, not "מידות" or another size (rating 052f53ad: lines named only sizes).
+  return sizedItems(text).filter((x) => x.name && x.name.split(/\s+/).some((w) => /\p{L}{2,}/u.test(w) && !SIZE_WORDS.has(w.toLowerCase()))).map((x) => `${x.name} ${x.size[0]}*${x.size[1]}`);
 }
+
+
+/**
+ * Every URL in the reply as a source has it (rating 052f53ad, NE'A: "%d7%ה%d7%9e", a Hebrew letter inside the
+ * percent-encoding). One that is not verbatim in a source is replaced by the source URL it starts like (same
+ * host and the longest shared path), else its sentence goes. Run last, on the final text.
+ */
+const URL_RE = /https?:\/\/[^\s<>"'״)\]]+[^\s<>"'״)\].,;:!?]/giu;
+export function repairUrls(text: string, sources: string): { text: string; fixed: number; dropped: number } {
+  const known = [...new Set(String(sources ?? "").match(URL_RE) ?? [])];
+  let fixed = 0, dropped = 0;
+  const bad = new Set<string>();
+  let out = String(text ?? "").replace(URL_RE, (u) => {
+    if (known.includes(u)) return u;
+    // The store's home on a known host ("https://shop.co.il/") is no corruption.
+    try { const h = new URL(u).host; if (/^https?:\/\/[^/]+\/?$/i.test(u) && known.some((k) => { try { return new URL(k).host === h; } catch { return false; } })) return u; } catch { /* not a URL */ }
+    let host = "";
+    try { host = new URL(u.replace(/%(?![0-9a-f]{2})/gi, "%25")).host; } catch { host = ""; }
+    const same = known.filter((k) => { try { return new URL(k).host === host; } catch { return false; } });
+    let best = "", len = 0;
+    for (const k of same) { let i = 0; while (i < k.length && i < u.length && k[i] === u[i]) i++; if (i > len) { len = i; best = k; } }
+    // Shares its host and at least the start of the path: the source's own URL.
+    if (best && len > `https://${host}/`.length) { fixed++; return best; }
+    bad.add(u);
+    return u;
+  });
+  if (bad.size) {
+    const parts = out.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*\s*|\n+/g) ?? [out];
+    out = parts.filter((x) => { const hit = [...bad].some((b) => x.includes(b)); if (hit) dropped++; return !hit; }).join("").trim();
+  }
+  return { text: out, fixed, dropped };
+}
+
+/** "No link" while the business's data has one (rating 052f53ad: youtu.be in the product data). */
+export function deniesKnownLink(reply: string, sources: string): string[] {
+  if (!(String(sources ?? "").match(URL_RE) ?? []).length) return [];
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => DENIES_LINK.test(x)).map((x) => x.trim().slice(0, 120));
+}
+
+/** "No information" in a how-to answer: "אין לי כאן הנחיה", besides the general no-info forms. */
+export const noHowToInfo = (reply: string) => noInfo(reply) || /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו)\s+(?:(?:כרגע|כאן)\s+)*(?:הנחיה|הנחיות|הוראות|מידע|פרטים)|לא\s+(?:מצאתי|מצאנו)\s+(?:הנחיה|הוראות|מידע))(?![\u0590-\u05FF])|\b(?:no (?:instructions|guidance|information)|(?:don'?t|do not) have (?:instructions|guidance|information))\b/iu.test(String(reply ?? ""));
+
+/** A how-to or safety question about the product in use ("התהפך", "נופל", "מעצור", "בטוח"). */
+export const howToSafetyAsk = (incoming: string) => /(?<![֐-׿])[והש]?(?:התהפך|מתהפך|מתהפכת|התהפכה|נופל|נופלת|נפל|נפלה|מחליק|מחליקה|זז|זזה|מעצור|מעצורים|המעצור|המעצורים|בטוח|בטוחה|בטיחות|יציב|יציבה|איך\s+(?:מתקינים|מניחים|שמים|משתמשים|מחברים))(?![֐-׿])|\b(?:safe|safety|tip(?:s|ped)? over|falls?|slides?|stopper|stable|how (?:do i|to) (?:install|place|use|attach))\b/iu.test(String(incoming ?? ""));
+
+/** A pad's name for the reply: its title without the size ("סמובי אליס 31*41" -> "סמובי אליס"). */
+export const padLabel = (title: string) => String(title ?? "").replace(/\s*\d{2,3}(?:\.\d)?\s*[x×*X]\s*\d{2,3}(?:\.\d)?\s*(?:ס["״]?מ|cm)?/giu, "").replace(/\s{2,}/g, " ").trim() || String(title ?? "");

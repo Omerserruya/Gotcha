@@ -6,12 +6,12 @@ import { parseArgs, planReplay, gateAsOf, stagesLine, reportPath } from "../scri
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
 function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }, opts: { ownerRecent?: boolean; handovers?: Record<string, any[]> } = {}) {
-  const calls: any = { conv: [] };
+  const calls: any = { conv: [], msg: [] };
   return {
     calls,
     aIAgent: { findFirst: async () => agent },
     conversation: { findMany: async (a: any) => { calls.conv.push(a); return convs.slice(0, a.take); } },
-    message: { findMany: async ({ where }: any) => msgs[where.conversationId] ?? [], findFirst: async () => opts.ownerRecent ? { id: "x" } : null },
+    message: { findMany: async (a: any) => { calls.msg.push(a); return msgs[a.where.conversationId] ?? []; }, findFirst: async () => opts.ownerRecent ? { id: "x" } : null },
     conversationHandover: { findMany: async ({ where }: any) => opts.handovers?.[where.conversationId] ?? [] },
   };
 }
@@ -39,6 +39,23 @@ describe("replay-v2 plan", () => {
     await planReplay(parseArgs(["--tenants", "t1"]), d2);
     expect(d2.calls.conv[0].where.lastMessageAt).toBeUndefined();
     expect(() => parseBefore("yesterday")).toThrow(/ISO/);
+  });
+  it("★ --ids pins the set: exactly those conversations, no per-tenant cut; with --before, only earlier messages", async () => {
+    const { parseIds, parseBefore } = await import("../scripts/replay-v2");
+    expect(parseIds("c1, c2,c2")).toEqual(["c1", "c2"]);
+    expect(parseIds("@set.txt", () => "c1\nc2\n\nc3")).toEqual(["c1", "c2", "c3"]);
+    expect(parseIds(undefined)).toBeNull();
+    expect(() => parseIds(" , ")).toThrow(/no conversation/);
+    const d = db([{ id: "c1", assignedAiAgentId: "a" }], {});
+    await planReplay(parseArgs(["--tenants", "t1", "--ids", "c1,c2", "--before", "2026-11-18T00:00:00Z"]), d);
+    expect(d.calls.conv[0].where.id).toEqual({ in: ["c1", "c2"] });
+    expect(d.calls.conv[0].where.lastMessageAt).toBeUndefined();
+    expect(d.calls.conv[0].take).toBeUndefined();
+    expect(d.calls.msg[0].where.createdAt).toEqual({ lt: new Date("2026-11-18T00:00:00Z") });
+    // Without --ids, --before selects by last message and every message of those conversations is read.
+    const d2 = db([{ id: "c1", assignedAiAgentId: "a" }], {});
+    await planReplay(parseArgs(["--tenants", "t1", "--before", "2026-11-18T00:00:00Z"]), d2);
+    expect(d2.calls.msg[0].where.createdAt).toBeUndefined();
     expect(parseBefore(undefined)).toBeNull();
   });
   it("one turn per customer message, as of it, with what was actually sent after it; the assigned employee first", async () => {

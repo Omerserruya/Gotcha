@@ -2665,3 +2665,40 @@ describe("6e6c306a five-devices", () => {
     expect(ungroundedNegativeFit("לטוסטר לא עלתה התאמה לפי המידות.", "טוסטר 24x15", ["סמובי גפן 26*20"], "")).toHaveLength(1);
   });
 });
+
+/** Rating on 052f53ad (2026-11-18). */
+describe("052f53ad rating fixes", () => {
+  it("★ a URL not in any source: the source's own URL with the same start, else the sentence goes", async () => {
+    const { repairUrls } = await import("../services/reply-engine/gates");
+    const src = "Product: https://chanivainberger.co.il/product/%d7%94%d7%9e-abc and https://shop.example/";
+    const bad = "בעמוד המוצר: https://chanivainberger.co.il/product/%d7%ה%d7%9e-abc תודה.";
+    const r = repairUrls(bad, src);
+    expect(r.text).toContain("https://chanivainberger.co.il/product/%d7%94%d7%9e-abc");
+    expect(r.fixed).toBe(1);
+    const u = repairUrls("הנה: https://evil.example/x. ואחלה יום.", src);
+    expect(u.text).not.toMatch(/evil/);
+    expect(u.text).toMatch(/אחלה יום/);
+    expect(repairUrls("באתר: https://shop.example/", src).fixed).toBe(0);
+    expect(repairUrls("באתר: https://shop.example/", src).dropped).toBe(0);
+    // The store's home on a host the sources know, though not verbatim: kept.
+    expect(repairUrls("באתר: https://chanivainberger.co.il/ תודה.", src).text).toContain("https://chanivainberger.co.il/");
+    // A URL denial in gate3 when the data has one.
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const v = gate3({ ...baseG3, reply: "אין לי כאן קישור לסרטון.", grounding: "סרטון: https://youtu.be/abc" } as any);
+    expect(JSON.stringify(v)).toMatch(/קישור לסרטון/);
+  });
+  it("★ 'no link' while the data has one is an absence claim", async () => {
+    const { deniesKnownLink } = await import("../services/reply-engine/gates");
+    expect(deniesKnownLink("אין לי כאן קישור לסרטון.", "סרטון: https://youtu.be/abc")).toHaveLength(1);
+    expect(deniesKnownLink("אין לי כאן קישור לסרטון.", "אין סרטון")).toEqual([]);
+  });
+  it("★ how-to and safety asks; pad labels; pads named only by a size are no pads", async () => {
+    const { howToSafetyAsk, padLabel, padsFromText } = await import("../services/reply-engine/gates");
+    expect(howToSafetyAsk("הבלנדר התהפך, איפה שמים את המעצורים?")).toBe(true);
+    expect(howToSafetyAsk("זה בטוח לשים על השיש?")).toBe(true);
+    expect(howToSafetyAsk("כמה זה עולה?")).toBe(false);
+    expect(padLabel("סמובי אליס 31*41")).toBe("סמובי אליס");
+    expect(padLabel("סמובי גפן 26x20 ס\"מ")).toBe("סמובי גפן");
+    expect(padsFromText("מידות 31*41, סמובי אליס 31*41")).toEqual(["סמובי אליס 31*41"]);
+  });
+});

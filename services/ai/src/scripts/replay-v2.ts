@@ -28,7 +28,7 @@ import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
 import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
 
-interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null }
+interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null; ids: string[] | null }
 
 export function parseArgs(argv: string[]): Args {
   const get = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
@@ -46,7 +46,18 @@ export function parseArgs(argv: string[]): Args {
     // A frozen set: only conversations whose last message is before this time (2026-11-18: new live chats pushed
     // the payment thread out of the 15 most recent, so two runs replayed different conversations).
     before: parseBefore(get("--before")),
+    // A pinned set: exactly these conversations (2026-11-18: --before still drifted as last messages moved).
+    ids: parseIds(get("--ids")),
   };
+}
+
+/** "--ids a,b,c" or "--ids @file" (one id per line or comma separated); null when absent; empty is refused. */
+export function parseIds(v: string | undefined, read: (p: string) => string = (p) => fs.readFileSync(p, "utf8")): string[] | null {
+  if (v === undefined) return null;
+  const raw = v.startsWith("@") ? read(v.slice(1)) : v;
+  const ids = [...new Set(raw.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean))];
+  if (!ids.length) throw new Error("--ids names no conversation");
+  return ids;
 }
 
 /** "--before <ISO>": a valid time, or null when absent; an invalid one is refused, never ignored. */
@@ -124,10 +135,11 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
         tenantId, isTest: false, origin: "LIVE",
         NOT: { customerExternalId: { startsWith: "sandbox:" } },
         messages: { some: { direction: "INBOUND" } },
-        ...(args.before ? { lastMessageAt: { lt: args.before } } : {}),
+        // Pinned ids: exactly those (every one of them, whatever the per-tenant count); else the newest before --before.
+        ...(args.ids ? { id: { in: args.ids } } : args.before ? { lastMessageAt: { lt: args.before } } : {}),
       },
       orderBy: { lastMessageAt: "desc" },
-      take: args.perTenant,
+      ...(args.ids ? {} : { take: args.perTenant }),
       select: { id: true, assignedAiAgentId: true, channel: true, customerExternalId: true },
     });
     const turns: PlannedTurn[] = [];
@@ -135,7 +147,8 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
       const aiAgentId = c.assignedAiAgentId ?? fallbackAgent?.id;
       if (!aiAgentId) continue;
       const msgs = await db.message.findMany({
-        where: { tenantId, conversationId: c.id, origin: "LIVE" },
+        // With pinned ids and --before, only the messages before it: the same turns run after run.
+        where: { tenantId, conversationId: c.id, origin: "LIVE", ...(args.ids && args.before ? { createdAt: { lt: args.before } } : {}) },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true, direction: true, body: true, createdAt: true, senderName: true, metadata: true, origin: true, messageType: true },
       });

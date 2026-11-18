@@ -1657,6 +1657,8 @@ describe("657e5f85 Crispy trace: the device table on a fit ask", () => {
 
 describe("ed780586 rating: engine passes", () => {
   it("★ items never dropped silently: the rest go to the team", async () => {
+    // The devices are the business's own (its device table): since 052f53ad only those count as items.
+    h.lexical = [{ content: "טבלת התאמה: מיקסר, טוסטר, בלנדר", score: 0.9, documentTitle: "t", chunkIndex: 1, documentId: "d" }];
     h.responses.push(
       { toolCalls: [tc("it1", "woocommerce.list_products", { query: "משטח" })] },
       { toolCalls: [respond("it2", { reply: "למיקסר מתאים Canvas Tote." })] },
@@ -1762,9 +1764,9 @@ describe("83086356 rating: engine passes", () => {
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר קפיץ 24x15 נינג׳ה בלנדר 24x18" }, "autonomous");
     const reply = r.reply ?? "";
-    expect(reply).toMatch(/32×22: סמובי אליס 31\*41/);
-    expect(reply).toMatch(/24×15: סמובי גפן 26\*20/);
-    expect(reply).toMatch(/24×18: סמובי גפן 26\*20/);
+    expect(reply).toMatch(/32×22: סמובי אליס\./);
+    expect(reply).toMatch(/24×15: סמובי גפן\./);
+    expect(reply).toMatch(/24×18: סמובי גפן\./);
     expect(reply).not.toMatch(/לא עלתה התאמה/);
     expect(reply).not.toMatch(/שמופיעים כאן/);
     // Every size answered: no team line over them, and no team question.
@@ -1822,6 +1824,62 @@ describe("Crispy, verified (2026-11-18, the real Smoovee table line)", () => {
   it("★ 'מתאים לנינג'ה סלושי, לא לקריספי' is a negative fit claim", async () => {
     const { ungroundedNegativeFit } = await import("../services/reply-engine/gates");
     expect(ungroundedNegativeFit("המשטח שמופיע כאן מתאים לפי היצרן לנינג'ה סלושי, לא לקריספי.", "ולנינגה קריספי", ["סמובי אליס 31*41"], "")).toHaveLength(1);
+  });
+});
+
+describe("052f53ad rating: engine passes", () => {
+  it("★ a URL no source has never reaches the customer", async () => {
+    h.responses.push({ toolCalls: [respond("ur1", { reply: "אפשר לקנות כאן: https://evil.example/buy-now. תודה שפנית!" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה קונים?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/evil\.example/);
+    expect((r.trace as any).urlsRepaired?.dropped).toBe(1);
+  });
+  it("★ a how-to or safety question answered 'no information': the team in the same turn, the question may follow", async () => {
+    // No safety word: the how-to rule itself.
+    h.responses.push({ toolCalls: [respond("hs1", { reply: "אין לי כאן הנחיה למיקום המעצורים. מה הדגם?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה שמים את המעצורים?" }, "autonomous");
+    expect(r.reply).toMatch(/מה הדגם/);
+    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    expect((r.trace as any).howToToTeam).toBe(true);
+    // A tipping appliance: the safety handoff, in the same turn.
+    h.responses.push({ toolCalls: [respond("hs2", { reply: "אין לי כאן הנחיה למיקום המעצורים. מה הדגם?" })] });
+    const s = await runReplyEngineTurn({ ...opts, incomingMessage: "הבלנדר התהפך, איפה שמים את המעצורים?" }, "autonomous");
+    expect(!!((s.trace as any).safetyHandoff || (s.trace as any).howToToTeam)).toBe(true);
+  });
+  it("★ no 'still being checked' on top of a product answer for a non-held open item", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: תיק בד כחול", at: new Date().toISOString() }], turnCount: 4 });
+    try {
+      h.responses.push({ toolCalls: [tc("so1", "woocommerce.list_products", { query: "תיק" })] }, { toolCalls: [respond("so2", { reply: "Canvas Tote עולה ₪79." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ויש תיק בד כחול?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+  it("★ products of her noun returned: the fallback shows them, not the team line", async () => {
+    h.groundTitle = "אנה";
+    h.groundCategory = "מטפחות";
+    h.responses.push(
+      { toolCalls: [tc("fk1", "woocommerce.list_products", { query: "מטפחת כחולה" })] },
+      { toolCalls: [respond("fk2", { reply: "יש לנו ב-₪999." })] },
+      { toolCalls: [respond("fk3", { reply: "יש לנו ב-₪888." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה עם מטפחת בגווני כחול" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/העברתי את השאלה לצוות/);
+    expect(r.reply ?? "").toMatch(/אפשרויות/);
+  });
+  it("★ unanswered items only of kinds the data knows; never an adjective", async () => {
+    h.lexical = [{ content: "טבלה: מיקסר - סמובי אליס; טוסטר - סמובי גפן; קרם לחות", score: 0.9, documentTitle: "t", chunkIndex: 1, documentId: "d" }];
+    h.responses.push({ toolCalls: [tc("ui1", "woocommerce.list_products", { query: "קרם" })] }, { toolCalls: [respond("ui2", { reply: "Canvas Tote עולה ₪79." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "קרם, לעדינות" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/שאר הפריטים/);
+  });
+  it("★ a size line names the pad, never only a size", async () => {
+    h.groundTitle = "סמובי אליס 31*41";
+    h.extraTitle = "סמובי גפן 26*20";
+    h.responses.push({ toolCalls: [tc("pl1", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("pl2", { reply: "הנה ההתאמות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 32x22 טוסטר 24x15" }, "autonomous");
+    expect(r.reply ?? "").toMatch(/32×22: סמובי אליס\./);
+    expect(r.reply ?? "").toMatch(/24×15: סמובי גפן\./);
   });
 });
 

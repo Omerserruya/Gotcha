@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, repairUrls, howToSafetyAsk, padLabel, noHowToInfo, nounKeys } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -1334,7 +1334,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // of that kind, no product fallback at all.
         const noun = headNoun(String(opts.incomingMessage ?? ""));
         const ofTheirs = noun ? (candidates as any[]).filter((c: any) => ofNoun(c, noun)) : (candidates as any[]);
-        const grounded = productAskNow(opts.incomingMessage ?? "") && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
+        // Also when the turn's products ARE her noun by title or category, whatever the wording (rating 052f53ad,
+        // Tehila: five scarves for her scarf, and the team line).
+        const keys = noun ? nounKeys(noun) : [];
+        const ofHerKind = keys.length ? (candidates as any[]).filter((c: any) => { const hay = `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")}`.toLowerCase(); return keys.some((k) => hay.includes(k)); }) : [];
+        const grounded = (productAskNow(opts.incomingMessage ?? "") || ofHerKind.length > 0) && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
@@ -1444,7 +1448,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const said = [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => text.includes(k)) || namesItem(text, it.name, items.filter((o) => o !== it).map((o) => o.name));
           if (said) continue;
           const pad = smallestFitting(it.size, padTitles);
-          if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${pad}.` : `למידה ${fmt(it.size)}: ${pad}.`);
+          // The pad's own name (its title without the size), never a size alone (rating 052f53ad).
+          if (pad) lines.push(locale === "en" ? `For ${fmt(it.size)}: ${padLabel(pad)}.` : `למידה ${fmt(it.size)}: ${padLabel(pad)}.`);
           else none.push(fmt(it.size));
         }
         if (lines.length || none.length) {
@@ -1620,12 +1625,25 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Several items asked and some never answered: never dropped silently (rating ed780586: a toaster and a
   // blender of five devices). The rest go to the team, and a fixed line says so.
   if (output?.reply && !output.handoff && !heldTurn && candidates.length > 0) {
-    const missing = unansweredItems(output.reply, String(opts.incomingMessage ?? ""));
+    // Only items the business's data knows as kinds (a device, a product word), never an adjective
+    // (rating 052f53ad, NE'A: "לעדינות" made it "several items").
+    // The data itself: product titles and categories and the knowledge text, never the tool arguments (they
+    // hold the customer's own words).
+    const known = `${(candidates as any[]).map((c: any) => `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")}`).join("\n")}\n${knowledge ?? ""}\n${turnTools.knowledgeText.join("\n")}`.toLowerCase();
+    const askedItems = unansweredItems("", String(opts.incomingMessage ?? "")).filter((w) => nounKeys(w).some((k) => k.length >= 3 && known.includes(k)));
+    const missing = askedItems.length >= 2 ? unansweredItems(output.reply, String(opts.incomingMessage ?? "")).filter((w) => askedItems.includes(w)) : [];
     if (missing.length) {
       const told = locale === "en" ? "I've passed the other items you asked about to the team, and the answer will come here in the chat." : "את שאר הפריטים ששאלת עליהם העברתי לצוות, והתשובה תגיע כאן בצ'אט.";
       output = { ...output, reply: `${output.reply.trim()} ${told}`, teamQuestion: output.teamQuestion ?? `items still to answer: ${missing.join(", ")} (${String(opts.incomingMessage ?? "").slice(0, 200)})` };
       (trace as any).itemsToTeam = missing;
     }
+  }
+  // A how-to or safety question answered "no information" goes to the team in the SAME turn (rating 052f53ad: a
+  // tipping appliance got a question back and the team only next turn). A question of the model's may follow.
+  if (output?.reply && !output.handoff && !output.teamQuestion && !heldTurn && howToSafetyAsk(opts.incomingMessage ?? "") && noHowToInfo(output.reply) && !teamPassIn(output.reply)) {
+    const told = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    output = { ...output, reply: `${output.reply.trim()} ${told}`, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
+    (trace as any).howToToTeam = true;
   }
   // A restock or date ask with nothing to go on is the team's (rating ed780586: "בדקי בדף המוצר"):
   // "check the page" and "no information" go, and the question is passed on with the fixed line.
@@ -1667,7 +1685,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The customer is back on a subject the team already has (prod replay 2026-11-17, NE'A): say it is
   // with the team, naming it, when the reply does not.
   const openOnIt = openTeam.find((t) => sameIssue(t, String(opts.incomingMessage ?? "")));
-  if (output?.reply && openOnIt && !output.handoff && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
+  // Only a held kind (payment, damage, safety), or a reply that is no product answer: never on top of a product
+  // answer for an item a search failure opened (rating 052f53ad).
+  const productAnswer = !!output?.reply && ((candidates as any[]).some((c: any) => c?.title && output!.reply!.includes(String(c.title))) || /₪|ש["״]ח/u.test(output.reply));
+  if (output?.reply && openOnIt && (holdingItem([openOnIt]) || !productAnswer) && !output.handoff && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
     output = { ...output, reply: `${output.reply.trim()} ${stillCheckingLine(openOnIt, locale)}` };
     (trace as any).openItemMentioned = true;
   }
@@ -1720,6 +1741,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (clean !== prose) (trace as any).sanitized = true;
   // One message, no product twice and no line twice (prod replay 2026-11-17, both Smoovee runs).
   let reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
+  // Every URL as a source has it (rating 052f53ad: a Hebrew letter inside a percent-encoding): else the source's
+  // own URL with the same start, else its sentence goes. Sources: the tools, the knowledge, the products, what was sent.
+  {
+    const site = String((company as any)?.websiteDomain ?? "").trim();
+    const sources = [groundingNow(), knowledge ?? "", ...turnTools.knowledgeText, candidates.map((c: any) => `${c?.url ?? ""} ${c?.imageUrl ?? ""}`).join(" "), earlierOutboundText, site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : ""].join("\n");
+    const r = repairUrls(reply, sources);
+    if (r.fixed || r.dropped) { reply = r.text; (trace as any).urlsRepaired = { fixed: r.fixed, dropped: r.dropped }; }
+  }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."
   // alone on "טוש אני רוצה"): a question that moves the choice on instead. Cards on a cards channel are
   // what it introduces, so there it stays.

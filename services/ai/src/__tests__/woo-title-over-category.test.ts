@@ -97,6 +97,11 @@ describe("a title of the customer's own word before the category", () => {
     // Never one from the other gender's category.
     expect(out.map((x: any) => x.name)).not.toContain("בובון לגבר");
   });
+  it("a plural of a name's word ('בובות') finds the names that start like it ('בובון'), by the existing forms", async () => {
+    const run = store();
+    const out = await run({ query: "בובות קשירה נמוכה", per_page: 10 });
+    expect(out.slice(0, 2).map((x: any) => x.name).sort()).toEqual(["בובון חצי שטוח", "בובון שטוח"]);
+  });
   it("the words the model dropped", async () => {
     const { droppedCustomerWords } = await import("../services/connectors/woocommerce.adapter");
     expect(droppedCustomerWords("בובון לקשירה נמוכה", "מטפחת לקשירה נמוכה")).toEqual(["בובון"]);
