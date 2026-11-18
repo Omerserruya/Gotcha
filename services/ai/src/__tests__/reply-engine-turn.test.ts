@@ -1572,6 +1572,24 @@ describe("d7782dd2 rating: engine passes", () => {
   });
 });
 
+describe("93f9fdff rating: engine passes", () => {
+  it("★ a reply with a dotted URL keeps it whole", async () => {
+    const url = "https://chanivainberger.co.il/product/makeup-base/";
+    h.responses.push({ toolCalls: [respond("u1", { reply: `אפשר לראות בעמוד המוצר: ${url} נשמח לעזור.` })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה רואים את המוצר?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/https:\/\/chanivainberger\.co\.(?!il)/);
+  });
+  it("★ holding mode: a size sentence does not hang on the holding line", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
+    try {
+      h.responses.push({ toolCalls: [respond("hz1", { reply: "אגב, יש לנו גם תיקי בד חדשים בקולקציה. החיוב עדיין בבדיקה." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+      expect(r.reply ?? "").not.toMatch(/תיקי בד/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+});
+
 describe("39b65d68 regression: engine passes", () => {
   it("★ a raw handle never reaches the greeting, and the model sees no name", async () => {
     const { prisma } = await import("@chatcenter/shared");

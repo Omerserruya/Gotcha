@@ -2431,3 +2431,62 @@ describe("d7782dd2 rating fixes", () => {
     expect(plain).not.toMatch(/youtu/);
   });
 });
+
+/** Rating on 93f9fdff (2026-11-18, LIVE). */
+describe("93f9fdff rating fixes", () => {
+  const URL = "https://chanivainberger.co.il/product/makeup-base.v2/?ref=a.b";
+  it("★ a URL is one unit in every sentence cut", async () => {
+    const g = await import("../services/reply-engine/gates");
+    const reply = `אפשר לראות בעמוד המוצר: ${URL}. נשמח לעזור.`;
+    expect(g.foreignLanguageSentences(reply)).toEqual([]);
+    expect(g.cleanStyle(reply, ["mixed_language"], [], "", "", [], null)).toContain(URL);
+    expect(g.dropDanglingPrice(reply, [])).toContain(URL);
+    expect(g.stripFactProblems(reply, [{ kind: "card_reference", claims: ["משהו אחר לגמרי"] }] as any)).toContain(URL);
+    expect(g.holdReply(`${reply}`, "", { details: false, locale: "he" })).toContain(URL);
+    // The sentence after the URL is still its own sentence.
+    expect(g.stripFactProblems(reply, [{ kind: "card_reference", claims: ["נשמח לעזור"] }] as any)).not.toMatch(/נשמח/);
+  });
+  it("★ narrated reasoning about the results is internal", async () => {
+    const { gate3, cleanStyle } = await import("../services/reply-engine/gates");
+    const reply = "הקשתות שמופיעות באתר לא תואמות למה שתיארת, אז לא אציע אותן. איזה צבע את מחפשת?";
+    const g = gate3({ reply, claims: [], cards: [], candidateCount: 2, tools: [], grounding: "", locale: "he", incomingMessage: "קשת רחבה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    expect(g.problems.some((p: any) => p.kind === "style" && p.codes.includes("internal_reasoning"))).toBe(true);
+    expect(cleanStyle(reply, ["internal_reasoning"], [], "", "", [], null)).toBe("איזה צבע את מחפשת?");
+  });
+  it("★ a fit the product's own text states is not a mismatch", async () => {
+    const { deviceMismatch } = await import("../services/reply-engine/gates");
+    // It names their model (and another): it fits.
+    expect(deviceMismatch("אליס מתאים לנינג'ה קריספי ולנינג'ה מקס.", "יש לכם משטח שמתאים לנינג'ה קריספי שלי?")).toEqual([]);
+    // It names another model only: a mismatch, as before.
+    expect(deviceMismatch("סמובי גפן מתאימה לנינג'ה סלושי.", "יש לכם משטח שמתאים לנינג'ה קריספי שלי?")).toHaveLength(1);
+  });
+  it("★ a product named by its own word, said to fit, is a named pick (the Crispy reply)", async () => {
+    const { gate3, namesCandidate } = await import("../services/reply-engine/gates");
+    expect(namesCandidate("אליס מתאים לנינג'ה קריספי.", ["סמובי אליס 35*28", "סמובי אלכסה 30*40"])).toBe(true);
+    expect(namesCandidate("סמובי מתאים לך.", ["סמובי אליס 35*28", "סמובי אלכסה 30*40"])).toBe(false);
+    const g = gate3({ reply: "אליס מתאים לנינג'ה קריספי.", claims: [], cards: ["PRODUCT_1"], candidateCount: 2, candidateTitles: ["סמובי אליס 35*28", "סמובי אלכסה 30*40"], tools: [], grounding: "סמובי אליס 35*28 מתאים ל: נינג'ה קריספי", locale: "he", incomingMessage: "איזה משטח מתאים לנינג'ה קריספי 4 ב-1?", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: true, handedOff: false, approvalPending: false } as any);
+    expect(g.problems.map((p: any) => p.kind)).not.toContain("unnamed_recommendation");
+    expect(g.problems.map((p: any) => p.kind)).not.toContain("no_recommendation");
+  });
+  it("★ narrated reasoning searches again with the customer's own words", async () => {
+    const { autoLookups } = await import("../services/reply-engine/gates");
+    const auto = autoLookups([{ kind: "style", codes: ["internal_reasoning"] }] as any, "קשת רחבה לשיער", ["woocommerce.list_products"], []);
+    expect(auto[0]?.function.name).toBe("woocommerce.list_products");
+    expect(JSON.parse(auto[0].function.arguments).query).toMatch(/קשת/);
+  });
+  it("★ 'the search returned no match' after a timeout is narration, and a fit ask goes to the knowledge", async () => {
+    const { failureNarration, gate3 } = await import("../services/reply-engine/gates");
+    expect(failureNarration("החיפוש לא החזיר התאמה למכשיר שלך.")).toBe(true);
+    const timeout = [{ callId: "1", tool: "woocommerce.list_products", args: { query: "משטח" }, decision: "timeout", content: "", ms: 8000, outcome: "timeout" }] as any;
+    const g = gate3({ reply: "החיפוש לא החזיר התאמה.", claims: [], cards: [], candidateCount: 0, tools: timeout, grounding: "", locale: "he", incomingMessage: "איזה משטח מתאים לנינג'ה קריספי?", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: ["woocommerce.list_products", "search_knowledge"], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    expect(g.problems.find((p: any) => p.kind === "gave_up_search")).toMatchObject({ fromKnowledge: true });
+  });
+  it("★ holding mode: another topic's sentence only when the customer asked about one", async () => {
+    const { holdReply, asksOtherTopic } = await import("../services/reply-engine/gates");
+    expect(asksOtherTopic("יש חדש?")).toBe(false);
+    expect(asksOtherTopic("החיוב עדיין לא חזר")).toBe(false);
+    expect(asksOtherTopic("ומה המידה של אלכסה?")).toBe(true);
+    const out = holdReply("סמובי אלכסה היא במידה 35×28 ס\"מ.", "החיוב עדיין בבדיקה אצל הצוות.", { details: false, locale: "he", keepOther: false });
+    expect(out).toBe("החיוב עדיין בבדיקה אצל הצוות.");
+  });
+});

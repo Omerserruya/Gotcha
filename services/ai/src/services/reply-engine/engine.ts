@@ -32,7 +32,7 @@ import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, asksOtherTopic } from "./gates";
 import { newTurnTools, runToolRound, type ModelToolCall, type RunnerEnv } from "./tools";
 
 export interface EngineTurnOpts {
@@ -299,7 +299,7 @@ const wordCount = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9
 /** The sentences of `before` that are not in `after` (what a cleanup cut). */
 export function removedSentences(before: string, after: string): string[] {
   const keep = String(after ?? "");
-  return (String(before ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
+  return (String(before ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
 }
 
 /** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
@@ -358,7 +358,7 @@ export function placeholderOnly(text: string | null | undefined): boolean {
 /** Drops a sentence that repeats one already in the same reply. */
 export function dedupeSentences(reply: string): string {
   const seen = new Set<string>();
-  const parts = String(reply ?? "").match(/[^.!?\n]+[.!?]*\s*/g) ?? [String(reply ?? "")];
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n])+[.!?]*\s*/g) ?? [String(reply ?? "")];
   return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("").trim();
 }
 
@@ -1423,7 +1423,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const sinceSpoke = Number.isFinite(spokeAt) ? turnNo - spokeAt : inboundSince <= 1 ? 1 : 2;
           const lineNow = !recentlyHeld || sinceSpoke >= 2 ? holdLine : "";
           text = onSubject
-            ? holdReply(text, lineNow, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow) })
+            // Another topic's sentences only when the customer asked about one this turn (rating 93f9fdff: a size
+            // sentence hung on the holding line).
+            ? holdReply(text, lineNow, { details: appended, locale: holdLoc, procedural: proceduralAsk(incomingNow), keepOther: asksOtherTopic(incomingNow) })
             : (holdReply(text, "", { details: false, locale: holdLoc }) || lineNow);
           if (text.includes(HOLD_LINE_CORE[holdLoc])) holdFacts[HOLD_LINE_FACT] = String(turnNo);
         }
