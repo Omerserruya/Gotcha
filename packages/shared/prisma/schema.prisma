@@ -332,6 +332,10 @@ model ChannelAccount {
   displayName String      @map("display_name")
   credentials Json        @default("{}") // { accessToken, appSecret, ... }
   isActive    Boolean     @default(true) @map("is_active")
+  /// The relevance filter on this account (2026-11-18, Omer): the business decides per connected channel.
+  /// Off: nothing on it is classified, the AI is never held back by a label, and its conversations never
+  /// show as not relevant (their labels are kept and come back when it is on). A person's override wins.
+  relevanceFilterEnabled Boolean @default(true) @map("relevance_filter_enabled")
 
   // Connection lifecycle
   connectionStatus ChannelConnectionStatus @default(CONNECTED) @map("connection_status")
