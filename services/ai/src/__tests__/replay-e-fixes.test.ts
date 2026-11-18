@@ -552,3 +552,48 @@ describe("48f3a261 verify", () => {
     expect(stripFactProblems(x, [{ kind: "ungrounded_absence", claims: [x] }] as any)).toBe("");
   });
 });
+
+describe("92486ac8 verify, with the inputs of a real turn", () => {
+  const KB = "מייקאפ Cover me לכל סוגי העור, כיסוי בינוני. אפשר למרוח עם מברשת או ספוגית. מתאים לעור יבש. גוונים: Sand, Beige.\nטוש גבות Miss eyebrows למילוי גבות, עמיד במים. מומלץ לבדוק את הגוון על פרק כף היד לפני קנייה.";
+  const g3 = async (reply: string, incoming: string) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, candidateTitles: [], tools: [], grounding: "", knowledge: KB, locale: "he", incomingMessage: incoming, isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: ["search_knowledge"], shopFloor: false, handedOff: false, approvalPending: false } as any).problems.map((p: any) => p.kind);
+  };
+  it("★ A: the vein explanation passes with the whole knowledge as evidence; product colours never do", async () => {
+    expect(await g3("אפשר לבדוק את הוורידים בפרק כף היד: כחולים או סגולים מצביעים על תת-גוון קר, ירוקים על חם.", "איך אדע מה התת גוון")).not.toContain("ungrounded_attribute");
+    for (const r of ["המייקאפ מגיע גם בגוון כחול.", "המייקאפ בגוון כחול עמוק.", "ל-Cover me יש גם גוון ורוד.", "Cover me קיים גם בחום כהה.", "Cover me בגוון ורוד עמוק.", "למייקאפ יש גם גוון ורוד."]) {
+      expect(await g3(r, "איך אדע מה התת גוון"), r).toContain("ungrounded_attribute");
+    }
+    // A body or attribute word opening the sentence is no product, even when the evidence has it.
+    expect(ungroundedAttribute("העור שלך בתת גוון חם אם הוורידים ירוקים.", "עור יבש זקוק ללחות.", "איך אדע מה התת גוון")).toEqual([]);
+  });
+  it("★ B: only a restock statement for the item the caveat names makes it false; numbers never", () => {
+    const x = "אין לנו כרגע תאריך לחידוש המלאי של אליס שחור.";
+    for (const src of ["סמובי אליס 20×30 ס\"מ במחיר 69.90 ש\"ח. אליס שחור אזל מהמלאי.", "שירות לקוחות 24/7. משלוח תוך 3-5 ימי עסקים.", "אריאל 15.4×23 ס\"מ. אליס שחור אזל.", "הזמנה 97858 מתאריך 15.11 בוטלה.", "גפן לבן יחזור למלאי ב-01.12. אליס שחור אזל."]) {
+      expect(caveatHolds(x, src), src).toBe(true);
+    }
+    expect(caveatHolds(x, "אליס שחור יחזור למלאי ב-01.12.")).toBe(false);
+  });
+  it("★ C: a video ask in real phrasing; a video word that qualifies another noun is none", () => {
+    for (const v of ["היי, אשמח לקבל סרטון הדרכה", "אפשר לקבל סרטון הדרכה לטוש?", "תוכלי לשלוח לי סרטון הדרכה?", "שלחי לי סרטון בבקשה", "יש לך אולי סרטון הדרכה?", "איך משתמשים בזה? יש סרטון?", "מחפשת סרטון הדרכה לטוש הגבות", "ראיתי שיש סרטון, אפשר קישור?", "is there a tutorial for the brow pen?", "יש לכם סרטון הדרכה לכביסה?", "איפה הסרטון", "אשמח להסבר /סרטון"]) {
+      expect(videoAsk(v), v).toBe(true);
+      expect(productAskNow(v), v).toBe(false);
+    }
+    for (const v of ["יש לכם מעמד לצילום סרטונים?", "מחפשת תאורה לסרטונים", "יש לכם חצובה לסרטוני טיקטוק?", "יש לכם מצלמת וידאו?", "אשמח להסבר על המוצר"]) expect(videoAsk(v), v).toBe(false);
+  });
+  it("★ D: the ש must open the clause that holds the fit verb; \"לא בטוח ש\" is a caveat", () => {
+    const titles = ["סמובי אסף", "סמובי אליס"];
+    for (const r of ["אין מידע על שינוי במידות, סמובי אסף מתאים לנינג'ה קריספי.", "אין לנו מידע שסותר את זה: סמובי אסף מתאים לנינג'ה קריספי.", "לא ידוע על שום בעיה וסמובי אסף מתאים לנינג'ה קריספי."]) {
+      expect(ungroundedPositiveFit(r, "מה מתאים לנינג'ה קריספי?", titles, "", ""), r).toHaveLength(1);
+    }
+    expect(ungroundedPositiveFit("לא בטוח שסמובי אסף מתאים לנינג'ה קריספי.", "מה מתאים לנינג'ה קריספי?", titles, "", "")).toEqual([]);
+    // A ו that opens a new clause ends the ש clause: the fit after it is a claim.
+    expect(ungroundedPositiveFit("לא מצוין שהוא קטן וסמובי אסף מתאים לנינג'ה קריספי.", "מה מתאים לנינג'ה קריספי?", titles, "", "")).toHaveLength(1);
+  });
+  it("★ E: a definite adjective after a bare word marks the name; an indefinite one a common noun", () => {
+    const smoovee = [{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }];
+    expect(referredCandidates(smoovee, "ממליצים על גפן הקטנה.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "קרם יום" }, { title: "סרום לילה" }, { title: "קרם לחות" }], "כדאי לבחור בלחות גבוהה.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "מלאני גדולה" }, { title: "מלאני קטנה" }, { title: "גפן למכונות קפה" }], "כדאי לבחור במלאני גדולה.", "")).toEqual([0]);
+  });
+});
