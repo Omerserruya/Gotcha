@@ -133,6 +133,11 @@ function TopicCard({
   useEffect(() => {
     if (confirming) backButton.current?.focus();
   }, [confirming]);
+  // "ביטול" and Escape alike: back where the reader was, on "דחיית הנושא".
+  const cancelConfirm = () => {
+    setConfirming(false);
+    requestAnimationFrame(() => rejectButton.current?.focus());
+  };
 
   const waiting = open.filter((item) => !saved.has(item.candidateId));
   const left = waiting.filter((item) => choiceMissing(choices[item.candidateId] ?? null)).length;
@@ -247,7 +252,18 @@ function TopicCard({
           {t('rejected')}
         </p>
       ) : canWrite && confirming ? (
-        <div className={styles.confirm} data-testid={`topic-reject-confirm-${topic.topicId}`}>
+        <div
+          className={styles.confirm}
+          data-testid={`topic-reject-confirm-${topic.topicId}`}
+          onKeyDown={(event) => {
+            // Escape here cancels the question, never the drawer around it:
+            // its listener on the document skips a prevented Escape. While
+            // the reject is in flight it does neither.
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            if (!busy) cancelConfirm();
+          }}
+        >
           <p className={styles.confirmLine} id={`${id}-confirm`}>
             {topic.occurrences > 0
               ? t('rejectConfirm.lineChats', {
@@ -274,11 +290,7 @@ function TopicCard({
               ref={backButton}
               disabled={busy}
               data-testid={`topic-reject-back-${topic.topicId}`}
-              onClick={() => {
-                setConfirming(false);
-                // Back where the reader was: on "דחיית הנושא".
-                requestAnimationFrame(() => rejectButton.current?.focus());
-              }}
+              onClick={cancelConfirm}
             >
               {t('rejectConfirm.back')}
             </button>
