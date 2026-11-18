@@ -74,6 +74,7 @@ export function PrimaryNavigation() {
   const renderDestination = (item: NavigationItem) => (
     <li key={item.id}>
       <Link
+        prefetch={false}
         href={item.href}
         className={styles.navLink}
         // `aria-current` rather than a class alone: it is how a screen reader
@@ -186,6 +187,7 @@ export function SettingsNavigation() {
 
   return (
     <Link
+      prefetch={false}
       href={SETTINGS_NAVIGATION.href}
       className={styles.navLink}
       aria-current={isCurrent ? 'page' : undefined}
@@ -214,6 +216,7 @@ export function ConsoleNavigation() {
 
   return (
     <Link
+      prefetch={false}
       href={CONSOLE_NAVIGATION.href}
       className={styles.navLink}
       aria-current={isCurrent ? 'page' : undefined}

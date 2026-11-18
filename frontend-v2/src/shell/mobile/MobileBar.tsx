@@ -47,6 +47,7 @@ export function MobileBar({
       <div className={styles.row}>
         {back === undefined ? null : (
           <Link
+            prefetch={false}
             href={back.href}
             className={styles.iconButton}
             aria-label={back.label}

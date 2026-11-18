@@ -208,6 +208,7 @@ function RecentRow({
         <ContextMenuTrigger asChild>
           <div className={styles.recentRow} data-testid={`recent-row-${thread.id}`}>
             <Link
+              prefetch={false}
               href={{ pathname: '/home', query: { thread: thread.id } }}
               className={styles.subNavLink}
               aria-current={current ? 'page' : undefined}

@@ -7,7 +7,12 @@ import { Button } from '@/design-system/primitives/button/Button';
 import { logger } from '@/observability/logger';
 
 import styles from './RscLoopGuard.module.css';
-import { createRscLoopCounter, pageKey, routerRequestPage, type RscLoopCounter } from './rsc-loop-guard';
+import {
+  createRscLoopCounter,
+  pageKey,
+  routerRequestPage,
+  type RscLoopCounter,
+} from './rsc-loop-guard';
 
 function sessionStore() {
   try {
@@ -64,7 +69,8 @@ export function RscLoopGuard({ children }: { readonly children: ReactNode }) {
         variant="primary"
         data-testid="rsc-loop-retry"
         onClick={() => {
-          counter.current?.clear(stopped);
+          // Every page: a tab stopped for its repeats across pages starts again at zero.
+          counter.current?.clear();
           window.location.reload();
         }}
       >

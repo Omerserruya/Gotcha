@@ -182,6 +182,7 @@ export function ActivityStrip() {
                    * list - there is no route to a single approval.
                    */
                   <Link
+                    prefetch={false}
                     href="/approvals"
                     className={styles.stepLink}
                     data-testid={`wall-step-approve-${step.id}`}

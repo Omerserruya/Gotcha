@@ -11,7 +11,8 @@ import { usePermissions } from '@/permissions/permissions-context';
 import styles from './MobileShell.module.css';
 import { inMobileOverlay } from './mobile-paths';
 
-export type MobileTabHref = '/m/home' | '/m/inbox' | '/m/approvals' | '/m/outreach' | '/m/customers';
+export type MobileTabHref =
+  '/m/home' | '/m/inbox' | '/m/approvals' | '/m/outreach' | '/m/customers';
 
 interface MobileTab {
   readonly id: 'home' | 'inbox' | 'approvals' | 'outreach' | 'customers';
@@ -79,6 +80,7 @@ export function MobileTabs() {
         const Icon = tab.icon;
         return (
           <Link
+            prefetch={false}
             key={tab.id}
             href={tab.href}
             className={styles.tab}

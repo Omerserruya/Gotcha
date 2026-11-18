@@ -15,7 +15,7 @@ export function ConsoleHome() {
     <ul className={styles.sections} role="list" data-testid="console-sections">
       {CONSOLE_SECTIONS.map((section) => (
         <li key={section.id}>
-          <Link href={section.href ?? '/system'} className={styles.sectionLink}>
+          <Link prefetch={false} href={section.href ?? '/system'} className={styles.sectionLink}>
             <span className={styles.sectionName}>{t(section.labelKey)}</span>
             <span className={styles.sectionLine}>{t(`${section.labelKey}Line`)}</span>
           </Link>

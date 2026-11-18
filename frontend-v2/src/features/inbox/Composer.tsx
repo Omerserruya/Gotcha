@@ -772,7 +772,7 @@ export function Composer({
                 <>
                   {t('compose.unitsExhausted')}{' '}
                   {/* Where a top-up happens. Somebody without billing access is told so there. */}
-                  <Link href="/settings/billing" data-testid="compose-units-link">
+                  <Link prefetch={false} href="/settings/billing" data-testid="compose-units-link">
                     {t('compose.unitsLink')}
                   </Link>
                 </>

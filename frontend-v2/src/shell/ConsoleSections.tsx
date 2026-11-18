@@ -24,6 +24,7 @@ export function ConsoleSections() {
         const href = section.href ?? CONSOLE_NAVIGATION.href;
         return (
           <Link
+            prefetch={false}
             key={section.id}
             href={href}
             className={styles.link}

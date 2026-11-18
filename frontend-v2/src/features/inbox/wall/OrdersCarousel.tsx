@@ -86,6 +86,7 @@ export function OrdersCarousel({
             <>
               {t('storeNotChosen')}{' '}
               <Link
+                prefetch={false}
                 href="/settings/systems"
                 className={styles.inlineLink}
                 data-testid="wall-orders-choose"
