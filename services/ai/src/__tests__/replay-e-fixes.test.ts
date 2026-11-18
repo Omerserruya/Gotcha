@@ -236,3 +236,37 @@ describe("the internal audit row carries the cut fields", () => {
     expect(cutFields({})).toBeUndefined();
   });
 });
+
+describe("b77ec0d1 verify: the focus rules", () => {
+  const W = ["woocommerce.list_products"];
+  const smoovee = [{ title: "גפן למכונות קפה" }, { title: "אריאל למכונות קפה" }, { title: "מלאני" }];
+  it("★ 1: attribute and question words alone are no product: no store search without a subject", () => {
+    for (const s of ["יש כמה צבעים?", "באילו מידות?", "מה המידות שלו?", "מאיזה בד הוא עשוי?"]) {
+      expect(storeQueryOf(s), s).toBeNull();
+      expect(autoLookups([{ kind: "unread_product" }] as any, s, W, [], null), s).toEqual([]);
+    }
+    // A product word with the attribute keeps the product only.
+    expect(storeQueryOf("הקרם הזה מתאים לעור יבש? זה חשוב לי")).toBe("הקרם לעור יבש");
+    expect(q(autoLookups([{ kind: "unread_product" }] as any, "הקרם הזה מתאים לעור יבש? זה חשוב לי", W, [], null))[0]).toEqual(["woocommerce.list_products", "קרם לעור יבש"]);
+    expect(storeQueryOf("יש לכם מטפחת בצבע כחול?")).toBe("מטפחת כחול");
+    // With a subject the product in focus is read.
+    expect(q(autoLookups([{ kind: "unread_product" }] as any, "יש כמה צבעים?", W, [], "Heavyweight Hoodie (Black)"))[0]).toEqual(["woocommerce.list_products", "Heavyweight Hoodie (Black)"]);
+  });
+  it("★ 2: a 3-letter name unique to one title is distinctive, with up to two Hebrew prefix letters", () => {
+    expect(referredCandidates(smoovee, "למכונה שלך מתאים משטח גפן.", "")).toEqual([0]);
+    expect(referredCandidates(smoovee, "לגפן יש ידית.", "")).toEqual([0]);
+    expect(referredCandidates(smoovee, "בגפן ובאריאל אין ידית.", "")).toEqual([0, 1]);
+    expect(referredCandidates([{ title: "אסף למיקסר" }, { title: "גפן למכונות קפה" }], "וגם אסף מתאים.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "Zip Hoodie" }, { title: "Cropped Hoodie" }, { title: "Heavyweight Hoodie" }], "יש לנו zip וגם cropped", "")).toEqual([0, 1]);
+  });
+  it("★ 3: a word two found titles share never counts; the same base marks both", () => {
+    expect(referredCandidates(smoovee, "יש לנו כמה משטחים למכונות קפה.", "")).toEqual([]);
+    expect(referredCandidates([{ title: "Runner Tee - Black" }, { title: "Runner Tee - White" }], "The runner tee is our best seller.", "")).toEqual([0, 1]);
+  });
+  it("★ 4: an intent that names two products is no single focus", () => {
+    expect(focusTitle(["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"], "השוואה בין Zip Hoodie ל-Cropped Hoodie", null)).toBeNull();
+    expect(focusTitle(["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"], "בירור Zip Hoodie", null)).toBe("Zip Hoodie");
+    // Two named now outrank an older shown product: still no focus.
+    expect(focusTitle(["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"], "השוואה בין Zip Hoodie ל-Cropped Hoodie", "Heavyweight Hoodie")).toBeNull();
+  });
+});
