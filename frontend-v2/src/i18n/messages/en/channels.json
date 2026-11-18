@@ -649,6 +649,19 @@
         "heading": "Added automatically ({count, number})",
         "undo": "Undo",
         "undone": "Undone. The answers were removed from the knowledge."
+      },
+      "rejectConfirm": {
+        "lineChats": "Reject {count, plural, one {# question} other {# questions}} from {conversations, plural, one {# conversation} other {# conversations}}? None of it goes into the knowledge.",
+        "line": "Reject {count, plural, one {# question} other {# questions}}? None of it goes into the knowledge.",
+        "yes": "Yes, reject",
+        "back": "Cancel"
+      },
+      "docConflictLine": {
+        "lead": "Contradicts the document",
+        "says": ", which says:"
+      },
+      "rejectedSection": {
+        "heading": "Rejected ({count, number})"
       }
     }
   },

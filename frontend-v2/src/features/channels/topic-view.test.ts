@@ -121,6 +121,21 @@ describe('★ the topic’s line and its items', () => {
     expect(topicView(topic({ occurrences: 0, customers: 0, lastSeenAt: null }), w).meta).toBe('');
   });
 
+  it('★ the chip follows any item that names its document; the conversations are carried', () => {
+    const plain = topicView(topic({}), w);
+    expect(plain.docConflict).toBe(false);
+    expect(plain.occurrences).toBe(12);
+    expect(plain.items[0]!.docConflict).toBeNull();
+    const named = topicView(
+      topic({
+        items: [item({ docConflict: { document: 'תקנון', passage: '14 ימים' } })],
+      }),
+      w,
+    );
+    expect(named.docConflict).toBe(true);
+    expect(named.items[0]!.docConflict).toEqual({ document: 'תקנון', passage: '14 ימים' });
+  });
+
   it('each option with when it was last said, and at most two quotes', () => {
     const view = topicView(topic({}), w).items[0]!;
     expect(view.options).toEqual(['3 ימים', '5 ימים']);

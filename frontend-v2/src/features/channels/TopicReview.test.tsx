@@ -43,6 +43,7 @@ const item = (over: Partial<TopicItemView> = {}): TopicItemView => ({
   optionSeen: [null, '12/11'],
   chosenLine: null,
   quotes: [],
+  docConflict: null,
   ...over,
 });
 
@@ -51,6 +52,7 @@ const topic = (over: Partial<TopicView> = {}): TopicView => ({
   label: 'Delivery',
   status: 'pending',
   meta: '5 chats',
+  occurrences: 5,
   docConflict: false,
   items: [item()],
   ...over,
@@ -59,18 +61,26 @@ const topic = (over: Partial<TopicView> = {}): TopicView => ({
 function show({
   pending = [topic()],
   auto = [],
+  rejected = [],
   progress = { total: 4, done: 1 },
   permissions = WRITE,
 }: {
   pending?: TopicView[];
   auto?: TopicView[];
+  rejected?: TopicView[];
   progress?: { total: number; done: number } | null;
   permissions?: string[];
 } = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ channels }}>
       <PermissionsProvider permissions={permissions as never} tenantId="tn">
-        <TopicReview importId="imp1" pending={pending} auto={auto} progress={progress} />
+        <TopicReview
+          importId="imp1"
+          pending={pending}
+          auto={auto}
+          rejected={rejected}
+          progress={progress}
+        />
       </PermissionsProvider>
     </NextIntlClientProvider>,
   );
@@ -276,5 +286,112 @@ describe('★★ TopicReview', () => {
   it('nothing pending: one line, no cards', () => {
     show({ pending: [] });
     expect(screen.getByTestId('topic-all-done')).toHaveTextContent(T.allDone);
+  });
+
+  const three = (over: Partial<TopicView> = {}) =>
+    topic({
+      occurrences: 254,
+      items: ['c1', 'c2', 'c3'].map((candidateId) => item({ candidateId })),
+      ...over,
+    });
+
+  it('★★ a topic of 3 or more questions asks first, inside the card, and lands on Cancel', async () => {
+    rejectTopic.mockResolvedValueOnce({ ok: true, documentsRemoved: 0 });
+    show({ pending: [three()] });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    expect(rejectTopic).not.toHaveBeenCalled();
+    const ask = screen.getByTestId('topic-reject-confirm-t1');
+    expect(ask).toHaveTextContent(
+      'Reject 3 questions from 254 conversations? None of it goes into the knowledge.',
+    );
+    expect(screen.getByTestId('topic-reject-back-t1')).toHaveFocus();
+    expect(screen.queryByTestId('topic-approve-t1')).toBeNull();
+    await userEvent.click(screen.getByTestId('topic-reject-yes-t1'));
+    expect(rejectTopic).toHaveBeenCalledWith('imp1', 't1');
+    expect(screen.getByTestId('topic-rejected-t1')).toHaveTextContent(T.rejected);
+  });
+
+  it('★ Cancel puts the card back as it was, on "Reject topic", and rejects nothing', async () => {
+    show({ pending: [three()] });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    await userEvent.click(screen.getByTestId('topic-reject-back-t1'));
+    expect(screen.queryByTestId('topic-reject-confirm-t1')).toBeNull();
+    expect(rejectTopic).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.getByTestId('topic-reject-t1')).toHaveFocus());
+    expect(approveButton()).toBeEnabled();
+  });
+
+  it('★ under 3 questions, "Reject topic" goes at once', async () => {
+    rejectTopic.mockResolvedValueOnce({ ok: true, documentsRemoved: 0 });
+    show({ pending: [topic({ items: [item(), item({ candidateId: 'c2' })] })] });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    expect(screen.queryByTestId('topic-reject-confirm-t1')).toBeNull();
+    expect(rejectTopic).toHaveBeenCalledWith('imp1', 't1');
+  });
+
+  it('without a count of conversations, the question names only the questions', async () => {
+    show({ pending: [three({ occurrences: 0 })] });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    expect(screen.getByTestId('topic-reject-confirm-t1')).toHaveTextContent(
+      'Reject 3 questions? None of it goes into the knowledge.',
+    );
+  });
+
+  it('★ a refusal after "Yes" puts the card back and says why', async () => {
+    rejectTopic.mockResolvedValueOnce({ ok: false, reason: 'failed' });
+    show({ pending: [three()] });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    await userEvent.click(screen.getByTestId('topic-reject-yes-t1'));
+    expect(screen.getByRole('alert')).toHaveTextContent(T.refused.failed);
+    expect(screen.queryByTestId('topic-reject-confirm-t1')).toBeNull();
+    expect(approveButton()).toBeEnabled();
+  });
+
+  it('★★ "Rejected" lists what was rejected, closed, and offers nothing to press', async () => {
+    show({ rejected: [topic({ topicId: 'r1', status: 'rejected', label: 'Returns' })] });
+    expect(screen.queryByTestId('topic-rejected-item-r1')).toBeNull();
+    const toggle = screen.getByTestId('topic-rejected-toggle');
+    expect(toggle).toHaveTextContent('Rejected (1)');
+    await userEvent.click(toggle);
+    const listed = screen.getByTestId('topic-rejected-item-r1');
+    expect(listed).toHaveTextContent('Returns');
+    expect(listed).toHaveTextContent('How long is delivery?');
+    expect(within(listed).queryByRole('button')).toBeNull();
+    expect(within(listed).queryByRole('radio')).toBeNull();
+  });
+
+  it('no rejected topics, no section', () => {
+    show();
+    expect(screen.queryByTestId('topic-rejected-section')).toBeNull();
+  });
+
+  it('★★ a document conflict names the document and its sentence, in the chosen line’s place', () => {
+    show({
+      pending: [
+        topic({
+          items: [
+            item({
+              docConflict: { document: 'Shipping policy', passage: 'Delivery takes 5 days' },
+            }),
+            item({ candidateId: 'c2', docConflict: { document: 'FAQ', passage: null } }),
+            item({ candidateId: 'c3', docConflict: { document: null, passage: 'x' } }),
+          ],
+        }),
+      ],
+    });
+    expect(screen.getByTestId('topic-doc-conflict-line-t1-c1')).toHaveTextContent(
+      'Contradicts the document Shipping policy, which says: Delivery takes 5 days',
+    );
+    expect(screen.getByTestId('topic-doc-conflict-line-t1-c2')).toHaveTextContent(
+      /^Contradicts the document FAQ$/,
+    );
+    // No document named: nothing to say beyond the topic's chip.
+    expect(screen.queryByTestId('topic-doc-conflict-line-t1-c3')).toBeNull();
+  });
+
+  it('without the new fields the card is drawn exactly as before', () => {
+    show();
+    expect(screen.queryByTestId(/^topic-doc-conflict-line-/)).toBeNull();
+    expect(screen.queryByTestId('topic-rejected-section')).toBeNull();
   });
 });

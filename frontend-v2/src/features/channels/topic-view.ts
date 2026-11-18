@@ -24,6 +24,11 @@ export interface TopicItemView {
   readonly chosenLine: string | null;
   /** Up to two of the real exchanges behind it. */
   readonly quotes: readonly { readonly question: string; readonly answer: string }[];
+  /** The knowledge document it contradicts, and the sentence; `null` when none or unsent. */
+  readonly docConflict: {
+    readonly document: string | null;
+    readonly passage: string | null;
+  } | null;
 }
 
 export interface TopicView {
@@ -32,6 +37,8 @@ export interface TopicView {
   readonly status: TopicStatus;
   /** "12 שיחות · 9 לקוחות · נראה לאחרונה 12.11", nothing for a figure of 0. */
   readonly meta: string;
+  /** The conversations behind it, for the reject confirmation; 0 when unknown. */
+  readonly occurrences: number;
   readonly docConflict: boolean;
   readonly items: readonly TopicItemView[];
 }
@@ -102,6 +109,9 @@ function itemView(item: TopicItem, w: TopicWords): TopicItemView {
     optionSeen: options.map((o) => seen.get(o) ?? null),
     chosenLine: chosenLineOf(item, w),
     quotes: item.quotes.slice(0, 2).map((q) => ({ question: q.question, answer: q.answer })),
+    docConflict: item.docConflict
+      ? { document: item.docConflict.document, passage: item.docConflict.passage }
+      : null,
   };
 }
 
@@ -119,7 +129,9 @@ export function topicView(topic: ImportTopic, w: TopicWords): TopicView {
     label: topic.label,
     status: topic.status,
     meta,
-    docConflict: topic.docConflict,
+    occurrences: topic.occurrences,
+    // The topic's flag, or any item that names its document (0559643c).
+    docConflict: topic.docConflict || topic.items.some((item) => item.docConflict !== null),
     items: topic.items.map((item) => itemView(item, w)),
   };
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   answerOptions,
+  byOccurrences,
   choiceMissing,
   choiceTooLong,
   importTopicsOf,
@@ -131,6 +132,39 @@ describe('★★ an item’s status is the database’s, in capitals', () => {
   it('★ an unknown or missing status is never offered for a decision', () => {
     expect(topicItemSchema.parse(item({ status: 'ARCHIVED' })).status).toBe('superseded');
     expect(topicItemSchema.parse(item({ status: undefined })).status).toBe('superseded');
+  });
+});
+
+describe('★★ the document conflict and the auto count (0559643c), optional until a rerun', () => {
+  it('reads an item’s document and sentence, trimmed; blank is none', () => {
+    const parsed = topicItemSchema.parse(
+      item({
+        docConflict: { documentId: 'd1', document: ' Shipping ', passage: '', note: 'x' },
+      }),
+    );
+    expect(parsed.docConflict).toEqual({ documentId: 'd1', document: 'Shipping', passage: null });
+  });
+
+  it.each([undefined, null, 'yes', { document: 3 }])(
+    '★ absent or odd (%j) is none, never a failure',
+    (v) => {
+      const parsed = topicItemSchema.parse(item({ docConflict: v }));
+      expect(parsed.docConflict === null || parsed.docConflict.document === null).toBe(true);
+    },
+  );
+
+  it('the top-level count is read when sent, null when not', () => {
+    expect(read({ topics: [], autoApprovable: 7 }).autoApprovable).toBe(7);
+    expect(read({ topics: [] }).autoApprovable).toBeNull();
+  });
+
+  it('byOccurrences takes one status, the most-asked first', () => {
+    const topics = [
+      { topicId: 'a', status: 'rejected', occurrences: 2 },
+      { topicId: 'b', status: 'pending', occurrences: 9 },
+      { topicId: 'c', status: 'rejected', occurrences: 8 },
+    ] as unknown as ImportTopic[];
+    expect(byOccurrences(topics, 'rejected').map((t) => t.topicId)).toEqual(['c', 'a']);
   });
 });
 

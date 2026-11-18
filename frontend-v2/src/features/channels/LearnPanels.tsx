@@ -3,7 +3,11 @@ import { getLocale, getTimeZone, getTranslations } from 'next-intl/server';
 
 import { humaniseCode } from '@/api/contracts/capabilities';
 import { isRunning, workDone, type ImportStatus } from '@/api/contracts/historical-import';
-import { pendingByOccurrences, type ImportTopics } from '@/api/contracts/import-topics';
+import {
+  byOccurrences,
+  pendingByOccurrences,
+  type ImportTopics,
+} from '@/api/contracts/import-topics';
 import {
   groupOf,
   knowledgeDocumentOf,
@@ -507,6 +511,9 @@ export async function ReportPanel({
             auto={byTopic.topics
               .filter((topic) => topic.status === 'auto')
               .map((topic) => topicView(topic, words))}
+            rejected={byOccurrences(byTopic.topics, 'rejected').map((topic) =>
+              topicView(topic, words),
+            )}
             progress={byTopic.progress}
           />
         ) : (

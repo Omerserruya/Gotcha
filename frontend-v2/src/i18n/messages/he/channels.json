@@ -649,6 +649,19 @@
         "heading": "נוסף אוטומטית ({count, number})",
         "undo": "ביטול",
         "undone": "בוטל. התשובות הוסרו מהידע."
+      },
+      "rejectConfirm": {
+        "lineChats": "לדחות {count, plural, one {שאלה אחת} other {# שאלות}} {conversations, plural, one {משיחה אחת} other {מ-# שיחות}}? שום דבר מזה לא ייכנס לידע.",
+        "line": "לדחות {count, plural, one {שאלה אחת} other {# שאלות}}? שום דבר מזה לא ייכנס לידע.",
+        "yes": "כן, לדחות",
+        "back": "ביטול"
+      },
+      "docConflictLine": {
+        "lead": "סותר את המסמך",
+        "says": ", שכתוב בו:"
+      },
+      "rejectedSection": {
+        "heading": "נדחו ({count, number})"
       }
     }
   },

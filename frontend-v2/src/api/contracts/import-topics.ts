@@ -87,6 +87,29 @@ export const topicItemSchema = z.object({
     .nullish()
     .catch(false)
     .transform((v) => v === true),
+  /*
+   * The knowledge document this answer contradicts, and its sentence
+   * (backend 0559643c). Absent until a review rerun fills it; `null` when
+   * there is none. `note` is the review's own wording and is not drawn.
+   */
+  docConflict: z
+    .object({
+      documentId: z.string().nullish().catch(null),
+      document: z.string().nullish().catch(null),
+      passage: z.string().nullish().catch(null),
+      note: z.string().nullish().catch(null),
+    })
+    .nullish()
+    .catch(null)
+    .transform((v) =>
+      v
+        ? {
+            documentId: v.documentId ?? null,
+            document: v.document?.trim() || null,
+            passage: v.passage?.trim() || null,
+          }
+        : null,
+    ),
   variants: lenientArray(
     z.object({ answer: z.string(), lastSeenAt: z.string().nullish().catch(null) }),
   ).transform((v) => v.kept.filter((variant) => variant.answer.trim() !== '')),
@@ -125,6 +148,12 @@ export type ImportTopic = Omit<z.infer<typeof topicSchema>, 'items'> & {
 
 export const topicsResponseSchema = z.object({
   topics: lenientArray(topicSchema),
+  /** How many items an automatic approval would take (0559643c); `null` when not sent. */
+  autoApprovable: z
+    .number()
+    .nullish()
+    .catch(null)
+    .transform((v) => v ?? null),
   progress: z
     .object({ total: z.number(), done: z.number() })
     .nullish()
@@ -136,6 +165,8 @@ export interface ImportTopics {
   readonly topics: readonly ImportTopic[];
   /** The server's count (Supervisior: use it); `null` when it did not send one. */
   readonly progress: { readonly total: number; readonly done: number } | null;
+  /** Parsed, and not drawn yet: no place in 13f says what it promises. */
+  readonly autoApprovable: number | null;
   /** Topics and items that did not parse - logged, never shown as missing work. */
   readonly dropped: number;
 }
@@ -147,14 +178,19 @@ export function importTopicsOf(raw: z.infer<typeof topicsResponseSchema>): Impor
     // A topic with no item left has nothing to approve or to show.
     return topic.items.kept.length > 0 ? [{ ...topic, items: topic.items.kept }] : [];
   });
-  return { topics, progress: raw.progress, dropped };
+  return { topics, progress: raw.progress, autoApprovable: raw.autoApprovable, dropped };
 }
 
 /** The pending topics, the most-asked first (Omer); the order the server gave breaks ties. */
 export function pendingByOccurrences(topics: readonly ImportTopic[]): ImportTopic[] {
+  return byOccurrences(topics, 'pending');
+}
+
+/** Topics of one status, the most-asked first; the server's order breaks ties. */
+export function byOccurrences(topics: readonly ImportTopic[], status: TopicStatus): ImportTopic[] {
   return topics
     .map((topic, index) => ({ topic, index }))
-    .filter(({ topic }) => topic.status === 'pending')
+    .filter(({ topic }) => topic.status === status)
     .sort((a, b) => b.topic.occurrences - a.topic.occurrences || a.index - b.index)
     .map(({ topic }) => topic);
 }

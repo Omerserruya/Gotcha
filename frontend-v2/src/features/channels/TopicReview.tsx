@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useId, useRef, useState, useTransition } from 'react';
+import { useEffect, useId, useRef, useState, useTransition } from 'react';
 
 import {
   choiceMissing,
@@ -31,17 +31,25 @@ import type { TopicItemView, TopicView } from './topic-view';
  * Optimistic per card: a press reads as done at once, and a refusal puts the
  * card back with the reason under it (role=alert, no toast). A partial
  * approve keeps the card open with the items that did not save marked.
+ *
+ * Rejecting a topic of 3 or more pending questions asks first, inside the
+ * card (Omer, 2026-11-18: one press threw away 30 questions from 254 chats);
+ * under 3 it goes at once. What was rejected is listed, read-only, under
+ * "נדחו" - the design's Rejected tab, per topic.
  */
 export function TopicReview({
   importId,
   pending,
   auto,
+  rejected = [],
   progress,
 }: {
   readonly importId: string;
   /** Pending topics, most-asked first (`pendingByOccurrences`). */
   readonly pending: readonly TopicView[];
   readonly auto: readonly TopicView[];
+  /** Rejected topics, most-asked first: shown, never acted on. */
+  readonly rejected?: readonly TopicView[];
   readonly progress: { readonly total: number; readonly done: number } | null;
 }) {
   const t = useTranslations('channels.whatsapp.topics');
@@ -87,11 +95,15 @@ export function TopicReview({
       ) : null}
 
       {auto.length > 0 ? <AutoAdded importId={importId} topics={auto} canWrite={canWrite} /> : null}
+      {rejected.length > 0 ? <Rejected topics={rejected} /> : null}
     </section>
   );
 }
 
 type Phase = 'open' | 'approved' | 'rejected';
+
+/** From this many pending questions, "דחיית הנושא" asks first (Omer, 2026-11-18). */
+export const REJECT_CONFIRM_FROM = 3;
 
 function TopicCard({
   importId,
@@ -113,7 +125,14 @@ function TopicCard({
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [saved, setSaved] = useState<ReadonlySet<string>>(new Set());
   const [problem, setProblem] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [busy, startBusy] = useTransition();
+  const rejectButton = useRef<HTMLButtonElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  // Asking first lands on the safe answer, "ביטול".
+  useEffect(() => {
+    if (confirming) backButton.current?.focus();
+  }, [confirming]);
 
   const waiting = open.filter((item) => !saved.has(item.candidateId));
   const left = waiting.filter((item) => choiceMissing(choices[item.candidateId] ?? null)).length;
@@ -155,6 +174,7 @@ function TopicCard({
 
   const reject = () => {
     setProblem(null);
+    setConfirming(false);
     setPhase('rejected');
     startBusy(async () => {
       const result = await rejectTopic(importId, topic.topicId);
@@ -226,6 +246,44 @@ function TopicCard({
         >
           {t('rejected')}
         </p>
+      ) : canWrite && confirming ? (
+        <div className={styles.confirm} data-testid={`topic-reject-confirm-${topic.topicId}`}>
+          <p className={styles.confirmLine} id={`${id}-confirm`}>
+            {topic.occurrences > 0
+              ? t('rejectConfirm.lineChats', {
+                  count: waiting.length,
+                  conversations: topic.occurrences,
+                })
+              : t('rejectConfirm.line', { count: waiting.length })}
+          </p>
+          <div className={styles.actions}>
+            <button
+              type="button"
+              className={channels.reportAction}
+              data-tone="primary"
+              disabled={busy}
+              aria-describedby={`${id}-confirm`}
+              data-testid={`topic-reject-yes-${topic.topicId}`}
+              onClick={reject}
+            >
+              {t('rejectConfirm.yes')}
+            </button>
+            <button
+              type="button"
+              className={channels.reportAction}
+              ref={backButton}
+              disabled={busy}
+              data-testid={`topic-reject-back-${topic.topicId}`}
+              onClick={() => {
+                setConfirming(false);
+                // Back where the reader was: on "דחיית הנושא".
+                requestAnimationFrame(() => rejectButton.current?.focus());
+              }}
+            >
+              {t('rejectConfirm.back')}
+            </button>
+          </div>
+        </div>
       ) : canWrite ? (
         <div className={styles.actions}>
           <button
@@ -242,9 +300,17 @@ function TopicCard({
           <button
             type="button"
             className={channels.reportAction}
+            ref={rejectButton}
             disabled={busy}
             data-testid={`topic-reject-${topic.topicId}`}
-            onClick={reject}
+            onClick={() => {
+              if (waiting.length >= REJECT_CONFIRM_FROM) {
+                setProblem(null);
+                setConfirming(true);
+              } else {
+                reject();
+              }
+            }}
           >
             {t('reject')}
           </button>
@@ -310,6 +376,17 @@ function TopicItem({
       {item.chosenLine ? (
         <p className={styles.chosen} data-testid={`topic-chosen-${testid}`}>
           {item.chosenLine}
+        </p>
+      ) : null}
+      {/* The document it contradicts, in the chosen line's place and style (0559643c). */}
+      {item.docConflict?.document ? (
+        <p className={styles.chosen} data-testid={`topic-doc-conflict-line-${testid}`}>
+          {t('docConflictLine.lead')} <UserText>{item.docConflict.document}</UserText>
+          {item.docConflict.passage ? (
+            <>
+              {t('docConflictLine.says')} <UserText>{item.docConflict.passage}</UserText>
+            </>
+          ) : null}
         </p>
       ) : null}
 
@@ -516,5 +593,54 @@ function AutoTopic({
         </p>
       ) : null}
     </li>
+  );
+}
+
+/** "נדחו": what a person rejected, read-only (Omer, 2026-11-18). Closed, its list is not drawn. */
+function Rejected({ topics }: { readonly topics: readonly TopicView[] }) {
+  const t = useTranslations('channels.whatsapp.topics');
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <section className={styles.auto} data-testid="topic-rejected-section">
+      <button
+        type="button"
+        className={styles.autoToggle}
+        aria-expanded={open}
+        aria-controls={`${id}-list`}
+        data-testid="topic-rejected-toggle"
+        onClick={() => setOpen(!open)}
+      >
+        {t('rejectedSection.heading', { count: topics.length })}
+      </button>
+      {open ? (
+        <ul className={styles.autoList} id={`${id}-list`}>
+          {topics.map((topic) => (
+            <li
+              key={topic.topicId}
+              className={styles.autoTopic}
+              data-testid={`topic-rejected-item-${topic.topicId}`}
+            >
+              <p className={styles.autoLabel}>
+                <UserText>{topic.label}</UserText>
+              </p>
+              {topic.meta ? <p className={styles.topicMeta}>{topic.meta}</p> : null}
+              <ul className={styles.autoItems}>
+                {topic.items.map((item) => (
+                  <li key={item.candidateId} className={styles.autoItem}>
+                    <span className={styles.quoteAsked}>
+                      <UserText>{item.question}</UserText>
+                    </span>
+                    <span>
+                      <UserText>{item.options[0] ?? ''}</UserText>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
