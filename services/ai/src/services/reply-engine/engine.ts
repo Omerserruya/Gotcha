@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -504,12 +504,13 @@ const THANKS_FACT = "_thanksTurn";
 // The turn the engine last sent something (holding mode: never silent twice running).
 const SPOKE_FACT = "_spokeTurn";
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
   if (trace?.rewriteCut) out.rewriteCut = trace.rewriteCut;
   if (Array.isArray(trace?.fallbackKinds) && trace.fallbackKinds.length) out.fallbackKinds = trace.fallbackKinds;
+  if (Array.isArray(trace?.cutWhy) && trace.cutWhy.length) out.cutWhy = trace.cutWhy;
   if (Array.isArray(trace?.cutText) && trace.cutText.length) out.cutText = trace.cutText.slice(0, 4).map((x: unknown) => String(x).slice(0, 120));
   const markers = CUT_MARKERS.filter((k) => trace?.[k]);
   if (markers.length) out.markers = markers;
@@ -1488,6 +1489,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // The bot's own cut words, short, for the replay printout (prod replay on 1b35c535, Tehila: a noun fragment
         // opened the reply and nothing showed what was cut).
         if (kept.removed?.length) (trace as any).cutText = kept.removed.slice(0, 4).map((x: string) => x.slice(0, 120));
+        // Why: the checks that cut (prod replay of 9480dfb2, Tehila: the recommendation sentence went and the line
+        // could not say which check took it).
+        if (kept.removed?.length) (trace as any).cutWhy = [...new Set((kept.problems ?? []).map((p: any) => (p.kind === "style" ? `style:${(p.codes ?? []).join("/")}` : p.kind)))].slice(0, 6);
         if (kept === fromSecond && fromSecond) { const q = withClosingQuestion(kept.o, questionOk ? original : null, previousBotReplies); if (q !== kept.o) { output = q; (trace as any).closingQuestionKept = true; } }
       } else {
         verdict = v2 ?? first;
@@ -2102,6 +2106,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (reply) {
       const named = colourList(nameSizeLines(reply, candidates as any[]), candidates as any[], locale === "en" ? "en" : "he");
       if (named !== reply) { reply = named; (trace as any).namedFromData = true; }
+      // "4 הצעות" with two cards shown: the count is the cards' (prod replay of 9480dfb2, Tehila).
+      const shownCards = cardChannel ? new Set((final.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; })).size : 0;
+      const counted = shownCards ? fixCardCount(reply, shownCards) : reply;
+      if (counted !== reply) { reply = counted; (trace as any).cardCountFixed = true; }
+      // After a cut, "גם כן" points at a sentence that is gone ("ברוקלין היא אפשרות קלילה ונשפכת גם כן.").
+      if (Number((trace as any).cutSentences ?? 0) > 0) { const a = dropOrphanAlso(reply); if (a !== reply) { reply = a; (trace as any).orphanAlsoCut = true; } }
     }
     if (reply) reply = spaceSentences(reply);
   }

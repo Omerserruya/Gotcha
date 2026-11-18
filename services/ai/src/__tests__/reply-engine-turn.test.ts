@@ -2626,6 +2626,26 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     } finally { (prisma as any).contact.findFirst = contact; }
   });
 
+  it("★ (prod replay of 9480dfb2) \"4 הצעות\" with two cards says 2", async () => {
+    h.groundTitle = "מטפחת נוטינג";
+    h.extraTitle = "מטפחת ברוקלין";
+    h.responses.push({ toolCalls: [tc("c1", "woocommerce.list_products", { query: "מטפחת" })] }, { toolCalls: [respond("c2", { reply: "בטח, הנה 4 הצעות שיתאימו לך.", cards: ["PRODUCT_1", "PRODUCT_2"] })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר המלצה על מטפחת?" }, "autonomous");
+    expect(r.reply).toMatch(/2 הצעות/);
+    expect(r.reply).not.toMatch(/4 הצעות/);
+  });
+
+  it("★ a cut records which check took it (trace and audit)", async () => {
+    h.responses.push({ toolCalls: [tc("w1", "woocommerce.list_products", { query: "תיק" })] }, { toolCalls: [respond("w2", { reply: "Canvas Tote עולה ₪999. הוא מבד קנבס עבה ונוח לשימוש יומיומי, ומתאים גם לקניות." })] }, { toolCalls: [respond("w3", { reply: "Canvas Tote עולה ₪999. הוא מבד קנבס עבה ונוח לשימוש יומיומי, ומתאים גם לקניות." })] }, { toolCalls: [respond("w4", { reply: "Canvas Tote עולה ₪999. הוא מבד קנבס עבה ונוח לשימוש יומיומי, ומתאים גם לקניות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה עולה התיק?" }, "autonomous");
+    if (Number((r.trace as any).cutSentences ?? 0) > 0) {
+      expect((r.trace as any).cutWhy).toContain("ungrounded_price");
+      expect(h.audits.find((a) => a.data.action === "ai.bot_turn").data.metadata.cuts.cutWhy).toContain("ungrounded_price");
+    } else {
+      throw new Error(`no cut happened: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
+    }
+  });
+
   it("★ the audit row carries the cut fields when something was cut", async () => {
     h.responses.push({ toolCalls: [respond("g5", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] }, { toolCalls: [respond("g6", { reply: "ביררנו, ואנחנו פתוחים א-ה 9-17." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");

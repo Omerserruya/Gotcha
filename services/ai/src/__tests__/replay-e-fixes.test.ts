@@ -1,5 +1,6 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
+import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -296,5 +297,68 @@ describe("13afc633 verify: attribute words that are the product; ordinary speech
     expect(referredCandidates(smoovee, "נשמח לעזור, אריאל.", "", ["אריאל"])).toEqual([]);
     // Still a product with a word of its own title beside it.
     expect(referredCandidates([{ title: "קרם יום לעור יבש" }, { title: "קרם לילה לעור יבש" }], "קרם יום מתאים לעור יבש.", "")).toEqual([0]);
+  });
+});
+
+describe("658a3e2e verify: title matches", () => {
+  const tehila = [{ title: "בובון שטוח" }, { title: "בובון חצי שטוח" }, { title: "מטפחת ג'יני כחולה" }];
+  const cosm = [{ title: "סרום ויטמין C" }, { title: "סרום לילה" }, { title: "קרם לחות" }];
+  const tees = [{ title: "Classic Tee" }, { title: "Classic Tee Long Sleeve" }, { title: "Zip Hoodie" }];
+  it("★ gap 1: every word of a title said (prefix letters allowed) marks it", () => {
+    expect(referredCandidates(tehila, "לקשירה נמוכה מתאים הבובון השטוח.", "")).toEqual([0]);
+    expect(referredCandidates(tehila, "הבובון החצי שטוח מתאים לך.", "")).toEqual([1]);
+    expect(referredCandidates(cosm, "קרם הלחות שלנו במבצע.", "")).toEqual([2]);
+  });
+  it("★ gap 2: a title inside a longer one that is said: only the longer", () => {
+    expect(referredCandidates(tees, "the Classic Tee Long Sleeve is in stock", "")).toEqual([1]);
+    expect(referredCandidates(tees, "the long sleeve classic tee is in stock", "")).toEqual([1]);
+    expect(referredCandidates(tees, "the classic tee is in stock", "")).toEqual([0]);
+  });
+  it("★ gaps 1-2: stays empty", () => {
+    expect(referredCandidates(tehila, "יש לנו שני בובונים.", "")).toEqual([]);
+    expect(referredCandidates(tees, "we have two tees", "")).toEqual([]);
+    expect(referredCandidates(cosm, "הקרם במבצע.", "")).toEqual([]);
+    expect(referredCandidates(cosm, "לילה טוב! נחזור אליך מחר.", "")).toEqual([]);
+  });
+  it("★ gap 3: a name with an apostrophe is one word; a colour of the same title is its companion", () => {
+    expect(referredCandidates([{ title: "מטפחת ג'יני כחולה" }, { title: "מטפחת אלכסה" }], "יש את ג'יני בגווני כחול.", "")).toEqual([0]);
+    expect(referredCandidates([{ title: "מטפחת ג׳יני כחולה" }, { title: "מטפחת אלכסה" }], "מטפחת ג'יני במלאי.", "")).toEqual([0]);
+    // The name alone, written with another apostrophe: one 5-character word, no companion needed.
+    expect(referredCandidates([{ title: "מטפחת ג׳יני כחולה" }, { title: "מטפחת אלכסה" }], "יש את ג'יני.", "")).toEqual([0]);
+    // A short name whose only companion is its title's colour.
+    expect(referredCandidates([{ title: "טוש ליה שחור" }, { title: "טוש מיה" }], "ליה בשחור במלאי.", "")).toEqual([0]);
+  });
+  it("★ nits: a weight verb and a size number are no product words", () => {
+    expect(storeQueryOf("כמה זה שוקל?")).toBeNull();
+    expect(storeQueryOf("יש מידה 38 בנעל הלבנה?")).toBe("38 בנעל הלבנה");
+  });
+});
+
+describe("prod replay of 9480dfb2, Tehila: the cleanup", () => {
+  const titles = ["נוטינג", "סוהו", "בובון שטוח", "ברוקלין"];
+  const reply = "למטפחת יומיומית קלילה שמתאימה גם לכיסוי מלא וגם לחלקי, כדאי לבחור בנוטינג, מבד דמוי פשתן רך ונשפך. אם מתאים לך מראה שיפון צרוב, ברוקלין היא אפשרות קלילה ונשפכת גם כן.";
+  it("★ a use is no device fit: the recommendation sentence is never cut as one", async () => {
+    expect(ungroundedPositiveFit(reply, "מטפחה", titles, titles.join("\n"), "")).toEqual([]);
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const r = gate3({ reply, claims: [], cards: ["PRODUCT_1", "PRODUCT_4"], candidateCount: 4, candidateTitles: titles, candidates: titles.map((title) => ({ title })), tools: [{ tool: "woocommerce.list_products", outcome: "ok", decision: "allow", args: { query: "מטפחת" } }], grounding: titles.join("\n"), locale: "he", incomingMessage: "מטפחה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: ["woocommerce.list_products"], shopFloor: false, handedOff: false, approvalPending: false, cardsChannel: true } as any);
+    expect(r.problems.map((p: any) => p.kind)).not.toContain("ungrounded_positive_fit");
+    // A device fit nothing backs is still a claim.
+    expect(ungroundedPositiveFit("סמובי אליס מתאים לנינג'ה קריספי.", "יש לכם משטח?", ["סמובי אליס", "סמובי גפן"], "סמובי אליס 40x50", "")).toHaveLength(1);
+  });
+  it("★ \"גם כן\" left after a cut goes", () => {
+    expect(dropOrphanAlso("אם מתאים לך מראה שיפון צרוב, ברוקלין היא אפשרות קלילה ונשפכת גם כן.")).toBe("אם מתאים לך מראה שיפון צרוב, ברוקלין היא אפשרות קלילה ונשפכת.");
+    expect(dropOrphanAlso("The Zip is soft as well.")).toBe("The Zip is soft.");
+    expect(dropOrphanAlso("גם כן יש לנו משלוח.")).toBe("גם כן יש לנו משלוח.");
+  });
+  it("★ the count of the offer is the cards' count", () => {
+    expect(fixCardCount("בטח 😊 הנה 4 הצעות: מטפחת קלילה ורכה, או עגילי וינטג' קטנים.", 2)).toBe("בטח 😊 הנה 2 הצעות: מטפחת קלילה ורכה, או עגילי וינטג' קטנים.");
+    expect(fixCardCount("הנה שלוש אפשרויות שמתאימות.", 3)).toBe("הנה שלוש אפשרויות שמתאימות.");
+    expect(fixCardCount("here are four options", 2)).toBe("here are 2 options");
+    expect(fixCardCount("הנה 4 הצעות", 0)).toBe("הנה 4 הצעות");
+    expect(fixCardCount("הנה 4 הצעות", 1)).toBe("הנה 4 הצעות");
+  });
+  it("★ the audit row and the replay line say which check cut", () => {
+    expect(cutFields({ cutSentences: 1, cutWhy: ["ungrounded_positive_fit"], cutText: ["x"] })).toMatchObject({ cutWhy: ["ungrounded_positive_fit"] });
+    expect(cutLine({ cutSentences: 1, cutWhy: ["ungrounded_positive_fit"] })).toContain("cutWhy=ungrounded_positive_fit");
   });
 });

@@ -113,8 +113,9 @@ export function cutLine(trace: any): string {
   if (trace?.cutSentences != null) parts.push(`cutSentences=${trace.cutSentences}`);
   if (trace?.rewriteCut) parts.push(`rewriteCut=${trace.rewriteCut}`);
   if (Array.isArray(trace?.fallbackKinds) && trace.fallbackKinds.length) parts.push(`fallback=${trace.fallbackKinds.join("/")}`);
+  if (Array.isArray(trace?.cutWhy) && trace.cutWhy.length) parts.push(`cutWhy=${trace.cutWhy.join(",")}`);
   if (Array.isArray(trace?.cutText) && trace.cutText.length) parts.push(`cut: ${trace.cutText.map((x: string) => JSON.stringify(String(x).slice(0, 120))).join(" ")}`);
-  for (const k of ["closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut"]) if (trace?.[k]) parts.push(k);
+  for (const k of ["cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut"]) if (trace?.[k]) parts.push(k);
   return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
 

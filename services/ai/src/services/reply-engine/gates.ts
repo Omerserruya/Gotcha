@@ -1357,7 +1357,7 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
 
 // The question around the product: never a store search word (prod replay on 1b35c535: "איך אדע מה התת גוון"
 // searched as written found a powder; "מאיזה חומר השרשרת" found head coverings).
-const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please", "או", "or", "באילו", "באיזה", "באיזו", "שלו", "שלה", "שלהם", "שלהן", "חשוב", "important"]);
+const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת", "יודעים", "יודעת", "יודע", "מאיזה", "מאיזו", "מאילו", "איזה", "איזו", "אילו", "מה", "מהו", "מהי", "מהם", "למה", "מתי", "האם", "איפה", "היכן", "כמה", "זה", "זאת", "הזה", "הזאת", "הזו", "האלה", "עשוי", "עשויה", "עשויים", "עשויות", "בדיוק", "באמת", "בעצם", "כאן", "פה", "אצלכם", "לי", "לנו", "שלכם", "how", "what", "which", "know", "tell", "is", "are", "the", "made", "of", "this", "that", "can", "do", "you", "me", "for", "about", "there", "any", "my", "your", "מזמינים", "להזמין", "קונים", "לקנות", "order", "buy", "לזה", "בזה", "עליו", "עליה", "אותו", "אותה", "שלו", "שלה", "it", "its", "does", "have", "has", "אשמח", "סרטון", "לסרטון", "סרטונים", "הדרכה", "מדריך", "קישור", "לינק", "video", "link", "tutorial", "please", "או", "or", "באילו", "באיזה", "באיזו", "שוקל", "שוקלת", "שוקלים", "weigh", "weighs", "שלו", "שלה", "שלהם", "שלהן", "חשוב", "important"]);
 // Attribute words: what is asked about a product, never its name (the Supervisor's probe on b77ec0d1: "יש כמה
 // צבעים?" searched "צבעים", "מאיזה בד הוא עשוי?" searched "בד").
 // The bare forms; a ה or ב form ("האורך", "בצבע") is always the attribute.
@@ -1375,7 +1375,8 @@ function attributeUse(tokens: string[], i: number, content: (w: string) => boole
   // Right after a question word it is asked about ("מאיזה חומר", "כמה צבעים", "what material").
   if (ASKS_ABOUT.has(String(tokens[i - 1] ?? "").toLowerCase())) return true;
   const beside = [tokens[i - 1], tokens[i + 1]].filter((x): x is string => !!x);
-  return !beside.some((x) => content(x) && !attributeForm(x));
+  // A number beside it is a value ("מידה 38"), never a product word.
+  return !beside.some((x) => content(x) && !attributeForm(x) && !/^\d+$/.test(x));
 }
 const queryStop = (w: string) => {
   const l = w.toLowerCase();
@@ -2165,6 +2166,7 @@ const FIT_CLAIM = /(?<![֐-׿])[שו]?(?:מתאים|מתאימה|מתאימים|
 // The device first: "לנינג'ה קריספי מתאים סמובי אליס", "לנינג'ה קריספי מופיעים כמתאימים ..." (rating ed780586, B).
 const FIT_CLAIM_REV = /(?<![\u0590-\u05FF])ו?ל(?!כם|ך|י\b)([\u0590-\u05FF'"״A-Za-z0-9 -]{3,40}?)\s+(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|(?:מופיע|מופיעה|מופיעים|מופיעות)\s+כ(?:מתאים|מתאימה|מתאימים|מתאימות))(?![\u0590-\u05FF])/u;
 const ALT_OFFER = /(?<![\u0590-\u05FF])(?:או|לחלופין|אפשר\s+גם|כאלטרנטיבה|כחלופה|במקום\s+זה)(?![\u0590-\u05FF])|\b(?:alternatively|instead|or you could|as an alternative)\b/iu;
+const USE_WORDS = new Set(["כיסוי", "שימוש", "יום", "יומיום", "ערב", "ערבים", "אירוע", "אירועים", "חג", "חגים", "קיץ", "חורף", "אביב", "סתיו", "עבודה", "משרד", "ים", "חוף", "טיול", "טיולים", "שיער", "עור", "פנים", "גוף", "ילדים", "ילדות", "נשים", "גברים", "מתנה", "מתנות", "קשירה", "חתונה", "שבת", "ספורט", "כל", "רוב", "מראה", "סגנון", "use", "everyday", "daily", "evening", "summer", "winter", "work", "office", "travel", "beach", "hair", "skin", "kids", "gift", "gifts", "weddings", "wedding", "sport", "sports"]);
 export function ungroundedPositiveFit(reply: string, incoming: string, titles: string[], grounding: string, knowledge: string): string[] {
   const proofText = `${grounding ?? ""}\n${knowledge ?? ""}`;
   const lines = proofText.split(/\n|;|(?<=\.)\s+/).map((l) => l.toLowerCase()).filter(Boolean);
@@ -2180,6 +2182,9 @@ export function ungroundedPositiveFit(reply: string, incoming: string, titles: s
     if (!named.length) return false;
     const target = (m[1].match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase()) && !FILL.has(w.toLowerCase()));
     if (!target.length) return false;
+    // A use, never a device: "מתאימה גם לכיסוי מלא", "מתאים לשימוש יומיומי", "לקיץ" (prod replay of 9480dfb2,
+    // Tehila: the recommendation sentence was cut as an unbacked device fit).
+    if (USE_WORDS.has(target[0].toLowerCase())) return false;
     // Offered as an ALTERNATIVE for her device while it fits another one (rating 1771ba14: "או לראות את סמובי
     // כריסטינה שמתאימה לנינג'ה סלושי" to a Crispy owner): cut, whatever proves the other fit.
     const asked = String(incoming ?? "").toLowerCase();
@@ -2504,9 +2509,11 @@ export function colourList(reply: string, candidates: Array<{ title?: string; de
 const TITLE_STOP = new Set(["the", "and", "for", "with", "new", "set", "pro", "one", "של", "עם", "את", "לכל", "כל", "סט", "חדש", "חדשה"]);
 const VARIANT_WORDS = new Set(["black", "white", "grey", "gray", "red", "blue", "green", "pink", "navy", "beige", "brown", "sand", "cream", "charcoal", "melange", "olive", "yellow", "orange", "purple", "silver", "gold", "small", "medium", "large", "xlarge", "size", "שחור", "שחורה", "לבן", "לבנה", "אפור", "אפורה", "אדום", "אדומה", "כחול", "כחולה", "ירוק", "ירוקה", "ורוד", "ורודה", "בז'", "חום", "חומה", "קרם", "זהב", "כסף", "צהוב", "כתום", "סגול", "קטן", "קטנה", "בינוני", "בינונית", "גדול", "גדולה", "מידה"]);
 export function referredCandidates(candidates: Array<{ title?: string }>, reply: string, intent: string, contactNames: Array<string | null | undefined> = []): number[] {
-  const hay = `${String(reply ?? "")}\n${String(intent ?? "")}`.toLowerCase();
-  const titles = candidates.map((c) => String(c?.title ?? "").trim());
-  const wordsOf = (t: string) => (t.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []) as string[];
+  // One apostrophe form, kept inside a word ("ג'יני" is one word, never "יני").
+  const apos = (x: string) => x.replace(/[׳’`]/g, "'");
+  const hay = apos(`${String(reply ?? "")}\n${String(intent ?? "")}`.toLowerCase());
+  const titles = candidates.map((c) => apos(String(c?.title ?? "").trim()));
+  const wordsOf = (t: string) => ((t.toLowerCase().match(/[\p{L}\p{N}]+(?:'[\p{L}]+)*/gu) ?? []) as string[]).filter((w) => w.replace(/'/g, "").length >= 3);
   // A word counts only when exactly one found title has it (the Supervisor's probe: "למכונות" in two of three titles
   // marked both).
   const bases = titles.map((t) => t.replace(/\s*[(\[][^)\]]*[)\]]\s*$/u, "").replace(/\s+[-|:]\s+.*$/u, "").trim().toLowerCase());
@@ -2526,14 +2533,24 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
     // Another word of the same title in the reply or intent, by its first four letters ("משטח גפן", "קרם יום",
     // "אסף ... לנינג'ה"; "למכונה" for "למכונות").
     const hayWords = (hay.match(/[\p{L}\p{N}']{2,}/gu) ?? []) as string[];
-    const companion = (w: string) => wordsOf(base).filter((x) => x !== w && !TITLE_STOP.has(x) && !VARIANT_WORDS.has(x)).some((x) => {
+    // A colour or size word of the same title may be the companion ("ג'יני ... כחול"), never the distinctive word.
+    const companion = (w: string) => wordsOf(base).filter((x) => x !== w && !TITLE_STOP.has(x)).some((x) => {
       const key = x.slice(0, 4);
       return hayWords.some((h) => [h, h.slice(1), h.slice(2)].some((v) => v.length >= Math.min(3, key.length) && v.startsWith(key)));
     });
     // A unique word under 5 letters counts only with a companion ("תוך יום עסקים" is no "קרם יום").
     const counts = (w: string) => said(w) && (w.length >= 5 || companion(w));
-    if ((base.length >= 4 && hay.includes(base)) || distinct.some(counts)) out.push(i);
+    // Every word of the title said (2+ words, colour and size words included): "הבובון השטוח", "קרם הלחות שלנו".
+    const all = wordsOf(base).filter((w) => !TITLE_STOP.has(w));
+    const allSaid = all.length >= 2 && all.every(said);
+    if ((base.length >= 4 && hay.includes(base)) || allSaid || distinct.some(counts)) out.push(i);
   });
+  // A title inside a longer one that is also said: only the longer counts ("Classic Tee Long Sleeve", never also
+  // "Classic Tee"); the same words (one base, two variants) keep both.
+  const setOf = (i: number) => new Set(wordsOf(bases[i]));
+  const inside = (a: Set<string>, b: Set<string>) => [...a].every((w) => b.has(w)) && b.size > a.size;
+  const kept = out.filter((i) => !out.some((j) => j !== i && inside(setOf(i), setOf(j))));
+  out.splice(0, out.length, ...kept);
   if (!out.length && titles.filter(Boolean).length === 1 && !TEAM_LINE.test(reply ?? "") && !NO_INFO.test(reply ?? "")) out.push(titles.findIndex(Boolean));
   return out;
 }
@@ -2549,4 +2566,25 @@ export function focusTitle(focusTitles: string[], intent: string | null | undefi
   if (named.length > 1) return null;
   if (String(lastOffered ?? "").trim()) return String(lastOffered).trim();
   return focusTitles.length === 1 ? focusTitles[0] : null;
+}
+
+
+/**
+ * A counted offer that is not what is shown: "הנה 4 הצעות" with two cards (prod replay of 9480dfb2, Tehila). The
+ * number becomes the cards' count; nothing else changes.
+ */
+const COUNT_WORD: Record<string, number> = { שתי: 2, שני: 2, שלוש: 3, שלושה: 3, ארבע: 4, ארבעה: 4, חמש: 5, חמישה: 5, two: 2, three: 3, four: 4, five: 5 };
+const OFFER_COUNT = /(?<![\p{L}\d])(\d|שתי|שני|שלוש|שלושה|ארבע|ארבעה|חמש|חמישה|two|three|four|five)\s+(הצעות|אפשרויות|מוצרים|דגמים|פריטים|options|suggestions|products|ideas|picks)(?![\p{L}])/iu;
+export function fixCardCount(reply: string, cards: number): string {
+  const m = OFFER_COUNT.exec(String(reply ?? ""));
+  // One card: "1 הצעות" is no Hebrew; the count is left alone.
+  if (!m || cards < 2) return reply;
+  const said = /^\d$/.test(m[1]) ? Number(m[1]) : COUNT_WORD[m[1].toLowerCase()];
+  if (!said || said === cards) return reply;
+  return String(reply).replace(m[0], `${cards} ${m[2]}`);
+}
+
+/** "גם כן" / "as well" closing a sentence after a cut took what it pointed back to. */
+export function dropOrphanAlso(reply: string): string {
+  return String(reply ?? "").replace(/\s+(?:גם\s+כן|גם\s+היא|גם\s+הוא)(?=\s*[.!?]|\s*$)/gu, "").replace(/,?\s+(?:as well|too)(?=\s*[.!?]|\s*$)/giu, "");
 }
