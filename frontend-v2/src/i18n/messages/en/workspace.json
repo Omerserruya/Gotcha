@@ -245,6 +245,14 @@
       "minutes": "{count, plural, one {1 minute} other {# minutes}}",
       "hours": "{count, plural, one {1 hour} other {# hours}}",
       "days": "{count, plural, one {1 day} other {# days}}"
+    },
+    "bot": "AI employee: {groups}",
+    "botGroup": "{group} - {value}",
+    "botOn": "reminder after {reminder}, close {close} after it",
+    "botOff": "off",
+    "groupShort": {
+      "liveChat": "Chat",
+      "messaging": "Messaging"
     }
   },
   "idleDrawer": {
@@ -276,6 +284,33 @@
       "forbidden": "Only an Owner can change this.",
       "invalid": "One of the values was refused. Check them and try again.",
       "failed": "That didn't save. Try again."
-    }
+    },
+    "partPerson": "Conversations a person handles",
+    "partBot": "Your AI employee’s conversations",
+    "nothingChanged": "Nothing changed.",
+    "partFailed": "{part}: {reason}"
+  },
+  "botIdle": {
+    "who": "When your AI employee answered and the customer didn’t come back. This runs by itself; here you can change the timing and the wording, or switch it off.",
+    "finished": "A conversation the customer clearly finished closes by itself shortly after, on every channel, without a message.",
+    "unread": "We couldn’t read your AI employee’s settings just now, so they can’t be changed here. Refresh to try again.",
+    "groupUnread": "We couldn’t read this setting just now.",
+    "group": {
+      "liveChat": "Website chat and Shopify chat",
+      "messaging": "WhatsApp, Instagram and Messenger"
+    },
+    "summaryOn": "A reminder after {reminder} of quiet, and the close {close} after it.",
+    "summaryOff": "Off: these conversations don’t close by themselves.",
+    "source": {
+      "default": "The default",
+      "custom": "Your own",
+      "unsaved": "Not saved"
+    },
+    "enabled": "Send a reminder, then close the conversation",
+    "reminderAfter": "Reminder after",
+    "closeAfter": "Close, after the reminder",
+    "reminderText": "The reminder",
+    "closeText": "The closing message",
+    "closeTextHint": "Empty: the conversation closes without a message."
   }
 }

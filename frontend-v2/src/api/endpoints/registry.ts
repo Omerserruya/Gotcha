@@ -249,6 +249,8 @@ export const workspaceEndpoints = {
   slaDepartment: (id: string) => endpoint('/api/agents/settings/sla/department/{id}', { id }),
   /** Follow-up and auto-close (S3): `GET/PUT` - Owner only, the GET too (auth agents.ts). */
   idleAutomation: () => endpoint('/api/agents/settings/idle-automation'),
+  /** The AI employee's own follow-up and auto-close, per group: `GET/PUT` (contracts/bot-idle-automation). */
+  botIdleAutomation: () => endpoint('/api/agents/settings/bot-idle-automation'),
 } as const;
 
 /**

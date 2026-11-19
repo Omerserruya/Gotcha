@@ -912,4 +912,70 @@
     font-size: var(--font-size-caption);
     color: var(--text-subtle);
   }
+
+  /*
+   * The follow-up drawer's two parts, a rule between them - the same values
+   * as the mailbox drawer's parts (channels/RelevanceFilter.module.css
+   * .drawerPart), which this feature may not import.
+   */
+  .drawerPart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    min-inline-size: 0;
+  }
+
+  .drawerPart + .drawerPart {
+    padding-block-start: var(--space-16);
+    border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+
+  /* The AI employee's groups: design-system disclosure rows, one under another. */
+  .botGroups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .botGroupName {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: var(--line-height-snug);
+  }
+
+  .botGroupTitle {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .botGroupSummary {
+    font-size: var(--font-size-caption);
+    color: var(--text-secondary);
+  }
+
+  .botGroupBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    padding: var(--space-8) var(--space-12) var(--space-12);
+  }
+
+  .botGroupUnread {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: var(--space-8) var(--space-12);
+    font-size: var(--font-size-caption);
+    color: var(--text-subtle);
+    line-height: var(--line-height-snug);
+  }
+
+  /* The row's second line: the AI employee's groups, under the person-held one. */
+  .idleBotLine {
+    display: block;
+    margin-block-start: 2px;
+    color: var(--text-secondary);
+  }
 }

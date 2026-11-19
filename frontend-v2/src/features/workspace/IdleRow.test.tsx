@@ -7,7 +7,7 @@ import messages from '@/i18n/messages/en/workspace.json';
 import he from '@/i18n/messages/he/workspace.json';
 
 import { IdleRow } from './IdleRow';
-import type { IdleSetup } from './load-idle';
+import type { BotIdleSetup, IdleSetup } from './load-idle';
 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: unknown; children: ReactNode }) => (
@@ -17,13 +17,13 @@ vi.mock('@/i18n/navigation', () => ({
   ),
 }));
 
-const show = (setup: IdleSetup, locale: 'en' | 'he' = 'en') =>
+const show = (setup: IdleSetup, locale: 'en' | 'he' = 'en', bot?: BotIdleSetup) =>
   render(
     <NextIntlClientProvider
       locale={locale}
       messages={{ workspace: locale === 'he' ? he : messages }}
     >
-      <IdleRow setup={setup} />
+      <IdleRow setup={setup} bot={bot} />
     </NextIntlClientProvider>,
   );
 const owner = (over: Record<string, unknown> = {}): IdleSetup => ({
@@ -79,5 +79,50 @@ describe('★★ S3 - follow-up and auto-close’s row', () => {
     expect(screen.getByTestId('fact-value-idle')).toHaveTextContent(
       'תזכורת אחרי שעתיים · סגירה אחרי יומיים',
     );
+  });
+});
+
+const BOT: BotIdleSetup = {
+  kind: 'read',
+  groups: {
+    liveChat: {
+      enabled: true,
+      reminderAfterMinutes: 10,
+      closeAfterReminderMinutes: 10,
+      reminderText: 'x',
+      closeText: '',
+      source: 'default',
+    },
+    messaging: {
+      enabled: false,
+      reminderAfterMinutes: 30,
+      closeAfterReminderMinutes: 15,
+      reminderText: 'x',
+      closeText: '',
+      source: 'custom',
+    },
+  },
+};
+
+describe('★★ the AI employee’s line, under the person-held one', () => {
+  it('each group read: what it does, or off', () => {
+    show(owner(), 'en', BOT);
+    expect(screen.getByTestId('fact-value-idle-bot')).toHaveTextContent(
+      /^AI employee: Chat - reminder after 10 minutes, close 10 minutes after it · Messaging - off$/,
+    );
+  });
+
+  it('in Hebrew, the AI employee named with its non-breaking hyphen', () => {
+    show(owner(), 'he', BOT);
+    expect(screen.getByTestId('fact-value-idle-bot')).toHaveTextContent('עובד ה\u2011AI:');
+  });
+
+  it.each([
+    ['unread', owner(), { kind: 'unread' } as BotIdleSetup],
+    ['not an Owner', { kind: 'forbidden' } as IdleSetup, BOT],
+    ['not given', owner(), undefined],
+  ])('%s: no second line', (_, setup, bot) => {
+    show(setup, 'en', bot);
+    expect(screen.queryByTestId('fact-value-idle-bot')).toBeNull();
   });
 });
