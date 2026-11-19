@@ -234,17 +234,33 @@ export function nounNotTried(reply: string, tools: ToolRunRecord[], incoming: st
 }
 /** A question for the device's model or brand, or "the fit depends on the model". */
 const MODEL_ASK = /(?<![\u0590-\u05FF])(?:(?:איזה|איזו|מה)\s+(?:ה)?(?:דגם|דגמים|מותג|יצרן)|(?:ה)?דגם\s+(?:של|שלה|שלו|שלך|שלכם)|(?:תלוי|תלויה)\s+ב(?:ה)?דגם)(?![\u0590-\u05FF])|\b(?:which|what) (?:model|brand)\b|\bmodel number\b|\bdepends on the model\b/iu;
-export const MEASURE_ASK_HE = "כדי לדעת מה מתאים, מה הרוחב והעומק של הבסיס בס\"מ? אפשר גם לשלוח תמונה.";
-export const MEASURE_ASK_EN = "To know what fits, what are the base's width and depth in cm? A photo works too.";
-/** Her device words on a fit ask: the words she said it is FOR ("למכונת קפה", "ולמיקסר"), with the word after. */
+// A verb is no thing (dev round on d43923c6: "איזו מידה לבחור?" read "בחור" as her device). The infinitives a
+// shopping conversation uses, and the verb shapes no thing shares: "להזמין", "להתלבש", "לקנות".
+const INFINITIVES = new Set(["לבחור", "לקחת", "לדעת", "לתת", "לשים", "ללבוש", "למדוד", "לבדוק", "לשמור", "למכור", "לרכוש", "לשלוח", "לפתוח", "לסגור", "לחזור", "לעזור", "למצוא", "לקבל", "לשלם", "לחפש", "לבטל", "לדבר", "לבקש", "לברר", "לשאול", "לחשוב", "לעבוד", "לכתוב", "לקרוא", "ללכת", "לבוא", "לצאת", "לשבת", "לגשת", "לומר", "לאסוף", "לארוז", "לנקות", "לכבס", "לחבר", "לתלות", "לסדר", "לחמם", "לבשל", "לאפות", "לטגן"]);
+const INFINITIVE_SHAPE = /^ל(?:ה[\u0590-\u05FF]{2,3}י[\u0590-\u05FF]|הת[\u0590-\u05FF]{3,}|[\u0590-\u05FF]{2}ות)$/u;
+const infinitive = (w: string) => { const x = w.replace(/^ו(?=ל)/u, ""); return INFINITIVES.has(x) || INFINITIVE_SHAPE.test(x); };
+// Who it is for is no thing either ("איזו מידה מתאימה לילד בן 6?").
+const PEOPLE = new Set(["ילד", "ילדה", "ילדים", "ילדות", "תינוק", "תינוקת", "תינוקות", "פעוט", "פעוטה", "נער", "נערה", "בחור", "בחורה", "גבר", "גברים", "אישה", "אשה", "נשים", "בעל", "בעלי", "אשתי", "אמא", "אבא", "סבא", "סבתא", "חבר", "חברה", "אחי", "אחותי", "מבוגר", "מבוגרים", "אדם", "אנשים", "בנים", "בנות", "הבן", "הבת", "בני", "בתי"]);
+// "ל" words that name no thing: an adverb or a span of time ("מה מתאים לדעתך?", "מתאים לפחות לשנה").
+const L_ADVERBS = new Set(["לפחות", "למשל", "לפעמים", "לעתים", "לעיתים", "לגמרי", "לדעתי", "לדעתך", "לדעתכם", "לצערי", "לאחרונה", "למעשה", "לבינתיים", "לעכשיו", "להיום", "למחר", "לעולם", "לתמיד", "לבסוף", "לפני", "לאחר", "למרות", "לקראת", "לכאן", "לשם", "לבד", "לכולם", "לכולנו", "לשניהם", "לשתיהן", "לאלה", "לאלו", "לכם", "להם", "להן", "לעצמי", "לעצמך", "למישהו", "למישהי", "למשהו", "לכלום", "לשנה", "לשנתיים", "לחודש", "לחודשיים", "לשבוע", "לשבועיים", "לעונה", "לתקופה", "לזמן"]);
+/**
+ * Her device words on a fit ask: what she said the thing must fit ("מתאים למכונת קפה ולמיקסר", "למיקסר שלי מה
+ * מתאים?"), the "ל" words of the sentence that holds the fit verb. Never a verb ("מתאים לקנות"), a person ("מתאים
+ * לילד") or a use ("מתאים לחורף"), and nothing in a sentence with no fit verb ("איזו מידה לבחור?", "איזו מידה לקחת למעיל?").
+ */
 function fitDeviceWords(incoming: string): string[] {
-  const ws = (normalizeQuotes(String(incoming ?? "")).match(/[\u0590-\u05FF]+(?:'[\u0590-\u05FF]+)*/gu) ?? []) as string[];
   const out: string[] = [];
-  ws.forEach((w, k) => {
-    const m = /^ו?ל([\u0590-\u05FF']{3,})$/u.exec(w);
-    if (!m || talkWord(w) || queryStop(m[1])) return;
-    out.push(m[1].replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""));
-  });
+  for (const sentence of normalizeQuotes(String(incoming ?? "")).split(/[.!?\u061F\n]+/)) {
+    const ws = (sentence.match(/[\u0590-\u05FF]+(?:'[\u0590-\u05FF]+)*/gu) ?? []) as string[];
+    if (!ws.some((w) => FIT_VERB.test(w))) continue;
+    for (const w of ws) {
+      const m = /^ו?ל([\u0590-\u05FF']{3,})$/u.exec(w);
+      if (!m || talkWord(w) || queryStop(m[1]) || infinitive(w) || L_ADVERBS.has(w.replace(/^ו(?=ל)/u, ""))) continue;
+      const bare = m[1].replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "");
+      if (PEOPLE.has(m[1]) || PEOPLE.has(bare) || USE_WORDS.has(m[1]) || USE_WORDS.has(bare)) continue;
+      out.push(bare);
+    }
+  }
   return out;
 }
 /** A model question on a fit ask with no models of her device kind in the business's texts (fewer than two lines name it). */
@@ -1527,7 +1543,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (foreignScript(reply, i.customerText ?? i.incomingMessage)) style.push("foreign_script");
   if (internalJargon(reply)) style.push("internal_jargon");
   // A fit ask answered with a question for the device's model, when the business's texts list no models for that kind of
-  // device: its staff fit by the base's size (Omer 2026-11-19, a business owner's complaint).
+  // device (Omer 2026-11-19, a business owner's complaint).
   if (unbackedModelAsk(reply, i.incomingMessage ?? "", i.knowledge ?? "")) style.push("model_ask" as any);
   if (INTERNAL_REASONING.test(reply ?? "")) style.push("internal_reasoning");
   if (TOOL_TALK.test(reply ?? "")) style.push("tool_talk");
@@ -1957,10 +1973,8 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
   if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
   if (c.has("foreign_script")) s = stripForeignScript(s, allowedScripts);
-  if (c.has("model_ask")) {
-    const kept = dropSentences(s, MODEL_ASK);
-    s = `${kept} ${/[\u0590-\u05FF]/.test(s) ? MEASURE_ASK_HE : MEASURE_ASK_EN}`.trim();
-  }
+  // The model question goes; nothing is put in its place (what a business asks instead is in its own texts).
+  if (c.has("model_ask")) s = dropSentences(s, MODEL_ASK);
   if (c.has("internal_jargon")) s = dropSentences(dropSentences(s.replace(PROCESS_CLAUSE, ""), INTERNAL_JARGON), PROCESS_TALK);
   if (c.has("internal_reasoning")) s = dropSentences(s, INTERNAL_REASONING);
   if (c.has("tool_talk")) s = dropSentences(s, TOOL_TALK);

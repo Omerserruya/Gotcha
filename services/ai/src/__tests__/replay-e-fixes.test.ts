@@ -1453,14 +1453,73 @@ describe("dev round k9 on 1f25aca0: F4", () => {
 
 describe("Omer 2026-11-19: a fit ask never asks for a model the texts do not list", () => {
   const K = "טבלת התאמה:\nמכונת קפה נינג'ה: סמובי אריאל\nנינג'ה קריספי: סמובי אליס\nנינג'ה סלושי: סמובי כריסטינה\nמיקסר קנווד: סמובי אסף";
-  it("★ the two prod lines are flagged and repaired to the measurements question", async () => {
-    const { unbackedModelAsk, cleanStyle, MEASURE_ASK_HE } = await import("../services/reply-engine/gates");
+  // The engine holds no business's own question (dev round on d43923c6: a clothing size ask got "מה הרוחב והעומק של הבסיס").
+  const NO_FIXED_ASK = /בסיס|רוחב|עומק|תמונה|\bbase\b|width|depth|photo/i;
+  it("★ the two prod lines are flagged, and the repair only takes the model question out", async () => {
+    const { unbackedModelAsk, cleanStyle } = await import("../services/reply-engine/gates");
     const a = "למכונת קפה ולמיקסר ההתאמה תלויה בדגם, איזה דגמים יש לך?";
     const b = "למכונת קפה ההתאמה תלויה בדגם, מה הדגם שלה?";
     expect(unbackedModelAsk(a, "איזה משטח מתאים למכונת קפה ולמיקסר?", K)).toBe(true);
     expect(unbackedModelAsk(b, "איזה משטח מתאים למכונת קפה?", K)).toBe(true);
-    expect(cleanStyle(b, ["model_ask"])).toBe(MEASURE_ASK_HE);
-    expect(cleanStyle("יש לנו כמה משטחים. " + b, ["model_ask"])).toBe(`יש לנו כמה משטחים. ${MEASURE_ASK_HE}`);
+    // The device before the verb, and in a second sentence, is still her device.
+    expect(unbackedModelAsk(b, "למכונת קפה שלי איזה משטח מתאים?", K)).toBe(true);
+    expect(unbackedModelAsk(b, "שלום. מה מתאים למכונת קפה?", K)).toBe(true);
+    // Nothing useful is left of a reply that was only the model question: the thin-reply path takes it from there.
+    expect(cleanStyle(a, ["model_ask"])).toBe("");
+    expect(cleanStyle(b, ["model_ask"])).toBe("");
+    expect(cleanStyle("יש לנו כמה משטחים. " + b, ["model_ask"])).toBe("יש לנו כמה משטחים.");
+    for (const r of [a, b, "יש לנו כמה משטחים. " + b, "Which model do you have?"]) {
+      const out = cleanStyle(r, ["model_ask"]);
+      expect(out).not.toMatch(/דגם|model/i);
+      expect(out).not.toMatch(NO_FIXED_ASK);
+    }
+  });
+  it("★ other trades stay clean: a size question is no device, whatever the reply asks", async () => {
+    const { unbackedModelAsk, gate3, cleanStyle } = await import("../services/reply-engine/gates");
+    const CLOTHES = "מדיניות החזרות: 14 יום.\nמשלוח חינם מעל 300 שקלים.";
+    const asks = ["איזה דגם מעניין אותך?", "זה תלוי בדגם, איזה דגם רצית?", "מה הדגם שלך?"];
+    const sizeAsks = [
+      // The dev round's own line, and its neighbours: a verb after the size word is no device.
+      "ואיך אני יודעת איזו מידה לבחור?",
+      "איזו מידה לבחור",
+      "איזו מידה לקחת למעיל",
+      "איזו מידה כדאי להזמין?",
+      "איזו מידה מתאימה לקנות לחורף?",
+      "מה מתאים לקחת לטיול?",
+      "מה הכי מתאים להזמין למתנה?",
+      "מה מתאים להתחיל איתו?",
+      // Who it is for is no device.
+      "איזו מידה מתאימה לילד בן 6?",
+      "מה מתאים לתינוקת בת שנה?",
+      "איזו מידה מתאימה לבעלי?",
+      // A use or a season is no device, and neither is a word that names nothing.
+      "מה מתאים לחתונה בקיץ?",
+      "איזו מידה מתאימה לדעתך?",
+      "מה מתאים לפחות לשנה?",
+    ];
+    for (const incoming of sizeAsks) for (const reply of asks) {
+      expect(unbackedModelAsk(reply, incoming, CLOTHES), `${incoming} / ${reply}`).toBe(false);
+      const v = gate3({ reply: `כדאי להתחיל מהמידה הרגילה שלך. ${reply}`, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", knowledge: CLOTHES, locale: "he", incomingMessage: incoming, recentInbound: [], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+      expect(v.problems.flatMap((p: any) => (p.kind === "style" ? p.codes : [])), incoming).not.toContain("model_ask");
+    }
+    // Furniture: the texts list its tables, so asking which one is fair; and with no such list the model question is
+    // only taken out, nothing is asked in its place.
+    const FURNITURE = "שולחן אוכל נפתח: 160 עד 220 ס\"מ\nשולחן סלון עגול: קוטר 90 ס\"מ\nכיסאות נמכרים בנפרד.";
+    expect(unbackedModelAsk("איזה דגם של שולחן יש לך?", "איזה גודל מתאים לשולחן שלי", FURNITURE)).toBe(false);
+    expect(unbackedModelAsk("איזה דגם של שולחן יש לך?", "איזה גודל מתאים לשולחן שלי", CLOTHES)).toBe(true);
+    const cut = cleanStyle("מפה בגודל 140 על 200 מתאימה לרוב השולחנות. איזה דגם של שולחן יש לך?", ["model_ask"]);
+    expect(cut).toBe("מפה בגודל 140 על 200 מתאימה לרוב השולחנות.");
+    expect(cleanStyle("כדאי להתחיל מהמידה הרגילה שלך ומהגזרה הנוחה לך. איזה דגם מעניין אותך?", ["model_ask"])).toBe("כדאי להתחיל מהמידה הרגילה שלך ומהגזרה הנוחה לך.");
+  });
+  it("★ no business's question lives in the engine's code or prompt", async () => {
+    const { readFileSync } = await import("fs");
+    const gates = await import("../services/reply-engine/gates");
+    expect(Object.keys(gates).filter((k) => /MEASURE_ASK/i.test(k))).toEqual([]);
+    const src = readFileSync("src/services/reply-engine/gates.ts", "utf8");
+    expect(src).not.toMatch(/הרוחב והעומק של הבסיס|base's width and depth/);
+    const prompt = readFileSync("src/services/reply-engine/prompt.ts", "utf8");
+    expect(prompt).not.toMatch(/for a base|width and depth/);
+    expect(prompt).toMatch(/ask only for what the business's texts say the fit depends on/);
   });
   it("★ stays: a Ninja device listed by name in the table, and a kind the table lists models for", async () => {
     const { unbackedModelAsk } = await import("../services/reply-engine/gates");
