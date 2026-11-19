@@ -273,6 +273,7 @@ export const caveatHolds = (x: string, sources: string) => {
 };
 const RESTOCK_STATEMENT = /(?<![\u0590-\u05FF])(?:(?:יחזור|יחזרו|תחזור|יגיע|יגיעו|תגיע)|(?:צפוי|צפויה|צפויים|צפויות)\s+(?:לחזור|להגיע))\s+(?:שוב\s+)?ל?מלאי|(?<![\u0590-\u05FF])צפי(?![\u0590-\u05FF])|חידוש\s+(?:ה)?מלאי\s+(?:ב|צפוי)|\b(?:back in stock|restock(?:ed|ing)?\s+(?:on|by)|expected (?:on|by|in))\b/iu;
 const CAVEAT = /(?<![\u0590-\u05FF])ו?(?:אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)|אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
+const herCardTalk = (i: { incomingMessage?: string; recentInbound?: string[] }) => /(?<![\u0590-\u05FF])[הבול]?(?:כרטיס|האשראי|אשראי|חיוב|חויבתי|חייבו|תשלום|שילמתי|עסקה|ויזה)(?![\u0590-\u05FF])|\b(?:card|charged?|payment|paid)\b/iu.test([i.incomingMessage ?? "", ...(i.recentInbound ?? [])].join("\n"));
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
@@ -1243,7 +1244,10 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (echoed.length) problems.push({ kind: "echoed_size", claims: echoed });
   const numbers = ungroundedNumbers(reply, [i.grounding, i.sourceText ?? "", i.customerText ?? i.incomingMessage, i.knowledge ?? "", i.businessAddress ?? ""].join("\n"));
   if (numbers.length) problems.push({ kind: "ungrounded_number", claims: numbers });
-  const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
+  // Her payment card: when her messages speak of her card or a payment, "בכרטיס" in the reply is that card, never a
+  // product card (pre-check of 51d0273e: "אישור בכרטיס לא בהכרח אומר שההזמנה הושלמה.").
+  const herCard = /(?<![\u0590-\u05FF])[הבול]?(?:כרטיס|האשראי|אשראי|חיוב|חויבתי|חייבו|תשלום|שילמתי|עסקה|ויזה)(?![\u0590-\u05FF])|\b(?:card|charged?|payment|paid)\b/iu.test([i.incomingMessage ?? "", ...(i.recentInbound ?? [])].join("\n"));
+  const pictures = herCard ? cardReferences(reply, true) : cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
   const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended).filter((x) => !pictures.includes(x));
   if (dangling.length) problems.push({ kind: "dangling_reference", claims: dangling });
@@ -1303,6 +1307,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     .map((v) => v.kind)
     // Prices are the claims check above, with the same grounding.
     .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price") as string[];
+  if (herCardTalk(i)) { const k = style.indexOf("card_narration"); if (k >= 0) style.splice(k, 1); }
   if (i.locale === "he") for (const [code, re] of V2_BANS_HE) if (re.test(reply)) style.push(code);
   for (const [code, re] of V2_BANS_ANY) if (re.test(reply)) style.push(code);
   if (simulationLeak(reply, `${i.knowledge ?? ""}\n${i.grounding ?? ""}`)) style.push("simulation_leak");
@@ -1457,7 +1462,7 @@ export function nonProductAsk(incoming: string): boolean {
  */
 // Words of a conversation, never of a product (the Supervisor's probes on 7100b0b6, L224 and L789): greetings, fillers,
 // past and existence verbs, pronouns, the frame of a question.
-const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison"]);
+const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison", "מומלץ", "מומלצים", "מומלצות", "מומלצת", "נשמע", "קיבלתי", "ממך", "מכם", "מצליח", "מצליחה", "לשלם", "הסבר", "להסבר", "וכו", "וכדומה", "עדכון", "עדכונים", "show", "me"]);
 const PLAIN_ADJECTIVES = new Set(["יפה", "יפות", "יפים", "יפהפייה", "חדש", "חדשה", "חדשים", "חדשות", "נחמד", "נחמדה", "טוב", "טובה", "קלילה", "קליל", "עדין", "עדינה", "מיוחד", "מיוחדת", "שווה", "beautiful", "nice", "new", "pretty", "special"]);
 const CONTEXT_NOUNS = new Set(["מכירה", "מכירות", "סניף", "חנות", "אתר", "אינסטגרם", "פייסבוק", "טיקטוק", "וואטסאפ", "סטורי", "פוסט", "תערוכה", "יריד", "שוק", "אירוע", "הופעה", "קבוצה", "מבצע", "פרסומת", "ניוזלטר"]);
 const talkWord = (w: string) => { const l = w.toLowerCase(); return TALK_WORDS.has(l) || (/^[הושל][\u0590-\u05FF]{2,}$/u.test(l) && TALK_WORDS.has(l.slice(1))) || (/^ש[\u0590-\u05FF]{3,}$/u.test(l) && (TALK_WORDS.has(l.slice(1)) || /^ש(?:מוצר|הוא|היא|זה)/u.test(l))); };
@@ -1477,7 +1482,7 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
   if (nonProductAsk(t)) return null;
   // A name beside a greeting at the start: "יערה שלום.", "היי יערה,".
   t = t.replace(/^\s*[\p{L}]+\s+שלום\s*[,.!]?/u, " ").replace(/^\s*(?:היי|הי|שלום|hi|hey|hello)\s+[\p{L}]+\s*[,!.]/iu, " ");
-  const tokens = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []) as string[];
+  const tokens = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*'?/gu) ?? []) as string[];
   const isContent = (w: string) => !queryStop(w) && !talkWord(w) && !ASK_WORDS.has(w.toLowerCase()) && (w.length >= 2 || /^\d$/.test(w));
   // A size and its value are never title text: "מידה 38" goes, and the ב comes off the word after it ("בנעל").
   const sized = new Set<number>();
@@ -1520,7 +1525,7 @@ const nounWord = (w: string) => /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(w) && 
 // A message about a product thing: a have/was/want/seen verb governing the noun ("הייתה מטפחת", "יש לכם X", "מחפשת X").
 const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|לחפש|למצוא|רוצה|רוצים|ראיתי|קניתי|הזמנתי)\s+(?:את\s+)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
 // Never the governed noun (the 7a3bc2a3 probe on 26 real intents): a frame or abstract word, an adverb, an infinitive.
-const NOT_LENT = new Set(["המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק"]);
+const NOT_LENT = new Set(["המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק", "אחריות", "החזרות", "שירות", "מבצעים"]);
 // In the governed slot a word ending in י is a construct noun ("למצוא משטחי הזזה"), never an adjective.
 const lendable = (w: string) => { const bare = w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""); return /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(bare) && !PLAIN_ADJECTIVES.has(bare) && !talkWord(w) && !queryStop(w) && !/^ל[\u0590-\u05FF]{2,}/u.test(w) && !NOT_LENT.has(bare) && !NOT_LENT.has(w); };
 /** The noun lent bare: never with its article ("המטפחת" lends "מטפחת"). */
@@ -2900,14 +2905,19 @@ export function asksAboutProduct(incoming: string): boolean {
   for (const m of t.matchAll(PRODUCT_CONTEXT)) if (lendable(m[1])) return true;
   return false;
 }
-const PRODUCTS_EXIST = /(?<![\u0590-\u05FF])(?:יש\s+(?:לנו\s+)?(?:כמה|מגוון|מספר)|יש\s+לנו|קיימות|קיימים|יש\s+גם)\s+[\u0590-\u05FF]{3,}|\b(?:we have (?:a few|several|some)|there are (?:a few|several|some))\b/iu;
+// "יש כמה מטפחות", "יש מגוון תיקים": several products exist; never the bare "יש לנו" (policy answers: "יש לנו
+// משלוח חינם", "יש לנו אחריות לשנה", the pre-check of 51d0273e).
+const PRODUCTS_EXIST = /(?<![\u0590-\u05FF])(?:יש\s+(?:לנו\s+)?(?:כמה|מגוון|מספר)|קיימות|קיימים)\s+([\u0590-\u05FF]{3,})|\b(?:we have (?:a few|several|some)|there are (?:a few|several|some))\s+(\w{3,})/iu;
 const SEARCH_PROMISE = /(?<![\u0590-\u05FF])[וש]?(?:נחפש|אחפש|נבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|אבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|נמצא\s+לך)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ll| will) (?:search|look (?:for|it up)|check (?:the )?(?:stock|catalog(?:ue)?)))\b/iu;
 /** A product claim or a promise to search, with a store offered and no store read this turn, on a message about a product. */
 export function claimsOrPromisesUnsearched(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
   if (!toolsOffered.some((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n))) return false;
   if (tools.some((t) => /list_products|search_products|get_product/i.test(t.tool))) return false;
   const r = String(reply ?? "");
-  return (PRODUCTS_EXIST.test(r) || SEARCH_PROMISE.test(r)) && asksAboutProduct(incoming);
+  // The claimed noun is no policy word (משלוח, אחריות...).
+  const m = PRODUCTS_EXIST.exec(r);
+  const claim = !!m && !NOT_LENT.has(bareNoun(String(m[1] ?? m[2] ?? "")));
+  return (claim || SEARCH_PROMISE.test(r)) && asksAboutProduct(incoming);
 }
 
 /**
@@ -2925,7 +2935,8 @@ export function cleanStoreQuery(query: string): string {
 }
 /** The product words of a store query; null when none is left ("להזמין", "אילו"): such a query is never run. */
 export function storeQueryWords(query: string): string | null {
-  const words = (String(query ?? "").match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []) as string[];
+  // One apostrophe form, kept inside and at the end of a word ("נינג׳ה", "קפוצ׳ון", "בז'").
+  const words = (normalizeQuotes(String(query ?? "")).match(/[\p{L}\p{N}]+(?:['"][\p{L}]+)*'?/gu) ?? []) as string[];
   const kept = words.filter((w) => !queryStop(w) && !talkWord(w) && !ASK_WORDS.has(w.toLowerCase()) && !ASKS_ABOUT.has(w.toLowerCase()));
   return kept.length ? kept.join(" ") : null;
 }

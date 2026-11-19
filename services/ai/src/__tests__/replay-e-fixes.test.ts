@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass, cutTheAnswer } from "../services/reply-engine/engine";
-import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer } from "../services/reply-engine/gates";
+import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer, claimsOrPromisesUnsearched, storeQueryWords } from "../services/reply-engine/gates";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
@@ -786,5 +786,40 @@ describe("rating of the dcf2158e prod replay: units", () => {
   it("★ I: an absence line is not the answer when what is left names products or asks a focused question", () => {
     expect(cutTheAnswer(["לא מצאתי את נינג'ה קריספי בשם הזה."], "המשטחים שמופיעים להתאמות נינג'ה הם אריאל, גפן, אליס, אסף וכריסטינה. אפשר לבדוק התאמה לפי רוחב ועומק בסיס המכשיר, מה המידות?", "ולנינגה קריספי")).toBe(false);
     expect(cutTheAnswer(["בשחור יש את ה-Heavyweight Hoodie."], "ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.", "רוצה שחור")).toBe(true);
+  });
+});
+
+describe("pre-check of 51d0273e: the follow-ups", () => {
+  const W = ["woocommerce.list_products", "search_knowledge"];
+  it("★ 1: a policy answer is no product claim; a product claim still is", () => {
+    expect(claimsOrPromisesUnsearched("יש לנו משלוח חינם מעל 300 ש\"ח.", "יש לכם משלוח חינם על המטפחות?", [], W)).toBe(false);
+    expect(claimsOrPromisesUnsearched("יש לנו אחריות לשנה על כל המוצרים.", "יש אחריות על הבלנדר?", [], W)).toBe(false);
+    // "יש כמה" before a policy word is no product claim either.
+    expect(claimsOrPromisesUnsearched("יש לנו כמה מבצעים החודש.", "יש לכם מבצע על המטפחות?", [], W)).toBe(false);
+    expect(claimsOrPromisesUnsearched("היי! יש כמה מטפחות חגיגיות בגווני כחול, אבל אין לי דרך לזהות.", "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?", [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("ברור, נחפש דווקא מטפחת חגיגית בגווני כחול.", "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית", [], W)).toBe(true);
+  });
+  it("★ 2: in a payment conversation \"בכרטיס\" is her card; a product card line elsewhere still is a card reference", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const g = (reply: string, incoming: string) => gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: incoming, recentInbound: [incoming], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any).problems;
+    for (const r of ["אישור בכרטיס לא בהכרח אומר שההזמנה הושלמה.", "כן, ייתכן שיופיע אישור בכרטיס גם אם ההזמנה לא הושלמה באתר.", "לפי התקנון רכישה תקפה רק אחרי אישור החברה והפקת חשבונית, ולכן אישור בכרטיס לבדו לא מאשר שההזמנה הושלמה."]) {
+      const p = g(r, "בכרטיס רשום שאושר");
+      expect(p.map((x: any) => x.kind), r).not.toContain("card_reference");
+      expect(p.flatMap((x: any) => (x.kind === "style" ? x.codes : [])), r).not.toContain("card_narration");
+    }
+    expect(g("רואים את זה בכרטיס המוצר למטה.", "יש לכם משטח למיקסר?").map((x: any) => x.kind)).toContain("card_reference");
+  });
+  it("★ 3: a query keeps the geresh, the curly apostrophe and a closing apostrophe", () => {
+    expect(cleanStoreQuery("נינג׳ה קרמה 28x18")).toBe("נינג'ה קרמה 28x18");
+    expect(cleanStoreQuery("ג׳ינס שחור")).toBe("ג'ינס שחור");
+    expect(cleanStoreQuery("קפוצ’ון שחור")).toBe("קפוצ'ון שחור");
+    expect(cleanStoreQuery("משטח בז'")).toBe("משטח בז'");
+    expect(storeQueryOf("יש לכם משטח בז'?")).toBe("משטח בז'");
+  });
+  it("★ 4: more conversation words never reach the store", () => {
+    expect(cleanStoreQuery("אילו מוצרים מומלצים לעדינות ומראה יומי?")).toBe("לעדינות ומראה יומי");
+    expect(storeQueryWords("הי מה נשמע? לא קיבלתי ממך עדכון")).toBeNull();
+    expect(cleanStoreQuery("לא מצליח לשלם עם ביימי")).toBe("ביימי");
+    expect(storeQueryOf("קניתי טוש למילוי גבות, אשמח להסבר /סרטון איך להשתמש?")).not.toMatch(/הסבר/);
   });
 });
