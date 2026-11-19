@@ -139,6 +139,7 @@ export type ClaimProblem =
   | { kind: "style"; codes: string[] }
   /** An attribute question answered "no info" (or sent to the team) without reading the product. */
   | { kind: "unread_product" }
+  | { kind: "noun_not_tried"; noun: string }
   /** A delivery or order question answered "no info" or sent to the team without the order/tracking tools. */
   | { kind: "unread_order" }
   /** A coupon or policy question sent to the team without searching the knowledge. */

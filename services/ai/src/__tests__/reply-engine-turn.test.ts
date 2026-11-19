@@ -3195,3 +3195,12 @@ describe("dev round k6 on 622fcae0, through a whole turn with model-shaped calls
     expect(d?.args.on_sale).toBe(true);
   });
 });
+
+describe("dev round k8 on f46b5a49, K8-1 through a whole turn", () => {
+  it("★ \"יש לכם חולצה בתכלת?\" after one empty narrow search: the engine searches \"חולצה\" before the absence goes out", async () => {
+    h.groundStatus = "no_results";
+    h.responses.push({ toolCalls: [tc("c1", "woocommerce.list_products", { query: "חולצה תכלת" })] }, { toolCalls: [respond("c2", { reply: "לא מצאנו חולצה בתכלת בקטלוג." })] }, { toolCalls: [respond("c3", { reply: "יש Canvas Tote." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם חולצה בתכלת?" }, "autonomous");
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => d.args.query)).toContain("חולצה");
+  });
+});

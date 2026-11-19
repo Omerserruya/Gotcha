@@ -184,6 +184,21 @@ const MATERIAL_ASK = /(?<![\u0590-\u05FF])(?:חומר|מאיזה\s+חומר|עש
 // on b3d2bbf3: "כמה היא עולה?" right after two shirts were named, only the knowledge searched).
 const PRICE_ASK = /(?<![\u0590-\u05FF])(?:כמה\s+(?:זה\s+|היא\s+|הוא\s+|הם\s+|הן\s+)?(?:עולה|עולים|עולות)|מה\s+(?:ה)?מחיר|ה?מחיר\s+של)(?![\u0590-\u05FF])|\b(?:how much|what(?:'s| is) the price|price of)\b/iu;
 const NO_PRICE_GIVEN = /(?<![\u0590-\u05FF])(?:(?:אין|לא)\s+(?:לנו\s+|לי\s+|כרגע\s+)?(?:[\u0590-\u05FF]+\s+){0,2}?(?:ה)?מחיר|מחיר\s+(?:מאומת|מעודכן)|(?:לשלוח|לכתוב|שלחו|כתבו)\s+(?:את\s+)?(?:ה)?(?:שם|קישור|לינק)|שם\s+או\s+קישור)(?![\u0590-\u05FF])|\b(?:(?:no|don't have (?:a|the)) price|send (?:me )?(?:the )?(?:name|link))\b/iu;
+/**
+ * "לא מצאנו חולצה בתכלת" after ONE empty search of noun plus attribute (dev round k8 on f46b5a49: the light-blue Oxford
+ * shirt the bot had named two turns before was never found again): every store search this turn came back empty, each
+ * had two or more words, and her message holds a describing word. Her noun alone, to search before any absence.
+ */
+export function nounNotTried(reply: string, tools: ToolRunRecord[], incoming: string): string | null {
+  if (!ABSENCE.test(String(reply ?? ""))) return null;
+  const store = tools.filter((t) => /list_products|search_products/i.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
+  if (!store.length || !store.every((t) => t.outcome === "empty")) return null;
+  if (store.some((t) => (searchTextOf(t).match(/[\p{L}\p{N}']+/gu) ?? []).length < 2)) return null;
+  const words = String(storeQueryWords(incoming) ?? "").split(/\s+/).filter(Boolean);
+  const bareW = (w: string) => w.replace(/^[הב](?=[\u0590-\u05FF]{3,})/u, "");
+  if (!words.some((w) => describingWord(bareW(w)) || COLOUR_WORD.test(bareW(w)))) return null;
+  return words.find((w) => !describingWord(bareW(w)) && !COLOUR_WORD.test(bareW(w)) && lendable(w)) ?? null;
+}
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
   if (PRICE_ASK.test(incoming ?? "") && (teamQuestion || NO_INFO.test(reply ?? "") || NO_PRICE_GIVEN.test(reply ?? ""))) {
     const canReadP = toolsOffered.some((n) => /get_product|list_products|search_products/i.test(n));
@@ -1313,6 +1328,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   const claimedAbsent = absent.filter((x) => !caveatHolds(x, `${i.knowledge ?? ""}\n${i.grounding ?? ""}\n${i.tools.map((t) => String(t.content ?? "")).join("\n")}`));
   if (claimedAbsent.length) problems.push({ kind: "ungrounded_absence", claims: claimedAbsent });
 
+  // An absence after narrow empty searches only, her noun never searched alone (dev round k8 on f46b5a49).
+  { const n = nounNotTried(reply, i.tools, i.incomingMessage ?? ""); if (n) problems.push({ kind: "noun_not_tried", noun: n }); }
   // A fit or size ask: the business's device or size table answers it (rating 93f9fdff, Smoovee).
   if (gaveUpSearch(reply, i.tools, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "")) problems.push({ kind: "gave_up_search", ...(knowledgeAnswersIt(reply, i.incomingMessage, !!i.teamQuestion, i.knowledge ?? "") || FIT_ASK.test(i.incomingMessage ?? "") ? { fromKnowledge: true } : {}) });
   else if (unreadProduct(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_product" });
@@ -1754,6 +1771,9 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
     // Decided by what is left of her words: attribute and question words alone are no product (storeQueryOf null).
     const q = String(subject ?? "").trim().slice(0, 80) || query;
     if (q) out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
+  } else if (store && has("noun_not_tried")) {
+    const noun = String((problems.find((p) => p.kind === "noun_not_tried") as any)?.noun ?? "").trim();
+    if (noun) out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: noun, ...few }) } });
   } else if (store && has("unknown_product") && asksAboutProduct(incoming) && !done.some((t) => PRODUCT_TOOL.test(t.tool))) {
     // Products named with no store read this turn (rating of b3d2bbf3, NE'A: "קניתי טוש למילוי גבות, אשמח להסבר
     // /סרטון" answered from the knowledge with "no video"; the product page had the tip and the video): her product
@@ -1916,6 +1936,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
     if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Answer from the business's knowledge first (a device, size or compatibility table answers it; name the fitting products from it). Else call the search once more with a narrower query (one or two words, per_page 5). Never say you could not check, and do not send it to the team.");
+    if (p.kind === "noun_not_tried") lines.push("- Your search was narrower than her ask and came back empty; the store was searched for the product itself above. Answer from what it returned: say which of them come in what she asked for, or which colours or options they do come in. No team hand-over when the products answer it.");
     if (p.kind === "unread_product") lines.push("- The customer asked about the product itself (material, colours, feel, fit, care, origin). Read it first: call get_product (or the product search) now, answer from its text, and only if the text truly lacks it say you will check.");
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {

@@ -570,6 +570,9 @@ export function generalPolicyAsk(incoming: string, knowledge: string): boolean {
   const own = /(?<![\u0590-\u05FF])(?:שלי|שלנו|חויבתי|חייבו|חיוב\s+כפול|שילמתי|הזמנתי|ההזמנה|נכשל|נכשלה|לא\s+עבר|לא\s+נקלט|כפול|פעמיים|זיכוי|החזר)(?![\u0590-\u05FF])|\d{3,}|\b(?:my|i paid|charged me|twice|refund)\b/iu;
   return infoQuestion(t) && !own.test(t) && knowledgeSpeaksTo(t, knowledge);
 }
+// The reply already says it is on sale, in any wording (dev round k8 on f46b5a49: "reduced from ₪379" and then the
+// engine's own sale line again).
+export const SALE_SAID = /(?<![\u0590-\u05FF])(?:מבצע|במבצע|במקום|הנחה|בהנחה|מוזל|מוזלת|ירד\s+מ|ירדה\s+מ|לפני\s+ההנחה)(?![\u0590-\u05FF])|\b(?:sale|instead of|reduced|down from|marked down|discount(?:ed)?|off the)\b|\bwas\s+[₪$€]?\s?\d|\d+%\s+off\b/iu;
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
 export function closestMatchLine(locale: "he" | "en"): string {
@@ -2370,7 +2373,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const one = namedOnce(reply ?? "", candidates);
     const c: any = one >= 0 ? candidates[one] : null;
     const now = Number(String(c?.discount?.now ?? "").replace(",", "."));
-    if (reply && c?.discount && now > 0 && !/(?<![\u0590-\u05FF])(?:מבצע|במבצע|במקום)(?![\u0590-\u05FF])|\b(?:sale|instead of)\b/iu.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
+    if (reply && c?.discount && now > 0 && !SALE_SAID.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
       const line = salePriceLine(c, locale);
       if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; }
     }

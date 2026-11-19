@@ -1284,3 +1284,30 @@ describe("dev round k7 on 22969e1f", () => {
     expect(repeatedSentences(r, prev, "תודה")).toHaveLength(1);
   });
 });
+
+describe("dev round k8 on f46b5a49", () => {
+  it("★ K8-3: a sale said in other words is a sale said; no second sale line", async () => {
+    const { SALE_SAID } = await import("../services/reply-engine/engine");
+    for (const r of ["The Zip Hoodie is ₪299 right now, reduced from ₪379.", "The Zip Hoodie is ₪299, down from ₪379.", "It's ₪299 (was ₪379).", "הקפוצ'ון עולה עכשיו 299 ש\"ח בהנחה.", "המחיר ירד מ-379 ל-299 ש\"ח."]) expect(SALE_SAID.test(r), r).toBe(true);
+    expect(SALE_SAID.test("The Zip Hoodie is ₪299.")).toBe(false);
+    expect(SALE_SAID.test("הקפוצ'ון עולה 299 ש\"ח.")).toBe(false);
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/if \(reply && c\?\.discount && now > 0 && !SALE_SAID\.test\(reply\)/);
+  });
+});
+
+describe("dev round k8, K8-1: her noun alone before any absence", () => {
+  const e = (q: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "empty", content: "[]" }) as any;
+  it("★ one empty search of noun plus colour: noun_not_tried, and the lookup searches the noun alone", async () => {
+    const { nounNotTried, autoLookups } = await import("../services/reply-engine/gates");
+    const r = "לא מצאנו חולצה בתכלת בקטלוג. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    expect(nounNotTried(r, [e("חולצה תכלת")], "יש לכם חולצה בתכלת?")).toBe("חולצה");
+    const q = JSON.parse(autoLookups([{ kind: "noun_not_tried", noun: "חולצה" } as any], "יש לכם חולצה בתכלת?", ["woocommerce.list_products"], [e("חולצה תכלת")])[0]?.function.arguments ?? "{}").query;
+    expect(q).toBe("חולצה");
+    // The noun was searched alone, or a search returned products, or she asked no attribute: nothing.
+    expect(nounNotTried(r, [e("חולצה תכלת"), e("חולצה")], "יש לכם חולצה בתכלת?")).toBeNull();
+    expect(nounNotTried(r, [e("חולצה תכלת"), { ...e("shirt blue"), outcome: "ok", content: "[1]" }], "יש לכם חולצה בתכלת?")).toBeNull();
+    expect(nounNotTried("לא מצאנו מעמד לצילום בקטלוג.", [e("מעמד צילום")], "יש לכם מעמד לצילום?")).toBeNull();
+    expect(nounNotTried("יש חולצת אוקספורד בתכלת.", [e("חולצה תכלת")], "יש לכם חולצה בתכלת?")).toBeNull();
+  });
+});
