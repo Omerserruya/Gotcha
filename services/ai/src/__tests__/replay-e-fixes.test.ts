@@ -1223,6 +1223,13 @@ describe("dev round k6 on 622fcae0", () => {
     expect(cleanSearchArgs({ query: "", on_sale: true, price_max: 100 }, "מה יש במבצע?")).not.toHaveProperty("price_max");
     expect(cleanSearchArgs({ query: "", on_sale: true, price_max: 100 }, "ומה מזה במבצע?")).toMatchObject({ price_max: 100 });
     expect(cleanSearchArgs({ query: "", price_max: 100 }, "מה יש לכם עד 100 שקל?")).toMatchObject({ price_max: 100 });
+    // The Supervisor's probe of 22969e1f: her budget in words, and a short follow-up, keep it; a fresh list ask loses it.
+    const A = { query: "", price_max: 100, price_min: 0 };
+    for (const m of ["מה הכי זול אצלכם?", "יש לכם משהו עד מאה שקל?", "משהו מתחת לחמישים שקלים", "מתנה בסביבות מאתיים ש\"ח", "anything under fifty shekels?", "יש משהו לא יקר?", "ובשחור?", "ולגברים?"]) {
+      expect(cleanSearchArgs(A, m), m).toMatchObject({ price_max: 100 });
+    }
+    for (const m of ["מה יש במבצע?", "מה חדש?", "what's on sale?"]) expect(cleanSearchArgs(A, m), m).not.toHaveProperty("price_max");
+    expect(cleanSearchArgs(A, "מה במבצע עד מאה שקל?")).toMatchObject({ price_max: 100 });
   });
   it("★ the was-price in the grounding reads as money", async () => {
     const { ungroundedPrices } = await import("../services/reply-style-check.service");

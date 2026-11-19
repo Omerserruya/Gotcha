@@ -631,6 +631,10 @@ const FOCUS_FACT = "_focusTitles";
 export function focusTitlesOf(facts: Record<string, unknown> | null | undefined): string[] {
   try { const v = JSON.parse(String(facts?.[FOCUS_FACT] ?? "[]")); return Array.isArray(v) ? v.map(String).filter(Boolean).slice(0, 5) : []; } catch { return []; }
 }
+// The message speaks of price: a number in digits or words (either language), a currency, or a bound word.
+const PRICE_TALK = /\d|(?<![\u0590-\u05FF])(?:עשר|עשרים|שלושים|ארבעים|חמישים|שישים|שבעים|שמונים|תשעים|מאה|מאתיים|שלוש\s*מאות|ארבע\s*מאות|חמש\s*מאות|אלף|אלפיים|שקל|שקלים|ש["״']?ח|עד|מתחת|פחות\s+מ|מעל|יותר\s+מ|בסביבות|באזור|לא\s+יקר|לא\s+יקרה|זול|זולה|זולים|מחיר|תקציב)(?![\u0590-\u05FF])|[₪$€]|\b(?:ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|shekels?|nis|ils|under|below|less than|up to|around|about|over|above|cheap|cheaper|inexpensive|affordable|budget|price)\b/iu;
+// A fresh list question: what is on sale, what is new (never a follow-up adding an attribute).
+const FRESH_LIST_ASK = /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה)(?![\u0590-\u05FF])|\b(?:on sale|sale|discounts?|new|newest|latest)\b/iu;
 const BUDGET_CONTINUES = /(?<![\u0590-\u05FF])(?:מזה|מזאת|מהם|מהן|מתוכם|מתוכן|מאלה|מאלו|באותו\s+תקציב|באותו\s+מחיר|בתקציב|תקציב|זול|זולים|זולה|יותר\s+זול)(?![\u0590-\u05FF])|\b(?:of these|of them|within (?:that|the) budget|cheaper|budget)\b/iu;
 /** A store search's args, cleaned (rating 83086356): no 0..0 price, an audience only when she names one, never her whole message as the query. */
 export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming: string): T {
@@ -639,7 +643,9 @@ export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming
   if (!(Number(ea.price_max) > 0)) delete ea.price_max;
   // A price bound only when this message names a price or continues the budget ask (dev round k6: "מה יש במבצע?" after
   // "עד 100" kept the 100 and lost the store's other sale items).
-  if ((ea.price_min != null || ea.price_max != null) && !/\d/.test(String(incoming ?? "")) && !BUDGET_CONTINUES.test(String(incoming ?? ""))) { delete ea.price_min; delete ea.price_max; }
+  // Only a fresh list question with no price talk loses it ("מה יש במבצע?", "מה חדש?"); her own budget in words ("עד מאה
+  // שקל", "לא יקר") and a short follow-up ("ובשחור?") keep it (the Supervisor's probe of 22969e1f).
+  if ((ea.price_min != null || ea.price_max != null) && FRESH_LIST_ASK.test(String(incoming ?? "")) && !PRICE_TALK.test(String(incoming ?? "")) && !BUDGET_CONTINUES.test(String(incoming ?? ""))) { delete ea.price_min; delete ea.price_max; }
   if (ea.audience && !AUDIENCE_WORDS.test(String(incoming ?? ""))) delete ea.audience;
   const whole = String(incoming ?? "").trim();
   if (typeof ea.query === "string" && (ea.query.trim() === whole || ea.query.length > 60)) {
