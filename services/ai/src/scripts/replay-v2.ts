@@ -117,6 +117,15 @@ export function cutLine(trace: any): string {
   if (Array.isArray(trace?.cutText) && trace.cutText.length) parts.push(`cut: ${trace.cutText.map((x: string) => JSON.stringify(String(x).slice(0, 120))).join(" ")}`);
   if (Array.isArray(trace?.teamItemUpdated) && trace.teamItemUpdated.length) parts.push(`teamItemUpdated=${trace.teamItemUpdated.length}`);
   for (const k of ["waitingClaimCut", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut"]) if (trace?.[k]) parts.push(k);
+  // Every turn: the style codes that fired on the first draft, the owner's rules it carried, a hand-over that named one.
+  const style = [...new Set((trace?.gate3?.problems ?? []).flatMap((p: any) => (p?.kind === "style" && Array.isArray(p.codes) ? p.codes : [])))];
+  if (style.length) parts.push(`style=${style.join(",")}`);
+  const o = trace?.ownerRules;
+  if (o && (o.rules || o.handover || o.never)) parts.push(`ownerRules=rules:${o.rules ?? 0},handover:${o.handover ?? 0},never:${o.never ?? 0}`);
+  if (trace?.ownerHandoverRule != null) parts.push(`ownerHandoverRule=${trace.ownerHandoverRule}`);
+  if (trace?.urlsRepaired) parts.push(`urlsRepaired=fixed:${trace.urlsRepaired.fixed ?? 0},dropped:${trace.urlsRepaired.dropped ?? 0}`);
+  // The model's first draft on a rewritten, cleaned, replaced or silent turn (the bot's own words).
+  if (trace?.firstDraft) parts.push(`draft: ${JSON.stringify(String(trace.firstDraft).slice(0, 400))}`);
   return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
 

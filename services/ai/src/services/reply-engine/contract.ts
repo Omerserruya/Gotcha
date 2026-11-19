@@ -89,6 +89,8 @@ export interface ModelTurnOutput {
   claims: Claim[];
   /** The model asks for a person: a short reason. */
   handoff?: string | null;
+  /** The owner's hand-over rule this handoff follows, by its number in the prompt (1-based). Null: none named. */
+  handoffRule?: number | null;
   /** Product keys (PRODUCT_n) to show as cards, when the channel renders cards. */
   cards?: string[];
   /** A question the team must answer later; the AI keeps the conversation (no handoff). */

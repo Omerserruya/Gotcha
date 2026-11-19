@@ -12,6 +12,7 @@ import { checkAiAllowed } from "@chatcenter/shared";
 import { ungroundedPrices, stripPrices, checkReplyStyle, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
+import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE } from "./owner-rules";
 
 export type Gate1 =
   | { reply: true }
@@ -153,10 +154,14 @@ const MEDIA_PLACEHOLDER = /^(?:\[(?:Image|Photo|Video|Voice message|Audio|Docume
 
 const CANCEL_REQUEST = /(?<![\u0590-\u05FF])[וש]?(?:לבטל|לביטול|ביטול|בטלו|תבטלו|תבטלי|תבטל|מבטל|מבטלת|להחזיר\s+(?:את\s+)?(?:ה)?כסף|החזר\s+כספי|זיכוי)(?![\u0590-\u05FF])|\b(?:cancel(?:l?ation)?|refund|money back|chargeback)\b/iu;
 export const cancelRequest = (t: string) => CANCEL_REQUEST.test(normalizeQuotes(t ?? ""));
-/** A handoff the customer's own words do not call for. */
-export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean): boolean {
+/**
+ * A handoff the customer's own words do not call for. One that names an owner hand-over rule loaded this turn
+ * (`ownerRuleCited`, a number in range; never read from text) is the owner's decision and stands.
+ */
+export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean, ownerRuleCited = false): boolean {
   if (!handoff) return false;
   if (toolsAskedPerson) return false;
+  if (ownerRuleCited) return false;
   if (safetyCase(recentInbound)) return false;
   // Photos sent right after the words ("[Image]") must not push them out of the window.
   const recent = recentInbound.filter((m) => !MEDIA_PLACEHOLDER.test(String(m ?? "").trim())).slice(-3).join("\n");
@@ -1312,6 +1317,9 @@ export interface Gate3Input {
   /** The reply's handoff and the customer's last messages (the handoff check). */
   handoff?: string | null;
   recentInbound?: string[];
+  /** The owner's hand-over rule the handoff names (its number), and how many were loaded this turn. */
+  handoffRule?: number | null;
+  ownerHandoverRules?: number;
   /** A tool this turn needs a person (an approval, a denied action): a handoff may follow. */
   toolsNeedPerson?: boolean;
   /** The team already has an open question from this conversation (state.pending). */
@@ -1402,7 +1410,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion || (!!i.teamAlreadyOpen && TEAM_LINE.test(reply)))) problems.push({ kind: "unread_knowledge" });
   else if (unreadOrder(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_order" });
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
-  if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson)) problems.push({ kind: "needless_handoff" });
+  if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson, citesOwnerHandover(i.handoffRule, i.ownerHandoverRules))) problems.push({ kind: "needless_handoff" });
   // Products this turn mean a search ran.
   const recommendUnsearched = ASKS_RECOMMEND.test(i.incomingMessage ?? "") && i.toolsOffered.some((n) => /list_products|search_products/i.test(n)) && !i.tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
   if (!i.candidateCount && (recommendUnsearched || photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion) || purchaseWithoutSearch(i.incomingMessage, i.tools, i.toolsOffered)
@@ -1967,12 +1975,12 @@ export function normalizeDashes(s: string): string {
 }
 
 /** The ONE targeted correction note for the rewrite round. */
-export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): string {
+export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", owner?: { rules?: boolean; handover?: number }): string {
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
   for (const p of problems) {
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
     if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn, or that the team cannot be reached (${p.claims.join("; ")}). Say only what really happened; the team can always be reached: set team_question and say it is with the team.`);
-    if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now.");
+    if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now." + (owner?.handover ? " The one other reason is one of the business's own numbered hand-over rules: only if one of them truly is the reason, keep the handoff and set handoff_rule to its number." : ""));
     if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell say the team will check.");
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
     if (p.kind === "ungrounded_absence" && p.claims.some((c) => ADDRESS_DENIED.test(c))) lines.push("- The business's address IS in the business details above: give it.");
@@ -2052,6 +2060,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
       if (c.has("repeated_team_line")) lines.push("- The team already has this question: do not say again that you passed it on, and do not set team_question for it again. Answer this new message itself.");
     }
   }
+  // The owner's rules hold for the rewritten reply too (they sit in the prefix; this names them at the point of the rewrite).
+  if (owner?.rules) lines.push(OWNER_RULES_REWRITE_LINE);
   return lines.join("\n");
 }
 

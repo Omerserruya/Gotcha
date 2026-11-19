@@ -30,6 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
+import { readOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover } from "./owner-rules";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conversation-relevance.service";
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
@@ -621,6 +622,11 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
   if (Array.isArray(trace?.fallbackKinds) && trace.fallbackKinds.length) out.fallbackKinds = trace.fallbackKinds;
   if (Array.isArray(trace?.cutWhy) && trace.cutWhy.length) out.cutWhy = trace.cutWhy;
   if (Array.isArray(trace?.cutText) && trace.cutText.length) out.cutText = trace.cutText.slice(0, 4).map((x: unknown) => String(x).slice(0, 120));
+  // The owner's rules this turn carried (counts per kind), a hand-over that named one, a repaired link, the first draft.
+  if (trace?.ownerRules) out.ownerRules = trace.ownerRules;
+  if (trace?.ownerHandoverRule != null) out.ownerHandoverRule = trace.ownerHandoverRule;
+  if (trace?.urlsRepaired) out.urlsRepaired = trace.urlsRepaired;
+  if (trace?.firstDraft) out.firstDraft = String(trace.firstDraft).slice(0, 400);
   const markers = CUT_MARKERS.filter((k) => trace?.[k]);
   if (markers.length) out.markers = markers;
   return Object.keys(out).length ? out : undefined;
@@ -871,6 +877,8 @@ export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
     stateUpdate: { stage: su.stage, intent: su.intent, facts: su.facts, pending: Array.isArray(su.pending) ? su.pending : undefined },
     claims,
     handoff: typeof v.handoff === "string" && v.handoff.trim() ? v.handoff.trim() : null,
+    // The owner's hand-over rule the model names, as a number only (whether it is one that was loaded is the gate's check).
+    handoffRule: typeof v.handoff_rule === "number" && Number.isInteger(v.handoff_rule) && v.handoff_rule >= 1 ? v.handoff_rule : null,
     teamQuestion: typeof v.team_question === "string" && v.team_question.trim() ? v.team_question.trim().slice(0, 500) : null,
     cards: [...new Set([...cards, ...show.keys])],
   };
@@ -1040,6 +1048,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     timed("docAddress", documentAddress(opts.tenantId, config.id).catch(() => null)),
     // Both store turns in parallel; a Shopify chat wins when both answer.
     timed("woo", prepareWebchatCommerceTurn({ tenantId: opts.tenantId, conversationId: opts.conversationId }).catch(() => null)),
+    // The business's never-say list (BusinessPolicy.data.blockedTopics), read with the turn's own client. LAST on
+    // purpose: the entries above are also read by position.
+    timed("policy", Promise.resolve((prisma as any).businessPolicy?.findUnique?.({ where: { tenantId: opts.tenantId }, select: { data: true } })).catch(() => null)),
   ]);
   loadAll.catch(() => {}); // a Gate 1 stop never leaves it unhandled
   // ── Gate 1 ──
@@ -1138,7 +1149,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     return empty({ reply: spoke ? null : en ? "Hi, how can we help?" : "היי, במה אפשר לעזור?" });
   }
 
-  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw] = await loadAll;
+  const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw, policyRow] = await loadAll;
+  // What the owner wrote: the employee's rules, the enabled hand-over rules, the never-say list (owner-rules.ts).
+  const ownerRules = readOwnerRules(config as any, (policyRow as any)?.data ?? null);
+  if (hasOwnerRules(ownerRules)) (trace as any).ownerRules = ownerRuleCounts(ownerRules);
   const wooTurn = shopifyTurn ? null : wooRaw;
   Object.assign(stageMs, Object.fromEntries(Object.entries(loadMs).map(([k, v]) => [`load_${k}`, v])));
   const productTurn: any = shopifyTurn ?? wooTurn;
@@ -1333,6 +1347,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     channel: String(conversation.channel),
     cardsChannel: cardChannel,
     storePlatform,
+    ownerRules,
   });
   const chat = historyToChat(history);
   const lastRow: any = history.at(-1);
@@ -1501,6 +1516,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // A team question is real follow-up work: "we'll check with the team" is then true.
     approvalPending: approvalPending || !!o.teamQuestion,
     handoff: o.handoff ?? null,
+    handoffRule: o.handoffRule ?? null,
+    ownerHandoverRules: ownerRules.handover.length,
     teamQuestion: !!o.teamQuestion,
     teamAlreadyOpen,
     newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
@@ -1536,12 +1553,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const cannedSent = !!state.facts?.[CANNED_SENT_FACT] || history.some((m: any) => m.direction === "OUTBOUND" && isCannedTeamLine(m.body));
   let cannedNow = false;
   (trace as any).rewriteRounds = 0;
+  let firstDraft = String(output?.reply ?? "");
   if (!verdict.ok) {
     // ONE targeted rewrite, at most TWO more model calls (prod replay 5: p95 17s).
-    if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correctionNote(verdict.problems, locale) });
-    else messages.push({ role: "system", content: correctionNote(verdict.problems, locale) });
+    if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correctionNote(verdict.problems, locale, { rules: hasOwnerRules(ownerRules), handover: ownerRules.handover.length }) });
+    else messages.push({ role: "system", content: correctionNote(verdict.problems, locale, { rules: hasOwnerRules(ownerRules), handover: ownerRules.handover.length }) });
     const first = verdict;
     const original = output;
+    firstDraft = String(original?.reply ?? "");
     // The first draft's question may be kept only when no check was about a question (asked before, already known).
     const questionOk = !first.problems.some((p) => p.kind === "style" && p.codes.some((c) => c === "asks_known" || c === "repeated_ask" || c === "repeated_sentence" || c === "statement_question"));
     let second: ModelTurnOutput | null = null;
@@ -2599,6 +2618,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
   trace.tools = turnTools.records;
+  // The model's first draft, for a turn that went out rewritten, cleaned, replaced or silent (the bot's own words only).
+  if (firstDraft.trim() && (trace.gate3?.rewrite !== "none" || !String(reply ?? "").trim())) (trace as any).firstDraft = firstDraft.replace(/\s+/g, " ").trim().slice(0, 400);
+  // A hand-over that went out naming one of the owner's hand-over rules: the number, for the reader to judge.
+  if (final.handoff && citesOwnerHandover(final.handoffRule, ownerRules.handover.length)) (trace as any).ownerHandoverRule = final.handoffRule;
 
   const toolCallLog = turnTools.records.map((r) => ({
     tool: r.tool,

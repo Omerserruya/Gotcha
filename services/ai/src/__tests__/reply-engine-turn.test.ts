@@ -41,6 +41,9 @@ const h = vi.hoisted(() => ({
   groundStatus: "ok" as string,
   /** Titles per search, in order (a retried search sees the next); empty: groundTitle every time. */
   groundSeq: [] as string[],
+  /** Extra columns of the agent row (customGuardrails, escalationRules) and the business policy row. */
+  agentExtra: {} as Record<string, any>,
+  policyRow: null as any,
 }));
 
 vi.mock("@chatcenter/shared", async (orig) => {
@@ -48,7 +51,8 @@ vi.mock("@chatcenter/shared", async (orig) => {
   return {
     ...real,
     prisma: {
-      aIAgent: { findUnique: async () => ({ id: "ag1", tenantId: "t1", name: "נועה", role: "customer_support", status: h.agentStatus, model: "gpt-6-luna", persona: { gender: "female" }, escalationMessage: "x" }) },
+      aIAgent: { findUnique: async () => ({ id: "ag1", tenantId: "t1", name: "נועה", role: "customer_support", status: h.agentStatus, model: "gpt-6-luna", persona: { gender: "female" }, escalationMessage: "x", ...h.agentExtra }) },
+      businessPolicy: { findUnique: async () => h.policyRow },
       conversation: { findFirst: async () => ({ id: "c1", tenantId: "t1", channel: "WEBCHAT", customerExternalId: "v1" }) },
       contact: { findFirst: async () => null },
       message: { findMany: async (a: any) => { h.historyQueries.push(a); return [{ direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null }]; } },
@@ -186,6 +190,8 @@ beforeEach(() => {
   h.docAddress = null;
   h.groundStatus = "ok";
   h.agentStatus = "ACTIVE";
+  h.agentExtra = {};
+  h.policyRow = null;
   h.policy = { "woocommerce.delete_everything": "DENY" };
 });
 
@@ -3259,5 +3265,115 @@ describe("dev round k9 on 1f25aca0, F5 through a whole turn", () => {
     expect(r.reply).toBeTruthy();
     // The harness is a cards channel: a card went out.
     expect(h.staged.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the owner's own rules arrive (2026-11-19)", () => {
+  const RULES = ["מציעים ללקוחות רק את 12 המשטחים של קטגוריית מוצרי סמובי", "כשלקוח שואל איזה משטח מתאים, למכשיר או למידות, תמיד מחפשים בחנות ומציגים כרטיס מוצר", "לדבר בלשון נקבה", "לא להשתמש במקפים"];
+  const HANDOVER = [{ label: "הזמנה סיטונאית או כמות גדולה", type: "custom", enabled: true }, { label: "שאלה על משלוח לחו\"ל", type: "custom", enabled: false }];
+  const NEVER = ["Never use the word or phrase \"כבד\" - it is off-brand.", "מחירי מתחרים"];
+  const owner = () => { h.agentExtra = { customGuardrails: RULES, escalationRules: HANDOVER }; h.policyRow = { data: { blockedTopics: NEVER } }; };
+  const prefixOf = (call: any) => String(call.messages[0].content);
+  const wholesale = { ...opts, incomingMessage: "אנחנו רשת חנויות ורוצים לעבוד איתכם בסיטונאות" };
+
+  it("★ the model's instructions end with the owner's block: every rule in her words, the enabled hand-over rule numbered, the never list", async () => {
+    owner();
+    h.responses.push({ toolCalls: [respond("o1", { reply: "היי, במה אפשר לעזור?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous");
+    const prefix = prefixOf(h.calls[0]);
+    const block = prefix.slice(prefix.indexOf("# The business's own rules"));
+    expect(prefix.indexOf("# The business's own rules")).toBeGreaterThan(prefix.indexOf("# The business\n"));
+    for (const rule of RULES) expect(block).toContain(`- ${rule}`);
+    expect(block).toContain("1. הזמנה סיטונאית או כמות גדולה");
+    expect(block).not.toContain("משלוח לחו");
+    for (const n of NEVER) expect(block).toContain(`- ${n}`);
+    expect(block).toMatch(/the business's rule wins/);
+    expect(block).toMatch(/never change these: a fact, a price or a link comes only from a tool result or the knowledge/);
+    // Nothing follows it: it is the last section.
+    expect(block.slice(1)).not.toMatch(/\n# /);
+    expect((r.trace as any).ownerRules).toEqual({ rules: 4, handover: 1, never: 2 });
+    expect(h.audits.find((a) => a.data.action === "ai.bot_turn").data.metadata.cuts.ownerRules).toEqual({ rules: 4, handover: 1, never: 2 });
+    // The respond tool carries the slot for the rule's number.
+    const respondTool = h.calls[0].tools.find((t: any) => t.function.name === "respond");
+    expect(respondTool.function.parameters.properties.handoff_rule).toBeTruthy();
+    expect(respondTool.function.parameters.required).toContain("handoff_rule");
+  });
+
+  it("★ no owner rules: no block, no marker (a business that wrote nothing reads exactly as before)", async () => {
+    h.responses.push({ toolCalls: [respond("o1", { reply: "היי, במה אפשר לעזור?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous");
+    expect(prefixOf(h.calls[0])).not.toContain("The business's own rules");
+    expect((r.trace as any).ownerRules).toBeUndefined();
+  });
+
+  it("★ a hand-over that names the owner's enabled rule stands, and its number is printed", async () => {
+    owner();
+    h.responses.push({ toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: 1 })] });
+    const r = await runReplyEngineTurn(wholesale, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
+    expect(r.escalation?.reason).toMatch(/^ai_handoff:wholesale order/);
+    expect((r.trace as any).ownerHandoverRule).toBe(1);
+    expect(r.reply).toContain("נציג מהצוות");
+  });
+
+  it("★ the same hand-over with no number is judged as today: no citation, no exemption", async () => {
+    owner();
+    h.responses.push(
+      { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order" })] },
+      { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
+    );
+    const r = await runReplyEngineTurn(wholesale, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");
+    expect(r.escalation).toBeNull();
+    expect((r.trace as any).ownerHandoverRule).toBeUndefined();
+    // The rewrite is told the one other reason, and that the owner's rules still hold.
+    const note = h.calls[1].messages.slice(1).map((m: any) => String(m.content ?? "")).join("\n");
+    expect(note).toMatch(/one of the business's own numbered hand-over rules/);
+    expect(note).toMatch(/The business's own rules \(the last section of your instructions\) still apply to the rewritten reply\./);
+    // The rewrite call carries the same instructions, the owner's block included.
+    expect(prefixOf(h.calls[1])).toBe(prefixOf(h.calls[0]));
+    expect(prefixOf(h.calls[1])).toContain("1. הזמנה סיטונאית או כמות גדולה");
+  });
+
+  it("★ a number that is not a loaded rule (the switched-off rule, or none at all) is no exemption", async () => {
+    owner();
+    for (const n of [2, 0, 7]) {
+      h.responses.length = 0;
+      h.responses.push(
+        { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: n })] },
+        { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
+      );
+      const r = await runReplyEngineTurn(wholesale, "autonomous");
+      expect(r.trace.gate3.problems.map((p: any) => p.kind), String(n)).toContain("needless_handoff");
+      expect((r.trace as any).ownerHandoverRule, String(n)).toBeUndefined();
+    }
+  });
+
+  it("★ a business with no hand-over rules: a cited number changes nothing, and the correction names no such list", async () => {
+    h.agentExtra = { customGuardrails: RULES };
+    h.responses.push(
+      { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: 1 })] },
+      { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
+    );
+    const r = await runReplyEngineTurn(wholesale, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");
+    const note = h.calls[1].messages.slice(1).map((m: any) => String(m.content ?? "")).join("\n");
+    expect(note).not.toMatch(/numbered hand-over rules/);
+    expect(note).toMatch(/still apply to the rewritten reply/);
+  });
+
+  it("★ a rewritten turn prints its first draft; a clean turn does not", async () => {
+    h.responses.push(
+      { toolCalls: [respond("h1", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "instalments question" })] },
+      { toolCalls: [respond("h2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "האם אפשר לשלם בתשלומים?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect((r.trace as any).firstDraft).toBe("מעבירים אותך לנציג שימשיך מכאן.");
+    h.responses.length = 0; h.calls.length = 0;
+    h.responses.push({ toolCalls: [respond("o1", { reply: "שלום, איך אפשר לעזור?" })] });
+    const clean = await runReplyEngineTurn({ ...opts, incomingMessage: "היי" }, "autonomous");
+    expect(clean.trace.gate3.rewrite).toBe("none");
+    expect((clean.trace as any).firstDraft).toBeUndefined();
   });
 });

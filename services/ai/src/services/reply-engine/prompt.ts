@@ -11,6 +11,8 @@ import type { CompanyContext } from "../company-context.service";
 import type { EngineSkill } from "./skills";
 import { renderSkillList, splitInline } from "./skills";
 import { BANNED_HE, BANNED_EN } from "../reply-style-check.service";
+import { VOICE_RENDERED_MAX } from "@chatcenter/shared";
+import { renderOwnerRules, type OwnerRules } from "./owner-rules";
 
 function readPrompt(name: string): string {
   try {
@@ -126,6 +128,21 @@ export function quotedAddress(a: string): string {
 
 const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
+/**
+ * The learned voice as the prompt carries it: whole, up to what the voice editor accepts (VOICE_RENDERED_MAX), its
+ * lines kept. It was cut at 600 characters, so an owner's edit past that never arrived (2026-11-19). Rules only
+ * (2026-10-25, Omer): a quoted example opening or closing from an old learner run is dropped, as the legacy prompt does.
+ */
+export function voiceForPrompt(voice: unknown): string {
+  return String(voice ?? "")
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+/g, " ").trim().replace(/^#+\s*/, ""))
+    .filter((l) => l && !/^- Example (?:opening|closing) in their voice:/.test(l))
+    .join("\n")
+    .slice(0, VOICE_RENDERED_MAX)
+    .trim();
+}
+
 export interface PrefixInput {
   agent: { name: string; role: string; roleMission?: string | null; persona?: any; goal?: string | null; successCriteria?: string | null; salesContext?: any; escalationMessage?: string | null };
   company: CompanyContext | null;
@@ -135,6 +152,8 @@ export interface PrefixInput {
   cardsChannel: boolean;
   /** The connected store's platform, for the generic shop facts below. */
   storePlatform?: "shopify" | "woocommerce" | null;
+  /** The owner's own rules, hand-over conditions and never-say list (owner-rules.ts). Null or empty: no block. */
+  ownerRules?: OwnerRules | null;
 }
 
 /** The "# The business" block exactly as the prompt carries it (the probe prints it; no customer text in it). */
@@ -180,7 +199,8 @@ export function buildStablePrefix(p: PrefixInput): string {
     // Prod replay 6: Tehila's address is only in "send returns to ...". Named for what the documents say it is.
     // Also beside a profile address with no street (prod replay 11).
     if (p.company.documentAddress) biz.push(`Address given in the business's documents for returns and pickup coordination: ${clip(quotedAddress(p.company.documentAddress), 120)}. Asked where the business is, give it as that address, not as a shop or a branch.`);
-    if (p.company.observedVoice) biz.push(`Voice (how this business really writes, follow it): ${clip(p.company.observedVoice, 600)}`);
+    const voice = voiceForPrompt(p.company.observedVoice);
+    if (voice) biz.push(`Voice (how this business really writes, follow it):\n${voice}`);
   } else {
     biz.push("(no business profile)");
   }
@@ -193,6 +213,9 @@ export function buildStablePrefix(p: PrefixInput): string {
   const { inline, listed } = splitInline(p.skills);
   if (inline.length) parts.push(`# Playbooks (follow the one that fits the situation; most turns need none)\n\n${inline.map((k) => k.render()).join("\n\n")}`);
   if (listed.length) parts.push(`# Skills (call read_skill with a name to open its playbook)\n${renderSkillList(listed)}`);
+  // Last, so "above" in its precedence line covers the playbooks, the skills and the style rules.
+  const owner = renderOwnerRules(p.ownerRules);
+  if (owner) parts.push(owner);
   return parts.join("\n\n");
 }
 
