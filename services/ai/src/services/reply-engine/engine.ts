@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -539,12 +539,13 @@ const TEAM_PASS_SENTENCE = /(?<![\u0590-\u05FF])[וש]?(?:אעביר|נעביר|
 export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
+const EN_TALK = /\b(?:do|does|did|have|has|is|are|was|the|a|an|how|what|when|where|which|why|can|could|would|will|hi|hello|hey|please|thanks|thank|want|need|looking|any|you|your|my|i'?m|price|cost)\b/i;
 /** The word every title of the last search shares ("Heavyweight Hoodie", "Zip Hoodie", "Pullover Hoodie": "Hoodie"). */
 export function sharedTitleNoun(titles: string[]): string | null {
   const t = titles.map((x) => String(x ?? "").replace(/\s*[(\[][^)\]]*[)\]]\s*$/u, "")).filter(Boolean);
   if (t.length < 2) return null;
   const words = (x: string) => (x.match(/[\p{L}']{3,}/gu) ?? []) as string[];
-  return words(t[0]).find((w) => t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
+  return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
 const CUT_MARKERS = ["leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
@@ -1265,7 +1266,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const firstName = greetingName(String(contactRow?.displayName ?? "").trim());
   const customerLine = firstName ? `Name: ${firstName}` : null;
   const turnPart = buildTurnPart({
-    replyLanguage: locale === "en" ? "English" : null,
+    // Only on English talk, never on a bare model name, code or address in Latin letters.
+    replyLanguage: locale === "en" && EN_TALK.test(String(opts.incomingMessage ?? "")) ? "English" : null,
     stateText: renderState(state),
     summary: chat.length > windowed.length ? state.summary : null,
     knowledge,
@@ -1556,7 +1558,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // share ("Hoodie"), never only the product whose card was attached (dev round on 51d0273e: the black Heavyweight
       // Hoodie was missed because only the Zip Hoodie was carded).
       const shared = sharedTitleNoun(focusTitlesOf(state.facts));
-      const lent = fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus: shared ?? subject, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
+      const lendWith = (focus: any) => fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
+      // The shared noun first; when there is none or it lends nothing, the subject exactly as before.
+      const lent = (shared ? lendWith(shared) : null) ?? lendWith(subject);
       const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject, lent) : [];
       if (auto.length) {
         const ta = Date.now();

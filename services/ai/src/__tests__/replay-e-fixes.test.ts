@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass, cutTheAnswer } from "../services/reply-engine/engine";
-import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer, claimsOrPromisesUnsearched, storeQueryWords, asksAboutProduct, danglingReferences, ungroundedAbsence, notFoundReply } from "../services/reply-engine/gates";
+import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer, claimsOrPromisesUnsearched, storeQueryWords, asksAboutProduct, danglingReferences, ungroundedAbsence, notFoundReply, namesAModel } from "../services/reply-engine/gates";
 import { sharedTitleNoun } from "../services/reply-engine/engine";
 import { buildTurnPart } from "../services/reply-engine/prompt";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
@@ -910,7 +910,8 @@ describe("dev recheck on 6320af2f", () => {
     expect(ungroundedAbsence("אין לנו סנובורד.", [e("snowboard beginner"), e("סנובורד למתחילים")])).toHaveLength(1);
     // Every query word counts, a short one too: "משטח עץ" is narrower than "משטחי במבוק".
     expect(ungroundedAbsence("משטחי במבוק אנחנו לא מוכרים.", [e("משטח עץ")])).toHaveLength(1);
-    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("ג'ינס", '[{"name":"ג\'ינס שחור"}]')])).toEqual([]);
+    // A search of the same turn that returned black jeans contradicts it (the Supervisor's probe of d9f7c248).
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("ג'ינס", '[{"name":"ג\'ינס שחור"}]')])).toHaveLength(1);
   });
   it("★ 9: the not-found line fits a kind of product; a named model keeps its own", () => {
     expect(notFoundReply("he", "יש לכם ג'ינס שחור?")).not.toMatch(/דגם בשם הזה|נחוץ/);
@@ -934,5 +935,52 @@ describe("dev round on 6320af2f, item 7: a list block is whole", () => {
     // The text still never says a line twice, and a block never goes out twice.
     expect(assembleOnce("הנה מה שמצאתי:\nהנה מה שמצאתי.", "A\n₪10\n\nA\n₪10", ["A"]).match(/הנה מה שמצאתי/g)).toHaveLength(1);
     expect(assembleOnce("שלום", "A\n₪10\n\nA\n₪10", ["A"]).match(/₪10/g)).toHaveLength(1);
+  });
+});
+
+describe("probe of d9f7c248", () => {
+  const W = ["woocommerce.list_products", "search_knowledge"];
+  it("★ 1: the shared word must be a real noun; else the subject lends as before", () => {
+    expect(sharedTitleNoun(["קרם לחות לפנים", "סרום לפנים"])).toBeNull();
+    expect(sharedTitleNoun(["כיסוי למכונת קפה", "מעמד למכונת קפה"])).toBe("קפה");
+    expect(sharedTitleNoun(["Black Hoodie", "Black Jeans"])).toBeNull();
+    expect(sharedTitleNoun(["T-Shirt with logo", "Hoodie with zip"])).toBeNull();
+    expect(sharedTitleNoun(["שרשרת זהב עם תליון", "צמיד זהב עם תליון"])).toBe("תליון");
+    expect(sharedTitleNoun(["Heavyweight Hoodie (Black)", "Zip Hoodie", "Pullover Hoodie"])).toBe("Hoodie");
+    // A material is no subject; a noun opening with מ or ב is one.
+    expect(sharedTitleNoun(["עור תיק גדול", "עור ארנק קטן"])).toBeNull();
+    expect(sharedTitleNoun(["Cotton Shirt", "Cotton Pants"])).toBeNull();
+    expect(sharedTitleNoun(["משטח הזזה גדול", "משטח הזזה קטן"])).toBe("משטח");
+    expect(sharedTitleNoun(["בקבוק מים 1 ליטר", "בקבוק מים 2 ליטר"])).toBe("בקבוק");
+  });
+  it("★ 2: an empty search never backs an absence a search of the same turn contradicts", () => {
+    const e = (q: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "empty", content: "[]" }) as any;
+    const ok = (q: string, c: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "ok", content: c }) as any;
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("ג׳ינס שחור", "ג'ינס שחור סלים | 249 | במלאי")])).toHaveLength(1);
+    expect(ungroundedAbsence("אין לנו משטח לתמי 4.", [e("תמי"), ok("משטח", "משטח הזזה לתמי 4 | 89")])).toHaveLength(1);
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("black", '[{"name":"Heavyweight Hoodie"}]')])).toEqual([]);
+  });
+  it("★ 3: a plural pointer with its items named, or at her own two things, does not dangle", () => {
+    expect(danglingReferences("ההבדל ביניהם הוא בגודל.", false, "מה ההבדל בין המשטח הקטן לגדול?")).toEqual([]);
+    expect(danglingReferences("איזה מהם ניסית, אשראי או ביט?", false)).toEqual([]);
+    expect(danglingReferences("אפשר לשלם באחד מהם: אשראי, ביט או פייפאל.", false)).toEqual([]);
+    expect(danglingReferences("לא בטוח איזו מהן ראית, תוכלו לתאר אם היא חלקה או מפוספסת?", false, "ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?")).toHaveLength(1);
+    expect(danglingReferences("ביניהן יש גם דגם מפוספס.", false, "יש לכם חולצות?")).toHaveLength(1);
+  });
+  it("★ 4: a clause opener is no product noun; plural policy nouns are no product claim", () => {
+    expect(asksAboutProduct("ראיתי אצלכם שאפשר לשלם בביט?")).toBe(false);
+    expect(claimsOrPromisesUnsearched("יש כאן כמה אפשרויות תשלום.", "ראיתי אצלכם שאפשר לשלם בביט?", [], W)).toBe(false);
+    expect(claimsOrPromisesUnsearched("יש באתר כמה נקודות איסוף.", "יש לכם נקודת איסוף בחיפה?", [], W)).toBe(false);
+    expect(asksAboutProduct("ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?")).toBe(true);
+    expect(asksAboutProduct("ראיתי אצלכם שמלה כחולה, יש עוד?")).toBe(true);
+  });
+  it("★ 5: a geresh inside a word is no quote; a Latin word alone is no name in English", () => {
+    expect(namesAModel("יש לכם ג'ינס או קפוצ'ון?")).toBe(false);
+    expect(namesAModel("do you have jeans?")).toBe(false);
+    expect(namesAModel("do you have the Zip Hoodie?")).toBe(true);
+    expect(namesAModel("יש לכם משטח לתמי 4?")).toBe(true);
+    expect(namesAModel("יש לכם KitchenAid?")).toBe(true);
+    expect(namesAModel("יש לכם 'סלים פיט'?")).toBe(true);
+    expect(notFoundReply("en", "do you have jeans?")).toMatch(/couldn't find that in the catalogue/);
   });
 });

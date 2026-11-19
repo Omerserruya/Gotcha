@@ -397,7 +397,10 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
       const claimWords = (clause.match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
       const rawWords = (t: ToolRunRecord) => (Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" ").match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
       const emptyWithin = searches.some((t) => t.outcome === "empty" && PRODUCT_TOOL.test(t.tool) && !filteredSearch(t) && rawWords(t).length > 0 && rawWords(t).every((x) => claimWords.some((w) => w === x || (x.length >= 3 && w.includes(x)))));
-      grounded = (asBroad.length > 0 && !returned) || emptyWithin;
+      // ... unless an ok product search of this turn holds the claim's words in what it returned ("ג'ינס" empty, then
+      // "ג׳ינס שחור" returned "ג'ינס שחור סלים": the claim is contradicted).
+      const held = searches.some((t) => t.outcome === "ok" && PRODUCT_TOOL.test(t.tool) && (() => { const c = bare(unfinal(normalizeQuotes(String(t.content ?? "")))); return terms.filter((w) => c.includes(bare(unfinal(w)))).length >= need; })());
+      grounded = (asBroad.length > 0 && !returned) || (emptyWithin && !held);
     }
     if (!grounded) out.push(sentence.trim().slice(0, 120));
   }
@@ -748,10 +751,18 @@ const HAS_LIST = /(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s+\S/;
 // (dev round on 6320af2f: the colour sentence was cut and "לא בטוח איזו מהן ראית" went out alone).
 // A bare "אחד מהם" may point back at her own words ("האם גם אחד מהם נכשל?"); "איזו מהן" asks her to pick between ours.
 const PLURAL_BACK = /(?<![\u0590-\u05FF])(?:(?:איזו|איזה|איזהו)\s+מה(?:ן|ם)|ביניה(?:ן|ם))(?![\u0590-\u05FF])|\b(?:which (?:one )?of them|between them)\b/iu;
-export function danglingReferences(reply: string, carriesList: boolean): string[] {
+// The items named in the same sentence after the pointer ("באחד מהם: אשראי, ביט או פייפאל", "איזה מהם ניסית, אשראי או ביט?").
+// Close after it: a colon list, or within two words a comma and at most three words before "או" ("חלקה או מפוספסת"
+// five words on is a question about her item, not the items).
+const ITEMS_AFTER = /(?:מה(?:ן|ם)|ביניה(?:ן|ם)|of them|between them)(?:\s+[^\s.!?,:]+){0,2}\s*(?::\s*\S|,\s*(?:[^\s.!?,]+,?\s+){1,3}(?:או|or)\s)/iu;
+// Her message names two things ("ההבדל בין X ל-Y", "X או Y"): "ביניהם" points at them.
+const HER_TWO = /(?<![\u0590-\u05FF])(?:בין\s+\S+.{0,40}?\s(?:ל|לבין)|ההבדל|הבדל|או)(?![\u0590-\u05FF])|\b(?:between|difference|or)\b/iu;
+export function danglingReferences(reply: string, carriesList: boolean, incoming = ""): string[] {
   if (carriesList || HAS_LIST.test(reply ?? "")) return [];
+  const pointsAtHers = (x: string) => /ביניה(?:ן|ם)|between them/iu.test(x) && HER_TWO.test(String(incoming ?? ""));
+  const exempt = (x: string) => ITEMS_AFTER.test(x) || pointsAtHers(x);
   const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
-  return sentences.filter((x, k) => DANGLING.test(x) || (k === 0 && PLURAL_BACK.test(x))).map((x) => x.trim().slice(0, 120));
+  return sentences.filter((x, k) => (DANGLING.test(x) || (k === 0 && PLURAL_BACK.test(x))) && !exempt(x)).map((x) => x.trim().slice(0, 120));
 }
 
 // The same advice or warning again, in other words (prod replay 2026-11-17: one warning in five
@@ -1272,7 +1283,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   // card or points at one ("כרטיס המוצר", "הכרטיסים", "בכרטיס ... למטה/הראשון") stays a card reference.
   const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0).filter((x) => !(herCardTalk(i) && barePaymentCard(x)));
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
-  const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended).filter((x) => !pictures.includes(x));
+  const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended, i.incomingMessage ?? "").filter((x) => !pictures.includes(x));
   if (dangling.length) problems.push({ kind: "dangling_reference", claims: dangling });
   if (noRecommendation(reply, i.incomingMessage, i.candidateCount, i.recentInbound ?? [], (i.previousBotReplies ?? []).at(-1) ?? "", i.candidateTitles ?? [])) problems.push({ kind: "no_recommendation" });
   const payment = ungroundedPayment(reply, i.tools);
@@ -1552,9 +1563,16 @@ const nounWord = (w: string) => /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(w) && 
 // A message about a product thing: a have/was/want/seen verb governing the noun ("הייתה מטפחת", "יש לכם X", "מחפשת X").
 const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|לחפש|למצוא|רוצה|רוצים|ראיתי|קניתי|הזמנתי)\s+(?:(?:אצלכם|אצלך|באתר|בחנות|פה|כאן|בסטורי|באינסטגרם|בפייסבוק)\s+)?(?:את\s+)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
 // Never the governed noun (the 7a3bc2a3 probe on 26 real intents): a frame or abstract word, an adverb, an infinitive.
-const NOT_LENT = new Set(["המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק", "אחריות", "החזרות", "שירות", "מבצעים"]);
+const NOT_LENT = new Set(["אפשר", "אפשרויות", "נקודת", "נקודות", "נקודה", "סניף", "סניפים", "שיטה", "שיטות", "שיטת", "דרך", "דרכים", "המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק", "אחריות", "החזרות", "שירות", "מבצעים"]);
 // In the governed slot a word ending in י is a construct noun ("למצוא משטחי הזזה"), never an adjective.
-const lendable = (w: string) => { const bare = w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""); return /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(bare) && !PLAIN_ADJECTIVES.has(bare) && !talkWord(w) && !queryStop(w) && !/^ל[\u0590-\u05FF]{2,}/u.test(w) && !NOT_LENT.has(bare) && !NOT_LENT.has(w); };
+// A governed word that opens a clause ("ראיתי אצלכם שאפשר לשלם בביט") is no noun.
+const CLAUSE_OPENER = /^ש(?:אפשר|יש|אין|צריך|כדאי|אני|את|אתם|אתן|הוא|היא|זה|אתה|לא|כבר|עדיין)/u;
+const lendable = (w: string) => { const bare = w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""); return !CLAUSE_OPENER.test(w) && /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(bare) && !PLAIN_ADJECTIVES.has(bare) && !talkWord(w) && !queryStop(w) && !/^ל[\u0590-\u05FF]{2,}/u.test(w) && !NOT_LENT.has(bare) && !NOT_LENT.has(w); };
+// A word every title shares lends only as a real noun: no ל form of a longer phrase ("לפנים", "למכונת"), no colour
+// or material ("זהב", "Black"), no function word ("with") (the Supervisor's probe of cb151923).
+const EN_NOT_NOUN = /^(?:with|and|for|the|of|in|on|by|set|pack|black|white|red|blue|navy|green|grey|gray|pink|brown|beige|gold|silver|cream|ivory|charcoal|leather|cotton|wool|linen|denim|steel|wood|wooden|bamboo|large|small|medium|mini|new|classic|premium|men|women|kids)$/i;
+const MATERIAL_HE = new Set(["עור", "כותנה", "צמר", "פשתן", "משי", "עץ", "במבוק", "נירוסטה", "פלדה", "זכוכית", "קרמיקה", "פלסטיק", "סיליקון", "זהב", "כסף"]);
+export const sharedTitleNounOk = (w: string) => /\p{L}{3,}/u.test(w) && !EN_NOT_NOUN.test(w) && !MATERIAL_HE.has(bareNoun(w)) && lendable(w) && nounWord(bareNoun(w));
 /** The noun lent bare: never with its article ("המטפחת" lends "מטפחת"). */
 const bareNoun = (w: string) => w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "");
 /** The noun a product source lends: a title or the intent (its first noun), or a message only by its product context or a title word. */
@@ -1868,10 +1886,17 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
 }
 
 /** An absence the search could not back, and nothing found: say what is true, not a hand-off (prod replay 6). */
+/** Her message names a model: a digit, quotes (a geresh inside a word is none), or a Latin word in a Hebrew message;
+ *  in an English one a capitalised word after the first ("do you have the Zip Hoodie?"). */
+export function namesAModel(incoming: string): boolean {
+  const t = String(incoming ?? "");
+  if (/\d/.test(t) || /(?<!\p{L})["״'׳][^"״'׳]{2,}["״'׳](?!\p{L})/u.test(t)) return true;
+  if (/[\u0590-\u05FF]/.test(t)) return /[A-Za-z]{2,}/.test(t);
+  return t.trim().split(/\s+/).slice(1).some((w) => /^[A-Z][A-Za-z]+/.test(w) && w !== "I");
+}
 export function notFoundReply(locale: "he" | "en", incoming = ""): string {
   // A kind of product with no name ("יש לכם ג'ינס שחור?", dev round on 6320af2f) is no "model by that name".
-  const named = /\d|[A-Za-z]{2,}|["״'׳][^"״'׳]{2,}["״'׳]/.test(String(incoming ?? ""));
-  if (!named) return locale === "he" ? "לא מצאתי את זה בקטלוג כרגע. מה חשוב לך בו? כך נוכל להציע משהו מתאים." : "I couldn't find that in the catalogue right now. What matters to you in it? Then we can suggest something that fits.";
+  if (!namesAModel(incoming)) return locale === "he" ? "לא מצאתי את זה בקטלוג כרגע. מה חשוב לך בו? כך נוכל להציע משהו מתאים." : "I couldn't find that in the catalogue right now. What matters to you in it? Then we can suggest something that fits.";
   // Asks what the customer needs, never hands the search back to them (prod replay 2026-11-17).
   return locale === "he" ? "לא מצאתי דגם בשם הזה. בשביל מה זה נחוץ לך? כך נוכל להציע את המתאים." : "I didn't find a model by that name. What do you need it for? Then we can suggest what fits.";
 }

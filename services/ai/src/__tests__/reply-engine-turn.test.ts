@@ -3065,6 +3065,15 @@ describe("dev live round on 51d0273e (round k), through a whole turn", () => {
     h.responses.push({ toolCalls: [respond("e2", { reply: "כן, יש קפוצ'ונים." })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם קפוצ'ון?" }, "autonomous");
     expect(JSON.stringify(h.calls[0].messages)).not.toMatch(/Reply language/);
+    // A bare model name or address in Latin letters is no English talk (probe of d9f7c248).
+    for (const m of ["KitchenAid Artisan 5KSM175", "dana.levi@gmail.com"]) {
+      h.calls.length = 0;
+      h.history = [{ direction: "INBOUND", body: m, metadata: null }];
+      h.responses.push({ toolCalls: [respond("e3", { reply: "תודה!" })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: m }, "autonomous");
+      h.history = null;
+      expect(JSON.stringify(h.calls[0].messages), m).not.toMatch(/Reply language/);
+    }
   });
   it("★ 6: the audit row carries the search arguments and the tool wait", async () => {
     h.responses.push({ toolCalls: [tc("s0", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("s1", { reply: "יש לנו Canvas Tote, תיק בד חזק." })] });
@@ -3075,5 +3084,18 @@ describe("dev live round on 51d0273e (round k), through a whole turn", () => {
     // so its wiring into the audit row is checked in the source.
     const { readFileSync } = await import("fs");
     expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/searchArgs: Array\.isArray\(\(trace as any\)\.searchArgs\) \? \(trace as any\)\.searchArgs\.slice\(0, 6\)/);
+  });
+});
+
+describe("probe of d9f7c248, through a whole turn", () => {
+  it("★ 1: no real shared noun: the subject lends as before", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _focusTitles: JSON.stringify(["Black Hoodie", "Black Jeans"]) }, offeredItems: [{ ref: "id:78", title: "Black Hoodie", productId: "78", at: new Date().toISOString() }], pending: [], turnCount: 2 });
+    try {
+      h.responses.push({ toolCalls: [respond("q1", { reply: "לא מצאתי בקטלוג התאמה ל-Black Hoodie בלבן." })] }, { toolCalls: [respond("q2", { reply: "יש Black Hoodie." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה לבן" }, "autonomous");
+      const q = h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query ?? "";
+      expect(q).not.toMatch(/^Black /);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 });
