@@ -893,6 +893,11 @@ const SAYS_FIT_ALL = new RegExp(SAYS_FIT.source, "giu");
 const JOINS = /(?<![\p{L}])(?:ו?(?:גם|הם|הן|הוא|היא|זה)|and|they|it|also|for)(?![\p{L}])/giu;
 // "for" as part of a verb ("looking for a pen") opens no use.
 const HER_FOR = /(?<!\b(?:looking|searching|search|asking|asked|ask|waiting|wait|thanks|thank you|paying|paid|pay)\s+)\bfor\s+([^,.;!?\n]*)/giu;
+// A word right after her kind's word that names no other product: it points at the found ones, or the sentence
+// goes on ("טושים כאלה", "קרם זה", "נעליים לא מתאימות").
+const POINTS_AT_FOUND = /^(?:ה?(?:זה|זאת|זו|אלה|אלו|ללו)|כ(?:זה|זאת|זו|אלה|אלו)|ש(?:מצאנו|מצאתי|נמצאו|לנו|לכם|לך|יש|ראית|הצגתי|הצגנו|הצענו|הראיתי|ציינתי|ציינת|הזכרת|שאלת|ביקשת|חיפשת|רצית|בחרת|ברשימה|בחנות|במלאי|למעלה)|[וש]?(?:לא|אין|אינו|אינה|אינם|אינן|כן|גם|אכן|הם|הן|הוא|היא|זה|מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים|מיועד|מיועדת|מיועדים|מיועדות)|של|עצמו|עצמה|עצמם|עצמן|אצלנו|בחנות|ברשימה|במלאי|כאן|כרגע|עדיין|כבר|רק|פחות|ממש|בכלל|לצערי|לצערנו|כנראה|למעלה)$/u;
+// Where the words that describe a use end ("לעיניים רגילות הם מתאימים": at "הם"): a pronoun, a "fits" word, a yes.
+const USE_ENDS = "(?:ו?(?:גם|הם|הן|הוא|היא|זה|כן)|[וש]?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים))(?![\\p{L}])";
 /** The words her message says as the use ("עיניים" in "יש טוש לעיניים?", "winter" in "something for winter?"), never her kind's word. */
 export function herUseWords(incoming: string, noun: string | null = null): string[] {
   const inc = String(incoming ?? "").toLowerCase();
@@ -906,7 +911,13 @@ export function herUseWords(incoming: string, noun: string | null = null): strin
  * products it speaks of, read in this order: a product it says by its whole title; else the found products of her
  * kind when it says her kind's word (only those of them it tells apart, when it does; else never one the text names
  * elsewhere, the one it offers in their place stays); only then a product matched through single words of its
- * title. What follows the "not for" words is the use, never a product ("לא מתאים לעיניים" does not name the product
+ * title. Her kind's word said with no "the" and with a word right after it that no found title of her kind holds
+ * ("קרם ידיים" beside the face creams) speaks of another product and rules none out. A word she said as the use
+ * tells one of her kind apart only right at the kind's word ("נעלי הריצה"), never from elsewhere in the sentence.
+ * A side of the turn, or a sentence, that says fits for a use she named with no subject of its own ("..., אבל
+ * לעיניים רגילות הם מתאימים") speaks of the subject of the one before it, and what the text says fits for part of
+ * what she asks is not ruled out.
+ * What follows the "not for" words is the use, never a product ("לא מתאים לעיניים" does not name the product
  * whose title holds "לעיניים"), and so is what follows a "fits" word; a product matched only through a word her own
  * message says as the use ("לעיניים הטושים לא מתאימים" on "יש טוש לעיניים?") is never the subject. When the sentence
  * also says something fits and another subject stands between that and the "not", which is which is not guessed
@@ -937,6 +948,27 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
   const hers = herUseWords(incoming, noun);
   const lessHers = (v: string) => hers.reduce((t, w) => t.replace(new RegExp(`(?<![\\p{L}])[הולבמשכ]{0,2}${w}(?![\\p{L}])`, "giu"), blank), v);
   const pieces = (String(text ?? "").match(SENTENCES_RE) ?? []).flatMap((s) => s.split(TURNS));
+  // What each sentence, or side of its turn, ruled out.
+  const ruled: number[][] = [];
+  // It speaks of nothing of its own: only a pronoun, the "fits" words, and a use she named with the words that
+  // describe it ("לעיניים רגילות הם מתאימים", "הם מתאימים לעיניים רגילות").
+  const noSubjectOfItsOwn = (v: string) => {
+    const left = hers.reduce((t, w) => t.replace(new RegExp(`(?<![\\p{L}])[הולבמשכ]{0,2}${w}(?![\\p{L}])(?:\\s+(?!${USE_ENDS})[\\p{L}]+)*`, "giu"), blank), v);
+    return !/\p{L}{2,}/u.test(left.replace(SAYS_FIT_ALL, blank).replace(JOINS, blank).replace(/(?<![\u0590-\u05FF])כן(?![\u0590-\u05FF])/gu, blank));
+  };
+  // Each place a Hebrew text says her kind's word: the letters in front of it, and the word right after it.
+  const kindWord = noun && /[\u0590-\u05FF]/.test(noun) ? new RegExp(`(?<![\\p{L}])([ושלבמכה]{0,3}?)(?:${nounKeys(noun).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})[\\p{L}]*(?:\\s+([\\p{L}]+))?`, "giu") : null;
+  const kindPlaces = (v: string) => (kindWord ? [...v.matchAll(kindWord)] : []);
+  // A word as written and without its one-letter prefix ("הריצה", "ריצה"), and whether a product's title holds it
+  // (the title's word, or the title's word with an ending: "שחורים" for "שחור").
+  const forms = (w: string) => [...new Set([w, w.replace(/^[הולבמשכ](?=[\u0590-\u05FF]{3,})/u, "")])];
+  const holds = (i: number, w: string) => (titleOf(i).match(/\p{L}{3,}/gu) ?? []).flatMap(forms).some((t) => forms(w.toLowerCase()).some((a) => a.startsWith(t)));
+  // It says her kind's word with no "the", and each time a word right after it that no title of her kind holds and
+  // that points at nothing found ("קרם ידיים" beside the face creams): it speaks of another product.
+  const speaksOfAnother = (v: string, kind: number[]) => {
+    const places = kindPlaces(lessHers(v));
+    return places.length > 0 && places.every((m) => !m[1].includes("ה") && !!m[2] && !POINTS_AT_FOUND.test(m[2]) && !kind.some((i) => holds(i, m[2])));
+  };
   for (let n = 0; n < pieces.length; n++) {
     const x = pieces[n];
     // "Not stated that it fits" rules nothing out; what the sentence says past those words still counts.
@@ -946,6 +978,9 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
     if (!unfit.length || forHerAsk(said, incoming)) {
       // It says they fit, or that they are for what she asks: the products it names are never ruled out.
       if (SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " ")) || (said.match(FOR_WHAT) ?? []).length > 0) namedMembers(x, candidates).forEach((i) => fits.add(i));
+      // It says fits (or yes) for a use she named and has no subject of its own: it speaks of the subject of the
+      // side before it, and a product the text says fits for part of what she asks is not ruled out.
+      if ((SAYS_FIT.test(said) || SAYS_YES.test(said)) && lessHers(x) !== x && noSubjectOfItsOwn(said)) (ruled[n - 1] ?? []).forEach((i) => fits.add(i));
       continue;
     }
     // The sentence without what follows each "not for", up to the comma.
@@ -996,11 +1031,17 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
     const inHerScript = (c: any) => (/[\u0590-\u05FF]/.test(noun ?? "") ? /[\u0590-\u05FF]/ : /[a-z]/i).test(String(c?.title ?? ""));
     const kind = noun && nounKeys(noun).some((k) => core.includes(k)) ? all.filter((i) => ofHerKindStrict(candidates[i], noun) || (!inHerScript(candidates[i]) && ofNoun(candidates[i], noun))) : [];
     // Only those of her kind the sentence tells apart ("הטוש השחור"), when it does.
-    const apart = kind.length ? namedMembers(core, candidates) : new Set<number>();
-    const narrowed = kind.filter((i) => apart.has(i));
+    // The word right at the kind's word tells them apart ("נעלי הריצה"); a word she said as the use never does from
+    // elsewhere in the sentence ("לריצה ארוכה הנעליים שמצאנו").
+    const atKind = kindPlaces(core).map((m) => m[2]).filter(Boolean);
+    const byWord = kind.filter((i) => atKind.some((w) => holds(i, w)));
+    const apart = kind.length ? namedMembers(lessHers(core), candidates) : new Set<number>();
+    const narrowed = byWord.length && byWord.length < kind.length ? byWord : kind.filter((i) => apart.has(i));
+    const another = speaksOfAnother(core, kind);
     // Only then single words of a title, never a word her own message says as the use.
     const single = namedMembers(lessHers(core), candidates);
     const chosen = titled.hit.size ? [...titled.hit]
+      : another ? []
       : kind.length ? (narrowed.length ? narrowed : kind.filter((i) => !elsewhere().has(i)))
       : single.size ? [...single]
       : titleSaid(lessHers(core)).filter((i) => !elsewhere().has(i));
@@ -1014,6 +1055,7 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
       const fit = [...fitWords.slice(0, m.index ?? 0).matchAll(SAYS_FIT_ALL)].at(-1);
       return !!fit && /\p{L}{2,}/u.test(lessHers(fitWords.slice((fit.index ?? 0) + fit[0].length, m.index ?? 0)).replace(JOINS, " "));
     })) continue;
+    ruled[n] = chosen;
     chosen.forEach((i) => out.add(i));
   }
   fits.forEach((i) => out.delete(i));

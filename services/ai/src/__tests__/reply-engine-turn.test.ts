@@ -4324,6 +4324,111 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(cards).toEqual(["203"]);
   });
 
+  // Three last cases (Supervisor, 2026-11-19): her kind's word naming another product, a use word away from the
+  // kind's word, and a later side that says the same subject does fit.
+  const SHOES = [{ title: "נעלי ריצה Air Zoom", price: 300 }, { title: "נעלי הליכה Comfort", price: 250 }, { title: "סנדלי שטח Trek", price: 200 }];
+  const SOCKS = { title: "גרבי ריצה", price: 30 };
+  const HAND_CREAM = { title: "קרם ידיים", price: 40 };
+  const K1_SENTENCE = "קרם ידיים לא מתאים לפנים.";
+  const K2_SENTENCE = "לריצה ארוכה הנעליים שמצאנו לא מתאימות.";
+  const K3_SENTENCE = "הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות הם מתאימים.";
+  // The store's own text says what the sentence says, so it stands as a checked fact; one more sentence is cut.
+  const storeSays = (content: string) => {
+    h.chunks = [{ content, score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "k" }];
+    h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+  };
+
+  it("★ (K1) her kind's word with a word no found title of her kind holds: it speaks of another product, and the found ones keep their cards", async () => {
+    storeSays("קרם ידיים: לא מתאים לפנים. קרם פנים לעור יבש: לעור יבש. קרם פנים לעור שמן: מתאים לעור שמן.");
+    const a = await runFive("יש קרם לעור שמן?", `${K1_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], CREAMS);
+    expect(a.r.reply).toBe(K1_SENTENCE);
+    expect(a.cards).toEqual(["201", "202"]);
+    // With that product found, it is the one the sentence rules out.
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    const b = await runFive("יש קרם לעור שמן?", `${K1_SENTENCE} ${CUT}`, ["PRODUCT_2", "PRODUCT_4"], [...CREAMS, HAND_CREAM]);
+    expect(b.r.reply).toBe(K1_SENTENCE);
+    expect(b.cards).toEqual(["202"]);
+  });
+
+  it.each([[3, SHOES], [4, [...SHOES, SOCKS]]])("★ (K2) a use word away from the kind's word, with %i found products: all of her kind are ruled out, whatever else was found", async (_n, list) => {
+    storeSays("נעלי ריצה Air Zoom ונעלי הליכה Comfort: לא מתאימות לריצה ארוכה. סנדלי שטח Trek: לטיולים.");
+    const { r, cards } = await runFive("יש נעליים לריצה?", `${K2_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], list as any[]);
+    expect(r.reply).toBe(K2_SENTENCE);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ (K3) a later side says the same subject does fit for part of what she asks: its products keep their cards", async () => {
+    storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
+    // The use in front: the sentence with the subject in front is read by the device check as said for another use.
+    const st = "לעיניים רגישות הטושים לא מתאימים, אבל לעיניים רגילות הם מתאימים.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["201", "202"]);
+  });
+
+  it("★ (K) the helpers: another product of her kind's word, the use word's place, and a side with no subject of its own", async () => {
+    const { unfitProducts } = await import("../services/reply-engine/engine");
+    const on = (t: string, list: any[], noun = "טוש", incoming = "יש טוש לעיניים?") => [list.length, [...unfitProducts(t, list, noun, incoming)].sort()];
+    const cream = (t: string, list: any[] = CREAMS) => on(t, list, "קרם", "יש קרם לעור שמן?");
+    const shoe = (t: string, list: any[] = SHOES) => on(t, list, "נעליים", "יש נעליים לריצה?");
+    // K1. Her kind's word, no "the", and right after it a word no found title of her kind holds: another product.
+    expect(cream(K1_SENTENCE)).toEqual([3, []]);
+    expect(cream(K1_SENTENCE, [...CREAMS, HAND_CREAM])).toEqual([4, [3]]);
+    expect(on("טוש שפתיים לא מתאים לעיניים.", THREE)).toEqual([3, []]);
+    expect(shoe("נעלי עבודה לא מתאימות לריצה.")).toEqual([3, []]);
+    // Also when nothing of her kind was found: the brow pencil is not the brow pen it speaks of.
+    expect(on("טוש גבות לא מתאים לעיניים.", [FIVE[2], { title: "עיפרון גבות", price: 49 }, FIVE[4]])).toEqual([3, []]);
+    // A word a found title of her kind holds tells that one apart, also with an ending, also beside a product of
+    // another kind whose title holds the same word.
+    expect(on("טוש שחור לא מתאים לעיניים.", THREE)).toEqual([3, [1]]);
+    expect(on("טושים שחורים לא מתאימים לעיניים.", THREE)).toEqual([3, [1]]);
+    expect(on("טוש גבות לא מתאים לעיניים.", [FIVE[0], { title: "טוש שחור", price: 149 }, { title: "עיפרון גבות", price: 99 }])).toEqual([3, [0]]);
+    // A word she said as the use, right after the kind's word, names no other product.
+    expect(on("טוש לעיניים לא מתאים לעור רגיש.", THREE)).toEqual([3, [0, 1]]);
+    expect(cream("קרם פנים לא מתאים לעור שמן.")).toEqual([3, [0, 1]]);
+    // Said with "the", or followed by a pointing word or by the sentence going on: the found ones.
+    expect(cream("הקרם לידיים לא מתאים לפנים.")).toEqual([3, [0, 1]]);
+    expect(cream("הקרם הזה לא מתאים לעור שמן.")).toEqual([3, [0, 1]]);
+    expect(on("הטושים שלנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים האלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים אלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים כאלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טוש זה לא מתאים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים שמצאנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים אצלנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים, לצערי, לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    // Another product and the found ones in one text: the found ones are ruled out.
+    expect(on("אין לנו טוש שפתיים, והטושים שמצאנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טוש שפתיים לא מתאים לעיניים, וגם הטושים שמצאנו לא.", THREE)).toEqual([3, [0, 1]]);
+    // K2. A word she said as the use tells one of her kind apart only right at the kind's word, on any list.
+    expect(shoe(K2_SENTENCE)).toEqual([3, [0, 1]]);
+    expect(shoe(K2_SENTENCE, [...SHOES, SOCKS])).toEqual([4, [0, 1]]);
+    expect(shoe("נעלי הריצה לא מתאימות למרתון.")).toEqual([3, [0]]);
+    expect(shoe("נעלי הריצה לא מתאימות למרתון.", [...SHOES, SOCKS])).toEqual([4, [0]]);
+    expect(shoe("נעלי ההליכה לא מתאימות לריצה.")).toEqual([3, [1]]);
+    expect(shoe("נעלי ההליכה לא מתאימות לריצה.", [...SHOES, SOCKS])).toEqual([4, [1]]);
+    expect(shoe("הנעליים לריצה לא מתאימות למרתון.")).toEqual([3, [0]]);
+    expect(cream("הקרם לעור יבש לא מתאים לעור שמן.")).toEqual([3, [0]]);
+    // K3. A side, or a sentence, that says fits for a use she named with no subject of its own.
+    expect(on(K3_SENTENCE, THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות כן.", THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל הם מתאימים לעיניים רגילות.", THREE)).toEqual([3, []]);
+    expect(on("טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים.", THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות. לעיניים רגילות הם מתאימים.", THREE)).toEqual([3, []]);
+    // Only the subject of the one before it: a product ruled out earlier or later stays ruled out.
+    expect(on("טוש גבות שחור לא מתאים לעיניים. טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים.", THREE)).toEqual([3, [1]]);
+    expect(on("טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים. טוש גבות שחור לא מתאים לעיניים.", THREE)).toEqual([3, [1]]);
+    // No "fits" in it, no use she named, a use she did not name, or a subject of its own: the one before it stands.
+    expect(on("הטושים לא מתאימים לעיניים רגישות. גם לעיניים רגילות.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים. זה מתאים?", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל לגבות הם מתאימים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים. הם מתאימים לגבות.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל קונסילר לעיניים מתאים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל לעיניים מתאים איילינר.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות מתאים סרום.", THREE)).toEqual([3, [0, 1]]);
+  });
+
   it("★ (I, J) the helpers: who the sentence speaks of, in order, on any list of found products", async () => {
     const { unfitProducts, herUseWords } = await import("../services/reply-engine/engine");
     const LISTS: any[][] = [THREE, [...THREE, FIVE[3]], [...THREE, FIVE[4]], FIVE];
@@ -4434,6 +4539,8 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(u("טוש גבות שחור מתאים לגבות. טוש גבות לא מתאים לעיניים.")).toEqual([0]);
     // Also when the sentence that says it fits is the yes to her own ask ("for brows, not for eyes" on an ask for brows).
     expect([...unfitProducts("טוש גבות חום מיועד לגבות, לא לעיניים. טוש גבות לא מתאים לעור רגיש.", FIVE, "טוש", "יש טוש לגבות?")]).toEqual([1]);
+    // The same beside a pen the second sentence does not speak of (the word at the kind's word tells the brow pens apart).
+    expect([...unfitProducts("טוש גבות חום מיועד לגבות, לא לעיניים. טוש גבות לא מתאים לעור רגיש.", [FIVE[0], FIVE[1], { title: "טוש שחור", price: 149 }], "טוש", "יש טוש לגבות?")]).toEqual([1]);
     // The use ends at the comma: a product named after it is still named.
     expect(u("טוש גבות חום לא מתאים לעיניים, וגם טוש גבות שחור.")).toEqual([0, 1]);
     // C: names none, speaks of her kind: that kind only. With no kind and no title word in it: none.
