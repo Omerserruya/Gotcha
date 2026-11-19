@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass } from "../services/reply-engine/engine";
-import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds } from "../services/reply-engine/gates";
+import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -69,7 +69,8 @@ describe("1 (verify of d5f288f6): a prefix letter comes off only where the searc
     expect(storeQueryOf("יש הנחה על המשטח?")).toBe("המשטח");
     expect(storeQueryOf("מה המחיר של הסרום")).toBe("הסרום");
     expect(storeQueryOf("מה המחיר של הסרום", { substring: true })).toBe("סרום");
-    expect(storeQueryOf("הכרית הזאת קיימת באפור?")).toBe("הכרית באפור");
+    // A colour's ב comes off ("באפור" matches inside "כרית אפורה" on a substring search).
+    expect(storeQueryOf("הכרית הזאת קיימת באפור?")).toBe("הכרית אפור");
     // A size alone is no product: the product in focus is searched instead.
     expect(storeQueryOf("יש לכם את זה במידה 42?")).toBeNull();
     expect(q(autoLookups([{ kind: "no_search" }] as any, "יש לכם את זה במידה 42?", WOO, [], "שמלת ערב שחורה"))[0]).toEqual(["woocommerce.list_products", "שמלת ערב שחורה"]);
@@ -281,7 +282,7 @@ describe("b77ec0d1 verify: the focus rules", () => {
 describe("13afc633 verify: attribute words that are the product; ordinary speech", () => {
   it("★ must-fix: a bare attribute word beside another content word is the product and stays", () => {
     expect(storeQueryOf("יש לכם משקל מטבח?")).toBe("משקל מטבח");
-    expect(storeQueryOf("יש לכם צבע לקיר בלבן?")).toBe("צבע לקיר בלבן");
+    expect(storeQueryOf("יש לכם צבע לקיר בלבן?")).toBe("צבע לקיר לבן");
     expect(storeQueryOf("אני מחפשת בד כותנה לתפירה")).toBe("בד כותנה לתפירה");
     expect(storeQueryOf("יש לכם סרט מידה?")).toBe("סרט מידה");
     expect(storeQueryOf("יש לכם חומר ניקוי לנירוסטה?")).toBe("חומר ניקוי לנירוסטה");
@@ -628,5 +629,38 @@ describe("the price cut takes only its own sentence (stripPrices trims)", () => 
   it("★ one made-up price never wipes the other sentences", () => {
     expect(stripFactProblems("יש לנו את Canvas Tote, תיק בד חזק ונוח לשימוש יומיומי וגם לקניות. הוא עולה ₪999.", [{ kind: "ungrounded_price", prices: ["999"] }] as any)).toBe("יש לנו את Canvas Tote, תיק בד חזק ונוח לשימוש יומיומי וגם לקניות.");
     expect(stripFactProblems("התיק עולה ₪120. מתאים לך?", [{ kind: "ungrounded_price", prices: ["120"] }] as any)).toBe("מתאים לך?");
+  });
+});
+
+describe("7100b0b6 pre-check: the real messages", () => {
+  const L224 = "הי, אני רוצה להזמין את המוצרים שלכם, יש לי שאלה לגבי המעצור.. האם יש מעצור לכל מתקן? כדי שמוצר שהוא לא כבד, לא יחלק או יתגלגל?";
+  const L789 = "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית";
+  const HARISH = "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?";
+  it("★ MISS 1 (L224): the question sentence decides: a stopper question is attribute-only, the list never goes", () => {
+    expect(attributeOnlyAsk(L224)).toBe(true);
+    expect(attributeOnlyAsk("מאיזה חומר עשויות השרשראות?")).toBe(true);
+    expect(attributeOnlyAsk("יש לכם מעצור למיקסר?")).toBe(false);
+    expect(attributeOnlyAsk("מחפשת משטח עם ידית")).toBe(false);
+    expect(storeQueryOf(L224)).not.toMatch(/הי|מוצרים|שאלה|לגבי/);
+  });
+  it("★ MISS 2 (L789 and the Harish turn): only product words; describing words alone take the conversation's noun", () => {
+    expect(storeQueryOf(L789)).toBe("חגיגי כחול");
+    expect(storeQueryOf(L789, { substring: true })).toBe("חגיגי כחול");
+    expect(fallbackQueryOf(L789, ["יש לכם מטפחת חגיגית לחתונה?"], null, { substring: true })).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, [], "מטפחת חגיגית בגווני כחול", { substring: true })).toBe("מטפחת חגיגי כחול");
+    expect(storeQueryOf(HARISH)).toBe("מטפחת חגגית כחול");
+    expect(storeQueryOf("אני רוצה גוון חום למתחת לעיינים")).toBe("חום לעיינים");
+    expect(storeQueryOf("אני רוצה גוון חום למתחת לעיינים", { substring: true })).toBe("חום עיינים");
+    // The article never comes off a verb; a word with ב of its own stays; no product word at all gives no query.
+    expect(storeQueryOf("הייתה פה מטפחת", { substring: true })).toBe("מטפחת");
+    expect(storeQueryOf("הגיעו מטפחות לחג?", { substring: true })).toMatch(/^הגיעו /);
+    expect(storeQueryOf("יש לכם בגדי הריון?")).toBe("בגדי הריון");
+    expect(storeQueryOf("יש משטחי במבוק?")).toBe("משטחי במבוק");
+    expect(storeQueryOf("ראיתי באינסטגרם בחנות שלכם")).toBeNull();
+    expect(fallbackQueryOf("הייתה אחת מאוד יפה", [], null)).toBeNull();
+  });
+  it("★ note: \"מעמד לצילום סרטונים\" with the want-word is a product ask; bare it is no ask at all", () => {
+    expect(productAskNow("יש לכם מעמד לצילום סרטונים?")).toBe(true);
+    expect(videoAsk("יש לכם מעמד לצילום סרטונים?")).toBe(false);
   });
 });

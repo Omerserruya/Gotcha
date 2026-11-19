@@ -1395,7 +1395,7 @@ const QUERY_STOP = new Set(["איך", "כיצד", "אדע", "נדע", "לדעת"
 // Attribute words: what is asked about a product, never its name (the Supervisor's probe on b77ec0d1: "יש כמה
 // צבעים?" searched "צבעים", "מאיזה בד הוא עשוי?" searched "בד").
 // The bare forms; a ה or ב form ("האורך", "בצבע") is always the attribute.
-const ATTRIBUTE_WORDS = new Set(["צבע", "צבעים", "גוון", "גוונים", "מידה", "מידות", "גודל", "בד", "חומר", "משקל", "אורך", "רוחב", "גובה", "עובי", "מלאי", "colour", "colours", "color", "colors", "size", "sizes", "fabric", "material", "weight", "length", "width", "height", "stock"]);
+const ATTRIBUTE_WORDS = new Set(["צבע", "צבעים", "צבעי", "גוון", "גוונים", "גווני", "מידה", "מידות", "גודל", "בד", "חומר", "משקל", "אורך", "רוחב", "גובה", "עובי", "מלאי", "colour", "colours", "color", "colors", "size", "sizes", "fabric", "material", "weight", "length", "width", "height", "stock"]);
 const attributeForm = (w: string) => { const l = w.toLowerCase(); return ATTRIBUTE_WORDS.has(l) || (/^[הב][\u0590-\u05FF]{2,}$/u.test(l) && ATTRIBUTE_WORDS.has(l.slice(1))); };
 /**
  * An attribute word comes out of the query only where it is used as one (the Supervisor's probe on 13afc633: "משקל
@@ -1406,8 +1406,10 @@ const ASKS_ABOUT = new Set(["מאיזה", "מאיזו", "איזה", "איזו", 
 function attributeUse(tokens: string[], i: number, content: (w: string) => boolean): boolean {
   const l = tokens[i].toLowerCase();
   if (!ATTRIBUTE_WORDS.has(l)) return attributeForm(l);
-  // Right after a question word it is asked about ("מאיזה חומר", "כמה צבעים", "what material").
+  // Right after a question word it is asked about ("מאיזה חומר", "כמה צבעים", "what material"); before a colour it is
+  // the attribute of that colour ("גווני כחול", "גוון חום").
   if (ASKS_ABOUT.has(String(tokens[i - 1] ?? "").toLowerCase())) return true;
+  if (COLOUR_WORD.test(String(tokens[i + 1] ?? "").replace(/^ב/u, ""))) return true;
   const beside = [tokens[i - 1], tokens[i + 1]].filter((x): x is string => !!x);
   // A number beside it is a value ("מידה 38"), never a product word.
   return !beside.some((x) => content(x) && !attributeForm(x) && !/^\d+$/.test(x));
@@ -1431,11 +1433,30 @@ export function nonProductAsk(incoming: string): boolean {
  * text), so one prefix letter (ה ו ל; never ב, which begins too many nouns) comes off a word of 5+ letters: the shorter form is a substring of the
  * word as written and can only add matches there. On a word search (Shopify) the word stays as written.
  */
+// Words of a conversation, never of a product (the Supervisor's probes on 7100b0b6, L224 and L789): greetings, fillers,
+// past and existence verbs, pronouns, the frame of a question.
+const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה"]);
+const PLAIN_ADJECTIVES = new Set(["יפה", "יפות", "יפים", "יפהפייה", "חדש", "חדשה", "חדשים", "חדשות", "נחמד", "נחמדה", "טוב", "טובה", "קלילה", "קליל", "עדין", "עדינה", "מיוחד", "מיוחדת", "שווה", "beautiful", "nice", "new", "pretty", "special"]);
+const CONTEXT_NOUNS = new Set(["מכירה", "מכירות", "סניף", "חנות", "אתר", "אינסטגרם", "פייסבוק", "טיקטוק", "וואטסאפ", "סטורי", "פוסט", "תערוכה", "יריד", "שוק", "אירוע", "הופעה", "קבוצה", "מבצע", "פרסומת", "ניוזלטר"]);
+const talkWord = (w: string) => { const l = w.toLowerCase(); return TALK_WORDS.has(l) || (/^[הושל][\u0590-\u05FF]{2,}$/u.test(l) && TALK_WORDS.has(l.slice(1))) || (/^ש[\u0590-\u05FF]{3,}$/u.test(l) && (TALK_WORDS.has(l.slice(1)) || /^ש(?:מוצר|הוא|היא|זה)/u.test(l))); };
+const COLOUR_WORD = /^(?:שחור|שחורה|שחורים|לבן|לבנה|לבנים|אדום|אדומה|כחול|כחולה|כחולים|ירוק|ירוקה|צהוב|צהובה|ורוד|ורודה|אפור|אפורה|חום|חומה|סגול|סגולה|כתום|כתומה|זהב|זהוב|כסף|כסוף|בז'|בורדו|תכלת|נייבי|black|white|red|blue|green|yellow|pink|grey|gray|brown|purple|orange|gold|silver|beige|navy)$/iu;
+/** A describing word: a colour, or an adjective-shaped word ("חגיגי", "חגיגית", "קלילה" is not one). */
+export const describingWord = (w: string) => COLOUR_WORD.test(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w);
+/**
+ * The customer's product words for a store search: the question, the conversation and the ask words off, four at
+ * most; null with no letter word left, or for an ask no product search answers (her order, shipping, a business fact,
+ * a coupon, a payment problem, a status ask). A name beside a greeting ("יערה שלום") and a ב-phrase that opens
+ * context ("במכירה בחריש") are no product words; a ב on a colour comes off; a ב-word after a product noun stays
+ * ("משטחי במבוק"). `substring`: the store matches inside titles (WooCommerce), so one prefix letter (ה before 4+, ו or ל
+ * before 5+; never ב, never on a verb) comes off: the shorter form is a substring of the word as written.
+ */
 export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {}): string | null {
-  const t = normalizeQuotes(String(incoming ?? ""));
+  let t = normalizeQuotes(String(incoming ?? ""));
   if (nonProductAsk(t)) return null;
+  // A name beside a greeting at the start: "יערה שלום.", "היי יערה,".
+  t = t.replace(/^\s*[\p{L}]+\s+שלום\s*[,.!]?/u, " ").replace(/^\s*(?:היי|הי|שלום|hi|hey|hello)\s+[\p{L}]+\s*[,!.]/iu, " ");
   const tokens = (t.match(/[\p{L}\p{N}]+(?:['"״][\p{L}]+)*/gu) ?? []) as string[];
-  const isContent = (w: string) => !queryStop(w) && !ASK_WORDS.has(w.toLowerCase()) && (w.length >= 2 || /^\d$/.test(w));
+  const isContent = (w: string) => !queryStop(w) && !talkWord(w) && !ASK_WORDS.has(w.toLowerCase()) && (w.length >= 2 || /^\d$/.test(w));
   // A size and its value are never title text: "מידה 38" goes, and the ב comes off the word after it ("בנעל").
   const sized = new Set<number>();
   // The value: a number, a size letter ("L", "XL") or a size adjective ("מידה גדולה"); the size word goes with it.
@@ -1446,10 +1467,51 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
     // The ב comes off the word after them, an apostrophe word too ("בקפוצ'ון").
     if (/^ב[\u0590-\u05FF]{2,}(?:['"״][\u0590-\u05FF]+)*$/u.test(tokens[i + 2] ?? "") && tokens[i + 2].replace(/['"״]/g, "").length >= 4) tokens[i + 2] = tokens[i + 2].slice(1);
   });
-  const words = tokens.filter((w, i) => !sized.has(i) && isContent(w) && !attributeUse(tokens, i, isContent));
-  const content = words.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && (/^ה[\u0590-\u05FF]{3,}$/u.test(w) || /^[ול][\u0590-\u05FF]{4,}$/u.test(w)) ? w.slice(1) : w));
+  const kept: string[] = [];
+  let afterContext = false;
+  tokens.forEach((w0, i) => {
+    const wasAfter = afterContext;
+    afterContext = false;
+    if (sized.has(i) || !isContent(w0) || attributeUse(tokens, i, isContent)) return;
+    let w = w0;
+    // A ב-word: a colour stays bare ("בכחול"); a context noun ("במכירה", "באינסטגרם") and the place right after it
+    // ("בחריש") are no product words. Any other ב-word is a word of its own ("בגדי", "במבוק", "בובה").
+    if (/^ב[\u0590-\u05FF]{3,}/u.test(w) && !attributeForm(w)) {
+      const bare = w.slice(1).replace(/^ה/u, "");
+      if (COLOUR_WORD.test(w.slice(1))) w = w.slice(1);
+      else if (CONTEXT_NOUNS.has(bare)) { afterContext = true; return; }
+      else if (wasAfter) return;
+    }
+    kept.push(w);
+  });
+  // The article off on a substring search, never on a verb ("הייתה").
+  const stripped = kept.filter((w) => w.length >= 2 || /^\d$/.test(w)).map((w) => (opts.substring && ((/^ה[\u0590-\u05FF]{3,}$/u.test(w) && !/(?:תה|ו)$/u.test(w)) || /^[ול][\u0590-\u05FF]{4,}$/u.test(w)) ? w.slice(1) : w));
+  // One form of a word ("חגיגי" and "חגיגית").
+  const seen = new Set<string>();
+  const content = stripped.filter((w) => { const k = w.replace(/^[הולב]/u, "").slice(0, 4); if (seen.has(k)) return false; seen.add(k); return true; });
   if (!content.some((w) => /\p{L}{2,}/u.test(w))) return null;
   return content.slice(0, 4).join(" ");
+}
+/**
+ * The fallback search's query: her product words; when they are only describing words ("חגיגי כחול"), the noun of
+ * the conversation goes in front (her earlier messages, then the model's intent): "מטפחת חגיגי כחול". Null with no
+ * product word at all: no search, never a garbage query.
+ */
+export function fallbackQueryOf(incoming: string, earlierInbound: string[], intent: string | null | undefined, opts: { substring?: boolean } = {}): string | null {
+  const q = storeQueryOf(incoming, opts);
+  if (!q) return null;
+  const words = q.split(/\s+/);
+  // Describing only: colours, plain adjectives and adjective shapes ("חגיגי כחול"). A construct noun before its
+  // material ("משטחי במבוק") is never all-describing: the material word is not one.
+  const describing = (w: string): boolean => COLOUR_WORD.test(w) || PLAIN_ADJECTIVES.has(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w);
+  if (!words.every((w) => describing(w))) return q;
+  for (const m of [...earlierInbound, String(intent ?? "")]) {
+    const e = storeQueryOf(m, opts);
+    const noun = e?.split(/\s+/).find((w) => !describingWord(w) && /\p{L}{3,}/u.test(w));
+    if (noun) return [noun, ...words].slice(0, 4).join(" ");
+  }
+  // Describing words and no noun anywhere: no product to search for.
+  return null;
 }
 // An explanation asked, no product wanted: "how do I know", "what is", "what's the difference" (the knowledge answers it).
 const EXPLAIN_ASK = /(?<![\u0590-\u05FF])(?:איך\s+(?:אני\s+)?(?:אדע|נדע|יודעים|לדעת|מבדילים|בוחרים|מתאימים)|מה\s+(?:זה|זאת|ההבדל|הכוונה|המשמעות)|מה\s+ה[\u0590-\u05FF]{2,}\s+(?:שלי|שלך)|מהו|מהי)(?![\u0590-\u05FF])|\b(?:how (?:do|can) (?:i|we|you) (?:know|tell|choose|pick)|what(?:'s| is) the difference|what (?:is|does) .{1,30} mean)\b/iu;
@@ -2751,6 +2813,12 @@ export function dropOrphanAlso(reply: string): string {
 /** A question about a product's own attribute (material, stopper, size, care), no product wanted: no list for it. */
 export function attributeOnlyAsk(incoming: string): boolean {
   const t = normalizeQuotes(String(incoming ?? ""));
-  return (ATTRIBUTE_ASK.test(t) || MATERIAL_ASK.test(t) || /(?<![\u0590-\u05FF])[הל]?(?:פקק|מכסה|ידית|מעצור|מעצורים|רגליות)(?![\u0590-\u05FF])/u.test(t))
-    && !/(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|רוצה|רוצים|יש\s+לכם|יש\s+לך|המלצה|ממליצים|תמליצו|אפשר\s+לקבל|מה\s+יש)(?![\u0590-\u05FF])|\b(?:looking for|do you have|recommend|i want|i need)\b/iu.test(t);
+  // The question sentence decides (L224: "אני רוצה להזמין..." then "האם יש מעצור לכל מתקן?"): its want-word, never one
+  // elsewhere in the message.
+  const sentences = (t.match(/[^.!?\n]+[.!?]*/g) ?? [t]).map((x) => x.trim()).filter(Boolean);
+  const asked = sentences.filter((x) => /\?/.test(x));
+  const decide = asked.length ? asked : sentences.slice(-1);
+  const attr = (x: string) => ATTRIBUTE_ASK.test(x) || MATERIAL_ASK.test(x) || /(?<![\u0590-\u05FF])[הל]?(?:פקק|מכסה|ידית|מעצור|מעצורים|רגליות)(?![\u0590-\u05FF])/u.test(x);
+  const want = (x: string) => /(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|רוצה|רוצים|יש\s+לכם|יש\s+לך|המלצה|ממליצים|תמליצו|אפשר\s+לקבל|מה\s+יש)(?![\u0590-\u05FF])|\b(?:looking for|do you have|recommend|i want|i need)\b/iu.test(x);
+  return decide.some((x) => attr(x) && !want(x));
 }

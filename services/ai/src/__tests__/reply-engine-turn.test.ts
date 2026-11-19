@@ -2878,6 +2878,15 @@ describe("rating of the d2f10620 prod replay, through a whole turn", () => {
     if (r.trace.gate3.rewrite !== "fallback") throw new Error(`not the fallback path: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
     expect(r.reply ?? "").not.toMatch(/Leather|הנה כמה אפשרויות/);
   });
+  it("★ (7100b0b6 pre-check, L789) the fallback search: her describing words with the conversation's noun, never a garbage query", async () => {
+    h.history = [{ direction: "INBOUND", body: "יש לכם מטפחת חגיגית לחתונה?", metadata: null }, { direction: "OUTBOUND", body: "יש לנו כמה מטפחות חגיגיות.", senderName: "AI Bot", metadata: null }];
+    await withState({ offeredItems: [{ ref: "id:5", title: "מטפחת אנה", productId: "5", at: new Date().toISOString() }] }, async () => {
+      h.responses.push({ toolCalls: [respond("q1", { reply: "המטפחת עולה ₪120." })] }, { toolCalls: [respond("q2", { reply: "בטח, ₪150 בלבד." })] }, { toolCalls: [respond("q3", { reply: "בטח, ₪150 בלבד." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
+      expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toBe("מטפחת חגיגי כחול");
+    });
+  });
+
   it("★ B1d: a request for the sizes she just gave is never left after a cut", async () => {
     h.groundTitle = "סמובי גפן 40x50";
     const reply = "למיקסר מתאים סמובי גפן 40x50. הוא עולה ₪999. אפשר לשלוח את רוחב ועומק הבסיס של כל אחד מהם?";
