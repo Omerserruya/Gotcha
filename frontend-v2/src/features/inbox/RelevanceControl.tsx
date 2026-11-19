@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from '@/i18n/navigation';
 
-import { setConversationRelevance, type VerbResult } from './conversation-actions';
+import { setConversationRelevance, type RelevanceResult } from './conversation-actions';
 import styles from './Inbox.module.css';
 import type { RelevanceOverride, RelevanceTag } from './relevance';
 
@@ -14,6 +14,8 @@ export type RelevanceClasses = {
   readonly tag?: string;
   readonly button?: string;
   readonly problem?: string;
+  /** The line after a mark that reached its sender. */
+  readonly note?: string;
 };
 
 const WEBSITE: RelevanceClasses = {
@@ -21,6 +23,7 @@ const WEBSITE: RelevanceClasses = {
   tag: styles.tagNeutral,
   button: styles.verbButton,
   problem: styles.verbProblem,
+  note: styles.verbNote,
 };
 
 /**
@@ -53,7 +56,7 @@ export function RelevanceControl({
 }) {
   const t = useTranslations('inbox.relevance');
   const router = useRouter();
-  const [result, setResult] = useState<VerbResult | null>(null);
+  const [result, setResult] = useState<RelevanceResult | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function press() {
@@ -86,6 +89,19 @@ export function RelevanceControl({
       >
         {override === 'business' ? t('markBusiness') : t('markIrrelevant')}
       </button>
+      {/*
+        What the mark did to its sender (Backend's sender rule), only when the
+        response says so - never inferred from the channel. Dark until it does.
+      */}
+      {result?.ok && result.senderRule ? (
+        <p
+          className={classes.note}
+          role="status"
+          data-testid={`relevance-sender-${conversationId}`}
+        >
+          {t(`sender.${result.senderRule}`)}
+        </p>
+      ) : null}
       {result && !result.ok ? (
         <p
           className={classes.problem}

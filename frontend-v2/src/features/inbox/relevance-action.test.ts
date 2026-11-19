@@ -24,7 +24,11 @@ describe('★★ setConversationRelevance', () => {
     '★★ PUTs `{ category: %s }` to the relevance route',
     async (category) => {
       const { setConversationRelevance } = await actions();
-      await expect(setConversationRelevance('c1', category)).resolves.toEqual({ ok: true });
+      // Today's response says nothing about the sender: null, never a guess.
+      await expect(setConversationRelevance('c1', category)).resolves.toEqual({
+        ok: true,
+        senderRule: null,
+      });
       expect(put).toHaveBeenCalledWith(
         expect.objectContaining({
           body: { category },
@@ -34,6 +38,18 @@ describe('★★ setConversationRelevance', () => {
         }),
       );
       expect(revalidatePath).toHaveBeenCalled();
+    },
+  );
+
+  it.each(['applied', 'lifted'] as const)(
+    '★ the response says the sender rule was %s: it is returned',
+    async (senderRule) => {
+      put.mockResolvedValue({ ok: true, senderRule });
+      const { setConversationRelevance } = await actions();
+      await expect(setConversationRelevance('c1', 'personal')).resolves.toEqual({
+        ok: true,
+        senderRule,
+      });
     },
   );
 

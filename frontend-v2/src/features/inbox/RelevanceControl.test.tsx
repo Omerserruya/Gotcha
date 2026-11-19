@@ -93,7 +93,7 @@ describe('Hebrew: Omer’s words, no English word and no dash', () => {
     show('marketing', 'he');
     expect(screen.getByTestId('relevance-tag-c1')).toHaveTextContent('דיוור או פרסומת');
     expect(screen.getByTestId('relevance-business-c1')).toHaveTextContent('זו פנייה עסקית');
-    expect(he.relevance.markIrrelevant).toBe('סמן כלא רלוונטי');
+    expect(he.relevance.markIrrelevant).toBe('סמנו כלא רלוונטי');
     expect(he.relevance.tag).toEqual({
       personal: 'אישי',
       notice: 'חשבונית או התראה',
@@ -104,5 +104,41 @@ describe('Hebrew: Omer’s words, no English word and no dash', () => {
     const words = JSON.stringify(he.relevance);
     expect(words.replace(/"[a-z_A-Z]+":/g, '')).not.toMatch(/[A-Za-z]/);
     for (const ch of words) expect([0x2013, 0x2014]).not.toContain(ch.codePointAt(0));
+  });
+});
+
+describe('★★ what the mark did to its sender - only when the response says so', () => {
+  it.each([
+    ['applied', 'notice', 'relevance-business-c1', en.relevance.sender.applied],
+    ['lifted', 'personal', 'relevance-business-c1', en.relevance.sender.lifted],
+  ] as const)('%s: the line, as a status', async (senderRule, tag, button, words) => {
+    setConversationRelevance.mockResolvedValue({ ok: true, senderRule });
+    show(tag);
+    await press(button);
+    const line = screen.getByTestId('relevance-sender-c1');
+    expect(line).toHaveTextContent(words);
+    expect(line).toHaveAttribute('role', 'status');
+  });
+
+  it('★★ not said (today’s response): no line, on a personal mark too', async () => {
+    setConversationRelevance.mockResolvedValue({ ok: true, senderRule: null });
+    show(null);
+    await press('relevance-personal-c1');
+    expect(setConversationRelevance).toHaveBeenCalledWith('c1', 'personal');
+    expect(screen.queryByTestId('relevance-sender-c1')).toBeNull();
+  });
+
+  it('a refused mark draws no sender line', async () => {
+    setConversationRelevance.mockResolvedValue({ ok: false, reason: 'failed' });
+    show(null);
+    await press('relevance-personal-c1');
+    expect(screen.queryByTestId('relevance-sender-c1')).toBeNull();
+  });
+
+  it('Hebrew: "this sender", plural address, no dash', () => {
+    expect(he.relevance.sender).toEqual({
+      applied: 'מעכשיו, שיחות חדשות מהשולח הזה בערוץ הזה ייכנסו כאישיות.',
+      lifted: 'מעכשיו, שיחות חדשות מהשולח הזה בערוץ הזה ייכנסו כרגיל.',
+    });
   });
 });
