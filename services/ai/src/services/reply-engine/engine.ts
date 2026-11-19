@@ -614,7 +614,7 @@ export function sharedTitleNoun(titles: string[]): string | null {
   return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut", "styleOnlyKept"] as const;
+const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut", "styleOnlyKept", "hollowHeader", "memberCut", "statementKept"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -659,6 +659,104 @@ export function cutTheAnswer(removed: string[], left: string, incoming: string):
   const sentences = String(left ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
   const negated = (x: string, w: string) => new RegExp(`(?<![\\u0590-\\u05FF])(?:לא|אין|ללא)\\s+(?:[\\u0590-\\u05FF]+\\s+)?[הולבמש]{0,2}${w}|\\bnot\\s+${w}`, "iu").test(x);
   return cutHolds.some((w) => !sentences.some((x) => has(x, w) && !negated(x, w)));
+}
+// ── What a cut may leave on a product turn (2026-11-19, the rating round on 9ce8a62b) ──
+const SENTENCES_RE = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g;
+// The low end of the price range, in the customer's words.
+const CHEAP_WORD = /(?<![\u0590-\u05FF])[והבש]{0,2}(?:זול|זולה|זולים|זולות)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])[והבל]{0,2}מחיר\s+(?:הכי\s+)?ה?נמוך(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])הכי\s+פחות\s+יקר|\b(?:cheap|cheaper|cheapest|inexpensive|least expensive|lowest[- ]priced?|lowest price|most affordable)\b/giu;
+// The word negated ("זה נשמע לי לא זול בכלל", "not that cheap"): a complaint, not an ask for the low end.
+const CHEAP_NEGATED = /(?:(?<![\u0590-\u05FF])(?:לא|אינו|אינה|אינם)|\bnot|n't)\s+(?:(?:ממש|כזה|כזאת|הכי|באמת|מאוד|כל\s?כך|so|that|very|exactly|really|the)\s+){0,2}$/iu;
+/** The customer asks for the cheap end ("מה הכי זול אצלכם?", "something cheaper"). */
+export function cheapAsk(incoming: string): boolean {
+  const t = normalizeQuotes(String(incoming ?? ""));
+  for (const m of t.matchAll(CHEAP_WORD)) if (!CHEAP_NEGATED.test(t.slice(0, m.index ?? 0))) return true;
+  return false;
+}
+// Words of a cheap ask that name no kind of product ("משהו", "הכי", "אצלכם").
+const CHEAP_FILL = /(?<![\u0590-\u05FF])(?:הכי|משהו|משהי|ממש|מאוד|באמת|יותר|ביותר|אצלכם|אצלך|שלכם|שיש|דבר|דברים|פריט|פריטים|מוצרים|ב?חנות|ב?אתר|ב?קטלוג)(?![\u0590-\u05FF])|\b(?:something|anything|really|very|most|items?|things?|products?|store|shop|sell)\b/giu;
+/** The kind of product a cheap ask names ("חולצה" in "יש חולצה זולה?"), or none ("מה הכי זול אצלכם?"). */
+export const cheapNoun = (incoming: string): string | null => headNoun(normalizeQuotes(String(incoming ?? "")).replace(CHEAP_WORD, " ").replace(CHEAP_FILL, " "));
+const priceOf = (c: any): number | null => (c?.priceOnSite || c?.price == null || !Number.isFinite(Number(c.price)) || Number(c.price) <= 0 ? null : Number(c.price));
+/** The products that can be shown (titled, in stock) and carry a price, cheapest first. */
+export function cheapestFirst<T extends { title?: string; price?: number | null; inventoryState?: string; priceOnSite?: boolean }>(list: T[]): T[] {
+  return list.map((c, i) => ({ c, i, p: priceOf(c) })).filter((x) => x.c?.title && x.c.inventoryState !== "out_of_stock" && x.p != null).sort((a, b) => a.p! - b.p! || a.i - b.i).map((x) => x.c);
+}
+/**
+ * The found products a text names (their indexes): by title, by a word only one found title has, or by a found
+ * product's own price written with a currency mark (a shipping price or a size is no product).
+ */
+export function namedMembers(text: string, candidates: any[]): Set<number> {
+  const out = new Set<number>();
+  const t = String(text ?? "");
+  if (!t.trim() || !candidates.length) return out;
+  const common = commonTitleWords(candidates.map((c) => String(c?.title ?? "")));
+  candidates.forEach((c, i) => { if (c?.title && namesTitle(t, String(c.title), common)) out.add(i); });
+  for (const i of referredCandidates(candidates as any[], t, "")) out.add(i);
+  const prices = [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)].map((m) => Number(String(m[1] ?? m[2]).replace(/,/g, "")));
+  candidates.forEach((c, i) => { const p = priceOf(c); if (p != null && prices.includes(p)) out.add(i); });
+  return out;
+}
+/**
+ * A cut took a member of the answer: a removed sentence named a found product (or its price) that what is left no
+ * longer names, while what is left still names found products. The rest then reads as the whole answer and is not
+ * ("יש חולצת ... ב-₪149." alone for "מה הכי זול?", with the ₪79 item cut).
+ */
+export function memberCutOf(removed: string[], left: string, candidates: any[]): boolean {
+  if (!removed.length || !candidates.length) return false;
+  const still = namedMembers(left, candidates);
+  return still.size > 0 && removed.some((r) => [...namedMembers(r, candidates)].some((i) => !still.has(i)));
+}
+/** The text speaks of the found products: the customer's noun when the found products are of it, or a word of a found title. */
+export function aboutFound(text: string, candidates: any[], noun: string | null): boolean {
+  const t = String(text ?? "").toLowerCase();
+  if (noun && candidates.some((c) => ofHerKindStrict(c, noun)) && nounKeys(noun).some((k) => t.includes(k))) return true;
+  return candidates.some((c) => (String(c?.title ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).some((w) => !TITLE_STOP.has(w) && t.includes(w)));
+}
+// A sentence that says the products do not fit the ask, directly ("לא מתאים ל", "מיועדים לגבות, לא לאזור העיניים");
+// never "it is not stated that it fits" (that one keeps the products with its caveat).
+const SAYS_UNFIT = /(?<![\u0590-\u05FF])[וש]?(?:לא|אינו|אינה|אינם|אינן)\s+(?:[\u0590-\u05FF]+\s+)?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים|מיועד|מיועדת|מיועדים|מיועדות)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:מיועד|מיועדת|מיועדים|מיועדות)\s+ל[^.!?\n]*?,\s*ו?לא\s+ל|\b(?:(?:is|are)\s+not|isn't|aren't)\s+(?:meant|intended|designed|suitable|made|a fit)\b|\b(?:does not|doesn't|do not|don't|will not|won't)\s+fit\b|\b(?:meant|intended|designed|made)\s+for\s+[^.!?\n]*?,\s*(?:and\s+)?not\s+for\b/iu;
+// The same, for every place in a sentence.
+const SAYS_UNFIT_ALL = new RegExp(SAYS_UNFIT.source, "giu");
+// Where a sentence turns ("X does not fit, but Y does"): each side is read on its own.
+const TURNS = /(?<![\u0590-\u05FF])(?:אבל|אך|אולם|ואילו|לעומת\s+זאת)(?![\u0590-\u05FF])|\b(?:but|however|whereas|while)\b/iu;
+// It says something fits.
+const SAYS_FIT = /(?<![\u0590-\u05FF])[וש]?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים)(?![\u0590-\u05FF])|\b(?:fits?|suits?|suitable)\b/iu;
+// What the sentence says the products ARE for ("מיועדים לגבות", "meant for brows"), up to the comma.
+const FOR_WHAT = /(?<![\u0590-\u05FF])(?<!(?:לא|אינו|אינה|אינם|אינן)\s+(?:[\u0590-\u05FF]+\s+)?)[וש]?(?:מתאים|מתאימה|מתאימים|מתאימות|מיועד|מיועדת|מיועדים|מיועדות)\s+([^,.;!?\n]*)|\b(?<!not\s+|n't\s+)(?:meant|intended|designed|suitable|made)\s+for\s+([^,.;!?\n]*)/giu;
+/** The sentence says the products are for the very thing her message asks for: a yes, which rules nothing out. */
+function forHerAsk(part: string, incoming: string): boolean {
+  const inc = String(incoming ?? "").toLowerCase();
+  if (!inc.trim()) return false;
+  for (const m of String(part ?? "").matchAll(FOR_WHAT)) {
+    // Only up to a "not" ("מתאימים לגבות ולא לעיניים": for brows).
+    const what = String(m[1] ?? m[2] ?? "").toLowerCase().split(/\s+(?:ו?לא|(?:and\s+)?not)\s/u)[0];
+    for (const w of what.match(/[\p{L}]{3,}/gu) ?? []) {
+      const forms = /^[לבהומשכ][\u0590-\u05FF]{3,}$/.test(w) ? [w, w.slice(1)] : [w];
+      if (forms.some((f) => new RegExp(`(?<![\\p{L}])[הולבמשכ]{0,2}${f}(?![\\p{L}])`, "iu").test(inc))) return true;
+    }
+  }
+  return false;
+}
+/**
+ * The found products a text says do not fit. A sentence (or the side of its turn) that says so rules out the
+ * products it names; when it names one and also says something fits, which is which is not guessed and it rules
+ * none out. When it names none and speaks of what was found, it rules out every found product the text does not
+ * name elsewhere (the one it offers in their place stays). A sentence about shipping or a size says nothing of
+ * the products, and one that says they are for what she asks ("מיועדים לגבות, לא לעיניים" on an ask for brows)
+ * is a yes.
+ */
+export function unfitProducts(text: string, candidates: any[], noun: string | null = null, incoming = ""): Set<number> {
+  const out = new Set<number>();
+  const inText = namedMembers(text, candidates);
+  for (const s of String(text ?? "").match(SENTENCES_RE) ?? []) for (const x of s.split(TURNS)) {
+    // "Not stated that it fits" rules nothing out; what the sentence says past those words still counts.
+    const said = x.replace(NEG_THAT_FIT, " ");
+    if (!SAYS_UNFIT.test(said) || forHerAsk(said, incoming)) continue;
+    const named = namedMembers(x, candidates);
+    if (named.size) { if (!SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); }
+    else if (aboutFound(x, candidates, noun)) candidates.forEach((_, i) => { if (!inText.has(i)) out.add(i); });
+  }
+  return out;
 }
 // A request for the base's sizes ("אפשר לשלוח את רוחב ועומק הבסיס", "מה המידות של המכשיר?").
 const ASKS_FOR_SIZES = /(?<![\u0590-\u05FF])(?:לשלוח|תשלחו|שלחו|לכתוב|כתבו|מה)\s+(?:לי\s+|לנו\s+)?(?:את\s+)?(?:ה)?(?:רוחב|עומק|אורך|מידות|גודל|מידה)|\b(?:send|tell) (?:me |us )?(?:the )?(?:width|depth|size|dimensions)\b/iu;
@@ -1681,6 +1779,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The open team item this turn's holding line stood for, when the customer brought something new: what she
   // gave joins that item (2026-11-19, Omer: a line that says the team has it while the team never saw her words).
   let openItemSpoken: string | null = null;
+  // The found products a kept statement says do not fit (their indexes): never shown with it, as a card or a line.
+  let unfitShown: Set<number> | null = null;
   (trace as any).rewriteRounds = 0;
   let firstDraft = String(output?.reply ?? "");
   if (!verdict.ok) {
@@ -1747,7 +1847,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
       if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
       if (!cleaned.reply) return null;
-      const after = gate3(g3Input(cleaned));
+      let after = gate3(g3Input(cleaned));
       if (factualProblems(after.problems).length) return null;
       // A remnant that no longer answers (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on a safety
       // complaint) is kept only as the last resort, never as the answer while the model can still give one.
@@ -1755,6 +1855,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // The sentence before it was cut: an opener that leaned on it goes (rating of b3d2bbf3: "יש גם Penstick...",
       // "בינתיים אפשר לראות..." opened the reply).
       if (removed.length) { const op = withoutLeaningOpener(cleaned.reply); if (op !== cleaned.reply) { cleaned.reply = op; (trace as any).leaningOpenerCut = true; } }
+      // A found product the kept text says does not fit is never shown under it, the model's own cards included
+      // (rule T). Unless the text points at those cards: without them the pointer would dangle, so they stay.
+      let unfit: Set<number> | null = null;
+      const ruled = unfitProducts(cleaned.reply, candidates as any[], kindNow, incNow);
+      if (ruled.size) {
+        const cards = (cleaned.cards ?? []).filter((k) => !ruled.has(Number(/PRODUCT_(\d+)/i.exec(k)?.[1]) - 1));
+        const shed = cards.length < (cleaned.cards ?? []).length ? gate3(g3Input({ ...cleaned, cards })) : null;
+        if (!shed) unfit = ruled;
+        else if (!factualProblems(shed.problems).length) { cleaned.cards = cards; after = shed; unfit = ruled; }
+      }
       const thin = tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) });
       // Hollow: thin, or most of the reply cut away (a style edit keeps its words).
       // A fragment after a cut (prod replay of 9480dfb2: "וכשמקפלים אותה מתקבל משולש." alone): never sent.
@@ -1784,22 +1894,31 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const linkAskNow = videoAsk(opts.incomingMessage ?? "") || HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? ""));
       const lostLink = linkAskNow && removed.some((x) => /סרטון|הדרכה|מדריך|קישור|לינק|video|tutorial|guide|link/iu.test(x)) && !/https?:\/\//i.test(cleaned.reply) && !teamPassIn(cleaned.reply);
       const hollow = thin || fragment || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
-      return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass, lostLink };
+      // A removed sentence named a found product that what is left no longer names, beside others it does name.
+      const memberCut = memberCutOf(removed, cleaned.reply, candidates as any[]);
+      return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass, lostLink, memberCut, unfit };
     };
     // No rewrite round when the cleanup can fix the draft itself (rating of d2f10620: 7 rewrites cut by the budget, 0
     // live): every problem is one a cut or a style fix removes, and at most one sentence goes, leaving a full answer.
     // The model is called only for what needs a lookup or a new answer.
     // Not when the owner set the address form and the draft used the other one: the word-level fix writes the plural,
     // which is not the owner's form either, so the model writes it again in that form.
+    const incNow = String(opts.incomingMessage ?? "");
+    // An ask for the cheap end: its fallback shows the cheapest of what was found.
+    const cheapNow = cheapAsk(incNow);
+    // The kind of product she asks for; a cheap ask often names none ("מה הכי זול אצלכם?").
+    const kindNow = cheapNow ? cheapNoun(incNow) : headNoun(incNow);
     const wrongForm = !!ownerAddress && first.problems.some((p) => p.kind === "style" && p.codes.includes("gendered_address"));
     const directOk = !wrongForm && first.problems.every((p) => DIRECT_KINDS.has(p.kind as string));
     const pre = directOk ? salvage(original) : null;
     // Never when the cut sentence was the answer: it holds a word of her ask and what is left says it only negated or not
     // at all (dev live round on dcf2158e: "רוצה שחור" lost "בשחור יש את ה-Heavyweight Hoodie" and kept "Charcoal, לא שחור").
     const answerCut = !!pre && cutTheAnswer(pre.removed, pre.o.reply, String(opts.incomingMessage ?? ""));
-    const direct = !!pre && !answerCut && !pre.hollow && !pre.fragment && !pre.lostPass && !pre.lostLink && pre.removed.length <= 1 && wordCount(pre.o.reply) >= 8;
+    // Nor when the cut took a member of a product answer: what is left reads as the whole answer, so the model
+    // writes it again (rule T; "מה הכי זול אצלכם?" got the ₪149 item alone).
+    const direct = !!pre && !answerCut && !pre.memberCut && !pre.hollow && !pre.fragment && !pre.lostPass && !pre.lostLink && pre.removed.length <= 1 && wordCount(pre.o.reply) >= 8;
     if (direct) (trace as any).rewriteSkipped = "direct_clean";
-    else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}${answerCut ? "answerCut " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
+    else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}${answerCut ? "answerCut " : ""}${pre.memberCut ? "memberCut " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
     if (!direct) try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       (trace as any).toolWaitMs = toolWaitMs;
@@ -1883,7 +2002,38 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // (prod replay 2026-11-17, Urban: the rewrite dropped the pick).
       const wantsPick = first.problems.some((p) => p.kind === "no_recommendation");
       const order = wantsPick ? [fromSecond, fromOriginal].sort((a, b) => Number(!!b && picksProduct(b.o.reply)) - Number(!!a && picksProduct(a.o.reply))) : [fromSecond, fromOriginal];
-      let kept = order.find((x) => x && !x.hollow) ?? null;
+      // The products this turn can fall back on: found, in stock, of her kind, on a product ask or a cheap ask.
+      const listable = (candidates as any[]).map((c: any, i: number) => ({ c, i })).filter((x) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!kindNow || ofNoun(x.c, kindNow)));
+      const productTurn = (productAskNow(incNow) || cheapNow) && listable.length > 0;
+      // A cut that took a member of a product answer is never sent while the products themselves can go out (the dev
+      // owner-rule round: "מה הכי זול אצלכם?" got the ₪149 item alone after the ₪79 sentence was cut): the rewrite, else
+      // the product fallback, which makes no ranking claim.
+      const memberMissing = (x: { memberCut: boolean } | null) => { if (!x || !x.memberCut || !productTurn) return false; (trace as any).memberCut = true; return true; };
+      let kept = order.find((x) => x && !x.hollow && !memberMissing(x)) ?? null;
+      // The cut took no product and what is left is a checked statement about the found products (rating round on
+      // 9ce8a62b, item 1: "הטושים שמצאנו מיועדים לגבות, לא לאזור מתחת לעיניים." lost to "הנה כמה אפשרויות" with the two
+      // brow markers): that statement is the answer, never the list in its place. The found products go with it,
+      // except those it says do not fit; with none left, the question that moves the choice on.
+      // A statement that rules found products out is kept at any length and whatever the cut sentence named: the
+      // list in its place would be the very products it says do not fit.
+      if (!kept && productTurn) {
+        const rulesOut = (x: { o: ModelTurnOutput }) => unfitProducts(x.o.reply, candidates as any[], kindNow, incNow).size > 0;
+        const st = order.find((x) => x && x.removed.length > 0 && !x.fragment && !x.lostPass && !x.lostLink && !x.memberCut
+          && (rulesOut(x) || (wordCount(x.o.reply) >= 8 && !x.removed.some((r) => namedMembers(r, candidates as any[]).size > 0)))
+          && aboutFound(x.o.reply, candidates as any[], kindNow)) ?? null;
+        // It rules products out and its own cards of them stayed, because it points at them: it goes as it is.
+        if (st && !st.unfit && rulesOut(st)) { kept = st; (trace as any).statementKept = true; }
+        else if (st) {
+          const unfit = st.unfit ?? new Set<number>();
+          const pool = (cheapNow ? cheapestFirst(listable.map((x) => x.c)).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : listable).filter((x) => !unfit.has(x.i)).slice(0, 3);
+          // With none of them left to show, the cards the cleanup left under it stay (none of them ruled out).
+          const cards = pool.length ? pool.map((x) => `PRODUCT_${x.i + 1}`) : (st.o.cards ?? []);
+          const o: ModelTurnOutput = { ...st.o, reply: cards.length || /[?؟]/.test(st.o.reply) ? st.o.reply : `${st.o.reply.trim()} ${productQuestionLine(locale)}`, cards };
+          const v = gate3(g3Input(o));
+          // Every text that goes out passed the fact check with the cards it goes out with.
+          if (!factualProblems(v.problems).length) { kept = { ...st, o, v }; (trace as any).statementKept = true; }
+        }
+      }
       if (!kept && (fromSecond || fromOriginal || second || original) && left() > 5000) {
         // ONE targeted rewrite: what was cut and why, and answer the customer fully.
         const cut = (fromSecond ?? fromOriginal);
@@ -1894,7 +2044,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const rc3 = (r3.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
           const third = rc3 ? parseRespond(rc3.function.arguments) : null;
           const s3 = salvage(third);
-          if (s3 && !s3.hollow) { kept = s3; (trace as any).rewrite2 = true; }
+          if (s3 && !s3.hollow && !memberMissing(s3)) { kept = s3; (trace as any).rewrite2 = true; }
         } catch (err: any) {
           if ((err as any)?.name === "AbortError") throw err;
         }
@@ -1912,10 +2062,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // ask is no answer, and the store search below still runs for it. Never when the cut sentence was the team pass
       // on an ask: what is left is not the answer, as the line below already holds.
       const styleOnly = first.problems.length > 0 && first.problems.every((p) => p.kind === "style");
-      if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && !fromOriginal.lostPass && wordCount(fromOriginal.o.reply) >= 8) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
-      if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass)) ?? null;
+      if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && !fromOriginal.lostPass && wordCount(fromOriginal.o.reply) >= 8 && !memberMissing(fromOriginal)) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
+      if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass) && !memberMissing(x)) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
+        // The products the kept text rules out stay off the cards and the product list added below.
+        unfitShown = kept.unfit ?? null;
         // How many sentences the cut took (a "cleaned" verdict may remove nothing, e.g. no_search).
         (trace as any).cutSentences = kept.removed?.length ?? 0;
         // The bot's own cut words, short, for the replay printout (prod replay on 1b35c535, Tehila: a noun fragment
@@ -1974,13 +2126,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // inline bullets AND the same three listed again).
         // Only products of the customer's own noun (rating 657e5f85, Tehila: hair arches for "מטפחת חגיגית"): none
         // of that kind, no product fallback at all.
-        const noun = headNoun(String(opts.incomingMessage ?? ""));
+        // A cheap ask names a kind only when it has one ("חולצה זולה"; "מה הכי זול אצלכם?" names none).
+        const noun = kindNow;
         const ofTheirs = noun ? (candidates as any[]).filter((c: any) => ofNoun(c, noun)) : (candidates as any[]);
         // Also when the turn's products ARE her noun by title or category, whatever the wording (rating 052f53ad,
         // Tehila: five scarves for her scarf, and the team line).
         const keys = noun ? nounKeys(noun) : [];
         const ofHerKind = keys.length ? (candidates as any[]).filter((c: any) => ofHerKindStrict(c, noun!)) : [];
-        const grounded = (productAskNow(opts.incomingMessage ?? "") || ofHerKind.length > 0) && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
+        const grounded = (productAskNow(opts.incomingMessage ?? "") || cheapNow || ofHerKind.length > 0) && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
@@ -2038,13 +2191,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // 9480dfb2, NE'A: "טוש אני רוצה" got the list with no word that the under-eye use is unconfirmed).
           const fitCut = factLeft.includes("ungrounded_positive_fit" as any) || factLeft.includes("ungrounded_negative_fit" as any);
           // With the caveat, the products by name on a cards channel (a bare header and a caveat reads as a shrug).
-          const shownNames = (candidates as any[]).filter((c: any) => c?.title && c.inventoryState !== "out_of_stock" && (!noun || ofNoun(c, noun))).slice(0, 3).map((c: any) => String(c.title));
+          // One set for the names and the cards. On a cheap ask: the cheapest of the found products by the store's own
+          // prices (the dev owner-rule round: "אני מחפשת את הכי זול שיש" got cards at ₪799, ₪529, ₪299), and with none
+          // priced no cards at all. The header makes no ranking claim.
+          const shownPool = (candidates as any[]).map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun)));
+          const shownSet = (cheapNow ? cheapestFirst(shownPool.map((x: any) => x.c)).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : shownPool).slice(0, 3);
+          const shownNames = shownSet.map((x: any) => String(x.c.title));
           // The draft's own caveat is the answer's point ("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים",
           // rating of d2f10620, NE'A): it stays with the products, in place of the fixed line.
           const srcs = [knowledge ?? "", ...turnTools.knowledgeText, groundingNow()].join("\n");
           const draftCaveats = [...new Set([original, second].flatMap((o) => (String(o?.reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => caveatHolds(x, srcs) || NEG_THAT_FIT.test(x))))].slice(0, 1);
           const header = (fitCut || draftCaveats.length > 0) && cardChannel && shownNames.length ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownNames.join(", ")}.` : grounded;
-          output = { reply: draftCaveats.length ? `${header} ${draftCaveats[0]}` : fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+          output = !shownSet.length ? { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] }
+            : { reply: draftCaveats.length ? `${header} ${draftCaveats[0]}` : fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: shownSet.map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // A simple product ask with nothing grounded to show: one question that moves the choice on,
           // never a question for the team (prod replay 2026-11-17: "רוצה לבן" sent to the team).
@@ -2556,8 +2715,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // A list ask that returned products and a reply that names none with no cards (dev round k9 on 1f25aca0: "מה יש כרגע
   // במלאי?" got categories only): two or three of them go out as cards with the question.
   if (cardChannel && output?.reply && !(output.cards ?? []).length && searchHasFilter({}, String(opts.incomingMessage ?? "")) && !storeQueryOf(String(opts.incomingMessage ?? "")) && (candidates as any[]).length) {
-    const shown = (candidates as any[]).map((c: any, n: number) => ({ c, n })).filter(({ c }) => c?.title && c.inventoryState !== "out_of_stock");
-    if (!shown.some(({ c }) => output!.reply.includes(String(c.title)))) {
+    const shown = (candidates as any[]).map((c: any, n: number) => ({ c, n })).filter(({ c, n }) => c?.title && c.inventoryState !== "out_of_stock" && !unfitShown?.has(n));
+    if (shown.length && !shown.some(({ c }) => output!.reply.includes(String(c.title)))) {
       output = { ...output, cards: shown.slice(0, 3).map(({ n }) => `PRODUCT_${n + 1}`) };
       (trace as any).listAskCards = output.cards!.length;
     }
@@ -2588,14 +2747,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const herIdx = hers ? new Set(hers.map((c: any) => candidates.indexOf(c) + 1)) : null;
   if (herIdx) {
     const keep = (final.cards ?? []).filter((k) => herIdx.has(Number(/PRODUCT_(\d+)/i.exec(k)?.[1])));
-    const cardsNow = keep.length || !(final.cards ?? []).length ? keep : [...herIdx].slice(0, 3).map((n) => `PRODUCT_${n}`);
+    // Never one the kept text rules out (rule T). When it rules out all of her kind, the model's own cards stay:
+    // they are what the text offers in its place, and a pointer at them would dangle without them.
+    const refill = [...herIdx].filter((n) => !unfitShown?.has(n - 1)).slice(0, 3).map((n) => `PRODUCT_${n}`);
+    const cardsNow = keep.length || !(final.cards ?? []).length ? keep : refill.length ? refill : (final.cards ?? []);
     if (cardsNow.join() !== (final.cards ?? []).join()) (trace as any).cardsByNoun = cardsNow;
     final = { ...final, cards: cardsNow };
   }
   // No list for a question about the product itself (rating of d2f10620, Smoovee A: a stopper question got three
   // products from a garbled search).
   // No list for an ask that names no product ("אפשר להזמין?", rating of dcf2158e: three products nobody asked for).
-  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") && (!!storeQueryOf(opts.incomingMessage ?? "") || (state.offeredItems?.length ?? 0) > 0) ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") && (!!storeQueryOf(opts.incomingMessage ?? "") || (state.offeredItems?.length ?? 0) > 0) ? textProductList(final, prose, herIdx || unfitShown ? candidates.map((c: any, i: number) => ((!herIdx || herIdx.has(i + 1)) && !unfitShown?.has(i) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);

@@ -41,6 +41,8 @@ const h = vi.hoisted(() => ({
   groundStatus: "ok" as string,
   /** Titles per search, in order (a retried search sees the next); empty: groundTitle every time. */
   groundSeq: [] as string[],
+  /** The products a search finds, when set (title, price, stock); else groundTitle and extraTitle. */
+  groundList: null as null | Array<{ title: string; price: number | null; inventoryState?: string; category?: string }>,
   /** Extra columns of the agent row (customGuardrails, escalationRules) and the business policy row. */
   agentExtra: {} as Record<string, any>,
   policyRow: null as any,
@@ -135,7 +137,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   isProductSearchTool: (n: string) => n === "woocommerce.list_products",
   groundProductSearchResult: async () => ((title: string) => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: h.groundStatus,
-    candidates: [{ title, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: h.groundUrl, attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
+    candidates: h.groundList ? h.groundList.map((p, i) => ({ title: p.title, productId: String(201 + i), price: p.price, currency: "ILS", inventoryState: p.inventoryState ?? "in_stock", url: `u${i}`, attributes: p.category ? { category: p.category } : {}, unknownAttributes: [] })) : [{ title, productId: "101", price: 79, currency: "ILS", inventoryState: "in_stock", url: h.groundUrl, attributes: h.groundCategory ? { category: h.groundCategory } : {}, unknownAttributes: [] }, ...(h.extraTitle ? [{ title: h.extraTitle, productId: "102", price: 89, currency: "ILS", inventoryState: "in_stock", url: "u2", attributes: {}, unknownAttributes: [] }] : [])],
     appliedFilters: [], unavailableFilters: [], safeModelSummary: title,
   }))(h.groundSeq.length ? h.groundSeq.shift()! : h.groundTitle),
 }));
@@ -184,6 +186,7 @@ beforeEach(() => {
   h.lexical = [];
   h.groundTitle = "Canvas Tote";
   h.groundSeq = [];
+  h.groundList = null;
   h.groundUrl = "u";
   h.groundCategory = "";
   h.extraTitle = "";
@@ -3815,5 +3818,384 @@ describe("only style was wrong with the draft: the turn never ends in the produc
     expect((t.r.trace as any).styleOnlyKept).toBeUndefined();
     expect(t.cuts.markers ?? []).not.toContain("styleOnlyKept");
     expect(t.calls).toBe(4);
+  });
+});
+
+// Rule T (2026-11-19, the rating round on 9ce8a62b and the dev owner-rule round): what a cut may leave on a product turn.
+describe("rule T: a cut on a product turn never leaves a wrong answer or a list in the answer's place", () => {
+  const BROW = "Miss eyebrows הטוש המושלם למילוי גבות בקלילות";
+  const STATEMENT = "הטושים שמצאנו מיועדים לגבות, לא לאזור מתחת לעיניים.";
+  const ABSENCE = "לא מופיע אצלנו טוש חום שמצוין לשימוש מתחת לעיניים, אז לא כדאי להשתמש בהם שם.";
+  const QUESTION = "כדי למצוא את המתאים: מה הכי חשוב לך, ולאיזה שימוש?";
+  // The store's own words about the product: with them the absence sentence is a fact problem, as on the real turn
+  // (gate3: [ungrounded_absence, style]).
+  const BROW_DATA = [{ content: "טוש לגבות: מיועד לשימוש על הגבות, למילוי וסימון.", score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "d" }];
+  const URBAN = [{ title: "Cropped Hoodie", price: 299 }, { title: "Oversized Cotton T-Shirt", price: 149 }, { title: "Ribbed Tank Top", price: 79 }];
+  const run = async (incoming: string, query: string, ...drafts: string[]) => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`d${i}`, { reply: d })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    const cuts = h.audits.find((a) => a.data.action === "ai.bot_turn")?.data.metadata.cuts ?? {};
+    // The cards by product id: 101 and 102 for groundTitle and extraTitle, 201 onward for groundList in its order.
+    return { r, cuts, cards: h.staged.flatMap((s: any) => (s.products ?? []).map((p: any) => String(p.productId))) };
+  };
+
+  it("★ (item 1) the checked statement that the found products do not fit is the answer: no list, no cards of them", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r, cuts, cards } = await run("טוש אני רוצה", "טוש", `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`);
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toEqual(["ungrounded_absence", "style"]);
+    expect(r.reply).toBe(`${STATEMENT} ${QUESTION}`);
+    expect(r.reply).not.toMatch(/הנה כמה אפשרויות|Miss eyebrows/);
+    expect(cards).toEqual([]);
+    expect((r.trace as any).statementKept).toBe(true);
+    expect(r.trace.gate3.rewrite).toBe("cleaned_partial");
+    expect((r.trace as any).fallbackKinds).toBeUndefined();
+    expect(cuts.markers).toContain("statementKept");
+    const { cutLine } = await import("../scripts/replay-v2");
+    expect(cutLine(r.trace)).toContain(" | statementKept | ");
+  });
+
+  it("★ (item 1) the same on a text channel: no product lines under it", async () => {
+    h.textChannel = true;
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r } = await run("טוש אני רוצה", "טוש", `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`);
+    expect(r.reply).toBe(`${STATEMENT} ${QUESTION}`);
+    expect(r.reply).not.toMatch(/Miss eyebrows|₪/);
+  });
+
+  it("★ a checked statement that does not rule the products out goes with their cards, and no question is added", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const fits = "הטושים שמצאנו מיועדים למילוי גבות בקלילות, כמו שכתוב בשם המוצר.";
+    const { r, cards } = await run("טוש אני רוצה", "טוש", `${fits} ${ABSENCE}`, `${fits} ${ABSENCE}`, `${fits} ${ABSENCE}`);
+    expect(r.reply).toBe(fits);
+    expect(cards).toEqual(["101", "102"]);
+    expect((r.trace as any).statementKept).toBe(true);
+  });
+
+  it("★ (owner rule, \"אז מה הכי זול אצלכם?\") the ₪149 item never goes out alone after the ₪79 sentence was cut", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = URBAN;
+    const draft = "הכי זול אצלנו הוא Ribbed Tank Top ב-₪79. יש חולצת Oversized Cotton T-Shirt ב-₪149.";
+    const { r, cuts, cards } = await run("אז מה הכי זול אצלכם?", "זול", draft, draft, draft);
+    expect(r.reply).toBe("הנה כמה אפשרויות: Ribbed Tank Top, Oversized Cotton T-Shirt, Cropped Hoodie.");
+    expect(r.reply ?? "").not.toMatch(/זול/);
+    expect((r.trace as any).memberCut).toBe(true);
+    expect(cuts.markers).toContain("memberCut");
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    // The cards: the cheapest of the found products first.
+    expect(cards).toEqual(["203", "202", "201"]);
+  });
+
+  it("★ the same draft with a rewrite that keeps both items is the answer", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = URBAN;
+    const draft = "הכי זול אצלנו הוא Ribbed Tank Top ב-₪79. יש חולצת Oversized Cotton T-Shirt ב-₪149.";
+    const both = "המחיר הנמוך ביותר שמצאנו הוא Ribbed Tank Top ב-₪79, ואחריו Oversized Cotton T-Shirt ב-₪149.";
+    const { r } = await run("אז מה הכי זול אצלכם?", "זול", draft, both);
+    expect(r.reply).toContain("₪79");
+    expect(r.reply).toContain("₪149");
+    expect((r.trace as any).memberCut).toBeUndefined();
+  });
+
+  it("★ (\"אני מחפשת את הכי זול שיש\") the fallback's cards are the cheapest found, never the first three", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "Wool Coat", price: 799 }, { title: "Leather Boots", price: 529 }, { title: "Cropped Hoodie", price: 299 }, { title: "Heavyweight Boxy Tee", price: 169 }, { title: "Ribbed Tank Top", price: 79 }, { title: "Silk Scarf", price: 49, inventoryState: "out_of_stock" }];
+    const draft = "יש אצלנו פריטים במחיר זול.";
+    const { r, cards } = await run("יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "זול", draft, draft, draft);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    // Ribbed Tank Top ₪79, Heavyweight Boxy Tee ₪169, Cropped Hoodie ₪299; the ₪49 scarf is out of stock.
+    expect(cards).toEqual(["205", "204", "203"]);
+    expect(r.reply).toBe("הנה כמה אפשרויות: Ribbed Tank Top, Heavyweight Boxy Tee, Cropped Hoodie.");
+    expect(r.reply ?? "").not.toMatch(/זול/);
+  });
+
+  it("★ a cheap ask whose found products carry no price gets no cards", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "Wool Coat", price: null }, { title: "Leather Boots", price: null }];
+    const draft = "יש אצלנו פריטים במחיר זול.";
+    const { r, cards } = await run("יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "זול", draft, draft, draft);
+    expect(cards).toEqual([]);
+    expect(r.reply).toBe(QUESTION);
+  });
+
+  it("★ a list ask (\"מה יש כרגע במלאי?\"): the card step adds none of the products the statement rules out", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r, cards } = await run("מה יש כרגע במלאי?", "טוש", `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`);
+    expect(r.reply).toBe(`${STATEMENT} ${QUESTION}`);
+    expect(cards).toEqual([]);
+    expect((r.trace as any).listAskCards).toBeUndefined();
+  });
+
+  it("★ a text channel, titles the statement shares no word with: the first products in stock are not listed under it", async () => {
+    h.textChannel = true;
+    h.groundTitle = "Miss eyebrows Pen"; h.extraTitle = "Miss eyebrows Pen"; h.groundCategory = "טושים"; h.chunks = BROW_DATA;
+    const st = "הטושים שמצאנו מתאימים לגבות בלבד, ולא מיועדים לאזור מתחת לעיניים.";
+    const { r } = await run("טוש אני רוצה", "טוש", `${st} ${ABSENCE}`, `${st} ${ABSENCE}`, `${st} ${ABSENCE}`);
+    expect(r.reply).toBe(`${st} ${QUESTION}`);
+    expect((r.trace as any).statementKept).toBe(true);
+  });
+
+  it("★ the cut sentence names a found product, the statement rules the found ones out: the statement, never the list", async () => {
+    h.groundTitle = "Miss eyebrows Pen"; h.extraTitle = "Deep Line Pen"; h.groundCategory = "טושים"; h.chunks = BROW_DATA;
+    const st = "הטושים שמצאנו מתאימים לגבות בלבד, ולא מיועדים לאזור מתחת לעיניים.";
+    const named = "לא מופיע אצלנו טוש Deep Line שמצוין לשימוש מתחת לעיניים, אז לא כדאי להשתמש בו שם.";
+    const { r, cards } = await run("טוש אני רוצה", "טוש", `${st} ${named}`, `${st} ${named}`, `${st} ${named}`);
+    expect(r.reply).toBe(`${st} ${QUESTION}`);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ a short statement that rules the products out is kept too; one that does not is no answer under 8 words", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const out = "הטושים מיועדים לגבות, לא לעיניים.";
+    const a = await run("טוש אני רוצה", "טוש", `${out} ${ABSENCE}`, `${out} ${ABSENCE}`, `${out} ${ABSENCE}`);
+    expect(a.r.reply).toBe(`${out} ${QUESTION}`);
+    expect(a.cards).toEqual([]);
+
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0; h.calls.length = 0;
+    const thin = "הטושים מיועדים לגבות בלבד.";
+    const b = await run("טוש אני רוצה", "טוש", `${thin} ${ABSENCE}`, `${thin} ${ABSENCE}`, `${thin} ${ABSENCE}`);
+    expect(b.r.trace.gate3.rewrite).toBe("fallback");
+    expect((b.r.trace as any).statementKept).toBeUndefined();
+    expect(b.cards).toEqual(["101", "102"]);
+  });
+
+  // The cleanup's own cut (a wrong price, no model round by itself) on a product ask that is not about price.
+  const WRONG = "הכי זול אצלנו הוא Ribbed Tank Top ב-₪59. יש גם חולצת Oversized Cotton T-Shirt ב-₪149, במגוון צבעים ומידות לבחירה.";
+  const RIGHT = "הכי זול אצלנו הוא Ribbed Tank Top ב-₪79. יש גם חולצת Oversized Cotton T-Shirt ב-₪149, במגוון צבעים ומידות לבחירה.";
+  it("★ a wrong price cut out of a two-product answer: the rest is not sent as the answer, the model writes it again", async () => {
+    h.groundList = URBAN;
+    const { r, cuts } = await run("מה יש לכם בחולצות?", "חולצות", WRONG, RIGHT);
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_price");
+    expect((r.trace as any).directRejected).toContain("memberCut");
+    expect((r.trace as any).rewriteSkipped).toBeUndefined();
+    expect(r.reply).toBe(RIGHT);
+    expect((r.trace as any).memberCut).toBeUndefined();
+    expect(cuts.markers ?? []).not.toContain("memberCut");
+  });
+
+  it("★ the same with a rewrite that repeats the wrong price: the found products in the store's order, no ranking", async () => {
+    h.groundList = URBAN;
+    const { r, cuts, cards } = await run("מה יש לכם בחולצות?", "חולצות", WRONG, WRONG, WRONG);
+    expect(r.reply).toBe("הנה כמה אפשרויות: Cropped Hoodie, Oversized Cotton T-Shirt, Ribbed Tank Top.");
+    expect(cards).toEqual(["201", "202", "203"]);
+    expect(cuts.markers).toContain("memberCut");
+  });
+
+  it("★ the cut sentence named a found product: a statement that rules none out is no answer, the found products go out", async () => {
+    h.groundTitle = "Miss eyebrows Pen"; h.extraTitle = "Deep Line Pen"; h.groundCategory = "טושים"; h.chunks = BROW_DATA;
+    const st = "הטושים שמצאנו מיועדים לשימוש על הגבות, למילוי וסימון של הגבות.";
+    const named = "לא מופיע אצלנו טוש Deep Line שמצוין לשימוש מתחת לעיניים, אז לא כדאי להשתמש בו שם.";
+    const { r, cards } = await run("טוש אני רוצה", "טוש", `${st} ${named}`, `${st} ${named}`, `${st} ${named}`);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect((r.trace as any).statementKept).toBeUndefined();
+    expect(cards).toEqual(["101", "102"]);
+  });
+
+  it("★ a kept statement on a cheap ask carries the cheapest of the found products first", async () => {
+    h.groundList = [{ title: BROW, price: 99 }, { title: "Miss eyebrows טוש עדין לגבות", price: 59 }, { title: "Miss eyebrows טוש כהה לגבות", price: 79 }];
+    h.chunks = BROW_DATA;
+    const fits = "הטושים שמצאנו מיועדים למילוי גבות בקלילות, כמו שכתוב בשם המוצר.";
+    const { r, cards } = await run("יש לכם טוש זול?", "טוש", `${fits} ${ABSENCE}`, `${fits} ${ABSENCE}`, `${fits} ${ABSENCE}`);
+    expect((r.trace as any).statementKept).toBe(true);
+    expect(r.reply).toBe(fits);
+    expect(cards).toEqual(["202", "203", "201"]);
+  });
+
+  it("★ a cheap ask with no priced product on a text channel: the question, never the unpriced products as a list", async () => {
+    h.textChannel = true;
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "Wool Coat", price: null }, { title: "Leather Boots", price: null }];
+    const draft = "יש אצלנו פריטים במחיר זול.";
+    const { r } = await run("יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "זול", draft, draft, draft);
+    expect(r.reply).toBe(QUESTION);
+  });
+
+  it("★ a cheap ask that names no kind of product, Hebrew titles: no word of the ask rules the found products out", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "חולצת כותנה רחבה", price: 149 }, { title: "גופיית ריב", price: 79 }, { title: "קפוצ'ון קצר", price: 299 }];
+    const draft = "יש אצלנו פריטים במחיר זול.";
+    const { r, cards } = await run("אז מה הכי זול אצלכם?", "זול", draft, draft, draft);
+    expect(cards).toEqual(["202", "201", "203"]);
+    expect(r.reply).toBe("הנה כמה אפשרויות: גופיית ריב, חולצת כותנה רחבה, קפוצ'ון קצר.");
+  });
+
+  // The model attached the cards itself: three drafts of the same text with both found products as cards.
+  const runWithCards = async (text: string, incoming = "טוש אני רוצה") => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "טוש" })] }, ...[0, 1, 2].map((i) => ({ toolCalls: [respond(`d${i}`, { reply: text, cards: ["PRODUCT_1", "PRODUCT_2"] })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    return { r, cards: h.staged.flatMap((x: any) => (x.products ?? []).map((p: any) => String(p.productId))) };
+  };
+  it("★ the model's own cards of the products the kept statement rules out do not go out under it", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r, cards } = await runWithCards(`${STATEMENT} ${ABSENCE}`);
+    expect(r.reply).toBe(`${STATEMENT} ${QUESTION}`);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ a kept statement that points at its cards keeps them: without them the pointer would dangle", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const st = "הטושים שמופיעים בכרטיסים מיועדים לגבות, לא לאזור מתחת לעיניים.";
+    const { r, cards } = await runWithCards(`${st} ${ABSENCE}`);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["101", "102"]);
+  });
+
+  it("★ a short statement that points at its cards goes as it is, cards and all, never the list in its place", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const st = "הטושים שמופיעים בכרטיסים מיועדים לגבות, לא לעיניים.";
+    const { r, cards } = await runWithCards(`${st} ${ABSENCE}`);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["101", "102"]);
+    expect((r.trace as any).statementKept).toBe(true);
+  });
+
+  it("★ a list ask, the kept text asks its own question and is no hollow remainder: the card step still adds none of the products it rules out", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const st = `${STATEMENT} לאיזה שימוש צריך את הטוש?`;
+    const { r, cards } = await run("מה יש כרגע במלאי?", "טוש", `${st} ${ABSENCE}`, `${st} ${ABSENCE}`, `${st} ${ABSENCE}`);
+    expect(r.reply).toBe(st);
+    expect((r.trace as any).statementKept).toBeUndefined();
+    expect(cards).toEqual([]);
+    expect((r.trace as any).listAskCards).toBeUndefined();
+  });
+
+  it("★ the same on a text channel: no product lines under the kept text", async () => {
+    h.textChannel = true;
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const st = `${STATEMENT} לאיזה שימוש צריך את הטוש?`;
+    const { r } = await run("טוש אני רוצה", "טוש", `${st} ${ABSENCE}`, `${st} ${ABSENCE}`, `${st} ${ABSENCE}`);
+    expect(r.reply).toBe(st);
+    expect((r.trace as any).statementKept).toBeUndefined();
+  });
+
+  it("★ (owner rule, Hebrew titles) a cheap ask names no kind of product: the dearer item still never goes out alone", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "חולצת כותנה רחבה", price: 149 }, { title: "גופיית ריב", price: 79 }, { title: "קפוצ'ון קצר", price: 299 }];
+    const draft = "הכי זול אצלנו היא גופיית ריב ב-₪79. יש חולצת כותנה רחבה ב-₪149.";
+    const { r, cards } = await run("אז מה הכי זול אצלכם?", "זול", draft, draft, draft);
+    expect(r.reply).toBe("הנה כמה אפשרויות: גופיית ריב, חולצת כותנה רחבה, קפוצ'ון קצר.");
+    expect((r.trace as any).memberCut).toBe(true);
+    expect(cards).toEqual(["202", "201", "203"]);
+  });
+
+  it("★ (owner rule, a store with Hebrew categories) the cheap ask's filler word is no kind of product: the same answer", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = [{ title: "חולצת כותנה רחבה", price: 149, category: "בגדים" }, { title: "גופיית ריב", price: 79, category: "בגדים" }, { title: "קפוצ'ון קצר", price: 299, category: "בגדים" }];
+    const draft = "הכי זול אצלנו היא גופיית ריב ב-₪79. יש חולצת כותנה רחבה ב-₪149.";
+    const { r, cards } = await run("אז מה הכי זול אצלכם?", "זול", draft, draft, draft);
+    expect(r.reply).toBe("הנה כמה אפשרויות: גופיית ריב, חולצת כותנה רחבה, קפוצ'ון קצר.");
+    expect((r.trace as any).memberCut).toBe(true);
+    expect(cards).toEqual(["202", "201", "203"]);
+  });
+
+  // The model's own card of what the text offers in place of her kind stays. A card the model did not send is rule S's.
+  const other = "Cover me קונסילר";
+  const runOther = async (st: string) => {
+    // A store with its own categories: the other product is not of her kind, so the product fallback never lists it.
+    h.groundList = [{ title: BROW, price: 59, category: "גבות" }, { title: other, price: 89, category: "פנים" }];
+    h.chunks = BROW_DATA;
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "טוש" })] }, ...[0, 1, 2].map((i) => ({ toolCalls: [respond(`d${i}`, { reply: `${st} ${ABSENCE}`, cards: ["PRODUCT_1", "PRODUCT_2"] })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "טוש אני רוצה" }, "autonomous");
+    return { r, cards: h.staged.flatMap((x: any) => (x.products ?? []).map((p: any) => String(p.productId))) };
+  };
+  it("★ the text rules her kind out and names another product in its place: that card stays, the ruled-out one does not come back", async () => {
+    const st = `${STATEMENT} לאזור הזה יש אצלנו את ${other}.`;
+    const { r, cards } = await runOther(st);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["202"]);
+    expect((r.trace as any).statementKept).toBeUndefined();
+  });
+
+  it("★ the same when the text points at the card: it never goes out with no card under it", async () => {
+    const st = "הטושים מיועדים לגבות, לא לעיניים. הקונסילר שמופיע בכרטיסים.";
+    const { r, cards } = await runOther(st);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["202"]);
+  });
+
+  it("★ a short statement of that kind (the statement path): the card the cleanup left under it stays", async () => {
+    const st = "הטושים מיועדים לגבות, לא לעיניים. הקונסילר בכרטיסים.";
+    const { r, cards } = await runOther(st);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["202"]);
+    expect((r.trace as any).statementKept).toBe(true);
+  });
+
+  it("★ she asks for the very use the text says they are for: it is a yes, and the model's cards stay", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r, cards } = await runWithCards(`${STATEMENT} ${ABSENCE}`, "יש לכם טוש לגבות?");
+    expect(r.reply).toBe(STATEMENT);
+    expect(cards).toEqual(["101", "102"]);
+  });
+
+  it("★ the same when the model sent no cards: the kept statement goes with the found products", async () => {
+    h.groundTitle = BROW; h.extraTitle = BROW; h.chunks = BROW_DATA;
+    const { r, cards } = await run("יש לכם טוש לגבות?", "טוש", `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`, `${STATEMENT} ${ABSENCE}`);
+    expect(r.reply).toBe(STATEMENT);
+    expect(cards).toEqual(["101", "102"]);
+  });
+
+  it("the helpers, on the real lines", async () => {
+    const { cheapAsk, cheapNoun, cheapestFirst, namedMembers, memberCutOf, unfitProducts, aboutFound } = await import("../services/reply-engine/engine");
+    for (const x of ["אז מה הכי זול אצלכם?", "יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "יש לכם משהו זול?", "לא מצאתי משהו זול", "מה המחיר הנמוך ביותר?", "what is the cheapest you have?", "do you have cheap shirts?"]) expect([x, cheapAsk(x)]).toEqual([x, true]);
+    // The word negated is a complaint, never an ask for the low end; a word that only holds the letters is no ask.
+    for (const x of ["זה נשמע לי לא זול בכלל", "זה לא הכי זול", "it's not that cheap", "טוש אני רוצה", "מה אתם ממליצים?", "יש לכם זולית?"]) expect([x, cheapAsk(x)]).toEqual([x, false]);
+    expect(cheapNoun("אז מה הכי זול אצלכם?")).toBeNull();
+    expect(cheapNoun("יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש")).toBeNull();
+    expect(cheapNoun("מה המחיר הנמוך ביותר?")).toBeNull();
+    expect(cheapNoun("what is the cheapest you have?")).toBeNull();
+    expect(cheapNoun("יש חולצה זולה?")).toBe("חולצה");
+    const found = [{ title: "Oversized Cotton T-Shirt", price: 149, inventoryState: "in_stock" }, { title: "Ribbed Tank Top", price: 79, inventoryState: "in_stock" }, { title: "Cropped Hoodie", price: 299, inventoryState: "in_stock" }, { title: "Wool Coat", price: 60, inventoryState: "out_of_stock" }, { title: "Gift Box", price: null, inventoryState: "in_stock" }, { title: "Site Only", price: 10, priceOnSite: true, inventoryState: "in_stock" }];
+    expect(cheapestFirst(found).map((c) => c.title)).toEqual(["Ribbed Tank Top", "Oversized Cotton T-Shirt", "Cropped Hoodie"]);
+    const cutOut = ["הכי זול אצלנו הוא Ribbed Tank Top ב-₪79."];
+    expect(memberCutOf(cutOut, "יש חולצת Oversized Cotton T-Shirt ב-₪149.", found)).toBe(true);
+    // The cut product is still named in what is left: nothing is missing.
+    expect(memberCutOf(["Ribbed Tank Top מתאים לריצה."], "יש Ribbed Tank Top ב-₪79 ו-Oversized Cotton T-Shirt ב-₪149.", found)).toBe(false);
+    // What is left names no found product: it is no list with a member missing.
+    expect(memberCutOf(cutOut, "המשלוח חינם מעל ₪200.", found)).toBe(false);
+    // A cut sentence that named no product took no member.
+    expect(memberCutOf(["אין לנו חנות פיזית."], "יש חולצת Oversized Cotton T-Shirt ב-₪149.", found)).toBe(false);
+    // A found product's own price with a currency mark names it; a bare number or another price does not.
+    expect([...namedMembers("יש פריט ב-₪79.", found)]).toEqual([1]);
+    expect([...namedMembers("יש 79 פריטים.", found)]).toEqual([]);
+    expect([...namedMembers("המשלוח עולה ₪30.", found)]).toEqual([]);
+    const brows = [{ title: BROW, price: 59, inventoryState: "in_stock" }, { title: BROW, price: 59, inventoryState: "in_stock" }];
+    expect([...unfitProducts(STATEMENT, brows)]).toEqual([0, 1]);
+    expect([...unfitProducts("הטוש לא מתאים לאזור העיניים.", brows)]).toEqual([0, 1]);
+    // "Not stated that it fits" keeps the products (the caveat goes with them).
+    expect([...unfitProducts("לא מצוין שהוא מתאים לאזור העיניים.", brows)]).toEqual([]);
+    expect([...unfitProducts("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים.", brows)]).toEqual([]);
+    expect([...unfitProducts("לא כתוב שהטוש לא מתאים לעור רגיש.", brows)]).toEqual([]);
+    // What the sentence says past "not stated that it fits" still counts.
+    expect([...unfitProducts("לא מצוין שהוא מתאים לעיניים, ולכן הטוש לא מתאים לשימוש שם.", brows)]).toEqual([0, 1]);
+    // The product the text offers in their place is not ruled out with them, in the next sentence or past a turn of the same one.
+    const two = [{ title: BROW, price: 59, inventoryState: "in_stock" }, { title: "Cover me קונסילר", price: 89, inventoryState: "in_stock" }];
+    expect([...unfitProducts(`${STATEMENT} לאזור הזה יש אצלנו את Cover me קונסילר.`, two, "טוש")]).toEqual([0]);
+    expect([...unfitProducts("הטושים מיועדים לגבות, לא לאזור העיניים, אבל Cover me קונסילר מתאים לשם.", two, "טוש")]).toEqual([0]);
+    expect([...unfitProducts("Cover me קונסילר לא מתאים לגבות, אבל הוא מתאים לאזור העיניים.", two, "טוש")]).toEqual([1]);
+    // A sentence that names none rules out the found products the text names nowhere else, never the one it offers.
+    const three = [{ title: BROW, price: 59, inventoryState: "in_stock" }, { title: "Kiss eyebrows הטוש העדין למילוי גבות", price: 69, inventoryState: "in_stock" }, { title: "Cover me קונסילר", price: 89, inventoryState: "in_stock" }];
+    expect([...unfitProducts("הטושים שמצאנו לא מתאימים לאזור העיניים. לאזור הזה יש אצלנו את Cover me קונסילר.", three, "טוש")]).toEqual([0, 1]);
+    // It names a product and says both that something fits and that something does not: which is which is not guessed.
+    expect([...unfitProducts("לאזור העיניים מתאים Cover me קונסילר, והטושים לא מתאימים.", two, "טוש")]).toEqual([]);
+    expect([...unfitProducts("הטושים שמצאנו מתאימים לגבות בלבד, ולא מיועדים לאזור מתחת לעיניים.", two, "טוש")]).toEqual([]);
+    // They are for the very thing she asks for: a yes, nothing is ruled out. Asked for the other use, they are.
+    expect([...unfitProducts(STATEMENT, brows, "טוש", "יש לכם טוש לגבות?")]).toEqual([]);
+    expect([...unfitProducts(STATEMENT, brows, "טוש", "טוש אני רוצה")]).toEqual([0, 1]);
+    expect([...unfitProducts(STATEMENT, brows, "טוש", "יש טוש חום לעיניים?")]).toEqual([0, 1]);
+    expect([...unfitProducts("Ribbed Tank Top is meant for summer, not for winter.", found, null, "something for summer?")]).toEqual([]);
+    expect([...unfitProducts("Ribbed Tank Top is meant for summer, not for winter.", found, null, "something for winter?")]).toEqual([1]);
+    expect([...unfitProducts("הטוש לא מיועד לגבות.", brows, "טוש", "יש לכם טוש לגבות?")]).toEqual([0, 1]);
+    expect([...unfitProducts(STATEMENT, brows, "טוש", "יש טוש גבות?")]).toEqual([]);
+    expect([...unfitProducts("הטושים מתאימים לגבות ולא מתאימים לעיניים.", brows, "טוש", "יש טוש לעיניים?")]).toEqual([0, 1]);
+    expect([...unfitProducts("הטושים מתאימים לגבות ולא מתאימים לעיניים.", brows, "טוש", "יש טוש לגבות?")]).toEqual([]);
+    expect([...unfitProducts("Ribbed Tank Top is not meant for summer.", found, null, "something for summer?")]).toEqual([1]);
+    // Only the product the sentence names.
+    expect([...unfitProducts("Ribbed Tank Top לא מתאים לחורף.", found)]).toEqual([1]);
+    // A sentence that names none and does not speak of the found products rules none out.
+    expect([...unfitProducts("המשלוח לא מתאים לכתובות בחו\"ל.", brows)]).toEqual([]);
+    expect([...unfitProducts("המשלוח לא מתאים לכתובות בחו\"ל.", found, "חולצה")]).toEqual([]);
+    expect(aboutFound(STATEMENT, brows, "טוש")).toBe(true);
+    expect(aboutFound("אפשר לשלם באשראי או בביט, לפי מה שנוח.", brows, "טוש")).toBe(false);
+    expect([...namedMembers(ABSENCE, brows)]).toEqual([]);
   });
 });
