@@ -4,7 +4,7 @@
  * catalogue, and timed out at 8s; warm it is 1.0 to 1.5s).
  *
  * At boot (after a short delay) and every 8 minutes (the catalogue is fresh for
- * 10), for every tenant with a CONNECTED WooCommerce store (legacy searches the
+ * 10, so every pass reloads it: it would go stale before the next one), for every tenant with a CONNECTED WooCommerce store (legacy searches the
  * same caches; prod replay 8: Tehila's engine is off and her search was cold).
  * WOO_CACHE_WARMER=engine limits it to reply-engine tenants, =off stops it: categories and the whole catalogue, in each
  * language a turn reads. Read-only GETs to the store, one store at a time;
@@ -48,7 +48,8 @@ export async function warmWooCachesOnce(deps: WarmDeps = {}): Promise<Array<{ te
     try {
       const conn = await (deps.load ?? loadConnection)({ tenantId, slug: "woocommerce" });
       if (!conn) continue;
-      const r = await (deps.warm ?? warmWooCatalog)(conn.credentials, conn.config);
+      // The interval goes with it: a catalogue that would go stale before the next pass is reloaded in this one.
+      const r = await (deps.warm ?? warmWooCatalog)(conn.credentials, conn.config, WARM_EVERY_MS);
       out.push({ tenantId, ...r });
     } catch (err: any) {
       console.warn(`[woo-warm] tenant=${tenantId} failed:`, err?.message ?? err);
