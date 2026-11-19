@@ -613,7 +613,7 @@ export function sharedTitleNoun(titles: string[]): string | null {
   return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -1659,11 +1659,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const lendWith = (focus: any) => fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
       // The shared noun first; when there is none or it lends nothing, the subject exactly as before.
       const lent = (shared ? lendWith(shared) : null) ?? lendWith(subject);
-      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject, lent) : [];
+      // The automatic lookups by the hard ceiling too (dev round k9 on 1f25aca0: a 10.5s model stage left 6.1s of budget,
+      // and the lookup for her noun was dropped at the 7s line). The rewrite still needs 4s after it.
+      const ceilingLeft = () => cfg.turnBudgetMs + HARD_CEILING_EXTRA_MS - (Date.now() - t0);
+      const auto = left() > 7000 || (left() > 4500 && ceilingLeft() > 7000) ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject, lent) : [];
       if (auto.length) {
         const ta = Date.now();
         messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-        await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 4500)) }, auto));
+        await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 4500, ceilingLeft() - 5000)) }, auto));
         for (const c of auto) messages.push({ role: "tool", tool_call_id: c.id, content: turnTools.records.find((x) => x.callId === c.id)?.content ?? "" });
         candidates = turnTools.envelope?.candidates ?? [];
         (trace as any).autoLookupMs = Date.now() - ta;
@@ -2356,6 +2359,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
+  // A list ask that returned products and a reply that names none with no cards (dev round k9 on 1f25aca0: "מה יש כרגע
+  // במלאי?" got categories only): two or three of them go out as cards with the question.
+  if (cardChannel && output?.reply && !(output.cards ?? []).length && searchHasFilter({}, String(opts.incomingMessage ?? "")) && !storeQueryOf(String(opts.incomingMessage ?? "")) && (candidates as any[]).length) {
+    const shown = (candidates as any[]).map((c: any, n: number) => ({ c, n })).filter(({ c }) => c?.title && c.inventoryState !== "out_of_stock");
+    if (!shown.some(({ c }) => output!.reply.includes(String(c.title)))) {
+      output = { ...output, cards: shown.slice(0, 3).map(({ n }) => `PRODUCT_${n + 1}`) };
+      (trace as any).listAskCards = output.cards!.length;
+    }
+  }
   // A reply that carries product cards never says nothing was found (dev round k3 on b3d2bbf3: the not-found line
   // went out with a jeans card): the fixed closest-match line instead.
   if (output?.reply && (output.cards ?? []).length && NOT_FOUND_LINE.test(output.reply)) {

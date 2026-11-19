@@ -1308,7 +1308,7 @@ describe("dev round k8, K8-1: her noun alone before any absence", () => {
     expect(q).toBe("חולצה");
     // The noun was searched alone, or a search returned products, or she asked no attribute: nothing.
     expect(nounNotTried(r, [e("חולצה תכלת"), e("חולצה")], "יש לכם חולצה בתכלת?")).toBeNull();
-    expect(nounNotTried(r, [e("חולצה תכלת"), { ...e("shirt blue"), outcome: "ok", content: "[1]" }], "יש לכם חולצה בתכלת?")).toBeNull();
+    expect(nounNotTried(r, [e("חולצה תכלת"), { ...e("חולצה"), outcome: "ok", content: "[1]" }], "יש לכם חולצה בתכלת?")).toBeNull();
     expect(nounNotTried("לא מצאנו מעמד לצילום בקטלוג.", [e("מעמד צילום")], "יש לכם מעמד לצילום?")).toBeNull();
     expect(nounNotTried("יש חולצת אוקספורד בתכלת.", [e("חולצה תכלת")], "יש לכם חולצה בתכלת?")).toBeNull();
   });
@@ -1411,5 +1411,73 @@ describe("db4e8917 pre-check: R5, R7, R8 on the real turns", () => {
   it("★ PRONOUN_LEAN is exempt when her message names the product (source)", async () => {
     const { readFileSync } = await import("fs");
     expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(PRONOUN_LEAN\.test\(cleaned\.reply\) && !headNoun\(String\(opts\.incomingMessage \?\? ""\)\)\)/);
+  });
+});
+
+describe("dev round k9 on 1f25aca0: F2, F3", () => {
+  const e = (q: string, outcome = "empty") => ({ tool: "woocommerce.list_products", args: { query: q }, outcome, content: outcome === "ok" ? "[1]" : "[]" }) as any;
+  it("★ F2: \"ג'ינס\" searched only inside a combined query: searched alone before the absence", async () => {
+    const { nounNotTried } = await import("../services/reply-engine/gates");
+    const r = "ג'ינס לא הופיע בקטלוג, אבל יש קפוצ'ון שחור או קפוצ'ון עם רוכסן בצבע פחם.";
+    expect(nounNotTried("לא מצאנו ג'ינס בקטלוג, אבל יש קפוצ'ון שחור.", [e("ג'ינס קפוצ'ון"), e("hoodie", "ok")], "יש לכם ג'ינס או קפוצ'ון?")).toBe("ג'ינס");
+    // Searched alone (also in English): nothing.
+    expect(nounNotTried("לא מצאנו ג'ינס בקטלוג.", [e("ג'ינס קפוצ'ון"), e("jeans")], "יש לכם ג'ינס או קפוצ'ון?")).toBeNull();
+    expect(r).toBeTruthy();
+  });
+  it("★ F3: an inability line after a query with a word she never wrote: her noun alone", async () => {
+    const { nounNotTried } = await import("../services/reply-engine/gates");
+    const her = "ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?";
+    expect(nounNotTried("לא הצלחתי לאמת אם החולצה עדיין קיימת במלאי. איזו חולצה זו, או אפשר לשלוח קישור אליה?", [e("חולצת טי כחול")], her)).toBe("חולצה");
+    expect(nounNotTried("לא הצלחתי לאמת אם החולצה עדיין קיימת במלאי.", [e("חולצה")], her)).toBeNull();
+    // A word she never wrote narrows the search by itself.
+    expect(nounNotTried("לא הצלחתי לאמת אם החולצה עדיין קיימת במלאי.", [e("חולצת טי")], "ראיתי אצלכם חולצה יפה, היא עדיין ישנה?")).toBe("חולצה");
+    // Her own use words beside the noun are no narrowing ("מעמד לצילום").
+    expect(nounNotTried("לא מצאנו מעמד לצילום בקטלוג.", [e("מעמד צילום")], "יש לכם מעמד לצילום?")).toBeNull();
+  });
+});
+
+describe("dev round k9 on 1f25aca0: F4", () => {
+  it("★ \"the team cannot be reached\" is never true: flagged and cut", async () => {
+    const { gate3, cleanStyle, stripFactProblems } = await import("../services/reply-engine/gates") as any;
+    const r = "מצטערים על החיוב הכפול; אין לנו אפשרות להעביר את השיחה לצוות מכאן, אבל אפשר לפנות אלינו בכתובת המייל כדי לבדוק את החיוב.";
+    const v = gate3({ reply: r, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "שילמתי פעמיים על ההזמנה האחרונה", recentInbound: ["שילמתי פעמיים על ההזמנה האחרונה"], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    const ua = v.problems.find((p: any) => p.kind === "unsupported_action");
+    expect(ua?.claims?.join(" ")).toMatch(/אין לנו אפשרות להעביר/);
+    expect(stripFactProblems(r, v.problems)).not.toMatch(/אין לנו אפשרות/);
+    // An ordinary limit about something else stays.
+    const v2 = gate3({ reply: "אין לנו אפשרות למשלוח לחו\"ל.", claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", knowledge: "אין משלוחים לחו\"ל", locale: "he", incomingMessage: "שולחים לחו\"ל?", recentInbound: [], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    expect(v2.problems.map((p: any) => p.kind)).not.toContain("unsupported_action");
+    expect(cleanStyle).toBeTruthy();
+  });
+});
+
+describe("Omer 2026-11-19: a fit ask never asks for a model the texts do not list", () => {
+  const K = "טבלת התאמה:\nמכונת קפה נינג'ה: סמובי אריאל\nנינג'ה קריספי: סמובי אליס\nנינג'ה סלושי: סמובי כריסטינה\nמיקסר קנווד: סמובי אסף";
+  it("★ the two prod lines are flagged and repaired to the measurements question", async () => {
+    const { unbackedModelAsk, cleanStyle, MEASURE_ASK_HE } = await import("../services/reply-engine/gates");
+    const a = "למכונת קפה ולמיקסר ההתאמה תלויה בדגם, איזה דגמים יש לך?";
+    const b = "למכונת קפה ההתאמה תלויה בדגם, מה הדגם שלה?";
+    expect(unbackedModelAsk(a, "איזה משטח מתאים למכונת קפה ולמיקסר?", K)).toBe(true);
+    expect(unbackedModelAsk(b, "איזה משטח מתאים למכונת קפה?", K)).toBe(true);
+    expect(cleanStyle(b, ["model_ask"])).toBe(MEASURE_ASK_HE);
+    expect(cleanStyle("יש לנו כמה משטחים. " + b, ["model_ask"])).toBe(`יש לנו כמה משטחים. ${MEASURE_ASK_HE}`);
+  });
+  it("★ stays: a Ninja device listed by name in the table, and a kind the table lists models for", async () => {
+    const { unbackedModelAsk } = await import("../services/reply-engine/gates");
+    // Answered from the table: no model question at all.
+    expect(unbackedModelAsk("לנינג'ה קריספי מתאים סמובי אליס.", "איזה משטח מתאים לנינג'ה קריספי?", K)).toBe(false);
+    // Several Ninja lines: asking which Ninja is fair.
+    expect(unbackedModelAsk("איזה דגם נינג'ה יש לך?", "איזה משטח מתאים לנינג'ה?", K)).toBe(false);
+    // Not a fit ask.
+    expect(unbackedModelAsk("מה הדגם שלך?", "שלום", K)).toBe(false);
+  });
+  it("★ gate3 raises model_ask on the prod line", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const v = gate3({ reply: "למכונת קפה ההתאמה תלויה בדגם, מה הדגם שלה?", claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", knowledge: K, locale: "he", incomingMessage: "איזה משטח מתאים למכונת קפה?", recentInbound: [], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any);
+    expect(v.problems.flatMap((p: any) => (p.kind === "style" ? p.codes : []))).toContain("model_ask");
+  });
+  it("★ the prompt carries the rule", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/prompt.ts", "utf8")).toMatch(/never ask for a model or brand the texts do not list/);
   });
 });

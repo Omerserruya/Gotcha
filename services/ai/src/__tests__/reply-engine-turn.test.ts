@@ -3105,10 +3105,12 @@ describe("probe of d9f7c248, through a whole turn", () => {
 describe("rating of b3d2bbf3 and dev round k3, through a whole turn", () => {
   it("★ k3-A: a draft true on what the automatic search returned goes as it is, with no rewrite", async () => {
     h.groundStatus = "no_results";
-    h.responses.push({ toolCalls: [respond("a1", { reply: "אין לנו תיק עור." })] });
-    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק עור?" }, "autonomous");
+    // No attribute asked: the noun itself was searched, nothing narrower to retry (K8-1 asks for the noun alone
+    // after a noun plus attribute).
+    h.responses.push({ toolCalls: [respond("a1", { reply: "אין לנו מעמדים." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם מעמד?" }, "autonomous");
     expect(h.dispatched.some((d) => d.name === "woocommerce.list_products")).toBe(true);
-    expect(r.reply).toMatch(/^אין לנו תיק עור\./);
+    expect(r.reply).toMatch(/^אין לנו מעמדים\./);
     expect((r.trace as any).passedAfterLookup).toBe(true);
     expect(h.calls).toHaveLength(1);
   });
@@ -3221,5 +3223,41 @@ describe("db4e8917 pre-check: R5 through a whole turn", () => {
       r = await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
     } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
     expect(h.dispatched.some((d) => d.name === "woocommerce.list_products")).toBe(true);
+  });
+});
+
+describe("dev round k9 on 1f25aca0, F1 through a whole turn", () => {
+  it("★ the automatic lookup runs when the model took 10.5s: noun_not_tried searches her noun", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "15000";
+    h.groundStatus = "no_results";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    (generateResponse as any).mockImplementationOnce(async (p: any) => orig(p)).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 9000; return out; });
+    // About 6s of budget left, as on dev (model 10.5s, its tool wait 1.6s netted out).
+    h.responses.push({ toolCalls: [tc("c1", "woocommerce.list_products", { query: "חולצה תכלת" })] }, { toolCalls: [respond("c2", { reply: "לא מצאנו חולצה בתכלת בקטלוג." })] }, { toolCalls: [respond("c3", { reply: "יש Canvas Tote." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם חולצה בתכלת?" }, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => d.args.query)).toContain("חולצה");
+    expect(r.trace.autoLookupMs).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("dev round k9 on 1f25aca0, F5 through a whole turn", () => {
+  it("★ \"מה יש כרגע במלאי?\" with products returned and a categories-only reply: cards go out with it", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const orig = (prisma as any).productTurnSettings;
+    h.responses.push({ toolCalls: [tc("l1", "woocommerce.list_products", { query: "", in_stock: true, per_page: 100 })] }, { toolCalls: [respond("l2", { reply: "כרגע יש במלאי מגוון פריטים, למשל תיקים ואביזרים. יש פריט מסוים שחשוב לך לבדוק?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה יש כרגע במלאי?" }, "autonomous");
+    // On a cards channel the cards are attached; the harness channel decides, so the rule is pinned in the source too.
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(trace as any\)\.listAskCards = output\.cards!\.length;/);
+    expect(h.dispatched.some((d) => d.name === "woocommerce.list_products")).toBe(true);
+    expect(orig === undefined || orig !== null).toBe(true);
+    expect(r.reply).toBeTruthy();
+    // The harness is a cards channel: a card went out.
+    expect(h.staged.length).toBeGreaterThan(0);
   });
 });

@@ -190,14 +190,57 @@ const NO_PRICE_GIVEN = /(?<![\u0590-\u05FF])(?:(?:אין|לא)\s+(?:לנו\s+|ל
  * had two or more words, and her message holds a describing word. Her noun alone, to search before any absence.
  */
 export function nounNotTried(reply: string, tools: ToolRunRecord[], incoming: string): string | null {
-  if (!ABSENCE.test(String(reply ?? ""))) return null;
+  const r = String(reply ?? "");
+  // An absence, or an inability to check (dev round k9: "לא הצלחתי לאמת אם החולצה עדיין קיימת במלאי").
+  const INABILITY = /(?<![\u0590-\u05FF])לא\s+(?:הצלחתי|הצלחנו)\s+(?:לאמת|למצוא|לבדוק|לאתר)(?![\u0590-\u05FF])|\b(?:couldn'?t|could not|was unable to) (?:verify|find|check|locate)\b/iu;
+  const sentences = (r.match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => ABSENCE.test(x) || INABILITY.test(x));
+  if (!sentences.length) return null;
   const store = tools.filter((t) => /list_products|search_products/i.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
-  if (!store.length || !store.every((t) => t.outcome === "empty")) return null;
-  if (store.some((t) => (searchTextOf(t).match(/[\p{L}\p{N}']+/gu) ?? []).length < 2)) return null;
-  const words = String(storeQueryWords(incoming) ?? "").split(/\s+/).filter(Boolean);
-  const bareW = (w: string) => w.replace(/^[הב](?=[\u0590-\u05FF]{3,})/u, "");
-  if (!words.some((w) => describingWord(bareW(w)) || COLOUR_WORD.test(bareW(w)))) return null;
-  return words.find((w) => !describingWord(bareW(w)) && !COLOUR_WORD.test(bareW(w)) && lendable(w)) ?? null;
+  if (!store.length) return null;
+  const bareW = (w: string) => normalizeQuotes(w).replace(/^[הבלו](?=[\u0590-\u05FF]{3,})/u, "");
+  const stem = (w: string) => bareW(w).replace(/(?:ת|ה|ים|ות)$/u, "").slice(0, 4).toLowerCase();
+  const herWords = String(storeQueryWords(incoming) ?? "").split(/\s+/).filter(Boolean);
+  const describing = (w: string) => describingWord(bareW(w)) || COLOUR_WORD.test(bareW(w)) || MATERIAL_HE.has(bareW(w));
+  const nouns = herWords.filter((w) => !describing(w) && lendable(w));
+  if (!nouns.length) return null;
+  const herStems = new Set(herWords.map(stem));
+  const same = (w: string, x: string) => stem(w) === stem(x) || sameAcrossLanguages(x, w) || sameAcrossLanguages(w, x);
+  // A search for X alone: it holds X, and its other words are hers and neither another noun of hers nor describing.
+  const forAlone = (t: ToolRunRecord, x: string) => {
+    const ws = (searchTextOf(t).match(/[\p{L}\p{N}']+/gu) ?? []) as string[];
+    if (!ws.some((w) => same(w, x))) return false;
+    return ws.every((w) => same(w, x) || (herStems.has(stem(w)) && !describing(w) && !nouns.some((n) => n !== x && same(w, n))));
+  };
+  for (const x of nouns) {
+    // Only a noun the absence speaks of; with one noun asked, any absence is about it.
+    if (nouns.length > 1 && !sentences.some((sx) => normalizeQuotes(sx).includes(stem(x)))) continue;
+    if (!store.some((t) => forAlone(t, x))) return x;
+  }
+  return null;
+}
+/** A question for the device's model or brand, or "the fit depends on the model". */
+const MODEL_ASK = /(?<![\u0590-\u05FF])(?:(?:איזה|איזו|מה)\s+(?:ה)?(?:דגם|דגמים|מותג|יצרן)|(?:ה)?דגם\s+(?:של|שלה|שלו|שלך|שלכם)|(?:תלוי|תלויה)\s+ב(?:ה)?דגם)(?![\u0590-\u05FF])|\b(?:which|what) (?:model|brand)\b|\bmodel number\b|\bdepends on the model\b/iu;
+export const MEASURE_ASK_HE = "כדי לדעת מה מתאים, מה הרוחב והעומק של הבסיס בס\"מ? אפשר גם לשלוח תמונה.";
+export const MEASURE_ASK_EN = "To know what fits, what are the base's width and depth in cm? A photo works too.";
+/** Her device words on a fit ask: the words she said it is FOR ("למכונת קפה", "ולמיקסר"), with the word after. */
+function fitDeviceWords(incoming: string): string[] {
+  const ws = (normalizeQuotes(String(incoming ?? "")).match(/[\u0590-\u05FF]+(?:'[\u0590-\u05FF]+)*/gu) ?? []) as string[];
+  const out: string[] = [];
+  ws.forEach((w, k) => {
+    const m = /^ו?ל([\u0590-\u05FF']{3,})$/u.exec(w);
+    if (!m || talkWord(w) || queryStop(m[1])) return;
+    out.push(m[1].replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""));
+  });
+  return out;
+}
+/** A model question on a fit ask with no models of her device kind in the business's texts (fewer than two lines name it). */
+export function unbackedModelAsk(reply: string, incoming: string, knowledge: string): boolean {
+  if (!MODEL_ASK.test(String(reply ?? "")) || !FIT_ASK.test(String(incoming ?? ""))) return false;
+  const devices = fitDeviceWords(incoming);
+  if (!devices.length) return false;
+  const lines = normalizeQuotes(String(knowledge ?? "")).split(/\n+/).filter(Boolean);
+  const key = (d: string) => d.replace(/'/g, "").slice(0, 4);
+  return devices.every((d) => lines.filter((l) => l.replace(/'/g, "").includes(key(d))).length < 2);
 }
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
   if (PRICE_ASK.test(incoming ?? "") && (teamQuestion || NO_INFO.test(reply ?? "") || NO_PRICE_GIVEN.test(reply ?? ""))) {
@@ -313,6 +356,8 @@ export const simulationLeak = (reply: string, sources = "") => {
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
 };
 
+/** The team said to be unreachable ("אין לנו אפשרות להעביר את השיחה לצוות", "can't pass this to the team"). */
+const DENIES_TEAM = /(?<![\u0590-\u05FF])(?:אין\s+(?:לנו\s+|לי\s+)?(?:אפשרות|דרך)\s+(?:ל)?(?:העביר|להעביר|לחבר|לפנות)[^.!?\n]{0,30}(?:צוות|נציג|אדם)|(?:לא\s+(?:ניתן|נוכל|אוכל|אפשר)|אי\s+אפשר)\s+(?:ל)?(?:העביר|להעביר|לחבר)[^.!?\n]{0,30}(?:צוות|נציג|אדם))(?![\u0590-\u05FF])|\b(?:(?:can(?:no|')t|cannot|unable to|no way to) (?:transfer|pass|connect|hand)[^.!?\n]{0,30}(?:team|agent|person|human))\b/iu;
 // "I passed it to the team", said again while the team already has it open.
 const TEAM_LINE = /(?:העברתי|העברנו|הועבר|הועברה|הועברו|מעבירים|מעבירה|מעביר)(?:\s+(?:את\s+)?[\u0590-\u05FF"'׳״-]+){0,3}?\s+(?:ל|אל\s+)ה?צוות|(?:הצוות|צוות)\s+(?:כבר\s+)?(?:יבדוק|בודק|בודקים|יחזור|יעדכן|יענה|מטפל|מטפלים)|(?:כבר\s+)?אצל\s+הצוות|(?:בבדיקה|לבדוק)\s+(?:מול|עם)\s+הצוות|\b(?:passed (?:it|this|your question) (?:on )?to the team|the team (?:will|is) (?:already )?(?:check|look|get back|on it)\w*|the team already has (?:it|this))\b/iu;
 const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם זה|נשמע)|יש (?:חדש|חדשות|עדכון|תשובה)|עדכון|עדכנו|נו|כמה זמן|עוד כמה|מתי תהיה תשובה|ענו|הצוות)(?![\u0590-\u05FF])|\b(?:any (?:update|news)|still waiting|heard back)\b/iu;
@@ -1329,6 +1374,9 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     ...unbackedPromises(reply, { teamQuestion: !!i.teamQuestion, handedOff: i.handedOff, teamAlreadyOpen: !!i.teamAlreadyOpen, approvalPending: i.approvalPending }),
     ...unbackedRecords(reply, i.tools),
   ];
+  // "The team cannot be reached from here" is never true: a question can always be passed (dev round k9 on 1f25aca0:
+  // a double charge got "אין לנו אפשרות להעביר את השיחה לצוות מכאן").
+  unbacked.push(...(reply.match(/[^.!?\n]+[.!?]*/g) ?? []).filter((x) => DENIES_TEAM.test(x)).map((x) => x.trim().slice(0, 120)));
   if (unbacked.length) problems.push({ kind: "unsupported_action", claims: [...new Set(unbacked)] });
   const absent = ungroundedAbsence(reply, i.tools, i.knowledge ?? "");
   absent.push(...ungroundedOrderAbsence(reply, i.tools).filter((x) => !absent.includes(x)));
@@ -1450,6 +1498,9 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (simulationLeak(reply, `${i.knowledge ?? ""}\n${i.grounding ?? ""}`)) style.push("simulation_leak");
   if (foreignScript(reply, i.customerText ?? i.incomingMessage)) style.push("foreign_script");
   if (internalJargon(reply)) style.push("internal_jargon");
+  // A fit ask answered with a question for the device's model, when the business's texts list no models for that kind of
+  // device: its staff fit by the base's size (Omer 2026-11-19, a business owner's complaint).
+  if (unbackedModelAsk(reply, i.incomingMessage ?? "", i.knowledge ?? "")) style.push("model_ask" as any);
   if (INTERNAL_REASONING.test(reply ?? "")) style.push("internal_reasoning");
   if (TOOL_TALK.test(reply ?? "")) style.push("tool_talk");
   if (failureNarration(reply)) style.push("failure_narration");
@@ -1866,6 +1917,10 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
   if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
   if (c.has("foreign_script")) s = stripForeignScript(s, allowedScripts);
+  if (c.has("model_ask")) {
+    const kept = dropSentences(s, MODEL_ASK);
+    s = `${kept} ${/[\u0590-\u05FF]/.test(s) ? MEASURE_ASK_HE : MEASURE_ASK_EN}`.trim();
+  }
   if (c.has("internal_jargon")) s = dropSentences(dropSentences(s.replace(PROCESS_CLAUSE, ""), INTERNAL_JARGON), PROCESS_TALK);
   if (c.has("internal_reasoning")) s = dropSentences(s, INTERNAL_REASONING);
   if (c.has("tool_talk")) s = dropSentences(s, TOOL_TALK);
@@ -1916,7 +1971,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
   for (const p of problems) {
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
-    if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn (${p.claims.join("; ")}). Say only what really happened; offer a person if needed.`);
+    if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn, or that the team cannot be reached (${p.claims.join("; ")}). Say only what really happened; the team can always be reached: set team_question and say it is with the team.`);
     if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now.");
     if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell say the team will check.");
     if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
