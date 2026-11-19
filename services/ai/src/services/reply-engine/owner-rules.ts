@@ -80,5 +80,31 @@ export function renderOwnerRules(r: OwnerRules | null | undefined): string | nul
   return out.join("\n\n");
 }
 
+// The particles Hebrew attaches to a word ("הזול", "בזול", "ולזול"): it is still the owner's word.
+const HE_ATTACHED = "ו?[הבל]?";
+const plainQuotes = (s: string) => s.replace(/[\u05F4\u201C\u201D\u201E]/g, '"').replace(/[\u05F3\u2018\u2019]/g, "'");
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The never-list entries a text says (2026-11-19: never = ["זול"], and "הכי זול שמצאנו הוא ..." went out).
+ * As a whole word: no letter or digit on either side ("זולת" is not "זול"); a Hebrew entry of three letters or more
+ * also with an attached particle. Who used the word first does not matter: the customer's own quote excuses nothing.
+ */
+export function neverSaid(text: unknown, never: string[] | null | undefined): string[] {
+  const t = plainQuotes(String(text ?? ""));
+  if (!t.trim()) return [];
+  return (never ?? []).filter((entry) => {
+    const words = plainQuotes(oneLine(entry)).split(" ").filter(Boolean);
+    // One letter is no entry ("a" would match every English reply).
+    if ((words.join("").match(/[\p{L}\p{N}]/gu) ?? []).length < 2) return false;
+    const attached = /^[\u05D0-\u05EA]{3,}/.test(words[0]) ? HE_ATTACHED : "";
+    return new RegExp(`(?<![\\p{L}\\p{N}])${attached}${words.map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])`, "iu").test(t);
+  });
+}
+
+/** What the rewrite is told when the draft said a never-list entry: the entry by name, and that no one's use of it allows it. */
+export const neverSaidNote = (entries: string[]) =>
+  `- The business never says this: ${entries.map((e) => `"${e}"`).join(", ")}. Your reply says it. Write the reply again without ${entries.length > 1 ? "those words" : "that word or phrase"}, in other words; the customer using it does not make it yours to use.`;
+
 /** The line the rewrite's correction ends with when the owner has rules: they hold for the rewritten reply too. */
 export const OWNER_RULES_REWRITE_LINE = "The business's own rules (the last section of your instructions) still apply to the rewritten reply.";

@@ -4,9 +4,9 @@
  */
 import { describe, it, expect } from "vitest";
 import { VOICE_RENDERED_MAX, MAX_RULES, MAX_RULE_LEN } from "@chatcenter/shared";
-import { readOwnerRules, renderOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, OWNER_RULES_HEADING, OWNER_RULES_REWRITE_LINE } from "../services/reply-engine/owner-rules";
+import { readOwnerRules, renderOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid, OWNER_RULES_HEADING, OWNER_RULES_REWRITE_LINE } from "../services/reply-engine/owner-rules";
 import { buildStablePrefix, voiceForPrompt, businessBlock } from "../services/reply-engine/prompt";
-import { needlessHandoff, correctionNote, gate3 } from "../services/reply-engine/gates";
+import { needlessHandoff, correctionNote, gate3, stripFactProblems, factualProblems } from "../services/reply-engine/gates";
 import { cutFields } from "../services/reply-engine/engine";
 import { cutLine } from "../scripts/replay-v2";
 
@@ -171,5 +171,49 @@ describe("what a turn prints", () => {
   it("★ the draft is clipped at 400 characters", () => {
     expect(cutLine({ firstDraft: "א".repeat(900) })).toBe(` | draft: "${"א".repeat(400)}"`);
     expect((cutFields({ firstDraft: "א".repeat(900) }) as any).firstDraft).toHaveLength(400);
+  });
+});
+
+describe("the never list is enforced (2026-11-19: never = [\"זול\"], and \"הכי זול שמצאנו\" went out)", () => {
+  it("★ an entry is found as a whole word, with the particles Hebrew attaches to it", () => {
+    for (const said of ["הכי זול שמצאנו הוא גופיית כותנה, ויש גם חולצת טי במחיר נמוך.", "זה המוצר הזול ביותר שלנו", "אפשר למצוא אצלנו גם בזול", "איכותי וזול", "זול!", "\"זול\" זה לא"]) expect(neverSaid(said, ["זול"]), said).toEqual(["זול"]);
+    // Another word that holds its letters is not the entry.
+    for (const other of ["יש לנו פריטים במחירים נגישים", "זולת המשלוח אין עלות נוספת", "הפריט מוזל השבוע", "זולים", ""]) expect(neverSaid(other, ["זול"]), other).toEqual([]);
+  });
+  it("★ a two-letter Hebrew entry takes no particle (\"בקר\" is not \"קר\")", () => {
+    expect(neverSaid("ארוחת בקר מוגשת עד 11", ["קר"])).toEqual([]);
+    expect(neverSaid("המשקה מוגש קר", ["קר"])).toEqual(["קר"]);
+  });
+  it("★ a phrase, an English word in any case, quotes of any kind; one letter is no entry", () => {
+    expect(neverSaid("אנחנו לא משווים מחירי  מתחרים", ["מחירי מתחרים"])).toEqual(["מחירי מתחרים"]);
+    expect(neverSaid("לא משווים מחירים של מתחרים", ["מחירי מתחרים"])).toEqual([]);
+    expect(neverSaid("It is a Cheap one.", ["cheap"])).toEqual(["cheap"]);
+    expect(neverSaid("This is the cheapest one.", ["cheap"])).toEqual([]);
+    expect(neverSaid("קוראים לזה ״דיל״ אצלנו", ["\"דיל\""])).toEqual(["\"דיל\""]);
+    expect(neverSaid("a table and a chair", ["a"])).toEqual([]);
+    expect(neverSaid("מחיר (כולל מע\"מ) ומשלוח", ["(כולל מע\"מ)"])).toEqual(["(כולל מע\"מ)"]);
+    expect(neverSaid("זול ומבצע", ["מבצע", "יקר", "זול"])).toEqual(["מבצע", "זול"]);
+    expect(neverSaid("זול", null)).toEqual([]);
+  });
+  const base: any = { claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", knowledge: "", sourceText: "", locale: "he", incomingMessage: "זה נשמע לי לא זול בכלל", recentInbound: ["זה נשמע לי לא זול בכלל"], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false };
+  const REPLY = "מבינים, זה באמת לא זול. אפשר לבדוק יחד מה מתאים לתקציב שלך.";
+  it("★ gate3: the entry in the reply is a problem that names it, also when the customer wrote the word herself; it can stop a reply", () => {
+    const v = gate3({ ...base, reply: REPLY, never: ["יקר", "זול"] });
+    expect(v.problems).toEqual([{ kind: "owner_never", claims: ["זול"] }]);
+    expect(factualProblems(v.problems)).toHaveLength(1);
+    expect(gate3({ ...base, reply: REPLY, never: [] }).ok).toBe(true);
+    expect(gate3({ ...base, reply: REPLY }).ok).toBe(true);
+    expect(gate3({ ...base, reply: "מבינים. אפשר לבדוק יחד מה מתאים לתקציב שלך.", never: ["זול"] }).ok).toBe(true);
+  });
+  it("★ the cut takes the sentence that says it and nothing else", () => {
+    expect(stripFactProblems(REPLY, [{ kind: "owner_never", claims: ["זול"] }])).toBe("אפשר לבדוק יחד מה מתאים לתקציב שלך.");
+    expect(stripFactProblems("זולת המשלוח אין עלות. זה לא זול.", [{ kind: "owner_never", claims: ["זול"] }])).toBe("זולת המשלוח אין עלות.");
+  });
+  it("★ the correction names every entry said, and the printout carries the count", () => {
+    const note = correctionNote([{ kind: "owner_never", claims: ["זול", "מבצע"] }], "he", { rules: true, handover: 0 });
+    expect(note).toContain('- The business never says this: "זול", "מבצע". Your reply says it. Write the reply again without those words');
+    expect(correctionNote([{ kind: "owner_never", claims: ["זול"] }], "he")).toContain("without that word or phrase");
+    expect(cutLine({ neverListHit: 2 })).toBe(" | neverListHit=2");
+    expect(cutFields({ neverListHit: 2 })).toEqual({ neverListHit: 2 });
   });
 });

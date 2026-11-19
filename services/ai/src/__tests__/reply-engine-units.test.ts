@@ -446,7 +446,7 @@ describe("tool errors from the prod replay", () => {
 describe("prod replay 2: what may stop a reply, and the cleanup", () => {
   it("only a price, a product or an action no tool backs is a FACT problem", async () => {
     const { factualProblems, FACTUAL_KINDS } = await import("../services/reply-engine/gates");
-    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "derived_measure", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "price_against_store", "price_of_other_product", "ungrounded_absence", "ungrounded_attribute", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_positive_fit", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
+    expect([...FACTUAL_KINDS].sort()).toEqual(["card_reference", "claims_attachment", "dangling_reference", "derived_measure", "device_mismatch", "echoed_size", "inactive_order_unlabelled", "option_without_variation", "order_state_unread", "owner_never", "price_against_store", "price_of_other_product", "ungrounded_absence", "ungrounded_attribute", "ungrounded_negative_fit", "ungrounded_number", "ungrounded_payment", "ungrounded_positive_fit", "ungrounded_price", "ungrounded_source", "unknown_product", "unsafe_tip", "unsupported_action"]);
     expect(factualProblems([{ kind: "style", codes: ["found_narration"] }, { kind: "unread_product" }, { kind: "needless_handoff" }] as any)).toEqual([]);
   });
   it("cleanStyle fixes what code can fix and keeps the rest", async () => {

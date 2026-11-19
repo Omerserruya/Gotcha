@@ -12,7 +12,7 @@ import { checkAiAllowed } from "@chatcenter/shared";
 import { ungroundedPrices, stripPrices, checkReplyStyle, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
-import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE } from "./owner-rules";
+import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE, neverSaid, neverSaidNote } from "./owner-rules";
 
 export type Gate1 =
   | { reply: true }
@@ -1355,6 +1355,8 @@ export interface Gate3Input {
   /** The customer's own messages, and everything else a fact may come from (tools, knowledge, a person, the state). */
   customerText?: string;
   sourceText?: string;
+  /** The owner's never list (BusinessPolicy.data.blockedTopics), as read this turn. */
+  never?: string[];
 }
 
 export function gate3(input: Gate3Input): Gate3Verdict {
@@ -1366,6 +1368,11 @@ export function gate3(input: Gate3Input): Gate3Verdict {
 
   const prices = ungroundedPrices(reply, i.grounding);
   if (prices.length) problems.push({ kind: "ungrounded_price", prices });
+
+  // The owner's never list is enforced, not only shown to the model (2026-11-19): a listed word in the reply is a
+  // problem whoever said it first.
+  const neverHit = neverSaid(reply, i.never);
+  if (neverHit.length) problems.push({ kind: "owner_never", claims: neverHit });
 
   // Shadow and replay judge a simulated write as live would see it: done, or awaiting approval.
   const simApproval = (t: ToolRunRecord) => t.decision === "simulated" && /awaiting_approval/.test(String(t.content ?? ""));
@@ -1543,7 +1550,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
  * cleaned or sent as is, never swapped for a canned line (prod replay 2 2026-11-16:
  * 17 fallbacks on Smoovee, most of them style, replaced real answers).
  */
-export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_attribute", "price_of_other_product", "derived_measure", "ungrounded_negative_fit", "ungrounded_positive_fit"] as any);
+export const FACTUAL_KINDS: ReadonlySet<ClaimProblem["kind"]> = new Set<ClaimProblem["kind"]>(["owner_never", "ungrounded_price", "unsupported_action", "unknown_product", "ungrounded_absence", "card_reference", "echoed_size", "unsafe_tip", "ungrounded_number", "dangling_reference", "ungrounded_payment", "inactive_order_unlabelled", "option_without_variation", "ungrounded_source", "price_against_store", "order_state_unread", "claims_attachment", "device_mismatch", "ungrounded_attribute", "price_of_other_product", "derived_measure", "ungrounded_negative_fit", "ungrounded_positive_fit"] as any);
 export const factualProblems = (problems: ClaimProblem[]) => problems.filter((p) => FACTUAL_KINDS.has(p.kind));
 
 // A decimal point is no sentence end ("99.5 ס"מ": the derived-measure claim spans it and was never cut).
@@ -1576,6 +1583,11 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
   // The same text the claims were cut from (gate3 reads it through normalizeQuotes).
   let s = normalizeQuotes(String(reply ?? ""));
   for (const p of problems) {
+    // A never-list entry the rewrite kept: its sentence goes.
+    if (p.kind === "owner_never") {
+      s = (s.match(SENTENCES) ?? [s]).filter((x) => !neverSaid(x, p.claims).length).reduce(joinKept, "").trim();
+      continue;
+    }
     // A made-up price loses its sentence ("התיק עולה ₪120." would leave "התיק עולה.").
     if ((p.kind as string) === "derived_measure") {
       // The derived clause goes, the measure the source states stays (prod replay on 1b35c535, Tehila: "the
@@ -1978,6 +1990,7 @@ export function normalizeDashes(s: string): string {
 export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", owner?: { rules?: boolean; handover?: number }): string {
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
   for (const p of problems) {
+    if (p.kind === "owner_never") lines.push(neverSaidNote(p.claims));
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
     if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn, or that the team cannot be reached (${p.claims.join("; ")}). Say only what really happened; the team can always be reached: set team_question and say it is with the team.`);
     if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now." + (owner?.handover ? " The one other reason is one of the business's own numbered hand-over rules: only if one of them truly is the reason, keep the handoff and set handoff_rule to its number." : ""));

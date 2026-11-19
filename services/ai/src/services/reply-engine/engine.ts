@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { readOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover } from "./owner-rules";
+import { readOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid } from "./owner-rules";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conversation-relevance.service";
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
@@ -625,6 +625,7 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
   // The owner's rules this turn carried (counts per kind), a hand-over that named one, a repaired link, the first draft.
   if (trace?.ownerRules) out.ownerRules = trace.ownerRules;
   if (trace?.ownerHandoverRule != null) out.ownerHandoverRule = trace.ownerHandoverRule;
+  if (trace?.neverListHit) out.neverListHit = trace.neverListHit;
   if (trace?.urlsRepaired) out.urlsRepaired = trace.urlsRepaired;
   if (trace?.firstDraft) out.firstDraft = String(trace.firstDraft).slice(0, 400);
   const markers = CUT_MARKERS.filter((k) => trace?.[k]);
@@ -1518,6 +1519,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     handoff: o.handoff ?? null,
     handoffRule: o.handoffRule ?? null,
     ownerHandoverRules: ownerRules.handover.length,
+    never: ownerRules.never,
     teamQuestion: !!o.teamQuestion,
     teamAlreadyOpen,
     newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
@@ -1564,8 +1566,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const first = verdict;
     const original = output;
     firstDraft = String(original?.reply ?? "");
+    // How many never-list entries the draft said (the rewrite names them; one that stays loses its sentence).
+    const neverCount = (v: { problems: any[] } | null) => (v?.problems.find((p) => p.kind === "owner_never")?.claims ?? []).length;
+    if (neverCount(first)) (trace as any).neverListHit = neverCount(first);
     // The first draft's question may be kept only when no check was about a question (asked before, already known).
     const questionOk = !first.problems.some((p) => p.kind === "style" && p.codes.some((c) => c === "asks_known" || c === "repeated_ask" || c === "repeated_sentence" || c === "statement_question"));
+    // The first draft's closing question joins a rewrite that has none, unless it would bring a never-list word back.
+    const carryQuestion = <T extends { reply: string }>(o: T): T => {
+      const q = withClosingQuestion(o, questionOk ? original : null, previousBotReplies);
+      return q !== o && neverSaid(q.reply, ownerRules.never).length ? o : q;
+    };
     let second: ModelTurnOutput | null = null;
     // The customer is waiting (prod replay 6: a one-round rewrite at p95 27s). The
     // rewrite fits in what is left of the turn's budget, or is skipped and the
@@ -1725,6 +1735,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     }
     (trace as any).rewriteMs = Date.now() - t0 - (stageMs.model ?? 0);
     const v2 = second ? gate3(g3Input(second)) : null;
+    if (!(trace as any).neverListHit && neverCount(v2)) (trace as any).neverListHit = neverCount(v2);
     // A rewrite that opens with a fragment ("15. לפי החיפוש, אותו משטח..." after a split inside a size) loses it, the
     // same check a clean gets (rating of dcf2158e, Smoovee A, severe).
     if (second && v2?.ok) {
@@ -1732,7 +1743,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (lead && (cutFragment(lead) || /^\s*\d+[.!?]\s*$/u.test(lead))) { second = { ...second, reply: String(second.reply).slice(lead.length).trim() }; (trace as any).leadFragmentCut = true; }
     }
     if (second && v2?.ok) {
-      output = withClosingQuestion(second, questionOk ? original : null, previousBotReplies); verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
+      output = carryQuestion(second); verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
       if (output !== second) (trace as any).closingQuestionKept = true;
     } else {
       // Not clean: what is left is cleaned and sent. A FACT problem (a price, a
@@ -1748,7 +1759,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (!kept && (fromSecond || fromOriginal || second || original) && left() > 5000) {
         // ONE targeted rewrite: what was cut and why, and answer the customer fully.
         const cut = (fromSecond ?? fromOriginal);
-        const why = [...new Set((cut?.problems ?? v2?.problems ?? first.problems).map((p) => p.kind === "style" ? p.codes.join("/") : p.kind))].join(", ");
+        const why = [...new Set((cut?.problems ?? v2?.problems ?? first.problems).map((p) => p.kind === "style" ? p.codes.join("/") : p.kind === "owner_never" ? `the business never says ${p.claims.map((c) => `"${c}"`).join(", ")}` : p.kind))].join(", ");
         messages.push({ role: "system", content: `Your reply could not be sent as written${cut?.removed.length ? `: these sentences had to be cut (${why}): ${cut.removed.map((x) => `"${x.slice(0, 160)}"`).join(" ")}` : ` (${why})`}. What was left does not answer the customer's last message: "${String(opts.incomingMessage ?? "").slice(0, 300)}". Write the full answer to it now, without those claims, and call respond.` });
         try {
           const r3 = await rewriteCall({ type: "function", function: { name: "respond" } });
@@ -1784,7 +1795,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           output = { ...output, reply: `${String(output.reply ?? "").trim()} ${line}`.trim(), teamQuestion: teamAlreadyOpen ? output.teamQuestion ?? null : output.teamQuestion ?? (String(opts.incomingMessage ?? "").slice(0, 300) || null) };
           (trace as any).linkAnswerToTeam = true;
         }
-        if (kept === fromSecond && fromSecond) { const q = withClosingQuestion(kept.o, questionOk ? original : null, previousBotReplies); if (q !== kept.o) { output = q; (trace as any).closingQuestionKept = true; } }
+        if (kept === fromSecond && fromSecond) { const q = carryQuestion(kept.o); if (q !== kept.o) { output = q; (trace as any).closingQuestionKept = true; } }
       } else {
         verdict = v2 ?? first;
         trace.gate3 = { ...first, rewrite: "fallback" };

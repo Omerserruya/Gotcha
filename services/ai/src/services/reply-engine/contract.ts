@@ -173,6 +173,8 @@ export type ClaimProblem =
   | { kind: "partial_return_policy" }
   | { kind: "knowledge_has_it" }
   | { kind: "coupon_source" }
+  /** The reply says an entry of the owner's never list (the entries, in the owner's words). */
+  | { kind: "owner_never"; claims: string[] }
   /** A handoff the customer's words do not call for (it would silence the AI). */
   | { kind: "needless_handoff" };
 

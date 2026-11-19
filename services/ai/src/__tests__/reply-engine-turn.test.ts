@@ -3379,6 +3379,104 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
     expect(clean.trace.gate3.rewrite).toBe("none");
     expect((clean.trace as any).firstDraft).toBeUndefined();
   });
+
+  // The never list is enforced, not only shown (2026-11-19, the dev owner-rule round: never = ["זול"], and
+  // "הכי זול שמצאנו הוא ..." went out with gate3 ok).
+  const never = (...entries: string[]) => { h.agentExtra = {}; h.policyRow = { data: { blockedTopics: entries } }; };
+  const noteOf = (call: any) => call.messages.slice(1).map((m: any) => String(m.content ?? "")).join("\n");
+  const NOT_CHEAP = "זה נשמע לי לא זול בכלל";
+  const DRAFT = "מבינים, זה באמת לא זול. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו.";
+
+  it("★ a draft that says a never-list word gets one rewrite that names it, although the customer said the word first", async () => {
+    never("זול");
+    h.responses.push({ toolCalls: [respond("n1", { reply: DRAFT })] }, { toolCalls: [respond("n2", { reply: "מבינים. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(r.trace.gate3.problems).toEqual([{ kind: "owner_never", claims: ["זול"] }]);
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(h.calls).toHaveLength(2);
+    expect(noteOf(h.calls[1])).toContain('The business never says this: "זול". Your reply says it.');
+    expect(noteOf(h.calls[1])).toContain("the customer using it does not make it yours to use");
+    expect(r.reply).toBe("מבינים. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו.");
+    expect((r.trace as any).neverListHit).toBe(1);
+    expect(h.audits.find((a) => a.data.action === "ai.bot_turn").data.metadata.cuts.neverListHit).toBe(1);
+  });
+
+  it("★ the real ask (\"הכי זול שיש\"): the word does not go out", async () => {
+    never("זול");
+    h.responses.push(
+      { toolCalls: [respond("n1", { reply: "יש אצלנו פריטים במחיר זול, ואפשר לחפש לפי סוג הפריט. איזה פריט מעניין אותך?" })] },
+      { toolCalls: [respond("n2", { reply: "יש אצלנו פריטים במחירים נגישים, ואפשר לחפש לפי סוג הפריט. איזה פריט מעניין אותך?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("owner_never");
+    expect(r.reply).toContain("במחירים נגישים");
+    expect(r.reply).not.toMatch(/זול/);
+    expect((r.trace as any).neverListHit).toBe(1);
+  });
+
+  it("★ the rewrite still says it: its sentence is cut, the rest goes out", async () => {
+    never("זול");
+    h.responses.push({ toolCalls: [respond("n1", { reply: DRAFT })] }, { toolCalls: [respond("n2", { reply: "מבינים, זה לא הכי זול. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(r.reply).toBe("אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו.");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect((r.trace as any).cutWhy).toEqual(["owner_never"]);
+    expect((r.trace as any).cutText).toEqual(["מבינים, זה לא הכי זול."]);
+    expect((r.trace as any).neverListHit).toBe(1);
+  });
+
+  it("★ the first draft was stopped for something else and the rewrite says the word: its sentence is cut and the marker shows", async () => {
+    never("זול");
+    h.responses.push(
+      { toolCalls: [respond("n1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "price" })] },
+      { toolCalls: [respond("n2", { reply: "מבינים, זה לא הכי זול. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toEqual(["needless_handoff"]);
+    expect(r.reply).toBe("אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו.");
+    expect((r.trace as any).cutWhy).toEqual(["owner_never"]);
+    expect((r.trace as any).neverListHit).toBe(1);
+  });
+
+  it("★ the word is the whole reply in both drafts: it is never sent, the turn takes the fallback and says why", async () => {
+    never("זול");
+    h.responses.push({ toolCalls: [respond("n1", { reply: "מבינים, זה באמת לא זול." })] }, { toolCalls: [respond("n2", { reply: "נכון, זה לא הכי זול." })] }, { toolCalls: [respond("n3", { reply: "זה לא זול, נכון." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(String(r.reply ?? "")).not.toMatch(/זול/);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect((r.trace as any).fallbackKinds).toEqual(["owner_never"]);
+    expect(noteOf(h.calls[2])).toContain('Your reply could not be sent as written (the business never says "זול").');
+  });
+
+  it("★ the first draft's closing question does not bring the word back into a clean rewrite; a clean question is still kept", async () => {
+    const CLEAN = "מבינים. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו.";
+    never("זול");
+    h.responses.push({ toolCalls: [respond("n1", { reply: "מבינים, זה באמת לא זול. לחפש לך משהו זול יותר מזה?" })] }, { toolCalls: [respond("n2", { reply: CLEAN })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(r.reply).toBe(CLEAN);
+
+    h.responses.length = 0; h.calls.length = 0;
+    h.responses.push({ toolCalls: [respond("n1", { reply: "מבינים, זה באמת לא זול. איזה סוג פריט חיפשת בעצם?" })] }, { toolCalls: [respond("n2", { reply: CLEAN })] });
+    const kept = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect(kept.reply).toBe(`${CLEAN} איזה סוג פריט חיפשת בעצם?`);
+  });
+
+  it("★ two entries in one draft: the marker counts both; a business with no never list, or a reply that says none of it, is untouched", async () => {
+    never("זול", "מבצע", "מחירי מתחרים");
+    h.responses.push({ toolCalls: [respond("n1", { reply: "יש עכשיו מבצע וזה יוצא זול. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] }, { toolCalls: [respond("n2", { reply: "אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] });
+    const two = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+    expect((two.trace as any).neverListHit).toBe(2);
+    expect(noteOf(h.calls[1])).toContain('The business never says this: "זול", "מבצע".');
+
+    for (const [entries, draft] of [[[], DRAFT], [["זול"], "מבינים, זולת המשלוח אין כאן עלות נוספת שלא ראית. אפשר לבדוק יחד מה מתאים לתקציב שלך."]] as Array<[string[], string]>) {
+      h.responses.length = 0; h.calls.length = 0;
+      never(...entries);
+      h.responses.push({ toolCalls: [respond("n1", { reply: draft })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
+      expect(r.trace.gate3.problems.map((p: any) => p.kind), draft).not.toContain("owner_never");
+      expect((r.trace as any).neverListHit, draft).toBeUndefined();
+    }
+  });
 });
 
 describe("silence only when the customer brought nothing new (2026-11-19, prod replay L774)", () => {
