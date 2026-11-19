@@ -618,7 +618,7 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
     expect(h.upserts[0].create.facts._cannedTeamLineAt).toBeTruthy();
   });
 
-  it("★ the canned line already went out: nothing is sent, the question still reaches the team once", async () => {
+  it("★ the canned line already went out and she brought nothing new: nothing is sent, and nothing goes to the team", async () => {
     await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() } }, async () => {
       h.responses.push(
         { toolCalls: [respond("c3", { reply: "התיק עולה ₪120." })] },
@@ -629,7 +629,10 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
       expect(r.trace.gate3.rewrite).toBe("silent");
       expect(r.reply).toBeNull();
       expect(r.escalation).toBeNull();
-      expect(h.teamQuestions).toHaveLength(1);
+      // A bare "טוב" is no question for the team (2026-11-19: it was recorded as one; a real question takes the
+      // holding-line branch below and reaches the team there).
+      expect(h.teamQuestions).toHaveLength(0);
+      { const up = h.upserts[h.upserts.length - 1]; expect(up?.create?.pending ?? up?.update?.pending ?? []).toHaveLength(0); }
       // The engine's mark is not shown to the model.
       expect(JSON.stringify(h.calls[0].messages)).not.toContain("_cannedTeamLineAt");
     });
@@ -3501,6 +3504,9 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
       expect(r.reply).toBeNull();
       expect((r.trace as any).teamItemUpdated).toBeUndefined();
       expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
+      // A thanks is no question for the team: nothing recorded, no new item.
+      expect(h.teamQuestions).toHaveLength(0);
+      expect(savedPending()).toHaveLength(1);
     });
   });
 

@@ -1922,9 +1922,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
           if (!q.reply) trace.gate3 = { ...first, rewrite: "silent" };
         } else {
-          // The canned line already went out once: nothing new to say. The question
-          // still reaches the team (once per issue) so the owner sees it.
-          output = { reply: "", stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
+          // The canned line already went out once and she brought nothing new (a thanks, a bare nudge, a message she
+          // already wrote): nothing to say, and nothing for the team (a "תודה רבה" was recorded as a team question).
+          output = { reply: "", stateUpdate: {}, claims: [], handoff: null, teamQuestion: null, cards: [] };
           trace.gate3 = { ...first, rewrite: "silent" };
         }
         // Never the same fallback twice in a row (prod replay of b369e939, NE'A: one line on two turns).
