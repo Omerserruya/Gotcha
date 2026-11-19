@@ -53,7 +53,7 @@ export interface RelevanceGateResult {
   mode: RelevanceGateMode;
   category: string | null;
   confidence: number | null;
-  source: "override" | "stored" | "fast" | "model" | "error" | "filter_off" | null;
+  source: "override" | "stored" | "fast" | "model" | "sender" | "error" | "filter_off" | null;
   hold: boolean;
 }
 
@@ -122,9 +122,9 @@ export async function relevanceForTurn(args: {
       const messages = (history ?? []).slice(-12).map((m: any) => ({ direction: m.direction, body: m.body, createdAt: m.createdAt, messageType: m.messageType, metadata: m.metadata }));
       const subject = (lastIn?.metadata as any)?.email?.subject ?? null;
       return (deps.classify ?? classifyConversation)(tenantId, profile, {
-        channel: String(conversation.channel ?? ""), customerExternalId: conversation.customerExternalId,
+        channel: String(conversation.channel ?? ""), customerExternalId: conversation.customerExternalId, conversationId: conversation.id,
         firstDirection: first?.direction ?? null, messages, subject, team: teamIdentityOf(users),
-      });
+      }, { db });
     })(), deps.timeoutMs ?? 3000);
     (deps.write ?? writeLabel)(tenantId, conversation.id, label).catch((err) => console.warn("[relevance] write failed:", (err as Error)?.message));
     return { mode, category: label.category, confidence: label.confidence, source: label.source, hold: holdsBack(label.category, label.confidence, false) };
