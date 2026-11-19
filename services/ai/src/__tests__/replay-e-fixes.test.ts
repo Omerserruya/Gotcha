@@ -11,6 +11,8 @@ import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactPro
 import { cutLine } from "../scripts/replay-v2";
 import { cutFields } from "../services/reply-engine/engine";
 import { oneTeamPass, withoutCheckedClaims, selfSearch, withClosingQuestion, withNewDetails } from "../services/reply-engine/engine";
+import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
+import { normalizeWooProducts, buildKeyedModelSummary } from "../services/product-search.service";
 
 const WOO = ["woocommerce.list_products", "search_knowledge"];
 const q = (calls: any[]) => calls.map((c) => [c.function.name, JSON.parse(c.function.arguments).query]);
@@ -1550,5 +1552,775 @@ describe("89935bf8 prod replay: R8 on the real turn", () => {
     expect(namedOnce("יש סמובי אלכסה וסמובי אליס.", C)).toBe(-1);
     // A one-word head never names it.
     expect(namedOnce("יש סמובי.", [{ title: "סמובי - משטח" }])).toBe(-1);
+  });
+});
+
+describe("commit 4, A2 + A7: a product named in product_id (prod replay e, L1437)", () => {
+  const ALICE = { id: 31, name: "סמובי אליס - משטח הזזה 40*30 ס\"מ" };
+  const ALEXA = { id: 30, name: "סמובי אלכסה - משטח הזזה 35*28 ס\"מ" };
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const row = (p: { id: unknown; name: string }) => ({ id: String(p.id), title: p.name });
+
+  it("★ A7: the exact title, or a single result that holds the whole name; anything else is unknown, with what was found", async () => {
+    const { pickByName, titleHoldsName } = await import("../services/reply-engine/engine");
+    // L1437: the model name alone, and with the article.
+    expect(pickByName("אליס", [ALICE])).toEqual({ id: "31" });
+    expect(pickByName("סמובי אליס", [ALICE])).toEqual({ id: "31" });
+    expect(pickByName("המשטח אליס", [ALICE])).toEqual({ id: "31" });
+    // A single result that shares no word with the name is never the product.
+    expect(pickByName("מייקאפ Cover me", [{ id: 1112, name: "ערכת קונטור" }])).toEqual({ candidates: [{ id: "1112", title: "ערכת קונטור" }] });
+    // A name under a one-letter prefix is not taken: the result is handed back, and the call is made again by its id.
+    expect(pickByName("לאליס", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(pickByName("באליס", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(titleHoldsName("האליס", ALICE.name)).toBe(true);
+    // One shared word of several is not the name: the same kind, another model; the same model, another size.
+    expect(pickByName("סמובי אליס", [ALEXA])).toEqual({ candidates: [row(ALEXA)] });
+    expect(pickByName("אליס 35", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(titleHoldsName("אליס 40", ALICE.name)).toBe(true);
+    // Several results: only the exact title is taken.
+    expect(pickByName("אליס", [ALEXA, ALICE])).toEqual({ candidates: [row(ALEXA), row(ALICE)] });
+    expect(pickByName("Oak Desk Pad", [{ id: "gid://shopify/Product/10", title: "Oak Desk Pad XL" }, { id: "gid://shopify/Product/9", title: "Oak Desk Pad" }])).toEqual({ id: "gid://shopify/Product/9" });
+    // Nothing found, not a list, a row with no id, a name of no words.
+    expect(pickByName("אליס", [])).toEqual({ candidates: [] });
+    expect(pickByName("אליס", null)).toEqual({ candidates: [] });
+    expect(pickByName("אליס", [{ name: "סמובי אליס" }])).toEqual({ candidates: [] });
+    expect(pickByName("?", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    // At most five are handed back.
+    expect((pickByName("משטח", Array.from({ length: 8 }, (_, i) => ({ id: i + 1, name: `משטח ${i + 10}` }))) as any).candidates).toHaveLength(5);
+  });
+
+  const hook = async (over: Record<string, unknown> = {}) => {
+    const { productIdBefore } = await import("../services/reply-engine/engine");
+    const found = new Set<string>();
+    const calls: any[] = [];
+    const before = productIdBefore({
+      locale: "he",
+      known: (v: unknown) => (/^\d+$/.test(String(v)) || found.has(String(v)) ? String(v) : null),
+      search: async (tool: string, args: any) => { calls.push([tool, args]); return { ok: true, result: [ALICE] }; },
+      found,
+      ...over,
+    } as any);
+    return { before, found, calls };
+  };
+
+  it("★ A2: a name is looked up by the store's own search, once, and the call goes on with the store's id", async () => {
+    const { before, found, calls } = await hook();
+    expect(await before("woocommerce.get_product", { product_id: "אליס", fields: "x" }, 8000)).toEqual({ args: { product_id: "31", fields: "x" } });
+    expect(calls).toEqual([["woocommerce.list_products", { query: "אליס", per_page: 5, lang: "he" }]]);
+    expect([...found]).toEqual(["31"]);
+  });
+
+  it("★ A2: a miss is unknown_product at once, with the candidates; their ids are taken on the next call", async () => {
+    const { errorKindOf, outcomeOf, readErrored } = await import("../services/reply-engine/tools");
+    const { resolveProductId } = await import("../services/reply-engine/engine");
+    const gid = "gid://shopify/Product/30";
+    let searches = 0;
+    const { before, found } = await hook({ search: async () => { searches++; return { ok: true, result: [{ id: gid, title: "Alexa Pad" }, { id: "gid://shopify/Product/31", title: "Alice Pad" }] }; } });
+    const r: any = await before("shopify.get_product", { product_id: "Pad" }, 8000);
+    const body = JSON.parse(r.content);
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(/^unknown_product: /);
+    expect(body.candidates).toEqual([{ product_id: gid, title: "Alexa Pad" }, { product_id: "gid://shopify/Product/31", title: "Alice Pad" }]);
+    expect(body.note).toMatch(/call again with its product_id/);
+    // The record: an error by its code, never retried as a failed read.
+    expect(outcomeOf("allow", r.content)).toBe("error");
+    expect(errorKindOf(r.content)).toBe("unknown_product");
+    expect(readErrored(r.content)).toBe(false);
+    // The model's next call with a candidate's id: known, no second search.
+    expect(found.has(gid)).toBe(true);
+    expect(await before("shopify.get_product", { product_id: gid }, 8000)).toBeNull();
+    expect(searches).toBe(1);
+    expect(resolveProductId(gid, null, [], found)).toBe(gid);
+    expect(resolveProductId(gid, null, [])).toBeNull();
+  });
+
+  it("★ A2: no lookup for an id, a key, a call with no product, or a tool with no search by name", async () => {
+    const { before, calls } = await hook();
+    expect(await before("woocommerce.get_product", { product_id: "1112" }, 8000)).toBeNull();
+    expect(await before("woocommerce.get_product", { product_id: "PRODUCT_3" }, 8000)).toBeNull();
+    expect(await before("woocommerce.get_product", { product_id: "" }, 8000)).toBeNull();
+    expect(await before("woocommerce.list_products", { query: "אליס" }, 8000)).toBeNull();
+    expect(await before("custom.get_thing", { product_id: "אליס" }, 8000)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("★ A2: the lookup has its own short bound; a slow, failed or throwing search is unknown_product with nothing made up", async () => {
+    const { LOOKUP_MS } = await import("../services/reply-engine/tools");
+    expect(LOOKUP_MS).toBe(3000);
+    const plain = (r: any) => { const b = JSON.parse(r.content); return b.ok === false && /^unknown_product: /.test(b.reason) && !("candidates" in b); };
+    // Slow: answered inside the bound given, not when the store answers.
+    const slow = await hook({ ms: 40, search: async () => { await sleep(600); return { ok: true, result: [ALICE] }; } });
+    let t0 = Date.now();
+    expect(plain(await slow.before("woocommerce.get_product", { product_id: "אליס" }, 8000))).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(400);
+    expect([...slow.found]).toEqual([]);
+    // Never more than the runner gives it.
+    const narrowed = await hook({ search: async () => { await sleep(600); return { ok: true, result: [ALICE] }; } });
+    t0 = Date.now();
+    expect(plain(await narrowed.before("woocommerce.get_product", { product_id: "אליס" }, 80))).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(400);
+    for (const search of [async () => ({ ok: false, reason: "http_500" }), async () => { throw new Error("down"); }, () => { throw new Error("sync"); }, async () => null]) {
+      const h = await hook({ search });
+      expect(plain(await h.before("woocommerce.get_product", { product_id: "אליס" }, 8000))).toBe(true);
+    }
+  });
+
+  const runner = async (over: Record<string, unknown> = {}, readMs = 0) => {
+    const { runToolRound, newTurnTools } = await import("../services/reply-engine/tools");
+    const dispatched: any[] = [];
+    const env: any = {
+      tenantId: "T", conversationId: "C", aiAgentId: "A", lane: "replay", locale: "he", cardChannel: false, ctx: {}, skills: [],
+      toolTimeoutMs: 1000, turn: newTurnTools(),
+      deps: {
+        evaluate: async () => ({ decision: "ALLOW" }),
+        ground: async () => null,
+        dispatch: async (call: any) => { dispatched.push(JSON.parse(call.function.arguments)); await sleep(readMs); return { toolCallId: call.id, content: JSON.stringify({ ok: true, result: { id: 31, name: ALICE.name } }) }; },
+      },
+      ...over,
+    };
+    const run = (args: Record<string, unknown>) => runToolRound(env, [{ id: "c1", function: { name: "woocommerce.get_product", arguments: JSON.stringify(args) } }]);
+    return { run, dispatched, env };
+  };
+
+  const lookupOf = (ms: number, seen: number[] = []) => async (_t: string, args: any, budgetMs: number) => { seen.push(budgetMs); await sleep(ms); return { args: { ...args, product_id: "31" } }; };
+
+  it("★ A2: with room in the turn the product read has its whole budget after the lookup (L1437: the two shared one budget and the read timed out)", async () => {
+    // 400ms of lookup and 800ms of read against a 1000ms tool bound, the turn has the extra time.
+    const seen: number[] = [];
+    const { run, dispatched } = await runner({ lookupExtraMs: 3000, before: lookupOf(400, seen) }, 800);
+    const [rec]: any[] = await run({ product_id: "אליס" });
+    expect(rec.decision).toBe("allow");
+    expect(rec.outcome).toBe("ok");
+    expect(dispatched).toEqual([{ product_id: "31" }]);
+    // The record holds the store's id: what follows this read (its variations) is asked by it.
+    expect(rec.args).toEqual({ product_id: "31" });
+    expect(seen).toEqual([3000]);
+  });
+
+  it("★ A2: a round narrowed for time is never run over: the lookup and the read share its bound, the lookup at most half", async () => {
+    // No extra time (every rewrite round): the same 400ms + 800ms against 1000ms ends at the bound, as a timeout.
+    const seen: number[] = [];
+    const shared = await runner({ before: lookupOf(400, seen) }, 800);
+    let t0 = Date.now();
+    const [late]: any[] = await shared.run({ product_id: "אליס" });
+    const took = Date.now() - t0;
+    expect([late.decision, late.outcome]).toEqual(["timeout", "timeout"]);
+    expect(took).toBeGreaterThanOrEqual(950);
+    expect(took).toBeLessThan(1150);
+    expect(seen).toEqual([500]);
+    // A read that fits what is left goes through.
+    const fits = await runner({ before: lookupOf(300) }, 400);
+    expect((await fits.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("ok");
+    // Some extra time, less than the lookup took: the read's clock gets back only that much (1000 + 200).
+    const some = await runner({ lookupExtraMs: 200, before: lookupOf(400) }, 600);
+    expect((await some.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("ok");
+    const over = await runner({ lookupExtraMs: 200, before: lookupOf(400) }, 1100);
+    t0 = Date.now();
+    expect((await over.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("timeout");
+    expect(Date.now() - t0).toBeLessThan(1350);
+  });
+
+  it("★ A2: the extra time is what the turn's hard ceiling leaves, so a lookup never moves the end of a round", async () => {
+    const { lookupExtraMs } = await import("../services/reply-engine/tools");
+    // L1437's shape: 3.5s into the turn, a 7.5s bound, 19.5s to the ceiling, 4s kept for the answer.
+    expect(lookupExtraMs(7500, 19500, 4000)).toBe(3000);
+    // Less room: only what is there. No room, or a ceiling already passed: none.
+    expect(lookupExtraMs(7500, 12000, 4000)).toBe(500);
+    expect(lookupExtraMs(4000, 8000, 4000)).toBe(0);
+    expect(lookupExtraMs(2000, 3000, 4000)).toBe(0);
+    expect(lookupExtraMs(2000, -500, 4000)).toBe(0);
+    expect(lookupExtraMs(8000, NaN, 4000)).toBe(0);
+    // Whatever the numbers: the bound plus the extra leaves the kept time under the ceiling whenever the bound alone did.
+    for (const bound of [1500, 2000, 4000, 7500, 8000]) for (const left of [0, 3000, 6000, 9000, 12000, 15000, 23000]) {
+      const extra = lookupExtraMs(bound, left, 4000);
+      expect(extra).toBeGreaterThanOrEqual(0);
+      expect(extra).toBeLessThanOrEqual(3000);
+      if (bound + 4000 <= left) expect(bound + extra + 4000).toBeLessThanOrEqual(left);
+      else expect(extra).toBe(0);
+    }
+  });
+
+  it("★ A2: unknown_product returns without a store call or a retry; a hook that throws changes nothing; one lookup across a retry", async () => {
+    const content = JSON.stringify({ ok: false, reason: "unknown_product: x", candidates: [{ product_id: "30", title: "t" }] });
+    const miss = await runner({ before: async () => ({ content }) });
+    // The store grounding reads any "ok": false of a product tool as a store failure: this result never goes to it,
+    // or the model is told the store was slow and never sees the candidates.
+    let grounded = 0;
+    miss.env.deps.ground = async () => { grounded++; return { provider: "woocommerce", tool: "woocommerce_product_search", status: "error", candidates: [], appliedFilters: [], unavailableFilters: [], safeModelSummary: "" }; };
+    const [rec]: any[] = await miss.run({ product_id: "אליס" });
+    expect([rec.decision, rec.outcome, rec.errorKind, rec.retried, rec.content]).toEqual(["allow", "error", "unknown_product", false, content]);
+    expect(grounded).toBe(0);
+    expect(miss.dispatched).toEqual([]);
+    expect(miss.env.turn.records).toHaveLength(1);
+
+    const broken = await runner({ before: async () => { throw new Error("boom"); } });
+    const [kept]: any[] = await broken.run({ product_id: "31" });
+    expect(kept.outcome).toBe("ok");
+    expect(broken.dispatched).toEqual([{ product_id: "31" }]);
+
+    // The read failed once and is retried: the name is not looked up a second time.
+    let looked = 0;
+    let reads = 0;
+    const again = await runner({ before: async (_t: string, args: any) => { looked++; return { args: { ...args, product_id: "31" } }; } });
+    again.env.deps.dispatch = async (call: any) => { reads++; return { toolCallId: call.id, content: reads === 1 ? JSON.stringify({ ok: false, failure: "errored" }) : JSON.stringify({ ok: true, result: { id: 31 } }) }; };
+    const [second]: any[] = await again.run({ product_id: "אליס" });
+    expect([second.outcome, second.retried, looked, reads]).toEqual(["ok", true, 1, 2]);
+  });
+
+  it("★ A2: the policy comes first: a call refused this turn, denied, or waiting for approval is never looked up", async () => {
+    const content = JSON.stringify({ ok: false, reason: "unknown_product: x" });
+    let looked = 0;
+    const before = async () => { looked++; return { content }; };
+    const refused = await runner({ refuse: () => "closing turn", before });
+    const [no]: any[] = await refused.run({ product_id: "אליס" });
+    expect([no.decision, no.outcome, looked]).toEqual(["deny", "denied", 0]);
+
+    const denied = await runner({ before });
+    denied.env.deps.evaluate = async () => ({ decision: "DENY", reason: "policy" });
+    const [d]: any[] = await denied.run({ product_id: "אליס" });
+    expect([d.decision, d.outcome, looked]).toEqual(["deny", "denied", 0]);
+    expect(d.content).not.toMatch(/unknown_product/);
+
+    const approval = await runner({ before });
+    approval.env.deps.evaluate = async () => ({ decision: "REQUIRE_APPROVAL" });
+    const [a]: any[] = await approval.run({ product_id: "אליס" });
+    expect([a.decision, looked]).toEqual(["simulated", 0]);
+    expect([...refused.dispatched, ...denied.dispatched, ...approval.dispatched]).toEqual([]);
+
+    // The runner has one place that looks up, and it is inside the run the policy allowed (live: the orchestrator's executor).
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/tools.ts", "utf8");
+    expect(src.match(/env\.before!?\(/g)).toHaveLength(1);
+    expect(src.match(/await lookup\(/g)).toHaveLength(1);
+    const run = src.slice(src.indexOf("const run = async (ctx: AgentToolContext"), src.indexOf("const exec = async ("));
+    expect(run).toMatch(/await lookup\(more\)/);
+    expect(src).toMatch(/\(\) => run\(env\.ctx, more\),/);
+  });
+
+  it("★ the engine wires it: the lookup is the runner's, never inside the adapter call; only the main round has extra time", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    const adapter = src.slice(src.indexOf("runAdapterTool: async"), src.indexOf("executeAdapterTool({", src.indexOf("runAdapterTool: async")));
+    expect(adapter).toMatch(/knownProductId\(rawArgs\.product_id\)/);
+    expect(adapter).toMatch(/if \(!id\) return unknownProduct\(\);/);
+    expect(adapter).not.toMatch(/storeSearchByName|pickByName/);
+    expect(src).toMatch(/before: productIdBefore\(\{/);
+    // Only the main round gives the lookup time of its own; a rewrite round's lookup shares that round's bound.
+    expect(src.match(/lookupExtraMs: /g)).toHaveLength(1);
+    expect(src).toMatch(/toolTimeoutMs: bound, lookupExtraMs: lookupExtraMs\(bound, cfg\.turnBudgetMs \+ HARD_CEILING_EXTRA_MS - \(Date\.now\(\) - t0\), 4000\)/);
+  });
+});
+
+describe("commit 4: where a product id came from, and the page as background (prod replay e, L1332)", () => {
+  // The shape of that turn, with generic names: a question about another kind of product, asked on a product's page.
+  const WOO_PAGE = [
+    "## Store page", "Store: https://store.example", "The customer is currently viewing THIS product:",
+    "- Contour Kit - price 189 ILS - in stock", "  product_id: 1112", "",
+    'If they say "this", "it" or "this one" without naming a product, they mean the product above.',
+  ].join("\n");
+  const SHOPIFY_PAGE = [
+    "## Shopify Storefront", "Store: shop.example", "Page the customer is on: product", "Storefront currency: ILS", "",
+    "The customer is currently viewing THIS product:", "- Linen Shirt - price 249 ILS - in stock", "  product_id: gid://shopify/Product/8842", "  options: Size",
+    "", 'If they say "this", "it" or "this one" without naming a product, they mean the product above.',
+  ].join("\n");
+  const WOO_UNLOADED = ["## Store page", "Store: https://store.example", "They are on a product page, but that product could not be loaded from the store.", "Ask which product they mean rather than guessing."].join("\n");
+  const SHOPIFY_UNLOADED = ["## Shopify Storefront", "Store: shop.example", "Page the customer is on: product", "", "They are on a product page, but that product could not be loaded from Shopify.", "Ask which product they mean rather than guessing."].join("\n");
+  const SHOPIFY_OTHER_PAGE = ["## Shopify Storefront", "Store: shop.example", "Page the customer is on: collection", "Items currently in their cart: 2"].join("\n");
+  const nothing = { envelope: null, offered: [], page: null, results: [], texts: [] };
+
+  it("★ origin: the id of the page she is on is \"page\" (L1332: get_product 1112 for a question about makeup shades)", async () => {
+    const { productIdOrigin } = await import("../services/reply-engine/engine");
+    expect(productIdOrigin("1112", { ...nothing, page: WOO_PAGE, texts: ["איזה גוון מייקאפ יתאים לעור שלי?"] })).toBe("page");
+    expect(productIdOrigin(1112, { ...nothing, page: WOO_PAGE })).toBe("page");
+    // A gid, whole or by the number it ends in.
+    expect(productIdOrigin("gid://shopify/Product/8842", { ...nothing, page: SHOPIFY_PAGE })).toBe("page");
+    expect(productIdOrigin("8842", { ...nothing, page: SHOPIFY_PAGE })).toBe("page");
+    // The page product's name in product_id.
+    expect(productIdOrigin("contour kit", { ...nothing, page: WOO_PAGE })).toBe("page");
+    // Not the same digits elsewhere on the page (its price), and not a part of its id.
+    expect(productIdOrigin("189", { ...nothing, page: WOO_PAGE })).toBe("none");
+    expect(productIdOrigin("111", { ...nothing, page: WOO_PAGE })).toBe("none");
+    expect(productIdOrigin("11120", { ...nothing, page: WOO_PAGE })).toBe("none");
+    expect(productIdOrigin("42", { ...nothing, page: SHOPIFY_PAGE })).toBe("none");
+    // A page with no product on it gives no id.
+    expect(productIdOrigin("1112", { ...nothing, page: WOO_UNLOADED })).toBe("none");
+  });
+
+  it("★ origin: this turn's results, the state, another tool's result, the texts, and nothing", async () => {
+    const { productIdOrigin } = await import("../services/reply-engine/engine");
+    const envelope = { candidates: [{ title: "Cotton Tee", productId: "31" }, { title: "Zip Hoodie", productId: "32" }, { title: "No Id Yet", productId: null }] };
+    const offered = [{ title: "Wool Scarf", productId: "77" }, { title: "Shown Without Id" }];
+    // This turn: a key, an id, a title.
+    expect(productIdOrigin("PRODUCT_2", { ...nothing, envelope })).toBe("turn");
+    expect(productIdOrigin("product_1", { ...nothing, envelope })).toBe("turn");
+    expect(productIdOrigin("31", { ...nothing, envelope })).toBe("turn");
+    expect(productIdOrigin("zip  hoodie", { ...nothing, envelope })).toBe("turn");
+    // A key no result of this turn holds (one from an earlier turn), and a candidate with no id.
+    expect(productIdOrigin("PRODUCT_9", { ...nothing, envelope })).toBe("none");
+    expect(productIdOrigin("PRODUCT_3", { ...nothing, envelope })).toBe("none");
+    expect(productIdOrigin("PRODUCT_1", nothing)).toBe("none");
+    // The state: the id it shows, or a title shown with an id.
+    expect(productIdOrigin("77", { ...nothing, offered })).toBe("state");
+    expect(productIdOrigin("Wool Scarf", { ...nothing, offered })).toBe("state");
+    expect(productIdOrigin("Shown Without Id", { ...nothing, offered })).toBe("none");
+    // Another tool's raw result this turn (an order's line item).
+    expect(productIdOrigin("5501", { ...nothing, results: [JSON.stringify({ ok: true, result: { number: "9001", line_items: [{ product_id: 5501, name: "Travel Mug" }] } })] })).toBe("tool_result");
+    expect(productIdOrigin("550", { ...nothing, results: [JSON.stringify({ line_items: [{ product_id: 5501 }] })] })).toBe("none");
+    // The knowledge or the conversation's own words.
+    expect(productIdOrigin("4410", { ...nothing, texts: [null, "מק\"ט 4410 במלאי"] })).toBe("text");
+    expect(productIdOrigin("אליס", { ...nothing, texts: ["יש לכם את אליס במידה 38?"] })).toBe("text");
+    expect(productIdOrigin("אליס", { ...nothing, texts: ["יש לכם את אליסון?"] })).toBe("none");
+    // Nothing held it.
+    expect(productIdOrigin("999", { envelope, offered, page: WOO_PAGE, results: ["{}"], texts: ["שלום"] })).toBe("none");
+    // No product_id: nothing to say.
+    for (const v of [undefined, null, "", "  "]) expect(productIdOrigin(v, { ...nothing, page: WOO_PAGE })).toBeUndefined();
+  });
+
+  it("★ origin: the first holder wins: turn, state, page, tool result, text", async () => {
+    const { productIdOrigin } = await import("../services/reply-engine/engine");
+    const all = {
+      envelope: { candidates: [{ title: "Contour Kit", productId: "1112" }] },
+      offered: [{ title: "Contour Kit", productId: "1112" }],
+      page: WOO_PAGE,
+      results: ['{"product_id":1112}'],
+      texts: ["1112"],
+    };
+    expect(productIdOrigin("1112", all)).toBe("turn");
+    expect(productIdOrigin("1112", { ...all, envelope: null })).toBe("state");
+    expect(productIdOrigin("1112", { ...all, envelope: null, offered: [] })).toBe("page");
+    expect(productIdOrigin("1112", { ...all, envelope: null, offered: [], page: null })).toBe("tool_result");
+    expect(productIdOrigin("1112", { ...all, envelope: null, offered: [], page: null, results: [] })).toBe("text");
+    expect(productIdOrigin("1112", { ...all, envelope: null, offered: [], page: null, results: [], texts: [] })).toBe("none");
+  });
+
+  const originRunner = async (over: Record<string, unknown> = {}) => {
+    const { runToolRound, newTurnTools } = await import("../services/reply-engine/tools");
+    const dispatched: any[] = [];
+    const env: any = {
+      tenantId: "T", conversationId: "C", aiAgentId: "A", lane: "replay", locale: "he", cardChannel: false, ctx: {}, skills: [],
+      toolTimeoutMs: 1000, turn: newTurnTools(),
+      deps: {
+        evaluate: async () => ({ decision: "ALLOW" }),
+        ground: async () => null,
+        dispatch: async (call: any) => { dispatched.push(JSON.parse(call.function.arguments)); return { toolCallId: call.id, content: JSON.stringify({ ok: true, result: { id: 1112, name: "Contour Kit" } }) }; },
+      },
+      ...over,
+    };
+    const run = (args: Record<string, unknown>, tool = "woocommerce.get_product") => runToolRound(env, [{ id: "c1", function: { name: tool, arguments: JSON.stringify(args) } }]);
+    return { run, dispatched };
+  };
+
+  it("★ origin: the tool record carries it, asked with the tool and the arguments the model sent", async () => {
+    const seen: any[] = [];
+    const { run, dispatched } = await originRunner({ idOrigin: (tool: string, args: any) => { seen.push([tool, { ...args }]); return "page"; } });
+    const [rec]: any[] = await run({ product_id: "1112" });
+    expect(rec.idOrigin).toBe("page");
+    expect(rec.outcome).toBe("ok");
+    expect(seen).toEqual([["woocommerce.get_product", { product_id: "1112" }]]);
+    expect(dispatched).toEqual([{ product_id: "1112" }]);
+  });
+
+  it("★ origin: log only: no hook, no answer or a hook that throws leave the call and its record as they were", async () => {
+    const plain = await originRunner();
+    const [base]: any[] = await plain.run({ product_id: "1112" });
+    expect("idOrigin" in base).toBe(false);
+    for (const idOrigin of [() => undefined, () => { throw new Error("boom"); }]) {
+      const { run, dispatched } = await originRunner({ idOrigin });
+      const [rec]: any[] = await run({ product_id: "1112" });
+      expect("idOrigin" in rec).toBe(false);
+      expect({ ...rec, ms: 0 }).toEqual({ ...base, ms: 0 });
+      expect(dispatched).toEqual([{ product_id: "1112" }]);
+    }
+    // And with an answer, nothing but the field differs.
+    const { run } = await originRunner({ idOrigin: () => "none" });
+    const [rec]: any[] = await run({ product_id: "1112" });
+    expect({ ...rec, ms: 0 }).toEqual({ ...base, ms: 0, idOrigin: "none" });
+  });
+
+  it("★ origin: an id nothing held that the engine's own lookup replaced is \"lookup\"; a miss stays \"none\"; a held one keeps its origin", async () => {
+    const found = async (_t: string, args: any) => ({ args: { ...args, product_id: "31" } });
+    const a = await originRunner({ idOrigin: () => "none", before: found });
+    const [looked]: any[] = await a.run({ product_id: "Alice Dress" });
+    expect(looked.idOrigin).toBe("lookup");
+    expect(looked.args).toEqual({ product_id: "31" });
+    const b = await originRunner({ idOrigin: () => "none", before: async () => null });
+    expect(((await b.run({ product_id: "9999" })) as any[])[0].idOrigin).toBe("none");
+    const c = await originRunner({ idOrigin: () => "none" });
+    expect(((await c.run({ product_id: "9999" })) as any[])[0].idOrigin).toBe("none");
+    // A name she wrote herself, found by the lookup: the model took it from her text.
+    const d = await originRunner({ idOrigin: () => "text", before: found });
+    expect(((await d.run({ product_id: "Alice Dress" })) as any[])[0].idOrigin).toBe("text");
+  });
+
+  it("★ origin: a refused, a denied, a failed and a timed out call carry it too", async () => {
+    const refused = await originRunner({ idOrigin: () => "none", refuse: () => "not now" });
+    const [r1]: any[] = await refused.run({ product_id: "1112" });
+    expect([r1.decision, r1.idOrigin]).toEqual(["deny", "none"]);
+    expect(refused.dispatched).toEqual([]);
+    const denied = await originRunner({ idOrigin: () => "page", deps: { evaluate: async () => ({ decision: "DENY", reason: "policy" }), ground: async () => null, dispatch: async () => { throw new Error("never"); } } });
+    const [r2]: any[] = await denied.run({ product_id: "1112" });
+    expect([r2.decision, r2.idOrigin]).toEqual(["deny", "page"]);
+    const failed = await originRunner({ idOrigin: () => "state", deps: { evaluate: async () => ({ decision: "ALLOW" }), ground: async () => null, dispatch: async () => { throw new Error("down"); } } });
+    const [r3]: any[] = await failed.run({ product_id: "1112" });
+    expect([r3.decision, r3.idOrigin]).toEqual(["error", "state"]);
+    const slow = await originRunner({ idOrigin: () => "page", toolTimeoutMs: 40, deps: { evaluate: async () => ({ decision: "ALLOW" }), ground: async () => null, dispatch: () => new Promise(() => {}) } });
+    const [r4]: any[] = await slow.run({ product_id: "1112" });
+    expect([r4.decision, r4.idOrigin]).toEqual(["timeout", "page"]);
+  });
+
+  it("★ origin: a call with no product id says nothing, and the engine's own tools are not asked wrongly", async () => {
+    const { productIdOrigin } = await import("../services/reply-engine/engine");
+    const { run } = await originRunner({ idOrigin: (_t: string, args: any) => productIdOrigin(args?.product_id, nothing) });
+    const [rec]: any[] = await run({ query: "contour" }, "woocommerce.list_products");
+    expect("idOrigin" in rec).toBe(false);
+  });
+
+  it("★ origin: the replay's search line shows it, and the report's head line the prompt wording that ran", async () => {
+    const { searchLine, reportHeadLine } = await import("../scripts/replay-v2");
+    const { ENGINE_PROMPT_VERSION } = await import("../services/reply-engine/prompt");
+    const tool = { tool: "woocommerce.get_product", args: { product_id: "1112" }, outcome: "ok", resultCount: 1, content: "" };
+    expect(searchLine({ tools: [{ ...tool, idOrigin: "page" }] })).toBe('model args: get_product {"product_id":"1112"} id=page -> ok (1)');
+    expect(searchLine({ tools: [{ ...tool, idOrigin: "none" }] })).toBe('model args: get_product {"product_id":"1112"} id=none -> ok (1)');
+    // A call with no product id reads as it did.
+    expect(searchLine({ tools: [{ tool: "woocommerce.list_products", args: { query: "contour" }, outcome: "ok", resultCount: 3, content: "" }] })).toBe('model args: list_products {"query":"contour"} -> ok (3)');
+    expect(searchLine({ tools: [tool] })).toBe('model args: get_product {"product_id":"1112"} -> ok (1)');
+    expect(reportHeadLine("m-1")).toBe(`Model: m-1. Prompt: ${ENGINE_PROMPT_VERSION}. Lane: replay (writes simulated, platform-paid).`);
+    expect(ENGINE_PROMPT_VERSION).toBe("reply-engine-v2.1");
+  });
+
+  it("★ origin: the engine asks it from the model's arguments and what the turn showed, and the trace keeps it", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    expect(src).toMatch(/idOrigin: \(_tool, args\) => productIdOrigin\(\(args as any\)\?\.product_id, \{\n\s+envelope: turnTools\.envelope as any,\n\s+offered: state\.offeredItems,\n\s+page,\n/);
+    // A product search reaches the model keyed (the envelope), so its raw result is no source of an id.
+    expect(src).toMatch(/results: turnTools\.records\.filter\(\(r\) => !isProductSearchTool\(r\.tool\) && !ENGINE_TEXT_TOOL\.test\(r\.tool\)\)\.map\(\(r\) => r\.content\),/);
+    expect(src).toMatch(/texts: \[knowledge, String\(opts\.incomingMessage \?\? ""\), \.\.\.chat\.map\(/);
+    expect(src).toMatch(/retried: r\.retried \|\| undefined, idOrigin: r\.idOrigin, /);
+    const tools = readFileSync("src/services/reply-engine/tools.ts", "utf8");
+    // Asked once, before anything can change the arguments' product id, and never able to stop the call.
+    expect(tools).toMatch(/try \{ origin = env\.idOrigin\?\.\(tool, args\) \?\? undefined; \} catch \{ origin = undefined; \}/);
+    expect(tools.indexOf("origin = env.idOrigin?.(tool, args)")).toBeLessThan(tools.indexOf("const lookup = async"));
+    const replay = readFileSync("src/scripts/replay-v2.ts", "utf8");
+    expect(replay).toMatch(/reportHeadLine\(process\.env\.REPLY_ENGINE_MODEL \|\| process\.env\.OPENAI_DEFAULT_MODEL \|\| "default"\), ""\];/);
+  });
+
+  // The turn part as it was built before this change, line for line.
+  const before = (t: any): string => {
+    const parts: string[] = [`# This turn (now ${t.nowIso})`];
+    if (t.replyLanguage) parts.push(`## Reply language\nThe customer writes in ${t.replyLanguage}: reply in ${t.replyLanguage}, whatever the language of the business's texts.`);
+    if (t.customer) parts.push(`## Customer\n${t.customer}`);
+    parts.push(`## State\n${t.stateText}`);
+    if (t.summary) parts.push(`## Earlier in this conversation (summary)\n${t.summary}`);
+    if (t.activeSkill) parts.push(`## Playbook in use (already open; read_skill only to switch to another)\n${t.activeSkill}`);
+    if (t.pendingApprovals.length) parts.push(`## Waiting for a person's approval\n${t.pendingApprovals.map((a: string) => `- ${a}`).join("\n")}`);
+    if (t.closedHours) parts.push(`## Hours\n${t.closedHours}`);
+    if (t.page) parts.push(`## Where the customer is on the site\n${t.page}`);
+    parts.push(`## Knowledge (the business's own documents, best matches for the latest message)\n${t.knowledge || "(nothing matched; search_knowledge can look for something else)"}`);
+    return parts.join("\n\n");
+  };
+  const bare = { stateText: "stage: browsing", summary: null, knowledge: null, page: null, closedHours: null, pendingApprovals: [] as string[], customer: null, nowIso: "2026-11-19T10:00:00.000Z" };
+  const full = { ...bare, summary: "She asked about delivery.", knowledge: "[Returns] 14 days.", closedHours: "Closed now.", pendingApprovals: ["a refund"], customer: "Name: Dana", activeSkill: "returns", replyLanguage: "English" };
+  const BACKGROUND = "The page is background, not the subject. Use the product on it only when the customer's message points at it: \"this\", \"it\", \"this one\" (זה, המוצר הזה), or a question about one product that names none (its price, stock, sizes, delivery). When the message names a product or a kind of product, answer about what they named: search for it, and do not read, show or recommend the page product unless the search returns it. A general question (opening hours, delivery policy, returns) is answered as asked, without bringing up the page product.";
+
+  it("★ page: under a page that names a product the turn part says the page is background, right after the block's own last sentence", async () => {
+    const { PAGE_IS_BACKGROUND } = await import("../services/reply-engine/prompt");
+    expect(PAGE_IS_BACKGROUND).toBe(BACKGROUND);
+    for (const page of [WOO_PAGE, SHOPIFY_PAGE]) {
+      for (const base of [bare, full]) {
+        const got = buildTurnPart({ ...base, page });
+        // The block as it is, its "this / it / this one" sentence kept, then the new lines; nothing else moved.
+        expect(got).toBe(before({ ...base, page: `${page}\n${BACKGROUND}` }));
+        expect(got).toContain(`they mean the product above.\n${BACKGROUND}\n\n## Knowledge`);
+        expect(got.split(BACKGROUND)).toHaveLength(2);
+      }
+    }
+  });
+
+  it("★ page: no page, a page with no product and a product that could not be loaded read exactly as before", () => {
+    for (const page of [null, "", WOO_UNLOADED, SHOPIFY_UNLOADED, SHOPIFY_OTHER_PAGE, "## Store page\nStore: https://store.example\nNotes mention product_id: in a sentence, not as the product's line."]) {
+      for (const base of [bare, full]) {
+        const got = buildTurnPart({ ...base, page });
+        expect(got).toBe(before({ ...base, page }));
+        expect(got).not.toContain("The page is background");
+      }
+    }
+  });
+
+  it("★ page: the wording lives in the turn part only, and the two shared block builders still write the line it keys on", async () => {
+    const { readFileSync } = await import("fs");
+    const prompt = readFileSync("src/services/reply-engine/prompt.ts", "utf8");
+    // Declared once, used once (in the turn part): the stable prefix of every turn is as it was.
+    expect(prompt.match(/PAGE_IS_BACKGROUND/g)).toHaveLength(2);
+    expect(prompt.match(/The page is background/g)).toHaveLength(1);
+    expect(readFileSync("src/services/woo-chat-turn.service.ts", "utf8")).toMatch(/"The customer is currently viewing THIS product:",\n[^\n]+\n\s+`  product_id: \$\{p\.id\}`,/);
+    const shopify = readFileSync("src/services/shopify-chat-turn.service.ts", "utf8");
+    expect(shopify).toMatch(/const idLine = `  product_id: \$\{p\.productId\}`;/);
+    expect(shopify).toMatch(/lines\.push\("", "The customer is currently viewing THIS product:"\);\n\s+lines\.push\(describeProduct\(r\.data\)\);/);
+  });
+});
+
+describe("commit 5 (A4): what the check flags as said to the customer has a neutral form (prod replay e, L1677)", () => {
+  const ctx = { locale: "he" as const, isFirstReply: false, incomingMessage: "", productFactsAvailable: true, shopFloor: true, toolsOffered: [], customerClosing: false };
+  const load = async () => {
+    const { ADDRESS_WORDS, addressFormsUsed, checkReplyStyle } = await import("../services/reply-style-check.service");
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    const flagged = (t: string) => { const f = addressFormsUsed(t); return !!(f.masculine || f.feminine); };
+    const gendered = (t: string) => checkReplyStyle(t, ctx as any).some((v: any) => v.kind === "gendered_address");
+    return { W: ADDRESS_WORDS, flagged, gendered, cleanStyle };
+  };
+  /** Every sentence is flagged as written, changes, and is not flagged after. */
+  const holds = (sentences: string[], flagged: (t: string) => boolean) => {
+    expect(sentences.length).toBeGreaterThan(0);
+    const notFlagged = sentences.filter((x) => !flagged(x));
+    expect(notFlagged, "the test's own sentence is not one the check flags").toEqual([]);
+    const left = sentences.filter((x) => { const n = neutralSecondPerson(x); return n === x || flagged(n); }).map((x) => `${x} -> ${neutralSecondPerson(x)}`);
+    expect(left, "flagged by the check, no neutral form in the map").toEqual([]);
+  };
+
+  it("★ L1677: the masculine order that went out as written is the plural, and the sentence says \"לכם\"", async () => {
+    const { gendered, cleanStyle } = await load();
+    const sent = "למכונת קפה אחרת, כתוב לי את רוחב ועומק הבסיס בס\"מ, וגם איזה דגם נינג'ה יש לך?";
+    const neutral = "למכונת קפה אחרת, כתבו לי את רוחב ועומק הבסיס בס\"מ, וגם איזה דגם נינג'ה יש לכם?";
+    expect(gendered(sent)).toBe(true);
+    expect(neutralSecondPerson(sent)).toBe(neutral);
+    expect(cleanStyle(sent, ["gendered_address"])).toBe(neutral);
+    expect(gendered(neutral)).toBe(false);
+  });
+
+  it("★ every order the check reads, masculine and feminine: opening the sentence, with \"ו\", and after a comma", async () => {
+    const { W, flagged } = await load();
+    const frame = (w: string) => ((W.pressedOnly as readonly string[]).includes(w) ? `${w} על הקישור בבקשה.` : w.endsWith(" ל") ? `${w}-Checkout בבקשה.` : w.includes(" ") ? `${w} בבקשה.` : `${w} בבקשה את הפרטים.`);
+    const orders = [...W.imperativeMasculine, ...W.imperativeFeminine];
+    expect(orders.length).toBeGreaterThanOrEqual(40);
+    holds(orders.flatMap((w) => [frame(w), `ו${frame(w)}`, `אם זה מתאים, ${frame(w)}`, `זה מתאים. ${frame(w)}`]), flagged);
+    // The plural itself, for the ones the map lacked.
+    expect(neutralSecondPerson("שלח לי תמונה של המוצר.")).toBe("שלחו לי תמונה של המוצר.");
+    expect(neutralSecondPerson("בחר צבע ונמשיך.")).toBe("בחרו צבע ונמשיך.");
+    expect(neutralSecondPerson("לחץ על הקישור כדי לשלם.")).toBe("לחצו על הקישור כדי לשלם.");
+    expect(neutralSecondPerson("ציין את המידה שלך.")).toBe("ציינו את המידה שלך.");
+    expect(neutralSecondPerson("תן לי רגע לבדוק.")).toBe("תנו לי רגע לבדוק.");
+    expect(neutralSecondPerson("שים לב, המשלוח לוקח שבוע.")).toBe("שימו לב, המשלוח לוקח שבוע.");
+    expect(neutralSecondPerson("כנס לאתר וראה את המידות.")).toBe("היכנסו לאתר וראו את המידות.");
+    expect(neutralSecondPerson("תראה, זה תלוי בדגם שיש לך.")).toBe("תראו, זה תלוי בדגם שיש לכם.");
+    expect(neutralSecondPerson("פשוט כתוב כאן את מספר ההזמנה.")).toBe("פשוט כתבו כאן את מספר ההזמנה.");
+  });
+
+  it("★ every second-person form of the two lists, bare, with \"ו\" and with \"ש\"; a pronoun opener with each verb, and with an adverb between", async () => {
+    const { W, flagged } = await load();
+    const lists = [...W.masculine, ...W.feminine];
+    expect(lists.length).toBeGreaterThanOrEqual(28);
+    const opener = (e: string) => /(?:^|\s|כש)(?:אתה|את)$/.test(e);
+    const sentences = lists.flatMap((e) => {
+      if (!opener(e)) return [`${e} משהו אחר, יש עוד.`, `ו${e} משהו אחר, יש עוד.`, ...(e.includes(" ") ? [] : [`כדי ש${e} משהו אחר, יש עוד.`])];
+      return W.afterPronoun.flatMap((v) => [`${e} ${v} משהו אחר, יש עוד.`, `ו${e} ${v} משהו אחר, יש עוד.`, `${e} עדיין ${v} משהו אחר, יש עוד.`, `${e} לא ${v} משהו אחר, יש עוד.`]);
+    });
+    expect(lists.filter(opener)).toEqual(["אם אתה", "כשאתה", "כשאת"]);
+    holds(sentences, flagged);
+    expect(neutralSecondPerson("אם אתה מחפש משהו חם, יש לנו מעיל.")).toBe("אם מחפשים משהו חם, יש לנו מעיל.");
+    expect(neutralSecondPerson("כשאת לא יודעת איזו מידה, אפשר למדוד.")).toBe("כשלא יודעים איזו מידה, אפשר למדוד.");
+    expect(neutralSecondPerson("אם אתה עדיין מתלבט, אפשר לשאול.")).toBe("אם עדיין מתלבטים, אפשר לשאול.");
+    expect(neutralSecondPerson("מעוניין לשמוע על עוד אפשרויות?")).toBe("מעוניינים לשמוע על עוד אפשרויות?");
+    expect(neutralSecondPerson("ואם מחפשת משהו קל יותר, יש גם חולצות.")).toBe("ואם מחפשים משהו קל יותר, יש גם חולצות.");
+  });
+
+  it("★ a pronoun and a present-tense verb: every verb of the check's list", async () => {
+    const { W, flagged } = await load();
+    expect(W.afterPronoun.length).toBeGreaterThanOrEqual(21);
+    holds(W.afterPronoun.flatMap((v) => [`אתה ${v} לבחור צבע אחר.`, `את ${v} לבחור צבע אחר.`, `יש עוד, את ${v} לראות?`]), flagged);
+    expect(neutralSecondPerson("את יכולה לשלם באשראי.")).toBe("יכולים לשלם באשראי.");
+    expect(neutralSecondPerson("אתה יודע איזו מידה יש לך?")).toBe("יודעים איזו מידה יש לכם?");
+    expect(neutralSecondPerson("המעיל שאת מחפשת נמצא במלאי.")).toBe("המעיל שמחפשים נמצא במלאי.");
+  });
+
+  it("★ a participle said in a question: opening it after every lead the check reads, after a question word, after \"או\" or a comma", async () => {
+    const { W, flagged } = await load();
+    const leads = ["", "היי. ", "יש כמה, ", "שאלה: ", "רגע; ", "היי\n", "הי \u2013 ", "הי \u2014 ", "הי - "];
+    holds(W.openingQuestion.flatMap((p) => leads.map((l) => `${l}${p} משהו חגיגי?`)), flagged);
+    holds(W.questionWords.flatMap((q) => W.afterQuestionWord.map((p) => `${q} צבע ${p}?`)), flagged);
+    holds(W.insideQuestion.flatMap((p) => [`יותר מתאים לשכבות או ${p} משהו חם?`, `זה מתאים לשכבות, ${p} משהו חם?`]), flagged);
+    expect(neutralSecondPerson("מחפש מעיל לחורף?")).toBe("מחפשים מעיל לחורף?");
+    expect(neutralSecondPerson("איזה צבע מעדיף?")).toBe("איזה צבע מעדיפים?");
+    expect(neutralSecondPerson("יותר מתאים לשכבות או מעדיף משהו חם?")).toBe("יותר מתאים לשכבות או מעדיפים משהו חם?");
+    // About someone else: not flagged, not changed.
+    for (const other of W.otherSubjects.filter((o) => !/^של/.test(o))) {
+      const t = `איזה צבע ${other} מעדיפה?`;
+      expect(flagged(t), t).toBe(false);
+      expect(neutralSecondPerson(t), t).toBe(t);
+    }
+    expect(neutralSecondPerson("היא מחפשת מתנה.")).toBe("היא מחפשת מתנה.");
+  });
+
+  it("★ a word that is an order only where an order stands: \"he sent\", \"written\", \"pressure\" and \"he chose\" stay", () => {
+    for (const t of [
+      "הצוות שלח לך מייל עם הפרטים.",
+      "בתקנון כתוב 14 יום, ובמקור אחר כתוב שבוע.",
+      "כתוב באתר שהמשלוח חינם.",
+      "כתוב כאן שהמשלוח חינם.",
+      "לפי התיאור, כתוב שהמשטח מתאים.",
+      "יש לחץ על המלאי בחגים.",
+      "לחץ המים בברז משפיע על הזרימה.",
+      "הלקוח בחר מידה M.",
+      "מי שראה את הסרטון מכיר את זה.",
+      "המוכר ציין שהמשלוח חינם.",
+      "ההזמנה תגיע עד לחצי שעה.",
+      "יש לך ל-3 ימים אפשרות לבטל.",
+    ]) expect(neutralSecondPerson(t), t).toBe(t);
+    // A future form is no order, so the past tense joined to it stays.
+    expect(neutralSecondPerson("תוכל לראות שהצוות בדק ושלח אישור.")).toBe("תוכלו לראות שהצוות בדק ושלח אישור.");
+  });
+
+  it("★ an order joined by \"ו\" to an order follows it", () => {
+    expect(neutralSecondPerson("הוסף לסל ובחר משלוח.")).toBe("הוסיפו לסל ובחרו משלוח.");
+    expect(neutralSecondPerson("בחר מידה ולחץ על הקישור.")).toBe("בחרו מידה ולחצו על הקישור.");
+    expect(neutralSecondPerson("בחרי מידה ואז שלח לי את הכתובת.")).toBe("בחרו מידה ואז שלחו לי את הכתובת.");
+    // No order in the sentence: "ושלח" is "and sent".
+    expect(neutralSecondPerson("הצוות בדק ושלח אישור.")).toBe("הצוות בדק ושלח אישור.");
+    // "ולחץ" joined to an order is pressed only before what is pressed.
+    expect(neutralSecondPerson("בחרו מידה, שלח לי אותה ולחץ המים יעלה.")).toBe("בחרו מידה, שלחו לי אותה ולחץ המים יעלה.");
+  });
+
+  it("★ the stated limits: a verb the lists do not hold after \"אם אתה\", and an order in the middle of a clause, stay as written", async () => {
+    const { flagged } = await load();
+    // Changing only the pronoun would leave a singular verb after a plural one.
+    expect(neutralSecondPerson("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.")).toBe("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.");
+    expect(flagged("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.")).toBe(true);
+    expect(neutralSecondPerson("כדי לשלם לחץ על הקישור.")).toBe("כדי לשלם לחץ על הקישור.");
+    expect(flagged("כדי לשלם לחץ על הקישור.")).toBe(true);
+  });
+});
+
+describe("a store product is in the turn's results once, under one key", () => {
+  const STORE = { storeUrl: "https://shop.example", storeCurrency: "ILS" };
+  const raw = (id: number, name: string, more: Record<string, unknown> = {}) => ({
+    id, name, status: "publish", price: "159", stock_status: "instock", permalink: `https://shop.example/product/p${id}/`, ...more,
+  });
+  const ALEXA = raw(101, "סמובי אלכסה - משטח הזזה 35*28 ס\"מ");
+  const ARIEL = raw(102, "סמובי אריאל - משטח הזזה 34*38 ס\"מ");
+  const GEFEN = raw(103, "סמובי גפן - משטח הזזה 20*30 ס\"מ");
+  const MONICA = raw(104, "סמובי מוניקה - משטח הזזה 20*25 ס\"מ");
+  const search = (list: any[], opts: Record<string, unknown> = {}) => normalizeWooProducts(list, { ...STORE, ...opts } as any);
+  const keyLines = (summary: string) => summary.split("\n").filter((l) => /^PRODUCT_\d+: /.test(l)).map((l) => l.slice(0, l.indexOf(" |")));
+  const titles = (turn: any) => turn.envelope.candidates.map((c: any) => c.title);
+
+  it("★ found again by a second search: its first place and key, and a new product takes the next free key", () => {
+    const turn = newTurnTools();
+    const first = mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    expect(keyLines(first)).toEqual([`PRODUCT_1: "${ALEXA.name}"`, `PRODUCT_2: "${ARIEL.name}"`, `PRODUCT_3: "${GEFEN.name}"`]);
+    const second = mergeEnvelope(turn, search([GEFEN, MONICA, ALEXA]), "he", true);
+    expect(keyLines(second)).toEqual([`PRODUCT_3: "${GEFEN.name}"`, `PRODUCT_4: "${MONICA.name}"`, `PRODUCT_1: "${ALEXA.name}"`]);
+    expect(titles(turn)).toEqual([ALEXA.name, ARIEL.name, GEFEN.name, MONICA.name]);
+    expect(turn.envelope!.candidates.map((c: any) => c.productId)).toEqual(["101", "102", "103", "104"]);
+    // A third search of only known products adds nothing.
+    const third = mergeEnvelope(turn, search([ARIEL]), "he", true);
+    expect(keyLines(third)).toEqual([`PRODUCT_2: "${ARIEL.name}"`]);
+    expect(titles(turn)).toHaveLength(4);
+  });
+
+  it("★ the name of a product two searches found is still its own (the word one found title has)", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    // The control: the same product under two keys. Named by its own word it is no product at all, since two
+    // found titles hold the word; named with a second word of its title it is two products.
+    const twice = [...search([ALEXA, ARIEL, GEFEN]).candidates, ...search([ALEXA]).candidates];
+    for (const [reply, once, asTwo] of [
+      ["כדאי לבחור באלכסה.", [0], []],
+      ["לתמי 4 מתאים אלכסה, ולמיקסר גפן.", [0], []],
+      ["לתמי 4 מתאים משטח סמובי אלכסה.", [0], [0, 3]],
+    ] as Array<[string, number[], number[]]>) {
+      expect(referredCandidates(turn.envelope!.candidates, reply, ""), reply).toEqual(once);
+      expect(referredCandidates(twice, reply, ""), reply).toEqual(asTwo);
+    }
+  });
+
+  it("no search found a product twice: the keys go on as before, the rules' example key too", () => {
+    const turn = newTurnTools();
+    const first = mergeEnvelope(turn, search([ALEXA, ARIEL]), "he", true);
+    expect(first).toBe(buildKeyedModelSummary(search([ALEXA, ARIEL]), "he", true));
+    const second = mergeEnvelope(turn, search([GEFEN]), "he", true);
+    expect(second).toBe(buildKeyedModelSummary(search([GEFEN]), "he", true).replace(/PRODUCT_(\d+)/g, (_, n) => `PRODUCT_${Number(n) + 2}`));
+    expect(titles(turn)).toEqual([ALEXA.name, ARIEL.name, GEFEN.name]);
+  });
+
+  it("a key the later summary only gives as an example is no key of another product", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    const own = buildKeyedModelSummary(search([ALEXA]), "he", true);
+    expect(own).toContain("PRODUCT_2");
+    const second = mergeEnvelope(turn, search([ALEXA]), "he", true);
+    const keys = [...second.matchAll(/PRODUCT_(\d+)/g)].map((m) => Number(m[1]));
+    expect(keys).toContain(1);
+    expect(keys.filter((k) => k !== 1 && k <= 3)).toEqual([]);
+  });
+
+  it("★ the newer search's price and stock, the earlier search's size pick when the newer has none", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28] }, ALEXA]), "he", true);
+    mergeEnvelope(turn, search([{ ...GEFEN, price: "139", stock_status: "outofstock" }]), "he", true);
+    const g = turn.envelope!.candidates[0] as any;
+    expect(turn.envelope!.candidates).toHaveLength(2);
+    expect([g.price, g.inventoryState]).toEqual(["139", "out_of_stock"]);
+    expect([g.fit, g.fitFor]).toEqual(["20 x 30 cm", "18 x 28 cm"]);
+  });
+
+  it("the newer search picked it for another size: that pick, whole, and no mark of the earlier one", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [49, 32], too_small: true }]), "he", true);
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28], second_choice: true }]), "he", true);
+    const g = turn.envelope!.candidates[0] as any;
+    expect([g.fit, g.fitFor, g.tooSmall, g.secondChoice]).toEqual(["20 x 30 cm", "18 x 28 cm", undefined, true]);
+    // And the other way: the earlier pick comes whole.
+    const t2 = newTurnTools();
+    mergeEnvelope(t2, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [49, 32], too_small: true }]), "he", true);
+    mergeEnvelope(t2, search([GEFEN]), "he", true);
+    const h = t2.envelope!.candidates[0] as any;
+    expect([h.fit, h.fitFor, h.tooSmall, h.secondChoice]).toEqual(["20 x 30 cm", "49 x 32 cm", true, undefined]);
+    const t3 = newTurnTools();
+    mergeEnvelope(t3, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28], second_choice: true }]), "he", true);
+    mergeEnvelope(t3, search([GEFEN]), "he", true);
+    const k = t3.envelope!.candidates[0] as any;
+    expect([k.fit, k.fitFor, k.tooSmall, k.secondChoice]).toEqual(["20 x 30 cm", "18 x 28 cm", undefined, true]);
+  });
+
+  it("★ the store text of both searches stays: a list's short text, then the product's whole text", () => {
+    const short = "משטח הזזה דק למכשירים על השיש.";
+    const long = `${short} מתאים ל: תמי 4 פרימו, בר מים אלקטרה. חומר: במבוק.`;
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: short }, ARIEL]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(short);
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: long }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(long);
+    // The shorter text second: the longer one is kept.
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: short }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(long);
+    // Two texts, neither inside the other: both.
+    const other = "גודל המשטח 35 על 28 ס\"מ.";
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: other }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(`${long} ${other}`);
+    // No text in the later search: the earlier one stays.
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(`${long} ${other}`);
+    expect(turn.envelope!.candidates).toHaveLength(2);
+  });
+
+  it("never one product: the same id in another store, or no id at all", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    const elsewhere = normalizeWooProducts([{ ...ARIEL, id: 101, permalink: "https://other.example/product/p101/" }], { storeUrl: "https://other.example", storeCurrency: "ILS" });
+    expect(keyLines(mergeEnvelope(turn, elsewhere, "he", true))).toEqual([`PRODUCT_2: "${ARIEL.name}"`]);
+    const noId = () => search([{ ...GEFEN, id: undefined }]);
+    expect(keyLines(mergeEnvelope(turn, noId(), "he", true))).toEqual([`PRODUCT_3: "${GEFEN.name}"`]);
+    expect(keyLines(mergeEnvelope(turn, noId(), "he", true))).toEqual([`PRODUCT_4: "${GEFEN.name}"`]);
+    expect(turn.envelope!.candidates).toHaveLength(4);
+  });
+
+  it("a search that failed or found nothing leaves the turn's results and keys as they were", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL]), "he", true);
+    const before = JSON.stringify(turn.envelope!.candidates);
+    expect(mergeEnvelope(turn, search([]), "he", true)).toMatch(/0 products matched/);
+    expect(mergeEnvelope(turn, { ...search([ALEXA]), status: "error" } as any, "he", true)).toMatch(/^PRODUCT_SEARCH_FAILED/);
+    expect(JSON.stringify(turn.envelope!.candidates)).toBe(before);
+    expect(keyLines(mergeEnvelope(turn, search([GEFEN]), "he", true))).toEqual([`PRODUCT_3: "${GEFEN.name}"`]);
   });
 });

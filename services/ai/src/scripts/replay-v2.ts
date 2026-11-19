@@ -21,11 +21,16 @@
  * the replay is for. The console prints the numeric summary only.
  */
 import fs from "fs";
+import { AsyncLocalStorage } from "async_hooks";
 import { prisma, withCrossTenantAccess, withHistoricalRecords } from "@chatcenter/shared";
 import { isPersonOutbound } from "../services/conversation-history.service";
 import { initAIService } from "../services/ai.service";
 import "../services/connectors";
+import { getAdapter } from "../services/connectors/integration-framework";
+import { cacheCounts, searchRequestCounts } from "../services/connectors/woocommerce.adapter";
+import { WARM_EVERY_MS, warmWooCachesOnce } from "../services/woo-cache-warmer.service";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
+import { ENGINE_PROMPT_VERSION } from "../services/reply-engine/prompt";
 import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
 
 interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null; ids: string[] | null }
@@ -116,7 +121,9 @@ export function cutLine(trace: any): string {
   if (Array.isArray(trace?.cutWhy) && trace.cutWhy.length) parts.push(`cutWhy=${trace.cutWhy.join(",")}`);
   if (Array.isArray(trace?.cutText) && trace.cutText.length) parts.push(`cut: ${trace.cutText.map((x: string) => JSON.stringify(String(x).slice(0, 120))).join(" ")}`);
   if (Array.isArray(trace?.teamItemUpdated) && trace.teamItemUpdated.length) parts.push(`teamItemUpdated=${trace.teamItemUpdated.length}`);
-  for (const k of ["waitingClaimCut", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silenceAvoided", "styleOnlyKept"]) if (trace?.[k]) parts.push(k);
+  for (const k of ["waitingClaimCut", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silenceAvoided", "styleOnlyKept", "memberCut", "statementKept"]) if (trace?.[k]) parts.push(k);
+  // The bare product header replaced at send: by the header that names the cards, or by the product question.
+  if (trace?.hollowHeader) parts.push(`hollowHeader=${trace.hollowHeader}`);
   // Every turn: the style codes that fired on the first draft, the owner's rules it carried, a hand-over that named one.
   const style = [...new Set((trace?.gate3?.problems ?? []).flatMap((p: any) => (p?.kind === "style" && Array.isArray(p.codes) ? p.codes : [])))];
   if (style.length) parts.push(`style=${style.join(",")}`);
@@ -137,18 +144,116 @@ export function searchArgsLine(list: any[]): string {
   return list.map((a) => `${String(a?.tool ?? "").replace(/^.*\./, "")} q=${q(a?.q)}${a?.cq ? ` cq=${q(a.cq)}` : ""}${a?.audience ? ` audience=${a.audience}` : ""}${a?.in_stock != null ? ` in_stock=${a.in_stock}` : ""}${a?.price?.some((x: any) => x != null) ? ` price=${a.price.map((x: any) => x ?? "-").join("..")}` : ""}`).join("; ");
 }
 
-export function searchLine(trace: any): string {
+/** The report's own line: the model and the prompt wording that ran. */
+export function reportHeadLine(model: string): string {
+  return `Model: ${model}. Prompt: ${ENGINE_PROMPT_VERSION}. Lane: replay (writes simulated, platform-paid).`;
+}
+
+/**
+ * The server's warmer runs on a timer (woo-cache-warmer.service, every WARM_EVERY_MS); the replay warmed once, at
+ * its start. A replay longer than the catalogue stays fresh then asked the store what the server answers from its
+ * own copy. The same pass on the same timer; stop() ends it.
+ */
+export function startReplayWarmer(pass: () => Promise<unknown>, everyMs: number = WARM_EVERY_MS): { passes: () => number; stop: () => void } {
+  let n = 0;
+  const timer = setInterval(() => { n++; void pass().catch(() => undefined); }, everyMs);
+  timer.unref?.();
+  return { passes: () => n, stop: () => clearInterval(timer) };
+}
+
+type RequestCounts = { local: number; live: number; capped: number };
+/** One product search call of a turn, as the store's connector got it, with how its requests were answered. */
+export interface StoreSearchCall {
+  args: Record<string, unknown>;
+  /** The connector's own count line for the call. It prints none for a call that failed. */
+  counted?: RequestCounts;
+  /** How the call ended; absent while it still runs (the engine stopped waiting for it). */
+  ended?: "ok" | "failed";
+  /** The process's counts from the call's start to its end (or to now): what a call with no line of its own shows. */
+  during: RequestCounts;
+  /** Another search ran at the same time: the process's counts are of both. */
+  shared: boolean;
+}
+/** The line the connector prints once per search call (woocommerce.adapter, list_products). */
+const REQUESTS_LINE = /^\[woo-search\] requests local=(\d+) live=(\d+) capped=(\d+)$/;
+
+/**
+ * Each product search call that reaches the store's connector while this watches, with the connector's own
+ * "[woo-search] requests" line read in the call it was printed in. take() hands over the calls since the last
+ * take (one turn's); stop() puts the connector and the console back.
+ */
+export function watchStoreSearches(
+  adapter: { execute: (a: any) => Promise<any> } | null,
+  total: () => RequestCounts = () => searchRequestCounts,
+  out: { log: (...a: any[]) => void } = console,
+): { take: () => StoreSearchCall[]; stop: () => void } {
+  if (!adapter) return { take: () => [], stop: () => undefined };
+  type Open = Omit<StoreSearchCall, "during"> & { from: RequestCounts; to?: RequestCounts };
+  const inCall = new AsyncLocalStorage<Open>();
+  const running = new Set<Open>();
+  let calls: Open[] = [];
+  const execute = adapter.execute, log = out.log;
+  adapter.execute = async function (this: unknown, a: any) {
+    // The connector calls itself for its retries: those are requests of the same call.
+    if (a?.toolName !== "list_products" || inCall.getStore()) return execute.call(this, a);
+    const call: Open = { args: { ...(a.args ?? {}) }, from: { ...total() }, shared: running.size > 0 };
+    for (const o of running) o.shared = true;
+    running.add(call);
+    calls.push(call);
+    const end = (how: "ok" | "failed") => { call.ended = how; call.to = { ...total() }; running.delete(call); };
+    try {
+      const found = await inCall.run(call, () => execute.call(this, a));
+      end("ok");
+      return found;
+    } catch (err) {
+      end("failed");
+      throw err;
+    }
+  };
+  out.log = (...a: any[]) => {
+    const m = typeof a[0] === "string" ? REQUESTS_LINE.exec(a[0]) : null;
+    const call = m ? inCall.getStore() : undefined;
+    if (m && call) call.counted = { local: Number(m[1]), live: Number(m[2]), capped: Number(m[3]) };
+    return log.apply(out, a);
+  };
+  return {
+    take: () => {
+      const now = total();
+      const taken = calls.map(({ from, to = now, ...c }) => ({ ...c, during: { local: to.local - from.local, live: to.live - from.live, capped: to.capped - from.capped } }));
+      calls = [];
+      return taken;
+    },
+    stop: () => { adapter.execute = execute; out.log = log; },
+  };
+}
+
+/** A turn's store search calls for the report: the args the connector got, then local, live and capped requests. */
+export function storeRequestsLine(calls: StoreSearchCall[]): string {
+  const n = (c: RequestCounts) => `local=${c.local} live=${c.live} capped=${c.capped}`;
+  return calls.map((c) => {
+    const args = JSON.stringify(Object.fromEntries(Object.entries(c.args).filter(([k, v]) => !k.startsWith("_") && v != null))).slice(0, 120);
+    if (c.counted) return `${args} ${n(c.counted)}`;
+    const during = `${n(c.during)}${c.shared ? " (with another search running)" : ""}`;
+    if (c.ended === "failed") return `${args} failed, no count line; store requests while it ran: ${during}`;
+    if (c.ended === "ok") return `${args} no count line; store requests while it ran: ${during}`;
+    return `${args} still running when the turn ended; store requests so far: ${during}`;
+  }).join("; ");
+}
+
+export function searchLine(trace: any, storeCalls: StoreSearchCall[] = []): string {
   const asked = Array.isArray(trace?.searchArgs) && trace.searchArgs.length ? searchArgsLine(trace.searchArgs) : "";
   const ran = (Array.isArray(trace?.tools) ? trace.tools : [])
     .filter((t: any) => /(?:list_products|search_products|get_product|complementary_products)$/.test(String(t?.tool ?? "")))
     .map((t: any) => {
       // The first three products it returned (C pinned rating: which two titles answered every appliance).
       const titles = [...String(t.content ?? "").matchAll(/PRODUCT_\d+:\s*"([^"]+)"/g)].slice(0, 3).map((m) => JSON.stringify(m[1].slice(0, 60)));
-      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
+      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)}${t.idOrigin ? ` id=${t.idOrigin}` : ""} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
     });
   // "sent": the args the store got, cleaned; "model args": what the model asked for (an audience there may
   // never have been sent).
-  return [asked ? `sent: ${asked}` : "", ran.length ? `model args: ${ran.join("; ")}` : ""].filter(Boolean).join(" | ") || "none";
+  // "store requests": each search call as the store's connector got it, answered from the cached catalogue
+  // (local), by the store (live), or not asked because the call's live requests were used up (capped).
+  return [asked ? `sent: ${asked}` : "", ran.length ? `model args: ${ran.join("; ")}` : "", storeCalls.length ? `store requests: ${storeRequestsLine(storeCalls)}` : ""].filter(Boolean).join(" | ") || "none";
 }
 
 export function stagesLine(trace: any): string {
@@ -260,11 +365,12 @@ async function main() {
   const plan = await withCrossTenantAccess(() => planReplay(args));
   // This is its own process: the server's warm store caches are not here. Warm the replayed
   // tenants' stores first, so the replay measures what live (server + warmer) does.
-  if (!args.dry) {
-    const { warmWooCachesOnce } = await import("../services/woo-cache-warmer.service");
+  const warmPass = async () => {
     const warmed = await withCrossTenantAccess(() => warmWooCachesOnce({ tenants: async () => args.tenants, scope: "all" })).catch(() => []);
-    console.log(`[replay] warmed ${warmed.map((w: any) => `${w.tenantId}:${w.ok ? `${w.ms}ms` : "failed"}`).join(" ") || "no Woo stores"}`);
-    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
+    return warmed.map((w: any) => `${w.tenantId}:${w.ok ? `${w.ms}ms` : "failed"}`).join(" ") || "no Woo stores";
+  };
+  if (!args.dry) {
+    console.log(`[replay] warmed ${await warmPass()}`);
     for (const k of Object.keys(cacheCounts)) delete (cacheCounts as any)[k];
   }
   if (args.dry) {
@@ -275,9 +381,12 @@ async function main() {
     return;
   }
 
-  const md: string[] = [`# Reply engine v2 replay (${new Date().toISOString()})`, "", `Model: ${process.env.REPLY_ENGINE_MODEL || process.env.OPENAI_DEFAULT_MODEL || "default"}. Lane: replay (writes simulated, platform-paid).`, ""];
+  const md: string[] = [`# Reply engine v2 replay (${new Date().toISOString()})`, "", reportHeadLine(process.env.REPLY_ENGINE_MODEL || process.env.OPENAI_DEFAULT_MODEL || "default"), ""];
   const summaries: TenantSummary[] = [];
   const replayed = new Set<string>();
+  // From here on as the server: the same warm pass on the same timer, while the turns run.
+  const warmer = startReplayWarmer(async () => console.log(`[replay] re-warmed ${await warmPass()}`));
+  const searches = watchStoreSearches(getAdapter("woocommerce"));
 
   for (const [tenantId, turns] of plan) {
     const s: TenantSummary = { tenantId, turns: 0, errors: 0, handoffs: 0, teamQuestions: 0, teamQuestionRepeats: 0, skipped: 0, skippedReasons: {}, priceStripped: 0, rewriteRounds: {}, rewriteP95: {}, fallbackKinds: {}, toolP95: {}, rewriteMsP95: 0, autoLookupMsP95: 0, rewriteCut: {}, cannedFrom: {}, handoffSetInCode: 0, withCards: 0, withList: 0, fallbacks: 0, rewrites: 0, cleaned: 0, silent: 0, cannedLines: 0, toolErrors: 0, toolErrorKinds: {}, gate3Kinds: {}, gate1Silent: {}, p50: 0, p95: 0 };
@@ -362,12 +471,13 @@ async function main() {
           stagesLine(r.trace),
           // Always a search line (rating 1771ba14: none for the "בובות" turn): the args the store was asked, and
           // every product search the turn's tools ran with its outcome and count, or "none".
-          `- search: ${searchLine(r.trace as any)}`,
+          `- search: ${searchLine(r.trace as any, searches.take())}`,
           "",
         );
       } catch (err: any) {
         s.errors++;
-        md.push(`**Customer:** ${oneLine(t.body)}`, "", `**v2 ERROR:** ${oneLine(err?.message ?? err, 300)}`, "");
+        const storeCalls = searches.take();
+        md.push(`**Customer:** ${oneLine(t.body)}`, "", `**v2 ERROR:** ${oneLine(err?.message ?? err, 300)}`, "", ...(storeCalls.length ? [`- search: ${searchLine(null, storeCalls)}`, ""] : []));
       }
     }
     s.p50 = pct(ms, 50);
@@ -382,6 +492,9 @@ async function main() {
     try { fs.writeFileSync(args.out, [...md, "", "(partial: written as each tenant finished)"].join("\n") + "\n"); } catch { /* the final write still runs */ }
   }
 
+  warmer.stop();
+  searches.stop();
+
   md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | cleaned | gate3 fallbacks | silent | canned lines | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.cleaned} | ${s.fallbacks} | ${s.silent} | ${s.cannedLines} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
   // Ends with a newline, so a report cat'ed after another starts on a line of its own.
@@ -393,11 +506,9 @@ async function main() {
   } else {
     console.log(`[replay] kept the replay-lane rows (${replayed.size} conversations)`);
   }
-  // Store caches during the turns (after the warm-up): hit, stale (served while refreshing), miss.
-  try {
-    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
-    console.log(`[replay] store cache ${JSON.stringify(cacheCounts)}`);
-  } catch { /* no Woo */ }
+  // Store caches after the warm-up, by the turns and by the timed warm passes: hit, stale (served while
+  // refreshing), miss.
+  console.log(`[replay] store cache ${JSON.stringify(cacheCounts)} (the turns and ${warmer.passes()} timed warm passes)`);
   // The console carries numbers only; the markdown (customer messages) is in the file.
   // Each tenant's summary was logged as it finished.
   console.log(`[replay] report written to ${args.out}`);

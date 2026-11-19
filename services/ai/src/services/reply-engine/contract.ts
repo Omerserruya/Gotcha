@@ -130,7 +130,14 @@ export interface ToolRunRecord {
   retried?: boolean;
   /** A short machine code for an error outcome (reason/code/failure of the result, or tool_error/timeout). Never free text. */
   errorKind?: string;
+  /**
+   * Where the model could have taken this call's product_id from, as it sent it (log only, for the trace and the
+   * replay): this turn's results, the state, the page the customer is on, another tool's raw result, the knowledge
+   * or the conversation's text, the engine's own lookup by name, or nothing ("none").
+   */
+  idOrigin?: ProductIdOrigin;
 }
+export type ProductIdOrigin = "turn" | "state" | "page" | "tool_result" | "text" | "lookup" | "none";
 
 // ── Gate 3 ──
 

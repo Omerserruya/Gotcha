@@ -239,9 +239,10 @@ describe("an attribute question reads the product first (eval A08: \"הסווד�
 });
 
 describe("the turn envelope", () => {
+  // A store id per product: the same product found again is not a new one (replay-e-fixes.test.ts).
   const env = (titles: string[]) => ({
     provider: "woocommerce", tool: "woocommerce_product_search", status: "ok",
-    candidates: titles.map((t, i) => ({ title: t, productId: String(100 + i), inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] })),
+    candidates: titles.map((t) => ({ title: t, productId: `id-${t}`, inventoryState: "in_stock", url: "u", attributes: {}, unknownAttributes: [] })),
     appliedFilters: [], unavailableFilters: [], safeModelSummary: "",
   }) as any;
   it("a second search's keys continue after the first's", () => {
