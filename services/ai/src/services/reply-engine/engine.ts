@@ -797,22 +797,60 @@ const SAYS_YES = /(?<![\u0590-\u05FF])(?<!גם\s+)כן\s*[.!]*\s*$|\b(?:does|yes
 const GOES_ON = /^\s*(?:(?:ו?גם|וכן)(?![\u0590-\u05FF])(?!\s+(?:יש|אפשר|ניתן|כדאי)(?![\u0590-\u05FF]))|(?:and\s+)?(?:also|nor)\b)|(?:(?<![\u0590-\u05FF])גם\s+לא|\beither)\s*[.!]*\s*$/iu;
 // A condition, not a statement ("אם הגוון לא מתאים אפשר להחליף", "if it does not fit"): it rules nothing out.
 const CONDITION = /(?<![\u0590-\u05FF])(?:[ושה]?אם(?![\u0590-\u05FF])|במידה\s+[וש]|במקרה\s+(?:[וש]|של(?![\u0590-\u05FF])))|\b(?:if|in case|unless)\b/iu;
+// What a "fits" word is for ("מתאימים לגבות בלבד", "fits the brows"): the use, never a product. It ends at a comma, at
+// a "not", or at a new subject joined by "and".
+const FIT_FOR = /((?<![\u0590-\u05FF])[וש]?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים|מיועד|מיועדת|מיועדים|מיועדות)\s+(?:(?:רק|גם|בעיקר|במיוחד)\s+)?)(ל[\u0590-\u05FF]+(?:\s+(?!ו?לא(?![\u0590-\u05FF]))(?!ו(?!ל)[\u0590-\u05FF])[^\s,.;:!?]+)*)|(\b(?:fits?|suits?|(?:suitable|meant|intended|designed|made)\s+for)\s+)((?:(?!(?:and|but|nor|or|not)\b)[^\s,.;:!?]+\s*)+)/giu;
+const SAYS_FIT_ALL = new RegExp(SAYS_FIT.source, "giu");
+// Words that go on with the same subject between a "fits" and a "not" ("מתאימים לגבות, הם לא מתאימים לעיניים").
+const JOINS = /(?<![\p{L}])(?:ו?(?:גם|הם|הן|הוא|היא|זה)|and|they|it|also|for)(?![\p{L}])/giu;
+// "for" as part of a verb ("looking for a pen") opens no use.
+const HER_FOR = /(?<!\b(?:looking|searching|search|asking|asked|ask|waiting|wait|thanks|thank you|paying|paid|pay)\s+)\bfor\s+([^,.;!?\n]*)/giu;
+/** The words her message says as the use ("עיניים" in "יש טוש לעיניים?", "winter" in "something for winter?"), never her kind's word. */
+export function herUseWords(incoming: string, noun: string | null = null): string[] {
+  const inc = String(incoming ?? "").toLowerCase();
+  const keys = noun ? nounKeys(noun) : [];
+  const words = [...inc.matchAll(/(?<![\u0590-\u05FF])ל([\u0590-\u05FF]{3,})(?![\u0590-\u05FF])/gu)].map((m) => m[1]);
+  for (const m of inc.matchAll(HER_FOR)) words.push(...(m[1].match(/[a-z]{3,}/g) ?? []).filter((w) => !TITLE_STOP.has(w)));
+  return [...new Set(words)].filter((w) => !keys.some((k) => w.includes(k)));
+}
 /**
  * The found products a text says do not fit. A sentence (or the side of its turn) that says so rules out the
- * products it names; when it names one and also says something fits, which is which is not guessed and it rules
- * none out. What follows the "not for" words is the use, never a product ("לא מתאים לעיניים" does not name the
- * product whose title holds "לעיניים"). When it names none, it rules out the found products of her kind when it
- * speaks of her kind, else those a word of whose title it says; never one the text names elsewhere (the one it
- * offers in their place stays), and never one the text says fits. A condition ("אם הגוון לא מתאים") rules nothing
+ * products it speaks of, read in this order: a product it says by its whole title; else the found products of her
+ * kind when it says her kind's word (only those of them it tells apart, when it does; else never one the text names
+ * elsewhere, the one it offers in their place stays); only then a product matched through single words of its
+ * title. What follows the "not for" words is the use, never a product ("לא מתאים לעיניים" does not name the product
+ * whose title holds "לעיניים"), and so is what follows a "fits" word; a product matched only through a word her own
+ * message says as the use ("לעיניים הטושים לא מתאימים" on "יש טוש לעיניים?") is never the subject. When the sentence
+ * also says something fits and another subject stands between that and the "not", which is which is not guessed
+ * and it rules none out; with one subject it rules it out ("הטושים מתאימים לגבות בלבד, ולא מיועדים לעיניים": the
+ * pens, whatever else was found). Never one the text says fits. A condition ("אם הגוון לא מתאים") rules nothing
  * out, nor does a sentence about shipping or a size, and one that says they are for what she asks ("מיועדים לגבות,
  * לא לעיניים" on an ask for brows) is a yes.
  */
 export function unfitProducts(text: string, candidates: any[], noun: string | null = null, incoming = ""): Set<number> {
   const out = new Set<number>();
   const fits = new Set<number>();
-  const inText = namedMembers(text, candidates);
   const blank = (m: string) => " ".repeat(m.length);
-  for (const s of String(text ?? "").match(SENTENCES_RE) ?? []) for (const x of s.split(TURNS)) {
+  const all = candidates.map((_, i) => i);
+  const titleOf = (i: number) => String(candidates[i]?.title ?? "").trim().toLowerCase();
+  const titles = [...new Set(all.map(titleOf).filter(Boolean))].sort((a, b) => b.length - a.length);
+  // The products a text says by their whole title, the longest first (a title that is only the start of a longer
+  // one the text says is not said), and the text without them.
+  const wholeTitles = (v: string) => {
+    let left = v.toLowerCase();
+    const hit = new Set<number>();
+    for (const title of titles) {
+      if (!left.includes(title)) continue;
+      all.forEach((i) => { if (titleOf(i) === title) hit.add(i); });
+      left = left.split(title).join(" ".repeat(title.length));
+    }
+    return { hit, left };
+  };
+  const hers = herUseWords(incoming, noun);
+  const lessHers = (v: string) => hers.reduce((t, w) => t.replace(new RegExp(`(?<![\\p{L}])[הולבמשכ]{0,2}${w}(?![\\p{L}])`, "giu"), blank), v);
+  const pieces = (String(text ?? "").match(SENTENCES_RE) ?? []).flatMap((s) => s.split(TURNS));
+  for (let n = 0; n < pieces.length; n++) {
+    const x = pieces[n];
     // "Not stated that it fits" rules nothing out; what the sentence says past those words still counts.
     const said = x.replace(NEG_THAT_FIT, blank);
     // Each place it says "does not fit", never inside a condition (the clause before it holds an "if").
@@ -841,28 +879,54 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
     parts.push({ from: at, to: said.length });
     const own = (p: { from: number; to: number }) => unfit.some((m) => (m.index ?? 0) < p.to && (m.index ?? 0) + m[0].length > p.from);
     const firstOwn = parts.findIndex(own);
-    const all = candidates.map((_, i) => i);
     const titleSaid = (v: string) => all.filter((i) => (String(candidates[i]?.title ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).some((w) => !TITLE_STOP.has(w) && v.toLowerCase().includes(w)));
-    const hasSubject = (v: string) => namedMembers(v, candidates).size > 0 || (!!noun && nounKeys(noun).some((k) => v.toLowerCase().includes(k))) || titleSaid(v).length > 0;
+    const hasSubject = (v: string) => {
+      const { hit, left } = wholeTitles(v);
+      const rest = lessHers(left);
+      return hit.size > 0 || namedMembers(rest, candidates).size > 0 || (!!noun && nounKeys(noun).some((k) => rest.includes(k))) || titleSaid(rest).length > 0;
+    };
     const only = (keep: (p: { from: number; to: number }, k: number) => boolean) => parts.reduce((v, p, k) => (keep(p, k) ? v : v.slice(0, p.from) + " ".repeat(p.to - p.from) + v.slice(p.to)), whole);
     const ownHas = hasSubject(only(own));
     const yes = parts.map((p, k) => !own(p) && (k > firstOwn || ownHas) && (SAYS_FIT.test(said.slice(p.from, p.to)) || SAYS_YES.test(said.slice(p.from, p.to))));
     parts.forEach((p, k) => { if (yes[k]) namedMembers(x.slice(p.from, p.to), candidates).forEach((i) => fits.add(i)); });
+    // A part that says yes or fits to the very use her message asks for, with no subject of its own ("לעיניים הטושים לא
+    // מתאימים, לגבות כן" on an ask for brows): the sentence is a yes.
+    if (parts.some((p, k) => yes[k] && !hasSubject(x.slice(p.from, p.to)) && lessHers(x.slice(p.from, p.to)) !== x.slice(p.from, p.to))) continue;
     let subject = only((p, k) => own(p) || (!yes[k] && (k < firstOwn || GOES_ON.test(said.slice(p.from, p.to)))));
     // Its own part and the parts before it name none and speak of none: the subject is in the parts after ("לא
     // מתאימים לעיניים: טוש גבות חום, טוש גבות שחור").
     if (!hasSubject(subject)) subject = only((_, k) => !yes[k]);
-    const named = namedMembers(subject, candidates);
-    // The parts that hold the subject also say something fits: which is which is not guessed.
-    const heldSaid = parts.filter((p, k) => !yes[k] && subject.slice(p.from, p.to).trim()).map((p) => said.slice(p.from, p.to)).join(" , ");
-    if (named.size) { if (!SAYS_FIT.test(heldSaid.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); continue; }
-    const low = subject.toLowerCase();
-    // Of her kind: by its title or category; a title in another script than her word ("Miss eyebrows Pen" for
-    // "טוש") cannot say, and counts unless its category says otherwise.
+    const held = parts.filter((p, k) => !yes[k] && subject.slice(p.from, p.to).trim());
+    // What the text names outside the parts that hold this subject.
+    const elsewhere = () => namedMembers([...pieces.slice(0, n), parts.filter((p) => !held.includes(p)).map((p) => x.slice(p.from, p.to)).join(" , "), ...pieces.slice(n + 1)].join(" "), candidates);
+    // Who the sentence speaks of. First a product said by its whole title.
+    const titled = wholeTitles(subject);
+    // The rest, without what each "fits" word is for.
+    const core = titled.left.replace(FIT_FOR, (_m, a, b, c, d) => (a ?? c) + " ".repeat(String(b ?? d).length));
+    // Else her kind, when the sentence says her kind's word: by its title or category; a title in another script
+    // than her word ("Miss eyebrows Pen" for "טוש") cannot say, and counts unless its category says otherwise.
     const inHerScript = (c: any) => (/[\u0590-\u05FF]/.test(noun ?? "") ? /[\u0590-\u05FF]/ : /[a-z]/i).test(String(c?.title ?? ""));
-    const ofKind = noun && nounKeys(noun).some((k) => low.includes(k)) ? all.filter((i) => ofHerKindStrict(candidates[i], noun) || (!inHerScript(candidates[i]) && ofNoun(candidates[i], noun))) : [];
-    const spoken = ofKind.length ? ofKind : titleSaid(low);
-    spoken.forEach((i) => { if (!inText.has(i)) out.add(i); });
+    const kind = noun && nounKeys(noun).some((k) => core.includes(k)) ? all.filter((i) => ofHerKindStrict(candidates[i], noun) || (!inHerScript(candidates[i]) && ofNoun(candidates[i], noun))) : [];
+    // Only those of her kind the sentence tells apart ("הטוש השחור"), when it does.
+    const apart = kind.length ? namedMembers(core, candidates) : new Set<number>();
+    const narrowed = kind.filter((i) => apart.has(i));
+    // Only then single words of a title, never a word her own message says as the use.
+    const single = namedMembers(lessHers(core), candidates);
+    const chosen = titled.hit.size ? [...titled.hit]
+      : kind.length ? (narrowed.length ? narrowed : kind.filter((i) => !elsewhere().has(i)))
+      : single.size ? [...single]
+      : titleSaid(lessHers(core)).filter((i) => !elsewhere().has(i));
+    // The parts that hold the subject also say something fits, and between that "fits" and a later "not" stands a
+    // word that is no joiner and no use she asked for: the "not" has a subject of its own, found or not ("הקונסילר
+    // מתאים והשפתון לא מתאים"), and which is which is not guessed. With nothing there the "fits" is the subject's own
+    // ("מתאימים לגבות בלבד, ולא מיועדים לעיניים") and the subject is ruled out, whatever else was found.
+    const flat = held.map((p) => said.slice(p.from, p.to)).join(" , ").replace(FIT_FOR, (_m, a, b, c, d) => (a ?? c) + " ".repeat(String(b ?? d).length));
+    const fitWords = flat.replace(SAYS_UNFIT_ALL, blank);
+    if ([...flat.matchAll(SAYS_UNFIT_ALL)].some((m) => {
+      const fit = [...fitWords.slice(0, m.index ?? 0).matchAll(SAYS_FIT_ALL)].at(-1);
+      return !!fit && /\p{L}{2,}/u.test(lessHers(fitWords.slice((fit.index ?? 0) + fit[0].length, m.index ?? 0)).replace(JOINS, " "));
+    })) continue;
+    chosen.forEach((i) => out.add(i));
   }
   fits.forEach((i) => out.delete(i));
   return out;
