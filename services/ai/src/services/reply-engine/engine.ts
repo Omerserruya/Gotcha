@@ -589,6 +589,16 @@ export function asksWhatSheSaid(reply: string, incoming: string): boolean {
   const rest = sentences.filter((x) => !/\?$/.test(x));
   return asked && rest.every((x) => x.split(/\s+/).length <= 8 && !/\d|₪|[A-Za-z]{2,}/.test(x) && !/(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאימים|מתאימות|ממליצים|כדאי)(?![\u0590-\u05FF])/u.test(x));
 }
+/** Whether the store's sale line goes on: the sale price said with no sale said, or the sale said (never by a coupon
+ *  phrase alone, "קוד הנחה") with neither its sale price nor its regular price in the reply. */
+export function saleLineNeeded(reply: string, now: number, was: number): boolean {
+  const text = String(reply ?? "").replace(/https?:\/\/\S+/g, "");
+  const nums = [...text.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].map((m) => Number(m[0].replace(",", ".")));
+  const near = (a: number) => nums.some((n) => Math.abs(n - a) < 0.011);
+  const saleSaid = SALE_SAID.test(text.replace(/(?<![\u0590-\u05FF])(?:קוד\s+(?:ה)?הנחה|קוד\s+קופון|קופון|הקופון)(?![\u0590-\u05FF])|\b(?:discount code|coupon(?: code)?|promo code)\b/giu, ""));
+  if (!saleSaid) return now > 0 && near(now);
+  return now > 0 && !near(now) && !(was > 0 && near(was));
+}
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
 export function closestMatchLine(locale: "he" | "en"): string {
@@ -1604,7 +1614,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // A first sentence that points at the cut items ("לשניהם צריך מעצור", 0b5f2b46 prod replay, Smoovee) is no answer.
       const leansOnCut = removed.length > 0 && (/^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu.test(cleaned.reply)
         // A bare pronoun as the subject within the first words ("כדי לדייק אם היא מתאימה לך", rating of f46b5a49, Tehila).
-        || PRONOUN_LEAN.test(cleaned.reply)
+        // Not when her own message names the product: "היא מתאימה גם לקיץ?" answers her about it.
+        || (PRONOUN_LEAN.test(cleaned.reply) && !headNoun(String(opts.incomingMessage ?? "")))
         // Only a question she already answered (rating of f46b5a49, NE'A: "נשרפת בשמש בקלות, או משתזפת?").
         || asksWhatSheSaid(cleaned.reply, String(opts.incomingMessage ?? "")));
       const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition || leansOnCut);
@@ -1767,7 +1778,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const ownProduct = !!own && own.split(/\s+/).some((w) => !/^[\u0590-\u05FF]?(?:לבן|לבנה|שחור|שחורה|כחול|כחולה|אדום|אדומה|ירוק|ירוקה|אפור|אפורה|ורוד|ורודה|חום|חומה|בז'|white|black|blue|red|green|grey|gray|pink|brown|beige)$/iu.test(w));
           // A product she saw and asks after ("הייתה מטפחת... היא עדיין ישנה?") is a product ask too (rating of f46b5a49,
           // Tehila: the generic question went out with no store search).
-          if (store && !ran && !(candidates as any[]).length && (productAskNow(inc) || asksAboutProduct(inc)) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
+          if (store && !ran && !(candidates as any[]).length && (productAskNow(inc) || asksAboutProduct(inc)) && (left() > 2500 || cfg.turnBudgetMs + HARD_CEILING_EXTRA_MS - (Date.now() - t0) > 3000) && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
             // Only product words; describing words alone take the conversation's noun (rating of d2f10620, L789).
             const earlier = [...history].reverse().filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m.body ?? "")).filter((b) => b.trim() !== inc.trim()).slice(0, 3);
             const focusNow = focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title) ?? (String(state.offeredItems?.at(-1)?.title ?? "").trim() || null);
@@ -2398,10 +2409,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const one = namedOnce(reply ?? "", candidates);
     const c: any = one >= 0 ? candidates[one] : null;
     const now = Number(String(c?.discount?.now ?? "").replace(",", "."));
-    // "הוא כרגע במבצע" with no price of it (rating of f46b5a49, Smoovee B): the store's own sale line too.
-    const saleNoPrice = !!reply && !!c?.discount && now > 0 && SALE_SAID.test(reply) && !/\d/.test(reply.replace(/https?:\/\/\S+/g, ""));
-    if (saleNoPrice) { const line = salePriceLine(c, locale); if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; } }
-    else if (reply && c?.discount && now > 0 && !SALE_SAID.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
+    // The store's own sale line when the reply gives the sale price with no sale said, or says the sale with no price of
+    // it (rating of f46b5a49, Smoovee B: "הוא כרגע במבצע" after "תמי 4": a digit, no price).
+    if (reply && c?.discount && now > 0 && saleLineNeeded(reply, Number(String(c.discount.now).replace(",", ".")), Number(String(c.discount.was ?? "").replace(",", ".")))) {
       const line = salePriceLine(c, locale);
       if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; }
     }

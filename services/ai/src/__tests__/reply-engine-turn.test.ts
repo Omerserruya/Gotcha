@@ -3204,3 +3204,22 @@ describe("dev round k8 on f46b5a49, K8-1 through a whole turn", () => {
     expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => d.args.query)).toContain("חולצה");
   });
 });
+
+describe("db4e8917 pre-check: R5 through a whole turn", () => {
+  it("★ the fallback store search runs at about 2s of budget left while the hard ceiling has room", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "15000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    // The draft is thin (style only) and the clock is at 13s: the rewrite is cut, the fallback runs with ~2s left.
+    (generateResponse as any).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 13000; return out; });
+    h.responses.push({ toolCalls: [respond("f1", { reply: "בטח/י, אשמח/ה!" })] }, { toolCalls: [respond("f2", { reply: "בטח/י, אשמח/ה!" })] });
+    let r: any;
+    try {
+      r = await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
+    } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(h.dispatched.some((d) => d.name === "woocommerce.list_products")).toBe(true);
+  });
+});

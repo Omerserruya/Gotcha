@@ -1292,7 +1292,9 @@ describe("dev round k8 on f46b5a49", () => {
     expect(SALE_SAID.test("The Zip Hoodie is ₪299.")).toBe(false);
     expect(SALE_SAID.test("הקפוצ'ון עולה 299 ש\"ח.")).toBe(false);
     const { readFileSync } = await import("fs");
-    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/if \(reply && c\?\.discount && now > 0 && !SALE_SAID\.test\(reply\)/);
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/const saleSaid = SALE_SAID\.test\(/);
+    const { saleLineNeeded } = await import("../services/reply-engine/engine");
+    expect(saleLineNeeded("The Zip Hoodie is ₪299 right now, reduced from ₪379.", 299, 379)).toBe(false);
   });
 });
 
@@ -1352,7 +1354,7 @@ describe("rating of f46b5a49 (R1-R8)", () => {
     expect(PRONOUN_LEAN.test("המטפחת מתאימה לכל עונות השנה.")).toBe(false);
     const { readFileSync } = await import("fs");
     const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
-    expect(src).toMatch(/\|\| PRONOUN_LEAN\.test\(cleaned\.reply\)/);
+    expect(src).toMatch(/\|\| \(PRONOUN_LEAN\.test\(cleaned\.reply\) && !headNoun\(/);
     expect(src).toMatch(/\|\| asksWhatSheSaid\(cleaned\.reply, String\(opts\.incomingMessage \?\? ""\)\)\);/);
   });
   it("★ R4: only a question she already answered is no answer", async () => {
@@ -1365,7 +1367,7 @@ describe("rating of f46b5a49 (R1-R8)", () => {
   });
   it("★ R5: a seen-product ask counts for the fallback store search (source)", async () => {
     const { readFileSync } = await import("fs");
-    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(productAskNow\(inc\) \|\| asksAboutProduct\(inc\)\) && left\(\) > 2500/);
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(productAskNow\(inc\) \|\| asksAboutProduct\(inc\)\) && \(left\(\) > 2500 \|\|/);
   });
   it("★ R6: a device-family fit from no store read and no model is unbacked; with a line for the device it stands", async () => {
     const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
@@ -1383,6 +1385,31 @@ describe("rating of f46b5a49 (R1-R8)", () => {
   });
   it("★ R8: \"במבצע\" with no price gets the store's sale line (source)", async () => {
     const { readFileSync } = await import("fs");
-    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/const saleNoPrice = !!reply && !!c\?\.discount && now > 0 && SALE_SAID\.test\(reply\)[^\n]*\n\s*if \(saleNoPrice\) \{ const line = salePriceLine\(c, locale\);/);
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/if \(reply && c\?\.discount && now > 0 && saleLineNeeded\(reply,/);
+  });
+});
+
+describe("db4e8917 pre-check: R5, R7, R8 on the real turns", () => {
+  it("★ R8: the L1705 sentence (\"תמי 4\" holds a digit, no price) gets the sale line; a coupon phrase alone does not", async () => {
+    const { saleLineNeeded } = await import("../services/reply-engine/engine");
+    expect(saleLineNeeded("לתמי 4 מתאים משטח סמובי אלכסה, שמיועד לדגמי באבלס, אדג', אדג' פלוס, פרימו, פמילי ושבת. הוא כרגע במבצע.", 159.2, 199)).toBe(true);
+    expect(saleLineNeeded("משטח סמובי אלכסה עולה 159.2 ש\"ח במבצע.", 159.2, 199)).toBe(false);
+    expect(saleLineNeeded("משטח סמובי אלכסה במבצע, במקום 199 ש\"ח.", 159.2, 199)).toBe(false);
+    expect(saleLineNeeded("אפשר להזין קוד הנחה בקופה על משטח סמובי אלכסה.", 159.2, 199)).toBe(false);
+    expect(saleLineNeeded("משטח סמובי אלכסה עולה 159.2 ש\"ח.", 159.2, 199)).toBe(true);
+  });
+  it("★ R7: the caveat about a product read this turn is no near name", async () => {
+    const { nearNameAsExact } = await import("../services/reply-engine/gates");
+    const T = ["עיפרון עיניים ושפתיים Drama qween", "עיפרון עיניים ושפתיים LiLu", "עיפרון עיניים ושפתיים first coffee"];
+    expect(nearNameAsExact("הוא מתואר בעיקר כעיפרון לתיחום שפתיים, אז לא מצוין במפורש שהוא מתאים לאזור העיניים.", "יש לכם עיפרון חום שאפשר לשים מתחת לעיניים?", T)).toBeNull();
+    // Each guard alone: a plain fit sentence of title words; a negated one with no titles.
+    expect(nearNameAsExact("העיפרון הזה מתאים לאזור העיניים.", "יש לכם עיפרון?", T)).toBeNull();
+    expect(nearNameAsExact("לא מצוין שהוא מתאים לאזור העיניים.", "יש לכם עיפרון?", [])).toBeNull();
+    // The real near miss still is one ("קריספי" asked, "קרמי" claimed).
+    expect(nearNameAsExact("המשטח מתאים לנינג'ה קרמי.", "יש לכם משטח לנינג'ה קריספי?", ["משטח אליס"])).not.toBeNull();
+  });
+  it("★ PRONOUN_LEAN is exempt when her message names the product (source)", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(PRONOUN_LEAN\.test\(cleaned\.reply\) && !headNoun\(String\(opts\.incomingMessage \?\? ""\)\)\)/);
   });
 });

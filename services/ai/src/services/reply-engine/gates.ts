@@ -1021,12 +1021,20 @@ export function nearNameAsExact(reply: string, incoming: string, titles: string[
   if (ALTERNATIVE.test(reply ?? "")) return null;
   const theirs = (String(incoming ?? "").match(/\p{L}{4,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase())).map((w) => stem(w));
   // The model the reply says the product fits (prod replay 2026-11-17: "קריספי" asked, "מתאימה לנינג'ה קרמי").
-  for (const m of String(reply ?? "").matchAll(FITS_TARGET)) {
-    const target = (String(m[1] ?? m[2] ?? "").match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
-    for (const a of theirs) {
-      if (target.some((w) => w === a || w.includes(a) || a.includes(w))) continue;
-      const hit = target.find((w) => close(w, a));
-      if (hit) return { asked: a, shown: hit };
+  // Never on a caveat ("לא מצוין במפורש שהוא מתאים לאזור העיניים"), and never between words of the turn's own titles: a
+  // description of the product read is no near name (rating of f46b5a49, NE'A: "עיניים" against her "עיפרון", both in
+  // "עיפרון עיניים ושפתיים ...").
+  const titleStems = new Set(titles.flatMap((t) => (String(t).match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w))));
+  const sentencesOf = String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? [];
+  for (const sx of sentencesOf) {
+    if (NEG_GOVERNS_FIT.test(sx)) continue;
+    for (const m of sx.matchAll(FITS_TARGET)) {
+      const target = (String(m[1] ?? m[2] ?? "").match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
+      for (const a of theirs) {
+        if (target.some((w) => w === a || w.includes(a) || a.includes(w))) continue;
+        const hit = target.find((w) => close(w, a));
+        if (hit && !(titleStems.has(hit) && titleStems.has(a))) return { asked: a, shown: hit };
+      }
     }
   }
   if (!titles.length) return null;
