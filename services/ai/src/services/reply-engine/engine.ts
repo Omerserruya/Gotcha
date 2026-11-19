@@ -671,6 +671,8 @@ const CHEAP_SHIPPING_BEFORE = /(?:(?<![\u0590-\u05FF])[הולבמש]{0,2}(?:מש
 const CHEAP_SHIPPING_AFTER = /^\s+(?:יותר\s+)?(?:(?:(?!(?:with|for|and|or|plus|including|in|to|by|on)\s)[a-z]+\s+)?(?:shipping|delivery|postage|courier)\b|(?:ל|של\s+ה?)(?:משלוח|שילוח|הובלה)(?![\u0590-\u05FF]))/iu;
 // The cheap word is said of another seller's price ("באתר אחר ראיתי את זה יותר זול"): a comparison, not an ask for the low end.
 const OTHER_SELLER = /(?<![\u0590-\u05FF])[בלמ]?(?:אתר(?:ים)?|מקום|מקומות|חנות|חנויות)\s+(?:אחר|אחרת|אחרים|אחרות)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])אצל\s+ה?מתחר(?:ה|ים)|\b(?:elsewhere|(?:an)?other (?:site|store|shop|place|seller|website)s?|competitors?)\b/iu;
+// A past statement ("קניתי אצלכם והיה זול, תודה", "it was cheap"): with no question in its own clause, not an ask.
+const CHEAP_PAST = /(?:(?<![\u0590-\u05FF])[וש]?(?:היה|הייתה|היתה|היו)|\b(?:was|were))\s+(?:(?:ממש|הכי|מאוד|כל\s?כך|so|very|much)\s+){0,2}$/iu;
 /**
  * The customer asks for the cheap end ("מה הכי זול אצלכם?", "something cheaper"). Never on a matter no product
  * list answers (a payment problem, their order, a complaint, a coupon, a how-to: the exclusions of a product ask),
@@ -682,6 +684,9 @@ export function cheapAsk(incoming: string): boolean {
   for (const m of t.matchAll(CHEAP_WORD)) {
     const before = t.slice(0, m.index ?? 0), after = t.slice((m.index ?? 0) + m[0].length);
     const clause = `${before.split(/[,.!?\n]/).at(-1) ?? ""}${m[0]}${after.split(/[,.!?\n]/)[0] ?? ""}`;
+    // The clause ends on a question mark: "מה היה הכי זול?" still asks.
+    const asked = /^[^,.!\n]*[?؟]/.test(after);
+    if (CHEAP_PAST.test(before) && !asked) continue;
     if (!CHEAP_NEGATED.test(before) && !CHEAP_SHIPPING_BEFORE.test(before) && !CHEAP_SHIPPING_AFTER.test(after) && !OTHER_SELLER.test(clause)) return true;
   }
   return false;
@@ -705,6 +710,9 @@ export function cheapestOfKind<T extends { title?: string; price?: number | null
   const hers = kind ? list.filter((c) => ofHerKindStrict(c as any, kind)) : [];
   return cheapestFirst(hers.length ? hers : list);
 }
+// The clause so far speaks of the shipping ("המשלוח עולה", "delivery costs"), not of a product that comes with it
+// ("טוש גבות ב-₪79 כולל משלוח" has the price first; "עם משלוח" is the product's).
+const SHIPPING_PRICE = /(?<!(?:כולל|עם|with|including)\s+)(?:(?<![\u0590-\u05FF])[הולבמש]{0,2}(?:משלוח|משלוחים|שילוח|הובלה|שליח)(?![\u0590-\u05FF])|\b(?:shipping|delivery|postage|courier)\b)[^,.;!?\n]*$/iu;
 /**
  * The found products a text names (their indexes): by title, by a word only one found title has, or by a found
  * product's own price written with a currency mark (a shipping price or a size is no product).
@@ -717,7 +725,10 @@ export function namedMembers(text: string, candidates: any[]): Set<number> {
   candidates.forEach((c, i) => { if (c?.title && namesTitle(t, String(c.title), common)) out.add(i); });
   const referred = new Set(referredCandidates(candidates as any[], t, ""));
   for (const i of referred) out.add(i);
-  const prices = [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)].map((m) => Number(String(m[1] ?? m[2]).replace(/,/g, "")));
+  // Never a price said of the shipping ("המשלוח עולה ₪79"): the shipping word before it in its own clause.
+  const prices = [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)]
+    .filter((m) => !SHIPPING_PRICE.test(t.slice(0, m.index ?? 0)))
+    .map((m) => Number(String(m[1] ?? m[2]).replace(/,/g, "")));
   candidates.forEach((c, i) => { const p = priceOf(c); if (p != null && prices.includes(p)) out.add(i); });
   if (out.size < 2) return out;
   // Several matched, some through words they share (the usual store: variants of one title, "טוש גבות חום" and
@@ -779,6 +790,11 @@ function forHerAsk(part: string, incoming: string): boolean {
   }
   return false;
 }
+// A comma part that says yes ("קונסילר לעיניים כן", "the concealer does"): what it names fits.
+const SAYS_YES = /(?<![\u0590-\u05FF])(?<!גם\s+)כן\s*[.!]*\s*$|\b(?:does|yes)\s*[.!]*\s*$/iu;
+// A later comma part that goes on with the same "does not fit" ("וגם טוש גבות שחור", "טוש גבות שחור גם לא", "nor the black
+// one"), never one that opens an offer ("וגם יש לנו קונסילר").
+const GOES_ON = /^\s*(?:(?:ו?גם|וכן)(?![\u0590-\u05FF])(?!\s+(?:יש|אפשר|ניתן|כדאי)(?![\u0590-\u05FF]))|(?:and\s+)?(?:also|nor)\b)|(?:(?<![\u0590-\u05FF])גם\s+לא|\beither)\s*[.!]*\s*$/iu;
 // A condition, not a statement ("אם הגוון לא מתאים אפשר להחליף", "if it does not fit"): it rules nothing out.
 const CONDITION = /(?<![\u0590-\u05FF])(?:[ושה]?אם(?![\u0590-\u05FF])|במידה\s+[וש]|במקרה\s+(?:[וש]|של(?![\u0590-\u05FF])))|\b(?:if|in case|unless)\b/iu;
 /**
@@ -806,23 +822,46 @@ export function unfitProducts(text: string, candidates: any[], noun: string | nu
       if (SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " ")) || (said.match(FOR_WHAT) ?? []).length > 0) namedMembers(x, candidates).forEach((i) => fits.add(i));
       continue;
     }
-    // The subject: the sentence without what follows each "not for", up to the comma.
-    let subject = x;
+    // The sentence without what follows each "not for", up to the comma.
+    let whole = x;
     for (const m of unfit) {
       const from = (m.index ?? 0) + m[0].length;
-      const stop = subject.slice(from).search(/[,;:]/);
-      const to = stop < 0 ? subject.length : from + stop;
-      subject = subject.slice(0, from) + " ".repeat(to - from) + subject.slice(to);
+      const stop = whole.slice(from).search(/[,;:]/);
+      const to = stop < 0 ? whole.length : from + stop;
+      whole = whole.slice(0, from) + " ".repeat(to - from) + whole.slice(to);
     }
-    const named = namedMembers(subject, candidates);
-    if (named.size) { if (!SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); continue; }
-    const low = subject.toLowerCase();
+    // The words speak of the subject of their own comma part ("הטושים לא מתאימים לעיניים, קונסילר לעיניים כן": the
+    // pens). A later part that says yes or says fits marks its products as fitting, and so does an earlier one when
+    // their own part has a subject ("קונסילר לעיניים מתאים, הטושים לא"); with none there, the earlier part holds it
+    // ("הטושים מתאימים לגבות בלבד, ולא מיועדים לעיניים"). A later part is the subject too only when it goes on with the
+    // same words ("וגם טוש גבות שחור").
+    const parts: Array<{ from: number; to: number }> = [];
+    let at = 0;
+    for (const m of said.matchAll(/[,;:]/g)) { parts.push({ from: at, to: m.index ?? 0 }); at = (m.index ?? 0) + 1; }
+    parts.push({ from: at, to: said.length });
+    const own = (p: { from: number; to: number }) => unfit.some((m) => (m.index ?? 0) < p.to && (m.index ?? 0) + m[0].length > p.from);
+    const firstOwn = parts.findIndex(own);
     const all = candidates.map((_, i) => i);
+    const titleSaid = (v: string) => all.filter((i) => (String(candidates[i]?.title ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).some((w) => !TITLE_STOP.has(w) && v.toLowerCase().includes(w)));
+    const hasSubject = (v: string) => namedMembers(v, candidates).size > 0 || (!!noun && nounKeys(noun).some((k) => v.toLowerCase().includes(k))) || titleSaid(v).length > 0;
+    const only = (keep: (p: { from: number; to: number }, k: number) => boolean) => parts.reduce((v, p, k) => (keep(p, k) ? v : v.slice(0, p.from) + " ".repeat(p.to - p.from) + v.slice(p.to)), whole);
+    const ownHas = hasSubject(only(own));
+    const yes = parts.map((p, k) => !own(p) && (k > firstOwn || ownHas) && (SAYS_FIT.test(said.slice(p.from, p.to)) || SAYS_YES.test(said.slice(p.from, p.to))));
+    parts.forEach((p, k) => { if (yes[k]) namedMembers(x.slice(p.from, p.to), candidates).forEach((i) => fits.add(i)); });
+    let subject = only((p, k) => own(p) || (!yes[k] && (k < firstOwn || GOES_ON.test(said.slice(p.from, p.to)))));
+    // Its own part and the parts before it name none and speak of none: the subject is in the parts after ("לא
+    // מתאימים לעיניים: טוש גבות חום, טוש גבות שחור").
+    if (!hasSubject(subject)) subject = only((_, k) => !yes[k]);
+    const named = namedMembers(subject, candidates);
+    // The parts that hold the subject also say something fits: which is which is not guessed.
+    const heldSaid = parts.filter((p, k) => !yes[k] && subject.slice(p.from, p.to).trim()).map((p) => said.slice(p.from, p.to)).join(" , ");
+    if (named.size) { if (!SAYS_FIT.test(heldSaid.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); continue; }
+    const low = subject.toLowerCase();
     // Of her kind: by its title or category; a title in another script than her word ("Miss eyebrows Pen" for
     // "טוש") cannot say, and counts unless its category says otherwise.
     const inHerScript = (c: any) => (/[\u0590-\u05FF]/.test(noun ?? "") ? /[\u0590-\u05FF]/ : /[a-z]/i).test(String(c?.title ?? ""));
     const ofKind = noun && nounKeys(noun).some((k) => low.includes(k)) ? all.filter((i) => ofHerKindStrict(candidates[i], noun) || (!inHerScript(candidates[i]) && ofNoun(candidates[i], noun))) : [];
-    const spoken = ofKind.length ? ofKind : all.filter((i) => (String(candidates[i]?.title ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).some((w) => !TITLE_STOP.has(w) && low.includes(w)));
+    const spoken = ofKind.length ? ofKind : titleSaid(low);
     spoken.forEach((i) => { if (!inText.has(i)) out.add(i); });
   }
   fits.forEach((i) => out.delete(i));
@@ -2088,8 +2127,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // list in its place would be the very products it says do not fit.
       if (!kept && productTurn) {
         const rulesOut = (x: { o: ModelTurnOutput }) => unfitProducts(x.o.reply, candidates as any[], kindNow, incNow).size > 0;
-        const st = order.find((x) => x && x.removed.length > 0 && !x.fragment && !x.lostPass && !x.lostLink && !x.memberCut
-          && (rulesOut(x) || (wordCount(x.o.reply) >= 8 && !x.removed.some((r) => namedMembers(r, candidates as any[]).size > 0)))
+        // Also when the cut counts as a member cut (the cut sentence names a found product the statement does not, by
+        // its title or by a use word a title holds): the list in its place would be the products the statement rules out.
+        const st = order.find((x) => x && x.removed.length > 0 && !x.fragment && !x.lostPass && !x.lostLink
+          && (rulesOut(x) || (!x.memberCut && wordCount(x.o.reply) >= 8 && !x.removed.some((r) => namedMembers(r, candidates as any[]).size > 0)))
           && aboutFound(x.o.reply, candidates as any[], kindNow)) ?? null;
         // It rules products out and its own cards of them stayed, because it points at them: it goes as it is.
         if (st && !st.unfit && rulesOut(st)) { kept = st; (trace as any).statementKept = true; }

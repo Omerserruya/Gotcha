@@ -4144,6 +4144,8 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     "באתר אחר ראיתי את זה יותר זול, למה אצלכם יקר?",
     "המשלוח הכי זול כמה עולה?",
     "is there a cheaper shipping option?",
+    // (H) a past statement with no ask.
+    "קניתי אצלכם והיה זול, תודה",
   ];
   // The model's drafts with the cards it chose, over the five found products.
   const runFive = async (incoming: string, text: string, cardKeys: string[] = []) => {
@@ -4176,6 +4178,11 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     for (const x of ["אז מה הכי זול אצלכם?", "יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "יש לכם משהו זול?", "יש חולצה זולה?", "יש חולצה זולה עם משלוח חינם?", "do you have anything cheaper with free shipping?", "ראיתי באתר אחר, יש לכם משהו יותר זול?", "זה יקר לי, יש משהו יותר זול?", "something cheaper?", "something cheap for delivery tomorrow?"]) expect([x, cheapAsk(x)]).toEqual([x, true]);
     // "Expensive" is no kind of product.
     expect(cheapNoun("זה יקר לי, יש משהו יותר זול?")).toBeNull();
+    // (H) a past statement is no ask; a question in the word's own clause still is, and so is an ask in another clause.
+    for (const x of ["הטוש שקניתי היה ממש זול", "it was cheap, thanks", "אתמול זה היה זול יותר, מה קרה?", "החולצה הייתה זולה", "החולצה היתה מאוד זולה", "המחירים היו זולים פעם", "they were much cheaper last year", "זה היה כל כך זול", "זה היה הכי זול שמצאתי", "it was so cheap", "it was very cheap",
+      // Negated, in a question: the question mark does not make it an ask.
+      "למה זה לא היה זול?", "למה היא לא הייתה זולה?", "למה היא לא היתה זולה?", "למה הם לא היו זולים?"]) expect([x, cheapAsk(x)]).toEqual([x, false]);
+    for (const x of ["מה היה הכי זול אצלכם?", "היה לכם משהו זול?", "בשבוע שעבר היה זול, יש משהו זול גם עכשיו?"]) expect([x, cheapAsk(x)]).toEqual([x, true]);
   });
 
   // What the store's own text says of the found products, so the statements below stand as checked facts.
@@ -4249,6 +4256,39 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(cards).toEqual([]);
   });
 
+  it("★ (F) \"X no, Y yes\": the pens are ruled out and the product the sentence says yes to keeps its card", async () => {
+    withCut();
+    const st = "הטושים לא מתאימים לעיניים, קונסילר לעיניים כן.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["203"]);
+  });
+
+  it("★ (the sixth case) a statement that rules the found products out stands when the cut sentence's use word counts as a member cut", async () => {
+    withCut();
+    // The cut sentence says "מתחת לעיניים" and names one of the pens: by the measure, a member of the answer was cut.
+    const cut = "יש אחריות על טוש גבות חום גם בשימוש מתחת לעיניים.";
+    const { memberCutOf } = await import("../services/reply-engine/engine");
+    expect(memberCutOf([cut], STATEMENT, FIVE)).toBe(true);
+    const { r, cuts, cards } = await runFive("יש טוש לעיניים?", `${STATEMENT} ${cut}`);
+    expect((r.trace as any).memberCut).toBe(true);
+    expect((r.trace as any).statementKept).toBe(true);
+    expect(cuts.markers).toEqual(expect.arrayContaining(["memberCut", "statementKept"]));
+    // The statement, never the list of the pens it rules out, and neither pen's card.
+    expect(r.reply).toBe(STATEMENT);
+    expect(cards).not.toContain("201");
+    expect(cards).not.toContain("202");
+  });
+
+  it("★ (G) a shipping price that equals a found product's price names no product: the answer left is no member cut", async () => {
+    h.policyRow = { data: { blockedTopics: ["משלוח"] } };
+    const st = "טוש גבות שחור קיים אצלנו והמחיר שלו הוא ₪149.";
+    const { r, cards } = await runFive("יש טוש גבות שחור?", `${st} המשלוח עולה ₪79.`, ["PRODUCT_2"]);
+    expect((r.trace as any).memberCut).toBeUndefined();
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["202"]);
+  });
+
   it("★ (B to E) the helpers, on the Supervisor's fixture", async () => {
     const { namedMembers, memberCutOf, unfitProducts } = await import("../services/reply-engine/engine");
     const u = (t: string) => [...unfitProducts(t, FIVE, "טוש", "יש טוש לעיניים?")].sort();
@@ -4299,6 +4339,44 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(memberCutOf(["טוש גבות חום עולה ₪79."], "יש לנו טוש גבות בכמה גוונים.", FIVE)).toBe(false);
     expect(memberCutOf(["קונסילר לעיניים עולה ₪99."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(true);
     expect(memberCutOf(["המשלוח עולה ₪30."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(false);
+    // F: "X no, Y yes". The words speak of the subject of their own comma part; the part that says yes fits.
+    expect(u("הטושים לא מתאימים לעיניים, קונסילר לעיניים כן.")).toEqual([0, 1]);
+    expect(u("קונסילר לעיניים כן, הטושים לא מתאימים לעיניים.")).toEqual([0, 1]);
+    expect(u("טוש גבות חום לא מתאים לעיניים, קונסילר לעיניים מתאים.")).toEqual([0]);
+    expect([...unfitProducts("The Cropped Hoodie does not fit a tall frame, the Ribbed Tank Top does.", URBAN)]).toEqual([0]);
+    // A later part that neither says yes nor goes on with the same words is not the subject.
+    expect(u("הטושים לא מתאימים לעיניים, קונסילר לעיניים זמין במלאי.")).toEqual([0, 1]);
+    expect(u("טוש גבות חום לא מתאים לעיניים, וגם יש לנו קונסילר לעיניים.")).toEqual([0]);
+    expect(u("טוש גבות חום לא מתאים לעיניים, טוש גבות שחור.")).toEqual([0]);
+    // One that goes on with them is.
+    expect(u("טוש גבות חום לא מתאים לעיניים, טוש גבות שחור גם לא.")).toEqual([0, 1]);
+    expect(u("טוש גבות חום לא מתאים לעיניים, וכן טוש גבות שחור.")).toEqual([0, 1]);
+    for (const x of ["nor the Ribbed Tank Top", "and also the Ribbed Tank Top", "also the Ribbed Tank Top", "the Ribbed Tank Top either"]) expect([x, [...unfitProducts(`The Cropped Hoodie does not fit a tall frame, ${x}.`, URBAN)].sort()]).toEqual([x, [0, 2]]);
+    // The yes marks its product as fitting where the words name it with its sibling, after them or before them.
+    expect(u("טוש גבות לא מתאים לעיניים, טוש גבות שחור כן.")).toEqual([0]);
+    expect(u("טוש גבות לא מתאים לעיניים, טוש גבות שחור גם כן.")).toEqual([0, 1]);
+    const PENS = [{ title: "Brow Pen Brown", price: 79 }, { title: "Brow Pen Black", price: 149 }];
+    expect([...unfitProducts("The Brow Pen does not fit the eyes.", PENS)]).toEqual([0, 1]);
+    for (const x of ["does", "yes"]) {
+      expect([x, [...unfitProducts(`The Brow Pen does not fit the eyes, the Brow Pen Black ${x}.`, PENS)]]).toEqual([x, [0]]);
+      expect([x, [...unfitProducts(`The Brow Pen Black ${x}, the Brow Pen Brown does not fit the eyes.`, PENS)]]).toEqual([x, [0]]);
+    }
+    // The same subject goes on in a later part that says what it does fit: still ruled out.
+    expect(u("הטושים לא מתאימים לעיניים, הם מתאימים רק לגבות.")).toEqual([0, 1]);
+    expect(u("טוש גבות חום לא מתאים לעיניים, הוא מתאים רק לגבות.")).toEqual([0]);
+    // A list of subjects before the words.
+    expect(u("טוש גבות חום, טוש גבות שחור לא מתאימים לעיניים.")).toEqual([0, 1]);
+    // The subject before the words, in an earlier part, and after them when nothing before names or speaks of any.
+    expect(u("טוש גבות שחור, שמגיע בגוון כהה, לא מתאים לעיניים.")).toEqual([1]);
+    expect(u("לא מתאימים לעיניים: טוש גבות חום, טוש גבות שחור.")).toEqual([0, 1]);
+    // G: a price said of the shipping names no product; a product's price with shipping after it still does.
+    expect(memberCutOf(["המשלוח עולה ₪79."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(false);
+    expect([...namedMembers("המשלוח עולה ₪79.", FIVE)]).toEqual([]);
+    for (const x of ["משלוח עולה ₪79", "משלוחים עולים ₪79", "השילוח עולה ₪79", "ההובלה עולה ₪79", "שליח עולה ₪79", "shipping costs ₪79", "delivery costs ₪79", "postage is ₪79", "a courier is ₪79"]) expect([x, [...namedMembers(`${x}.`, FIVE)]]).toEqual([x, []]);
+    // The price before the shipping word, or the shipping as what comes with the product.
+    expect([...namedMembers("יש אצלנו פריט ב-₪79 כולל משלוח.", FIVE)]).toEqual([0]);
+    for (const x of ["יש אצלנו פריט כולל משלוח ב-₪79.", "יש אצלנו פריט עם משלוח ב-₪79.", "an item with delivery for ₪79.", "an item including delivery for ₪79."]) expect([x, [...namedMembers(x, FIVE)]]).toEqual([x, [0]]);
+    expect([...namedMembers("המשלוח חינם, והפריט עולה ₪79.", FIVE)]).toEqual([0]);
   });
 
   it("the helpers, on the real lines", async () => {
@@ -4342,8 +4420,10 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     // A sentence that names none rules out the found products the text names nowhere else, never the one it offers.
     const three = [{ title: BROW, price: 59, inventoryState: "in_stock" }, { title: "Kiss eyebrows הטוש העדין למילוי גבות", price: 69, inventoryState: "in_stock" }, { title: "Cover me קונסילר", price: 89, inventoryState: "in_stock" }];
     expect([...unfitProducts("הטושים שמצאנו לא מתאימים לאזור העיניים. לאזור הזה יש אצלנו את Cover me קונסילר.", three, "טוש")]).toEqual([0, 1]);
-    // It names a product and says both that something fits and that something does not: which is which is not guessed.
-    expect([...unfitProducts("לאזור העיניים מתאים Cover me קונסילר, והטושים לא מתאימים.", two, "טוש")]).toEqual([]);
+    // (F) Each comma part has its own subject: the part that says fits marks its product, the other part's pens are out.
+    expect([...unfitProducts("לאזור העיניים מתאים Cover me קונסילר, והטושים לא מתאימים.", two, "טוש")]).toEqual([0]);
+    // In one part it names a product and says both that something fits and that something does not: which is which is not guessed.
+    expect([...unfitProducts("לאזור העיניים מתאים Cover me קונסילר והטושים לא מתאימים.", two, "טוש")]).toEqual([]);
     expect([...unfitProducts("הטושים שמצאנו מתאימים לגבות בלבד, ולא מיועדים לאזור מתחת לעיניים.", two, "טוש")]).toEqual([]);
     // They are for the very thing she asks for: a yes, nothing is ruled out. Asked for the other use, they are.
     expect([...unfitProducts(STATEMENT, brows, "טוש", "יש לכם טוש לגבות?")]).toEqual([]);
