@@ -53,7 +53,7 @@ export interface RelevanceGateResult {
   mode: RelevanceGateMode;
   category: string | null;
   confidence: number | null;
-  source: "override" | "stored" | "fast" | "model" | "error" | "filter_off" | null;
+  source: "override" | "stored" | "fast" | "model" | "sender" | "error" | "filter_off" | null;
   hold: boolean;
 }
 
@@ -112,6 +112,9 @@ export async function relevanceForTurn(args: {
   if ((args.preferStored && stored.category) || !shouldReclassify(stored, lastInAt, now)) {
     return { mode, category: stored.category, confidence: stored.confidence, source: "stored", hold: holdsBack(stored.category, stored.confidence, false) };
   }
+  // This client adds origin LIVE to every conversation read, the sender rule's read of hand marks included: a mark
+  // on an imported-history conversation is not seen. Whoever lets the import review write marks must ask for
+  // historical rows on purpose in that read.
   const db = deps.db ?? prisma;
   try {
     const label = await withTimeout((async () => {
@@ -122,9 +125,9 @@ export async function relevanceForTurn(args: {
       const messages = (history ?? []).slice(-12).map((m: any) => ({ direction: m.direction, body: m.body, createdAt: m.createdAt, messageType: m.messageType, metadata: m.metadata }));
       const subject = (lastIn?.metadata as any)?.email?.subject ?? null;
       return (deps.classify ?? classifyConversation)(tenantId, profile, {
-        channel: String(conversation.channel ?? ""), customerExternalId: conversation.customerExternalId,
+        channel: String(conversation.channel ?? ""), customerExternalId: conversation.customerExternalId, conversationId: conversation.id,
         firstDirection: first?.direction ?? null, messages, subject, team: teamIdentityOf(users),
-      });
+      }, { db });
     })(), deps.timeoutMs ?? 3000);
     (deps.write ?? writeLabel)(tenantId, conversation.id, label).catch((err) => console.warn("[relevance] write failed:", (err as Error)?.message));
     return { mode, category: label.category, confidence: label.confidence, source: label.source, hold: holdsBack(label.category, label.confidence, false) };

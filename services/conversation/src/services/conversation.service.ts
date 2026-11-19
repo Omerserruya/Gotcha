@@ -1166,8 +1166,9 @@ export async function setClassifiedRelevance(
   if (!(RELEVANCE_CATEGORY_VALUES as readonly string[]).includes(category)) {
     throw Object.assign(new Error(`invalid_category: one of ${RELEVANCE_CATEGORY_VALUES.join(", ")}`), { status: 400 });
   }
-  const source = body.source === "fast" || body.source === "model" ? body.source : null;
-  if (!source) throw Object.assign(new Error("invalid_source: fast or model"), { status: 400 });
+  // "sender": a person marked this sender personal by hand on another conversation (the ai's sender rule).
+  const source = body.source === "fast" || body.source === "model" || body.source === "sender" ? body.source : null;
+  if (!source) throw Object.assign(new Error("invalid_source: fast, model or sender"), { status: 400 });
   const n = Number(body.confidence);
   const confidence = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null;
   const at = typeof body.classifiedAt === "string" && Number.isFinite(Date.parse(body.classifiedAt)) ? new Date(body.classifiedAt) : new Date();

@@ -13,10 +13,12 @@
  *   internal          the tenant's own team (a user's phone or email, the team's email domain)
  *   unclear           the model's real uncertainty
  *
- * A cheap deterministic fast path first (bulk headers, no-reply senders, our own notification senders:
- * the reply engine's automatedInbound), then ONE small model call with a short generic rubric and JSON
- * out. Platform-paid ("conversation_classify": the "_classify" usage suffix, outside every tenant budget).
+ * The sender rule first (a person marked this sender personal by hand), then a cheap deterministic fast path
+ * (bulk headers, no-reply senders, our own notification senders: the reply engine's automatedInbound), then
+ * ONE small model call with a short generic rubric and JSON out. Platform-paid ("conversation_classify": the
+ * "_classify" usage suffix, outside every tenant budget).
  */
+import { prisma } from "@chatcenter/shared";
 import { automatedInbound } from "./reply-engine/gates";
 import { generateResponse, getDefaultModel, platformPaidScope } from "./ai.service";
 
@@ -29,7 +31,7 @@ export interface Relevance {
   category: RelevanceCategory;
   confidence: number;
   reason: string;
-  source: "fast" | "model";
+  source: "fast" | "model" | "sender";
   classifiedAt: string;
 }
 
@@ -57,6 +59,10 @@ export interface RelevanceInput {
   channel: string;
   team?: TeamIdentity | null;
   customerExternalId?: string | null;
+  /** The conversation being classified: the sender rule looks at the sender's OTHER conversations. */
+  conversationId?: string | null;
+  /** Set when a person marked this conversation by hand: the sender rule never relabels it. */
+  overriddenBy?: string | null;
   /** Who wrote first in the whole conversation. */
   firstDirection: "INBOUND" | "OUTBOUND" | null;
   /** The last messages, oldest first. */
@@ -67,6 +73,10 @@ export interface RelevanceInput {
 
 const clip = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const realMessages = (m: RelevanceMessage[]) => m.filter((x) => x.messageType !== "system" && clip(x.body, 1).length > 0);
+/** A body that is one bracketed placeholder ("[image]", "[sticker]", "[edit message]", "[deleted]"): a platform event, never the sender's words. */
+export const bracketOnly = (body: unknown) => /^\[[^\[\]]*\]$/u.test(String(body ?? "").trim());
+/** What the sender wrote: the real inbound messages, the placeholders off. */
+const writtenInbound = (m: RelevanceMessage[]) => realMessages(m).filter((x) => x.direction === "INBOUND" && !bracketOnly(x.body));
 
 // Free mail providers: a shared domain says nothing about who someone works for.
 const PUBLIC_MAIL = /^(?:gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|proton|protonmail|pm|gmx|mail|yandex|zoho|walla|bezeqint|012|netvision|inter)\./i;
@@ -155,6 +165,66 @@ export function sellerPitch(body: unknown): boolean {
 /** An Instagram story mention with nothing written: it asks nothing (replay d, Smoovee A: "[Story mention]" got a question). */
 export const storyMentionOnly = (body: unknown) => /^\s*\[(?:story[ _]mention|story mention reply|אזכור\s+בסטורי|תיוג\s+בסטורי)\]\s*$/iu.test(String(body ?? ""));
 
+/**
+ * Could this be a customer? (2026-11-19, Omer: casual chats stayed "unclear".) The expensive error is a customer
+ * hidden as personal, so anything a customer might open with counts: a bare greeting, "אפשר שאלה", "יש לכם", the
+ * business addressed, a price, order or subscription word. Never a word of the business's profile (dry run
+ * 2026-11-19: "message", "chat", "time", the business's own name pulled clear personal chats back to unclear),
+ * and never a bracketed placeholder.
+ */
+const GREETING_ONLY = /^\s*(?:היי+|הי|שלום|אהלן|הלו|בוקר\s+טוב|ערב\s+טוב|צהריים\s+טובים|hey|hi|hello|good\s+(?:morning|evening))[\s!.,?🙂😊]*$/iu;
+const CUSTOMER_ASK = /(?<![\u0590-\u05FF])[הובלמשכ]{0,2}(?:אפשר\s+(?:לשאול|שאלה)|שאלה\s+קטנה|יש\s+(?:לכם|לך|אצלכם)|שלכם|אצלכם|אתם|לכם|מחיר|מחירים|מחירון|כמה\s+(?:זה\s+)?(?:עולה|עולים|עולות)|עלות|להזמין|הזמנה|הזמנתי|משלוח|לקנות|לרכוש|מנוי|הצעת\s+מחיר|שירות\s+לקוחות|תמיכה|דמו|פגישה)(?![\u0590-\u05FF])|\b(?:price|prices|cost|order|buy|purchase|subscription|plan|demo|support|do you|can i ask|quote|meeting)\b/iu;
+export function couldBeCustomer(body: unknown, strongOnly = false): boolean {
+  const b = String(body ?? "").trim();
+  if (!b || bracketOnly(b)) return false;
+  if (!strongOnly && GREETING_ONLY.test(b)) return true;
+  return CUSTOMER_ASK.test(b);
+}
+/** personal needs this much from the model, and nothing a customer might write in any of the sender's messages. */
+export const MIN_PERSONAL_CONFIDENCE = 0.75;
+export function personalBound(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput) {
+  if (p.category !== "personal") return p;
+  // A placeholder is not a message of the sender: it neither asks nor counts.
+  const inbound = writtenInbound(c.messages);
+  if (p.confidence < MIN_PERSONAL_CONFIDENCE) return { category: "unclear" as const, confidence: p.confidence, reason: `unsure: personal (${p.reason})`.slice(0, 120) };
+  // An ask in ANY inbound message; a greeting only when greetings are all the sender wrote.
+  if (inbound.some((m) => couldBeCustomer(m.body, true)) || (inbound.length > 0 && inbound.every((m) => couldBeCustomer(m.body)))) return { category: "unclear" as const, confidence: p.confidence, reason: `could be a customer (${p.reason})`.slice(0, 120) };
+  return p;
+}
+
+/**
+ * The sender rule (2026-11-19, Omer: a hand-marked "personal" excludes the sender). No store of its own: it reads
+ * the marks people already made on this sender's other conversations (same tenant, channel and id). The newest
+ * mark decides: "personal" labels this conversation personal with no model call; any other mark does nothing.
+ * Not on email, for now: one address is not one person there (a site's form mailer, a marketplace relay, a shared
+ * mailbox), and one mark would hide every later customer writing through it. Email goes on to the fast path and the model.
+ */
+export const SENDER_PERSONAL_REASON = "this sender was marked personal by hand";
+const EMAIL_CHANNEL = /^(?:EMAIL|GMAIL|OUTLOOK)$/i;
+/** The sender's id as a channel may have stored it: a number with and without the leading "+". */
+export function senderIds(externalId: unknown): string[] {
+  const raw = String(externalId ?? "").trim();
+  const bare = raw.replace(/^\+/, "");
+  if (!bare) return [];
+  return /^\d+$/.test(bare) ? [bare, `+${bare}`] : [raw];
+}
+/** One bounded read (the tenant, channel and sender index). A failed read is no mark: the classifier goes on as before. */
+export async function senderMarkedPersonal(tenantId: string, c: RelevanceInput, db?: any): Promise<boolean> {
+  const ids = senderIds(c.customerExternalId);
+  if (!tenantId || !c.channel || !ids.length || c.overriddenBy || EMAIL_CHANNEL.test(c.channel)) return false;
+  try {
+    const newest = await (db ?? prisma).conversation?.findFirst?.({
+      where: { tenantId, channel: c.channel, customerExternalId: { in: ids }, relevanceSource: "override", relevanceOverriddenAt: { not: null }, ...(c.conversationId ? { id: { not: c.conversationId } } : {}) },
+      orderBy: { relevanceOverriddenAt: "desc" },
+      select: { relevanceCategory: true },
+    });
+    return newest?.relevanceCategory === "personal";
+  } catch (err) {
+    console.warn("[relevance] sender rule read failed:", (err as Error)?.message);
+    return false;
+  }
+}
+
 /** The fast path: mail no person wrote, decided with no model call. Null when it does not apply. */
 export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | null {
   const at = now.toISOString();
@@ -175,7 +245,7 @@ export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | 
 const RUBRIC = `You label ONE conversation of a business's inbox. Decide who it is with and what it is about, judged against the business below. Categories:
 - business: a customer or a lead asking about, buying, or getting service for what THIS business sells or does.
 - reply_to_outbound: the business wrote first and this is the other side answering (a supplier, a hotel, a partner, someone the business reached out to), not a customer of the business.
-- personal: a private chat (a friend, a partner, family) that is not about the business.
+- personal: a private chat (a friend, a partner, family) that is not about the business; also a casual chat about something that has nothing to do with what this business does or sells (a game, a car, sport, a joke) and asks nothing of it. Name that subject in the reason. A short opener that could be a customer (a greeting, "can I ask", "do you have", a product, price or order word) is never personal: business or unclear.
 - notice: an automatic or vendor message to the business: an invoice or receipt, a system notification, a password reset, a login alert, shipping of something the business itself bought.
 - marketing: a newsletter, a promotion, an ad, or a cold sales pitch TO the business.
 - auto_reply: another business's automated message: a thanks-for-contacting greeting, opening hours, an away or out-of-office notice.
@@ -194,7 +264,7 @@ export function relevancePrompt(profile: RelevanceProfile | null, c: RelevanceIn
       ].filter(Boolean).join("\n")
     : "Business: (no profile)";
   const lines = realMessages(c.messages).slice(-8).map((m) => `[${m.direction === "OUTBOUND" ? "business" : "contact"}] ${clip(m.body, 300)}`);
-  const email = /^(?:EMAIL|GMAIL|OUTLOOK)$/i.test(c.channel) ? `\nEmail from: ${clip(c.customerExternalId, 80)}${c.subject ? `\nSubject: ${clip(c.subject, 120)}` : ""}` : "";
+  const email = EMAIL_CHANNEL.test(c.channel) ? `\nEmail from: ${clip(c.customerExternalId, 80)}${c.subject ? `\nSubject: ${clip(c.subject, 120)}` : ""}` : "";
   const user = `${biz}\n\nChannel: ${c.channel}\nWho wrote first: ${c.firstDirection === "OUTBOUND" ? "the business" : c.firstDirection === "INBOUND" ? "the contact (so NOT reply_to_outbound: the business answering the contact's opener never makes it one)" : "unknown"}${email}\n\nLast messages (oldest first):\n${lines.join("\n") || "(none)"}`;
   return [{ role: "system", content: RUBRIC }, { role: "user", content: user }];
 }
@@ -211,6 +281,8 @@ export function parseRelevance(text: string | null | undefined): { category: Rel
 
 export interface ClassifyDeps {
   generate?: typeof generateResponse;
+  /** The database the sender rule reads (default: prisma). */
+  db?: any;
   model?: string;
   now?: () => Date;
 }
@@ -245,9 +317,10 @@ export function firstMover(p: { category: RelevanceCategory; confidence: number;
   return p;
 }
 
-/** One conversation's relevance: the fast path, else one small platform-paid model call. */
+/** One conversation's relevance: the sender rule, the fast path, else one small platform-paid model call. */
 export async function classifyConversation(tenantId: string, profile: RelevanceProfile | null, c: RelevanceInput, deps: ClassifyDeps = {}): Promise<Relevance> {
   const now = deps.now?.() ?? new Date();
+  if (await senderMarkedPersonal(tenantId, c, deps.db)) return { category: "personal", confidence: 1, reason: SENDER_PERSONAL_REASON, source: "sender", classifiedAt: now.toISOString() };
   const fast = fastRelevance(c, now);
   if (fast) return fast;
   // No customer message yet: nothing to judge.
@@ -263,7 +336,7 @@ export async function classifyConversation(tenantId: string, profile: RelevanceP
     reasoningEffort: "minimal",
     metadata: { type: "conversation_relevance" },
   }));
-  const parsed = lowConfidence(onlyAfterOwnOutbound(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c), c));
+  const parsed = personalBound(lowConfidence(onlyAfterOwnOutbound(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c), c)), c);
   return { ...parsed, source: "model", classifiedAt: now.toISOString() };
 }
 

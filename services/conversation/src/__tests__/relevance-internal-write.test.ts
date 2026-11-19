@@ -37,6 +37,11 @@ describe("internal relevance write", () => {
     expect(out).toMatchObject({ written: true, relevance: { category: "auto_reply", confidence: 0.9, source: "fast" } });
     expect(S.events.some((e) => e.event === "conversation:updated" && e.data.relevance?.category === "auto_reply")).toBe(true);
   });
+  it("★ the sender rule's label is accepted as it is", async () => {
+    S.rows = [row()]; S.events = [];
+    const out = await setClassifiedRelevance("T", "c1", { category: "personal", confidence: 1, reason: "this sender was marked personal by hand", source: "sender" });
+    expect(out).toMatchObject({ written: true, relevance: { category: "personal", confidence: 1, source: "sender" } });
+  });
   it("★ never replaces a person's override", async () => {
     S.rows = [row({ relevanceCategory: "business", relevanceSource: "override", relevanceOverriddenBy: "u1" })]; S.events = [];
     const out = await setClassifiedRelevance("T", "c1", { category: "internal", confidence: 0.95, source: "fast" });
