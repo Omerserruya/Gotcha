@@ -180,7 +180,16 @@ export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/(?
 // A material answered from the business description without reading the product (prod replay 12:
 // "stainless steel" from the product data in one conversation, something else from the description in another).
 const MATERIAL_ASK = /(?<![\u0590-\u05FF])(?:חומר|מאיזה\s+חומר|עשוי|עשויה|עשויים|ממה\s+(?:זה|הוא|היא)\s+עשוי)(?![\u0590-\u05FF])|\b(?:material|made of|made from)\b/iu;
+// A price ask about the product in focus answered with no price, or with a request for its name or link (dev round k3
+// on b3d2bbf3: "כמה היא עולה?" right after two shirts were named, only the knowledge searched).
+const PRICE_ASK = /(?<![\u0590-\u05FF])(?:כמה\s+(?:זה\s+|היא\s+|הוא\s+|הם\s+|הן\s+)?(?:עולה|עולים|עולות)|מה\s+(?:ה)?מחיר|ה?מחיר\s+של)(?![\u0590-\u05FF])|\b(?:how much|what(?:'s| is) the price|price of)\b/iu;
+const NO_PRICE_GIVEN = /(?<![\u0590-\u05FF])(?:(?:אין|לא)\s+(?:לנו\s+|לי\s+|כרגע\s+)?(?:[\u0590-\u05FF]+\s+){0,2}?(?:ה)?מחיר|מחיר\s+(?:מאומת|מעודכן)|(?:לשלוח|לכתוב|שלחו|כתבו)\s+(?:את\s+)?(?:ה)?(?:שם|קישור|לינק)|שם\s+או\s+קישור)(?![\u0590-\u05FF])|\b(?:(?:no|don't have (?:a|the)) price|send (?:me )?(?:the )?(?:name|link))\b/iu;
 export function unreadProduct(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
+  if (PRICE_ASK.test(incoming ?? "") && (teamQuestion || NO_INFO.test(reply ?? "") || NO_PRICE_GIVEN.test(reply ?? ""))) {
+    const canReadP = toolsOffered.some((n) => /get_product|list_products|search_products/i.test(n));
+    const readP = tools.some((t) => /product|variation|inventory/i.test(t.tool) && t.decision === "allow");
+    if (canReadP && !readP) return true;
+  }
   // Asked what it is made of and answered anyway (any statement that is not a question or "no info"):
   // a product fact with no product read behind it (prod replay 12: the description said otherwise).
   const materialStated = MATERIAL_ASK.test(incoming ?? "") && !/\?\s*$/.test(String(reply ?? "").trim()) && !NO_INFO.test(reply ?? "");
@@ -577,6 +586,17 @@ export function namesProductsUnsearched(reply: string, incoming: string, tools: 
   const canSearch = toolsOffered.some((n) => /list_products|search_products/i.test(n));
   return canSearch && !tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
 }
+/** Every sentence of the reply says the team has it. */
+export const bareTeamLine = (reply: string) => { const xs = (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter(Boolean); return xs.length > 0 && xs.every((x) => TEAM_LINE.test(x) || TEAM_PASS_ANY.test(x)); };
+/** An information question (how, what, which, is there), not about her own order and with no number of hers. */
+export const infoQuestion = (incoming: string) => { const t = String(incoming ?? ""); return /(?<![\u0590-\u05FF])(?:מה|איך|איזה|איזו|אילו|האם|יש|אפשר|כמה)(?![\u0590-\u05FF])|\b(?:what|how|which|is there|can i|do you)\b/iu.test(t) && !ORDER_ASK.test(t) && !/\d{3,}/.test(t); };
+/** Two or more of her content words (4+ letters, the joined ה and ו off) in the retrieved knowledge. */
+export const knowledgeSpeaksTo = (incoming: string, knowledge: string) => {
+  const k = String(knowledge ?? "").toLowerCase();
+  if (!k) return false;
+  const words = [...new Set(tipWords(incoming).map((w) => w.replace(/^[הו](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => !talkWord(w) && !["אפשר", "איזה", "איזו", "אילו", "שלכם", "עבור", "האם"].includes(w)))];
+  return words.filter((w) => k.includes(w)).length >= 2;
+};
 /** The knowledge holds the customer's device or item (a 4+ letter word of their message): it may answer. */
 export function knowledgeHasIt(incoming: string, knowledge: string): boolean {
   const k = String(knowledge ?? "").toLowerCase();
@@ -720,7 +740,12 @@ export const stripForeignScript = (reply: string, allowedText = "") => String(re
 
 // How the system works is not the customer's business (prod replay 5: "the number is linked to your contact details").
 const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:לא\s+מפורט(?:ים|ות|ת)?\s+(?:כאן|אצלנו|במידע)|אין\s+במידע|במידע\s+(?:שיש\s+)?(?:לי|לנו)\s+(?:אין|לא))(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:בתיאור\s+העסק|בפרטי\s+העסק|במידע\s+שלנו\s+(?:מופיע|מופיעה|מופיעים|כתוב)|אצלנו\s+(?:מופיע|מופיעה|מופיעים|רשום)|לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות)\s+אצלנו|צירוף\s+(?:של\s+)?תבנית|הודעה\s+(?:קריאה|שאינה\s+קריאה)|לא\s+התקבלה\s+הודעה\s+קריאה)(?![\u0590-\u05FF])|\b(?:template attachment|template message|readable message)\b|(?<![\u0590-\u05FF])(?:נוסף|נוספה|הוספתי|הוספנו|שמרתי|שמרנו|עודכן|עודכנה|עדכנו)\s+(?:את\s+\S+\s+)?(?:ל|אל\s+)?(?:פרטי\s+(?:ה)?קשר|הכרטיס\s+שלך|לכרטיס|למערכת)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
-export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "");
+// The bot describing its own lookup or what it did or did not verify (rating of b3d2bbf3 and dev round k3: "בחיפוש
+// לפי חולצת טי", "לא אומתו", "מחיר מאומת", "שתוארו קודם", "לא בדקנו את התיאור", "המידע שיש לנו מתאר").
+const PROCESS_TALK = /(?<![\u0590-\u05FF])(?:בחיפוש\s+(?:לפי|של|על)|לא\s+(?:אומת|אומתו|אומתה|מאומת|מאומתים|מאומתות|מאומתת)|(?:מחיר|מחירים|צבע|צבעים|מלאי)\s+(?:מאומת|מאומתים|מאומתות)|ש(?:תוארו|תואר|תוארה|הוזכרו|הוזכר|הוזכרה)\s+(?:קודם|לפני\s+כן|מקודם)|(?:לא\s+)?(?:בדקנו|בדקתי)\s+את\s+(?:ה)?(?:תיאור|מידע|פרטים)|המידע\s+שיש\s+(?:לנו|לי)\s+(?:מתאר|מציין|אומר))(?![\u0590-\u05FF])/u;
+// The same as a clause before the real question ("אין כאן פנייה קודמת פתוחה ..., אפשר לכתוב במה מדובר?"): the clause goes.
+const PROCESS_CLAUSE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי\s+)?(?:כאן|פה|אצלנו)\s+(?:פנייה|בקשה|שיחה|הודעה)[^,.!?\n]{0,80}),\s*/gu;
+export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "") || PROCESS_TALK.test(reply ?? "") || new RegExp(PROCESS_CLAUSE.source, "u").test(reply ?? "");
 
 // A tool failure told to the customer (prod replay 8: "the catalogue didn't open for me").
 /** The reply narrating its own reasoning about the results (rating 93f9fdff, Tehila: "...לא תואמות למה שתיארת, אז לא אציע אותן"). */
@@ -808,7 +833,7 @@ export function noRecommendation(reply: string, incoming: string, candidateCount
 
 // Gendered forms to a customer whose gender is not known become the plural (prod replay 2026-11-17).
 const TO_PLURAL: Record<string, string> = {
-  תשלחי: "תשלחו", שלחי: "שלחו", בחרי: "בחרו", תבחרי: "תבחרו", תוכלי: "תוכלו", תרצי: "תרצו", תגידי: "תגידו",
+  תשלחי: "תשלחו", שלחי: "שלחו", בחרי: "בחרו", תבחרי: "תבחרו", תוכלי: "תוכלו", תרצי: "תרצו", תרצה: "תרצו", תגידי: "תגידו",
   כתבי: "כתבו", תכתבי: "תכתבו", לחצי: "לחצו", תלחצי: "תלחצו", תזמיני: "תזמינו", הזמיני: "הזמינו", הסתכלי: "הסתכלו", תסתכלי: "תסתכלו",
   ראי: "ראו", תראי: "תראו", תארי: "תארו", הוסיפי: "הוסיפו", תוסיפי: "תוסיפו", תבדקי: "תבדקו", בדקי: "בדקו",
   כנסי: "היכנסו", היכנסי: "היכנסו", תיכנסי: "תיכנסו", תכנסי: "תיכנסו", צייני: "ציינו", תצייני: "תציינו", תני: "תנו", נסי: "נסו", תנסי: "תנסו",
@@ -830,7 +855,7 @@ export function neutralSecondPerson(s: string): string {
 function neutralSecondPersonPart(s: string): string {
   return String(s ?? "")
     .replace(/(?<![\u0590-\u05FF])(?:את|אתה)\s+(מחפשת|מחפש|מעדיפה|מעדיף|מעוניינת|מעוניין|צריכה|צריך|רוצה)(?![\u0590-\u05FF])/gu, (_m, w) => TO_PLURAL[w] ?? ({ מחפש: "מחפשים", מעדיף: "מעדיפים", מעוניין: "מעוניינים", צריך: "צריכים" } as Record<string, string>)[w] ?? w)
-    .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (_m, v, w) => `${v}${TO_PLURAL[w]}`)
+    .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?ש?|כש)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (_m, v, w) => `${v}${TO_PLURAL[w]}`)
     // A participle opening a question to the customer ("מחפשת משהו חגיגי?").
     .replace(/(^|[.!?,]\s*)(מחפשת|מעדיפה|מעוניינת|מתלבטת)(?=[^.!?\n]*\?)/gu, (_m, p, w) => `${p}${TO_PLURAL[w]}`);
 }
@@ -1273,6 +1298,9 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     // turns about a scarf with the knowledge searched only; on cards channels nothing flagged them).
     || claimsOrPromisesUnsearched(reply, i.incomingMessage, i.tools, i.toolsOffered))) problems.push({ kind: "no_search" });
   if (i.searchFailed && i.teamQuestion && knowledgeHasIt(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
+  // A bare team line to an information question the retrieved knowledge speaks to (dev round k3 on b3d2bbf3: "מה
+  // אפשרויות התשלום?" went to the team with the payment methods in the knowledge).
+  else if (i.teamQuestion && bareTeamLine(reply) && infoQuestion(i.incomingMessage) && !productAskNow(i.incomingMessage ?? "") && knowledgeSpeaksTo(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
   if (couponSourceMissed(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"))) problems.push({ kind: "coupon_source" });
   if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
   const tips = unsafeTips(reply, i.knowledge ?? "", !!i.safety);
@@ -1765,7 +1793,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
   if (c.has("found_narration")) s = s.replace(/(?<![֐-׿])(?<!לא\s)((?:ו|ש)?)מצאתי(?![֐-׿])/gu, "$1יש");
   if (c.has("self_gendered")) s = neutralFirstPerson(s);
   if (c.has("foreign_script")) s = stripForeignScript(s, allowedScripts);
-  if (c.has("internal_jargon")) s = dropSentences(s, INTERNAL_JARGON);
+  if (c.has("internal_jargon")) s = dropSentences(dropSentences(s.replace(PROCESS_CLAUSE, ""), INTERNAL_JARGON), PROCESS_TALK);
   if (c.has("internal_reasoning")) s = dropSentences(s, INTERNAL_REASONING);
   if (c.has("tool_talk")) s = dropSentences(s, TOOL_TALK);
   if (c.has("failure_narration")) s = dropSentences(s, FAILURE_NARRATION);

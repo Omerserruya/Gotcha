@@ -1029,3 +1029,85 @@ describe("rating of b3d2bbf3, 2: no second store try after a timeout when the kn
     expect(autoLookups([{ kind: "gave_up_search" } as any], her, W, timedOut)).toHaveLength(1);
   });
 });
+
+describe("rating of b3d2bbf3, 8: neutral address and no process talk", () => {
+  it("★ \"תרצה\", glued to ש too, becomes the plural; the style check still raises it", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    const a = cleanStyle("בטח! סמובי מתאים למכשירי חשמל וחפצים בבית. מה המכשיר או החפץ שתרצה להניח עליו?", ["gendered_address"]);
+    expect(a).toContain("שתרצו להניח");
+    expect(a).not.toMatch(/תרצה/);
+    expect(cleanStyle("בטח. איזה מכשיר או חפץ תרצה להניח על המשטח?", ["gendered_address"])).toContain("איזה מכשיר או חפץ תרצו להניח");
+    // A word that only ends like it stays.
+    expect(cleanStyle("המשטח מתאים לכל מכשיר שתרצו.", ["gendered_address"])).toBe("המשטח מתאים לכל מכשיר שתרצו.");
+  });
+  it("★ the bot's own lookup and what it did not verify never reach the customer; the answer around it stays", async () => {
+    const { cleanStyle, internalJargon } = await import("../services/reply-engine/gates");
+    const d = "נכון, טעינו קודם ולא בדקנו את התיאור. זה טינט שפתיים, והגוון Cocoa הוא חום שוקולדי, אבל המוצר מיועד לשפתיים ולא מתחת לעיניים. מצטערים על ההטעיה.";
+    expect(internalJargon(d)).toBe(true);
+    expect(cleanStyle(d, ["internal_jargon"])).toBe("זה טינט שפתיים, והגוון Cocoa הוא חום שוקולדי, אבל המוצר מיועד לשפתיים ולא מתחת לעיניים. מצטערים על ההטעיה.");
+    const e = "סליחה שלא קיבלת עדכון. אין כאן פנייה קודמת פתוחה או פרטים על מה שצריך לעדכן, אפשר לכתוב במה מדובר?";
+    expect(internalJargon(e)).toBe(true);
+    expect(cleanStyle(e, ["internal_jargon"])).toBe("סליחה שלא קיבלת עדכון. אפשר לכתוב במה מדובר?");
+    const c = "בחיפוש לפי חולצת טי מופיעה חולצה שחורה או לבנה, לא בתכלת. צבעי החולצות הכחולות שתוארו קודם לא אומתו, אז העברתי לצוות לבדוק אם יש חולצה בתכלת.";
+    expect(cleanStyle(c, ["internal_jargon"])).toBe("");
+    expect(internalJargon("לא ברור לאיזו מהחולצות התכוונת, ואין לנו מחיר מאומת לחולצות שתוארו קודם.")).toBe(true);
+    // A plain answer is no process talk.
+    expect(internalJargon("לתמי 4 מתאים משטח סמובי אלכסה, במידה 30x40.")).toBe(false);
+    expect(internalJargon("בדקנו ויש במלאי.")).toBe(false);
+  });
+});
+
+describe("dev round k3 B: a price ask about the products in focus reads them", () => {
+  it("★ \"כמה היא עולה?\" answered with no price or a request for the name: unread_product; the lookup reads the focus product", async () => {
+    const { unreadProduct, autoLookups } = await import("../services/reply-engine/gates");
+    const W = ["woocommerce.list_products", "woocommerce.get_product", "search_knowledge"];
+    const r = "לא ברור לאיזו מהחולצות התכוונת, ואין לנו מחיר מאומת לחולצות שתוארו קודם. אפשר לשלוח שם או קישור לחולצה, ואבדוק את המחיר שלה.";
+    expect(unreadProduct(r, "כמה היא עולה?", [{ tool: "search_knowledge", decision: "allow", outcome: "ok" } as any], W)).toBe(true);
+    expect(unreadProduct(r, "כמה היא עולה?", [{ tool: "woocommerce.get_product", decision: "allow", outcome: "ok" } as any], W)).toBe(false);
+    // A price given is no problem.
+    expect(unreadProduct("חולצת האוקספורד עולה 229 ש\"ח.", "כמה היא עולה?", [], W)).toBe(false);
+    const q = JSON.parse(autoLookups([{ kind: "unread_product" } as any], "כמה היא עולה?", W, [{ tool: "search_knowledge", outcome: "ok" } as any], "Oxford Button-Down Shirt")[0]?.function.arguments ?? "{}").query;
+    expect(q).toBe("Oxford Button-Down Shirt");
+  });
+});
+
+describe("dev round k3 D: an information question the knowledge answers is no hand-over; the team question is this turn's", () => {
+  const K = "שאלה: אילו אפשרויות תשלום קיימות? תשובה: אפשר לשלם בהעברה בנקאית או במזומן בעת המסירה. אין תשלום בביט.";
+  it("★ a bare team line to \"מה אפשרויות התשלום?\" with the knowledge holding it raises knowledge_has_it", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const g = (reply: string, incoming: string, knowledge: string) => gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [{ tool: "search_knowledge", decision: "allow", outcome: "ok" }], grounding: "", knowledge, locale: "he", incomingMessage: incoming, recentInbound: [incoming], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: ["search_knowledge"], shopFloor: false, handedOff: false, approvalPending: false, teamQuestion: incoming } as any).problems.map((x: any) => x.kind);
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה אפשרויות התשלום?", K)).toContain("knowledge_has_it");
+    // Not when the knowledge does not speak to it, nor for her own order, nor when the reply answers too.
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה אפשרויות התשלום?", "משלוח חינם מעל 300 ש\"ח.")).not.toContain("knowledge_has_it");
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה קורה עם ההזמנה שלי 48213?", K)).not.toContain("knowledge_has_it");
+    // One shared word is not enough; her own order with a number never, even when the knowledge holds its words.
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה שעות הפתיחה של החנות?", "החנות נמצאת ברחוב הרצל 5.")).not.toContain("knowledge_has_it");
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה שעות הפתיחה של החנות?", "שעות הפתיחה של החנות: א-ה 9 עד 18.")).toContain("knowledge_has_it");
+    const K2 = `${K} שאלה: מה עם תשלום ההזמנה? תשובה: תשלום ההזמנה נגבה בעת המסירה.`;
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה עם תשלום ההזמנה שלי 48213?", K2)).not.toContain("knowledge_has_it");
+    expect(g("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "יש לכם תשלום במזומן עם החבילה 4821?", K2)).not.toContain("knowledge_has_it");
+    expect(g("אפשר לשלם בהעברה בנקאית. העברתי את השאלה על ביט לצוות.", "מה אפשרויות התשלום?", K)).not.toContain("knowledge_has_it");
+  });
+  it("★ the team question drops the earlier topic in front of her question", async () => {
+    const { ownQuestionOnly } = await import("../services/reply-engine/engine");
+    expect(ownQuestionOnly("לבדוק אם יש ג׳ינס או קפוצ׳ון: מה אפשרויות התשלום?", "מה אפשרויות התשלום?")).toBe("מה אפשרויות התשלום?");
+    expect(ownQuestionOnly("החיוב כפול: הלקוחה שילמה פעמיים ומבקשת זיכוי", "שילמתי פעמיים")).toBe("החיוב כפול: הלקוחה שילמה פעמיים ומבקשת זיכוי");
+    // Wired into the turn before the team question is recorded, and the leaning opener into the cut (source checks).
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    expect(src.indexOf("if (final.teamQuestion) final = { ...final, teamQuestion: ownQuestionOnly(final.teamQuestion, String(opts.incomingMessage ?? \"\")) };")).toBeGreaterThan(0);
+    expect(src.indexOf("ownQuestionOnly(final.teamQuestion")).toBeLessThan(src.indexOf("const newTeamQuestion = isNewTeamQuestion(final.teamQuestion)"));
+    expect(src).toMatch(/if \(removed\.length\) \{ const op = withoutLeaningOpener\(cleaned\.reply\); if \(op !== cleaned\.reply\) \{ cleaned\.reply = op;/);
+  });
+});
+
+describe("rating of b3d2bbf3, 4: an opener that leaned on a cut sentence", () => {
+  it("★ \"יש גם\" and \"בינתיים\" lose the lean; the rest stays", async () => {
+    const { withoutLeaningOpener } = await import("../services/reply-engine/engine");
+    expect(withoutLeaningOpener("יש גם Penstick בגווני חום, אבל התיאור לא מציין שימוש מתחת לעיניים.")).toBe("יש Penstick בגווני חום, אבל התיאור לא מציין שימוש מתחת לעיניים.");
+    expect(withoutLeaningOpener("בינתיים אפשר לראות את פרטי הטוש בעמוד המוצר: https://x.example/p")).toBe("אפשר לראות את פרטי הטוש בעמוד המוצר: https://x.example/p");
+    // "גם" later in the sentence, and a reply that opens plainly, stay.
+    expect(withoutLeaningOpener("יש משטח, וגם מעצור.")).toBe("יש משטח, וגם מעצור.");
+    expect(withoutLeaningOpener("יש גמישות במשלוח.")).toBe("יש גמישות במשלוח.");
+  });
+});

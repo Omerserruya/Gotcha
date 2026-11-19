@@ -539,6 +539,21 @@ const TEAM_PASS_SENTENCE = /(?<![\u0590-\u05FF])[וש]?(?:אעביר|נעביר|
 export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
+export function ownQuestionOnly(teamQuestion: string, incoming: string): string {
+  const m = /^(.{3,120}?):\s*(.+)$/su.exec(String(teamQuestion ?? "").trim());
+  const norm = (x: string) => normalizeQuotes(x).replace(/[\s?!.]+/g, " ").trim().toLowerCase();
+  // Only the model's own topic in front, in her language: never the engine's labels ("call request:", a tool name).
+  if (!m || !norm(incoming) || /[A-Za-z]/.test(m[1]) || !/[\u0590-\u05FF]/.test(m[1])) return teamQuestion;
+  return norm(m[2]) === norm(incoming) || norm(m[2]).includes(norm(incoming)) ? m[2].trim() : teamQuestion;
+}
+/** The reply's first sentence opening with a word that leans on a sentence before it ("יש גם", "בינתיים", "בנוסף"). */
+export function withoutLeaningOpener(reply: string): string {
+  const t = String(reply ?? "");
+  return t
+    .replace(/^(\s*)(יש|קיים|קיימת|קיימים|קיימות)\s+גם(?![\u0590-\u05FF])\s*/u, "$1$2 ")
+    .replace(/^(\s*)(?:ו?בינתיים|ו?בנוסף|ו?חוץ\s+מזה|מעבר\s+לזה)(?![\u0590-\u05FF]),?\s+/u, "$1")
+    .replace(/^(\s*)(?:In the meantime|Meanwhile|Also|In addition),?\s+(\w)/u, (_m, a, b) => `${a}${String(b).toUpperCase()}`);
+}
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
 export function closestMatchLine(locale: "he" | "en"): string {
@@ -1515,6 +1530,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // A remnant that no longer answers (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on a safety
       // complaint) is kept only as the last resort, never as the answer while the model can still give one.
       const removed = removedSentences(resolveKeysInText(o.reply, candidates), cleaned.reply);
+      // The sentence before it was cut: an opener that leaned on it goes (rating of b3d2bbf3: "יש גם Penstick...",
+      // "בינתיים אפשר לראות..." opened the reply).
+      if (removed.length) { const op = withoutLeaningOpener(cleaned.reply); if (op !== cleaned.reply) { cleaned.reply = op; (trace as any).leaningOpenerCut = true; } }
       const thin = tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) });
       // Hollow: thin, or most of the reply cut away (a style edit keeps its words).
       // A fragment after a cut (prod replay of 9480dfb2: "וכשמקפלים אותה מתקבל משולש." alone): never sent.
@@ -2451,6 +2469,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // A question for the team: on the owner's unanswered list, and an open promise in
   // the state. ONCE per open issue: a repeat of the open one is not recorded again.
+  // The team question is this turn's question: a "topic: question" whose question is her message drops the earlier
+  // topic in front (dev round k3 on b3d2bbf3: "לבדוק אם יש ג׳ינס או קפוצ׳ון: מה אפשרויות התשלום?").
+  if (final.teamQuestion) final = { ...final, teamQuestion: ownQuestionOnly(final.teamQuestion, String(opts.incomingMessage ?? "")) };
   const newTeamQuestion = isNewTeamQuestion(final.teamQuestion) ? final.teamQuestion! : null;
   trace.teamQuestion = newTeamQuestion;
   trace.teamQuestionRepeat = (!!final.teamQuestion && !newTeamQuestion) || heldMerged;
