@@ -1552,6 +1552,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // it replaced real answers turn after turn). Ours in the history, or the state's mark.
   const cannedSent = !!state.facts?.[CANNED_SENT_FACT] || history.some((m: any) => m.direction === "OUTBOUND" && isCannedTeamLine(m.body));
   let cannedNow = false;
+  // The open team item this turn's holding line stood for, when the customer brought something new: what she
+  // gave joins that item (2026-11-19, Omer: a line that says the team has it while the team never saw her words).
+  let openItemSpoken: string | null = null;
   (trace as any).rewriteRounds = 0;
   let firstDraft = String(output?.reply ?? "");
   if (!verdict.ok) {
@@ -1862,6 +1865,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // The question line, and when that line was the last thing said: the other holding line (the team has it).
         const spokenLine = (): { reply: string; teamQuestion: string | null } => {
           const q = questionLine();
+          if (openSame && !quietOk) openItemSpoken = openSame;
           if (q.reply || quietOk) return q;
           (trace as any).silenceAvoided = true;
           return { reply: HOLD_LINE_ALT[locale === "en" ? "en" : "he"], teamQuestion: null };
@@ -2614,10 +2618,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   let pendingNow = state.pending;
   // In holding mode the customer's new details go to the held item even when the model asked nothing.
   const heldItem = holdingItem(openTeam);
-  const detailsFor = final.teamQuestion && !newTeamQuestion ? final.teamQuestion : !final.teamQuestion && heldItem ? heldItem : null;
+  // So does what she gave on any open item a holding line was spoken for: digits and a file always, her own
+  // words when the turn would have been silent (silenceAvoided; a reworded question is not recorded again).
+  const detailsFor = final.teamQuestion && !newTeamQuestion ? final.teamQuestion : !final.teamQuestion ? (openItemSpoken ?? heldItem) : null;
   if (detailsFor) {
     // What the reply says was added is added: her words when it says so, a file, the urgency note.
-    const upd = withNewDetails(state.pending, detailsFor, String(opts.incomingMessage ?? ""), { attachment: attachmentThisTurn, words: ADDED_CLAIM.test(reply), note: settledNow ? SETTLED_NOTE : null });
+    const upd = withNewDetails(state.pending, detailsFor, String(opts.incomingMessage ?? ""), { attachment: attachmentThisTurn, words: ADDED_CLAIM.test(reply) || (!!openItemSpoken && (trace as any).silenceAvoided === true), note: settledNow ? SETTLED_NOTE : null });
     if (upd) {
       pendingNow = upd.pending;
       (trace as any).teamItemUpdated = upd.added;

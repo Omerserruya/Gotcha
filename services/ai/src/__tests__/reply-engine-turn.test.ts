@@ -3441,15 +3441,66 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
     });
   });
 
-  it("★ her words are about the open item and its holding line was the last thing said: the other holding line", async () => {
+  const savedPending = (): any[] => { const up = h.upserts[h.upserts.length - 1]; return up?.create?.pending ?? up?.update?.pending ?? []; };
+  const ITEM = "הלקוחה שואלת אם אפשר לקבל חשבונית על שם העסק";
+  const OPEN_ITEM = { ...TEAM, text: `checking with the team: ${ITEM}` };
+
+  it("★ her words are about the open item and its holding line was the last thing said: the other holding line, and her words join the item", async () => {
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
-    const ITEM = "הלקוחה שואלת אם אפשר לקבל חשבונית על שם העסק";
     const held = stillCheckingLine(ITEM, "he");
-    await withState({ pending: [{ ...TEAM, text: `checking with the team: ${ITEM}` }] }, async () => {
-      const r = await turn("חשבונית על שם העסק שלי, עוסק מורשה", held, "אפשר לקבל חשבונית על שם העסק?");
+    const said = "חשבונית על שם העסק שלי, עוסק מורשה";
+    await withState({ pending: [OPEN_ITEM] }, async () => {
+      const r = await turn(said, held, "אפשר לקבל חשבונית על שם העסק?");
       expect(r.reply).toBe("אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.");
       expect((r.trace as any).silenceAvoided).toBe(true);
+      // The line says the team has it, so the team is given what she wrote: on the item, one update line, no new item.
+      expect((r.trace as any).teamItemUpdated).toEqual([said]);
+      const promises = savedPending().filter((p: any) => String(p.text).startsWith("checking with the team: "));
+      expect(promises).toHaveLength(1);
+      expect(promises[0].text).toBe(`${OPEN_ITEM.text} (customer added: "${said}")`);
+      expect(h.teamQuestions).toHaveLength(1);
+      expect(h.teamQuestions[0].question).toContain(`(update: the customer gave ${said})`);
+      expect(r.trace.teamQuestion).toBeNull();
+    });
+  });
+
+  it("★ a question on the open item gets its still-checking line: a number she gave joins the item, a rewording does not", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    await withState({ pending: [OPEN_ITEM] }, async () => {
+      const r = await turn("מה עם החשבונית על שם העסק? ח.פ 514889231", CANNED, "אפשר לקבל חשבונית על שם העסק?");
+      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
+      expect((r.trace as any).silenceAvoided).toBeUndefined();
+      expect((r.trace as any).teamItemUpdated).toEqual(["514889231"]);
+      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(`${OPEN_ITEM.text} (customer gave: 514889231)`);
+      expect(h.teamQuestions).toHaveLength(1);
+      expect(h.teamQuestions[0].question).toContain("(update: the customer gave 514889231)");
+    });
+    await withState({ pending: [OPEN_ITEM] }, async () => {
+      h.responses.length = 0; h.upserts.length = 0; h.teamQuestions.length = 0;
+      const r = await turn("מה קורה עם החשבונית על שם העסק?", CANNED, "אפשר לקבל חשבונית על שם העסק?");
+      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
+      expect((r.trace as any).teamItemUpdated).toBeUndefined();
+      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
       expect(h.teamQuestions).toHaveLength(0);
+    });
+  });
+
+  it("★ nothing new on the open item (the message she already wrote, a thanks): nothing joins it", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    const again = "מה עם החשבונית על שם העסק? ח.פ 514889231";
+    await withState({ pending: [OPEN_ITEM] }, async () => {
+      const r = await turn(again, CANNED, again);
+      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
+      expect((r.trace as any).teamItemUpdated).toBeUndefined();
+      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
+      expect(h.teamQuestions).toHaveLength(0);
+    });
+    await withState({ pending: [OPEN_ITEM] }, async () => {
+      h.responses.length = 0; h.upserts.length = 0; h.teamQuestions.length = 0;
+      const r = await turn("תודה רבה", CANNED, again);
+      expect(r.reply).toBeNull();
+      expect((r.trace as any).teamItemUpdated).toBeUndefined();
+      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
     });
   });
 
