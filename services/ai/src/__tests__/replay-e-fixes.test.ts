@@ -11,6 +11,8 @@ import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactPro
 import { cutLine } from "../scripts/replay-v2";
 import { cutFields } from "../services/reply-engine/engine";
 import { oneTeamPass, withoutCheckedClaims, selfSearch, withClosingQuestion, withNewDetails } from "../services/reply-engine/engine";
+import { mergeEnvelope, newTurnTools } from "../services/reply-engine/tools";
+import { normalizeWooProducts, buildKeyedModelSummary } from "../services/product-search.service";
 
 const WOO = ["woocommerce.list_products", "search_knowledge"];
 const q = (calls: any[]) => calls.map((c) => [c.function.name, JSON.parse(c.function.arguments).query]);
@@ -2184,5 +2186,141 @@ describe("commit 5 (A4): what the check flags as said to the customer has a neut
     expect(flagged("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.")).toBe(true);
     expect(neutralSecondPerson("כדי לשלם לחץ על הקישור.")).toBe("כדי לשלם לחץ על הקישור.");
     expect(flagged("כדי לשלם לחץ על הקישור.")).toBe(true);
+  });
+});
+
+describe("a store product is in the turn's results once, under one key", () => {
+  const STORE = { storeUrl: "https://shop.example", storeCurrency: "ILS" };
+  const raw = (id: number, name: string, more: Record<string, unknown> = {}) => ({
+    id, name, status: "publish", price: "159", stock_status: "instock", permalink: `https://shop.example/product/p${id}/`, ...more,
+  });
+  const ALEXA = raw(101, "סמובי אלכסה - משטח הזזה 35*28 ס\"מ");
+  const ARIEL = raw(102, "סמובי אריאל - משטח הזזה 34*38 ס\"מ");
+  const GEFEN = raw(103, "סמובי גפן - משטח הזזה 20*30 ס\"מ");
+  const MONICA = raw(104, "סמובי מוניקה - משטח הזזה 20*25 ס\"מ");
+  const search = (list: any[], opts: Record<string, unknown> = {}) => normalizeWooProducts(list, { ...STORE, ...opts } as any);
+  const keyLines = (summary: string) => summary.split("\n").filter((l) => /^PRODUCT_\d+: /.test(l)).map((l) => l.slice(0, l.indexOf(" |")));
+  const titles = (turn: any) => turn.envelope.candidates.map((c: any) => c.title);
+
+  it("★ found again by a second search: its first place and key, and a new product takes the next free key", () => {
+    const turn = newTurnTools();
+    const first = mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    expect(keyLines(first)).toEqual([`PRODUCT_1: "${ALEXA.name}"`, `PRODUCT_2: "${ARIEL.name}"`, `PRODUCT_3: "${GEFEN.name}"`]);
+    const second = mergeEnvelope(turn, search([GEFEN, MONICA, ALEXA]), "he", true);
+    expect(keyLines(second)).toEqual([`PRODUCT_3: "${GEFEN.name}"`, `PRODUCT_4: "${MONICA.name}"`, `PRODUCT_1: "${ALEXA.name}"`]);
+    expect(titles(turn)).toEqual([ALEXA.name, ARIEL.name, GEFEN.name, MONICA.name]);
+    expect(turn.envelope!.candidates.map((c: any) => c.productId)).toEqual(["101", "102", "103", "104"]);
+    // A third search of only known products adds nothing.
+    const third = mergeEnvelope(turn, search([ARIEL]), "he", true);
+    expect(keyLines(third)).toEqual([`PRODUCT_2: "${ARIEL.name}"`]);
+    expect(titles(turn)).toHaveLength(4);
+  });
+
+  it("★ the name of a product two searches found is still its own (the word one found title has)", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    // The control: the same product under two keys. Named by its own word it is no product at all, since two
+    // found titles hold the word; named with a second word of its title it is two products.
+    const twice = [...search([ALEXA, ARIEL, GEFEN]).candidates, ...search([ALEXA]).candidates];
+    for (const [reply, once, asTwo] of [
+      ["כדאי לבחור באלכסה.", [0], []],
+      ["לתמי 4 מתאים אלכסה, ולמיקסר גפן.", [0], []],
+      ["לתמי 4 מתאים משטח סמובי אלכסה.", [0], [0, 3]],
+    ] as Array<[string, number[], number[]]>) {
+      expect(referredCandidates(turn.envelope!.candidates, reply, ""), reply).toEqual(once);
+      expect(referredCandidates(twice, reply, ""), reply).toEqual(asTwo);
+    }
+  });
+
+  it("no search found a product twice: the keys go on as before, the rules' example key too", () => {
+    const turn = newTurnTools();
+    const first = mergeEnvelope(turn, search([ALEXA, ARIEL]), "he", true);
+    expect(first).toBe(buildKeyedModelSummary(search([ALEXA, ARIEL]), "he", true));
+    const second = mergeEnvelope(turn, search([GEFEN]), "he", true);
+    expect(second).toBe(buildKeyedModelSummary(search([GEFEN]), "he", true).replace(/PRODUCT_(\d+)/g, (_, n) => `PRODUCT_${Number(n) + 2}`));
+    expect(titles(turn)).toEqual([ALEXA.name, ARIEL.name, GEFEN.name]);
+  });
+
+  it("a key the later summary only gives as an example is no key of another product", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL, GEFEN]), "he", true);
+    const own = buildKeyedModelSummary(search([ALEXA]), "he", true);
+    expect(own).toContain("PRODUCT_2");
+    const second = mergeEnvelope(turn, search([ALEXA]), "he", true);
+    const keys = [...second.matchAll(/PRODUCT_(\d+)/g)].map((m) => Number(m[1]));
+    expect(keys).toContain(1);
+    expect(keys.filter((k) => k !== 1 && k <= 3)).toEqual([]);
+  });
+
+  it("★ the newer search's price and stock, the earlier search's size pick when the newer has none", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28] }, ALEXA]), "he", true);
+    mergeEnvelope(turn, search([{ ...GEFEN, price: "139", stock_status: "outofstock" }]), "he", true);
+    const g = turn.envelope!.candidates[0] as any;
+    expect(turn.envelope!.candidates).toHaveLength(2);
+    expect([g.price, g.inventoryState]).toEqual(["139", "out_of_stock"]);
+    expect([g.fit, g.fitFor]).toEqual(["20 x 30 cm", "18 x 28 cm"]);
+  });
+
+  it("the newer search picked it for another size: that pick, whole, and no mark of the earlier one", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [49, 32], too_small: true }]), "he", true);
+    mergeEnvelope(turn, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28], second_choice: true }]), "he", true);
+    const g = turn.envelope!.candidates[0] as any;
+    expect([g.fit, g.fitFor, g.tooSmall, g.secondChoice]).toEqual(["20 x 30 cm", "18 x 28 cm", undefined, true]);
+    // And the other way: the earlier pick comes whole.
+    const t2 = newTurnTools();
+    mergeEnvelope(t2, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [49, 32], too_small: true }]), "he", true);
+    mergeEnvelope(t2, search([GEFEN]), "he", true);
+    const h = t2.envelope!.candidates[0] as any;
+    expect([h.fit, h.fitFor, h.tooSmall, h.secondChoice]).toEqual(["20 x 30 cm", "49 x 32 cm", true, undefined]);
+    const t3 = newTurnTools();
+    mergeEnvelope(t3, search([{ ...GEFEN, matched_in: "dimensions", footprint_cm: [20, 30], fit_for: [18, 28], second_choice: true }]), "he", true);
+    mergeEnvelope(t3, search([GEFEN]), "he", true);
+    const k = t3.envelope!.candidates[0] as any;
+    expect([k.fit, k.fitFor, k.tooSmall, k.secondChoice]).toEqual(["20 x 30 cm", "18 x 28 cm", undefined, true]);
+  });
+
+  it("★ the store text of both searches stays: a list's short text, then the product's whole text", () => {
+    const short = "משטח הזזה דק למכשירים על השיש.";
+    const long = `${short} מתאים ל: תמי 4 פרימו, בר מים אלקטרה. חומר: במבוק.`;
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: short }, ARIEL]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(short);
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: long }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(long);
+    // The shorter text second: the longer one is kept.
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: short }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(long);
+    // Two texts, neither inside the other: both.
+    const other = "גודל המשטח 35 על 28 ס\"מ.";
+    mergeEnvelope(turn, search([{ ...ALEXA, short_description: other }]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(`${long} ${other}`);
+    // No text in the later search: the earlier one stays.
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    expect((turn.envelope!.candidates[0] as any).details).toBe(`${long} ${other}`);
+    expect(turn.envelope!.candidates).toHaveLength(2);
+  });
+
+  it("never one product: the same id in another store, or no id at all", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA]), "he", true);
+    const elsewhere = normalizeWooProducts([{ ...ARIEL, id: 101, permalink: "https://other.example/product/p101/" }], { storeUrl: "https://other.example", storeCurrency: "ILS" });
+    expect(keyLines(mergeEnvelope(turn, elsewhere, "he", true))).toEqual([`PRODUCT_2: "${ARIEL.name}"`]);
+    const noId = () => search([{ ...GEFEN, id: undefined }]);
+    expect(keyLines(mergeEnvelope(turn, noId(), "he", true))).toEqual([`PRODUCT_3: "${GEFEN.name}"`]);
+    expect(keyLines(mergeEnvelope(turn, noId(), "he", true))).toEqual([`PRODUCT_4: "${GEFEN.name}"`]);
+    expect(turn.envelope!.candidates).toHaveLength(4);
+  });
+
+  it("a search that failed or found nothing leaves the turn's results and keys as they were", () => {
+    const turn = newTurnTools();
+    mergeEnvelope(turn, search([ALEXA, ARIEL]), "he", true);
+    const before = JSON.stringify(turn.envelope!.candidates);
+    expect(mergeEnvelope(turn, search([]), "he", true)).toMatch(/0 products matched/);
+    expect(mergeEnvelope(turn, { ...search([ALEXA]), status: "error" } as any, "he", true)).toMatch(/^PRODUCT_SEARCH_FAILED/);
+    expect(JSON.stringify(turn.envelope!.candidates)).toBe(before);
+    expect(keyLines(mergeEnvelope(turn, search([GEFEN]), "he", true))).toEqual([`PRODUCT_3: "${GEFEN.name}"`]);
   });
 });

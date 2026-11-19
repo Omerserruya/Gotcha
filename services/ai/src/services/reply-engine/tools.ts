@@ -160,18 +160,50 @@ export function lookupExtraMs(boundMs: number, ceilingLeftMs: number, keepMs: nu
   return Number.isFinite(room) ? Math.max(0, Math.min(LOOKUP_MS, room)) : 0;
 }
 
-/** Append a search's candidates to the turn envelope and renumber its keys to match. */
+type Candidate = ProductSearchEnvelope["candidates"][number];
+const storeOf = (c: Candidate) => { try { return new URL(c.url).host.toLowerCase(); } catch { return ""; } };
+/** The same store product: the store's own id (never an empty one), in the same store. */
+const sameProduct = (a: Candidate, b: Candidate) => !!a.productId && a.productId === b.productId && storeOf(a) === storeOf(b);
+/**
+ * A product a later search of the turn found again: the newer search's facts (price, stock), the size it was
+ * picked for when only the earlier search picked by size, and the store text of both, since the model read both.
+ */
+function seenAgain(old: Candidate, next: Candidate): Candidate {
+  const a = old.details ?? "", b = next.details ?? "";
+  const details = b.includes(a) ? b : a.includes(b) ? a : `${a} ${b}`;
+  const size = next.fit || !old.fit ? {} : {
+    fit: old.fit,
+    ...(old.fitFor ? { fitFor: old.fitFor } : {}),
+    ...(old.tooSmall ? { tooSmall: true as const } : {}),
+    ...(old.secondChoice ? { secondChoice: true as const } : {}),
+  };
+  return { ...next, ...size, ...(details ? { details } : {}) };
+}
+
+/**
+ * Add a search's candidates to the turn envelope and renumber its keys to match. A store product is in the
+ * envelope once: found again by a later search, it keeps its first place and key, and the later summary names
+ * it by that key. Under two keys no word of its name was its own: a reply that named it by that word referred to
+ * no product, and one that named it by two words of its title referred to two.
+ */
 export function mergeEnvelope(turn: TurnTools, env: ProductSearchEnvelope, locale: "he" | "en", cards: boolean): string {
-  const offset = turn.envelope?.candidates.length ?? 0;
   const summary = buildKeyedModelSummary(env, locale, cards);
   if (env.status !== "ok" || !env.candidates.length) {
     if (!turn.envelope) turn.envelope = { ...env, candidates: [] };
     return summary;
   }
-  turn.envelope = turn.envelope
-    ? { ...env, candidates: [...turn.envelope.candidates, ...env.candidates] }
-    : { ...env, candidates: [...env.candidates] };
-  return offset ? summary.replace(/PRODUCT_(\d+)/g, (_, n) => `PRODUCT_${Number(n) + offset}`) : summary;
+  const all = [...(turn.envelope?.candidates ?? [])];
+  // This search's key number (1 based) to the turn's.
+  const keyOf = env.candidates.map((c) => {
+    const at = all.findIndex((o) => sameProduct(o, c));
+    if (at < 0) return all.push(c);
+    all[at] = seenAgain(all[at], c);
+    return at + 1;
+  });
+  turn.envelope = { ...env, candidates: all };
+  // A key past this search's own (an example in the rules) stays past the turn's.
+  const turnKey = (n: number) => keyOf[n - 1] ?? all.length + n - keyOf.length;
+  return summary.replace(/PRODUCT_(\d+)/g, (_, n) => `PRODUCT_${turnKey(Number(n))}`);
 }
 
 /** A how-to or video ask: the business's linked guides are part of the answer (prod rating 2026-11-18, NE'A). */
