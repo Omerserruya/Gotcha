@@ -996,6 +996,10 @@ export function wrongSelfName(reply: string, employeeName: string | null | undef
   for (const m of normalizeQuotes(String(reply ?? "")).matchAll(NAMED_SELF)) {
     const name = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? "").trim();
     if (!name || NOT_A_NAME.has(name.toLowerCase())) continue;
+    // A word the reply uses as a noun elsewhere, with a joined prefix ("אם הכוונה למטפחת, זו מטפחת מלבנית": rating of
+    // f46b5a49, Tehila) is no name; a greeting by the same name ("היי מתן, זה מתן") is no noun use.
+    const core = name.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "");
+    if ((normalizeQuotes(String(reply ?? "")).match(new RegExp(`(?<![\\u0590-\\u05FF])[הלבמו]${core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\u0590-\\u05FF])`, "gu")) ?? []).length > 0) continue;
     if (mine.has(name.toLowerCase()) || skeletons.has(nameSkeleton(name).replace(/(.)\1+/g, "$1"))) continue;
     return name;
   }
@@ -2555,7 +2559,8 @@ const FIT_VERB = /(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאי
 // אישור/מידע/מופיע/בטוח/ברור ש..." with the fit verb inside that same ש clause (the 92486ac8 probe: "אין מידע על שינוי,
 // X מתאים", "אין לנו מידע שסותר את זה: X מתאים").
 const NEG_DIRECT = /(?<![\u0590-\u05FF])ו?(?:לא|אינו|אינה|אינם|אינן)\s+(?:[\u0590-\u05FF]+\s+)?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים)(?![\u0590-\u05FF])/u;
-const NEG_THAT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*(?:מצוין|מצוינת|כתוב|כתובה|ידוע|ידועה|אישור|מידע|מופיע|מופיעה|בטוח|בטוחה|ברור)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*ש([^,.:;!?\n]*)/gu;
+// "לא מצוין במפורש שהוא מתאים" is a caveat too (rating of f46b5a49, NE'A: the caveat was cut, the claim kept).
+const NEG_THAT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*(?:מצוין|מצוינת|כתוב|כתובה|ידוע|ידועה|אישור|מידע|מופיע|מופיעה|בטוח|בטוחה|ברור)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*ש([^,.:;!?\n]*)/gu;
 const NEG_GOVERNS_FIT = { test: (x: string) => NEG_DIRECT.test(x) || [...String(x).matchAll(NEG_THAT)].some((m) => FIT_VERB.test(String(m[1]).split(/\s(?=ו[\u0590-\u05FF])/u)[0])) };
 const NEG_GOVERNS_FIT_EN = /\b(?:does ?n[o']t|won'?t|will not|is ?n[o']t|not)\s+(?:fit|suit|work with)|\bno (?:confirmation|information|indication|record)\b[^,.!?\n]{0,30}\bthat\b|\bnot (?:stated|listed|confirmed)\b[^,.!?\n]{0,10}\bthat\b/iu;
 export function ungroundedPositiveFit(reply: string, incoming: string, titles: string[], grounding: string, knowledge: string): string[] {
@@ -2574,12 +2579,22 @@ export function ungroundedPositiveFit(reply: string, incoming: string, titles: s
     const m = FIT_CLAIM_REV.exec(x) ?? FIT_CLAIM.exec(x);
     if (!m) return false;
     const named = namedTitles(x, titles);
-    if (!named.length) return false;
     const target = (m[1].match(/[\p{L}\p{N}]{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase()) && !STEM_STOP.has(w.toLowerCase()) && !FILL.has(w.toLowerCase()));
     if (!target.length) return false;
     // A use, never a device: "מתאימה גם לכיסוי מלא", "מתאים לשימוש יומיומי", "לקיץ" (prod replay of 9480dfb2,
     // Tehila: the recommendation sentence was cut as an unbacked device fit).
     if (USE_WORDS.has(target[0].toLowerCase())) return false;
+    // No store read and her device with no model (rating of f46b5a49, Smoovee: "לנינג'ה ולמכונת קפה נינג'ה מתאים משטח
+    // אריאל" from the knowledge alone): a fit claim needs a line of the business's texts with the device's words.
+    if (!named.length) {
+      if (titles.length || /\d|[A-Za-z]{2,}|["״][^"״]{2,}["״]/.test(String(incoming ?? ""))) return false;
+      // The device's words without their joined prefix letters ("ולמכונת" is "מכונת").
+      const core = (w: string) => w.replace(/^[ולבהמ]{1,2}(?=[\u0590-\u05FF]{3,})/u, "");
+      const keysOf = (w: string) => [...new Set([...nounKeys(w), ...nounKeys(core(w)), core(w)])];
+      const herDevice = target.filter((w) => keysOf(w).some((k) => String(incoming ?? "").toLowerCase().includes(k)));
+      if (!herDevice.length) return false;
+      return !lines.some((l) => herDevice.every((w) => keysOf(w).some((k) => l.includes(k))));
+    }
     // Offered as an ALTERNATIVE for her device while it fits another one (rating 1771ba14: "או לראות את סמובי
     // כריסטינה שמתאימה לנינג'ה סלושי" to a Crispy owner): cut, whatever proves the other fit.
     const asked = String(incoming ?? "").toLowerCase();

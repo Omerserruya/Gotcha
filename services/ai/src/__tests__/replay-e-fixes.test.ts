@@ -1324,3 +1324,65 @@ describe("probe of f46b5a49: two small edges", () => {
     expect(repeatedSentences(r, prev, "תודה, ומתי המשלוח מגיע?")).toEqual([]);
   });
 });
+
+describe("rating of f46b5a49 (R1-R8)", () => {
+  it("★ R1: a closing question that states an absence or offers the team is never kept", async () => {
+    const { withClosingQuestion } = await import("../services/reply-engine/engine");
+    const rw = { reply: "נכון, סליחה, לא צירפתי את הסרטון. הנה סרטון ההדרכה לטוש: https://youtu.be/abc" };
+    expect(withClosingQuestion(rw, { reply: "אין לי כאן קישור לסרטון הדרכה של הטוש, להעביר לצוות בקשה לקישור?" }, []).reply).toBe(rw.reply);
+    expect(withClosingQuestion({ reply: "הנה המשטח." }, { reply: "יש משטח. איזה מכשיר יש לך בבית?" }, []).reply).toMatch(/איזה מכשיר יש לך בבית\?$/);
+    // Each guard alone: the team, no information, an absence. An offer to show more stays a good closing question.
+    expect(withClosingQuestion({ reply: "הנה המשטח." }, { reply: "יש משטח. רוצה לראות עוד צבעים שלו?" }, []).reply).toMatch(/רוצה לראות עוד צבעים שלו\?$/);
+    for (const q of ["הצוות יכול לבדוק את זה עבורך מחר?", "אין מידע על התאמה למכשיר הזה, יש עוד שאלה?", "אין לי כאן קישור לסרטון, אבל אפשר לראות את עמוד המוצר?"]) {
+      expect(withClosingQuestion(rw, { reply: `שלום. ${q}` }, []).reply, q).toBe(rw.reply);
+    }
+  });
+  it("★ R2: \"מה יש כרגע במלאי?\" is a list ask; a recommendation ask is not", async () => {
+    const { searchHasFilter } = await import("../services/reply-engine/engine");
+    expect(searchHasFilter({ query: "", in_stock: true }, "מה יש כרגע במלאי?")).toBe(true);
+    expect(searchHasFilter({ query: "" }, "what do you have?")).toBe(true);
+    expect(searchHasFilter({ query: "", in_stock: true }, "אפשר המלצה על משהו שיתאים לי?")).toBe(false);
+  });
+  it("★ R3: \"זו מטפחת\" is no self-name; a bare pronoun after the cut is a lean (source)", async () => {
+    const { wrongSelfName } = await import("../services/reply-engine/gates");
+    expect(wrongSelfName("אם הכוונה למטפחת, זו מטפחת מלבנית, דקה וקלילה, שמתאימה לכל עונות השנה וגם לכיסוי חלקי.", "נועה")).toBeNull();
+    expect(wrongSelfName("היי, כאן מיכל מהצוות.", "נועה")).toBe("מיכל");
+    const { PRONOUN_LEAN } = await import("../services/reply-engine/engine");
+    expect(PRONOUN_LEAN.test("כדי לדייק אם היא מתאימה לך, מה חשוב לך במטפחת?")).toBe(true);
+    expect(PRONOUN_LEAN.test("המטפחת מתאימה לכל עונות השנה.")).toBe(false);
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    expect(src).toMatch(/\|\| PRONOUN_LEAN\.test\(cleaned\.reply\)/);
+    expect(src).toMatch(/\|\| asksWhatSheSaid\(cleaned\.reply, String\(opts\.incomingMessage \?\? ""\)\)\);/);
+  });
+  it("★ R4: only a question she already answered is no answer", async () => {
+    const { asksWhatSheSaid } = await import("../services/reply-engine/engine");
+    const her = "אני נשרפת בשמש מהר והוורידים שלי כחולים";
+    expect(asksWhatSheSaid("לפי הוורידים הכחולים, תת-הגוון כנראה קר. נשרפת בשמש בקלות, או משתזפת?", her)).toBe(true);
+    expect(asksWhatSheSaid("במייקאפ Cover me גוון Sand מתאים להתחלה. נשרפת בשמש בקלות, או משתזפת?", her)).toBe(false);
+    expect(asksWhatSheSaid("איזה גוון עור יש לך, בהיר או כהה?", her)).toBe(false);
+    expect(asksWhatSheSaid("במייקאפ Cover me יש גוון Sand. נשרפת בשמש בקלות, או משתזפת?", her)).toBe(false);
+  });
+  it("★ R5: a seen-product ask counts for the fallback store search (source)", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\(productAskNow\(inc\) \|\| asksAboutProduct\(inc\)\) && left\(\) > 2500/);
+  });
+  it("★ R6: a device-family fit from no store read and no model is unbacked; with a line for the device it stands", async () => {
+    const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
+    const her = "אני צריכה עצה, מתקן לנינג'ה ולמכונת קפה";
+    const x = "לנינג'ה ולמכונת קפה נינג'ה מתאים משטח אריאל.";
+    expect(ungroundedPositiveFit(x, her, [], "", "טבלת התאמה: מיקסר קנווד - כריסטינה")).toHaveLength(1);
+    expect(ungroundedPositiveFit(x, her, [], "", "מכונת קפה נינג'ה: משטח אריאל")).toEqual([]);
+    expect(ungroundedPositiveFit(x, "יש לי נינג'ה AF400", [], "", "")).toEqual([]);
+  });
+  it("★ R7: \"לא מצוין במפורש שהוא מתאים\" is a caveat, never a fit claim", async () => {
+    const { ungroundedPositiveFit } = await import("../services/reply-engine/gates");
+    expect(ungroundedPositiveFit("הוא מתואר בעיקר כעיפרון לתיחום שפתיים, אז לא מצוין במפורש שהוא מתאים לאזור העיניים.", "יש עיפרון חום מתחת לעיניים?", ["עיפרון שפתיים חום"], "", "")).toEqual([]);
+    expect(ungroundedPositiveFit("ה-Lip Liner Brown מתואר לתיחום שפתיים, ולא מצוין במפורש שהוא מתאים לאזור העיניים.", "יש עיפרון חום מתחת לעיניים?", ["Lip Liner Brown"], "", "")).toEqual([]);
+    expect(ungroundedPositiveFit("ה-Lip Liner Brown מתאים לאזור העיניים.", "יש עיפרון חום מתחת לעיניים?", ["Lip Liner Brown"], "", "")).toHaveLength(1);
+  });
+  it("★ R8: \"במבצע\" with no price gets the store's sale line (source)", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/const saleNoPrice = !!reply && !!c\?\.discount && now > 0 && SALE_SAID\.test\(reply\)[^\n]*\n\s*if \(saleNoPrice\) \{ const line = salePriceLine\(c, locale\);/);
+  });
+});

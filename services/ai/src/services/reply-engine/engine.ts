@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -561,7 +561,8 @@ export function withoutLeaningOpener(reply: string): string {
 export function searchHasFilter(args: any, incoming: string): boolean {
   const a = args ?? {};
   if (["price_min", "price_max", "on_sale", "category", "orderby", "featured", "tag", "audience", "min_price", "max_price"].some((k) => a[k] != null && a[k] !== "" && a[k] !== false)) return true;
-  return /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה|עד\s+\d+|מתחת\s+ל-?\s*\d+|זול|זולים)(?![\u0590-\u05FF])|\b(?:on sale|sale|discount|new|newest|under \d+|up to \d+|cheap)\b/iu.test(String(incoming ?? ""));
+  // A stock ask is a list ask too (rating of f46b5a49, Tehila: "מה יש כרגע במלאי?" was refused).
+  return /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה|עד\s+\d+|מתחת\s+ל-?\s*\d+|זול|זולים|במלאי|מלאי|מה\s+יש\s+(?:לכם|אצלכם|כרגע|עכשיו|בחנות|באתר))(?![\u0590-\u05FF])|\b(?:on sale|sale|discount|new|newest|under \d+|up to \d+|cheap|in stock|what do you (?:have|sell|carry)|what(?:'s| is) available)\b/iu.test(String(incoming ?? ""));
 }
 /** A general question about the business's options ("מה אפשרויות התשלום?") that the knowledge speaks to, with no mark
  *  of her own case: no held item opens (dev round k5 on 0b5f2b46: the answer went out as the hold line). */
@@ -573,6 +574,21 @@ export function generalPolicyAsk(incoming: string, knowledge: string): boolean {
 // The reply already says it is on sale, in any wording (dev round k8 on f46b5a49: "reduced from ₪379" and then the
 // engine's own sale line again).
 export const SALE_SAID = /(?<![\u0590-\u05FF])(?:מבצע|במבצע|במקום|הנחה|בהנחה|מוזל|מוזלת|ירד\s+מ|ירדה\s+מ|לפני\s+ההנחה)(?![\u0590-\u05FF])|\b(?:sale|instead of|reduced|down from|marked down|discount(?:ed)?|off the)\b|\bwas\s+[₪$€]?\s?\d|\d+%\s+off\b/iu;
+/** A bare pronoun as the subject within the first words: it leaned on a sentence that was cut. */
+export const PRONOUN_LEAN = /^\s*(?:[^\s.!?,]+\s+){0,3}(?:אם\s+)?(?:היא|הוא|הן|הם)\s+(?:מתאים|מתאימה|מתאימים|מתאימות|עשוי|עשויה|מגיע|מגיעה|יתאים|תתאים)(?![\u0590-\u05FF])/u;
+/** The reply is only questions, and one of the options it asks between is what her message already says. */
+export function asksWhatSheSaid(reply: string, incoming: string): boolean {
+  const sentences = (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter(Boolean);
+  const qs = sentences.filter((x) => /\?$/.test(x));
+  if (!qs.length) return false;
+  const her = normalizeQuotes(String(incoming ?? "")).toLowerCase();
+  const stem = (w: string) => w.replace(/^[הוב](?=[\u0590-\u05FF]{3,})/u, "").slice(0, 4);
+  const said = (opt: string) => { const ws = (opt.match(/[\u0590-\u05FFa-z]{3,}/giu) ?? []).map((w) => stem(w.toLowerCase())).filter((w) => w.length >= 3); return ws.length > 0 && ws.filter((w) => her.includes(w)).length >= Math.ceil(ws.length * 0.6); };
+  const asked = qs.some((q) => q.split(/\s+או\s+|\s+or\s+/iu).length > 1 && q.split(/\s+או\s+|\s+or\s+/iu).some((o) => said(o.replace(/[,\s]+$/u, "").replace(/^.*,\s*/u, ""))));
+  // The rest says nothing new: every other sentence is short (a lead-in), none names a product or a price.
+  const rest = sentences.filter((x) => !/\?$/.test(x));
+  return asked && rest.every((x) => x.split(/\s+/).length <= 8 && !/\d|₪|[A-Za-z]{2,}/.test(x) && !/(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאימים|מתאימות|ממליצים|כדאי)(?![\u0590-\u05FF])/u.test(x));
+}
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
 export function closestMatchLine(locale: "he" | "en"): string {
@@ -751,6 +767,9 @@ export function withClosingQuestion<T extends { reply: string }>(rewrite: T, ori
   const parts = String(original.reply ?? "").trim().match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
   const q = parts.at(-1)?.trim() ?? "";
   if (!/\?$/.test(q) || q.split(/\s+/).length < 3 || /PRODUCT_\d|https?:\/\/|\d/.test(q) || teamPassIn(q)) return rewrite;
+  // Never a question that states an absence, a lack of information or offers the team: the rewrite answered it (rating of
+  // f46b5a49, NE'A: the video link, then "אין לי כאן קישור לסרטון..., להעביר לצוות בקשה לקישור?").
+  if (/(?<![\u0590-\u05FF])(?:צוות|הצוות|לצוות)(?![\u0590-\u05FF])|\bteam\b/iu.test(q) || noInfo(q) || /(?<![\u0590-\u05FF])(?:אין\s+(?:לי|לנו|כאן|מידע)|לא\s+(?:מצאתי|מצאנו|צירפתי|צירפנו|מצוין))(?![\u0590-\u05FF])|\b(?:i (?:don't|do not) have|we (?:don't|do not) have|couldn't find)\b/iu.test(q)) return rewrite;
   if (previousBotReplies.some((b) => repeatsQuestion(q, b)) || String(rewrite.reply ?? "").includes(q)) return rewrite;
   return { ...rewrite, reply: `${String(rewrite.reply ?? "").trim()} ${q}`.trim() };
 }
@@ -1583,7 +1602,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const noWords = removed.length > 0 && !/[\p{L}\p{N}]{2,}/u.test(cleaned.reply);
       const onlyCondition = removed.length > 0 && (cleaned.reply.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).every((x) => /^\s*(?:ו?אם|if)\s/iu.test(x));
       // A first sentence that points at the cut items ("לשניהם צריך מעצור", 0b5f2b46 prod replay, Smoovee) is no answer.
-      const leansOnCut = removed.length > 0 && /^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu.test(cleaned.reply);
+      const leansOnCut = removed.length > 0 && (/^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu.test(cleaned.reply)
+        // A bare pronoun as the subject within the first words ("כדי לדייק אם היא מתאימה לך", rating of f46b5a49, Tehila).
+        || PRONOUN_LEAN.test(cleaned.reply)
+        // Only a question she already answered (rating of f46b5a49, NE'A: "נשרפת בשמש בקלות, או משתזפת?").
+        || asksWhatSheSaid(cleaned.reply, String(opts.incomingMessage ?? "")));
       const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition || leansOnCut);
       // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
       // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
@@ -1742,7 +1765,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // its question; "מחפשת דווקא חגיגי, גווני כחול" searches (rating of d2f10620, Tehila c55b9).
           const own = storeQueryOf(inc);
           const ownProduct = !!own && own.split(/\s+/).some((w) => !/^[\u0590-\u05FF]?(?:לבן|לבנה|שחור|שחורה|כחול|כחולה|אדום|אדומה|ירוק|ירוקה|אפור|אפורה|ורוד|ורודה|חום|חומה|בז'|white|black|blue|red|green|grey|gray|pink|brown|beige)$/iu.test(w));
-          if (store && !ran && !(candidates as any[]).length && productAskNow(inc) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
+          // A product she saw and asks after ("הייתה מטפחת... היא עדיין ישנה?") is a product ask too (rating of f46b5a49,
+          // Tehila: the generic question went out with no store search).
+          if (store && !ran && !(candidates as any[]).length && (productAskNow(inc) || asksAboutProduct(inc)) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
             // Only product words; describing words alone take the conversation's noun (rating of d2f10620, L789).
             const earlier = [...history].reverse().filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m.body ?? "")).filter((b) => b.trim() !== inc.trim()).slice(0, 3);
             const focusNow = focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title) ?? (String(state.offeredItems?.at(-1)?.title ?? "").trim() || null);
@@ -2373,7 +2398,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const one = namedOnce(reply ?? "", candidates);
     const c: any = one >= 0 ? candidates[one] : null;
     const now = Number(String(c?.discount?.now ?? "").replace(",", "."));
-    if (reply && c?.discount && now > 0 && !SALE_SAID.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
+    // "הוא כרגע במבצע" with no price of it (rating of f46b5a49, Smoovee B): the store's own sale line too.
+    const saleNoPrice = !!reply && !!c?.discount && now > 0 && SALE_SAID.test(reply) && !/\d/.test(reply.replace(/https?:\/\/\S+/g, ""));
+    if (saleNoPrice) { const line = salePriceLine(c, locale); if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; } }
+    else if (reply && c?.discount && now > 0 && !SALE_SAID.test(reply) && [...reply.matchAll(/\d{1,5}(?:[.,]\d{1,2})?/g)].some((m) => Math.abs(Number(m[0].replace(",", ".")) - now) < 0.011)) {
       const line = salePriceLine(c, locale);
       if (line) { reply = `${reply.trim()} ${line}.`; (trace as any).saleLine = true; }
     }
