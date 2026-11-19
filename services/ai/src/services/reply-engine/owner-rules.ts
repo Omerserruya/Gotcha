@@ -106,5 +106,43 @@ export function neverSaid(text: unknown, never: string[] | null | undefined): st
 export const neverSaidNote = (entries: string[]) =>
   `- The business never says this: ${entries.map((e) => `"${e}"`).join(", ")}. Your reply says it. Write the reply again without ${entries.length > 1 ? "those words" : "that word or phrase"}, in other words; the customer using it does not make it yours to use.`;
 
+export type AddressForm = "feminine" | "masculine";
+const HE_LETTER = "\\u0590-\\u05FF";
+const heWord = (alts: string) => new RegExp(`(?<![${HE_LETTER}])(?:${alts})(?![${HE_LETTER}])`, "u");
+// The form, stated: "בלשון נקבה", "בנקבה", "בגוף נקבה"; "feminine form", "in the feminine".
+const FORM_NAMED: Record<AddressForm, RegExp[]> = {
+  feminine: [heWord("[בל]?(?:לשון|גוף)\\s+נקבה|בנקבה"), /\b(?:feminine|female)\s+(?:form|gender)\b|\bin\s+the\s+feminine\b/i],
+  masculine: [heWord("[בל]?(?:לשון|גוף)\\s+זכר|בזכר"), /\b(?:masculine|male)\s+(?:form|gender)\b|\bin\s+the\s+masculine\b/i],
+};
+// It is about addressing the customer: the verb of address itself, or speaking or writing with the customer named.
+const ADDRESSES = heWord("[ושכ]?(?:ה|ב|ל)?(?:לפנות|פנייה|פניה|פונים|פונות|פנו|נפנה)");
+const SPEAKS = heWord("[ושכ]?(?:לדבר|מדברים|מדברות|דברו|לכתוב|כותבים|כותבות|כתבו|לענות|עונים|עונות|ענו)");
+const CUSTOMER = heWord("[ושכ]?(?:ל|ה|ב|מ)?(?:לקוח|לקוחה|לקוחות|פונה|פונים|פונות)");
+const ADDRESSES_EN = /\b(?:address|speak to|talk to|write to|reply to|answer)\b[^.]*\b(?:customers?|clients?|shoppers?|visitors?)\b/i;
+// A rule that forbids, or one about the employee's own voice, sets no address form.
+const NEGATED = new RegExp(`(?<![${HE_LETTER}])(?:לא|אסור|בלי|ללא|אין)(?![${HE_LETTER}])|\\b(?:never|not|no|don'?t|without|avoid)\\b`, "iu");
+const OWN_VOICE = new RegExp(`(?<![${HE_LETTER}])על\\s+עצמ|\\b(?:yourself|herself|himself|itself)\\b`, "iu");
+
+/**
+ * The address form the owner set for the customer, or null (2026-11-19: the rule "לפנות אל הלקוח בלשון נקבה בלבד",
+ * and the style gate flagged the draft's "תרצי?" as a gendered address and the rewrite removed it).
+ * Only a rule that says both things outright: that it is about addressing the customer, and which form. A rule that
+ * forbids, one about the employee's own voice, or rules that name both forms set nothing: the neutral address stays.
+ */
+export function ownerAddressForm(rules: string[] | null | undefined): AddressForm | null {
+  const forms = new Set<AddressForm>();
+  for (const raw of rules ?? []) {
+    const rule = oneLine(raw);
+    const named = (["feminine", "masculine"] as AddressForm[]).filter((f) => FORM_NAMED[f].some((re) => re.test(rule)));
+    if (!named.length) continue;
+    const address = ADDRESSES.test(rule) || (SPEAKS.test(rule) && CUSTOMER.test(rule)) || ADDRESSES_EN.test(rule);
+    if (!address || OWN_VOICE.test(rule)) continue;
+    // Both forms in one rule, or a "not": no form is set, and none may be set by another rule either.
+    if (named.length > 1 || NEGATED.test(rule)) return null;
+    forms.add(named[0]);
+  }
+  return forms.size === 1 ? [...forms][0] : null;
+}
+
 /** The line the rewrite's correction ends with when the owner has rules: they hold for the rewritten reply too. */
 export const OWNER_RULES_REWRITE_LINE = "The business's own rules (the last section of your instructions) still apply to the rewritten reply.";

@@ -100,9 +100,9 @@ export const BANNED_EN = ["happy to help", "great question", "i hope this helps"
  * Two whole words ("אירופה/בריטניה", eval e6 F02) are a list, not a form.
  */
 const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}])|(?<![${HE}])(?:אתה\\/את|את\\/ה)(?![${HE}])`, "u");
-/** Second-person forms that choose a gender, addressed to the customer. */
-const MASC_TO_CUSTOMER = w("אם מחפש|אם אתה|כשאתה|שלח לי|תשלח|תבחר|תוכל|תרצה|תגיד|תן לי|כתוב|תכתוב|לחץ|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
-const FEM_TO_CUSTOMER = w("אם מחפשת|אם את מחפשת|כשאת|שלחי לי|תשלחי|בחרי|תבחרי|תוכלי|תרצי|תגידי|תני לי|כתבי|תכתבי|לחצי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
+/** Second-person forms that choose a gender, addressed to the customer. A bare imperative is in the lists below. */
+const MASC_TO_CUSTOMER = w("אם מחפש|אם אתה|כשאתה|תשלח|תבחר|תוכל|תרצה|תגיד|תכתוב|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
+const FEM_TO_CUSTOMER = w("אם מחפשת|אם את מחפשת|כשאת|תשלחי|תבחרי|תוכלי|תרצי|תגידי|תכתבי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
 // About someone else, "איזה צבע היא מעדיפה?" (urban-e33), is not to the customer.
@@ -111,9 +111,37 @@ const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצ
 const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?<!(?:היא|הוא|הם|הן|הזוג|זוג|הבת|הבן|שלך|שלו|שלה)\\s)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** A participle to the customer opening a clause inside a question, after "או" or a comma: "יותר מתאים לשכבות או מעדיף משהו חם?" (urban-e30). "הבת שלך מחפשת" has its subject. */
 const PARTICIPLE_IN_QUESTION = /(?:(?<![\u0590-\u05FF])או\s+|,\s*)(?:מעדיף|מעדיפה|מחפש|מחפשת|מעוניין|מעוניינת|מתלבט|מתלבטת)(?![\u0590-\u05FF])(?=[^.!?؟\n]*[?؟])/u;
-/** Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו. */
-const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין)(?![${HE}])`, "u");
-const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני)(?![${HE}])`, "u");
+/**
+ * Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו.
+ * "כתוב" and "לחץ" too (prod replay of 18aedcf2, NE'A: "אפשר לכתוב איזה מוצר" was read as "write!" to a man, and
+ * the answer was lost to the product fallback): "לכתוב" is an infinitive, "הכתוב" and "שכתוב" are "written".
+ * "לחץ" / "לחצי" only before what is pressed ("לחץ על", "לחצי כאן"): "לחצי שעה" is half an hour, "לחץ המים" is pressure.
+ */
+const PRESSED = "(?=\\s+(?:על|כאן|פה)(?![\\u0590-\\u05FF]))";
+const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין|תן לי|כתוב|לחץ${PRESSED})(?![${HE}])`, "u");
+const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני|תני לי|כתבי|לחצי${PRESSED})(?![${HE}])`, "u");
+const FEM_MARK = new RegExp(`(?<![${HE}])(?:את|מחפשת|צריכה|מעדיפה|יכולה|מעוניינת|יודעת|חושבת|מתכוונת|אוהבת|לובשת|מתלבטת)(?![${HE}])`, "u");
+const MASC_MARK = new RegExp(`(?<![${HE}])(?:אתה|מחפש|צריך|מעדיף|יכול|מעוניין|יודע|חושב|מתכוון|אוהב|לובש|מתלבט)(?![${HE}])`, "u");
+/**
+ * The gendered second-person forms a reply uses towards the customer, each with its first match (null: none).
+ * The same patterns the gendered_address check reads; a pronoun or a participle is told apart by its first
+ * gendered word ("את רוצה" is feminine, "מחפש את המעיל?" is masculine).
+ */
+export function addressFormsUsed(draft: string): { masculine: string | null; feminine: string | null } {
+  const plain = String(draft ?? "").replace(/PRODUCT_\d+/gi, "המוצר");
+  let masculine = (plain.match(MASC_TO_CUSTOMER) ?? plain.match(IMPERATIVE_MASC))?.[0] ?? null;
+  let feminine = (plain.match(FEM_TO_CUSTOMER) ?? plain.match(IMPERATIVE_FEM))?.[0] ?? null;
+  for (const re of [PRONOUN_TO_CUSTOMER, PARTICIPLE_TO_CUSTOMER, PARTICIPLE_IN_QUESTION]) {
+    for (const m of plain.matchAll(new RegExp(re.source, `${re.flags.replace("g", "")}g`))) {
+      const f = m[0].search(FEM_MARK);
+      const k = m[0].search(MASC_MARK);
+      if (f >= 0 && (k < 0 || f < k)) feminine ??= m[0].trim();
+      else if (k >= 0) masculine ??= m[0].trim();
+    }
+  }
+  return { masculine, feminine };
+}
+
 /** Collecting a phone number or a time for a callback (eval e9 W5, C02). */
 const CALLBACK_ASK = /טלפון|מספר נייד|מתי נוח|באיזו שעה|שעה נוחה|phone number|what time/i;
 const CALLBACK_WORD = /שיחה|שיחת טלפון|נתקשר|נחזור|יחזרו|יחזור|תחזור|לחזור אליך|יתקשר|call you|call back|callback/i;

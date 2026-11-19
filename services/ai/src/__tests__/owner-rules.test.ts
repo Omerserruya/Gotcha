@@ -4,9 +4,10 @@
  */
 import { describe, it, expect } from "vitest";
 import { VOICE_RENDERED_MAX, MAX_RULES, MAX_RULE_LEN } from "@chatcenter/shared";
-import { readOwnerRules, renderOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid, OWNER_RULES_HEADING, OWNER_RULES_REWRITE_LINE } from "../services/reply-engine/owner-rules";
+import { readOwnerRules, renderOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid, ownerAddressForm, OWNER_RULES_HEADING, OWNER_RULES_REWRITE_LINE } from "../services/reply-engine/owner-rules";
 import { buildStablePrefix, voiceForPrompt, businessBlock } from "../services/reply-engine/prompt";
-import { needlessHandoff, correctionNote, gate3, stripFactProblems, factualProblems } from "../services/reply-engine/gates";
+import { needlessHandoff, correctionNote, gate3, stripFactProblems, factualProblems, neutralSecondPerson } from "../services/reply-engine/gates";
+import { checkReplyStyle, addressFormsUsed } from "../services/reply-style-check.service";
 import { cutFields } from "../services/reply-engine/engine";
 import { cutLine } from "../scripts/replay-v2";
 
@@ -215,5 +216,148 @@ describe("the never list is enforced (2026-11-19: never = [\"זול\"], and \"ה
     expect(correctionNote([{ kind: "owner_never", claims: ["זול"] }], "he")).toContain("without that word or phrase");
     expect(cutLine({ neverListHit: 2 })).toBe(" | neverListHit=2");
     expect(cutFields({ neverListHit: 2 })).toEqual({ neverListHit: 2 });
+  });
+});
+
+describe("the owner sets how the customer is addressed (2026-11-19: the rule \"לפנות אל הלקוח בלשון נקבה בלבד\", and the draft's \"תרצי?\" was flagged and rewritten away)", () => {
+  it("★ a rule sets the form only when it says it is about addressing the customer and names the form", () => {
+    expect(ownerAddressForm(["לפנות אל הלקוח בלשון נקבה בלבד"])).toBe("feminine");
+    expect(ownerAddressForm(["לא להשתמש במקפים", "פנייה ללקוחות בנקבה"])).toBe("feminine");
+    expect(ownerAddressForm(["מדברים עם הלקוחות בגוף נקבה"])).toBe("feminine");
+    expect(ownerAddressForm(["תמיד פונים בלשון זכר"])).toBe("masculine");
+    expect(ownerAddressForm(["כותבים ללקוח בלשון זכר"])).toBe("masculine");
+    expect(ownerAddressForm(["Address the customer in the feminine form"])).toBe("feminine");
+    expect(ownerAddressForm(["Always speak to customers in the masculine form."])).toBe("masculine");
+  });
+  it("★ every other rule sets nothing, and the neutral address stays", () => {
+    // Whose speech? The employee's own voice is as likely, and no customer is named.
+    expect(ownerAddressForm(["לדבר בלשון נקבה"])).toBeNull();
+    expect(ownerAddressForm(["הנציגה כותבת ללקוח על עצמה בלשון נקבה"])).toBeNull();
+    // The customer is named, and the form is still the employee's own.
+    expect(ownerAddressForm(["לכתוב ללקוחות על עצמך בלשון נקבה"])).toBeNull();
+    expect(ownerAddressForm(["When you write to customers, refer to yourself in the feminine form"])).toBeNull();
+    // An address rule that names no form, and a form that is not about address.
+    expect(ownerAddressForm(["לפנות אל הלקוח בנימוס ובשמו הפרטי"])).toBeNull();
+    expect(ownerAddressForm(["תיאורי המוצרים באתר בלשון נקבה"])).toBeNull();
+    // A rule that forbids, and both forms (in one rule, or across two).
+    expect(ownerAddressForm(["לא לפנות אל הלקוח בלשון זכר"])).toBeNull();
+    expect(ownerAddressForm(["אסור לפנות ללקוחות בלשון נקבה"])).toBeNull();
+    expect(ownerAddressForm(["לפנות ללקוח בלשון זכר או בלשון נקבה לפי השם"])).toBeNull();
+    expect(ownerAddressForm(["לפנות אל הלקוח בלשון נקבה ולא בלשון זכר"])).toBeNull();
+    expect(ownerAddressForm(["לפנות אל הלקוח בלשון נקבה", "פונים ללקוחות בלשון זכר"])).toBeNull();
+    expect(ownerAddressForm(["Never address the customer in the feminine form"])).toBeNull();
+    expect(ownerAddressForm([])).toBeNull();
+    expect(ownerAddressForm(null)).toBeNull();
+  });
+  it("★ the forms a reply uses towards the customer, each by its first word", () => {
+    expect(addressFormsUsed("כן, יש בכחול. תרצי לראות?")).toEqual({ masculine: null, feminine: "תרצי" });
+    expect(addressFormsUsed("כן, יש בכחול. תרצה לראות?")).toEqual({ masculine: "תרצה", feminine: null });
+    expect(addressFormsUsed("את רוצה לראות עוד צבעים?")).toEqual({ masculine: null, feminine: "את רוצה" });
+    expect(addressFormsUsed("אתה רוצה לראות עוד צבעים?")).toEqual({ masculine: "אתה רוצה", feminine: null });
+    // "את" after a masculine participle is the object marker, not "you".
+    expect(addressFormsUsed("מחפש את המעיל הכחול?").feminine).toBeNull();
+    expect(addressFormsUsed("מחפש את המעיל הכחול?").masculine).toContain("מחפש");
+    expect(addressFormsUsed("מחפשת מעיל לחורף?").masculine).toBeNull();
+    expect(addressFormsUsed("מחפשת מעיל לחורף?").feminine).toContain("מחפשת");
+    expect(addressFormsUsed("שלחי לי תמונה ותוכל לבחור.")).toEqual({ masculine: "ותוכל", feminine: "שלחי" });
+    // A participle that opens a clause inside a question, and one after a question word.
+    expect(addressFormsUsed("יותר מתאים לשכבות או מעדיף משהו חם?")).toEqual({ masculine: "או מעדיף", feminine: null });
+    expect(addressFormsUsed("זה יותר לשכבות, מעדיפה משהו חם?").masculine).toBeNull();
+    expect(addressFormsUsed("זה יותר לשכבות, מעדיפה משהו חם?").feminine).toContain("מעדיפה");
+    // A bare order.
+    expect(addressFormsUsed("שלח לי את מספר ההזמנה.")).toEqual({ masculine: "שלח", feminine: null });
+    expect(addressFormsUsed("שלחי לי את מספר ההזמנה.")).toEqual({ masculine: null, feminine: "שלחי" });
+    expect(addressFormsUsed("אפשר לבחור צבע ולראות את כל המידות.")).toEqual({ masculine: null, feminine: null });
+  });
+
+  const base: any = { claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", knowledge: "", sourceText: "", locale: "he", incomingMessage: "תודה על העזרה", recentInbound: ["תודה על העזרה"], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false };
+  const codes = (reply: string, ownerAddress?: any) => gate3({ ...base, reply, ownerAddress }).problems.filter((p: any) => p.kind === "style").flatMap((p: any) => p.codes);
+  it("★ gate3: the owner's form is no fault, the other form still is; with no address rule both are, as today", () => {
+    const fem = "בשמחה. תרצי שנעבור יחד על האפשרויות?";
+    const masc = "בשמחה. תרצה שנעבור יחד על האפשרויות?";
+    expect(codes(fem)).toEqual(["gendered_address"]);
+    expect(codes(masc)).toEqual(["gendered_address"]);
+    expect(codes(fem, null)).toEqual(["gendered_address"]);
+    expect(codes(fem, "feminine")).toEqual([]);
+    expect(gate3({ ...base, reply: fem, ownerAddress: "feminine" }).ok).toBe(true);
+    expect(codes(masc, "feminine")).toEqual(["gendered_address"]);
+    expect(codes(masc, "masculine")).toEqual([]);
+    expect(codes(fem, "masculine")).toEqual(["gendered_address"]);
+    // Both forms in one reply: the other one is there, so it is still a fault.
+    expect(codes("תרצי לראות? ואם תרצה, אפשר גם במידה אחרת.", "feminine")).toEqual(["gendered_address"]);
+    // A slash form is never the owner's form.
+    expect(codes("בשמחה. תרצה/י שנעבור יחד על האפשרויות?", "feminine")).toContain("slash_form");
+    // The rule is about Hebrew: an English reply is read as before.
+    expect(gate3({ ...base, locale: "en", reply: "Sure. Shall we go over the options together?", ownerAddress: "feminine" }).ok).toBe(true);
+  });
+  it("★ gate3: \"צודקת\" and \"מעדיפה\" follow the same rule, each against its other gender", () => {
+    expect(codes("את צודקת. אפשר לעבור יחד על האפשרויות.")).toContain("gendered_agree");
+    expect(codes("את צודקת. אפשר לעבור יחד על האפשרויות.", "feminine")).toEqual([]);
+    expect(codes("אתה צודק. אפשר לעבור יחד על האפשרויות.", "feminine")).toContain("gendered_agree");
+    expect(codes("אתה צודק. אפשר לעבור יחד על האפשרויות.", "masculine")).toEqual([]);
+    expect(codes("מעדיפה לעבור יחד על האפשרויות?")).toEqual(expect.arrayContaining(["gendered_address", "gendered_prefers"]));
+    expect(codes("מעדיפה לעבור יחד על האפשרויות?", "feminine")).toEqual([]);
+    expect(codes("מעדיף לעבור יחד על האפשרויות?", "feminine")).toEqual(expect.arrayContaining(["gendered_address", "gendered_prefers"]));
+    expect(codes("מעדיף לעבור יחד על האפשרויות?", "masculine")).toEqual([]);
+  });
+  it("★ the correction names the owner's form; with no address rule it asks for the neutral address, as today", () => {
+    const style = (...c: string[]) => [{ kind: "style" as const, codes: c }];
+    const fem = correctionNote(style("gendered_address"), "he", { rules: true, handover: 0, address: "feminine" });
+    expect(fem).toContain("- The business's rule sets the feminine form of address: address the customer in the feminine form only (את, תרצי, תוכלי), never the masculine form and no slash forms.");
+    expect(fem).not.toContain("Address the customer neutrally");
+    const masc = correctionNote(style("gendered_address"), "he", { rules: true, handover: 0, address: "masculine" });
+    expect(masc).toContain("in the masculine form only (אתה, תרצה, תוכל), never the feminine form");
+    for (const owner of [undefined, { rules: true, handover: 0 }, { rules: true, handover: 0, address: null }]) {
+      const none = correctionNote(style("gendered_address", "gendered_agree", "gendered_prefers"), "he", owner);
+      expect(none).toContain("- Address the customer neutrally (לך / אפשר + infinitive), no gendered verbs and no slash forms.");
+      expect(none).toContain('- "נכון" or "בדיוק", not "צודק/צודקת" (the customer\'s gender is not known).');
+      expect(none).toContain('- No "שים לב" or "מעדיף/ה": rephrase neutrally.');
+      expect(none).not.toContain("form of address");
+    }
+    const words = correctionNote(style("gendered_agree", "gendered_prefers"), "he", { rules: true, handover: 0, address: "feminine" });
+    expect(words).toContain('- "צודקת" or "נכון", not "צודק": the business\'s rule sets the feminine form of address.');
+    expect(words).toContain('- "מעדיפה", not "מעדיף": the business\'s rule sets the feminine form of address.');
+    expect(words).not.toContain("מעדיף/ה");
+    expect(words).not.toContain("gender is not known");
+    // English replies have no gendered address: the rule changes nothing there.
+    expect(correctionNote(style("gendered_address"), "en", { rules: true, handover: 0, address: "feminine" })).toContain("- Address the customer neutrally.");
+  });
+  it("★ the printout and the audit carry the gender", () => {
+    expect(cutLine({ ownerAddress: "feminine" })).toBe(" | ownerAddress=feminine");
+    expect(cutFields({ ownerAddress: "masculine" })).toEqual({ ownerAddress: "masculine" });
+    expect(cutLine({})).toBe("");
+    expect(cutFields({ ownerAddress: null })).toBeUndefined();
+  });
+});
+
+describe("an infinitive or a noun is no order to the customer (prod replay of 18aedcf2: \"אפשר לכתוב איזה מוצר\" was read as \"write!\" to a man)", () => {
+  const ctx = { locale: "he" as const, isFirstReply: false, incomingMessage: "", productFactsAvailable: true, shopFloor: true, toolsOffered: [], customerClosing: false };
+  const gendered = (t: string) => checkReplyStyle(t, ctx).filter((v) => v.kind === "gendered_address").length > 0;
+  it.each([
+    "אם מדובר במייקאפ אחר, אפשר לכתוב איזה מוצר, ואכוון לפי הגוון שלו.",
+    "לפי הכתוב באתר, המשלוח חינם.",
+    "ראינו שכתוב שם אחרת.",
+    "ההזמנה מוכנה לאיסוף בתוך כחצי שעה, ולפעמים מחכים לחצי שעה נוספת.",
+    "לחץ המים בברז משפיע על הזרימה.",
+    "אפשר לשלוח לי כאן את מספר ההזמנה.",
+    "אפשר לתת לי כמה פרטים ונמשיך.",
+  ])("%s is not flagged", (t) => { expect(gendered(t)).toBe(false); });
+  it.each([
+    "כתוב לי את מספר ההזמנה.",
+    "וכתוב לי את מספר ההזמנה.",
+    "כתבי לי את מספר ההזמנה.",
+    "לחץ על הקישור כדי לשלם.",
+    "לחצי כאן כדי לשלם.",
+    "ולחצי על הקישור.",
+    "תן לי רגע לבדוק.",
+    "תני לי את מספר ההזמנה.",
+    "שלח לי תמונה של המוצר.",
+    "שלחי לי תמונה של המוצר.",
+    "בחרי צבע ונמשיך.",
+  ])("%s is still flagged", (t) => { expect(gendered(t)).toBe(true); });
+  it("★ the plural rewrite leaves half an hour alone and still turns the order", () => {
+    expect(neutralSecondPerson("ההזמנה תגיע עד לחצי שעה. תרצי לחכות?")).toBe("ההזמנה תגיע עד לחצי שעה. תרצו לחכות?");
+    expect(neutralSecondPerson("לחצי על הקישור כדי לשלם.")).toBe("לחצו על הקישור כדי לשלם.");
+    expect(neutralSecondPerson("ולחצי כאן.")).toBe("ולחצו כאן.");
   });
 });

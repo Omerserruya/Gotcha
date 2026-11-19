@@ -123,6 +123,7 @@ export function cutLine(trace: any): string {
   const o = trace?.ownerRules;
   if (o && (o.rules || o.handover || o.never)) parts.push(`ownerRules=rules:${o.rules ?? 0},handover:${o.handover ?? 0},never:${o.never ?? 0}`);
   if (trace?.ownerHandoverRule != null) parts.push(`ownerHandoverRule=${trace.ownerHandoverRule}`);
+  if (trace?.ownerAddress) parts.push(`ownerAddress=${trace.ownerAddress}`);
   if (trace?.neverListHit) parts.push(`neverListHit=${trace.neverListHit}`);
   if (trace?.urlsRepaired) parts.push(`urlsRepaired=fixed:${trace.urlsRepaired.fixed ?? 0},dropped:${trace.urlsRepaired.dropped ?? 0}`);
   // The model's first draft on a rewritten, cleaned, replaced or silent turn (the bot's own words).

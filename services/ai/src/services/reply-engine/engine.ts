@@ -30,7 +30,7 @@ import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromi
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
 import { buildStablePrefix, buildTurnPart, ENGINE_PROMPT_VERSION } from "./prompt";
-import { readOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid } from "./owner-rules";
+import { readOwnerRules, ownerRuleCounts, hasOwnerRules, citesOwnerHandover, neverSaid, ownerAddressForm } from "./owner-rules";
 import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conversation-relevance.service";
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
@@ -625,6 +625,7 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
   // The owner's rules this turn carried (counts per kind), a hand-over that named one, a repaired link, the first draft.
   if (trace?.ownerRules) out.ownerRules = trace.ownerRules;
   if (trace?.ownerHandoverRule != null) out.ownerHandoverRule = trace.ownerHandoverRule;
+  if (trace?.ownerAddress) out.ownerAddress = trace.ownerAddress;
   if (trace?.neverListHit) out.neverListHit = trace.neverListHit;
   if (trace?.urlsRepaired) out.urlsRepaired = trace.urlsRepaired;
   if (trace?.firstDraft) out.firstDraft = String(trace.firstDraft).slice(0, 400);
@@ -1154,6 +1155,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // What the owner wrote: the employee's rules, the enabled hand-over rules, the never-say list (owner-rules.ts).
   const ownerRules = readOwnerRules(config as any, (policyRow as any)?.data ?? null);
   if (hasOwnerRules(ownerRules)) (trace as any).ownerRules = ownerRuleCounts(ownerRules);
+  // A rule of the owner's that sets how the customer is addressed: that form is no style fault this turn.
+  const ownerAddress = ownerAddressForm(ownerRules.rules);
+  if (ownerAddress) (trace as any).ownerAddress = ownerAddress;
   const wooTurn = shopifyTurn ? null : wooRaw;
   Object.assign(stageMs, Object.fromEntries(Object.entries(loadMs).map(([k, v]) => [`load_${k}`, v])));
   const productTurn: any = shopifyTurn ?? wooTurn;
@@ -1520,6 +1524,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     handoffRule: o.handoffRule ?? null,
     ownerHandoverRules: ownerRules.handover.length,
     never: ownerRules.never,
+    ownerAddress,
     teamQuestion: !!o.teamQuestion,
     teamAlreadyOpen,
     newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
@@ -1561,8 +1566,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   let firstDraft = String(output?.reply ?? "");
   if (!verdict.ok) {
     // ONE targeted rewrite, at most TWO more model calls (prod replay 5: p95 17s).
-    if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correctionNote(verdict.problems, locale, { rules: hasOwnerRules(ownerRules), handover: ownerRules.handover.length }) });
-    else messages.push({ role: "system", content: correctionNote(verdict.problems, locale, { rules: hasOwnerRules(ownerRules), handover: ownerRules.handover.length }) });
+    const correction = correctionNote(verdict.problems, locale, { rules: hasOwnerRules(ownerRules), handover: ownerRules.handover.length, address: ownerAddress });
+    if (respondCallId) messages.push({ role: "tool", tool_call_id: respondCallId, content: correction });
+    else messages.push({ role: "system", content: correction });
     const first = verdict;
     const original = output;
     firstDraft = String(original?.reply ?? "");
@@ -1664,7 +1670,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // No rewrite round when the cleanup can fix the draft itself (rating of d2f10620: 7 rewrites cut by the budget, 0
     // live): every problem is one a cut or a style fix removes, and at most one sentence goes, leaving a full answer.
     // The model is called only for what needs a lookup or a new answer.
-    const directOk = first.problems.every((p) => DIRECT_KINDS.has(p.kind as string));
+    // Not when the owner set the address form and the draft used the other one: the word-level fix writes the plural,
+    // which is not the owner's form either, so the model writes it again in that form.
+    const wrongForm = !!ownerAddress && first.problems.some((p) => p.kind === "style" && p.codes.includes("gendered_address"));
+    const directOk = !wrongForm && first.problems.every((p) => DIRECT_KINDS.has(p.kind as string));
     const pre = directOk ? salvage(original) : null;
     // Never when the cut sentence was the answer: it holds a word of her ask and what is left says it only negated or not
     // at all (dev live round on dcf2158e: "רוצה שחור" lost "בשחור יש את ה-Heavyweight Hoodie" and kept "Charcoal, לא שחור").

@@ -9,10 +9,10 @@
  * budget allows a turn.
  */
 import { checkAiAllowed } from "@chatcenter/shared";
-import { ungroundedPrices, stripPrices, checkReplyStyle, type StyleViolationKind } from "../reply-style-check.service";
+import { ungroundedPrices, stripPrices, checkReplyStyle, addressFormsUsed, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
-import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE, neverSaid, neverSaidNote } from "./owner-rules";
+import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE, neverSaid, neverSaidNote, type AddressForm } from "./owner-rules";
 
 export type Gate1 =
   | { reply: true }
@@ -51,6 +51,15 @@ export const HARD_STYLE: ReadonlySet<StyleViolationKind> = new Set<StyleViolatio
   "echo_opener",
   "false_absence",
 ] as StyleViolationKind[]);
+
+const otherForm = (f: AddressForm): AddressForm => (f === "feminine" ? "masculine" : "feminine");
+// The two words the bans below hold in both genders, one gender each: under an owner's address form only the other one is a fault.
+const AGREES: Record<AddressForm, RegExp> = { masculine: /(?<![\u0590-\u05FF])צודק(?![\u0590-\u05FF])/u, feminine: /(?<![\u0590-\u05FF])צודקת(?![\u0590-\u05FF])/u };
+const PREFERS: Record<AddressForm, RegExp> = { masculine: /(?<![\u0590-\u05FF])מעדיף(?![\u0590-\u05FF])/u, feminine: /(?<![\u0590-\u05FF])מעדיפה(?![\u0590-\u05FF])/u };
+const FORM_WORDS: Record<AddressForm, { you: string; agree: string; prefer: string }> = {
+  feminine: { you: "את, תרצי, תוכלי", agree: "צודקת", prefer: "מעדיפה" },
+  masculine: { you: "אתה, תרצה, תוכל", agree: "צודק", prefer: "מעדיף" },
+};
 
 /** Hebrew phrasings the legacy engine learned to ban that its checker does not name (eval 2026-11-16). */
 const V2_BANS_HE: Array<[string, RegExp]> = [
@@ -957,7 +966,7 @@ export function neutralSecondPerson(s: string): string {
 function neutralSecondPersonPart(s: string): string {
   return String(s ?? "")
     .replace(/(?<![\u0590-\u05FF])(?:את|אתה)\s+(מחפשת|מחפש|מעדיפה|מעדיף|מעוניינת|מעוניין|צריכה|צריך|רוצה)(?![\u0590-\u05FF])/gu, (_m, w) => TO_PLURAL[w] ?? ({ מחפש: "מחפשים", מעדיף: "מעדיפים", מעוניין: "מעוניינים", צריך: "צריכים" } as Record<string, string>)[w] ?? w)
-    .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?ש?|כש)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (_m, v, w) => `${v}${TO_PLURAL[w]}`)
+    .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?ש?|כש)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (m, v, w, at: number, all: string) => (w === "לחצי" && !/^\s+(?:על|כאן|פה)(?![\u0590-\u05FF])/u.test(all.slice(at + m.length)) ? m : `${v}${TO_PLURAL[w]}`))
     // A participle opening a question to the customer ("מחפשת משהו חגיגי?").
     .replace(/(^|[.!?,]\s*)(מחפשת|מעדיפה|מעוניינת|מתלבטת)(?=[^.!?\n]*\?)/gu, (_m, p, w) => `${p}${TO_PLURAL[w]}`);
 }
@@ -1320,6 +1329,8 @@ export interface Gate3Input {
   /** The owner's hand-over rule the handoff names (its number), and how many were loaded this turn. */
   handoffRule?: number | null;
   ownerHandoverRules?: number;
+  /** The address form the owner's rules set for the customer (ownerAddressForm), when they set one. */
+  ownerAddress?: AddressForm | null;
   /** A tool this turn needs a person (an approval, a denied action): a handoff may follow. */
   toolsNeedPerson?: boolean;
   /** The team already has an open question from this conversation (state.pending). */
@@ -1539,6 +1550,13 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (termsRefusal(reply)) style.push("terms_refusal");
   if (i.locale === "he" && foreignLanguageSentences(reply, i.candidateTitles ?? []).length) style.push("mixed_language");
   if (repeatedTeamLine(reply, i.incomingMessage, !!i.teamAlreadyOpen, !!i.newTeamQuestion, !!i.onOpenItem)) style.push("repeated_team_line");
+  // The owner set the address form (Omer: the owner's rule wins over style): that form is the business's rule and no
+  // style fault this turn. The other form still is. (All three codes are raised for Hebrew only.)
+  if (i.ownerAddress) {
+    const other = otherForm(i.ownerAddress);
+    const wrong: Record<string, boolean> = { gendered_address: !!addressFormsUsed(reply)[other], gendered_agree: AGREES[other].test(reply), gendered_prefers: PREFERS[other].test(reply) };
+    for (let k = style.length - 1; k >= 0; k--) if (wrong[style[k]] === false) style.splice(k, 1);
+  }
   if (style.length) problems.push({ kind: "style", codes: [...new Set(style)] });
 
   return { ok: problems.length === 0, problems };
@@ -1987,7 +2005,7 @@ export function normalizeDashes(s: string): string {
 }
 
 /** The ONE targeted correction note for the rewrite round. */
-export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", owner?: { rules?: boolean; handover?: number }): string {
+export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", owner?: { rules?: boolean; handover?: number; address?: AddressForm | null }): string {
   const lines = ["Your reply cannot be sent as is. Rewrite it once, fixing exactly this, and call respond again:"];
   for (const p of problems) {
     if (p.kind === "owner_never") lines.push(neverSaidNote(p.claims));
@@ -2033,7 +2051,10 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "unknown_product") lines.push(`- These product keys are not in this turn's results: ${p.names.join("; ")}. Use only the PRODUCT_n keys a tool returned this turn.`);
     if (p.kind === "style") {
       const c = new Set(p.codes);
-      if (c.has("gendered_address") || c.has("slash_form")) lines.push(locale === "he" ? "- Address the customer neutrally (לך / אפשר + infinitive), no gendered verbs and no slash forms." : "- Address the customer neutrally.");
+      // The owner's address form: the fault is the other form, and the correction is the owner's form.
+      const form = locale === "he" ? owner?.address ?? null : null;
+      if (form && (c.has("gendered_address") || c.has("slash_form"))) lines.push(`- The business's rule sets the ${form} form of address: address the customer in the ${form} form only (${FORM_WORDS[form].you}), never the ${otherForm(form)} form and no slash forms.`);
+      else if (c.has("gendered_address") || c.has("slash_form")) lines.push(locale === "he" ? "- Address the customer neutrally (לך / אפשר + infinitive), no gendered verbs and no slash forms." : "- Address the customer neutrally.");
       if (c.has("self_gender")) lines.push("- Speak of yourself in your configured gender, or neutrally.");
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
@@ -2042,7 +2063,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
       if (c.has("failure_narration")) lines.push("- Never tell the customer a tool or the catalogue failed. Search again narrower, or ask one question about what they want, or show the closest products from earlier in this conversation.");
       if (c.has("statement_question")) lines.push("- \"יש כמה ...\" about the products you show is a statement: end it with a full stop, not a question mark.");
       if (c.has("affirms_unsafe")) lines.push("- Never affirm on the business's behalf that the product is unsafe or dangerous: apologise, say to stop using it until a person checks, and a person continues here.");
-      if (c.has("gendered_agree")) lines.push("- \"נכון\" or \"בדיוק\", not \"צודק/צודקת\" (the customer's gender is not known).");
+      if (form && c.has("gendered_agree")) lines.push(`- "${FORM_WORDS[form].agree}" or "נכון", not "${FORM_WORDS[otherForm(form)].agree}": the business's rule sets the ${form} form of address.`);
+      else if (c.has("gendered_agree")) lines.push("- \"נכון\" or \"בדיוק\", not \"צודק/צודקת\" (the customer's gender is not known).");
       if (c.has("odd_hedge")) lines.push("- No hedge that predicts a fault the data does not state (\"ייתכן שהמוצר יזוז\", \"it might break\").");
       if (c.has("broken_hebrew")) lines.push("- \"מה לא היה בסדר\" (or \"מה לא עבד\"), not \"מה לא מרוצה\".");
       if (c.has("internal_reasoning")) lines.push("- Never narrate your own choice (\"they don't match what you described, so I won't offer them\"). Search again with the customer's own words for the item; show what fits, or ask one question about what they want.");
@@ -2065,7 +2087,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
       if (c.has("mixed_person")) lines.push("- One person per sentence: we asked you (\"ביקשנו ממך\"), not \"ביקשתם ממך\".");
       if (c.has("self_gendered")) lines.push("- Speak of yourself neutrally (\"כדאי\", \"ממליצים\", \"הכי מתאים לך\"), never a gendered first person.");
       if (c.has("found_narration")) lines.push("- Do not narrate the search (\"מצאתי\"); just say what there is.");
-      if (c.has("imperative_notice") || c.has("gendered_prefers") || c.has("mixed_address")) lines.push("- No \"שים לב\" or \"מעדיף/ה\": rephrase neutrally.");
+      if (form && c.has("gendered_prefers")) lines.push(`- "${FORM_WORDS[form].prefer}", not "${FORM_WORDS[otherForm(form)].prefer}": the business's rule sets the ${form} form of address.`);
+      if (c.has("imperative_notice") || (!form && c.has("gendered_prefers")) || c.has("mixed_address")) lines.push("- No \"שים לב\" or \"מעדיף/ה\": rephrase neutrally.");
       if (c.has("recap_opener") || c.has("echo_opener")) lines.push("- Do not open by restating what the customer said; answer.");
       if (c.has("false_absence")) lines.push("- An empty search is not proof the store lacks it: say you did not find it by that name.");
       if (c.has("empty")) lines.push("- The reply was empty: write the message to the customer.");

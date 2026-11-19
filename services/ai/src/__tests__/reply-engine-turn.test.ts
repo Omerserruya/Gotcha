@@ -3629,3 +3629,74 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
     expect(nudge.trace.gate3.rewrite).toBe("silent");
   });
 });
+
+describe("the owner sets how the customer is addressed (2026-11-19: \"לפנות אל הלקוח בלשון נקבה בלבד\", and \"תרצי?\" was flagged and rewritten away)", () => {
+  const noteOf = (call: any) => call.messages.slice(1).map((m: any) => String(m.content ?? "")).join("\n");
+  const ASK = { ...opts, incomingMessage: "יש לכם קפוצ'ון בכחול?" };
+  const FEM = "כן, יש לנו את קפוצ'ון כחול. תרצי?";
+  const MASC = "כן, יש לנו את קפוצ'ון כחול. תרצה?";
+  const search = { toolCalls: [tc("s1", "woocommerce.list_products", { query: "קפוצ'ון כחול" })] };
+  const turn = async (rules: string[] | null, ...drafts: string[]) => {
+    h.responses.length = 0; h.calls.length = 0; h.audits.length = 0;
+    h.groundTitle = "קפוצ'ון כחול";
+    h.agentExtra = rules ? { customGuardrails: rules } : {};
+    h.responses.push(search, ...drafts.map((d, i) => ({ toolCalls: [respond(`a${i}`, { reply: d })] })));
+    const r = await runReplyEngineTurn(ASK, "autonomous");
+    return { r, cuts: h.audits.find((a) => a.data.action === "ai.bot_turn").data.metadata.cuts, calls: h.calls.length };
+  };
+
+  it("★ the real case: the feminine rule, and the draft's \"תרצי?\" goes out as written, with no rewrite and the gender on the marker", async () => {
+    const { r, cuts, calls } = await turn(["לפנות אל הלקוח בלשון נקבה בלבד"], FEM);
+    expect(r.reply).toBe(FEM);
+    expect(r.trace.gate3).toMatchObject({ ok: true, problems: [], rewrite: "none" });
+    expect(calls).toBe(2);
+    expect((r.trace as any).ownerAddress).toBe("feminine");
+    expect(cuts.ownerAddress).toBe("feminine");
+    // The masculine rule, the same way.
+    const m = await turn(["לא להשתמש במקפים", "תמיד פונים בלשון זכר"], MASC);
+    expect(m.r.reply).toBe(MASC);
+    expect(m.calls).toBe(2);
+    expect(m.cuts.ownerAddress).toBe("masculine");
+  });
+
+  it("★ the other gender is still a fault: one rewrite that names the owner's form, never the word-level plural", async () => {
+    const { r, cuts, calls } = await turn(["לפנות אל הלקוח בלשון נקבה בלבד"], MASC, FEM);
+    expect(r.trace.gate3.problems).toEqual([{ kind: "style", codes: ["gendered_address"] }]);
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(calls).toBe(3);
+    expect(noteOf(h.calls[2])).toContain("address the customer in the feminine form only (את, תרצי, תוכלי), never the masculine form");
+    expect(noteOf(h.calls[2])).not.toContain("Address the customer neutrally");
+    expect(r.reply).toBe(FEM);
+    expect((r.trace as any).rewriteSkipped).toBeUndefined();
+    expect(cuts.ownerAddress).toBe("feminine");
+  });
+
+  it("★ another style fault under the rule is still fixed by words, with no rewrite, and the owner's form stays", async () => {
+    const { r, calls } = await turn(["לפנות אל הלקוח בלשון נקבה בלבד"], "כן, מצאתי אצלנו את קפוצ'ון כחול והוא מופיע באתר. תרצי לראות אותו מקרוב?");
+    expect(r.trace.gate3.problems).toEqual([{ kind: "style", codes: ["found_narration"] }]);
+    expect((r.trace as any).rewriteSkipped).toBe("direct_clean");
+    expect(calls).toBe(2);
+    expect(r.reply).toMatch(/תרצי לראות אותו מקרוב\?$/);
+    expect(r.reply).not.toMatch(/מצאתי/);
+  });
+
+  it("★ the rewrite repeats the other gender: the neutral plural goes out, never the wrong form", async () => {
+    const { r } = await turn(["לפנות אל הלקוח בלשון נקבה בלבד"], MASC, MASC);
+    expect(r.reply).toBe("כן, יש לנו את קפוצ'ון כחול. תרצו?");
+  });
+
+  it("★ a business with rules but no address rule keeps today's neutral behaviour: the same turn as a business with no rules", async () => {
+    // "לדבר בלשון נקבה" names no customer: it may as well be the employee's own voice.
+    const withRules = await turn(["לדבר בלשון נקבה", "לא להשתמש במקפים"], FEM);
+    const none = await turn(null, FEM);
+    for (const t of [withRules, none]) {
+      expect(t.r.reply).toBe("כן, יש לנו את קפוצ'ון כחול. תרצו?");
+      expect(t.r.trace.gate3).toMatchObject({ problems: [{ kind: "style", codes: ["gendered_address"] }], rewrite: "cleaned" });
+      expect((t.r.trace as any).rewriteSkipped).toBe("direct_clean");
+      expect(t.calls).toBe(2);
+      expect((t.r.trace as any).ownerAddress).toBeUndefined();
+      expect(t.cuts.ownerAddress).toBeUndefined();
+    }
+    expect(withRules.cuts.ownerRules).toEqual({ rules: 2, handover: 0, never: 0 });
+  });
+});
