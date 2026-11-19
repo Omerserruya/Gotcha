@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -469,7 +469,9 @@ export function greetingName(raw: string | null | undefined): string | null {
 /** A product the customer named (a distinctive word of theirs) is among this turn's results. */
 export function namedInResults(incoming: string, candidates: any[]): boolean {
   const words = (String(incoming ?? "").toLowerCase().match(/\p{L}{3,}/gu) ?? []).filter((w) => w.length >= 3);
-  return candidates.some((c) => { const t = String(c?.title ?? "").toLowerCase(); return words.some((w) => w.length >= 4 && t.includes(w.replace(/^[הולבמש]/, ""))); });
+  // Across scripts too: "ג'ינס" names "Relaxed Straight Jeans" (dev round k7 on 22969e1f).
+  const heWords = (normalizeQuotes(String(incoming ?? "")).match(/[\u0590-\u05FF]+(?:'[\u0590-\u05FF]+)*/gu) ?? []).filter((w) => w.length >= 3);
+  return candidates.some((c) => { const t = String(c?.title ?? "").toLowerCase(); return words.some((w) => w.length >= 4 && t.includes(w.replace(/^[הולבמש]/, ""))) || heWords.some((h) => (t.match(/[a-z]{3,}/g) ?? []).some((x) => sameAcrossLanguages(h, x) || sameAcrossLanguages(h, x.replace(/s$/, "")))); });
 }
 
 /**
@@ -634,7 +636,7 @@ export function focusTitlesOf(facts: Record<string, unknown> | null | undefined)
 // The message speaks of price: a number in digits or words (either language), a currency, or a bound word.
 const PRICE_TALK = /\d|(?<![\u0590-\u05FF])(?:עשר|עשרים|שלושים|ארבעים|חמישים|שישים|שבעים|שמונים|תשעים|מאה|מאתיים|שלוש\s*מאות|ארבע\s*מאות|חמש\s*מאות|אלף|אלפיים|שקל|שקלים|ש["״']?ח|עד|מתחת|פחות\s+מ|מעל|יותר\s+מ|בסביבות|באזור|לא\s+יקר|לא\s+יקרה|זול|זולה|זולים|מחיר|תקציב)(?![\u0590-\u05FF])|[₪$€]|\b(?:ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|shekels?|nis|ils|under|below|less than|up to|around|about|over|above|cheap|cheaper|inexpensive|affordable|budget|price)\b/iu;
 // A fresh list question: what is on sale, what is new (never a follow-up adding an attribute).
-const FRESH_LIST_ASK = /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה)(?![\u0590-\u05FF])|\b(?:on sale|sale|discounts?|new|newest|latest)\b/iu;
+const FRESH_LIST_ASK = /(?<![\u0590-\u05FF])ו?ה?(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה)(?![\u0590-\u05FF])|\b(?:on sale|sale|discounts?|new|newest|latest)\b/iu;
 const BUDGET_CONTINUES = /(?<![\u0590-\u05FF])(?:מזה|מזאת|מהם|מהן|מתוכם|מתוכן|מאלה|מאלו|באותו\s+תקציב|באותו\s+מחיר|בתקציב|תקציב|זול|זולים|זולה|יותר\s+זול)(?![\u0590-\u05FF])|\b(?:of these|of them|within (?:that|the) budget|cheaper|budget)\b/iu;
 /** A store search's args, cleaned (rating 83086356): no 0..0 price, an audience only when she names one, never her whole message as the query. */
 export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming: string): T {
@@ -1766,7 +1768,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // Also when the turn's products ARE her noun by title or category, whatever the wording (rating 052f53ad,
         // Tehila: five scarves for her scarf, and the team line).
         const keys = noun ? nounKeys(noun) : [];
-        const ofHerKind = keys.length ? (candidates as any[]).filter((c: any) => { const hay = `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")}`.toLowerCase(); return keys.some((k) => hay.includes(k)); }) : [];
+        const ofHerKind = keys.length ? (candidates as any[]).filter((c: any) => ofHerKindStrict(c, noun!)) : [];
         const grounded = (productAskNow(opts.incomingMessage ?? "") || ofHerKind.length > 0) && ofTheirs.length ? groundedProductFallback(ofTheirs as any, locale, true) : null;
         const question = String(opts.incomingMessage ?? "").slice(0, 300) || null;
         const searched = turnTools.records.some((t) => /list_products|search_products/.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
@@ -2474,6 +2476,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
   const cardKeys = (final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length);
+  // The not-found line never goes out over the turn's own cards (dev round k7 on 22969e1f: the hoodie cards under "לא
+  // מצאתי את זה בקטלוג"), whatever attached them.
+  if (cardKeys.length && cardChannel && reply && NOT_FOUND_LINE.test(reply)) { reply = closestMatchLine(locale); (trace as any).notFoundWithCards = true; }
   if (cardKeys.length && cardChannel && lane === "live") {
     const picked = [...new Set(cardKeys)].slice(0, 6).map((n) => candidates[n - 1]);
     try {

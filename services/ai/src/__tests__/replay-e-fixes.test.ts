@@ -1228,7 +1228,7 @@ describe("dev round k6 on 622fcae0", () => {
     for (const m of ["מה הכי זול אצלכם?", "יש לכם משהו עד מאה שקל?", "משהו מתחת לחמישים שקלים", "מתנה בסביבות מאתיים ש\"ח", "anything under fifty shekels?", "יש משהו לא יקר?", "ובשחור?", "ולגברים?"]) {
       expect(cleanSearchArgs(A, m), m).toMatchObject({ price_max: 100 });
     }
-    for (const m of ["מה יש במבצע?", "מה חדש?", "what's on sale?"]) expect(cleanSearchArgs(A, m), m).not.toHaveProperty("price_max");
+    for (const m of ["מה יש במבצע?", "מה חדש?", "what's on sale?", "תראי לי את החדשים", "מה עם ההנחות?"]) expect(cleanSearchArgs(A, m), m).not.toHaveProperty("price_max");
     expect(cleanSearchArgs(A, "מה במבצע עד מאה שקל?")).toMatchObject({ price_max: 100 });
   });
   it("★ the was-price in the grounding reads as money", async () => {
@@ -1254,5 +1254,33 @@ describe("0b5f2b46 prod replay: P-1, P-2", () => {
     const re = /^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu;
     expect(re.test("לשניהם צריך מעצור נוסף, ובזמן הפעלת המיקסר חשוב לא להשאיר אותו על המשטח ללא השגחה.")).toBe(true);
     expect(re.test("למיקסר דאבו מתאים אליס.")).toBe(false);
+  });
+});
+
+describe("dev round k7 on 22969e1f", () => {
+  const C = [{ title: "Cropped Hoodie", attributes: { category: "Hoodies" } }, { title: "Zip Hoodie", attributes: { category: "Hoodies" } }, { title: "Heavyweight Hoodie", attributes: { category: "Hoodies" } }, { title: "Relaxed Straight Jeans", attributes: { category: "Jeans" } }];
+  it("★ K7-A: her Hebrew noun finds its kind and its name in English titles", async () => {
+    const { headNoun, ofHerKindStrict } = await import("../services/reply-engine/gates");
+    const { namedInResults } = await import("../services/reply-engine/engine");
+    expect(headNoun("יש לכם ג'ינס או קפוצ'ון?")).toBe("ג'ינס");
+    expect(headNoun("do you have jeans or a hoodie?")).toBe("jeans");
+    expect(C.filter((c) => ofHerKindStrict(c, "ג'ינס")).map((c) => c.title)).toContain("Relaxed Straight Jeans");
+    expect(namedInResults("יש לכם ג'ינס או קפוצ'ון?", C)).toBe(true);
+    // A Hebrew store keeps the plain rule: another kind in her script is ruled out.
+    expect(ofHerKindStrict({ title: "קשת לשיער", attributes: { category: "קשתות" } }, "מטפחת")).toBe(false);
+    expect(namedInResults("יש לכם מעיל?", C)).toBe(false);
+  });
+  it("★ K7-A (2): the not-found line never goes out over the turn's cards (source check at the card staging)", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/if \(cardKeys\.length && cardChannel && reply && NOT_FOUND_LINE\.test\(reply\)\) \{ reply = closestMatchLine\(locale\);/);
+    // The not-found branch reads her kind through the cross-script rule.
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/const ofHerKind = keys\.length \? \(candidates as any\[\]\)\.filter\(\(c: any\) => ofHerKindStrict\(c, noun!\)\) : \[\];/);
+  });
+  it("★ K7-B: a sentence that answers this turn's question is no repeat", async () => {
+    const { repeatedSentences } = await import("../services/reply-engine/gates");
+    const prev = ["יש גופיית ריב מכותנה אורגנית ב-79 ש\"ח, והיא כרגע במבצע."];
+    const r = "במבצע כרגע יש גופיית ריב מכותנה אורגנית, ב-79 ש\"ח במקום 99 ש\"ח. יש צעיף צמר טלה ב-159 ש\"ח במקום 199 ש\"ח.";
+    expect(repeatedSentences(r, prev, "מה יש במבצע?")).toEqual([]);
+    expect(repeatedSentences(r, prev, "תודה")).toHaveLength(1);
   });
 });

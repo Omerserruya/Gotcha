@@ -747,11 +747,15 @@ export function nearDuplicate(reply: string, previousBotReplies: string[]): bool
 
 // One sentence again, inside an otherwise new reply (prod replay 10: "3-7 ימי עסקים" four times).
 /** Sentences (6+ words) that repeat one of the employee's last five replies. */
-export function repeatedSentences(reply: string, previousBotReplies: string[]): string[] {
+export function repeatedSentences(reply: string, previousBotReplies: string[], incoming = ""): string[] {
+  // A sentence holding a content word of this turn's question answers it: no repeat, she asked again (dev round k7 on
+  // 22969e1f: "במבצע כרגע יש גופיית ריב..." to "מה יש במבצע?" was cut and the rest leaned on it).
+  const asked = ((normalizeQuotes(String(incoming ?? "")).match(/[\p{L}']{4,}/gu) ?? []) as string[]).map((w) => w.toLowerCase().replace(/^[הובל](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => w.length >= 4 && !talkWord(w) && !queryStop(w));
+  const answers = (x: string) => asked.some((w) => normalizeQuotes(x).toLowerCase().includes(w));
   const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map(qWords).filter((w) => w.size >= 6);
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => {
     const mine = qWords(x);
-    if (mine.size < 6) return false;
+    if (mine.size < 6 || answers(x)) return false;
     return before.some((b) => { let n = 0; for (const w of mine) if (b.has(w)) n++; return n / Math.max(mine.size, b.size) >= 0.8; });
   }).map((x) => x.trim());
 }
@@ -1423,7 +1427,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (i.locale === "he" && (i.candidateCount > 0 || i.cards.length > 0) && new RegExp(STATEMENT_Q.source, "u").test(reply)) style.push("statement_question");
   if (repeatedAsk(reply, i.previousBotReplies ?? [])) style.push("repeated_ask");
   if (nearDuplicate(reply, i.previousBotReplies ?? [])) style.push("near_duplicate");
-  else if (repeatedSentences(reply, i.previousBotReplies ?? []).length) style.push("repeated_sentence");
+  else if (repeatedSentences(reply, i.previousBotReplies ?? [], i.incomingMessage ?? "").length) style.push("repeated_sentence");
   if (repeatedAdvice(reply, i.previousBotReplies ?? [], i.incomingMessage).length) style.push("repeated_advice");
   if (wrongSelfName(reply, i.employeeName)) style.push("wrong_identity");
   if (asksKnown(reply, i.incomingMessage).length) style.push("asks_known");
@@ -1799,7 +1803,7 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
   const c = new Set(codes);
   let s = normalizeQuotes(String(reply ?? ""));
   if (c.has("repeated_sentence")) {
-    const again = new Set(repeatedSentences(s, previousBotReplies));
+    const again = new Set(repeatedSentences(s, previousBotReplies, incoming));
     s = (s.match(SENTENCES) ?? [s]).filter((x) => !again.has(x.trim())).reduce(joinKept, "").trim();
   }
   if (c.has("repeated_advice")) {
@@ -2474,13 +2478,26 @@ export function unansweredItems(reply: string, incoming: string): string[] {
 export function headNoun(incoming: string): string | null {
   // A joined "ו" is no noun of its own ("ומה עם מטפחת": rating 052f53ad read "ומה").
   const stop = (w: string) => ASK_STOP.has(w) || STEM_STOP.has(w);
-  return (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).find((w) => { const l = w.toLowerCase(); return !stop(l) && !(/^ו[\u0590-\u05FF]{2,}/u.test(l) && stop(l.slice(1))); }) ?? null;
+  // A geresh inside a word is part of it ("ג'ינס", "קפוצ'ון": dev round k7 read "ינס"); English question words are no noun.
+  const EN_ASK = /^(?:do|does|did|you|have|has|had|any|the|got|want|need|looking|for|some|can|could|is|are|there|what|which|how|much|many|show|me|please|hi|hello|hey|and|or|with|your|yours)$/i;
+  return (normalizeQuotes(String(incoming ?? "")).match(/\p{L}+(?:'\p{L}+)*/gu) ?? []).filter((w) => w.replace(/'/g, "").length >= 3).find((w) => { const l = w.toLowerCase(); return !stop(l) && !EN_ASK.test(l) && !(/^ו[\u0590-\u05FF]{2,}/u.test(l) && stop(l.slice(1))); }) ?? null;
 }
 /**
  * Is the product of the customer's noun's kind? Its title, category or own text holds the noun. A product is
  * ruled out only with evidence it is another kind: a category in the noun's own script that does not hold it
  * (a Latin "Canvas Tote" for "תיק" is not ruled out; a "קשתות" arch for "מטפחת" is).
  */
+/** Of her kind by title or category: the noun's keys in it, or across scripts the same word ("ג'ינס", "Jeans": dev
+ *  round k7 on 22969e1f, Hebrew keys against English titles found none). */
+export function ofHerKindStrict(c: { title?: string; attributes?: Record<string, unknown>; details?: string }, noun: string): boolean {
+  const hay = `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")}`;
+  const low = hay.toLowerCase();
+  if (nounKeys(noun).some((k) => low.includes(k))) return true;
+  if (!/[\u0590-\u05FF]/.test(noun) || /[\u0590-\u05FF]/.test(hay)) return false;
+  const latin = (low.match(/[a-z]{3,}/g) ?? []) as string[];
+  // Positive evidence only: a "Leather Crossbody Bag" for "מעמד" stays another kind (rating of d2f10620, queue 6).
+  return latin.some((w) => sameAcrossLanguages(noun, w) || sameAcrossLanguages(noun, w.replace(/s$/, "")));
+}
 export function ofNoun(c: { title?: string; attributes?: Record<string, unknown>; details?: string }, noun: string): boolean {
   const hebrew = /[\u0590-\u05FF]/;
   const hay = `${c?.title ?? ""} ${String(c?.attributes?.category ?? "")} ${c?.details ?? ""}`.toLowerCase();
