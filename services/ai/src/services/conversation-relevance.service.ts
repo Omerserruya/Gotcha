@@ -155,6 +155,37 @@ export function sellerPitch(body: unknown): boolean {
 /** An Instagram story mention with nothing written: it asks nothing (replay d, Smoovee A: "[Story mention]" got a question). */
 export const storyMentionOnly = (body: unknown) => /^\s*\[(?:story[ _]mention|story mention reply|אזכור\s+בסטורי|תיוג\s+בסטורי)\]\s*$/iu.test(String(body ?? ""));
 
+/**
+ * Could this be a customer? (2026-11-19, Omer: casual chats stayed "unclear".) The expensive error is a customer
+ * hidden as personal, so anything a customer might open with counts: a bare greeting, "אפשר שאלה", "יש לכם", the
+ * business addressed, a price, order or subscription word, or a word of the business's own profile.
+ */
+const GREETING_ONLY = /^\s*(?:היי+|הי|שלום|אהלן|הלו|בוקר\s+טוב|ערב\s+טוב|צהריים\s+טובים|hey|hi|hello|good\s+(?:morning|evening))[\s!.,?🙂😊]*$/iu;
+const CUSTOMER_ASK = /(?<![\u0590-\u05FF])[הובלמשכ]{0,2}(?:אפשר\s+(?:לשאול|שאלה)|שאלה\s+קטנה|יש\s+(?:לכם|לך|אצלכם)|שלכם|אצלכם|אתם|לכם|מחיר|מחירים|מחירון|כמה\s+(?:זה\s+)?(?:עולה|עולים|עולות)|עלות|להזמין|הזמנה|הזמנתי|משלוח|לקנות|לרכוש|מנוי|הצעת\s+מחיר|שירות\s+לקוחות|תמיכה|דמו|פגישה)(?![\u0590-\u05FF])|\b(?:price|prices|cost|order|buy|purchase|subscription|plan|demo|support|do you|can i ask|quote|meeting)\b/iu;
+const PROFILE_STOP = new Set(["that", "with", "your", "from", "this", "have", "they", "their", "will", "what", "שלנו", "אנחנו", "עבור", "שלכם", "וגם", "כמו", "כדי", "יותר", "בכל"]);
+export function couldBeCustomer(body: unknown, profile: RelevanceProfile | null = null, strongOnly = false): boolean {
+  const b = String(body ?? "").trim();
+  if (!b) return false;
+  if (!strongOnly && GREETING_ONLY.test(b)) return true;
+  if (CUSTOMER_ASK.test(b)) return true;
+  // A word of what the business does or sells (4+ letters, the joined prefix off).
+  const words = (t: string) => ((t.toLowerCase().match(/[\p{L}]{4,}/gu) ?? []) as string[]).map((w) => w.replace(/^[הובלמש](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => !PROFILE_STOP.has(w));
+  const prof = [...new Set(words([profile?.whatWeSell, profile?.industry, profile?.businessDescription].filter(Boolean).join(" ")).map((w) => w.slice(0, 5)))];
+  // The same first five letters, or one opening the other from four letters on ("chat" and "chatbot").
+  const same = (x: string, y: string) => x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)));
+  return words(b).some((w) => prof.some((k) => same(w.slice(0, 5), k)));
+}
+/** personal needs this much from the model, and nothing a customer might write in any of the sender's messages. */
+export const MIN_PERSONAL_CONFIDENCE = 0.75;
+export function personalBound(p: { category: RelevanceCategory; confidence: number; reason: string }, c: RelevanceInput, profile: RelevanceProfile | null) {
+  if (p.category !== "personal") return p;
+  const inbound = c.messages.filter((m) => m.direction === "INBOUND");
+  if (p.confidence < MIN_PERSONAL_CONFIDENCE) return { category: "unclear" as const, confidence: p.confidence, reason: `unsure: personal (${p.reason})`.slice(0, 120) };
+  // An ask or a business word in ANY inbound message; a greeting only when greetings are all the sender wrote.
+  if (inbound.some((m) => couldBeCustomer(m.body, profile, true)) || (inbound.length > 0 && inbound.every((m) => couldBeCustomer(m.body, profile)))) return { category: "unclear" as const, confidence: p.confidence, reason: `could be a customer (${p.reason})`.slice(0, 120) };
+  return p;
+}
+
 /** The fast path: mail no person wrote, decided with no model call. Null when it does not apply. */
 export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | null {
   const at = now.toISOString();
@@ -175,7 +206,7 @@ export function fastRelevance(c: RelevanceInput, now = new Date()): Relevance | 
 const RUBRIC = `You label ONE conversation of a business's inbox. Decide who it is with and what it is about, judged against the business below. Categories:
 - business: a customer or a lead asking about, buying, or getting service for what THIS business sells or does.
 - reply_to_outbound: the business wrote first and this is the other side answering (a supplier, a hotel, a partner, someone the business reached out to), not a customer of the business.
-- personal: a private chat (a friend, a partner, family) that is not about the business.
+- personal: a private chat (a friend, a partner, family) that is not about the business; also a casual chat about something that has nothing to do with what this business does or sells (a game, a car, sport, a joke) and asks nothing of it. Name that subject in the reason. A short opener that could be a customer (a greeting, "can I ask", "do you have", a product, price or order word) is never personal: business or unclear.
 - notice: an automatic or vendor message to the business: an invoice or receipt, a system notification, a password reset, a login alert, shipping of something the business itself bought.
 - marketing: a newsletter, a promotion, an ad, or a cold sales pitch TO the business.
 - auto_reply: another business's automated message: a thanks-for-contacting greeting, opening hours, an away or out-of-office notice.
@@ -263,7 +294,7 @@ export async function classifyConversation(tenantId: string, profile: RelevanceP
     reasoningEffort: "minimal",
     metadata: { type: "conversation_relevance" },
   }));
-  const parsed = lowConfidence(onlyAfterOwnOutbound(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c), c));
+  const parsed = personalBound(lowConfidence(onlyAfterOwnOutbound(firstMover(parseRelevance((r as any)?.content ?? (r as any)?.text ?? ""), c), c)), c, profile);
   return { ...parsed, source: "model", classifiedAt: now.toISOString() };
 }
 
