@@ -26,6 +26,8 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
+import { endMarkFact } from "./end-mark";
+import { ENDED_FACT } from "@chatcenter/shared/src/lib/bot-idle";
 import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT, INACTIVE_ORDERS_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
@@ -2596,6 +2598,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The last lookup's titles replace the earlier ones; an order, payment or business turn clears them.
     engineFacts: { ...holdFacts, ...(candidates.length ? { [FOCUS_FACT]: JSON.stringify(candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean).slice(0, 5)) } : nonProductAsk(String(opts.incomingMessage ?? "")) && state.facts?.[FOCUS_FACT] ? { [FOCUS_FACT]: "" } : {}), ...(reply ? { [SPOKE_FACT]: String(Number(state.turnCount ?? 0)) } : {}), ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
+  // The customer ended it and nothing is open: marked for the idle sweep's quiet close (end-mark.ts). Any later turn clears it.
+  if (lane === "live") Object.assign(next.facts, endMarkFact(state.facts?.[ENDED_FACT], { incoming: opts.incomingMessage, history, reply, handoff: !!escalation, awaitingApproval: !!awaitingApproval, pending: next.pending, turnStartedAt: t0 }));
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
   trace.tools = turnTools.records;

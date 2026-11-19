@@ -4,7 +4,7 @@
  * agent got 403 and never saw it. Reading needs conversation:messages:read;
  * writing stays ADMIN (Owner). Values are read under the caller's tenant.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -118,26 +118,103 @@ describe("idle automation defaults follow the workspace language (2026-10-13)", 
   });
 });
 
-describe("bot idle settings (B3): only an Owner writes, validated, under the caller's tenant", () => {
-  const body = { reminderEnabled: true, reminderDelayMinutes: 10, reminderMessage: "היי, עדיין כאן?", autoCloseEnabled: true, autoCloseDelayMinutes: 10, autoCloseMessage: "סוגרת את השיחה בינתיים.", channels: ["WEBCHAT"] };
-  it("an Owner sets it; it is stored as botIdleAutomation and read back", async () => {
-    H.user = OWNER;
-    const r = await request(app).put("/api/agents/settings/bot-idle-automation").send(body);
-    expect(r.status).toBe(200);
-    expect(H.writes).toEqual([["t1", "botIdleAutomation", JSON.stringify(body)]]);
-    H.settings.set("t1:botIdleAutomation", H.writes[0][2]);
-    expect((await request(app).get("/api/agents/settings/bot-idle-automation")).body).toEqual(body);
-  });
-  it("channels default to WEBCHAT; an agent cannot write; an enabled step without its message, an unknown key or channel: refused", async () => {
-    H.user = OWNER;
-    const { channels: _c, ...noChannels } = body;
-    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send(noChannels)).body.channels).toEqual(["WEBCHAT"]);
-    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, reminderMessage: " " })).status).toBe(422);
-    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, extra: 1 })).status).toBe(400);
-    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send({ ...body, channels: ["SMS"] })).status).toBe(400);
-    H.user = AGENT;
-    H.writes = [];
-    expect((await request(app).put("/api/agents/settings/bot-idle-automation").send(body)).status).toBe(403);
+describe("bot idle settings, per group (2026-11-19): only an Owner, validated, under the caller's tenant", () => {
+  const URL = "/api/agents/settings/bot-idle-automation";
+  const FLAT = { reminderEnabled: true, reminderDelayMinutes: 10, reminderMessage: "היי, עדיין כאן?", autoCloseEnabled: true, autoCloseDelayMinutes: 10, autoCloseMessage: "סוגרת את השיחה בינתיים.", channels: ["WEBCHAT"] };
+  const live = { enabled: true, reminderAfterMinutes: 5, closeAfterReminderMinutes: 7, reminderText: "עוד כאן?", closeText: "נסגר בינתיים." };
+  const messaging = { enabled: true, reminderAfterMinutes: 45, closeAfterReminderMinutes: 20, reminderText: "Still with us?", closeText: "" };
+  const stored = () => JSON.parse(H.writes.at(-1)[2]);
+  beforeEach(() => { H.user = OWNER; H.locale = "en"; delete process.env.BOT_IDLE_DEFAULT_ON; });
+  afterEach(() => { delete process.env.BOT_IDLE_DEFAULT_ON; });
+
+  it("★ nothing saved: both groups come back as the platform's default, off while the switch is unset, in the workspace's language", async () => {
+    const off = await request(app).get(URL);
+    expect(off.status).toBe(200);
+    expect(off.body).toEqual({
+      liveChat: { enabled: false, reminderAfterMinutes: 10, closeAfterReminderMinutes: 10, reminderText: "Still here? You can pick this up any time.", closeText: "We've closed this chat for now. You can write here again any time.", source: "default" },
+      messaging: { enabled: false, reminderAfterMinutes: 30, closeAfterReminderMinutes: 15, reminderText: "Still here? You can pick this up any time.", closeText: "We've closed this chat for now. You can write here again any time.", source: "default" },
+    });
+    process.env.BOT_IDLE_DEFAULT_ON = "on"; H.locale = "he";
+    const on = (await request(app).get(URL)).body;
+    expect(on.liveChat).toMatchObject({ enabled: true, reminderAfterMinutes: 10, closeAfterReminderMinutes: 10, reminderText: "עדיין כאן? אפשר להמשיך מכאן בכל רגע.", closeText: "סגרנו את השיחה בינתיים. אפשר לכתוב כאן שוב בכל רגע.", source: "default" });
+    expect(on.messaging).toMatchObject({ enabled: true, reminderAfterMinutes: 30, closeAfterReminderMinutes: 15, source: "default" });
+    // A read writes nothing.
     expect(H.writes).toHaveLength(0);
+    expect(H.reads).toEqual([["t1", "botIdleAutomation"], ["t1", "botIdleAutomation"]]);
+  });
+
+  it("★ the row from before the groups (WEBCHAT only): it shows as the live chat group, the business's own; messaging is the default", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    H.settings.set("t1:botIdleAutomation", JSON.stringify(FLAT));
+    const b = (await request(app).get(URL)).body;
+    expect(b.liveChat).toEqual({ enabled: true, reminderAfterMinutes: 10, closeAfterReminderMinutes: 10, reminderText: FLAT.reminderMessage, closeText: FLAT.autoCloseMessage, source: "custom" });
+    expect(b.messaging.source).toBe("default");
+  });
+
+  it("★ one group saved: only it is written, as sent; the other group and the old row's own fields stay", async () => {
+    H.settings.set("t1:botIdleAutomation", JSON.stringify(FLAT));
+    const r = await request(app).put(URL).send({ messaging });
+    expect(r.status).toBe(200);
+    expect(H.writes).toHaveLength(1);
+    expect(H.writes[0].slice(0, 2)).toEqual(["t1", "botIdleAutomation"]);
+    expect(stored()).toEqual({ ...FLAT, groups: { messaging } });
+    expect(r.body.messaging).toEqual({ ...messaging, source: "custom" });
+    expect(r.body.liveChat).toMatchObject({ reminderText: FLAT.reminderMessage, source: "custom" });
+    // Then the other one: the first is kept.
+    H.settings.set("t1:botIdleAutomation", H.writes[0][2]);
+    const r2 = await request(app).put(URL).send({ liveChat: live });
+    expect(stored()).toEqual({ ...FLAT, groups: { messaging, liveChat: live } });
+    expect(r2.body).toEqual({ liveChat: { ...live, source: "custom" }, messaging: { ...messaging, source: "custom" } });
+    H.settings.set("t1:botIdleAutomation", H.writes[1][2]);
+    expect((await request(app).get(URL)).body).toEqual(r2.body);
+  });
+
+  it("★ both groups in one save; texts are trimmed; a group switched off is stored as off", async () => {
+    const r = await request(app).put(URL).send({ liveChat: { ...live, reminderText: "  עוד כאן?  " }, messaging: { ...messaging, enabled: false } });
+    expect(r.status).toBe(200);
+    expect(stored()).toEqual({ groups: { liveChat: live, messaging: { ...messaging, enabled: false } } });
+    expect(r.body.messaging).toMatchObject({ enabled: false, source: "custom" });
+  });
+
+  it("★ the close text may be empty (close with no message); the reminder text may be empty only while the group is off", async () => {
+    expect((await request(app).put(URL).send({ liveChat: { ...live, closeText: "" } })).status).toBe(200);
+    expect((await request(app).put(URL).send({ liveChat: { ...live, enabled: false, reminderText: "" } })).status).toBe(200);
+    H.writes = [];
+    for (const reminderText of ["", "   "]) {
+      const r = await request(app).put(URL).send({ liveChat: { ...live, reminderText } });
+      expect(r.status).toBe(422);
+    }
+    // One bad group refuses the whole save.
+    expect((await request(app).put(URL).send({ liveChat: live, messaging: { ...messaging, reminderText: "" } })).status).toBe(422);
+    expect(H.writes).toHaveLength(0);
+  });
+
+  it("★ refused with 400: no group, an unknown group or field, the old flat body, a missing field, a delay outside 1..10080, a text over 1000", async () => {
+    const { closeText: _c, ...noClose } = live;
+    const bad = [
+      {}, { email: live }, { liveChat: live, extra: 1 }, { liveChat: { ...live, source: "custom" } }, { liveChat: { ...live, channels: ["WEBCHAT"] } },
+      FLAT, { liveChat: noClose },
+      { liveChat: { ...live, reminderAfterMinutes: 0 } }, { liveChat: { ...live, reminderAfterMinutes: 10081 } }, { liveChat: { ...live, reminderAfterMinutes: 1.5 } },
+      { messaging: { ...messaging, closeAfterReminderMinutes: 0 } }, { messaging: { ...messaging, closeAfterReminderMinutes: 10081 } }, { messaging: { ...messaging, closeAfterReminderMinutes: "15" } },
+      { liveChat: { ...live, reminderText: "x".repeat(1001) } }, { liveChat: { ...live, closeText: "x".repeat(1001) } }, { liveChat: { ...live, enabled: "yes" } },
+    ];
+    for (const body of bad) {
+      const r = await request(app).put(URL).send(body);
+      expect([JSON.stringify(body).slice(0, 60), r.status]).toEqual([JSON.stringify(body).slice(0, 60), 400]);
+    }
+    expect(H.writes).toHaveLength(0);
+    // The edges are inside.
+    expect((await request(app).put(URL).send({ liveChat: { ...live, reminderAfterMinutes: 1, closeAfterReminderMinutes: 10080, reminderText: "x".repeat(1000) } })).status).toBe(200);
+  });
+
+  it("★ an agent neither reads nor writes it; the write is by this person, under the caller's tenant", async () => {
+    H.user = AGENT;
+    expect((await request(app).put(URL).send({ liveChat: live })).status).toBe(403);
+    expect((await request(app).get(URL)).status).toBe(403);
+    expect(H.writes).toHaveLength(0);
+    expect(H.reads).toHaveLength(0);
+    H.user = OWNER;
+    H.settings.set("t2:botIdleAutomation", JSON.stringify({ groups: { liveChat: { ...live, reminderText: "another business" } } }));
+    expect((await request(app).get(URL)).body.liveChat.source).toBe("default");
   });
 });

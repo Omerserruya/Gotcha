@@ -24,6 +24,7 @@ import {
 import { getIO } from "../lib/socket";
 // Deep import: the pure rule, because this service's tests mock the barrel.
 import { projectWooCommerce } from "@chatcenter/shared/src/lib/woo-commerce-cards";
+import { BOT_CLOSE_REASONS } from "@chatcenter/shared/src/lib/bot-idle";
 
 /**
  * Channel config is read once per channel and cached briefly. A relay
@@ -169,6 +170,9 @@ async function loadChannelMeta(
 export function relayConversationState(event: ServiceEvent): void {
   if (event.event !== "conversation:updated" && event.event !== "conversation:closed") return;
   if (event.data?.channel !== "SHOPIFY_LIVE_CHAT") return;
+  // The bot's own close (silence, or the visitor ended it) is not the end for the visitor: their next
+  // message reopens it, and its close message says so. Only a person's close ends the chat in the widget.
+  if (event.event === "conversation:closed" && BOT_CLOSE_REASONS.includes(String(event.data?.closeReason ?? ""))) return;
   const conversationId = event.data?.id ?? event.data?.conversationId;
   if (!conversationId) return;
   try {

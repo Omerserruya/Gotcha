@@ -9,7 +9,7 @@
  * entitlement lookup: origin checks, session signing and the visitor
  * projection are the code under test.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -513,6 +513,73 @@ describe("POST /message", () => {
 });
 
 // ─── Cart ───────────────────────────────────────────────────
+
+describe("★ a shopper writes after the bot closed the chat (2026-11-19)", () => {
+  // The bot closes its own quiet conversations; the widget is not told, and the next message carries on.
+  const DAY = 24 * 60 * 60_000;
+  const store = { conv: null as any, events: [] as any[] };
+  const closedBy = (reason: string | null, closedDaysAgo = 0) => {
+    const closedAt = new Date(Date.now() - closedDaysAgo * DAY);
+    store.conv = { id: "conv-closed", tenantId: "t1", status: "CLOSED", closedAt, reminderSentAt: closedAt, isHandedOver: false };
+    store.events = reason ? [{ createdAt: closedAt, metadata: { systemEvent: "auto_closed", reason } }] : [];
+  };
+  const message = () => request(app()).post("/api/shopify-chat/message").set("Origin", ORIGIN).send({ sessionToken: session(), body: "עוד שאלה", clientId: "abc123def456" });
+  const open = () => request(app()).post("/api/shopify-chat/conversation").set("Origin", ORIGIN).send({ sessionToken: session() });
+
+  beforeEach(() => {
+    prismaDouble.conversation.findFirst.mockImplementation(async (a: any) => {
+      const c = store.conv;
+      if (!c || a.where.tenantId !== c.tenantId) return null;
+      if (a.where.id && a.where.id !== c.id) return null;
+      const st = a.where.status;
+      if (st && (typeof st === "string" ? c.status !== st : c.status === st.not)) return null;
+      return c;
+    });
+    prismaDouble.conversation.updateMany = vi.fn(async (a: any) => {
+      const c = store.conv;
+      if (!c || c.id !== a.where.id || c.tenantId !== a.where.tenantId || c.status !== a.where.status) return { count: 0 };
+      Object.assign(c, a.data);
+      return { count: 1 };
+    });
+    prismaDouble.message.findFirst = vi.fn(async () => store.events.at(-1) ?? null);
+  });
+  afterEach(() => {
+    prismaDouble.conversation.findFirst.mockImplementation(async () => H.conversationRow.current);
+    delete prismaDouble.conversation.updateMany;
+    delete prismaDouble.message.findFirst;
+  });
+
+  it("closed for silence, or the shopper had said thanks: the same conversation, open again, no new one", async () => {
+    for (const reason of ["bot_idle", "customer_ended"]) {
+      closedBy(reason, 1);
+      const res = await message();
+      expect(res.status).toBe(200);
+      expect(store.conv).toMatchObject({ status: "OPEN", closedAt: null, reminderSentAt: null });
+      expect(res.body.data.conversationId).toBe("conv-closed");
+      expect(H.enqueue.mock.calls.at(-1)![1].normalizedMessage.externalMessageId).toBe("sfychat_conv-closed_abc123def456");
+    }
+    expect(H.createConversation).not.toHaveBeenCalled();
+  });
+
+  it("a person closed it, or the bot's close is older than 7 days: a new conversation, the closed one stays closed", async () => {
+    for (const [reason, days] of [[null, 0], ["idle", 0], ["bot_idle", 8]] as Array<[string | null, number]>) {
+      H.createConversation.mockClear();
+      closedBy(reason, days);
+      const res = await message();
+      expect(res.status).toBe(200);
+      expect(res.body.data.conversationId).toBe("conv1");
+      expect([reason, store.conv.status]).toEqual([reason, "CLOSED"]);
+      expect(H.createConversation).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("opening the widget reopens nothing: only a message does", async () => {
+    closedBy("bot_idle", 0);
+    expect((await open()).status).toBe(200);
+    expect(store.conv.status).toBe("CLOSED");
+    expect(prismaDouble.conversation.updateMany).not.toHaveBeenCalled();
+  });
+});
 
 describe("POST /cart/validate", () => {
   it("returns a server-resolved variant, never the browser's numbers", async () => {

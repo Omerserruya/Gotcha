@@ -356,6 +356,9 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Bot idle default: the settings GET shows a business with no row as on only when this is on.
+      # Same value as `incoming-worker`, which is the service that acts on it.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       # oidcConfig() THROWS without this, taking down the BFF session flow's
       # token exchange. It was set in dev and declared NOWHERE in production, so
       # `OIDC_CLIENT_ID=...` in a production env file reached the host and never
@@ -1052,6 +1055,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Bot idle default (packages/shared/src/lib/bot-idle.ts). Unset or off: only a business with its own
+      # botIdleAutomation row gets the reminder and the close, as before. on: every business with no row gets
+      # the defaults, and a conversation the customer ended is closed quietly. Same value on `auth`.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       # The https half of List-Unsubscribe on marketing email (one-click,
       # RFC 8058) is built on this origin; without it only the mailto part is
       # sent. Same value as conversation's.

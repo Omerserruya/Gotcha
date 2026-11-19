@@ -12,6 +12,10 @@ import {
   assignSoleMemberOnHandoff,
 } from "@chatcenter/shared";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
+import {
+  BOT_IDLE_KEY, BOT_IDLE_CLOSE_REASON, BOT_END_CLOSE_REASON, BOT_IDLE_SOURCE, ENDED_FACT, MARKED_END_CLOSE_MINUTES,
+  botIdleDefaultOn, botIdleLang, botIdleRules, botIdleText, markedEndStep, parseBotIdleRow, type BotIdleRule,
+} from "@chatcenter/shared/src/lib/bot-idle";
 
 interface IdleConversationJob {
   type: "idle_check";
@@ -504,26 +508,23 @@ export async function idleAutomationForTenant(tenantId: string): Promise<{ remin
   return { reminders, closes, skippedOutsideWindow };
 }
 
-// ─── Bot idle: the AI employee's own conversations (B3, Smoovee 2026-11-09) ───
+// ─── Bot idle: the AI employee's own conversations (B3, Smoovee 2026-11-09; default for every business 2026-11-19) ───
 //
 // "idleAutomation" above acts only on conversations a PERSON holds
-// (assignedAgentId set) and counts any outbound message. A conversation only
-// the AI employee answers was never reminded or closed. This is that mode,
-// under its own key so the human one is unchanged:
-//   TenantSetting "botIdleAutomation" = the same shape + channels (default
-//   ["WEBCHAT"]). The silence counts from the BOT's last message only; the
-//   close counts from the reminder; a conversation a person has, or was
-//   handed to one, or a flow holds, is never touched (re-checked just before
-//   sending).
+// (assignedAgentId set) and counts any outbound message. This is the mode for
+// a conversation only the AI employee answers, under its own key so the human
+// one is unchanged. The numbers, the texts, the stored shape and the switch
+// live in shared lib/bot-idle. The silence counts from the BOT's last message
+// only; the close counts from the reminder; a conversation a person has, or
+// was handed to one, or a flow holds, is never touched (re-checked just before
+// acting). A conversation the customer ended (the engine's mark) closes
+// quietly after a short while, with no reminder and no message.
 
-export interface BotIdleConfig extends IdleAutomationConfig { channels: string[] }
-
-export const BOT_IDLE_KEY = "botIdleAutomation";
+export { BOT_IDLE_KEY, BOT_IDLE_CLOSE_REASON, BOT_END_CLOSE_REASON, BOT_IDLE_SOURCE };
 /** How late a step may still be taken (the sweep runs every 5 minutes). */
 export const STEP_LATE_MINUTES = 60;
-export const BOT_IDLE_SOURCE = { reminder: "idle_reminder", close: "idle_close" } as const;
-/** The close's system event reason: the visitor's next message reopens such a conversation (embedded-chat). */
-export const BOT_IDLE_CLOSE_REASON = "bot_idle";
+/** Conversations loaded per read: every candidate is looked at, a page at a time. */
+export const SWEEP_PAGE = 200;
 
 const AI_SOURCES = new Set(["ai_bot", "approval_continuation"]);
 /** An outbound message the AI sent (analytics' isAiOutbound rule). */
@@ -532,26 +533,11 @@ export function isBotOutbound(m: { direction?: string; metadata?: unknown; sende
   const meta = (m.metadata && typeof m.metadata === "object" ? m.metadata : {}) as Record<string, unknown>;
   return AI_SOURCES.has(String(meta.source ?? "")) || meta.aiGenerated === true || m.senderName === "AI Bot";
 }
+const idleSourceOf = (m: { metadata?: unknown } | null | undefined) => String(((m?.metadata ?? {}) as any).source ?? "");
+const isIdleSource = (m: { metadata?: unknown } | null | undefined) =>
+  idleSourceOf(m) === BOT_IDLE_SOURCE.reminder || idleSourceOf(m) === BOT_IDLE_SOURCE.close;
 
-export function parseBotIdleConfig(raw: string | null): BotIdleConfig | null {
-  if (!raw) return null;
-  try {
-    const c = JSON.parse(raw);
-    const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
-    const cfg: BotIdleConfig = {
-      reminderEnabled: c?.reminderEnabled === true,
-      reminderDelayMinutes: num(c?.reminderDelayMinutes, 10),
-      reminderMessage: typeof c?.reminderMessage === "string" ? c.reminderMessage : "",
-      autoCloseEnabled: c?.autoCloseEnabled === true,
-      autoCloseDelayMinutes: num(c?.autoCloseDelayMinutes, 10),
-      autoCloseMessage: typeof c?.autoCloseMessage === "string" ? c.autoCloseMessage : "",
-      channels: Array.isArray(c?.channels) && c.channels.length ? c.channels.map(String) : ["WEBCHAT"],
-    };
-    return cfg.reminderEnabled || cfg.autoCloseEnabled ? cfg : null;
-  } catch {
-    return null;
-  }
-}
+type StepRule = Pick<BotIdleRule, "reminderEnabled" | "reminderDelayMinutes" | "reminderMessage" | "autoCloseEnabled" | "autoCloseDelayMinutes">;
 
 /**
  * What the newest non-system message calls for: "remind" (the bot spoke last,
@@ -561,11 +547,11 @@ export function parseBotIdleConfig(raw: string | null): BotIdleConfig | null {
  */
 export function botIdleStep(
   last: { direction: string; createdAt: Date; metadata?: unknown; senderName?: string | null } | null | undefined,
-  cfg: BotIdleConfig,
+  cfg: StepRule,
   now = Date.now(),
 ): "remind" | "close" | null {
   if (!last || last.direction !== "OUTBOUND") return null;
-  const source = String(((last.metadata ?? {}) as any).source ?? "");
+  const source = idleSourceOf(last);
   const minutes = (now - new Date(last.createdAt).getTime()) / 60000;
   // Due, and not long past due: a step is taken only within STEP_LATE_MINUTES
   // of falling due. Switching the rule on never sweeps up every old silent
@@ -588,31 +574,36 @@ const botOwned = (channels: string[]) => ({
   OR: [{ handledBy: null }, { handledBy: { notIn: ["human", "awaiting_approval", "flow"] } }],
 });
 
-const lastNonSystem = async (conversationId: string) =>
+const lastNonSystem = async (conversationId: string, direction?: "INBOUND" | "OUTBOUND") =>
   prisma.message.findFirst({
-    where: { conversationId, messageType: { not: "system" } },
+    where: { conversationId, messageType: { not: "system" }, ...(direction ? { direction } : {}) } as any,
     orderBy: { createdAt: "desc" },
     select: { id: true, direction: true, createdAt: true, metadata: true, senderName: true, body: true },
   });
 
 /** A team pass in the bot's own words ("העברתי את זה לצוות", "עדיין בבדיקה אצל הצוות"). */
-const TEAM_PASS = /(?<![\u0590-\u05FF])(?:העברתי|העברנו)\s+(?:את\s+)?(?:\S+\s+){0,4}(?:ל)?צוות|(?:בבדיקה|נבדק|נבדקת)\s+(?:אצל|עם)\s+(?:ה)?צוות|(?:ה)?צוות\s+(?:יחזור|יחזרו|יבדוק|יבדקו|ייצור|יעדכן)|\b(?:passed (?:this|it|your \w+) (?:on )?to the team|the team will (?:get back|check|reply))\b/iu;
+const TEAM_PASS = /(?<![֐-׿])(?:העברתי|העברנו)\s+(?:את\s+)?(?:\S+\s+){0,4}(?:ל)?צוות|(?:בבדיקה|נבדק|נבדקת)\s+(?:אצל|עם)\s+(?:ה)?צוות|(?:ה)?צוות\s+(?:יחזור|יחזרו|יבדוק|יבדקו|ייצור|יעדכן)|\b(?:passed (?:this|it|your \w+) (?:on )?to the team|the team will (?:get back|check|reply))\b/iu;
 /** A return, refund or exchange asked for. */
-const RETURN_ASK = /(?<![\u0590-\u05FF])[והלשב]?(?:החזרה|החזרת|להחזיר|מחזירה|מחזיר|החזר|זיכוי|לבטל|ביטול|החלפה|להחליף)(?![\u0590-\u05FF])|\b(?:return|refund|exchange|cancel(?:lation)?)\b/iu;
+const RETURN_ASK = /(?<![֐-׿])[והלשב]?(?:החזרה|החזרת|להחזיר|מחזירה|מחזיר|החזר|זיכוי|לבטל|ביטול|החלפה|להחליף)(?![֐-׿])|\b(?:return|refund|exchange|cancel(?:lation)?)\b/iu;
 /** The engine's open team items: "checking with the team: …" promises younger than 72h (reply-engine state.ts). */
 const TEAM_OPEN_MS = 72 * 60 * 60 * 1000;
 export function hasOpenTeamItem(pending: unknown, now = Date.now()): boolean {
   return Array.isArray(pending) && pending.some((p: any) => p?.kind === "promise" && String(p?.text ?? "").startsWith("checking with the team: ") && !(now - Date.parse(p?.at ?? "") > TEAM_OPEN_MS));
 }
 
+/** The engine's state of the live conversation: its open items and its own facts (the end mark). */
+const liveState = async (tenantId: string, conversationId: string): Promise<{ pending?: unknown; facts?: unknown } | null> =>
+  (await (prisma as any).conversationState?.findFirst?.({ where: { tenantId, conversationId, lane: "live" }, select: { pending: true, facts: true } }).catch(() => null)) ?? null;
+
 /**
  * Never remind or close a conversation that waits on the business (2026-11-18, Smoovee: "העברתי את השאלה לצוות",
  * then "עדיין כאן?", then "סוגרת את השיחה"; a return request closed). Blocked by an open team item, the bot's
  * last message being a team pass, or a return asked for in the last 3 days. Handoffs are out by botOwned already.
+ * `known`: the live state when the caller has read it already.
  */
-export async function botIdleBlocked(tenantId: string, conversationId: string, lastBody: string | null | undefined): Promise<string | null> {
+export async function botIdleBlocked(tenantId: string, conversationId: string, lastBody: string | null | undefined, known?: { pending?: unknown } | null): Promise<string | null> {
   if (TEAM_PASS.test(String(lastBody ?? ""))) return "team_pass_last";
-  const state = await (prisma as any).conversationState?.findFirst?.({ where: { tenantId, conversationId, lane: "live" }, select: { pending: true } }).catch(() => null);
+  const state = known !== undefined ? known : await liveState(tenantId, conversationId);
   if (hasOpenTeamItem(state?.pending)) return "open_team_item";
   const asked = await prisma.message.findMany({
     where: { tenantId, conversationId, direction: "INBOUND", createdAt: { gte: new Date(Date.now() - TEAM_OPEN_MS) } },
@@ -622,65 +613,119 @@ export async function botIdleBlocked(tenantId: string, conversationId: string, l
   return null;
 }
 
+/**
+ * The bot's close, the same outcome as a person's Resolve in the inbox (conversation.service close():
+ * status CLOSED, closedAt, and conversation:closed carrying the whole row), plus the system event that says
+ * it was automatic and why. Only while the conversation is still the bot's: a person who took it, or a
+ * close that already happened, is left alone. False: nothing was closed.
+ */
+export async function closeByBot(tenantId: string, conversationId: string, channels: string[], reason: string): Promise<boolean> {
+  const closed = await prisma.conversation.updateMany({
+    where: { id: conversationId, tenantId, ...botOwned(channels) } as any,
+    data: { status: "CLOSED", closedAt: new Date() },
+  });
+  if (!closed.count) return false;
+  await prisma.message.create({
+    data: {
+      tenantId, conversationId, direction: "INBOUND", body: "", messageType: "system", senderName: "System",
+      metadata: { systemEvent: "auto_closed", reason },
+    },
+  });
+  const row = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+  });
+  // closeReason: the storefront relay does not end the visitor's chat for a close their next message reopens.
+  publishEvent({ event: "conversation:closed", tenantId, data: { ...(row ?? { id: conversationId, status: "CLOSED" }), closeReason: reason } }).catch(() => {});
+  return true;
+}
+
 export async function botIdleForTenant(tenantId: string): Promise<{ reminders: number; closes: number }> {
   let reminders = 0, closes = 0;
-  const cfg = parseBotIdleConfig(await readDurableSetting(tenantId, BOT_IDLE_KEY));
-  if (!cfg) return { reminders, closes };
-  const conversations = await prisma.conversation.findMany({
-    where: {
-      tenantId, ...botOwned(cfg.channels),
-      lastMessageAt: { gte: new Date(Date.now() - (Math.max(cfg.reminderDelayMinutes, cfg.autoCloseDelayMinutes) + STEP_LATE_MINUTES) * 60_000 * 2) },
-    } as any,
-    select: { id: true, channel: true, channelAccountId: true, customerExternalId: true, channelAccount: { select: { id: true, channel: true } } },
-    take: 500,
-  });
-  for (const conv of conversations) {
-    try {
-      const last = await lastNonSystem(conv.id);
-      const step = botIdleStep(last as any, cfg);
-      if (!step || !last) continue;
-      // Just before acting: still the bot's, and nobody wrote since (a person
-      // took it, the customer replied, or a flow claimed it in the meantime).
-      const still = await prisma.conversation.findFirst({ where: { id: conv.id, tenantId, ...botOwned(cfg.channels) } as any, select: { id: true } });
-      const newest = await lastNonSystem(conv.id);
-      if (!still || newest?.id !== last.id) continue;
-      // Waiting on the business: neither a reminder nor a close (2026-11-18).
-      const blocked = await botIdleBlocked(tenantId, conv.id, (last as any).body);
-      if (blocked) { console.log(`[idle-check][bot] ${step} skipped (${blocked}) conv=${conv.id}`); continue; }
-      const text = step === "remind" ? cfg.reminderMessage : cfg.autoCloseMessage;
-      const allowed = !!(text && conv.channelAccount) && (await messageAllowed(conv as any));
-      if (allowed) {
-        const message = await prisma.message.create({
-          data: {
-            tenantId, conversationId: conv.id, direction: "OUTBOUND", body: text, messageType: "text",
-            senderName: "AI Bot", status: "PENDING",
-            metadata: { source: step === "remind" ? BOT_IDLE_SOURCE.reminder : BOT_IDLE_SOURCE.close },
-          },
-        });
-        await outgoingMessageQueue.add("send", {
-          tenantId, conversationId: conv.id, channel: conv.channelAccount!.channel, channelAccountId: conv.channelAccount!.id,
-          recipientExternalId: conv.customerExternalId, body: text, messageType: "text", senderName: "AI Bot", messageId: message.id,
-        }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+  const defaultOn = botIdleDefaultOn();
+  const rules = botIdleRules(parseBotIdleRow(await readDurableSetting(tenantId, BOT_IDLE_KEY)), defaultOn);
+  const channels = Object.keys(rules);
+  if (!channels.length) return { reminders, closes };
+  const longest = Math.max(MARKED_END_CLOSE_MINUTES, ...channels.flatMap((c) => [rules[c].reminderDelayMinutes, rules[c].autoCloseDelayMinutes]));
+  // Every candidate, not the first 500: the ids in one read (no ordering, so the tenant and status index
+  // serves it), then the rows a page at a time.
+  const ids = (await prisma.conversation.findMany({
+    where: { tenantId, ...botOwned(channels), lastMessageAt: { gte: new Date(Date.now() - (longest + STEP_LATE_MINUTES) * 60_000 * 2) } } as any,
+    select: { id: true },
+  })).map((c) => c.id);
+  for (let at = 0; at < ids.length; at += SWEEP_PAGE) {
+    const conversations = await prisma.conversation.findMany({
+      where: { tenantId, id: { in: ids.slice(at, at + SWEEP_PAGE) } },
+      select: { id: true, tenantId: true, channel: true, channelAccountId: true, customerExternalId: true, detectedLocale: true, channelAccount: { select: { id: true, channel: true } } },
+    });
+    for (const conv of conversations) {
+      try {
+        const rule = rules[String(conv.channel)];
+        const last = await lastNonSystem(conv.id);
+        if (!rule || !last) continue;
+        const idle = botIdleStep(last as any, rule);
+        // The customer ended it (the engine's mark): a quiet close, and never a reminder after a goodbye.
+        const quiet = (Date.now() - new Date(last.createdAt).getTime()) / 60000;
+        const endCould = defaultOn && !isIdleSource(last) && (last.direction === "INBOUND" || isBotOutbound(last))
+          && (!!idle || (quiet >= MARKED_END_CLOSE_MINUTES && quiet < MARKED_END_CLOSE_MINUTES + STEP_LATE_MINUTES));
+        if (!idle && !endCould) continue;
+        const state = await liveState(tenantId, conv.id);
+        const endedAt = endCould ? (state?.facts as any)?.[ENDED_FACT] : null;
+        const end = endedAt
+          ? markedEndStep({
+              endedAt,
+              last: { direction: last.direction, createdAt: last.createdAt, botOutbound: isBotOutbound(last), idleSource: isIdleSource(last) },
+              lastInboundAt: last.direction === "INBOUND" ? last.createdAt : (await lastNonSystem(conv.id, "INBOUND"))?.createdAt,
+              lateMinutes: STEP_LATE_MINUTES,
+            })
+          : null;
+        if (end === "wait") continue;
+        const step = end === "close" ? "end" : idle;
+        if (!step) continue;
+        // Just before acting: still the bot's, and nobody wrote since (a person
+        // took it, the customer replied, or a flow claimed it in the meantime).
+        const still = await prisma.conversation.findFirst({ where: { id: conv.id, tenantId, ...botOwned(channels) } as any, select: { id: true } });
+        const newest = await lastNonSystem(conv.id);
+        if (!still || newest?.id !== last.id) continue;
+        // Waiting on the business: neither a reminder nor a close (2026-11-18). After a goodbye the bot did
+        // not answer, the bot's own last message is the one that may be a team pass.
+        const ours = last.direction === "OUTBOUND" ? (last as any).body : (await lastNonSystem(conv.id, "OUTBOUND"))?.body;
+        const blocked = await botIdleBlocked(tenantId, conv.id, ours, state);
+        if (blocked) { console.log(`[idle-check][bot] ${step} skipped (${blocked}) conv=${conv.id}`); continue; }
+        if (step === "end") {
+          if (await closeByBot(tenantId, conv.id, channels, BOT_END_CLOSE_REASON)) { closes++; console.log(`[idle-check][bot] closed (customer ended) conv=${conv.id}`); }
+          continue;
+        }
+        const text = botIdleText(rule, step === "remind" ? "reminder" : "close", botIdleLang(conv.detectedLocale, (last as any).body));
+        const allowed = !!(text && conv.channelAccount) && (await messageAllowed(conv as any));
+        const send = async () => {
+          const message = await prisma.message.create({
+            data: {
+              tenantId, conversationId: conv.id, direction: "OUTBOUND", body: text, messageType: "text",
+              senderName: "AI Bot", status: "PENDING",
+              metadata: { source: step === "remind" ? BOT_IDLE_SOURCE.reminder : BOT_IDLE_SOURCE.close },
+            },
+          });
+          await outgoingMessageQueue.add("send", {
+            tenantId, conversationId: conv.id, channel: conv.channelAccount!.channel, channelAccountId: conv.channelAccount!.id,
+            recipientExternalId: conv.customerExternalId, body: text, messageType: "text", senderName: "AI Bot", messageId: message.id,
+          }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+        };
+        if (step === "remind") {
+          // No reminder can be sent (the reply window is closed): nothing is written, the conversation is as it was.
+          if (!allowed) { console.log(`[idle-check][bot] reminder skipped (window) conv=${conv.id}`); continue; }
+          await send();
+          await prisma.conversation.update({ where: { id: conv.id }, data: { reminderSentAt: new Date(), lastMessageAt: new Date() } });
+          publishEvent({ event: "conversation:updated", tenantId, data: { id: conv.id } }).catch(() => {});
+          reminders++;
+          console.log(`[idle-check][bot] reminder sent conv=${conv.id}`);
+          continue;
+        }
+        if (allowed) await send();
+        if (await closeByBot(tenantId, conv.id, channels, BOT_IDLE_CLOSE_REASON)) { closes++; console.log(`[idle-check][bot] closed conv=${conv.id}`); }
+      } catch (err) {
+        console.error(`[idle-check][bot] failed for ${conv.id}:`, (err as any)?.message ?? err);
       }
-      if (step === "remind") {
-        await prisma.conversation.update({ where: { id: conv.id }, data: { reminderSentAt: new Date(), lastMessageAt: new Date() } });
-        publishEvent({ event: "conversation:updated", tenantId, data: { id: conv.id } }).catch(() => {});
-        if (allowed) reminders++;
-        console.log(`[idle-check][bot] reminder ${allowed ? "sent" : "skipped (window)"} conv=${conv.id}`);
-        continue;
-      }
-      await prisma.conversation.update({ where: { id: conv.id }, data: { status: "CLOSED", closedAt: new Date() } });
-      await prisma.message.create({
-        data: {
-          tenantId, conversationId: conv.id, direction: "INBOUND", body: "", messageType: "system", senderName: "System",
-          metadata: { systemEvent: "auto_closed", reason: BOT_IDLE_CLOSE_REASON },
-        },
-      });
-      publishEvent({ event: "conversation:closed", tenantId, data: { id: conv.id, status: "CLOSED" } }).catch(() => {});
-      closes++;
-      console.log(`[idle-check][bot] closed conv=${conv.id}`);
-    } catch (err) {
-      console.error(`[idle-check][bot] failed for ${conv.id}:`, (err as any)?.message ?? err);
     }
   }
   return { reminders, closes };

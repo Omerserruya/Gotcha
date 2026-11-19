@@ -21,6 +21,10 @@ import {
   encryptCredentials,
 } from "@chatcenter/shared";
 import * as invitations from "../services/invitation.service";
+import {
+  BOT_IDLE_KEY, BOT_IDLE_GROUPS, BOT_IDLE_DELAY_MAX_MINUTES, BOT_IDLE_TEXT_MAX,
+  botIdleDefaultOn, botIdleView, botIdleWithGroups, parseBotIdleRow,
+} from "@chatcenter/shared/src/lib/bot-idle";
 import { resolveInviteRoleStrict, ensureRoleAssignment } from "../services/invite-role.service";
 import { actorOf, inviteRoleRefusal } from "../lib/grant-ceiling";
 import { publicChannelAccount } from "../lib/channel-account-dto";
@@ -799,26 +803,38 @@ router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutom
   }
 });
 
-// ─── Bot idle (the AI employee's own conversations, B3 2026-11-09) ──
+// ─── Bot idle (the AI employee's own conversations, B3 2026-11-09; per group 2026-11-19) ──
 // "idleAutomation" acts only on conversations a person holds. This one acts
 // only on conversations the AI employee alone answers: the silence counts
 // from the bot's last message, the close from the reminder, and a conversation
 // handed to a person is never touched (incoming-worker idle-conversation.worker).
+//
+// Two groups, liveChat and messaging (shared lib/bot-idle: the channels, the
+// default numbers and texts, the stored shape). GET returns each group's
+// effective values and whether they are the platform's default or the
+// business's own. PUT takes one group or both, each whole; a group not sent is
+// not written. Nothing is written on a read.
 
-const botIdleSchema = z.object({
-  reminderEnabled: z.boolean(),
-  reminderDelayMinutes: z.number().int().min(1).max(10080),
-  reminderMessage: z.string().max(1000),
-  autoCloseEnabled: z.boolean(),
-  autoCloseDelayMinutes: z.number().int().min(1).max(10080),
-  autoCloseMessage: z.string().max(1000),
-  channels: z.array(z.enum(["WEBCHAT", "SHOPIFY_LIVE_CHAT", "WHATSAPP", "INSTAGRAM", "MESSENGER"])).min(1).default(["WEBCHAT"]),
+const botIdleMinutes = z.number().int().min(1).max(BOT_IDLE_DELAY_MAX_MINUTES);
+const botIdleGroupSchema = z.object({
+  enabled: z.boolean(),
+  reminderAfterMinutes: botIdleMinutes,
+  closeAfterReminderMinutes: botIdleMinutes,
+  reminderText: z.string().max(BOT_IDLE_TEXT_MAX).transform((v) => v.trim()),
+  // Empty: the conversation closes with no message.
+  closeText: z.string().max(BOT_IDLE_TEXT_MAX).transform((v) => v.trim()),
 }).strict();
+const botIdleSchema = z.object({ liveChat: botIdleGroupSchema.optional(), messaging: botIdleGroupSchema.optional() }).strict();
+
+async function botIdleSettingsView(tenantId: string, raw: string | null) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }).catch(() => null);
+  const he = String(tenant?.defaultLocale ?? "").toLowerCase().startsWith("he");
+  return botIdleView(parseBotIdleRow(raw), botIdleDefaultOn(), he ? "he" : "en");
+}
 
 router.get("/settings/bot-idle-automation", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const raw = await readDurableSetting(req.tenantId!, "botIdleAutomation");
-    res.json(raw ? JSON.parse(raw) : { reminderEnabled: false, reminderDelayMinutes: 10, reminderMessage: "", autoCloseEnabled: false, autoCloseDelayMinutes: 10, autoCloseMessage: "", channels: ["WEBCHAT"] });
+    res.json(await botIdleSettingsView(req.tenantId!, await readDurableSetting(req.tenantId!, BOT_IDLE_KEY)));
   } catch (err) {
     console.error("Get bot idle automation error:", err);
     res.status(500).json({ error: "Failed to get bot idle automation settings" });
@@ -828,12 +844,18 @@ router.get("/settings/bot-idle-automation", requireRole("ADMIN"), async (req: Re
 router.put("/settings/bot-idle-automation", requireRole("ADMIN"), validate(botIdleSchema), async (req: Request, res: Response) => {
   try {
     const value = botIdleSchema.parse(req.body);
-    if ((value.reminderEnabled && !value.reminderMessage.trim()) || (value.autoCloseEnabled && !value.autoCloseMessage.trim())) {
-      res.status(422).json({ error: "An enabled step needs its message" });
+    const groups = BOT_IDLE_GROUPS.filter((g) => value[g]);
+    if (!groups.length) {
+      res.status(400).json({ error: "Send at least one group: liveChat or messaging" });
       return;
     }
-    await writeDurableSetting(req.tenantId!, "botIdleAutomation", JSON.stringify(value), req.user?.userId);
-    res.json(value);
+    if (groups.some((g) => value[g]!.enabled && !value[g]!.reminderText)) {
+      res.status(422).json({ error: "A group that is on needs its reminder text" });
+      return;
+    }
+    const next = botIdleWithGroups(await readDurableSetting(req.tenantId!, BOT_IDLE_KEY), value);
+    await writeDurableSetting(req.tenantId!, BOT_IDLE_KEY, next, req.user?.userId);
+    res.json(await botIdleSettingsView(req.tenantId!, next));
   } catch (err) {
     console.error("Update bot idle automation error:", err);
     res.status(500).json({ error: "Failed to update bot idle automation settings" });
