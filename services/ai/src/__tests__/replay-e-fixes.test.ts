@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass, cutTheAnswer } from "../services/reply-engine/engine";
-import { optionClaimsWithoutVariations } from "../services/reply-engine/gates";
+import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer } from "../services/reply-engine/gates";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
@@ -753,5 +753,38 @@ describe("dev live round on dcf2158e: option claims", () => {
     expect(optionClaimsWithoutVariations("בשחור יש את ה-Zip Hoodie.", "רוצה שחור", other)).toEqual([]);
     // No product named and several read: nothing grounds it.
     expect(optionClaimsWithoutVariations("בשחור יש את ה-Pullover.", "רוצה שחור", other)).toHaveLength(1);
+  });
+});
+
+describe("rating of the dcf2158e prod replay: units", () => {
+  it("★ B: a dangling pointer loses only its pointing words", () => {
+    const r = "השרשראות שמופיעות כאן עשויות מפלדת אל חלד (Stainless Steel). בחלק מהדגמים מצוין גם תליון מאבני חן.";
+    expect(stripFactProblems(r, [{ kind: "dangling_reference", claims: ["השרשראות שמופיעות כאן עשויות מפלדת אל חלד (Stainless Steel)."] }] as any)).toBe("השרשראות עשויות מפלדת אל חלד (Stainless Steel). בחלק מהדגמים מצוין גם תליון מאבני חן.");
+    expect(withoutPointer("בחר באחד מהמוצרים שמופיעים כאן.")).toBe("בחר באחד מהמוצרים.");
+    expect(withoutPointer("שמופיעים כאן.")).toBe("");
+  });
+  it("★ F: a payment card is never a product card", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    for (const r of ["אבקש מהצוות לבדוק את החיוב בכרטיס ואת סטטוס ההזמנה, ויענו כאן בצ'אט.", "צוות השירות כבר בודק את החיוב בכרטיס, אפשר לצרף כאן אישור עסקה בלי פרטי כרטיס מלאים.", "כרגע הבדיקה מול הצוות היא האם נרשם חיוב בכרטיס ומה אפשר לעשות לגבי ההזמנה שבוטלה."]) {
+      const p = gate3({ reply: r, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: "חויבתי ואין הזמנה", isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false, teamQuestion: "חיוב", openTeamText: "חיוב" } as any).problems;
+      expect(p.map((x: any) => x.kind), r).not.toContain("card_reference");
+      expect(p.flatMap((x: any) => (x.kind === "style" ? x.codes : [])), r).not.toContain("card_narration");
+    }
+  });
+  it("★ G: a period inside an email, a domain, a decimal or a size is no sentence end", () => {
+    const r = "אפשר לכתוב ל-support@gmail.com או לבקר ב-shop.example.co.il. המשטח 15.4x23 ס\"מ עולה ₪999.";
+    const out = stripFactProblems(r, [{ kind: "ungrounded_price", prices: ["999"] }] as any);
+    expect(out).toBe("אפשר לכתוב ל-support@gmail.com או לבקר ב-shop.example.co.il.");
+    expect(out).not.toMatch(/gmail\. com|example\. co/);
+  });
+  it("★ H: a store query never holds a question, stop or talk word", () => {
+    expect(cleanStoreQuery("להזמין סמובי")).toBe("סמובי");
+    expect(cleanStoreQuery("אילו קרמים ליום")).toBe("קרמים ליום");
+    expect(cleanStoreQuery("מאיזה חומר השרשרת")).toBe("חומר השרשרת");
+    expect(cleanStoreQuery("Canvas Tote")).toBe("Canvas Tote");
+  });
+  it("★ I: an absence line is not the answer when what is left names products or asks a focused question", () => {
+    expect(cutTheAnswer(["לא מצאתי את נינג'ה קריספי בשם הזה."], "המשטחים שמופיעים להתאמות נינג'ה הם אריאל, גפן, אליס, אסף וכריסטינה. אפשר לבדוק התאמה לפי רוחב ועומק בסיס המכשיר, מה המידות?", "ולנינגה קריספי")).toBe(false);
+    expect(cutTheAnswer(["בשחור יש את ה-Heavyweight Hoodie."], "ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.", "רוצה שחור")).toBe(true);
   });
 });

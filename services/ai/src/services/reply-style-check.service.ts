@@ -494,7 +494,9 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   if (ctx.shopFloor) hit("offer_to_check", plain.match(OFFER_TO_CHECK) ?? plain.match(OFFER_SHOW_BOTH));
   // Narrating the cards or their buttons (urban-e25: "מתחת מופיעים הכרטיסים
   // עם הפרטים והוספת סל", "לשניהם יש תמונות וכפתור הוספה לעגלה למטה").
-  hit("card_narration", plain.match(CARD_NARRATION));
+  // "החיוב בכרטיס", "פרטי כרטיס", "אישור עסקה": a payment card, never a product card (rating of dcf2158e: 4 such cuts).
+  const cardHit = plain.match(CARD_NARRATION);
+  hit("card_narration", cardHit && /(?<![\u0590-\u05FF])[הבול]?(?:חיוב|תשלום|עסקה|אשראי|ויזה|זיכוי|מאסטרקארד)(?![\u0590-\u05FF])|\b(?:charge|payment|transaction|credit|debit)\b/iu.test(cardHit[0]) ? null : cardHit);
   hit("source_leak", plain.match(SOURCE_LEAK));
   // On a shop's floor "the demo" is our test store, never a meeting (urban-e30:
   // "זמן הגעה בדמו"). A sales employee's "לקבוע דמו" is untouched.

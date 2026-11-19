@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -301,7 +301,7 @@ const wordCount = (s: string) => (String(s ?? "").match(/[\u0590-\u05FFA-Za-z0-9
 /** The sentences of `before` that are not in `after` (what a cleanup cut). */
 export function removedSentences(before: string, after: string): string[] {
   const keep = String(after ?? "");
-  return (String(before ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
+  return (String(before ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => x && !keep.includes(x));
 }
 
 /** A profile address that names a street and a number, not only a town ("הסטודיו נמצא בנהריה"). */
@@ -360,7 +360,7 @@ export function placeholderOnly(text: string | null | undefined): boolean {
 /** Drops a sentence that repeats one already in the same reply. */
 export function dedupeSentences(reply: string): string {
   const seen = new Set<string>();
-  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*\s*/g) ?? [String(reply ?? "")];
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*/g) ?? [String(reply ?? "")];
   return parts.filter((x) => { const k = x.trim().replace(/\s+/g, " "); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).reduce(joinKept, "").trim();
 }
 
@@ -559,9 +559,13 @@ export function cutTheAnswer(removed: string[], left: string, incoming: string):
   const ask = [...new Set([...(storeQueryOf(incoming) ?? "").split(/\s+/).filter((w) => w.length >= 2), ...colours, ...sizes])];
   if (!ask.length) return false;
   const has = (x: string, w: string) => new RegExp(`(?<![\\p{L}\\d])[הולבמש]{0,2}${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\d])`, "iu").test(x) || (/^[\u0590-\u05FF]/.test(w) && new RegExp(`(?<![\\p{L}])[הולבמש]{0,2}${w}`, "iu").test(x));
-  const cutHolds = ask.filter((w) => removed.some((r) => has(r, w)));
+  // An absence line ("לא מצאתי את X בשם הזה") is not the answer when what is left names products or asks a focused
+  // question (rating of dcf2158e: the Ninja Crispy remnant was the better answer).
+  const ABSENCE_LINE = /(?<![\u0590-\u05FF])(?:לא\s+(?:מצאתי|מצאנו|מופיע|מופיעה)|אין\s+לנו|אינו\s+מופיע)(?![\u0590-\u05FF])|\b(?:(?:i|we) (?:could ?n[o']t|did ?n[o']t) find|not found|we don'?t have)\b/iu;
+  const informative = /\?/.test(left) || (left.match(/,/g) ?? []).length >= 2;
+  const cutHolds = ask.filter((w) => removed.some((r) => has(r, w) && !(ABSENCE_LINE.test(r) && informative)));
   if (!cutHolds.length) return false;
-  const sentences = String(left ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? [];
+  const sentences = String(left ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
   const negated = (x: string, w: string) => new RegExp(`(?<![\\u0590-\\u05FF])(?:לא|אין|ללא)\\s+(?:[\\u0590-\\u05FF]+\\s+)?[הולבמש]{0,2}${w}|\\bnot\\s+${w}`, "iu").test(x);
   return cutHolds.some((w) => !sentences.some((x) => has(x, w) && !negated(x, w)));
 }
@@ -642,7 +646,7 @@ export function oneTeamPass(reply0: string): string {
   // An emoji then a new word ends a sentence ("...כאן בצ'אט 😊 העברתי את זה לצוות", rating of d2f10620, NE'A).
   const MARK = "\u2063";
   const reply = String(reply0 ?? "").replace(/(\p{Extended_Pictographic}\uFE0F?)\s+(?=\p{L})/gu, `$1${MARK}`);
-  const parts = String(reply ?? "").replace(new RegExp(MARK, "g"), `${MARK}\n`).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
+  const parts = String(reply ?? "").replace(new RegExp(MARK, "g"), `${MARK}\n`).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*|\n+/g) ?? [];
   if (!parts.some((p) => FIXED_PASS.test(p))) return reply0;
   // The most specific told pass stays ("את שאר הפריטים העברתי לצוות" over the generic line), the others go.
   const keep = parts.filter((p) => FIXED_PASS.test(p)).sort((a, b) => b.trim().length - a.trim().length)[0];
@@ -674,7 +678,7 @@ export const selfSearch = (incoming: string) => SELF_SEARCH.test(normalizeQuotes
  */
 export function withClosingQuestion<T extends { reply: string }>(rewrite: T, original: { reply: string } | null, previousBotReplies: string[]): T {
   if (!original || /\?/.test(rewrite.reply ?? "")) return rewrite;
-  const parts = String(original.reply ?? "").trim().match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*/g) ?? [];
+  const parts = String(original.reply ?? "").trim().match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
   const q = parts.at(-1)?.trim() ?? "";
   if (!/\?$/.test(q) || q.split(/\s+/).length < 3 || /PRODUCT_\d|https?:\/\/|\d/.test(q) || teamPassIn(q)) return rewrite;
   if (previousBotReplies.some((b) => repeatsQuestion(q, b)) || String(rewrite.reply ?? "").includes(q)) return rewrite;
@@ -683,7 +687,7 @@ export function withClosingQuestion<T extends { reply: string }>(rewrite: T, ori
 /** The reply without its "we checked" clauses (a sentence that says nothing else goes). */
 const CHECKED_CLAIM = /(?<![\u0590-\u05FF])[ושכ]?(?:ביררנו|ביררתי|בדקנו|בדקתי|וידאנו|וידאתי)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ve| have)? (?:checked|verified|looked into it))\b/iu;
 export function withoutCheckedClaims(reply: string): string {
-  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
+  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*|\n+/g) ?? [];
   if (!parts.some((p) => CHECKED_CLAIM.test(p))) return reply;
   return parts.map((p) => {
     if (!CHECKED_CLAIM.test(p)) return p;
@@ -856,6 +860,14 @@ export async function runReplyEngineTurn(opts: EngineTurnOpts, mode: ReplyEngine
 async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateLane, signal?: AbortSignal): Promise<AIBotReplyResult & { trace: EngineTurnTrace }> {
   const cfg = engineConfig();
   const t0 = Date.now();
+  // Store and knowledge waits do not eat the turn's own budget (rating of dcf2158e: 5 rewrites cut by the budget, each
+  // after a 2 to 10 s store read): the budget counts engine time net of tool waits, under a hard wall ceiling of the
+  // budget plus 8 s. 8 s covers the slow reads seen (9.7 s at worst) less the share a normal turn spends on tools,
+  // so a slow-store turn still gets one rewrite round instead of a fallback, and no turn passes ~23 s.
+  let toolWaitMs = 0;
+  const HARD_CEILING_EXTRA_MS = 8000;
+  // Takes the call itself, so the clock starts before the tool does.
+  const waited = async <T,>(run: () => Promise<T>): Promise<T> => { const s0 = Date.now(); try { return await run(); } finally { toolWaitMs += Date.now() - s0; } };
   const stageMs: Record<string, number> = {};
   const mark = (k: string) => { stageMs[k] = Date.now() - t0; };
 
@@ -1147,6 +1159,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       let effective = await enrichProductSearchArgs({ tenantId: opts.tenantId, conversationId: opts.conversationId, toolName: toolFunctionName, args: args as any });
       if (/^woocommerce\.(list_products|get_product|list_product_variations)$/.test(toolFunctionName)) effective = { ...effective, lang: locale };
       if (toolFunctionName === "woocommerce.list_products") effective = withCustomerSearchFacts(effective, history, opts.incomingMessage ?? "");
+      // A store query never holds a question, stop or talk word ("להזמין סמובי", "אילו", "מאיזה", rating of dcf2158e).
+      if (/(?:^|\.)(?:list_products|search_products)$/.test(toolFunctionName) && typeof (effective as any).query === "string") effective = { ...effective, query: cleanStoreQuery((effective as any).query) };
       // Shopify parity: the item the customer named and a colour they gave go into its query too
       // (its search takes a query only: sizes, audience and the Hebrew fallback are Woo adapter features).
       if (toolFunctionName === "shopify.search_products") effective = withCustomerQueryWords(effective, history, opts.incomingMessage ?? "");
@@ -1192,7 +1206,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     cardChannel,
     ctx,
     skills,
-    refuse: (tool) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? ""),
+    // A verb, a question word or a talk word alone is never a store search (rating of dcf2158e: q="להזמין").
+    refuse: (tool, args) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? "")
+      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null),
     tightenApproval: (a) => {
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
@@ -1279,7 +1295,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The whole turn, not only the rewrite, answers inside the budget (prod replay 11: a
   // turn with no rewrite at 22s p95): with little time left the next call must answer,
   // and a tool waits at most what is left minus time for that answer.
-  const turnLeft = () => cfg.turnBudgetMs - (Date.now() - t0);
+  const turnLeft = () => Math.min(cfg.turnBudgetMs - (Date.now() - t0 - toolWaitMs), cfg.turnBudgetMs + HARD_CEILING_EXTRA_MS - (Date.now() - t0));
   for (let round = 0; round < cfg.maxRounds && !output; round++) {
     const lastRound = round === cfg.maxRounds - 1 || (round > 0 && turnLeft() < 6000);
     if (lastRound && round < cfg.maxRounds - 1) (trace as any).roundsCut = round;
@@ -1295,7 +1311,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const work = calls.filter((c) => c.function?.name !== "respond");
     if (work.length) {
       const tStart = Date.now();
-      await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, Math.max(2000, turnLeft() - 4000)) }, work);
+      await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, Math.max(2000, turnLeft() - 4000)) }, work));
       stageMs[`tools_r${round}`] = Date.now() - tStart;
       for (const c of work) {
         const rec = turnTools.records.find((x) => x.callId === c.id);
@@ -1424,7 +1440,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The customer is waiting (prod replay 6: a one-round rewrite at p95 27s). The
     // rewrite fits in what is left of the turn's budget, or is skipped and the
     // reply is cleaned in code instead.
-    const left = () => cfg.turnBudgetMs - (Date.now() - t0);
+    const left = () => Math.min(cfg.turnBudgetMs - (Date.now() - t0 - toolWaitMs), cfg.turnBudgetMs + HARD_CEILING_EXTRA_MS - (Date.now() - t0));
     const rewriteCall = async (choice: any) => {
       (trace as any).rewriteRounds++;
       const deadline = Math.max(3000, left());
@@ -1483,7 +1499,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // What a cut leaves must stand as an answer: words, not an emoji alone ("🙂"), and not a condition without its
       // claim ("אם זו מכונת קפה קטנה..., כתבו את הדגמים ואדייק.").
       const noWords = removed.length > 0 && !/[\p{L}\p{N}]{2,}/u.test(cleaned.reply);
-      const onlyCondition = removed.length > 0 && (cleaned.reply.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).every((x) => /^\s*(?:ו?אם|if)\s/iu.test(x));
+      const onlyCondition = removed.length > 0 && (cleaned.reply.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).every((x) => /^\s*(?:ו?אם|if)\s/iu.test(x));
       const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition);
       // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
       // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
@@ -1508,6 +1524,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}${answerCut ? "answerCut " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
     if (!direct) try {
       const forceRespond = { type: "function", function: { name: "respond" } };
+      (trace as any).toolWaitMs = toolWaitMs;
       if (left() < 4000) { (trace as any).rewriteCut = "budget"; throw Object.assign(new Error("no time left for a rewrite"), { name: "RewriteDeadline" }); }
       // The lookups the engine can make itself run first, with no model round:
       // the customer's own words in the store, or in the knowledge. Short, and only with time for an answer after.
@@ -1516,11 +1533,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // The product in focus: the last lookup's product the model's intent names, else the last one shown (dev live
       // round on 9480dfb2: a paraphrased title left nothing in focus, and "מאיזה בד הוא עשוי?" went to the team).
       const subject = nonProductAsk(String(opts.incomingMessage ?? "")) ? null : focusTitle(focusTitlesOf(state.facts), String((output as any)?.stateUpdate?.intent ?? "").trim() || state.intent, state.offeredItems?.at(-1)?.title);
-      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject) : [];
+      const earlierIn = [...history].reverse().filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m.body ?? "")).filter((b) => b.trim() !== String(opts.incomingMessage ?? "").trim()).slice(0, 3);
+      const lent = fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus: subject, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
+      const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject, lent) : [];
       if (auto.length) {
         const ta = Date.now();
         messages.push({ role: "assistant", content: "", tool_calls: auto.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-        await runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 4500)) }, auto);
+        await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 4500)) }, auto));
         for (const c of auto) messages.push({ role: "tool", tool_call_id: c.id, content: turnTools.records.find((x) => x.callId === c.id)?.content ?? "" });
         candidates = turnTools.envelope?.candidates ?? [];
         (trace as any).autoLookupMs = Date.now() - ta;
@@ -1533,7 +1552,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const work = calls.filter((c) => c.function?.name !== "respond");
         if (work.length) {
           messages.push({ role: "assistant", content: r.content || "", tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: c.function })) });
-          await runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs) }, work);
+          await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs) }, work));
           for (const c of calls) {
             const rec = turnTools.records.find((x) => x.callId === c.id);
             messages.push({ role: "tool", tool_call_id: c.id, content: rec?.content ?? "Not sent: read the results first." });
@@ -1551,6 +1570,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     }
     (trace as any).rewriteMs = Date.now() - t0 - (stageMs.model ?? 0);
     const v2 = second ? gate3(g3Input(second)) : null;
+    // A rewrite that opens with a fragment ("15. לפי החיפוש, אותו משטח..." after a split inside a size) loses it, the
+    // same check a clean gets (rating of dcf2158e, Smoovee A, severe).
+    if (second && v2?.ok) {
+      const lead = /^\s*(?:\d+(?:[.,]\d+)?[.!?]\s+|[^.!?\n]{0,24}[.!?]\s+)/u.exec(second.reply ?? "")?.[0] ?? "";
+      if (lead && (cutFragment(lead) || /^\s*\d+[.!?]\s*$/u.test(lead))) { second = { ...second, reply: String(second.reply).slice(lead.length).trim() }; (trace as any).leadFragmentCut = true; }
+    }
     if (second && v2?.ok) {
       output = withClosingQuestion(second, questionOk ? original : null, previousBotReplies); verdict = v2; trace.gate3 = { ...first, rewrite: "rewritten" };
       if (output !== second) (trace as any).closingQuestionKept = true;
@@ -1583,7 +1608,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // Else the original minus only its offending sentences, then the rewrite's remnant.
       // (A product turn with products found keeps its grounded product fallback instead.)
       // A thin remnant ("תודה!" for a question) is never the answer.
-      if (!kept && !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass)) ?? null;
+      // When the budget or the deadline cut the rewrite, the smallest repair of the draft goes out, never the generic
+      // list in its place (rating of dcf2158e: four budget turns ended on "הנה כמה אפשרויות").
+      const cutByTime = !!(trace as any).rewriteCut;
+      if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass)) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
         // How many sentences the cut took (a "cleaned" verdict may remove nothing, e.g. no_search).
@@ -1626,7 +1654,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
             if (q) {
               const few = /(?:^|\.)search_products$/.test(store) && !/^woocommerce\./.test(store) ? { limit: 5 } : { per_page: 5 };
               try {
-                await runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 1000)) }, [{ id: "auto_store_fallback", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } }]);
+                await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.max(1500, Math.min(env.toolTimeoutMs, cfg.rewriteLookupMs, left() - 1000)) }, [{ id: "auto_store_fallback", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } }]));
                 candidates = turnTools.envelope?.candidates ?? [];
                 (trace as any).fallbackSearch = q.slice(0, 60);
               } catch (err: any) {
@@ -1697,7 +1725,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // The draft's own caveat is the answer's point ("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים",
           // rating of d2f10620, NE'A): it stays with the products, in place of the fixed line.
           const srcs = [knowledge ?? "", ...turnTools.knowledgeText, groundingNow()].join("\n");
-          const draftCaveats = [...new Set([original, second].flatMap((o) => (String(o?.reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => caveatHolds(x, srcs) || NEG_THAT_FIT.test(x))))].slice(0, 1);
+          const draftCaveats = [...new Set([original, second].flatMap((o) => (String(o?.reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => caveatHolds(x, srcs) || NEG_THAT_FIT.test(x))))].slice(0, 1);
           const header = (fitCut || draftCaveats.length > 0) && cardChannel && shownNames.length ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownNames.join(", ")}.` : grounded;
           output = { reply: draftCaveats.length ? `${header} ${draftCaveats[0]}` : fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
@@ -2222,7 +2250,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // No list for a question about the product itself (rating of d2f10620, Smoovee A: a stopper question got three
   // products from a garbled search).
-  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  // No list for an ask that names no product ("אפשר להזמין?", rating of dcf2158e: three products nobody asked for).
+  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") && (!!storeQueryOf(opts.incomingMessage ?? "") || (state.offeredItems?.length ?? 0) > 0) ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);
@@ -2293,6 +2322,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (reply) { const sl = withoutSlashForms(reply); if (sl !== reply) { reply = sl; (trace as any).slashFormFixed = true; } }
     // A reply that ends on a bare word ("הנה כמה אפשרויות שיש כרגע במלאי") gets its full stop.
     if (reply && /[\p{L}\p{N}]$/u.test(reply.trim()) && !/https?:\/\/\S+$/i.test(reply.trim())) reply = `${reply.trim()}.`;
+    // Every dash in the outgoing text is a hyphen, the store's titles included (a title came with an en dash).
+    if (reply) reply = reply.replace(/[\u2010-\u2015\u2212]/g, "-");
     if (reply) reply = spaceSentences(reply);
   }
   // The bare header with nothing under it says nothing (prod rating 2026-11-18, NE'A: "הנה מה שיש לנו שמתאים."

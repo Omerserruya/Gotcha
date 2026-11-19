@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   textChannel: false,
   offerWrite: false,
   variations: false,
+  onTool: null as null | ((name: string) => void),
   lexicalFor: null as null | ((q: string) => any[]),
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
@@ -70,6 +71,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
     dispatchToolCall: async (tc: any, ctx: any) => {
       h.dispatched.push({ name: tc.function.name, args: JSON.parse(tc.function.arguments), sandbox: ctx.sandbox ?? null });
+      if (h.onTool) h.onTool(tc.function.name);
       if (tc.function.name === "woocommerce.list_products" && h.slowReads > 0) { h.slowReads--; await new Promise((r) => setTimeout(r, 900)); }
       if (tc.function.name === "woocommerce.get_order" && h.slowOrders > 0) { h.slowOrders--; await new Promise((r) => setTimeout(r, h.orderDelay)); }
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
@@ -170,6 +172,7 @@ beforeEach(() => {
   h.textChannel = false;
   h.offerWrite = false;
   h.variations = false;
+  h.onTool = null;
   h.lexicalFor = null;
   h.history = null;
   h.lexical = [];
@@ -2967,5 +2970,77 @@ describe("dev live round on dcf2158e: the direct clean and the reply text", () =
     const r = await runReplyEngineTurn(opts, "autonomous");
     expect(r.reply).not.toMatch(/\(Canvas Tote\)/);
     expect(r.reply).toMatch(/Canvas Tote, תיק בד/);
+  });
+});
+
+describe("rating of the dcf2158e prod replay, through a whole turn", () => {
+  it("★ A: a slow store read never eats the rewrite's budget (counted net of tool waits, under a hard ceiling)", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "15000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    // The store read takes 9.7 s, as on the chains turn.
+    // A 12 s store wait: counted against the turn, the rewrite was cut by the budget (under 4 s left).
+    h.onTool = (name) => { if (name === "woocommerce.list_products") shift += 12000; };
+    h.responses.push({ toolCalls: [tc("a0", "woocommerce.list_products", { query: "תיק" })] }, { toolCalls: [respond("a1", { reply: "Canvas Tote עולה ₪120." })] }, { toolCalls: [respond("a2", { reply: "יש לנו Canvas Tote, תיק בד חזק, ב-₪79." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(r.trace.rewriteCut, `toolWait=${r.trace.toolWaitMs} stages=${JSON.stringify(r.trace.stageMs ?? {})} gate=${JSON.stringify(r.trace.gate3)}`).toBeUndefined();
+    expect(r.reply).toMatch(/Canvas Tote/);
+    // The main loop too: after the slow read the next round may still use a tool (it is not forced to answer).
+    expect(h.calls[1].toolChoice).toBe("required");
+  });
+  it("★ A: when the time cut the rewrite, the draft's smallest repair goes out, never the generic list", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "15000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    // The draft's model call itself runs long: no time is left for a rewrite.
+    (generateResponse as any).mockImplementationOnce(async (p: any) => orig(p)).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 20500; return out; });
+    // Most of the draft goes with the price (a hollow remnant): still the draft's own words, never the generic list.
+    h.responses.push({ toolCalls: [tc("t0", "woocommerce.list_products", { query: "תיק" })] }, { toolCalls: [respond("t1", { reply: "יש Canvas Tote. הוא תיק בד חזק ונוח במחיר ₪999 בלבד." })] });
+    let r: any;
+    try { r = await runReplyEngineTurn(opts, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect(r.trace.rewriteCut).toBeTruthy();
+    expect(r.reply).toMatch(/Canvas Tote/);
+    expect(r.reply).not.toMatch(/הנה כמה אפשרויות|999/);
+  });
+
+  it("★ D: \"יש כמה מטפחות...\" with no store read runs the store search, with the noun her message gives", async () => {
+    h.responses.push({ toolCalls: [respond("d1", { reply: "היי! יש כמה מטפחות חגיגיות בגווני כחול, אבל אין לי דרך לזהות את המטפחת מהמכירה." })] }, { toolCalls: [respond("d2", { reply: "יש לנו Canvas Tote." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?" }, "autonomous");
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toMatch(/מטפחת/);
+  });
+  it("★ D: a promise to search with no search runs it (\"נחפש...\"), with the conversation's noun", async () => {
+    h.history = [{ direction: "INBOUND", body: "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?", metadata: null }, { direction: "OUTBOUND", body: "נבדוק.", senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "אני לא טובה בלראות באתר וכו..", metadata: null }, { direction: "OUTBOUND", body: "אין בעיה.", senderName: "AI Bot", metadata: null }];
+    h.responses.push({ toolCalls: [respond("d3", { reply: "ברור, נחפש דווקא מטפחת חגיגית בגווני כחול. עדיין ממתינים לתשובה מהצוות." })] }, { toolCalls: [respond("d4", { reply: "יש לנו Canvas Tote." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
+    const q = h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => String(d.args.query));
+    expect(q.some((x) => /מטפחת/.test(x))).toBe(true);
+    expect(q.some((x) => /טובה/.test(x))).toBe(false);
+  });
+  it("★ E: an explanation about a product she names searches its page too", async () => {
+    h.responses.push({ toolCalls: [respond("e1", { reply: "אין לנו סרטון הדרכה לטוש." })] }, { toolCalls: [respond("e2", { reply: "יש לנו Canvas Tote." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "קניתי טוש למילוי גבות, אשמח להסבר /סרטון איך להשתמש?" }, "autonomous");
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toMatch(/טוש/);
+  });
+  it("★ C: a rewrite that opens with a fragment loses it", async () => {
+    h.responses.push({ toolCalls: [respond("c1", { reply: "אין לנו תיקי בד." })] }, { toolCalls: [respond("c2", { reply: "15. יש לנו Canvas Tote, תיק בד חזק." })] });
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.reply).toMatch(/^יש לנו Canvas Tote/);
+  });
+  it("★ H: a store title's en dash goes out as a hyphen; \"אפשר להזמין?\" gets no list", async () => {
+    h.textChannel = true;
+    h.groundTitle = "סמובי מוניקה \u2013 משטח הזזה";
+    h.responses.push({ toolCalls: [tc("h0", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("h1", { reply: "יש לנו את סמובי מוניקה \u2013 משטח הזזה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם משטח הזזה?" }, "autonomous");
+    expect(r.reply).not.toMatch(/[\u2010-\u2015]/);
+    h.responses.push({ toolCalls: [tc("h2", "woocommerce.list_products", { query: "להזמין" }), tc("h2b", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("h3", { reply: "כן, אפשר להזמין באתר." })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר להזמין?" }, "autonomous");
+    // Products were found ("משטח"), yet no list goes out for an ask that names none.
+    expect(r2.reply).not.toMatch(/סמובי מוניקה/);
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => String(d.args.query))).not.toContain("להזמין");
   });
 });
