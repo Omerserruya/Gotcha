@@ -4134,6 +4134,173 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(cards).toEqual(["101", "102"]);
   });
 
+  // Follow-up to cba121cf (Supervisor's probe of the helpers, 2026-11-19): five wrong results, each at the helper and at the turn.
+  const FIVE = [{ title: "טוש גבות חום", price: 79 }, { title: "טוש גבות שחור", price: 149 }, { title: "קונסילר לעיניים", price: 99 }, { title: "מברשת איפור", price: null }, { title: "שפתון אדום", price: 59, inventoryState: "out_of_stock" }];
+  const NOT_CHEAP_ASKS = [
+    "המוצר שקיבלתי זול ושבור, אני רוצה החזר כספי",
+    "יש אפשרות למשלוח זול יותר?",
+    "יש קופון? אני מחפשת מחיר זול יותר",
+    "ההזמנה שלי לא הגיעה, וזה לא היה זול",
+    "באתר אחר ראיתי את זה יותר זול, למה אצלכם יקר?",
+    "המשלוח הכי זול כמה עולה?",
+    "is there a cheaper shipping option?",
+  ];
+  // The model's drafts with the cards it chose, over the five found products.
+  const runFive = async (incoming: string, text: string, cardKeys: string[] = []) => {
+    h.groundList = FIVE;
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "טוש" })] }, ...[0, 1, 2].map((i) => ({ toolCalls: [respond(`d${i}`, { reply: text, ...(cardKeys.length ? { cards: cardKeys } : {}) })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    const cuts = h.audits.find((a) => a.data.action === "ai.bot_turn")?.data.metadata.cuts ?? {};
+    return { r, cuts, cards: h.staged.flatMap((x: any) => (x.products ?? []).map((p: any) => String(p.productId))) };
+  };
+
+  it.each(NOT_CHEAP_ASKS)("★ (A) a cheap word on a matter no product list answers (%s): a failed draft with found products gets no product list", async (incoming) => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    h.groundList = URBAN;
+    const draft = "יש אצלנו פריטים במחיר זול.";
+    const { r, cards } = await run(incoming, "זול", draft, draft, draft);
+    expect(r.reply ?? "").not.toMatch(/הנה כמה אפשרויות|Here are|Ribbed|Oversized|Cropped/);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ (A) the helper: a cheap ask keeps the exclusions of a product ask, and a word about the shipping or another seller's price is none", async () => {
+    const { cheapAsk, cheapNoun, listAsk } = await import("../services/reply-engine/engine");
+    for (const x of NOT_CHEAP_ASKS) expect([x, cheapAsk(x)]).toEqual([x, false]);
+    // Nor a list ask: no cards go under the reply for the cheap word alone. Another filter word of its own still does.
+    for (const x of NOT_CHEAP_ASKS) expect([x, listAsk(x)]).toEqual([x, false]);
+    for (const x of ["מה יש במבצע?", "יש לכם משהו זול?", "מה יש במבצע? והמשלוח הכי זול כמה עולה?", "מה יש כרגע במלאי?"]) expect([x, listAsk(x)]).toEqual([x, true]);
+    for (const x of ["הזול הזה הגיע שבור", "המשלוח לא היה זול", "is the delivery cheap?", "what is the cheapest express delivery?", "מה הכי זול של המשלוח?", "ראיתי את זה יותר זול בחנות אחרת"]) expect([x, cheapAsk(x)]).toEqual([x, false]);
+    // Each exclusion of a product ask, with a cheap word in the message: a payment problem, a how-to, a video.
+    for (const x of ["התשלום נכשל על הפריט הכי זול", "איפה ההזמנה שלי? הזמנתי את הכי זול", "איך משתמשים בטוש הזול?", "יש סרטון על הדגם הזול?", "payment failed on the cheapest item", "how do I use the cheap one?"]) expect([x, cheapAsk(x)]).toEqual([x, false]);
+    // The asks stay asks, also next to a word about shipping or another seller in another clause.
+    for (const x of ["אז מה הכי זול אצלכם?", "יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "יש לכם משהו זול?", "יש חולצה זולה?", "יש חולצה זולה עם משלוח חינם?", "do you have anything cheaper with free shipping?", "ראיתי באתר אחר, יש לכם משהו יותר זול?", "זה יקר לי, יש משהו יותר זול?", "something cheaper?", "something cheap for delivery tomorrow?"]) expect([x, cheapAsk(x)]).toEqual([x, true]);
+    // "Expensive" is no kind of product.
+    expect(cheapNoun("זה יקר לי, יש משהו יותר זול?")).toBeNull();
+  });
+
+  // What the store's own text says of the found products, so the statements below stand as checked facts.
+  const FIT_DATA = [{ content: "טוש גבות: מיועד לגבות, לא מתאים לאזור העיניים ולא מיועד לילדים מתחת לגיל 3. קונסילר לעיניים: מתאים לאזור העיניים. אם הגוון לא מתאים אפשר להחליף את המוצר בחנות.", score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "f" }];
+  // A sentence the owner's list cuts, that names no product and no use.
+  const CUT = "יש אחריות לשנה.";
+  const withCut = () => { h.chunks = FIT_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } }; };
+
+  it("★ (B) the use after \"not for\" names no product, and the one the text says fits stays: its card goes out, the ruled-out ones do not", async () => {
+    withCut();
+    const st = "הטושים לא מתאימים לעיניים, אבל קונסילר לעיניים מתאים.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["203"]);
+  });
+
+  it("★ (B) the statement of the found pens with the under-eye product as the model's card: that card is not ruled out by it", async () => {
+    withCut();
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${STATEMENT} ${CUT}`, ["PRODUCT_1", "PRODUCT_2", "PRODUCT_3"]);
+    expect(r.reply).toBe(STATEMENT);
+    expect(cards).toEqual(["203"]);
+  });
+
+  it("★ (C) a sentence that names none and speaks of her kind rules out that kind only: the other product's card stays", async () => {
+    withCut();
+    const st = "הטוש לא מיועד לילדים מתחת לגיל 3.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["203"]);
+  });
+
+  it("★ (D) a condition (\"אם הגוון לא מתאים\") rules nothing out: the card of the product it names stays", async () => {
+    withCut();
+    const st = "אפשר להחליף את טוש גבות שחור בחנות אם הגוון לא מתאים.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_2"]);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["202"]);
+  });
+
+  it("★ (E) variants of one title: the dearer one never goes out alone after the cheaper one's sentence was cut", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    const draft = "הכי זול אצלנו טוש גבות חום ב-₪79. יש טוש גבות שחור ב-₪149.";
+    const { r, cuts, cards } = await runFive("מה הטוש הכי זול?", draft);
+    expect((r.trace as any).memberCut).toBe(true);
+    expect(cuts.markers).toContain("memberCut");
+    expect(r.reply).toBe("הנה כמה אפשרויות: טוש גבות חום, טוש גבות שחור.");
+    expect(cards).toEqual(["201", "202"]);
+  });
+
+  it("★ a cheap ask with a kind, no found product of that kind has a price but others do: the question line, no cards", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    const draft = "יש אצלנו מברשות במחיר זול.";
+    const { r, cards } = await runFive("מה המברשת הכי זולה?", draft);
+    expect(r.reply).toBe(QUESTION);
+    expect(cards).toEqual([]);
+    // The cheapest of her kind when a found product is of it; of all that was found when none is, or she names none.
+    const { cheapestOfKind } = await import("../services/reply-engine/engine");
+    const of = (kind: string | null) => cheapestOfKind(FIVE, kind).map((c) => c.title);
+    expect(of("המברשת")).toEqual([]);
+    expect(of("הטוש")).toEqual(["טוש גבות חום", "טוש גבות שחור"]);
+    expect(of(null)).toEqual(["טוש גבות חום", "קונסילר לעיניים", "טוש גבות שחור"]);
+    expect(of("מסקרה")).toEqual(["טוש גבות חום", "קונסילר לעיניים", "טוש גבות שחור"]);
+  });
+
+  it("★ a cheap ask with a kind, on a kept statement whose own card was ruled out: no cheaper product of another kind goes under it", async () => {
+    withCut();
+    const st = "טוש גבות חום לא מתאים למריחת איפור.";
+    const { r, cards } = await runFive("מה המברשת הכי זולה?", `${st} יש אחריות לשנה. האחריות מכסה פגמים.`, ["PRODUCT_1"]);
+    expect((r.trace as any).statementKept).toBe(true);
+    expect(r.reply).toBe(`${st} ${QUESTION}`);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ (B to E) the helpers, on the Supervisor's fixture", async () => {
+    const { namedMembers, memberCutOf, unfitProducts } = await import("../services/reply-engine/engine");
+    const u = (t: string) => [...unfitProducts(t, FIVE, "טוש", "יש טוש לעיניים?")].sort();
+    // B: what follows "not for" is the use, never a product; the one the text says fits is never ruled out.
+    expect(u("טוש גבות חום לא מתאים לעיניים, אבל קונסילר לעיניים מתאים.")).toEqual([0]);
+    expect(u("הטושים שמצאנו מיועדים לגבות, לא לאזור מתחת לעיניים.")).toEqual([0, 1]);
+    expect(u("טוש גבות שחור לא מתאים לעיניים.")).toEqual([1]);
+    expect(u("הטושים לא מתאימים לעיניים. קונסילר לעיניים מתאים בדיוק לזה.")).toEqual([0, 1]);
+    // The subject before the words still names: the under-eye product itself can be the one ruled out.
+    expect(u("קונסילר לעיניים לא מתאים לגבות.")).toEqual([2]);
+    // One the text says fits in another sentence is never ruled out by a sentence that names it with others.
+    expect(u("טוש גבות שחור מתאים לגבות. טוש גבות לא מתאים לעיניים.")).toEqual([0]);
+    // Also when the sentence that says it fits is the yes to her own ask ("for brows, not for eyes" on an ask for brows).
+    expect([...unfitProducts("טוש גבות חום מיועד לגבות, לא לעיניים. טוש גבות לא מתאים לעור רגיש.", FIVE, "טוש", "יש טוש לגבות?")]).toEqual([1]);
+    // The use ends at the comma: a product named after it is still named.
+    expect(u("טוש גבות חום לא מתאים לעיניים, וגם טוש גבות שחור.")).toEqual([0, 1]);
+    // C: names none, speaks of her kind: that kind only. With no kind and no title word in it: none.
+    expect(u("הטוש לא מיועד לילדים מתחת לגיל 3.")).toEqual([0, 1]);
+    expect(u("המוצרים שמצאנו לא מתאימים לעיניים.")).toEqual([]);
+    expect(u("המברשת לא מתאימה לעור רגיש.")).toEqual([3]);
+    // D: a condition rules nothing out; a statement after the condition's clause still does.
+    expect(u("אם הגוון לא מתאים אפשר להחליף את טוש גבות שחור בחנות.")).toEqual([]);
+    expect(u("במידה והטוש לא מתאים, אפשר להחזיר אותו.")).toEqual([]);
+    expect([...unfitProducts("If the Ribbed Tank Top does not fit, you can exchange it.", URBAN)]).toEqual([]);
+    expect([...unfitProducts("The Ribbed Tank Top does not fit a tall frame.", URBAN)]).toEqual([2]);
+    expect(u("אם חיפשת גוון כהה, טוש גבות שחור לא מתאים.")).toEqual([1]);
+    // E: siblings are told apart by the word or the price only one of those matched has.
+    expect([...namedMembers("יש טוש גבות שחור ב-₪149.", FIVE)]).toEqual([1]);
+    expect([...namedMembers("טוש גבות חום עולה ₪79.", FIVE)]).toEqual([0]);
+    expect([...namedMembers("יש טוש גבות ב-₪149.", FIVE)]).toEqual([1]);
+    expect([...namedMembers("יש טוש גבות בגוון שחור.", FIVE)]).toEqual([1]);
+    // A title that is the start of a longer one: the longer one the text says is the one named.
+    const PRE = [{ title: "טוש גבות", price: 79 }, { title: "טוש גבות שחור", price: 79 }];
+    expect([...namedMembers("יש טוש גבות שחור.", PRE)]).toEqual([1]);
+    expect([...namedMembers("יש טוש גבות.", PRE)]).toEqual([0]);
+    // A price two of them share tells neither apart: the one named by its whole title is the one named.
+    const TWO = [{ title: "טוש גבות חום", price: 79 }, { title: "טוש גבות שחור", price: 79 }];
+    expect([...namedMembers("יש טוש גבות חום ב-₪79.", TWO)]).toEqual([0]);
+    expect([...namedMembers("יש טוש גבות ב-₪79.", TWO)]).toEqual([0, 1]);
+    // A word tells it apart from the others matched, also when a found product that is not matched has it too.
+    expect([...namedMembers("יש טוש גבות בגוון שחור.", [...FIVE, { title: "עיפרון שחור", price: 45 }])]).toEqual([1]);
+    // Also far from the title's other words, where no other measure marks it.
+    expect([...namedMembers("טוש גבות מגיע אצלנו במבחר גוונים, כולל שחור.", FIVE)]).toEqual([1]);
+    expect([...namedMembers("טוש גבות חום וטוש גבות שחור", FIVE)]).toEqual([0, 1]);
+    // None told apart: the text speaks of them all.
+    expect([...namedMembers("יש לנו טוש גבות בכמה גוונים.", FIVE)]).toEqual([0, 1]);
+    expect(memberCutOf(["טוש גבות חום עולה ₪79."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(true);
+    expect(memberCutOf(["טוש גבות חום עולה ₪79."], "יש לנו טוש גבות בכמה גוונים.", FIVE)).toBe(false);
+    expect(memberCutOf(["קונסילר לעיניים עולה ₪99."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(true);
+    expect(memberCutOf(["המשלוח עולה ₪30."], "יש טוש גבות שחור ב-₪149.", FIVE)).toBe(false);
+  });
+
   it("the helpers, on the real lines", async () => {
     const { cheapAsk, cheapNoun, cheapestFirst, namedMembers, memberCutOf, unfitProducts, aboutFound } = await import("../services/reply-engine/engine");
     for (const x of ["אז מה הכי זול אצלכם?", "יש לכם משהו ממש זול? אני מחפשת את הכי זול שיש", "יש לכם משהו זול?", "לא מצאתי משהו זול", "מה המחיר הנמוך ביותר?", "what is the cheapest you have?", "do you have cheap shirts?"]) expect([x, cheapAsk(x)]).toEqual([x, true]);
