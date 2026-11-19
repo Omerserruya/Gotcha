@@ -23,6 +23,7 @@ import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 
 import { TOOL_LEVELS, type EmployeeTool, type ToolLevel } from '@/api/contracts/employees';
+import disclosure from '@/design-system/styles/disclosure.module.css';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import { useRouter } from '@/i18n/navigation';
 
@@ -169,19 +170,22 @@ function DomainGroup({
   const Icon = (group.icon ? DOMAIN_ICONS[group.icon] : undefined) ?? Shapes;
   const id = `levels-${at}-${group.domain}`;
   return (
-    <div className={styles.toolDomain} data-testid={`levels-domain-${at}-${group.domain}`}>
+    <div
+      className={`${disclosure.group} ${styles.toolDomain}`}
+      data-testid={`levels-domain-${at}-${group.domain}`}
+    >
       <button
         type="button"
-        className={styles.toolDomainHead}
+        className={disclosure.head}
         aria-expanded={open}
         aria-controls={open ? id : undefined}
         data-testid={`levels-domain-toggle-${at}-${group.domain}`}
         onClick={() => setOpen((was) => !was)}
       >
-        <Icon className={styles.toolDomainIcon} size={16} strokeWidth={1.8} aria-hidden="true" />
-        <span className={styles.toolDomainName}>{group.label ?? t('otherSection')}</span>
-        <span className={styles.toolDomainCount}>{group.rows.length}</span>
-        <ChevronDown className={styles.toolDomainChevron} size={14} aria-hidden="true" />
+        <Icon className={disclosure.icon} size={16} strokeWidth={1.8} aria-hidden="true" />
+        <span className={disclosure.name}>{group.label ?? t('otherSection')}</span>
+        <span className={disclosure.count}>{group.rows.length}</span>
+        <ChevronDown className={disclosure.chevron} size={14} aria-hidden="true" />
       </button>
       {/*
         Not drawn while closed - never `hidden`: `.rows` sets `display: flex`,

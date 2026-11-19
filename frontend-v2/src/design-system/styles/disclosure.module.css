@@ -1,0 +1,52 @@
+@layer patterns {
+  /*
+   * A group that opens on its own row: the row is one button (an icon, a
+   * name, what it holds, a chevron that turns), and the group's body is
+   * drawn only while open - never `hidden` (a display class beats it).
+   * First the employee page's tool domains; the bot-idle groups too.
+   */
+  .group {
+    border: var(--border-width-thin) solid var(--border-subtle);
+    border-radius: 10px;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    inline-size: 100%;
+    padding: var(--space-8) var(--space-12);
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .icon {
+    flex: none;
+    color: var(--text-secondary);
+  }
+
+  .name {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .count {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .chevron {
+    flex: none;
+    color: var(--text-secondary);
+    transition: transform 0.15s ease;
+  }
+
+  .head[aria-expanded='true'] .chevron {
+    transform: rotate(180deg);
+  }
+}
