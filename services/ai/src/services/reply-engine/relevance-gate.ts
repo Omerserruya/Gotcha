@@ -112,6 +112,9 @@ export async function relevanceForTurn(args: {
   if ((args.preferStored && stored.category) || !shouldReclassify(stored, lastInAt, now)) {
     return { mode, category: stored.category, confidence: stored.confidence, source: "stored", hold: holdsBack(stored.category, stored.confidence, false) };
   }
+  // This client adds origin LIVE to every conversation read, the sender rule's read of hand marks included: a mark
+  // on an imported-history conversation is not seen. Whoever lets the import review write marks must ask for
+  // historical rows on purpose in that read.
   const db = deps.db ?? prisma;
   try {
     const label = await withTimeout((async () => {
