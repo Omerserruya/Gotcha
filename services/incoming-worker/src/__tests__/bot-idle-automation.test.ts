@@ -58,7 +58,7 @@ vi.mock("@chatcenter/shared/src/lib/reply-window", async () => {
 });
 
 import { botIdleForTenant, botIdleStep, closeByBot, SWEEP_PAGE } from "../workers/idle-conversation.worker";
-import { BOT_IDLE_DEFAULT_TEXTS as TXT, botIdleRuleFor, parseBotIdleRow } from "@chatcenter/shared/src/lib/bot-idle";
+import { BOT_CLOSE_REOPEN_DAYS, BOT_IDLE_DEFAULT_TEXTS as TXT, botIdleRuleFor, parseBotIdleRow, reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
 
 const MIN = 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms);
@@ -422,6 +422,46 @@ describe("the customer ended it: the engine's mark, a quiet close (2026-11-19)",
     expect(sent("again")).toEqual([TXT.he.reminder]);
     expect(byId("waiting").status).toBe("OPEN");
     expect(sent("waiting")).toEqual([]);
+  });
+
+  it("★ the whole way round: marked, closed quietly, a new subject reopens the same conversation, and the old mark never closes it again", async () => {
+    // The inbound path's reopen (the real helper) over this file's rows.
+    const db = {
+      conversation: {
+        findFirst: async (a: any) => H.convs.find((c) => matches(c, a.where)) ?? null,
+        updateMany: async (a: any) => { const rows = H.convs.filter((c) => matches(c, a.where)); rows.forEach((c) => Object.assign(c, a.data)); return { count: rows.length }; },
+      },
+      message: { findFirst: async (a: any) => H.msgs.filter((m) => m.conversationId === a.where.conversationId && m.messageType === a.where.messageType).sort((x, y) => +y.createdAt - +x.createdAt)[0] ?? null },
+    };
+    H.convs = [conv("c", { channel: "WHATSAPP", channelAccountId: "ca_wa" })];
+    msg("c", "INBOUND", 12, { body: "תודה רבה, זה הכל" }); msg("c", "OUTBOUND", 11); mark("c");
+    expect(await botIdleForTenant("T")).toEqual({ reminders: 0, closes: 1 });
+    expect(systemOf("c")).toEqual([{ systemEvent: "auto_closed", reason: "customer_ended" }]);
+
+    // Two days later the customer writes about something else: the same conversation, open again.
+    const later = (ms: number) => {
+      for (const m of H.msgs) m.createdAt = new Date(+m.createdAt - ms);
+      if (byId("c").closedAt) byId("c").closedAt = new Date(+byId("c").closedAt - ms);
+      H.states.c.facts._endedAt = new Date(Date.parse(H.states.c.facts._endedAt) - ms).toISOString();
+    };
+    later(2 * 24 * 60 * MIN);
+    expect(await reopenBotClosed(db, { tenantId: "T", conversationId: "c", maxDays: BOT_CLOSE_REOPEN_DAYS })).toBe(true);
+    expect(byId("c")).toMatchObject({ status: "OPEN", closedAt: null });
+    expect(H.convs).toHaveLength(1);
+
+    // The new question is waiting for its answer; the old mark is still in the engine's state.
+    msg("c", "INBOUND", 12, { body: "היי, יש לכם משלוחים לחו\"ל?" });
+    expect(H.states.c.facts._endedAt).toBeTruthy();
+    expect(await botIdleForTenant("T")).toEqual({ reminders: 0, closes: 0 });
+    expect(byId("c").status).toBe("OPEN");
+
+    // The bot answered and 31 quiet minutes passed: the usual reminder, not the mark's quiet close.
+    later(20 * MIN);
+    msg("c", "OUTBOUND", 31, { body: "כן, יש משלוח לחו\"ל." });
+    expect(await botIdleForTenant("T")).toEqual({ reminders: 1, closes: 0 });
+    expect(sent("c")).toEqual([TXT.he.reminder]);
+    expect(byId("c").status).toBe("OPEN");
+    expect(systemOf("c")).toHaveLength(1);
   });
 
   it("★ waiting on the business: a marked conversation with a return asked for, a team pass or an open team item is not closed", async () => {
