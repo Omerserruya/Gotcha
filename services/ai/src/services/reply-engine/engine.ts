@@ -554,6 +554,13 @@ export function withoutLeaningOpener(reply: string): string {
     .replace(/^(\s*)(?:ו?בינתיים|ו?בנוסף|ו?חוץ\s+מזה|מעבר\s+לזה)(?![\u0590-\u05FF]),?\s+/u, "$1")
     .replace(/^(\s*)(?:In the meantime|Meanwhile|Also|In addition),?\s+(\w)/u, (_m, a, b) => `${a}${String(b).toUpperCase()}`);
 }
+/** A search that is a filter of its own (a price, a sale, a category, newest) or a message asking for one: an empty
+ *  query lists by it (dev round k4 on 259d48ea: "מה יש במבצע?" was refused and answered with one scarf). */
+export function searchHasFilter(args: any, incoming: string): boolean {
+  const a = args ?? {};
+  if (["price_min", "price_max", "on_sale", "category", "orderby", "featured", "tag", "audience", "min_price", "max_price"].some((k) => a[k] != null && a[k] !== "" && a[k] !== false)) return true;
+  return /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה|עד\s+\d+|מתחת\s+ל-?\s*\d+|זול|זולים)(?![\u0590-\u05FF])|\b(?:on sale|sale|discount|new|newest|under \d+|up to \d+|cheap)\b/iu.test(String(incoming ?? ""));
+}
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
 export function closestMatchLine(locale: "he" | "en"): string {
@@ -1249,7 +1256,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null)
       // An empty query lists the whole store: never when her message names no product (rating of b3d2bbf3: "אפשר
       // המלצה" got three arbitrary cards); ask what she is looking for.
-      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && !String((args as any)?.query ?? "").trim() && !storeQueryOf(String(opts.incomingMessage ?? "")) ? "she named no product: ask what she is looking for before searching" : null),
+      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && !String((args as any)?.query ?? "").trim() && !storeQueryOf(String(opts.incomingMessage ?? "")) && !searchHasFilter(args, String(opts.incomingMessage ?? "")) ? "she named no product: ask what she is looking for before searching" : null),
     tightenApproval: (a) => {
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
@@ -2536,6 +2543,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // The store searches as sent and the time spent waiting on tools (internal only).
           searchArgs: Array.isArray((trace as any).searchArgs) ? (trace as any).searchArgs.slice(0, 6) : undefined,
           toolWaitMs,
+          // The heads of the knowledge this turn saw (the prompt's chunks and search_knowledge results), internal only.
+          knowledgeHeads: [...(knowledgeChunks as any[]).map((c: any) => String(c?.title ?? c?.content ?? "")), ...turnTools.knowledgeText].map((x) => String(x ?? "").replace(/\s+/g, " ").trim().slice(0, 60)).filter(Boolean).slice(0, 6),
         } as any,
       },
     }).catch(() => {});

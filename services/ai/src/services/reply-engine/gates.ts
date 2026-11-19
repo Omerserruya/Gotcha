@@ -368,6 +368,19 @@ const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
  * covers the claim's words and that did not return them. Without such words
  * ("אין לנו כזה"), any product search that ran this turn grounds it.
  */
+// Hebrew letters as Latin consonants, vowel letters dropped: a borrowed product noun keeps its consonants.
+const HE_CONS: Record<string, string> = { ב: "b", ג: "g", ד: "d", ה: "h", ז: "z", ח: "h", ט: "t", כ: "k", ך: "k", ל: "l", מ: "m", ם: "m", נ: "n", ן: "n", ס: "s", פ: "p", ף: "f", צ: "ts", ץ: "ts", ק: "k", ר: "r", ש: "sh", ת: "t" };
+const heSkeleton = (w: string) => String(w ?? "").replace(/^[הוב](?=[\u0590-\u05FF]{3,})/u, "").replace(/ג['׳]/gu, "j").replace(/צ['׳]/gu, "ch").replace(/ז['׳]/gu, "j").replace(/[\u0590-\u05FF]/gu, (c) => HE_CONS[c] ?? "").replace(/['׳"״]/g, "");
+const enSkeleton = (w: string) => String(w ?? "").toLowerCase().replace(/ph/g, "f").replace(/ck/g, "k").replace(/c(?=[eiy])/g, "s").replace(/c/g, "k").replace(/x/g, "ks").replace(/w/g, "").replace(/[aeiouy]/g, "").replace(/(.)\1+/g, "$1");
+/** A Hebrew word and a Latin one for the same thing: a colour by the colour map, or a borrowed noun by its consonants (3+). */
+export function sameAcrossLanguages(he: string, en: string): boolean {
+  if (!/[\u0590-\u05FF]/.test(he) || !/^[a-z-]+$/i.test(en)) return false;
+  const bareHe = he.replace(/^[הוב](?=[\u0590-\u05FF]{3,})/u, "");
+  if (COLOURS.some((c) => COLOUR_RE(c).test(bareHe) && (COLOUR_EN[c] ?? []).includes(en.toLowerCase()))) return true;
+  const a = heSkeleton(bareHe).replace(/(.)\1+/g, "$1"), b = enSkeleton(en);
+  // A plural s on either side is the same word.
+  return Math.min(a.length, b.length) >= 3 && (a === b || a === `${b}s` || `${a}s` === b);
+}
 export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowledge = ""): string[] {
   const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
   const searches = tools.filter((t) => SEARCH_TOOL.test(t.tool) && (t.outcome === "ok" || t.outcome === "empty"));
@@ -407,8 +420,11 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
       // Every word of the query counts, short ones too ("משטח עץ" is narrower than "משטחי במבוק", never within it).
       const bare = (x: string) => x.replace(/['׳"״]/g, "").toLowerCase();
       const claimWords = (clause.match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
+      const claimAsWritten = (normalizeQuotes(clause).match(/[\p{L}\p{N}'׳]+/gu) ?? []) as string[];
       const rawWords = (t: ToolRunRecord) => (Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" ").match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
-      const emptyWithin = searches.some((t) => t.outcome === "empty" && PRODUCT_TOOL.test(t.tool) && !filteredSearch(t) && rawWords(t).length > 0 && rawWords(t).every((x) => claimWords.some((w) => w === x || (x.length >= 3 && w.includes(x)))));
+      // A query in the other language counts too (dev round k4 on 259d48ea: "black jeans" came back empty for "לא
+      // מצאנו ג'ינס שחור"): a colour by the colour map, a borrowed noun by its consonants (ג'ינס, jeans: "jns").
+      const emptyWithin = searches.some((t) => t.outcome === "empty" && PRODUCT_TOOL.test(t.tool) && !filteredSearch(t) && rawWords(t).length > 0 && rawWords(t).every((x) => claimWords.some((w) => w === x || (x.length >= 3 && w.includes(x))) || claimAsWritten.some((w) => sameAcrossLanguages(w, x))));
       // ... unless an ok product search of this turn holds the claim's words in what it returned ("ג'ינס" empty, then
       // "ג׳ינס שחור" returned "ג'ינס שחור סלים": the claim is contradicted).
       const held = searches.some((t) => t.outcome === "ok" && PRODUCT_TOOL.test(t.tool) && (() => { const c = bare(unfinal(normalizeQuotes(String(t.content ?? "")))); return terms.filter((w) => c.includes(bare(unfinal(w)))).length >= need; })());
@@ -595,7 +611,11 @@ export const knowledgeSpeaksTo = (incoming: string, knowledge: string) => {
   const k = String(knowledge ?? "").toLowerCase();
   if (!k) return false;
   const words = [...new Set(tipWords(incoming).map((w) => w.replace(/^[הו](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => !talkWord(w) && !["אפשר", "איזה", "איזו", "אילו", "שלכם", "עבור", "האם"].includes(w)))];
-  return words.filter((w) => k.includes(w)).length >= 2;
+  // By stem: "אפשרויות" by "אפשר", "תשלום" by "לשלם" (dev round k4 on 259d48ea).
+  const stem = (w: string) => w.replace(/^[לבמש](?=[\u0590-\u05FF]{4,})/u, "").replace(/(?:ויות|יות|ות|ים|ה|ת)$/u, "").slice(0, 4);
+  const kStems = new Set(((k.match(/[\u0590-\u05FFa-z]{3,}/gu) ?? []) as string[]).map((x) => stem(x.replace(/^[הו](?=[\u0590-\u05FF]{3,})/u, ""))));
+  const root = (w: string) => w.replace(/^ת(?=ש)/u, "");
+  return words.filter((w) => k.includes(w) || kStems.has(stem(w)) || [...kStems].some((x) => x.length >= 3 && root(stem(w)).length >= 3 && (x.includes(root(stem(w))) || root(stem(w)).includes(x)))).length >= 2;
 };
 /** The knowledge holds the customer's device or item (a 4+ letter word of their message): it may answer. */
 export function knowledgeHasIt(incoming: string, knowledge: string): boolean {
@@ -742,7 +762,7 @@ export const stripForeignScript = (reply: string, allowedText = "") => String(re
 const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:לא\s+מפורט(?:ים|ות|ת)?\s+(?:כאן|אצלנו|במידע)|אין\s+במידע|במידע\s+(?:שיש\s+)?(?:לי|לנו)\s+(?:אין|לא))(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:בתיאור\s+העסק|בפרטי\s+העסק|במידע\s+שלנו\s+(?:מופיע|מופיעה|מופיעים|כתוב)|אצלנו\s+(?:מופיע|מופיעה|מופיעים|רשום)|לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות)\s+אצלנו|צירוף\s+(?:של\s+)?תבנית|הודעה\s+(?:קריאה|שאינה\s+קריאה)|לא\s+התקבלה\s+הודעה\s+קריאה)(?![\u0590-\u05FF])|\b(?:template attachment|template message|readable message)\b|(?<![\u0590-\u05FF])(?:נוסף|נוספה|הוספתי|הוספנו|שמרתי|שמרנו|עודכן|עודכנה|עדכנו)\s+(?:את\s+\S+\s+)?(?:ל|אל\s+)?(?:פרטי\s+(?:ה)?קשר|הכרטיס\s+שלך|לכרטיס|למערכת)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
 // The bot describing its own lookup or what it did or did not verify (rating of b3d2bbf3 and dev round k3: "בחיפוש
 // לפי חולצת טי", "לא אומתו", "מחיר מאומת", "שתוארו קודם", "לא בדקנו את התיאור", "המידע שיש לנו מתאר").
-const PROCESS_TALK = /(?<![\u0590-\u05FF])(?:בחיפוש\s+(?:לפי|של|על)|לא\s+(?:אומת|אומתו|אומתה|מאומת|מאומתים|מאומתות|מאומתת)|(?:מחיר|מחירים|צבע|צבעים|מלאי)\s+(?:מאומת|מאומתים|מאומתות)|ש(?:תוארו|תואר|תוארה|הוזכרו|הוזכר|הוזכרה)\s+(?:קודם|לפני\s+כן|מקודם)|(?:לא\s+)?(?:בדקנו|בדקתי)\s+את\s+(?:ה)?(?:תיאור|מידע|פרטים)|המידע\s+שיש\s+(?:לנו|לי)\s+(?:מתאר|מציין|אומר))(?![\u0590-\u05FF])/u;
+const PROCESS_TALK = /(?<![\u0590-\u05FF])(?:בחיפוש\s+(?:לפי|של|על)|לא\s+מצוין\s+(?:אם|האם)|(?:ב|ש|ה)?(?:פריטים|מוצרים|חולצות|דגמים)\s+ש(?:מופיעים|מופיעות)\s+(?:אצלנו|כאן|באתר)|לא\s+(?:אומת|אומתו|אומתה|מאומת|מאומתים|מאומתות|מאומתת)|(?:מחיר|מחירים|צבע|צבעים|מלאי)\s+(?:מאומת|מאומתים|מאומתות)|ש(?:תוארו|תואר|תוארה|הוזכרו|הוזכר|הוזכרה)\s+(?:קודם|לפני\s+כן|מקודם)|(?:לא\s+)?(?:בדקנו|בדקתי)\s+את\s+(?:ה)?(?:תיאור|מידע|פרטים)|המידע\s+שיש\s+(?:לנו|לי)\s+(?:מתאר|מציין|אומר))(?![\u0590-\u05FF])/u;
 // The same as a clause before the real question ("אין כאן פנייה קודמת פתוחה ..., אפשר לכתוב במה מדובר?"): the clause goes.
 const PROCESS_CLAUSE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי\s+)?(?:כאן|פה|אצלנו)\s+(?:פנייה|בקשה|שיחה|הודעה)[^,.!?\n]{0,80}),\s*/gu;
 export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "") || PROCESS_TALK.test(reply ?? "") || new RegExp(PROCESS_CLAUSE.source, "u").test(reply ?? "");
@@ -772,7 +792,7 @@ const STATEMENT_Q = /(?:^|(?<=[.!]\s))(יש\s+(?:כמה|לנו)(?:(?!\s(?:איז
 // "One of these payment methods" with no list, "the necklaces shown here" with no card (prod
 // replay 2026-11-17): a pointer at a list or cards the outgoing message does not carry.
 // "להיכנס לאחת מהן", "לבחור באחד מהם": a plural pointer to act on; a bare "אחד מהם" may point back at her words.
-const DANGLING = /(?<![\u0590-\u05FF])(?:(?:ל|ב)(?:אחת|אחד)\s+מה(?:ן|ם)|[\u0590-\u05FF]{2,}\s+(?:האלה|האלו|הבאים|הבאות|שלהלן)|(?:שמופיע|שמופיעה|שמופיעים|שמופיעות|המופיעים|המופיעות)\s+(?:כאן|למטה|בהמשך)|(?:כאן\s+)?למטה|ברשימה\s+(?:הבאה|כאן|למטה))(?![\u0590-\u05FF])|\b(?:the following|listed (?:below|here)|(?:shown|see) below|below|one of these|these (?:options|products|items|methods|ones|models)|from (?:the|this) list)\b/iu;
+const DANGLING = /(?<![\u0590-\u05FF])(?:(?:מופיע|מופיעה|מופיעים|מופיעות)\s+ב(?:פריטים|כרטיסים|כרטיסיות)|(?:ל|ב)(?:אחת|אחד)\s+מה(?:ן|ם)|[\u0590-\u05FF]{2,}\s+(?:האלה|האלו|הבאים|הבאות|שלהלן)|(?:שמופיע|שמופיעה|שמופיעים|שמופיעות|המופיעים|המופיעות)\s+(?:כאן|למטה|בהמשך)|(?:כאן\s+)?למטה|ברשימה\s+(?:הבאה|כאן|למטה))(?![\u0590-\u05FF])|\b(?:the following|listed (?:below|here)|(?:shown|see) below|below|one of these|these (?:options|products|items|methods|ones|models)|from (?:the|this) list)\b/iu;
 const HAS_LIST = /(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s+\S/;
 /** Sentences that point at a list or cards that do not go out with the reply. */
 // "איזו מהן ראית", "ביניהן": a plural pointer back at items; it dangles when nothing before it in the reply names them

@@ -1111,3 +1111,40 @@ describe("rating of b3d2bbf3, 4: an opener that leaned on a cut sentence", () =>
     expect(withoutLeaningOpener("יש גמישות במשלוח.")).toBe("יש גמישות במשלוח.");
   });
 });
+
+describe("dev round k4 on 259d48ea", () => {
+  const e = (q: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "empty", content: "[]" }) as any;
+  it("★ K4-1: an empty search in the other language backs the absence of exactly what was searched", async () => {
+    const { ungroundedAbsence, sameAcrossLanguages } = await import("../services/reply-engine/gates");
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("black jeans")])).toEqual([]);
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("black hoodie")])).toHaveLength(1);
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("jeans")])).toEqual([]);
+    expect(sameAcrossLanguages("ג'ינס", "jeans")).toBe(true);
+    expect(sameAcrossLanguages("טישרט", "tshirt")).toBe(true);
+    expect(sameAcrossLanguages("מעיל", "mail")).toBe(false);
+    expect(sameAcrossLanguages("ג'ינס", "gens")).toBe(false);
+  });
+  it("★ K4-2: the knowledge speaks to it by word stems", async () => {
+    const { knowledgeSpeaksTo } = await import("../services/reply-engine/gates");
+    const K = "אפשר לשלם בהעברה בנקאית או במזומן בעת המסירה. כרגע אין תשלום בכרטיס אשראי, בביט או ב-PayPal.";
+    expect(knowledgeSpeaksTo("מה אפשרויות התשלום?", K)).toBe(true);
+    expect(knowledgeSpeaksTo("מה אפשרויות המשלוח?", K)).toBe(false);
+    expect(knowledgeSpeaksTo("מה שעות הפתיחה של החנות?", "החנות נמצאת ברחוב הרצל 5.")).toBe(false);
+  });
+  it("★ K4-3: an empty query with a filter of its own, or a sale or price ask, lists the store", async () => {
+    const { searchHasFilter } = await import("../services/reply-engine/engine");
+    expect(searchHasFilter({ query: "" }, "מה יש במבצע?")).toBe(true);
+    expect(searchHasFilter({ query: "" }, "מה יש לכם עד 100 שקל?")).toBe(true);
+    expect(searchHasFilter({ query: "", price_max: 100 }, "מה יש לכם?")).toBe(true);
+    expect(searchHasFilter({ query: "", on_sale: true }, "תראו לי")).toBe(true);
+    expect(searchHasFilter({ query: "" }, "אפשר המלצה על משהו שיתאים לי?")).toBe(false);
+  });
+  it("★ K4-4/5: no process wording; a pointer at items with no cards dangles", async () => {
+    const { internalJargon, danglingReferences } = await import("../services/reply-engine/gates");
+    expect(internalJargon("בחולצות שמופיעות אצלנו יש שמלת חולצה בצבע Sky, אבל לא מצוין אם הגוון הוא תכלת.")).toBe(true);
+    expect(internalJargon("יש שמלת חולצה בצבע Sky, אבל לא מצוין אם הגוון הוא תכלת.")).toBe(true);
+    expect(internalJargon("יש שמלת חולצה בצבע Sky.")).toBe(false);
+    expect(danglingReferences("יש חולצות. למשל, חולצת כותנה אוקספורד קלאסית. המלאי והמחירים מופיעים בפריטים.", false)).toEqual(["המלאי והמחירים מופיעים בפריטים."]);
+    expect(danglingReferences("המלאי והמחירים מופיעים בפריטים.", true)).toEqual([]);
+  });
+});

@@ -3135,3 +3135,15 @@ describe("rating of b3d2bbf3, E: dashes in store titles", () => {
     h.groundTitle = "Canvas Tote";
   });
 });
+
+describe("dev round k4 on 259d48ea, through a whole turn", () => {
+  it("★ K4-3: \"מה יש במבצע?\" with an empty query is searched, never refused", async () => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "" })] }, { toolCalls: [respond("s2", { reply: "יש Canvas Tote במבצע." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מה יש במבצע?" }, "autonomous");
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").length).toBeGreaterThan(0);
+  });
+  it("★ K4-2: the audit row holds the heads of the knowledge the turn saw", async () => {
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/knowledgeHeads: \[\.\.\.\(knowledgeChunks as any\[\]\)/);
+  });
+});
