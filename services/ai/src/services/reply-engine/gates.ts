@@ -1435,7 +1435,7 @@ export function nonProductAsk(incoming: string): boolean {
  */
 // Words of a conversation, never of a product (the Supervisor's probes on 7100b0b6, L224 and L789): greetings, fillers,
 // past and existence verbs, pronouns, the frame of a question.
-const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה"]);
+const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison"]);
 const PLAIN_ADJECTIVES = new Set(["יפה", "יפות", "יפים", "יפהפייה", "חדש", "חדשה", "חדשים", "חדשות", "נחמד", "נחמדה", "טוב", "טובה", "קלילה", "קליל", "עדין", "עדינה", "מיוחד", "מיוחדת", "שווה", "beautiful", "nice", "new", "pretty", "special"]);
 const CONTEXT_NOUNS = new Set(["מכירה", "מכירות", "סניף", "חנות", "אתר", "אינסטגרם", "פייסבוק", "טיקטוק", "וואטסאפ", "סטורי", "פוסט", "תערוכה", "יריד", "שוק", "אירוע", "הופעה", "קבוצה", "מבצע", "פרסומת", "ניוזלטר"]);
 const talkWord = (w: string) => { const l = w.toLowerCase(); return TALK_WORDS.has(l) || (/^[הושל][\u0590-\u05FF]{2,}$/u.test(l) && TALK_WORDS.has(l.slice(1))) || (/^ש[\u0590-\u05FF]{3,}$/u.test(l) && (TALK_WORDS.has(l.slice(1)) || /^ש(?:מוצר|הוא|היא|זה)/u.test(l))); };
@@ -1492,25 +1492,47 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
   if (!content.some((w) => /\p{L}{2,}/u.test(w))) return null;
   return content.slice(0, 4).join(" ");
 }
+/** Describing only: colours, plain adjectives and adjective shapes ("חגיגי כחול"). */
+const allDescribing = (q: string) => q.split(/\s+/).every((w) => COLOUR_WORD.test(w) || PLAIN_ADJECTIVES.has(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w));
+const nounWord = (w: string) => /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(w) && !PLAIN_ADJECTIVES.has(w) && !/^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w) && !talkWord(w) && !queryStop(w);
+// A message about a product thing: a have/was/want/seen verb governing the noun ("הייתה מטפחת", "יש לכם X", "מחפשת X").
+const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|רוצה|רוצים|ראיתי|קניתי|הזמנתי|אשמח\s+ל|אשמח)\s+(?:את\s+)?(?:ה)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
+/** The noun a product source lends: a title or the intent (its first noun), or a message only by its product context or a title word. */
+function lentNoun(text: string, kind: "focus" | "message", titles: string[]): string | null {
+  if (kind === "focus") return (storeQueryOf(text) ?? "").split(/\s+/).find(nounWord) ?? null;
+  for (const m of String(text ?? "").matchAll(PRODUCT_CONTEXT)) if (nounWord(m[1])) return m[1];
+  // A title word, with up to two prefix letters off ("והמטפחת" lends "מטפחת").
+  const t = titles.join(" ").toLowerCase();
+  for (const w of (storeQueryOf(text) ?? "").split(/\s+/)) {
+    if (!nounWord(w)) continue;
+    const forms = [w, w.replace(/^[והלבשמ]/u, ""), w.replace(/^[והלבשמ]{2}/u, "")].filter((x) => x.length >= 3);
+    const hit = forms.find((x) => new RegExp(`(?<![\\p{L}])${x.toLowerCase()}(?![\\p{L}])`, "u").test(t));
+    if (hit) return hit;
+  }
+  return null;
+}
+/** Describing words alone take a noun from the product in focus (for the early lookup). */
+export function withFocusNoun(q: string | null, focus: string | null | undefined): string | null {
+  if (!q || !allDescribing(q) || !String(focus ?? "").trim()) return q;
+  const noun = lentNoun(String(focus), "focus", []);
+  return noun ? [noun, ...q.split(/\s+/)].slice(0, 4).join(" ") : q;
+}
 /**
- * The fallback search's query: her product words; when they are only describing words ("חגיגי כחול"), the noun of
- * the conversation goes in front (her earlier messages, then the model's intent): "מטפחת חגיגי כחול". Null with no
- * product word at all: no search, never a garbage query.
+ * The fallback search's query: her product words; when they are only describing words ("חגיגי כחול"), a noun lent
+ * by a source about a product goes in front: the product in focus, the intent, then an earlier message (newest
+ * first) only by its product context ("הייתה מטפחת") or a title word; a first-person state ("אני לא טובה ב...",
+ * "בדקתי", "נראה לי ש...") lends nothing. Nothing lent: null, no search, never a garbage query.
  */
-export function fallbackQueryOf(incoming: string, earlierInbound: string[], intent: string | null | undefined, opts: { substring?: boolean } = {}): string | null {
+export function fallbackQueryOf(incoming: string, earlierInbound: string[], intent: string | null | undefined, opts: { substring?: boolean } = {}, extra: { focus?: string | null; titles?: string[] } = {}): string | null {
   const q = storeQueryOf(incoming, opts);
   if (!q) return null;
-  const words = q.split(/\s+/);
-  // Describing only: colours, plain adjectives and adjective shapes ("חגיגי כחול"). A construct noun before its
-  // material ("משטחי במבוק") is never all-describing: the material word is not one.
-  const describing = (w: string): boolean => COLOUR_WORD.test(w) || PLAIN_ADJECTIVES.has(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w);
-  if (!words.every((w) => describing(w))) return q;
-  for (const m of [...earlierInbound, String(intent ?? "")]) {
-    const e = storeQueryOf(m, opts);
-    const noun = e?.split(/\s+/).find((w) => !describingWord(w) && /\p{L}{3,}/u.test(w));
-    if (noun) return [noun, ...words].slice(0, 4).join(" ");
+  if (!allDescribing(q)) return q;
+  const sources: Array<[string, "focus" | "message"]> = [[String(extra.focus ?? ""), "focus"], [String(intent ?? ""), "focus"], ...earlierInbound.map((m) => [m, "message"] as [string, "message"])];
+  for (const [text, kind] of sources) {
+    if (!text.trim()) continue;
+    const noun = lentNoun(text, kind, extra.titles ?? []);
+    if (noun) return [opts.substring ? noun.replace(/^ה(?=[\u0590-\u05FF]{4,}$)/u, "") : noun, ...q.split(/\s+/)].slice(0, 4).join(" ");
   }
-  // Describing words and no noun anywhere: no product to search for.
   return null;
 }
 // An explanation asked, no product wanted: "how do I know", "what is", "what's the difference" (the knowledge answers it).
@@ -1537,7 +1559,8 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   // No product word of her own ("אשמח לסרטון הדרכה"): the product the conversation is about (prod replay on
   // 1b35c535, NE'A: the literal sentence lost the marker in focus).
   const substring = toolsOffered.some((n) => /^woocommerce\.(?:list_products|search_products)$/.test(n));
-  const query = storeQueryOf(words, { substring }) ?? (String(subject ?? "").trim().slice(0, 80) || null);
+  // Describing words alone take the focus product's noun ("חגיגי כחול" -> "מטפחת חגיגי כחול", the 7100b0b6 probe).
+  const query = withFocusNoun(storeQueryOf(words, { substring }), subject) ?? (String(subject ?? "").trim().slice(0, 80) || null);
   const store = explain || !query ? undefined : toolsOffered.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
   const has = (k: ClaimProblem["kind"]) => problems.some((p) => p.kind === k);
   // Each store's own page-size argument (Shopify parity: its search takes "limit").

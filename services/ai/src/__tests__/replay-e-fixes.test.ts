@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass } from "../services/reply-engine/engine";
-import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf } from "../services/reply-engine/gates";
+import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
 import { cutLine } from "../scripts/replay-v2";
@@ -662,5 +662,32 @@ describe("7100b0b6 pre-check: the real messages", () => {
   it("★ note: \"מעמד לצילום סרטונים\" with the want-word is a product ask; bare it is no ask at all", () => {
     expect(productAskNow("יש לכם מעמד לצילום סרטונים?")).toBe(true);
     expect(videoAsk("יש לכם מעמד לצילום סרטונים?")).toBe(false);
+  });
+});
+
+describe("d874dc87 pre-check: the noun is lent only by a product source", () => {
+  const L789 = "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית";
+  const HARISH = "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?";
+  it("★ the real sequence, newest first: the noun comes from the message about a product, never from a first-person state", () => {
+    const q = fallbackQueryOf(L789, ["אני לא טובה בלראות באתר וכו..", HARISH], null, { substring: true });
+    expect(q).toMatch(/מטפחת/);
+    expect(q).not.toMatch(/טובה/);
+    expect(q).toBe("מטפחת חגיגי כחול");
+  });
+  it("★ a previous message with no product in it lends nothing: no search", () => {
+    for (const prev of ["בדקתי עכשיו שוב- ואין", "הי , נראה לי ששכחתם אותי 😅", "אני לא טובה בלראות באתר וכו.."]) {
+      expect(fallbackQueryOf(L789, [prev], null), prev).toBeNull();
+    }
+  });
+  it("★ the product in focus and the intent lend first; a title word lends too", () => {
+    expect(fallbackQueryOf(L789, ["אני לא טובה בלראות באתר וכו.."], null, {}, { focus: "מטפחת אנה כחולה" })).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, [], "בירור מטפחת חגיגית")).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, ["והמטפחת ההיא עוד קיימת?"], null, {}, { titles: ["מטפחת אנה", "מטפחת סולו"] })).toBe("מטפחת חגיגי כחול");
+  });
+  it("★ the early lookup takes the focus product's noun for describing words alone", () => {
+    expect(withFocusNoun("חגיגי כחול", "מטפחת אנה כחולה")).toBe("מטפחת חגיגי כחול");
+    expect(withFocusNoun("משטח לתמי 4", "סמובי אליס")).toBe("משטח לתמי 4");
+    expect(withFocusNoun("חגיגי כחול", null)).toBe("חגיגי כחול");
+    expect(q(autoLookups([{ kind: "no_search" }] as any, L789, WOO, [], "מטפחת אנה כחולה"))[0]).toEqual(["woocommerce.list_products", "מטפחת חגיגי כחול"]);
   });
 });

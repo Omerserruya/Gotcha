@@ -1597,7 +1597,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           if (store && !ran && !(candidates as any[]).length && productAskNow(inc) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
             // Only product words; describing words alone take the conversation's noun (rating of d2f10620, L789).
             const earlier = [...history].reverse().filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m.body ?? "")).filter((b) => b.trim() !== inc.trim()).slice(0, 3);
-            const q = fallbackQueryOf(inc, earlier, state.intent, { substring: /^woocommerce\./.test(store) }) ?? (nonProductAsk(inc) ? null : focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title));
+            const focusNow = focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title) ?? (String(state.offeredItems?.at(-1)?.title ?? "").trim() || null);
+            const q = fallbackQueryOf(inc, earlier, state.intent, { substring: /^woocommerce\./.test(store) }, { focus: focusNow, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] }) ?? (nonProductAsk(inc) ? null : focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title));
             if (q) {
               const few = /(?:^|\.)search_products$/.test(store) && !/^woocommerce\./.test(store) ? { limit: 5 } : { per_page: 5 };
               try {

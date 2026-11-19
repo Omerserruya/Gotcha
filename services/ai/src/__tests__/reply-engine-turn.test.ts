@@ -2887,6 +2887,31 @@ describe("rating of the d2f10620 prod replay, through a whole turn", () => {
     });
   });
 
+  it("★ (d874dc87 pre-check) the real L789 sequence: the noun from the message about a product, never \"טובה\"", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "יערה שלום. במכירה בחריש הייתה מטפחת חגגית מאוד שהיה בה גווני כחול, היא עדיין יישנה?", metadata: null },
+      { direction: "OUTBOUND", body: "נבדוק את זה.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "אני לא טובה בלראות באתר וכו..", metadata: null },
+      { direction: "OUTBOUND", body: "אין בעיה, נעזור כאן.", senderName: "AI Bot", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [respond("rs1", { reply: "המטפחת עולה ₪120." })] }, { toolCalls: [respond("rs2", { reply: "בטח, ₪150 בלבד." })] }, { toolCalls: [respond("rs3", { reply: "בטח, ₪150 בלבד." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
+    const q = h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => String(d.args.query));
+    expect(q.some((x) => /מטפחת/.test(x))).toBe(true);
+    expect(q.some((x) => /טובה/.test(x))).toBe(false);
+  });
+
+  it("★ (d874dc87 pre-check) a previous message with no product lends nothing; the product in focus does", async () => {
+    h.history = [{ direction: "INBOUND", body: "בדקתי עכשיו שוב- ואין", metadata: null }, { direction: "OUTBOUND", body: "נבדוק.", senderName: "AI Bot", metadata: null }];
+    await withState({ intent: "מטפחת חגיגית", offeredItems: [{ ref: "id:5", title: "מטפחת אנה כחולה", productId: "5", at: new Date().toISOString() }] }, async () => {
+      h.responses.push({ toolCalls: [respond("fc1", { reply: "המטפחת עולה ₪120." })] }, { toolCalls: [respond("fc2", { reply: "בטח, ₪150 בלבד." })] }, { toolCalls: [respond("fc3", { reply: "בטח, ₪150 בלבד." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "מחפשת דוקא חגיגי. הייתה אחת עם גווני כחול מאוד חגיגית" }, "autonomous");
+      const q = h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => String(d.args.query));
+      expect(q.length).toBeGreaterThan(0);
+      expect(q.every((x) => /מטפחת/.test(x) && !/בדקתי/.test(x))).toBe(true);
+    });
+  });
+
   it("★ B1d: a request for the sizes she just gave is never left after a cut", async () => {
     h.groundTitle = "סמובי גפן 40x50";
     const reply = "למיקסר מתאים סמובי גפן 40x50. הוא עולה ₪999. אפשר לשלוח את רוחב ועומק הבסיס של כל אחד מהם?";
