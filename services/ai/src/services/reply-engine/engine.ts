@@ -36,7 +36,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -665,21 +665,45 @@ const SENTENCES_RE = /(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-
 // The low end of the price range, in the customer's words.
 const CHEAP_WORD = /(?<![\u0590-\u05FF])[והבש]{0,2}(?:זול|זולה|זולים|זולות)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])[והבל]{0,2}מחיר\s+(?:הכי\s+)?ה?נמוך(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])הכי\s+פחות\s+יקר|\b(?:cheap|cheaper|cheapest|inexpensive|least expensive|lowest[- ]priced?|lowest price|most affordable)\b/giu;
 // The word negated ("זה נשמע לי לא זול בכלל", "not that cheap"): a complaint, not an ask for the low end.
-const CHEAP_NEGATED = /(?:(?<![\u0590-\u05FF])(?:לא|אינו|אינה|אינם)|\bnot|n't)\s+(?:(?:ממש|כזה|כזאת|הכי|באמת|מאוד|כל\s?כך|so|that|very|exactly|really|the)\s+){0,2}$/iu;
-/** The customer asks for the cheap end ("מה הכי זול אצלכם?", "something cheaper"). */
+const CHEAP_NEGATED = /(?:(?<![\u0590-\u05FF])(?:לא|אינו|אינה|אינם)|\bnot|n't)\s+(?:(?:ממש|כזה|כזאת|הכי|באמת|מאוד|כל\s?כך|היה|הייתה|היתה|היו|יהיה|תהיה|so|that|very|exactly|really|the|been|be)\s+){0,2}$/iu;
+// The word is said of the shipping, not of a product ("משלוח זול יותר", "המשלוח הכי זול", "a cheaper shipping option").
+const CHEAP_SHIPPING_BEFORE = /(?:(?<![\u0590-\u05FF])[הולבמש]{0,2}(?:משלוח|משלוחים|שילוח|הובלה|שליח|שליחות)|\b(?:shipping|delivery|postage|courier)(?:\s+(?:options?|methods?|rates?|costs?|fees?|prices?))?(?:\s+(?:that|which))?(?:\s+(?:is|are|be))?)\s+(?:(?:הכי|יותר|ממש|קצת|a|the|bit|little|more|most)\s+){0,2}$/iu;
+const CHEAP_SHIPPING_AFTER = /^\s+(?:יותר\s+)?(?:(?:(?!(?:with|for|and|or|plus|including|in|to|by|on)\s)[a-z]+\s+)?(?:shipping|delivery|postage|courier)\b|(?:ל|של\s+ה?)(?:משלוח|שילוח|הובלה)(?![\u0590-\u05FF]))/iu;
+// The cheap word is said of another seller's price ("באתר אחר ראיתי את זה יותר זול"): a comparison, not an ask for the low end.
+const OTHER_SELLER = /(?<![\u0590-\u05FF])[בלמ]?(?:אתר(?:ים)?|מקום|מקומות|חנות|חנויות)\s+(?:אחר|אחרת|אחרים|אחרות)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])אצל\s+ה?מתחר(?:ה|ים)|\b(?:elsewhere|(?:an)?other (?:site|store|shop|place|seller|website)s?|competitors?)\b/iu;
+/**
+ * The customer asks for the cheap end ("מה הכי זול אצלכם?", "something cheaper"). Never on a matter no product
+ * list answers (a payment problem, their order, a complaint, a coupon, a how-to: the exclusions of a product ask),
+ * and a cheap word about the shipping, or said of another seller's price in its own clause, is no such ask.
+ */
 export function cheapAsk(incoming: string): boolean {
   const t = normalizeQuotes(String(incoming ?? ""));
-  for (const m of t.matchAll(CHEAP_WORD)) if (!CHEAP_NEGATED.test(t.slice(0, m.index ?? 0))) return true;
+  if (notProductMatter(t)) return false;
+  for (const m of t.matchAll(CHEAP_WORD)) {
+    const before = t.slice(0, m.index ?? 0), after = t.slice((m.index ?? 0) + m[0].length);
+    const clause = `${before.split(/[,.!?\n]/).at(-1) ?? ""}${m[0]}${after.split(/[,.!?\n]/)[0] ?? ""}`;
+    if (!CHEAP_NEGATED.test(before) && !CHEAP_SHIPPING_BEFORE.test(before) && !CHEAP_SHIPPING_AFTER.test(after) && !OTHER_SELLER.test(clause)) return true;
+  }
   return false;
 }
-// Words of a cheap ask that name no kind of product ("משהו", "הכי", "אצלכם").
-const CHEAP_FILL = /(?<![\u0590-\u05FF])(?:הכי|משהו|משהי|ממש|מאוד|באמת|יותר|ביותר|אצלכם|אצלך|שלכם|שיש|דבר|דברים|פריט|פריטים|מוצרים|ב?חנות|ב?אתר|ב?קטלוג)(?![\u0590-\u05FF])|\b(?:something|anything|really|very|most|items?|things?|products?|store|shop|sell)\b/giu;
+const CHEAP_FILL = /(?<![\u0590-\u05FF])(?:הכי|משהו|משהי|ממש|מאוד|באמת|יותר|ביותר|יקר|יקרה|יקרים|יקרות|אצלכם|אצלך|שלכם|שיש|דבר|דברים|פריט|פריטים|מוצרים|ב?חנות|ב?אתר|ב?קטלוג)(?![\u0590-\u05FF])|\b(?:something|anything|really|very|most|expensive|pricey|items?|things?|products?|store|shop|sell)\b/giu;
+/** A message that asks for a list by a filter of its own; its cheap word counts only as a cheap ask. */
+export const listAsk = (incoming: string): boolean => searchHasFilter({}, incoming) && (cheapAsk(incoming) || searchHasFilter({}, normalizeQuotes(String(incoming ?? "")).replace(CHEAP_WORD, " ")));
 /** The kind of product a cheap ask names ("חולצה" in "יש חולצה זולה?"), or none ("מה הכי זול אצלכם?"). */
 export const cheapNoun = (incoming: string): string | null => headNoun(normalizeQuotes(String(incoming ?? "")).replace(CHEAP_WORD, " ").replace(CHEAP_FILL, " "));
 const priceOf = (c: any): number | null => (c?.priceOnSite || c?.price == null || !Number.isFinite(Number(c.price)) || Number(c.price) <= 0 ? null : Number(c.price));
 /** The products that can be shown (titled, in stock) and carry a price, cheapest first. */
 export function cheapestFirst<T extends { title?: string; price?: number | null; inventoryState?: string; priceOnSite?: boolean }>(list: T[]): T[] {
   return list.map((c, i) => ({ c, i, p: priceOf(c) })).filter((x) => x.c?.title && x.c.inventoryState !== "out_of_stock" && x.p != null).sort((a, b) => a.p! - b.p! || a.i - b.i).map((x) => x.c);
+}
+/**
+ * The cheapest of a cheap ask: of the kind she names when some found product is of that kind by its own title or
+ * category ("מה המברשת הכי זולה?" never ranks the pens found beside the brush), else of all that was found. With none
+ * of them priced there is nothing to rank.
+ */
+export function cheapestOfKind<T extends { title?: string; price?: number | null; inventoryState?: string; priceOnSite?: boolean }>(list: T[], kind: string | null): T[] {
+  const hers = kind ? list.filter((c) => ofHerKindStrict(c as any, kind)) : [];
+  return cheapestFirst(hers.length ? hers : list);
 }
 /**
  * The found products a text names (their indexes): by title, by a word only one found title has, or by a found
@@ -691,10 +715,28 @@ export function namedMembers(text: string, candidates: any[]): Set<number> {
   if (!t.trim() || !candidates.length) return out;
   const common = commonTitleWords(candidates.map((c) => String(c?.title ?? "")));
   candidates.forEach((c, i) => { if (c?.title && namesTitle(t, String(c.title), common)) out.add(i); });
-  for (const i of referredCandidates(candidates as any[], t, "")) out.add(i);
+  const referred = new Set(referredCandidates(candidates as any[], t, ""));
+  for (const i of referred) out.add(i);
   const prices = [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)].map((m) => Number(String(m[1] ?? m[2]).replace(/,/g, "")));
   candidates.forEach((c, i) => { const p = priceOf(c); if (p != null && prices.includes(p)) out.add(i); });
-  return out;
+  if (out.size < 2) return out;
+  // Several matched, some through words they share (the usual store: variants of one title, "טוש גבות חום" and
+  // "טוש גבות שחור"). Only those the text tells apart count: by the whole title, or by a word or a price none of the
+  // others matched has. With none told apart the text speaks of them all.
+  const low = t.toLowerCase();
+  const idx = [...out];
+  const title = (i: number) => String(candidates[i]?.title ?? "");
+  const words = new Map(idx.map((i) => [i, new Set(titleWords(title(i)))]));
+  const apart = idx.filter((i) => {
+    const others = idx.filter((j) => j !== i);
+    // Its whole title, unless that is only the start of a longer title the text says.
+    if (title(i) && t.includes(title(i)) && !others.some((j) => title(j).length > title(i).length && title(j).includes(title(i)) && t.includes(title(j)))) return true;
+    if (referred.has(i)) return true;
+    const p = priceOf(candidates[i]);
+    if (p != null && prices.includes(p) && !others.some((j) => priceOf(candidates[j]) === p)) return true;
+    return [...words.get(i)!].some((w) => !/^\d+$/.test(w) && low.includes(w) && !others.some((j) => words.get(j)!.has(w)));
+  });
+  return apart.length ? new Set(apart) : out;
 }
 /**
  * A cut took a member of the answer: a removed sentence named a found product (or its price) that what is left no
@@ -737,25 +779,53 @@ function forHerAsk(part: string, incoming: string): boolean {
   }
   return false;
 }
+// A condition, not a statement ("אם הגוון לא מתאים אפשר להחליף", "if it does not fit"): it rules nothing out.
+const CONDITION = /(?<![\u0590-\u05FF])(?:[ושה]?אם(?![\u0590-\u05FF])|במידה\s+[וש]|במקרה\s+(?:[וש]|של(?![\u0590-\u05FF])))|\b(?:if|in case|unless)\b/iu;
 /**
  * The found products a text says do not fit. A sentence (or the side of its turn) that says so rules out the
  * products it names; when it names one and also says something fits, which is which is not guessed and it rules
- * none out. When it names none and speaks of what was found, it rules out every found product the text does not
- * name elsewhere (the one it offers in their place stays). A sentence about shipping or a size says nothing of
- * the products, and one that says they are for what she asks ("מיועדים לגבות, לא לעיניים" on an ask for brows)
- * is a yes.
+ * none out. What follows the "not for" words is the use, never a product ("לא מתאים לעיניים" does not name the
+ * product whose title holds "לעיניים"). When it names none, it rules out the found products of her kind when it
+ * speaks of her kind, else those a word of whose title it says; never one the text names elsewhere (the one it
+ * offers in their place stays), and never one the text says fits. A condition ("אם הגוון לא מתאים") rules nothing
+ * out, nor does a sentence about shipping or a size, and one that says they are for what she asks ("מיועדים לגבות,
+ * לא לעיניים" on an ask for brows) is a yes.
  */
 export function unfitProducts(text: string, candidates: any[], noun: string | null = null, incoming = ""): Set<number> {
   const out = new Set<number>();
+  const fits = new Set<number>();
   const inText = namedMembers(text, candidates);
+  const blank = (m: string) => " ".repeat(m.length);
   for (const s of String(text ?? "").match(SENTENCES_RE) ?? []) for (const x of s.split(TURNS)) {
     // "Not stated that it fits" rules nothing out; what the sentence says past those words still counts.
-    const said = x.replace(NEG_THAT_FIT, " ");
-    if (!SAYS_UNFIT.test(said) || forHerAsk(said, incoming)) continue;
-    const named = namedMembers(x, candidates);
-    if (named.size) { if (!SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); }
-    else if (aboutFound(x, candidates, noun)) candidates.forEach((_, i) => { if (!inText.has(i)) out.add(i); });
+    const said = x.replace(NEG_THAT_FIT, blank);
+    // Each place it says "does not fit", never inside a condition (the clause before it holds an "if").
+    const unfit = [...said.matchAll(SAYS_UNFIT_ALL)].filter((m) => !CONDITION.test(said.slice(0, m.index ?? 0).split(/[,;:]/).at(-1) ?? ""));
+    if (!unfit.length || forHerAsk(said, incoming)) {
+      // It says they fit, or that they are for what she asks: the products it names are never ruled out.
+      if (SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " ")) || (said.match(FOR_WHAT) ?? []).length > 0) namedMembers(x, candidates).forEach((i) => fits.add(i));
+      continue;
+    }
+    // The subject: the sentence without what follows each "not for", up to the comma.
+    let subject = x;
+    for (const m of unfit) {
+      const from = (m.index ?? 0) + m[0].length;
+      const stop = subject.slice(from).search(/[,;:]/);
+      const to = stop < 0 ? subject.length : from + stop;
+      subject = subject.slice(0, from) + " ".repeat(to - from) + subject.slice(to);
+    }
+    const named = namedMembers(subject, candidates);
+    if (named.size) { if (!SAYS_FIT.test(said.replace(SAYS_UNFIT_ALL, " "))) named.forEach((i) => out.add(i)); continue; }
+    const low = subject.toLowerCase();
+    const all = candidates.map((_, i) => i);
+    // Of her kind: by its title or category; a title in another script than her word ("Miss eyebrows Pen" for
+    // "טוש") cannot say, and counts unless its category says otherwise.
+    const inHerScript = (c: any) => (/[\u0590-\u05FF]/.test(noun ?? "") ? /[\u0590-\u05FF]/ : /[a-z]/i).test(String(c?.title ?? ""));
+    const ofKind = noun && nounKeys(noun).some((k) => low.includes(k)) ? all.filter((i) => ofHerKindStrict(candidates[i], noun) || (!inHerScript(candidates[i]) && ofNoun(candidates[i], noun))) : [];
+    const spoken = ofKind.length ? ofKind : all.filter((i) => (String(candidates[i]?.title ?? "").toLowerCase().match(/\p{L}{4,}/gu) ?? []).some((w) => !TITLE_STOP.has(w) && low.includes(w)));
+    spoken.forEach((i) => { if (!inText.has(i)) out.add(i); });
   }
+  fits.forEach((i) => out.delete(i));
   return out;
 }
 // A request for the base's sizes ("אפשר לשלוח את רוחב ועומק הבסיס", "מה המידות של המכשיר?").
@@ -2025,7 +2095,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         if (st && !st.unfit && rulesOut(st)) { kept = st; (trace as any).statementKept = true; }
         else if (st) {
           const unfit = st.unfit ?? new Set<number>();
-          const pool = (cheapNow ? cheapestFirst(listable.map((x) => x.c)).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : listable).filter((x) => !unfit.has(x.i)).slice(0, 3);
+          const pool = (cheapNow ? cheapestOfKind(listable.map((x) => x.c), kindNow).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : listable).filter((x) => !unfit.has(x.i)).slice(0, 3);
           // With none of them left to show, the cards the cleanup left under it stay (none of them ruled out).
           const cards = pool.length ? pool.map((x) => `PRODUCT_${x.i + 1}`) : (st.o.cards ?? []);
           const o: ModelTurnOutput = { ...st.o, reply: cards.length || /[?؟]/.test(st.o.reply) ? st.o.reply : `${st.o.reply.trim()} ${productQuestionLine(locale)}`, cards };
@@ -2195,7 +2265,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // prices (the dev owner-rule round: "אני מחפשת את הכי זול שיש" got cards at ₪799, ₪529, ₪299), and with none
           // priced no cards at all. The header makes no ranking claim.
           const shownPool = (candidates as any[]).map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun)));
-          const shownSet = (cheapNow ? cheapestFirst(shownPool.map((x: any) => x.c)).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : shownPool).slice(0, 3);
+          const shownSet = (cheapNow ? cheapestOfKind(shownPool.map((x: any) => x.c), noun).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : shownPool).slice(0, 3);
           const shownNames = shownSet.map((x: any) => String(x.c.title));
           // The draft's own caveat is the answer's point ("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים",
           // rating of d2f10620, NE'A): it stays with the products, in place of the fixed line.
@@ -2714,7 +2784,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
   // A list ask that returned products and a reply that names none with no cards (dev round k9 on 1f25aca0: "מה יש כרגע
   // במלאי?" got categories only): two or three of them go out as cards with the question.
-  if (cardChannel && output?.reply && !(output.cards ?? []).length && searchHasFilter({}, String(opts.incomingMessage ?? "")) && !storeQueryOf(String(opts.incomingMessage ?? "")) && (candidates as any[]).length) {
+  // A cheap word is a list ask only as a cheap ask (rule T: "יש קופון? אני מחפשת מחיר זול יותר" got the team line with
+  // three cards under it).
+  if (cardChannel && output?.reply && !(output.cards ?? []).length && listAsk(String(opts.incomingMessage ?? "")) && !storeQueryOf(String(opts.incomingMessage ?? "")) && (candidates as any[]).length) {
     const shown = (candidates as any[]).map((c: any, n: number) => ({ c, n })).filter(({ c, n }) => c?.title && c.inventoryState !== "out_of_stock" && !unfitShown?.has(n));
     if (shown.length && !shown.some(({ c }) => output!.reply.includes(String(c.title)))) {
       output = { ...output, cards: shown.slice(0, 3).map(({ n }) => `PRODUCT_${n + 1}`) };

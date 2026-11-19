@@ -1247,12 +1247,19 @@ export const paymentProblem = (incoming: string) => PAY_PROBLEM.test(normalizeQu
 const HOW_TO = /(?<![\u0590-\u05FF])(?:איך|כיצד)\s+(?:אני\s+|אפשר\s+|ניתן\s+)?(?!(?:מזמינים|להזמין|קונים|לקנות|רוכשים))[\u0590-\u05FF]{2,}|\bhow (?:do|can|should) (?:i|we|you) (?!order|buy|purchase)\w+|\bhow to (?!order|buy|purchase)\w+/iu;
 // A product named to be found: the product words, a purchase, or "יש <noun>?".
 const NAMES_A_PRODUCT = /^\s*(?:היי[,!\s]*|שלום[,!\s]*)?יש\s+(?:לכם\s+|לך\s+)?(?!(?:עדכון|חדש|חדשות|תשובה|בעיה|אפשרות|מבצע|קופון|קוד|משלוח|החזר|זמן)(?![\u0590-\u05FF]))[\u0590-\u05FF]{3,}/u;
+/**
+ * A matter no product list answers: a payment problem, an order of theirs, a complaint, a coupon question, a how-to.
+ * A video or tutorial ask is none either, whatever its shape ("יש לכם סרטון הדרכה לכביסה?", dev live round on b369e939).
+ */
+export function notProductMatter(incoming: string): boolean {
+  const t = normalizeQuotes(incoming ?? "");
+  return PAY_PROBLEM.test(t) || MY_ORDER.test(t) || STRONG_CASE.test(t) || COUPON_ASK.test(t) || HOW_TO.test(t) || videoAsk(t);
+}
 export function productAskNow(incoming: string): boolean {
   // Products answer a product ask only: never a support case (payment, an order of theirs, a complaint),
   // a policy or coupon question, or a how-to (prod replay 2026-11-17: the list replaced a policy answer).
   const t = normalizeQuotes(incoming ?? "");
-  // A video or tutorial ask is no product ask, whatever its shape ("יש לכם סרטון הדרכה לכביסה?", dev live round on b369e939).
-  if (PAY_PROBLEM.test(t) || MY_ORDER.test(t) || STRONG_CASE.test(t) || COUPON_ASK.test(t) || HOW_TO.test(t) || videoAsk(t)) return false;
+  if (notProductMatter(t)) return false;
   return PRODUCT_WANT.test(t) || PURCHASE.test(t) || PRODUCT_ASK.test(t) || NAMES_A_PRODUCT.test(t) || /\bhow (?:do|can) (?:i|we) (?:order|buy|purchase)\b/i.test(t);
 }
 
