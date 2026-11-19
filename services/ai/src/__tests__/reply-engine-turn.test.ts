@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   agentStatus: "ACTIVE",
   textChannel: false,
   offerWrite: false,
+  variations: false,
   lexicalFor: null as null | ((q: string) => any[]),
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
@@ -64,6 +65,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
       { type: "function", function: { name: "escalate_to_human", description: "hand over", parameters: { type: "object", properties: {} } } },
       { type: "function", function: { name: "send_product_card", description: "card", parameters: { type: "object", properties: {} } } },
       ...(h.offerWrite ? [{ type: "function", function: { name: "woocommerce.add_order_note", description: "note", parameters: { type: "object", properties: {} } } }] : []),
+      ...(h.variations ? [{ type: "function", function: { name: "woocommerce.list_product_variations", description: "variations", parameters: { type: "object", properties: { product_id: { type: "string" } } } } }] : []),
     ],
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
     dispatchToolCall: async (tc: any, ctx: any) => {
@@ -73,6 +75,9 @@ vi.mock("@chatcenter/shared", async (orig) => {
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
       if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "denied") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
+      if (tc.function.name === "woocommerce.list_product_variations") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 9, attributes: { Color: "Black", Size: "L" }, stock_status: "instock", available: true }] }) };
+      if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "77") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: { id: 77, name: "Heavyweight Hoodie", description: "Organic cotton, heavy fleece." } }) };
+      if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "78") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: { id: 78, name: "Zip Hoodie", description: "Charcoal zip hoodie." } }) };
       // A product read returns its text (the number rule needs the "100%" a reply may quote).
       if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "55") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: { id: 55, name: "סוודר", description: "100% כותנה אורגנית" } }) };
       return { toolCallId: tc.id, content: JSON.stringify({ ok: true, simulated: !!ctx.sandbox }) };
@@ -164,6 +169,7 @@ beforeEach(() => {
   h.orderDelay = 900;
   h.textChannel = false;
   h.offerWrite = false;
+  h.variations = false;
   h.lexicalFor = null;
   h.history = null;
   h.lexical = [];
@@ -2926,5 +2932,40 @@ describe("rating of the d2f10620 prod replay, through a whole turn", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יחזור למלאי בצבע שחור?" }, "autonomous");
     if (r.trace.teamQuestion) expect(r.reply).toMatch(/לצוות/);
     else throw new Error(`no team question was opened: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
+  });
+});
+
+describe("dev live round on dcf2158e: the answer sentence is never the one cut", () => {
+  const draft = "בשחור יש את ה-Heavyweight Hoodie, מקפוצ'ון כותנה אורגנית עבה. ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.";
+  const reads = [tc("g1", "woocommerce.get_product", { product_id: "77" }), tc("g2", "woocommerce.get_product", { product_id: "78" }), tc("g3", "woocommerce.get_product", { product_id: "77" })];
+  it("★ (c) with a variations tool: the variations are read and the Heavyweight sentence stays", async () => {
+    h.variations = true;
+    h.responses.push({ toolCalls: reads }, { toolCalls: [respond("v1", { reply: draft })] }, { toolCalls: [respond("v2", { reply: draft })] }, { toolCalls: [respond("v3", { reply: draft })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה שחור" }, "autonomous");
+    expect((r.trace as any).rewriteSkipped).toBeUndefined();
+    expect(h.dispatched.find((d) => d.name === "woocommerce.list_product_variations")?.args.product_id).toBe("77");
+    expect(r.reply).toMatch(/Heavyweight Hoodie/);
+  });
+  it("★ (a) without a variations tool: never the direct clean that leaves only the negated sentence", async () => {
+    h.responses.push({ toolCalls: reads }, { toolCalls: [respond("w1", { reply: draft })] }, { toolCalls: [respond("w2", { reply: draft })] }, { toolCalls: [respond("w3", { reply: draft })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה שחור" }, "autonomous");
+    expect((r.trace as any).rewriteSkipped).toBeUndefined();
+    expect((r.reply ?? "").trim()).not.toBe("ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.");
+  });
+});
+
+describe("dev live round on dcf2158e: the direct clean and the reply text", () => {
+  it("★ (a) a price ask whose only price sentence is cut never goes out as a direct clean", async () => {
+    h.responses.push({ toolCalls: [tc("p0", "woocommerce.list_products", { query: "Canvas Tote" })] }, { toolCalls: [respond("p1", { reply: "Canvas Tote עולה ₪999. הוא תיק בד חזק ונוח לשימוש יומיומי וגם לקניות בשוק." })] }, { toolCalls: [respond("p2", { reply: "Canvas Tote עולה ₪79. הוא תיק בד חזק ונוח." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כמה עולה Canvas Tote?" }, "autonomous");
+    expect((r.trace as any).rewriteSkipped).toBeUndefined();
+    expect(String((r.trace as any).directRejected ?? "")).toMatch(/answerCut/);
+    expect(r.reply).toMatch(/79/);
+  });
+  it("★ a title repeated in brackets after itself goes out once", async () => {
+    h.responses.push({ toolCalls: [tc("t0", "woocommerce.list_products", { query: "תיק" })] }, { toolCalls: [respond("t1", { reply: "יש לנו Canvas Tote (Canvas Tote), תיק בד חזק." })] });
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(r.reply).not.toMatch(/\(Canvas Tote\)/);
+    expect(r.reply).toMatch(/Canvas Tote, תיק בד/);
   });
 });

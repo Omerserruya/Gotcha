@@ -1,7 +1,8 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
-import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass } from "../services/reply-engine/engine";
+import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass, cutTheAnswer } from "../services/reply-engine/engine";
+import { optionClaimsWithoutVariations } from "../services/reply-engine/gates";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
@@ -718,5 +719,39 @@ describe("7a3bc2a3 pre-check: the intent lends only like a message (26 real inte
     }
     // An abstract word lends nothing even when a catalogue title has it.
     expect(fallbackQueryOf("רוצה לבן", ["חלופה טובה?"], null, {}, { titles: ["חלופה לסוכר"] })).toBeNull();
+  });
+});
+
+describe("dev live round on dcf2158e: option claims", () => {
+  const draft = "בשחור יש את ה-Heavyweight Hoodie, מקפוצ'ון כותנה אורגנית עבה. ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.";
+  const gp = (id: string, name: string, extra = "") => ({ tool: "woocommerce.get_product", outcome: "ok", decision: "allow", args: { product_id: id }, content: JSON.stringify({ ok: true, result: { id, name, description: extra } }) }) as any;
+  it("★ (a) the cut sentence held her ask and what is left says it only negated: the answer was cut", () => {
+    expect(cutTheAnswer(["בשחור יש את ה-Heavyweight Hoodie, מקפוצ'ון כותנה אורגנית עבה."], "ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.", "רוצה שחור")).toBe(true);
+    expect(cutTheAnswer(["התיק עולה ₪999."], "יש לנו תיק בד בשחור, חזק ונוח.", "רוצה תיק שחור")).toBe(false);
+    // A short follow-up with no product word: the colour, the size or the price is her ask.
+    expect(cutTheAnswer(["בשחור יש את ה-Heavyweight Hoodie."], "ה-Zip Hoodie הוא בצבע Charcoal, לא שחור.", "יש בשחור?")).toBe(true);
+    expect(cutTheAnswer(["במידה L יש את ה-Heavyweight Hoodie."], "ה-Zip Hoodie אזל.", "ויש L?")).toBe(true);
+    expect(cutTheAnswer(["ה-Heavyweight Hoodie עולה ₪249."], "הוא עשוי כותנה אורגנית עבה ונעים מאוד.", "כמה זה עולה?")).toBe(true);
+    expect(cutTheAnswer(["הוא גם נוח לכביסה."], "ה-Heavyweight Hoodie עולה ₪249.", "כמה זה עולה?")).toBe(false);
+    expect(cutTheAnswer(["הוא גם נוח לכביסה."], "בשחור יש את ה-Heavyweight Hoodie.", "יש בשחור?")).toBe(false);
+    expect(cutTheAnswer(["הוא עולה ₪999."], "יש לנו את Canvas Tote.", "יש לכם תיק בד?")).toBe(false);
+  });
+  it("★ (b) the variations of the product the claim names are read; a product read listing the colour grounds an existence claim", async () => {
+    const reads = [gp("77", "Heavyweight Hoodie"), gp("78", "Zip Hoodie"), gp("77", "Heavyweight Hoodie")];
+    const claims = optionClaimsWithoutVariations(draft, "רוצה שחור", reads);
+    expect(claims).toHaveLength(1);
+    const calls = autoLookups([{ kind: "option_without_variation", claims }] as any, "רוצה שחור", ["woocommerce.list_products", "woocommerce.list_product_variations"], reads);
+    expect(calls[0].function.name).toBe("woocommerce.list_product_variations");
+    expect(JSON.parse(calls[0].function.arguments)).toEqual({ product_id: "77" });
+    // The product's own read lists the colour: "יש בשחור" is grounded; "במלאי בשחור" still needs the variations.
+    const listed = [gp("77", "Heavyweight Hoodie", "Color: Black, Sand")];
+    expect(optionClaimsWithoutVariations("בשחור יש את ה-Heavyweight Hoodie.", "רוצה שחור", listed)).toEqual([]);
+    expect(optionClaimsWithoutVariations("ה-Heavyweight Hoodie בשחור במלאי.", "רוצה שחור", listed)).toHaveLength(1);
+    // Per product: Black on another product's read never grounds this one (3 reads, Black only on the Zip).
+    const other = [gp("77", "Heavyweight Hoodie", "Color: Sand"), gp("78", "Zip Hoodie", "Color: Black, Charcoal"), gp("77", "Heavyweight Hoodie", "Color: Sand")];
+    expect(optionClaimsWithoutVariations("בשחור יש את ה-Heavyweight Hoodie.", "רוצה שחור", other)).toHaveLength(1);
+    expect(optionClaimsWithoutVariations("בשחור יש את ה-Zip Hoodie.", "רוצה שחור", other)).toEqual([]);
+    // No product named and several read: nothing grounds it.
+    expect(optionClaimsWithoutVariations("בשחור יש את ה-Pullover.", "רוצה שחור", other)).toHaveLength(1);
   });
 });

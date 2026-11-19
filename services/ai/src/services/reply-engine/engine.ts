@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -544,11 +544,32 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
 }
 // A sentence that says the fit is not stated ("ולא מצוין שהוא מתאים ל..."): a caveat of its own.
 const NEG_THAT_FIT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*(?:מצוין|מצוינת|כתוב|ידוע|אישור|מידע|מופיע|בטוח|ברור)\s+ש[^,.:;!?\n]*(?:מתאים|מתאימה|מתאימים|יתאים)/u;
+/**
+ * The cut sentence was the answer: it holds a word of her ask (her product words, as the store query takes them) and
+ * no sentence left says that word without a negation.
+ */
+export function cutTheAnswer(removed: string[], left: string, incoming: string): boolean {
+  if (!removed.length) return false;
+  // A price ask whose only price sentence was cut: what is left answers nothing.
+  const PRICE = /₪|ש["״']?ח|\d+\s?(?:NIS|ILS)|(?<![\u0590-\u05FF])(?:עולה|עולים|מחיר|המחיר)(?![\u0590-\u05FF])|\b(?:costs?|price)\b/iu;
+  if (/(?<![\u0590-\u05FF])(?:כמה\s+(?:זה\s+|הוא\s+|היא\s+)?עול(?:ה|ים|ות)|מה\s+(?:ה)?מחיר|מחיר)(?![\u0590-\u05FF])|\b(?:how much|what(?:'s| is) the price)\b/iu.test(incoming) && removed.some((r) => PRICE.test(r)) && !PRICE.test(left)) return true;
+  // Her words: her product words, and the colour and the size a short follow-up asks about ("יש בשחור?", "ויש L?").
+  const colours = (String(incoming).match(/[\p{L}']+/gu) ?? []).map((w) => w.replace(/^[והב]{1,2}(?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => describingWord(w) && /^(?:שחור|שחורה|לבן|לבנה|אפור|אפורה|כחול|כחולה|אדום|אדומה|ירוק|ירוקה|ורוד|ורודה|חום|חומה|בז'|סגול|צהוב|כתום|black|white|grey|gray|blue|red|green|pink|brown|beige|purple|yellow|orange|navy)$/iu.test(w));
+  const sizes = (String(incoming).match(/(?<![\p{L}\d])(?:xxs|xs|s|m|l|xl|xxl|xxxl|\d{2})(?![\p{L}\d])/giu) ?? []);
+  const ask = [...new Set([...(storeQueryOf(incoming) ?? "").split(/\s+/).filter((w) => w.length >= 2), ...colours, ...sizes])];
+  if (!ask.length) return false;
+  const has = (x: string, w: string) => new RegExp(`(?<![\\p{L}\\d])[הולבמש]{0,2}${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\d])`, "iu").test(x) || (/^[\u0590-\u05FF]/.test(w) && new RegExp(`(?<![\\p{L}])[הולבמש]{0,2}${w}`, "iu").test(x));
+  const cutHolds = ask.filter((w) => removed.some((r) => has(r, w)));
+  if (!cutHolds.length) return false;
+  const sentences = String(left ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? [];
+  const negated = (x: string, w: string) => new RegExp(`(?<![\\u0590-\\u05FF])(?:לא|אין|ללא)\\s+(?:[\\u0590-\\u05FF]+\\s+)?[הולבמש]{0,2}${w}|\\bnot\\s+${w}`, "iu").test(x);
+  return cutHolds.some((w) => !sentences.some((x) => has(x, w) && !negated(x, w)));
+}
 // A request for the base's sizes ("אפשר לשלוח את רוחב ועומק הבסיס", "מה המידות של המכשיר?").
 const ASKS_FOR_SIZES = /(?<![\u0590-\u05FF])(?:לשלוח|תשלחו|שלחו|לכתוב|כתבו|מה)\s+(?:לי\s+|לנו\s+)?(?:את\s+)?(?:ה)?(?:רוחב|עומק|אורך|מידות|גודל|מידה)|\b(?:send|tell) (?:me |us )?(?:the )?(?:width|depth|size|dimensions)\b/iu;
 const stillCheckingRe = /(?<![\u0590-\u05FF])(?:עדיין\s+(?:בבדיקה|בודקים|נבדק)|אצל\s+הצוות)(?![\u0590-\u05FF])|\bstill (?:checking|being checked)\b/iu;
 // The problems the cleanup removes itself (a sentence cut or a style fix), with no model round.
-const DIRECT_KINDS = new Set<string>(["style", "ungrounded_price", "price_of_other_product", "derived_measure", "ungrounded_attribute", "card_reference", "dangling_reference", "echoed_size", "ungrounded_number", "unsafe_tip", "option_without_variation", "device_mismatch", "ungrounded_positive_fit", "ungrounded_negative_fit", "claims_attachment", "ungrounded_source", "price_against_store", "inactive_order_unlabelled", "order_state_unread"]);
+const DIRECT_KINDS = new Set<string>(["style", "ungrounded_price", "price_of_other_product", "derived_measure", "ungrounded_attribute", "card_reference", "dangling_reference", "echoed_size", "ungrounded_number", "unsafe_tip", "device_mismatch", "ungrounded_positive_fit", "ungrounded_negative_fit", "claims_attachment", "ungrounded_source", "price_against_store", "inactive_order_unlabelled", "order_state_unread"]);
 // The titles the last product lookup found (the focus when the reply named none by its exact title).
 const FOCUS_FACT = "_focusTitles";
 export function focusTitlesOf(facts: Record<string, unknown> | null | undefined): string[] {
@@ -1479,9 +1500,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The model is called only for what needs a lookup or a new answer.
     const directOk = first.problems.every((p) => DIRECT_KINDS.has(p.kind as string));
     const pre = directOk ? salvage(original) : null;
-    const direct = !!pre && !pre.hollow && !pre.fragment && !pre.lostPass && !pre.lostLink && pre.removed.length <= 1 && wordCount(pre.o.reply) >= 8;
+    // Never when the cut sentence was the answer: it holds a word of her ask and what is left says it only negated or not
+    // at all (dev live round on dcf2158e: "רוצה שחור" lost "בשחור יש את ה-Heavyweight Hoodie" and kept "Charcoal, לא שחור").
+    const answerCut = !!pre && cutTheAnswer(pre.removed, pre.o.reply, String(opts.incomingMessage ?? ""));
+    const direct = !!pre && !answerCut && !pre.hollow && !pre.fragment && !pre.lostPass && !pre.lostLink && pre.removed.length <= 1 && wordCount(pre.o.reply) >= 8;
     if (direct) (trace as any).rewriteSkipped = "direct_clean";
-    else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
+    else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}${answerCut ? "answerCut " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
     if (!direct) try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       if (left() < 4000) { (trace as any).rewriteCut = "budget"; throw Object.assign(new Error("no time left for a rewrite"), { name: "RewriteDeadline" }); }
@@ -2263,6 +2287,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // After a cut, "גם כן" points at a sentence that is gone ("ברוקלין היא אפשרות קלילה ונשפכת גם כן.").
       if (Number((trace as any).cutSentences ?? 0) > 0) { const a = dropOrphanAlso(reply); if (a !== reply) { reply = a; (trace as any).orphanAlsoCut = true; } }
     }
+    // A title repeated in brackets after itself ("Poplin Shirt Dress (Poplin Shirt Dress)") once.
+    if (reply) { const un = reply.replace(/([\p{L}\p{N}][^()\n]{2,80}?)\s*\(\s*\1\s*\)/gu, "$1"); if (un !== reply) { reply = un; (trace as any).titleEchoFixed = true; } }
     // A slash form ("תשלחו/י", "נכון/ת") is never sent: the neutral form stays (prod replay of b369e939).
     if (reply) { const sl = withoutSlashForms(reply); if (sl !== reply) { reply = sl; (trace as any).slashFormFixed = true; } }
     // A reply that ends on a bare word ("הנה כמה אפשרויות שיש כרגע במלאי") gets its full stop.

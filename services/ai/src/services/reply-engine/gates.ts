@@ -947,12 +947,27 @@ const OPTION_SIZE = /\b(?:XS|S|M|L|XL|XXL|\d{2}(?:\.\d)?\s?(?:cm|eu|us|EU|US))\b
 const OPTION_WORDS = { test: (t: string) => OPTION_HE.test(t) || OPTION_EN.test(t) || OPTION_SIZE.test(t) };
 const VARIATION_TOOL = /variation|variant/i;
 /** Sentences claiming stock or a price for one option when no variation data was read this turn. */
+const OPTION_COLOURS: Array<[string, string]> = [["שחור", "black"], ["לבן", "white"], ["אפור", "grey"], ["אפור", "gray"], ["כחול", "blue"], ["נייבי", "navy"], ["אדום", "red"], ["ירוק", "green"], ["ורוד", "pink"], ["חום", "brown"], ["בז'", "beige"], ["חול", "sand"], ["צהוב", "yellow"], ["סגול", "purple"], ["כתום", "orange"]];
 export function optionClaimsWithoutVariations(reply: string, incoming: string, tools: ToolRunRecord[]): string[] {
   if (!OPTION_WORDS.test(incoming ?? "")) return [];
   // Variation data this turn: a variation read, or a product read that carries its variants with stock.
   const read = tools.some((t) => t.outcome === "ok" && (VARIATION_TOOL.test(t.tool) || /"variants?"\s*:\s*\[\s*\{[^\]]*(?:available|inventory|stock)/i.test(String(t.content ?? ""))));
   if (read) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => STOCK_WORDS.test(x) && OPTION_WORDS.test(x) && !/\?\s*$/.test(x.trim())).map((x) => x.trim().slice(0, 120));
+  // The product's own read lists the option ("Color: Black, Sand"): "בשחור יש את X" says it exists, which that read
+  // grounds; only a stock claim (במלאי, אזל, in stock) still needs the variations (dev live round on dcf2158e).
+  // Per product: only the read of the product the sentence names grounds it (the read of another product listing Black
+  // never grounds "בשחור יש את X"); with no product named, only when a single product was read.
+  const reads = tools.filter((t) => t.outcome === "ok" && /get_product/i.test(t.tool));
+  const nameOf = (t: ToolRunRecord) => String(/"(?:name|title)"\s*:\s*"([^"]+)"/.exec(String(t.content ?? ""))?.[1] ?? "").toLowerCase();
+  const readsFor = (x: string) => {
+    const lx = x.toLowerCase();
+    // Every word of the product's name, from 3 letters ("Zip Hoodie" needs "zip" too, never "hoodie" alone).
+    const named = reads.filter((t) => { const n = nameOf(t); const ws = n.split(/\s+/).filter((w) => w.length >= 3); return !!n && (lx.includes(n) || (ws.length > 0 && ws.every((w) => lx.includes(w)))); });
+    return named.length ? named : new Set(reads.map(nameOf)).size === 1 ? reads : [];
+  };
+  const optionListed = (x: string) => { const text = readsFor(x).map((t) => String(t.content ?? "")).join("\n").toLowerCase(); return !!text && OPTION_COLOURS.some(([he, en]) => new RegExp(`(?<![\\u0590-\\u05FF])[בהו]?${he}`, "u").test(x) && (new RegExp(`\\b${en}\\b`).test(text) || text.includes(he))); };
+  const stockClaim = (x: string) => /(?<![\u0590-\u05FF])[וש]?(?:במלאי|אזל|אזלה|אזלו|חזר\s+למלאי|יחזור\s+למלאי)(?![\u0590-\u05FF])|\b(?:in stock|out of stock|sold out|back in stock)\b/iu.test(x);
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).filter((x) => STOCK_WORDS.test(x) && OPTION_WORDS.test(x) && !/\?\s*$/.test(x.trim()) && !(optionListed(x) && !stockClaim(x))).map((x) => x.trim().slice(0, 120));
 }
 
 // A payment or checkout failure is a support case, never a product list (prod replay 2026-11-17:
@@ -1612,6 +1627,18 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
     const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
     const narrow = String((last?.args as any)?.query ?? words).split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
     out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: narrow, ...few }) } });
+  }
+  // An option claim with the product known (its read this turn) and a variations tool offered: its variations are read
+  // before any cut (dev live round on dcf2158e: "בשחור יש את ה-Heavyweight Hoodie" was true, the next turn showed it).
+  const variationTool = toolsOffered.find((n) => /(?:^|\.)list_product_variations$/.test(n));
+  const optionClaim = problems.find((p) => p.kind === "option_without_variation") as { claims?: string[] } | undefined;
+  if (optionClaim && variationTool && !done.some((t) => VARIATION_TOOL.test(t.tool))) {
+    const reads = done.filter((t) => /get_product$/.test(t.tool) && t.outcome === "ok");
+    const nameOf = (t: ToolRunRecord) => String(/"(?:name|title)"\s*:\s*"([^"]+)"/.exec(String(t.content ?? ""))?.[1] ?? "").toLowerCase();
+    const said = (optionClaim.claims ?? []).join(" ").toLowerCase();
+    const pick = reads.find((t) => { const n = nameOf(t); return !!n && (said.includes(n) || n.split(/\s+/).filter((w) => w.length >= 4).some((w) => said.includes(w))); }) ?? (reads.length === 1 ? reads[0] : null);
+    const id = (pick?.args as any)?.product_id ?? (pick?.args as any)?.id;
+    if (id != null) out.unshift({ id: "auto_variations_1", function: { name: variationTool, arguments: JSON.stringify({ product_id: String(id) }) } });
   }
   // An order said to be missing: the customer's own orders, by the identity the channel proves (no selector).
   const ownOrders = toolsOffered.find((n) => /(?:list_customer_orders|get_customer_orders|find_latest_order)$/.test(n));
