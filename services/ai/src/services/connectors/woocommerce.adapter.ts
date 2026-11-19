@@ -896,9 +896,9 @@ export function storeSellsBySize(storeUrl: string): boolean {
  * catalogue (its own ids, which the cards then use); a store without them
  * ignores the parameter and answers its one catalogue.
  */
-async function wholeCatalog(auth: string, base: string, lang: string | null): Promise<any[] | null> {
+async function wholeCatalog(auth: string, base: string, lang: string | null, freshMs = CATALOG_FRESH_MS): Promise<any[] | null> {
   const key = `catalog|${base}|${lang ?? ""}`;
-  return swrCached(catalogCache, key, CATALOG_FRESH_MS, CATALOG_STALE_MS, async () => {
+  return swrCached(catalogCache, key, freshMs, CATALOG_STALE_MS, async () => {
     // The loader always reads the store itself, never the local answers below (a
     // background refresh started inside a search must reach the store).
     const page = (n: number) => searchScope.exit(async () => {
@@ -925,8 +925,13 @@ async function wholeCatalog(auth: string, base: string, lang: string | null): Pr
  * Fill the store caches a search needs (categories and the whole catalogue, in
  * every language a turn may read), off any customer's turn: at boot and on a
  * timer (woo-cache-warmer.service). Read-only GETs; never throws.
+ *
+ * nextPassMs: how long until the next warm pass. A catalogue that would go stale before then (its age is above
+ * the fresh window less that interval) is reloaded now, in the background, by the same loader and through the
+ * same store request slots as any stale refresh. Without it a pass that found the catalogue fresh at 8 minutes
+ * left it, and searches read the store live from minute 10 until the pass at 16.
  */
-export async function warmWooCatalog(credentials: Record<string, any>, config: Record<string, any>): Promise<{ ms: number; ok: boolean }> {
+export async function warmWooCatalog(credentials: Record<string, any>, config: Record<string, any>, nextPassMs = 0): Promise<{ ms: number; ok: boolean }> {
   const t0 = Date.now();
   try {
     const consumerKey = credentials.consumerKey || credentials.consumer_key;
@@ -939,7 +944,7 @@ export async function warmWooCatalog(credentials: Record<string, any>, config: R
     const langs: Array<string | null> = productLanguage({}, config) ? [null, "he", "en"] : [null, "he"];
     const allowed = categoryAllowList(config);
     await Promise.all([
-      ...langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l).catch(() => null)]),
+      ...langs.flatMap((l) => [storeCategories(auth, base, l), wholeCatalog(auth, base, l, Math.max(0, CATALOG_FRESH_MS - nextPassMs)).catch(() => null)]),
       ...(allowed ? [allowedProductIds(auth, base, allowed).catch(() => null)] : []),
     ]);
     // Each category's members as the store lists them (only those past their hour are read again).
