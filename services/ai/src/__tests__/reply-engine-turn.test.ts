@@ -3044,3 +3044,36 @@ describe("rating of the dcf2158e prod replay, through a whole turn", () => {
     expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products").map((d) => String(d.args.query))).not.toContain("להזמין");
   });
 });
+
+describe("dev live round on 51d0273e (round k), through a whole turn", () => {
+  it("★ 1: \"רוצה שחור\" after three hoodies searches the shared noun with the colour, never the carded one alone", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _focusTitles: JSON.stringify(["Heavyweight Hoodie (Black)", "Zip Hoodie", "Pullover Hoodie"]) }, offeredItems: [{ ref: "id:78", title: "Zip Hoodie", productId: "78", at: new Date().toISOString() }], pending: [], turnCount: 2 });
+    try {
+      h.responses.push({ toolCalls: [respond("k1", { reply: "לא מצאתי בקטלוג התאמה ל-Zip Hoodie בשחור." })] }, { toolCalls: [respond("k2", { reply: "יש Heavyweight Hoodie בשחור." })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: "רוצה שחור" }, "autonomous");
+      expect(h.dispatched.find((d) => d.name === "woocommerce.list_products")?.args.query).toMatch(/^Hoodie שחור$/);
+    } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  });
+  it("★ 4: a first English message gets the reply-language line; a Hebrew one does not", async () => {
+    h.history = [{ direction: "INBOUND", body: "do you have a hoodie?", metadata: null }];
+    h.responses.push({ toolCalls: [respond("e1", { reply: "Yes, we have hoodies." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "do you have a hoodie?" }, "autonomous");
+    h.history = null;
+    expect(JSON.stringify(h.calls[0].messages)).toMatch(/reply in English/);
+    h.calls.length = 0;
+    h.responses.push({ toolCalls: [respond("e2", { reply: "כן, יש קפוצ'ונים." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם קפוצ'ון?" }, "autonomous");
+    expect(JSON.stringify(h.calls[0].messages)).not.toMatch(/Reply language/);
+  });
+  it("★ 6: the audit row carries the search arguments and the tool wait", async () => {
+    h.responses.push({ toolCalls: [tc("s0", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("s1", { reply: "יש לנו Canvas Tote, תיק בד חזק." })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    const audit = h.audits.find((a) => a.data.action === "ai.bot_turn");
+    expect(audit.data.metadata.toolWaitMs).toBeGreaterThanOrEqual(0);
+    // The harness dispatches through its own mock; searchArgs is filled on the adapter path (as the replay line is),
+    // so its wiring into the audit row is checked in the source.
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/searchArgs: Array\.isArray\(\(trace as any\)\.searchArgs\) \? \(trace as any\)\.searchArgs\.slice\(0, 6\)/);
+  });
+});

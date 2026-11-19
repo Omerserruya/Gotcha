@@ -278,7 +278,12 @@ const herCardTalk = (i: { incomingMessage?: string; recentInbound?: string[] }) 
 // A sentence that names or points at a product card, whatever she wrote.
 const PRODUCT_CARD = /(?<![\u0590-\u05FF])(?:[בהל]?כרטיס(?:י)?\s+(?:ה)?מוצר|[בהל]?כרטיס\s+של\s+(?:ה)?מוצר|[בהלו]?(?:ה)?כרטיסים|[בהל]?כרטיס(?:\s+[\u0590-\u05FF]+){0,2}\s+(?:למטה|למעלה|שלמעלה|שלמטה|כאן|הראשון|השני|השלישי|ששלחתי|ששלחנו|המצורף)|[בהל]?כרטיס\s+(?:הראשון|השני|השלישי|שלמעלה|שלמטה|המצורף)|(?:מופיע|מופיעה|מופיעים|מופיעות|רואים|רואה|תראי|תראה|ראי|ראו|תסתכלי|תסתכל)\s+(?:[\u0590-\u05FF]+\s+){0,3}?[בהל]?כרטיס)(?![\u0590-\u05FF])|\b(?:product cards?|cards? (?:below|above)|the (?:first|second) card)\b/iu;
 /** A bare payment-card mention: the card word, no product card named or pointed at. */
-const barePaymentCard = (x: string) => /כרטיס|\bcards?\b/iu.test(x) && !PRODUCT_CARD.test(x);
+// A see/appear verb before the card ("אישור מופיע בכרטיס") points at a product card only with no payment word in the
+// sentence (dev round on 51d0273e: her approval on her card).
+const SEE_CARD = /(?<![\u0590-\u05FF])(?:מופיע|מופיעה|מופיעים|מופיעות|רואים|רואה|תראי|תראה|ראי|ראו|תסתכלי|תסתכל)\s+(?:[\u0590-\u05FF]+\s+){0,3}?[בהל]?כרטיס(?![\u0590-\u05FF])/u;
+const PAYMENT_WORD = /(?<![\u0590-\u05FF])[הבול]?(?:אישור|חיוב|עסקה|תשלום|זיכוי|אשראי)(?![\u0590-\u05FF])/u;
+const barePaymentCard = (x: string) => /כרטיס|\bcards?\b/iu.test(x) && !(PRODUCT_CARD.test(x) && !(SEE_CARD.test(x) && !PRODUCT_CARD_POINTED.test(x) && PAYMENT_WORD.test(x)));
+const PRODUCT_CARD_POINTED = /(?<![\u0590-\u05FF])(?:[בהל]?כרטיס(?:י)?\s+(?:ה)?מוצר|[בהל]?כרטיס\s+של\s+(?:ה)?מוצר|[בהלו]?(?:ה)?כרטיסים|[בהל]?כרטיס(?:\s+[\u0590-\u05FF]+){0,2}\s+(?:למטה|למעלה|שלמעלה|שלמטה|כאן|הראשון|השני|השלישי|ששלחתי|ששלחנו|המצורף)|[בהל]?כרטיס\s+(?:הראשון|השני|השלישי|שלמעלה|שלמטה|המצורף))(?![\u0590-\u05FF])|\b(?:product cards?|cards? (?:below|above)|the (?:first|second) card)\b/iu;
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
@@ -385,7 +390,14 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
       // A filtered search (a price, stock, a type or an option) proves nothing about the item itself
       // (Shopify's search is in stock only unless told otherwise).
       const asBroad = ranFor.filter((t) => !filteredSearch(t) && query(t).every((x) => terms.some((w) => x.includes(w) || w.includes(x))));
-      grounded = asBroad.length > 0 && !returned;
+      // An empty, unfiltered search no wider than the claim backs it too (dev round on 6320af2f: "ג'ינס" came back
+      // empty, so there is no black jeans), whatever the other searches of the turn returned.
+      // Every word of the query counts, short ones too ("משטח עץ" is narrower than "משטחי במבוק", never within it).
+      const bare = (x: string) => x.replace(/['׳"״]/g, "").toLowerCase();
+      const claimWords = (clause.match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
+      const rawWords = (t: ToolRunRecord) => (Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" ").match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
+      const emptyWithin = searches.some((t) => t.outcome === "empty" && PRODUCT_TOOL.test(t.tool) && !filteredSearch(t) && rawWords(t).length > 0 && rawWords(t).every((x) => claimWords.some((w) => w === x || (x.length >= 3 && w.includes(x)))));
+      grounded = (asBroad.length > 0 && !returned) || emptyWithin;
     }
     if (!grounded) out.push(sentence.trim().slice(0, 120));
   }
@@ -728,12 +740,18 @@ const STATEMENT_Q = /(?:^|(?<=[.!]\s))(יש\s+(?:כמה|לנו)(?:(?!\s(?:איז
 
 // "One of these payment methods" with no list, "the necklaces shown here" with no card (prod
 // replay 2026-11-17): a pointer at a list or cards the outgoing message does not carry.
-const DANGLING = /(?<![\u0590-\u05FF])(?:[\u0590-\u05FF]{2,}\s+(?:האלה|האלו|הבאים|הבאות|שלהלן)|(?:שמופיע|שמופיעה|שמופיעים|שמופיעות|המופיעים|המופיעות)\s+(?:כאן|למטה|בהמשך)|(?:כאן\s+)?למטה|ברשימה\s+(?:הבאה|כאן|למטה))(?![\u0590-\u05FF])|\b(?:the following|listed (?:below|here)|(?:shown|see) below|below|one of these|these (?:options|products|items|methods|ones|models)|from (?:the|this) list)\b/iu;
+// "להיכנס לאחת מהן", "לבחור באחד מהם": a plural pointer to act on; a bare "אחד מהם" may point back at her words.
+const DANGLING = /(?<![\u0590-\u05FF])(?:(?:ל|ב)(?:אחת|אחד)\s+מה(?:ן|ם)|[\u0590-\u05FF]{2,}\s+(?:האלה|האלו|הבאים|הבאות|שלהלן)|(?:שמופיע|שמופיעה|שמופיעים|שמופיעות|המופיעים|המופיעות)\s+(?:כאן|למטה|בהמשך)|(?:כאן\s+)?למטה|ברשימה\s+(?:הבאה|כאן|למטה))(?![\u0590-\u05FF])|\b(?:the following|listed (?:below|here)|(?:shown|see) below|below|one of these|these (?:options|products|items|methods|ones|models)|from (?:the|this) list)\b/iu;
 const HAS_LIST = /(?:^|\n)\s*(?:[•\-*]|\d+[.)])\s+\S/;
 /** Sentences that point at a list or cards that do not go out with the reply. */
+// "איזו מהן ראית", "ביניהן": a plural pointer back at items; it dangles when nothing before it in the reply names them
+// (dev round on 6320af2f: the colour sentence was cut and "לא בטוח איזו מהן ראית" went out alone).
+// A bare "אחד מהם" may point back at her own words ("האם גם אחד מהם נכשל?"); "איזו מהן" asks her to pick between ours.
+const PLURAL_BACK = /(?<![\u0590-\u05FF])(?:(?:איזו|איזה|איזהו)\s+מה(?:ן|ם)|ביניה(?:ן|ם))(?![\u0590-\u05FF])|\b(?:which (?:one )?of them|between them)\b/iu;
 export function danglingReferences(reply: string, carriesList: boolean): string[] {
   if (carriesList || HAS_LIST.test(reply ?? "")) return [];
-  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => DANGLING.test(x)).map((x) => x.trim().slice(0, 120));
+  const sentences = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
+  return sentences.filter((x, k) => DANGLING.test(x) || (k === 0 && PLURAL_BACK.test(x))).map((x) => x.trim().slice(0, 120));
 }
 
 // The same advice or warning again, in other words (prod replay 2026-11-17: one warning in five
@@ -1532,7 +1550,7 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
 const allDescribing = (q: string) => q.split(/\s+/).every((w) => COLOUR_WORD.test(w) || PLAIN_ADJECTIVES.has(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w));
 const nounWord = (w: string) => /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(w) && !PLAIN_ADJECTIVES.has(w) && !/^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w) && !talkWord(w) && !queryStop(w);
 // A message about a product thing: a have/was/want/seen verb governing the noun ("הייתה מטפחת", "יש לכם X", "מחפשת X").
-const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|לחפש|למצוא|רוצה|רוצים|ראיתי|קניתי|הזמנתי)\s+(?:את\s+)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
+const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|לחפש|למצוא|רוצה|רוצים|ראיתי|קניתי|הזמנתי)\s+(?:(?:אצלכם|אצלך|באתר|בחנות|פה|כאן|בסטורי|באינסטגרם|בפייסבוק)\s+)?(?:את\s+)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
 // Never the governed noun (the 7a3bc2a3 probe on 26 real intents): a frame or abstract word, an adverb, an infinitive.
 const NOT_LENT = new Set(["המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק", "אחריות", "החזרות", "שירות", "מבצעים"]);
 // In the governed slot a word ending in י is a construct noun ("למצוא משטחי הזזה"), never an adjective.
@@ -1850,7 +1868,10 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en"): s
 }
 
 /** An absence the search could not back, and nothing found: say what is true, not a hand-off (prod replay 6). */
-export function notFoundReply(locale: "he" | "en"): string {
+export function notFoundReply(locale: "he" | "en", incoming = ""): string {
+  // A kind of product with no name ("יש לכם ג'ינס שחור?", dev round on 6320af2f) is no "model by that name".
+  const named = /\d|[A-Za-z]{2,}|["״'׳][^"״'׳]{2,}["״'׳]/.test(String(incoming ?? ""));
+  if (!named) return locale === "he" ? "לא מצאתי את זה בקטלוג כרגע. מה חשוב לך בו? כך נוכל להציע משהו מתאים." : "I couldn't find that in the catalogue right now. What matters to you in it? Then we can suggest something that fits.";
   // Asks what the customer needs, never hands the search back to them (prod replay 2026-11-17).
   return locale === "he" ? "לא מצאתי דגם בשם הזה. בשביל מה זה נחוץ לך? כך נוכל להציע את המתאים." : "I didn't find a model by that name. What do you need it for? Then we can suggest what fits.";
 }
@@ -2227,7 +2248,7 @@ const ATTRIBUTES: RegExp[] = [
   /(?<![\u0590-\u05FF])[הוב]?(?:מתקפל|מתקפלת|מתקפלים)|\bfoldable\b/iu,
   /(?<![\u0590-\u05FF])[הוב]?(?:מדיח|למדיח)|\bdishwasher\b/iu,
 ];
-const COLOURS = ["שחור", "לבן", "אדום", "כחול", "ירוק", "צהוב", "ורוד", "אפור", "חום", "סגול", "כתום", "זהב", "כסף", "בז'", "black", "white", "red", "blue", "green", "yellow", "pink", "grey", "gray", "brown", "purple", "orange", "gold", "silver", "beige"];
+const COLOURS = ["תכלת", "שחור", "לבן", "אדום", "כחול", "ירוק", "צהוב", "ורוד", "אפור", "חום", "סגול", "כתום", "זהב", "כסף", "בז'", "black", "white", "red", "blue", "green", "yellow", "pink", "grey", "gray", "brown", "purple", "orange", "gold", "silver", "beige"];
 const COLOUR_RE = (c: string) => new RegExp(/^[a-z]/i.test(c) ? `\\b${c}\\b` : `(?<![\\u0590-\\u05FF])[הובמ]?${c.replace("'", "['׳]")}(?:ה|ים|ות)?(?![\\u0590-\\u05FF])`, "iu");
 const NOT_A_CLAIM = /(?<![\u0590-\u05FF])(?:לא|אין|אינו|אינה|אינם|ללא)(?![\u0590-\u05FF])|\b(?:not|no|without)\b|\?\s*$/iu;
 const PRODUCT_COLOUR_SAID = /(?<![\u0590-\u05FF])[וש]?(?:מגיע|מגיעה|מגיעים|מגיעות|קיים|קיימת|קיימים|קיימות|יש|זמין|זמינה|זמינים|זמינות|נמכר|נמכרת|מוצע|מוצעת)(?![\u0590-\u05FF])[^.!?\n]{0,30}(?<![\u0590-\u05FF])(?:גם\s+)?(?:ב[\u0590-\u05FF]{2,}|גוון|צבע)|\b(?:comes? in|available in|also in)\b/iu;
@@ -2247,6 +2268,14 @@ function productSubject(sentence: string, evidence: string, titles: string[]): b
   const bare = first.replace(/^ה/u, "");
   return first !== bare && bare.length >= 3 && !NOT_PRODUCT_SUBJECT.has(bare) && new RegExp(`(?<![\\p{L}])${bare}(?![\\p{L}])`, "u").test(ev);
 }
+// A Hebrew colour is grounded by its English name in an English catalogue ("תכלת" by "Light Blue", "כחול-לבן" by "Blue
+// Stripe ... blue-and-white", dev round on 51d0273e).
+const COLOUR_EN: Record<string, string[]> = { שחור: ["black"], לבן: ["white", "ivory", "cream"], אדום: ["red", "burgundy"], כחול: ["blue", "navy", "denim"], ירוק: ["green", "olive", "khaki"], צהוב: ["yellow", "mustard"], ורוד: ["pink", "rose", "blush"], אפור: ["grey", "gray", "charcoal", "melange"], חום: ["brown", "tan", "camel", "chocolate"], סגול: ["purple", "lilac", "violet"], כתום: ["orange", "rust"], זהב: ["gold"], כסף: ["silver"], "בז'": ["beige", "sand", "nude"], תכלת: ["light blue", "sky blue", "baby blue"] };
+function colourInEvidence(c: string, evidence: string): boolean {
+  if (COLOUR_RE(c).test(evidence)) return true;
+  const ev = evidence.toLowerCase();
+  return (COLOUR_EN[c] ?? []).some((en) => new RegExp(`\\b${en}\\b`, "i").test(ev));
+}
 export function ungroundedAttribute(reply: string, evidence: string, incoming = "", titles: string[] = []): string[] {
   const ev = unfinal(String(evidence ?? "").toLowerCase());
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => {
@@ -2259,9 +2288,9 @@ export function ungroundedAttribute(reply: string, evidence: string, incoming = 
     // הוורידים: כחולים..." names the product in another clause).
     if (explanationAsk(incoming)) {
       const said = x.split(/[:;,]|\s-\s/u).filter((c) => PRODUCT_COLOUR_SAID.test(c) || productSubject(c, String(evidence ?? ""), titles));
-      return said.some((c) => COLOURS.some((col) => COLOUR_RE(col).test(c) && !COLOUR_RE(col).test(String(evidence ?? ""))));
+      return said.some((c) => COLOURS.some((col) => COLOUR_RE(col).test(c) && !colourInEvidence(col, String(evidence ?? ""))));
     }
-    return COLOURS.some((c) => COLOUR_RE(c).test(x) && !COLOUR_RE(c).test(String(evidence ?? "")));
+    return COLOURS.some((c) => COLOUR_RE(c).test(x) && !colourInEvidence(c, String(evidence ?? "")));
   }).map((x) => x.trim().slice(0, 120));
 }
 
@@ -2916,7 +2945,7 @@ export function asksAboutProduct(incoming: string): boolean {
 }
 // "יש כמה מטפחות", "יש מגוון תיקים": several products exist; never the bare "יש לנו" (policy answers: "יש לנו
 // משלוח חינם", "יש לנו אחריות לשנה", the pre-check of 51d0273e).
-const PRODUCTS_EXIST = /(?<![\u0590-\u05FF])(?:יש\s+(?:לנו\s+)?(?:כמה|מגוון|מספר)|קיימות|קיימים)\s+([\u0590-\u05FF]{3,})|\b(?:we have (?:a few|several|some)|there are (?:a few|several|some))\s+(\w{3,})/iu;
+const PRODUCTS_EXIST = /(?<![\u0590-\u05FF])(?:יש\s+(?:(?:לנו|אצלנו|באתר|בחנות|כאן|במלאי)\s+)?(?:כמה|מגוון|מספר)|קיימות|קיימים)\s+([\u0590-\u05FF]{3,})|\b(?:we have (?:a few|several|some)|there are (?:a few|several|some))\s+(\w{3,})/iu;
 const SEARCH_PROMISE = /(?<![\u0590-\u05FF])[וש]?(?:נחפש|אחפש|נבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|אבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|נמצא\s+לך)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ll| will) (?:search|look (?:for|it up)|check (?:the )?(?:stock|catalog(?:ue)?)))\b/iu;
 /** A product claim or a promise to search, with a store offered and no store read this turn, on a message about a product. */
 export function claimsOrPromisesUnsearched(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
@@ -2926,7 +2955,9 @@ export function claimsOrPromisesUnsearched(reply: string, incoming: string, tool
   // The claimed noun is no policy word (משלוח, אחריות...).
   const m = PRODUCTS_EXIST.exec(r);
   const claim = !!m && !NOT_LENT.has(bareNoun(String(m[1] ?? m[2] ?? "")));
-  return (claim || SEARCH_PROMISE.test(r)) && asksAboutProduct(incoming);
+  // "אין מידע מאומת על ... המלאי" with the store offered and nothing read: an unsearched answer too.
+  const noInfo = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי\s+|לנו\s+)?(?:כרגע\s+)?מידע(?:\s+מאומת)?\s+(?:על|לגבי)[^.!?\n]{0,40}(?:מלאי|צבע|גוון|גווני|מידה|מידות|זמינות)|לא\s+(?:בדקתי|בדקנו)\s+(?:את\s+)?(?:ה)?מלאי)(?![\u0590-\u05FF])|\b(?:no (?:verified )?(?:information|info) (?:on|about) (?:the )?(?:stock|colou?rs?|sizes?|availability))\b/iu.test(r);
+  return (claim || SEARCH_PROMISE.test(r) || noInfo) && asksAboutProduct(incoming);
 }
 
 /**

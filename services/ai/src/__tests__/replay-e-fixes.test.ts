@@ -2,7 +2,9 @@
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
 import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass, cutTheAnswer } from "../services/reply-engine/engine";
-import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer, claimsOrPromisesUnsearched, storeQueryWords } from "../services/reply-engine/gates";
+import { optionClaimsWithoutVariations, cleanStoreQuery, withoutPointer, claimsOrPromisesUnsearched, storeQueryWords, asksAboutProduct, danglingReferences, ungroundedAbsence, notFoundReply } from "../services/reply-engine/gates";
+import { sharedTitleNoun } from "../services/reply-engine/engine";
+import { buildTurnPart } from "../services/reply-engine/prompt";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds, attributeOnlyAsk, fallbackQueryOf, withFocusNoun } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
@@ -847,5 +849,76 @@ describe("abed8d54 rerun: the payment-card waiver is per sentence", () => {
     expect(codes).toContain("card_narration");
     // A bare charge on her card in the same payment talk stays waived.
     expect(refs(await g("החיוב בכרטיס יופיע תוך שלושה ימים.", "מה אפשרויות התשלום?"))).toEqual([]);
+  });
+});
+
+describe("dev live round on 51d0273e (round k)", () => {
+  const W = ["woocommerce.list_products", "search_knowledge"];
+  it("★ 1: the noun the last search's products share", () => {
+    expect(sharedTitleNoun(["Heavyweight Hoodie (Black)", "Zip Hoodie", "Pullover Hoodie"])).toBe("Hoodie");
+    expect(sharedTitleNoun(["Zip Hoodie"])).toBeNull();
+    expect(fallbackQueryOf("רוצה שחור", [], null, { substring: true }, { focus: "Hoodie" })).toBe("Hoodie שחור");
+  });
+  it("★ 2: \"ראיתי אצלכם X, היא עדיין ישנה?\" is about a product; a place word never hides a claim; no-stock-info with no search is unsearched", () => {
+    const her = "ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?";
+    expect(asksAboutProduct(her)).toBe(true);
+    expect(claimsOrPromisesUnsearched("יש באתר כמה חולצות, אבל אין מידע מאומת על גווני הכחול או על המלאי העדכני.", her, [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("יש אצלנו כמה חולצות כחולות.", her, [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("יש בחנות מגוון חולצות.", "יש לכם חולצה כחולה?", [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("אין לנו מידע מאומת על המלאי של החולצה.", her, [], W)).toBe(true);
+    // With a store read this turn none of it fires.
+    expect(claimsOrPromisesUnsearched("יש אצלנו כמה חולצות כחולות.", her, [{ tool: "woocommerce.list_products", outcome: "ok" } as any], W)).toBe(false);
+  });
+  it("★ 3: an English catalogue grounds the Hebrew colour; a plural pointer with nothing attached dangles", () => {
+    const ev = "Oxford Button-Down Shirt Color: Light Blue, White\nStriped Cotton Shirt Color: Blue Stripe. A fine blue-and-white bengal stripe shirt";
+    const her = "ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?";
+    expect(ungroundedAttribute("בטח, יש חולצת אוקספורד בתכלת וגם חולצת כותנה בפסים כחול-לבן.", ev, her, ["Oxford Button-Down Shirt", "Striped Cotton Shirt"])).toEqual([]);
+    expect(ungroundedAttribute("יש חולצת אוקספורד בכחול בהיר.", ev, her, ["Oxford Button-Down Shirt"])).toEqual([]);
+    expect(ungroundedAttribute("יש חולצת אוקספורד בירוק.", ev, her, ["Oxford Button-Down Shirt"])).toHaveLength(1);
+    expect(danglingReferences("חולצת האוקספורד כרגע במבצע, אז אפשר להיכנס לאחת מהן ולראות אם זו החולצה שראית.", false)).toHaveLength(1);
+    expect(danglingReferences("אפשר להיכנס לאחת מהן.", true)).toEqual([]);
+    expect(danglingReferences("האם גם אחד מהם נכשל?", false)).toEqual([]);
+  });
+  it("★ 4: an English message gets the reply-language line", () => {
+    expect(buildTurnPart({ stateText: "-", summary: null, knowledge: null, page: null, closedHours: null, pendingApprovals: [], customer: null, nowIso: "x", replyLanguage: "English" })).toMatch(/reply in English/);
+    expect(buildTurnPart({ stateText: "-", summary: null, knowledge: null, page: null, closedHours: null, pendingApprovals: [], customer: null, nowIso: "x" })).not.toMatch(/Reply language/);
+  });
+  it("★ 5: her approval on her card (\"אישור מופיע בכרטיס\") is no product card; a pointed product card still is", async () => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    const her = "אין לי מספר הזמנה אבל בכרטיס רשום שאושר";
+    const g = (reply: string) => gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: her, recentInbound: [her], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any).problems.map((x: any) => x.kind);
+    expect(g("מבינים, אבל אישור שמופיע בכרטיס לא מאשר שההזמנה נקלטה.")).not.toContain("card_reference");
+    expect(g("אישור מופיע בכרטיס, אבל ההזמנה עוד לא נקלטה.")).not.toContain("card_reference");
+    expect(g("תראי בכרטיס הראשון את הדגם.")).toContain("card_reference");
+  });
+});
+
+describe("dev recheck on 6320af2f", () => {
+  it("★ 8: the Hebrew colours of an English catalogue are the same fact; a lone plural pointer dangles", () => {
+    const ev = "Oxford Button-Down Shirt Color: Light Blue, White\nStriped Cotton Shirt Color: Blue Stripe. A fine blue-and-white bengal stripe shirt\nCropped Hoodie Color: Ecru, Dusty Rose\nZip Hoodie Color: Charcoal";
+    expect(ungroundedAttribute("יש באתר חולצת אוקספורד בתכלת, וגם חולצת כותנה בפסים כחול-לבן.", ev, "ראיתי אצלכם חולצה מאוד יפה בגווני כחול, היא עדיין ישנה?", ["Oxford Button-Down Shirt", "Striped Cotton Shirt"])).toEqual([]);
+    expect(ungroundedAttribute("ה-Cropped Hoodie מגיע באקרו או ורוד מעושן, וה-Zip Hoodie בפחם.", ev, "יש לכם קפוצ'ון?", ["Cropped Hoodie", "Zip Hoodie"])).toEqual([]);
+    expect(danglingReferences("לא בטוח איזו מהן ראית, תוכלו לתאר אם היא חלקה או מפוספסת?", false)).toHaveLength(1);
+    // With the items named before it, the pointer has its antecedent.
+    expect(danglingReferences("יש חולצת אוקספורד בתכלת וחולצת כותנה בפסים. לא בטוח איזו מהן ראית, תוכלו לתאר?", false)).toEqual([]);
+    expect(danglingReferences("לא בטוח איזו מהן ראית?", true)).toEqual([]);
+  });
+  it("★ 9: an empty search of the product word backs \"no black jeans\"; a narrower empty search still does not", () => {
+    const e = (q: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "empty", content: "[]" }) as any;
+    const ok = (q: string, c: string) => ({ tool: "woocommerce.list_products", args: { query: q }, outcome: "ok", content: c }) as any;
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("black", '[{"name":"Heavyweight Hoodie"}]')])).toEqual([]);
+    expect(ungroundedAbsence("אין לנו סנובורד.", [e("snowboard beginner"), e("סנובורד למתחילים")])).toHaveLength(1);
+    // Every query word counts, a short one too: "משטח עץ" is narrower than "משטחי במבוק".
+    expect(ungroundedAbsence("משטחי במבוק אנחנו לא מוכרים.", [e("משטח עץ")])).toHaveLength(1);
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [e("ג'ינס"), ok("ג'ינס", '[{"name":"ג\'ינס שחור"}]')])).toEqual([]);
+  });
+  it("★ 9: the not-found line fits a kind of product; a named model keeps its own", () => {
+    expect(notFoundReply("he", "יש לכם ג'ינס שחור?")).not.toMatch(/דגם בשם הזה|נחוץ/);
+    expect(notFoundReply("he", "יש לכם ג'ינס שחור?")).toMatch(/לא מצאתי את זה בקטלוג/);
+    expect(notFoundReply("he", "יש לכם משטח לתמי 4?")).toMatch(/דגם בשם הזה/);
+    expect(notFoundReply("he", "יש לכם KitchenAid Artisan?")).toMatch(/דגם בשם הזה/);
+    // The engine hands it her message (the branch sits behind a failed rewrite; checked in the source).
+    const { readFileSync } = require("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/reply: notFoundReply\(locale, String\(opts\.incomingMessage \?\? ""\)\)/);
   });
 });

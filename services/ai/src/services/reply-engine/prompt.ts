@@ -206,10 +206,13 @@ export interface TurnPartInput {
   /** The playbook already opened in this conversation (kept in state): never read twice. */
   activeSkill?: string | null;
   nowIso: string;
+  /** Her language when it is not the business's (dev round on 51d0273e: a first English message answered in Hebrew). */
+  replyLanguage?: string | null;
 }
 
 export function buildTurnPart(t: TurnPartInput): string {
   const parts: string[] = [`# This turn (now ${t.nowIso})`];
+  if (t.replyLanguage) parts.push(`## Reply language\nThe customer writes in ${t.replyLanguage}: reply in ${t.replyLanguage}, whatever the language of the business's texts.`);
   if (t.customer) parts.push(`## Customer\n${t.customer}`);
   parts.push(`## State\n${t.stateText}`);
   if (t.summary) parts.push(`## Earlier in this conversation (summary)\n${t.summary}`);

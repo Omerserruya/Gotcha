@@ -529,8 +529,15 @@ const TEAM_PASS_SENTENCE = /(?<![\u0590-\u05FF])[וש]?(?:אעביר|נעביר|
 export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
+/** The word every title of the last search shares ("Heavyweight Hoodie", "Zip Hoodie", "Pullover Hoodie": "Hoodie"). */
+export function sharedTitleNoun(titles: string[]): string | null {
+  const t = titles.map((x) => String(x ?? "").replace(/\s*[(\[][^)\]]*[)\]]\s*$/u, "")).filter(Boolean);
+  if (t.length < 2) return null;
+  const words = (x: string) => (x.match(/[\p{L}']{3,}/gu) ?? []) as string[];
+  return words(t[0]).find((w) => t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
+}
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -1248,6 +1255,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const firstName = greetingName(String(contactRow?.displayName ?? "").trim());
   const customerLine = firstName ? `Name: ${firstName}` : null;
   const turnPart = buildTurnPart({
+    replyLanguage: locale === "en" ? "English" : null,
     stateText: renderState(state),
     summary: chat.length > windowed.length ? state.summary : null,
     knowledge,
@@ -1534,7 +1542,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // round on 9480dfb2: a paraphrased title left nothing in focus, and "מאיזה בד הוא עשוי?" went to the team).
       const subject = nonProductAsk(String(opts.incomingMessage ?? "")) ? null : focusTitle(focusTitlesOf(state.facts), String((output as any)?.stateUpdate?.intent ?? "").trim() || state.intent, state.offeredItems?.at(-1)?.title);
       const earlierIn = [...history].reverse().filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m.body ?? "")).filter((b) => b.trim() !== String(opts.incomingMessage ?? "").trim()).slice(0, 3);
-      const lent = fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus: subject, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
+      // A bare attribute ask ("רוצה שחור") is checked against everything the last search returned, by the noun its products
+      // share ("Hoodie"), never only the product whose card was attached (dev round on 51d0273e: the black Heavyweight
+      // Hoodie was missed because only the Zip Hoodie was carded).
+      const shared = sharedTitleNoun(focusTitlesOf(state.facts));
+      const lent = fallbackQueryOf(String(opts.incomingMessage ?? ""), earlierIn, state.intent, { substring: surface.names.some((n) => /^woocommerce\./.test(n)) }, { focus: shared ?? subject, titles: [...focusTitlesOf(state.facts), ...(state.offeredItems ?? []).map((o: any) => String(o?.title ?? ""))] });
       const auto = left() > 7000 ? autoLookups(first.problems, opts.incomingMessage ?? "", surface.names, turnTools.records, subject, lent) : [];
       if (auto.length) {
         const ta = Date.now();
@@ -1715,7 +1727,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // Only a product ask whose named item the search really did not find (prod replay 2026-11-17: on a
           // stopper or coupon question, with the model in the results).
           && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
-          output = { reply: notFoundReply(locale), stateUpdate: {}, claims: [], handoff: null, cards: [] };
+          output = { reply: notFoundReply(locale, String(opts.incomingMessage ?? "")), stateUpdate: {}, claims: [], handoff: null, cards: [] };
         } else if (grounded) {
           // The fit the model claimed was cut: the products go out with that said, never as a fit (prod replay of
           // 9480dfb2, NE'A: "טוש אני רוצה" got the list with no word that the under-eye use is unconfirmed).
@@ -2463,6 +2475,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
           // What the cleanup cut and why, the bot's own words only (internal: never read by a customer or tenant screen).
           cuts: cutFields(trace),
+          // The store searches as sent and the time spent waiting on tools (internal only).
+          searchArgs: Array.isArray((trace as any).searchArgs) ? (trace as any).searchArgs.slice(0, 6) : undefined,
+          toolWaitMs,
         } as any,
       },
     }).catch(() => {});
