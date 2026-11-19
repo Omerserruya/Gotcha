@@ -399,6 +399,8 @@ const enSkeleton = (w: string) => String(w ?? "").toLowerCase().replace(/ph/g, "
 /** A Hebrew word and a Latin one for the same thing: a colour by the colour map, or a borrowed noun by its consonants (3+). */
 export function sameAcrossLanguages(he: string, en: string): boolean {
   if (!/[\u0590-\u05FF]/.test(he) || !/^[a-z-]+$/i.test(en)) return false;
+  // Attribute words are no product noun ("קולר"/"color", the Supervisor's probe of f46b5a49).
+  if (/^(?:colou?rs?|sizes?|styles?|models?|types?|kinds?|items?|products?)$/i.test(en)) return false;
   const bareHe = he.replace(/^[הוב](?=[\u0590-\u05FF]{3,})/u, "");
   if (COLOURS.some((c) => COLOUR_RE(c).test(bareHe) && (COLOUR_EN[c] ?? []).includes(en.toLowerCase()))) return true;
   const a = heSkeleton(bareHe).replace(/(.)\1+/g, "$1"), b = enSkeleton(en);
@@ -765,7 +767,9 @@ export function nearDuplicate(reply: string, previousBotReplies: string[]): bool
 export function repeatedSentences(reply: string, previousBotReplies: string[], incoming = ""): string[] {
   // A sentence holding a content word of this turn's question answers it: no repeat, she asked again (dev round k7 on
   // 22969e1f: "במבצע כרגע יש גופיית ריב..." to "מה יש במבצע?" was cut and the rest leaned on it).
-  const asked = ((normalizeQuotes(String(incoming ?? "")).match(/[\p{L}']{4,}/gu) ?? []) as string[]).map((w) => w.toLowerCase().replace(/^[הובל](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => w.length >= 4 && !talkWord(w) && !queryStop(w));
+  // A thanks with no question asks nothing ("תודה על המשלוח").
+  const thanksOnly = /^\s*(?:תודה|תודה\s+רבה|thanks|thank you)(?![\u0590-\u05FF])/iu.test(String(incoming ?? "")) && !/\?/.test(String(incoming ?? ""));
+  const asked = thanksOnly ? [] : ((normalizeQuotes(String(incoming ?? "")).match(/[\p{L}']{4,}/gu) ?? []) as string[]).map((w) => w.toLowerCase().replace(/^[הובל](?=[\u0590-\u05FF]{3,})/u, "")).filter((w) => w.length >= 4 && !talkWord(w) && !queryStop(w));
   const answers = (x: string) => asked.some((w) => normalizeQuotes(x).toLowerCase().includes(w));
   const before = previousBotReplies.slice(-5).flatMap((p) => String(p).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map(qWords).filter((w) => w.size >= 6);
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => {

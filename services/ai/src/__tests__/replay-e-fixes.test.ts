@@ -1311,3 +1311,16 @@ describe("dev round k8, K8-1: her noun alone before any absence", () => {
     expect(nounNotTried("יש חולצת אוקספורד בתכלת.", [e("חולצה תכלת")], "יש לכם חולצה בתכלת?")).toBeNull();
   });
 });
+
+describe("probe of f46b5a49: two small edges", () => {
+  it("★ an attribute word never pairs with a Hebrew noun; a thanks asks nothing", async () => {
+    const { sameAcrossLanguages, repeatedSentences } = await import("../services/reply-engine/gates");
+    expect(sameAcrossLanguages("קולר", "color")).toBe(false);
+    expect(sameAcrossLanguages("ג'ינס", "jeans")).toBe(true);
+    const prev = ["המשלוח מגיע תוך 3 עד 5 ימי עסקים לכל הארץ, ובאילת עד 7 ימי עסקים."];
+    const r = "המשלוח מגיע תוך 3 עד 5 ימי עסקים לכל הארץ, ובאילת עד 7 ימי עסקים.";
+    expect(repeatedSentences(r, prev, "תודה על המשלוח")).toHaveLength(1);
+    expect(repeatedSentences(r, prev, "מתי המשלוח מגיע?")).toEqual([]);
+    expect(repeatedSentences(r, prev, "תודה, ומתי המשלוח מגיע?")).toEqual([]);
+  });
+});
