@@ -147,8 +147,54 @@ describe("conversation relevance", () => {
       // A model label under 0.6 is unclear, which never silences (dry run 2).
       const low = vi.fn(async () => ({ content: '{"category":"auto_reply","confidence":0.45,"reason":"r"}' } as any));
       expect((await classifyConversation("t1", biz, wa([["INBOUND", "[Unsupported message]"]]), { generate: low as any })).category).toBe("unclear");
-      const ok6 = vi.fn(async () => ({ content: '{"category":"personal","confidence":0.6,"reason":"r"}' } as any));
-      expect((await classifyConversation("t1", biz, wa([["INBOUND", "dinner tonight"]]), { generate: ok6 as any })).category).toBe("personal");
+      // 0.6 itself holds for every label but personal, which needs 0.75 (2026-11-19: a customer hidden as personal is the expensive error).
+      const ok6 = vi.fn(async () => ({ content: '{"category":"auto_reply","confidence":0.6,"reason":"r"}' } as any));
+      expect((await classifyConversation("t1", biz, wa([["INBOUND", "I am out of the office until Sunday"]]), { generate: ok6 as any })).category).toBe("auto_reply");
+      const p6 = vi.fn(async () => ({ content: '{"category":"personal","confidence":0.6,"reason":"r"}' } as any));
+      expect((await classifyConversation("t1", biz, wa([["INBOUND", "dinner tonight"]]), { generate: p6 as any })).category).toBe("unclear");
+      const p75 = vi.fn(async () => ({ content: '{"category":"personal","confidence":0.75,"reason":"r"}' } as any));
+      expect((await classifyConversation("t1", biz, wa([["INBOUND", "dinner tonight"]]), { generate: p75 as any })).category).toBe("personal");
     });
+  });
+});
+
+describe("casual chat is personal; a customer opener never is (Omer 2026-11-19)", () => {
+  const profile = { organizationName: "Acme AI", industry: "SaaS / Conversational AI / Customer Communication", businessDescription: "A platform for WhatsApp and website chat bots, an AI agent that answers customers and books meetings.", whatWeSell: "subscriptions to the AI chat platform" };
+  const conv = (body: string) => ({ channel: "WHATSAPP", firstDirection: "INBOUND" as const, customerExternalId: "972500000001", messages: [{ direction: "INBOUND", body, createdAt: new Date() }] });
+  const as = (category: string, confidence: number) => async () => ({ content: JSON.stringify({ category, confidence, reason: "casual chat about a car" }) } as any);
+  it("★ the two prod phrases stay personal when the model says so with confidence", async () => {
+    const { classifyConversation } = await import("../services/conversation-relevance.service");
+    for (const m of ["איזה חזק אפשר לשפר את הרכב", "טובה מגניב ה GTA vi"]) {
+      const r = await classifyConversation("t1", profile, conv(m), { generate: as("personal", 0.85) });
+      expect(r.category, m).toBe("personal");
+    }
+  });
+  it("★ eight short customer openers are never personal, whatever the model says", async () => {
+    const { classifyConversation } = await import("../services/conversation-relevance.service");
+    for (const m of ["היי", "שלום!", "אפשר שאלה?", "יש לכם בוט לוואטסאפ?", "כמה עולה המנוי?", "אני רוצה להזמין דמו", "hi", "do you have a free trial?", "מה המחיר?", "chatbot"]) {
+      const r = await classifyConversation("t1", profile, conv(m), { generate: as("personal", 0.9) });
+      expect(r.category, m).toBe("unclear");
+    }
+  });
+  it("★ every message of the sender counts: an ask earlier in the chat keeps it out of personal; a greeting before a casual chat does not", async () => {
+    const { classifyConversation, couldBeCustomer } = await import("../services/conversation-relevance.service");
+    const many = (...bodies: string[]) => ({ channel: "WHATSAPP", firstDirection: "INBOUND" as const, customerExternalId: "972500000001", messages: bodies.map((body) => ({ direction: "INBOUND", body, createdAt: new Date() })) });
+    expect((await classifyConversation("t1", profile, many("כמה עולה המנוי?", "תודה אחי, נדבר"), { generate: as("personal", 0.9) })).category).toBe("unclear");
+    expect((await classifyConversation("t1", profile, many("ראיתי את המחירון באתר", "סבבה"), { generate: as("personal", 0.9) })).category).toBe("unclear");
+    expect((await classifyConversation("t1", profile, many("היי", "טובה מגניב ה GTA vi"), { generate: as("personal", 0.85) })).category).toBe("personal");
+    expect((await classifyConversation("t1", profile, many("היי", "שלום"), { generate: as("personal", 0.85) })).category).toBe("unclear");
+    // The joined prefix: המחיר, והמחיר, למשלוח, שהזמנתי; never a longer word that only contains one (מחירת is no word of ours).
+    for (const m of ["מה המחיר?", "והמחיר?", "מתי זה יוצא למשלוח", "מה שהזמנתי לא הגיע", "בתמיכה אמרו לי"]) expect(couldBeCustomer(m, null), m).toBe(true);
+    for (const m of ["איזה חזק אפשר לשפר את הרכב", "טובה מגניב ה GTA vi", "ראית את המשחק אתמול?", "נפגשים בשמונה אצל דני"]) expect(couldBeCustomer(m, profile), m).toBe(false);
+    // The business's own words, from its profile: the same sentence is a customer's for a garage and casual for a chat platform.
+    expect(couldBeCustomer("איזה חזק אפשר לשפר את הרכב", { organizationName: "G", industry: "מוסך", businessDescription: "שיפור ושדרוג רכבים", whatWeSell: "טיפולים לרכב" } as any)).toBe(true);
+  });
+  it("★ personal under 0.75 is unclear; the rubric says what personal is", async () => {
+    const { classifyConversation, relevancePrompt, MIN_PERSONAL_CONFIDENCE } = await import("../services/conversation-relevance.service");
+    expect(MIN_PERSONAL_CONFIDENCE).toBe(0.75);
+    expect((await classifyConversation("t1", profile, conv("טובה מגניב ה GTA vi"), { generate: as("personal", 0.7) })).category).toBe("unclear");
+    expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/casual chat about something that has nothing to do with what this business does/);
+    expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/A short opener that could be a customer \(a greeting, "can I ask", "do you have", a product, price or order word\) is never personal: business or unclear/);
+    expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/Name that subject in the reason/);
   });
 });
