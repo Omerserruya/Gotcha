@@ -2913,3 +2913,21 @@ describe("C pinned rating c24439a1: units", () => {
     expect(all).toMatch(/unless you can answer it now from the knowledge, a tool or general know-how/);
   });
 });
+
+describe("nothing new from the customer: the only turns silence may meet (2026-11-19)", () => {
+  it("an acknowledgement, a bare nudge and a message with no words bring nothing new", async () => {
+    const { nothingNewFromCustomer } = await import("../services/reply-engine/gates");
+    for (const t of ["טוב", "אוקיי תודה", "תודה רבה!", "נו", "נו?", "נווו", "אה", "hm", "well", "👍", "...", ""]) expect(nothingNewFromCustomer(t), t).toBe(true);
+  });
+  it("her own words are new, also short ones and ones that open like a nudge", async () => {
+    const { nothingNewFromCustomer } = await import("../services/reply-engine/gates");
+    for (const t of ["אני לא טובה בלראות באתר וכו..", "אני לא זוכרת מאיזה מייל הזמנתי", "נו אז מה עם הצעיף", "כחול", "נושא אחר", "so what now", "wellness set"]) expect(nothingNewFromCustomer(t), t).toBe(false);
+  });
+  it("the same message again counts only against an earlier turn's message, punctuation aside", async () => {
+    const { nothingNewFromCustomer } = await import("../services/reply-engine/gates");
+    const said = "אני לא טובה בלראות באתר וכו..";
+    expect(nothingNewFromCustomer(said, ["מחפשת צעיף", "אני לא טובה בלראות באתר וכו"])).toBe(true);
+    expect(nothingNewFromCustomer(said, ["מחפשת צעיף", "אני לא טובה בלראות באתר, אפשר עזרה?"])).toBe(false);
+    expect(nothingNewFromCustomer(said, [])).toBe(false);
+  });
+});

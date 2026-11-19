@@ -36,7 +36,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -614,7 +614,7 @@ export function sharedTitleNoun(titles: string[]): string | null {
   return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -1855,8 +1855,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           if (!cannedSent) return { reply: safeFallback(locale, teamAlreadyOpen), teamQuestion: question };
           return { reply: locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", teamQuestion: question };
         };
-        if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "") && asked) {
+        // Silence only when the customer's turn brings nothing new (an acknowledgement, a bare nudge, a message
+        // they already wrote on an earlier turn). Anything else gets a line (2026-11-19, Omer; prod replay L774).
+        const lastOutAt = history.map((m: any) => m?.direction).lastIndexOf("OUTBOUND");
+        const quietOk = nothingNewFromCustomer(incomingQ, history.slice(0, Math.max(0, lastOutAt)).filter((m: any) => m?.direction === "INBOUND").map((m: any) => String(m?.body ?? "")).slice(-4));
+        // The question line, and when that line was the last thing said: the other holding line (the team has it).
+        const spokenLine = (): { reply: string; teamQuestion: string | null } => {
           const q = questionLine();
+          if (q.reply || quietOk) return q;
+          (trace as any).silenceAvoided = true;
+          return { reply: HOLD_LINE_ALT[locale === "en" ? "en" : "he"], teamQuestion: null };
+        };
+        if (onlyRepeat && !productAskNow(opts.incomingMessage ?? "") && (asked || !quietOk)) {
+          if (!asked) (trace as any).silenceAvoided = true;
+          const q = spokenLine();
           output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
           if (!cannedSent) cannedNow = true;
           if (!q.reply) trace.gate3 = { ...first, rewrite: "silent" };
@@ -1898,9 +1910,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // Never silent on a product ask (prod replay 2026-11-17, Tehila): one question that moves the
           // choice on, and the question still reaches the team.
           output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
-        } else if (asked) {
-          // The canned line already went out: a question still gets one holding line (not twice in a row).
-          const q = questionLine();
+        } else if (asked || !quietOk) {
+          // The canned line already went out: a question still gets one holding line (not twice in a row),
+          // and so does anything new the customer wrote.
+          if (!asked) (trace as any).silenceAvoided = true;
+          const q = spokenLine();
           output = { reply: q.reply, stateUpdate: {}, claims: [], handoff: null, teamQuestion: q.teamQuestion, cards: [] };
           if (!q.reply) trace.gate3 = { ...first, rewrite: "silent" };
         } else {
@@ -1914,6 +1928,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const alt = productAskNow(opts.incomingMessage ?? "") ? productQuestionLine(locale) : teamAlreadyOpen ? HOLD_LINE_ALT[locale === "en" ? "en" : "he"] : "";
           output = { ...output, reply: alt.trim() !== lastOutBody ? alt : "" };
           (trace as any).fallbackRepeatAvoided = true;
+          // Something new from the customer is never met with silence: the team gets it and the customer is told,
+          // in a line that was not the last thing said.
+          if (!output.reply && !quietOk && !output.handoff) {
+            // Both lines say the team has it, so the team is given it on this turn too (joined to an open item downstream).
+            const passed = locale === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+            const lines = [passed, safeFallback(locale)];
+            output = { ...output, reply: lines.find((l) => l !== lastOutBody) ?? lines[0], teamQuestion: output.teamQuestion ?? question, cards: [] };
+            (trace as any).silenceAvoided = true;
+          }
         }
       }
     }
@@ -2356,7 +2379,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Only a held kind (payment, damage, safety), or a reply that is no product answer: never on top of a product
   // answer for an item a search failure opened (rating 052f53ad).
   const productAnswer = !!output?.reply && ((candidates as any[]).some((c: any) => c?.title && output!.reply!.includes(String(c.title))) || /₪|ש["״]ח/u.test(output.reply));
-  if (output?.reply && openOnIt && (holdingItem([openOnIt]) || !productAnswer) && !output.handoff && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
+  // Not after the other holding line: it already says the team's answer is coming (else the two lines go out together).
+  if (output?.reply && openOnIt && (holdingItem([openOnIt]) || !productAnswer) && !output.handoff && !output.reply.includes(HOLD_LINE_ALT[locale === "en" ? "en" : "he"]) && !teamPassIn(output.reply) && !offersToAsk(output.reply) && !/(?<![\u0590-\u05FF])(?:אצל|בבדיקה|בודק|בודקים)(?![\u0590-\u05FF])|\b(?:with the team|being checked)\b/iu.test(output.reply)) {
     output = { ...output, reply: `${output.reply.trim()} ${stillCheckingLine(openOnIt, locale)}` };
     (trace as any).openItemMentioned = true;
   }

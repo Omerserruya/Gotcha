@@ -116,7 +116,7 @@ export function cutLine(trace: any): string {
   if (Array.isArray(trace?.cutWhy) && trace.cutWhy.length) parts.push(`cutWhy=${trace.cutWhy.join(",")}`);
   if (Array.isArray(trace?.cutText) && trace.cutText.length) parts.push(`cut: ${trace.cutText.map((x: string) => JSON.stringify(String(x).slice(0, 120))).join(" ")}`);
   if (Array.isArray(trace?.teamItemUpdated) && trace.teamItemUpdated.length) parts.push(`teamItemUpdated=${trace.teamItemUpdated.length}`);
-  for (const k of ["waitingClaimCut", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut"]) if (trace?.[k]) parts.push(k);
+  for (const k of ["waitingClaimCut", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silenceAvoided"]) if (trace?.[k]) parts.push(k);
   // Every turn: the style codes that fired on the first draft, the owner's rules it carried, a hand-over that named one.
   const style = [...new Set((trace?.gate3?.problems ?? []).flatMap((p: any) => (p?.kind === "style" && Array.isArray(p.codes) ? p.codes : [])))];
   if (style.length) parts.push(`style=${style.join(",")}`);

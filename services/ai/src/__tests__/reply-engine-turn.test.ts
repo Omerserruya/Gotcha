@@ -3377,3 +3377,100 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
     expect((clean.trace as any).firstDraft).toBeUndefined();
   });
 });
+
+describe("silence only when the customer brought nothing new (2026-11-19, prod replay L774)", () => {
+  const CANNED = "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+  const PASSED = "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+  const TEAM = { kind: "promise", text: "checking with the team: הלקוחה מחפשת צעיף חגיגי בגווני כחול", at: new Date().toISOString() };
+  const withState = async (row: any, fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString() }, offeredItems: [], pending: [], turnCount: 6, ...row });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  const failing = () => h.responses.push(
+    { toolCalls: [tc("k1", "search_knowledge", { query: "אתר" })] },
+    { toolCalls: [respond("s1", { reply: "הצעיף עולה ₪120." })] },
+    { toolCalls: [respond("s2", { reply: "בטח, ₪150 בלבד." })] },
+  );
+  const turn = async (incoming: string, lastOut: string, earlier = "מחפשת צעיף חגיגי בגווני כחול") => {
+    h.history = [
+      { direction: "INBOUND", body: earlier, metadata: null },
+      { direction: "OUTBOUND", body: lastOut, senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: incoming, metadata: null },
+    ];
+    failing();
+    return runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+  };
+
+  it("★ L774: the fixed line already went out, a team question is open, and she writes something new: a line, never silence", async () => {
+    await withState({ pending: [TEAM] }, async () => {
+      const r = await turn("אני לא טובה בלראות באתר וכו..", CANNED);
+      expect(r.trace.gate3.rewrite).not.toBe("silent");
+      expect(r.reply).toBe(PASSED);
+      expect((r.trace as any).silenceAvoided).toBe(true);
+      expect(r.escalation).toBeNull();
+      expect(h.teamQuestions.map((q: any) => q.question)).toEqual(["אני לא טובה בלראות באתר וכו.."]);
+    });
+  });
+
+  it("★ the same turn on a bare acknowledgement stays silent", async () => {
+    for (const ack of ["אוקיי תודה", "תודה רבה", "טוב"]) {
+      await withState({ pending: [TEAM] }, async () => {
+        h.responses.length = 0;
+        const r = await turn(ack, CANNED);
+        expect(r.reply, ack).toBeNull();
+        expect((r.trace as any).silenceAvoided, ack).toBeUndefined();
+      });
+    }
+  });
+
+  it("★ the same message she already wrote on an earlier turn: silence is allowed", async () => {
+    await withState({}, async () => {
+      const r = await turn("אני לא טובה בלראות באתר וכו..", CANNED, "אני לא טובה בלראות באתר וכו");
+      expect(r.reply).toBeNull();
+      expect(r.trace.gate3.rewrite).toBe("silent");
+    });
+  });
+
+  it("★ no team question open and the line would be the last one said again: the other line, and the team gets it", async () => {
+    await withState({}, async () => {
+      const r = await turn("אני לא טובה בלראות באתר וכו..", PASSED);
+      expect(r.reply).toBe(CANNED);
+      expect(h.teamQuestions).toHaveLength(1);
+      expect((r.trace as any).silenceAvoided).toBe(true);
+    });
+  });
+
+  it("★ her words are about the open item and its holding line was the last thing said: the other holding line", async () => {
+    const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    const ITEM = "הלקוחה שואלת אם אפשר לקבל חשבונית על שם העסק";
+    const held = stillCheckingLine(ITEM, "he");
+    await withState({ pending: [{ ...TEAM, text: `checking with the team: ${ITEM}` }] }, async () => {
+      const r = await turn("חשבונית על שם העסק שלי, עוסק מורשה", held, "אפשר לקבל חשבונית על שם העסק?");
+      expect(r.reply).toBe("אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.");
+      expect((r.trace as any).silenceAvoided).toBe(true);
+      expect(h.teamQuestions).toHaveLength(0);
+    });
+  });
+
+  it("★ the same paragraph twice on something new she wrote: a line; on a plain nudge: nothing (as before)", async () => {
+    const para = "כדי לבדוק את ההזמנה צריך את מספר ההזמנה, והטלפון ששמור עליה לא תואם למספר שממנו כותבים.";
+    const run = async (incoming: string) => {
+      h.responses.length = 0; h.teamQuestions.length = 0;
+      h.history = [
+        { direction: "INBOUND", body: "איפה ההזמנה?", metadata: null },
+        { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null },
+        { direction: "INBOUND", body: incoming, metadata: null },
+      ];
+      h.responses.push({ toolCalls: [respond("d3", { reply: para })] }, { toolCalls: [respond("d4", { reply: para })] });
+      return runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    };
+    const said = await run("אני לא זוכרת מאיזה מייל הזמנתי");
+    expect(said.reply).toBe(CANNED);
+    expect(said.trace.gate3.rewrite).not.toBe("silent");
+    expect((said.trace as any).silenceAvoided).toBe(true);
+    const nudge = await run("נו");
+    expect(nudge.reply).toBeNull();
+    expect(nudge.trace.gate3.rewrite).toBe("silent");
+  });
+});

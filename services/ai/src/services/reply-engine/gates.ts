@@ -2304,6 +2304,21 @@ export const customerAck = (incoming: string) => {
   return words.length <= 5 && core.length >= 1 && CUSTOMER_ACK.test(core.join(" ")) || (words.length <= 5 && core.length === 0 && words.length > 0);
 };
 
+/** A nudge with no content of its own ("נו", "אה"). */
+const BARE_NUDGE = /^(?:נו+|אה+|אמ+|המ+|nu+|um+|hm+|well|so)$/iu;
+const sayKey = (s: string) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/**
+ * The customer's turn brings nothing new: a bare acknowledgement, a nudge with no content, or a message they
+ * already wrote on an earlier turn. Only such a turn may be met with silence (2026-11-19, Omer; prod replay
+ * L774: "אני לא טובה בלראות באתר" went unanswered because the fixed line had already been sent once).
+ */
+export function nothingNewFromCustomer(incoming: string, earlierInbound: string[] = []): boolean {
+  if (customerAck(incoming)) return true;
+  const key = sayKey(incoming);
+  if (!key || BARE_NUDGE.test(key)) return true;
+  return earlierInbound.some((m) => sayKey(m) === key);
+}
+
 /**
  * A "what should I do now" ask on a held subject (prod rating 2026-11-18: "if I re-order, will there be a
  * duplicate?"). Answered with fixed procedural advice, never with the payment's or order's state.
