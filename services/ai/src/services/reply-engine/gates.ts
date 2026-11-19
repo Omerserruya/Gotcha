@@ -1496,15 +1496,22 @@ export function storeQueryOf(incoming: string, opts: { substring?: boolean } = {
 const allDescribing = (q: string) => q.split(/\s+/).every((w) => COLOUR_WORD.test(w) || PLAIN_ADJECTIVES.has(w) || /^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w));
 const nounWord = (w: string) => /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(w) && !PLAIN_ADJECTIVES.has(w) && !/^[\u0590-\u05FF]{3,}(?:י|ית|יות|יים)$/u.test(w) && !talkWord(w) && !queryStop(w);
 // A message about a product thing: a have/was/want/seen verb governing the noun ("הייתה מטפחת", "יש לכם X", "מחפשת X").
-const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|רוצה|רוצים|ראיתי|קניתי|הזמנתי|אשמח\s+ל|אשמח)\s+(?:את\s+)?(?:ה)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
+const PRODUCT_CONTEXT = /(?<![\u0590-\u05FF])(?:הייתה|היתה|היה|היו|יש\s+לכם|יש\s+לך|יש|מחפש|מחפשת|מחפשים|לחפש|למצוא|רוצה|רוצים|ראיתי|קניתי|הזמנתי)\s+(?:את\s+)?([\u0590-\u05FF]{3,}(?:['"״][\u0590-\u05FF]+)?)/gu;
+// Never the governed noun (the 7a3bc2a3 probe on 26 real intents): a frame or abstract word, an adverb, an infinitive.
+const NOT_LENT = new Set(["המלצה", "חלופה", "מידע", "קישור", "מענה", "אפשרות", "שם", "מידות", "מידה", "גוון", "צבע", "הבדל", "מועד", "קוד", "תפקיד", "אופן", "שקיפות", "קושי", "סף", "כתובת", "עלות", "משלוח", "התיחסות", "התייחסות", "עזרה", "תשובה", "עדכון", "הודעה", "פרטים", "זיכוי", "החלפה", "החזרה", "בעיה", "שאלה", "מחיר", "הנחה", "קופון", "כרגע", "עכשיו", "היום", "מחר", "עוד", "גם", "מוצר", "דגם", "פריט", "משהו", "בעצם", "הרבה", "מספיק"]);
+// In the governed slot a word ending in י is a construct noun ("למצוא משטחי הזזה"), never an adjective.
+const lendable = (w: string) => { const bare = w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""); return /\p{L}{3,}/u.test(w) && !COLOUR_WORD.test(bare) && !PLAIN_ADJECTIVES.has(bare) && !talkWord(w) && !queryStop(w) && !/^ל[\u0590-\u05FF]{2,}/u.test(w) && !NOT_LENT.has(bare) && !NOT_LENT.has(w); };
+/** The noun lent bare: never with its article ("המטפחת" lends "מטפחת"). */
+const bareNoun = (w: string) => w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "");
 /** The noun a product source lends: a title or the intent (its first noun), or a message only by its product context or a title word. */
 function lentNoun(text: string, kind: "focus" | "message", titles: string[]): string | null {
-  if (kind === "focus") return (storeQueryOf(text) ?? "").split(/\s+/).find(nounWord) ?? null;
-  for (const m of String(text ?? "").matchAll(PRODUCT_CONTEXT)) if (nounWord(m[1])) return m[1];
+  // A product title lends its first noun; anything else (the intent, a message) only by a product context or a title word.
+  if (kind === "focus") { const n = (storeQueryOf(text) ?? "").split(/\s+/).find((w) => nounWord(w) && !NOT_LENT.has(bareNoun(w))); return n ? bareNoun(n) : null; }
+  for (const m of String(text ?? "").matchAll(PRODUCT_CONTEXT)) if (lendable(m[1])) return bareNoun(m[1]);
   // A title word, with up to two prefix letters off ("והמטפחת" lends "מטפחת").
   const t = titles.join(" ").toLowerCase();
   for (const w of (storeQueryOf(text) ?? "").split(/\s+/)) {
-    if (!nounWord(w)) continue;
+    if (!nounWord(w) || NOT_LENT.has(bareNoun(w))) continue;
     const forms = [w, w.replace(/^[והלבשמ]/u, ""), w.replace(/^[והלבשמ]{2}/u, "")].filter((x) => x.length >= 3);
     const hit = forms.find((x) => new RegExp(`(?<![\\p{L}])${x.toLowerCase()}(?![\\p{L}])`, "u").test(t));
     if (hit) return hit;
@@ -1527,11 +1534,12 @@ export function fallbackQueryOf(incoming: string, earlierInbound: string[], inte
   const q = storeQueryOf(incoming, opts);
   if (!q) return null;
   if (!allDescribing(q)) return q;
-  const sources: Array<[string, "focus" | "message"]> = [[String(extra.focus ?? ""), "focus"], [String(intent ?? ""), "focus"], ...earlierInbound.map((m) => [m, "message"] as [string, "message"])];
+  // The intent lends like a message: its first word is a verb or a gerund (לברר, מחפשת, בירור), never the noun.
+  const sources: Array<[string, "focus" | "message"]> = [[String(extra.focus ?? ""), "focus"], [String(intent ?? ""), "message"], ...earlierInbound.map((m) => [m, "message"] as [string, "message"])];
   for (const [text, kind] of sources) {
     if (!text.trim()) continue;
     const noun = lentNoun(text, kind, extra.titles ?? []);
-    if (noun) return [opts.substring ? noun.replace(/^ה(?=[\u0590-\u05FF]{4,}$)/u, "") : noun, ...q.split(/\s+/)].slice(0, 4).join(" ");
+    if (noun) return [noun, ...q.split(/\s+/)].slice(0, 4).join(" ");
   }
   return null;
 }

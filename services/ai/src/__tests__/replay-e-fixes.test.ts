@@ -647,7 +647,9 @@ describe("7100b0b6 pre-check: the real messages", () => {
     expect(storeQueryOf(L789)).toBe("חגיגי כחול");
     expect(storeQueryOf(L789, { substring: true })).toBe("חגיגי כחול");
     expect(fallbackQueryOf(L789, ["יש לכם מטפחת חגיגית לחתונה?"], null, { substring: true })).toBe("מטפחת חגיגי כחול");
-    expect(fallbackQueryOf(L789, [], "מטפחת חגיגית בגווני כחול", { substring: true })).toBe("מטפחת חגיגי כחול");
+    // The intent lends only by a catalogue title word or a find/want verb (7a3bc2a3 pre-check).
+    expect(fallbackQueryOf(L789, [], "מטפחת חגיגית בגווני כחול", { substring: true }, { titles: ["מטפחת אנה"] })).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, [], "מטפחת חגיגית בגווני כחול", { substring: true })).toBeNull();
     expect(storeQueryOf(HARISH)).toBe("מטפחת חגגית כחול");
     expect(storeQueryOf("אני רוצה גוון חום למתחת לעיינים")).toBe("חום לעיינים");
     expect(storeQueryOf("אני רוצה גוון חום למתחת לעיינים", { substring: true })).toBe("חום עיינים");
@@ -681,7 +683,8 @@ describe("d874dc87 pre-check: the noun is lent only by a product source", () => 
   });
   it("★ the product in focus and the intent lend first; a title word lends too", () => {
     expect(fallbackQueryOf(L789, ["אני לא טובה בלראות באתר וכו.."], null, {}, { focus: "מטפחת אנה כחולה" })).toBe("מטפחת חגיגי כחול");
-    expect(fallbackQueryOf(L789, [], "בירור מטפחת חגיגית")).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, [], "בירור מטפחת חגיגית", {}, { titles: ["מטפחת אנה"] })).toBe("מטפחת חגיגי כחול");
+    expect(fallbackQueryOf(L789, [], "בירור מטפחת חגיגית")).toBeNull();
     expect(fallbackQueryOf(L789, ["והמטפחת ההיא עוד קיימת?"], null, {}, { titles: ["מטפחת אנה", "מטפחת סולו"] })).toBe("מטפחת חגיגי כחול");
   });
   it("★ the early lookup takes the focus product's noun for describing words alone", () => {
@@ -689,5 +692,31 @@ describe("d874dc87 pre-check: the noun is lent only by a product source", () => 
     expect(withFocusNoun("משטח לתמי 4", "סמובי אליס")).toBe("משטח לתמי 4");
     expect(withFocusNoun("חגיגי כחול", null)).toBe("חגיגי כחול");
     expect(q(autoLookups([{ kind: "no_search" }] as any, L789, WOO, [], "מטפחת אנה כחולה"))[0]).toEqual(["woocommerce.list_products", "מטפחת חגיגי כחול"]);
+  });
+});
+
+describe("7a3bc2a3 pre-check: the intent lends only like a message (26 real intents)", () => {
+  const titles = ["טוש טינט חום", "מטפחת אנה"];
+  const nulls = ["מחפשת המלצה למוצר מתאים", "קושי להוסיף את בנדנת סוליקה פוקסיה לסל", "לברר מידות מדויקות של הקייס", "לברר על ההבדל בין טושי נמשים", "לברר מועד מלאי של מוצר נינג'ה שחור", "שואלת איך להשתמש במעצור של סמובי גפן", "בירור אופן השימוש במעצור של סמובי גפן", "בירור תפקיד החלקים ואופן חיבור STOOPEE", "בירור שקיפות המשטחים והנחת כמות", "תיאום מסירה, SMS לפני הגעה", "אישור התאמה לסמובי אלכסה", "לבדוק סף למשלוח חינם", "לקבל קישור לסמובי אלכסה", "לקבל את מידות המשטחים", "מבקשת מענה מהיר והחלפת משטח שבור", "החזרת סמובי מוניקה לבן וקבלת זיכוי", "בדיקת אפשרות להחזרת הסמובי", "מחפשת חלופה למייקאפ", "התאמת גוון מייקאפ", "לברר קוד קופון להנחה", "בירור איך לבצע הזמנה באתר", "המשתמשת מסרה כתובת מייל"];
+  it("★ a frame, verb or abstract word is never lent: no noun, no search", () => {
+    for (const i of nulls) {
+      expect(fallbackQueryOf("רוצה לבן", [], i, { substring: true }, { titles }), i).toBeNull();
+      expect(fallbackQueryOf("רוצה לבן", [], i, {}, { titles }), i).toBeNull();
+    }
+  });
+  it("★ a find or want verb's object, or a catalogue title word, is lent bare", () => {
+    expect(fallbackQueryOf("רוצה לבן", [], "למצוא משטחי הזזה מתאימים לתמי 4, מיקסר ומכונת קפה")).toBe("משטחי לבן");
+    expect(fallbackQueryOf("רוצה לבן", [], "בירור שם של טוש טינט חום", {}, { titles })).toBe("טוש לבן");
+    expect(fallbackQueryOf("רוצה לבן", [], "האם המטפחת החגיגית בגווני כחול עדיין קיימת", {}, { titles })).toBe("מטפחת לבן");
+    expect(fallbackQueryOf("רוצה לבן", [], "הלקוחה מחפשת מטפחת חגיגית כחולה")).toBe("מטפחת לבן");
+    // The early lookup's focus noun goes out bare as well.
+    expect(withFocusNoun("חגיגי כחול", "המטפחת החגיגית")).toBe("מטפחת חגיגי כחול");
+  });
+  it("★ queue: a governed infinitive, adverb or abstract word in an earlier message lends nothing", () => {
+    for (const p of ["אשמח להתיחסות שלכם", "מה יש כרגע במלאי?", "אשמח לקבל הודעה כשיגיע", "והאם יש עלות משלוח לאזור ירושלים?", "מחפשת למיקסר שלי"]) {
+      expect(fallbackQueryOf("רוצה לבן", [p], null), p).toBeNull();
+    }
+    // An abstract word lends nothing even when a catalogue title has it.
+    expect(fallbackQueryOf("רוצה לבן", ["חלופה טובה?"], null, {}, { titles: ["חלופה לסוכר"] })).toBeNull();
   });
 });
