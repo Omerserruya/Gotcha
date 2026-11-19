@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -560,6 +560,13 @@ export function searchHasFilter(args: any, incoming: string): boolean {
   const a = args ?? {};
   if (["price_min", "price_max", "on_sale", "category", "orderby", "featured", "tag", "audience", "min_price", "max_price"].some((k) => a[k] != null && a[k] !== "" && a[k] !== false)) return true;
   return /(?<![\u0590-\u05FF])(?:מבצע|מבצעים|במבצע|הנחה|הנחות|חדש|חדשים|חדשות|חדשה|עד\s+\d+|מתחת\s+ל-?\s*\d+|זול|זולים)(?![\u0590-\u05FF])|\b(?:on sale|sale|discount|new|newest|under \d+|up to \d+|cheap)\b/iu.test(String(incoming ?? ""));
+}
+/** A general question about the business's options ("מה אפשרויות התשלום?") that the knowledge speaks to, with no mark
+ *  of her own case: no held item opens (dev round k5 on 0b5f2b46: the answer went out as the hold line). */
+export function generalPolicyAsk(incoming: string, knowledge: string): boolean {
+  const t = String(incoming ?? "");
+  const own = /(?<![\u0590-\u05FF])(?:שלי|שלנו|חויבתי|חייבו|חיוב\s+כפול|שילמתי|הזמנתי|ההזמנה|נכשל|נכשלה|לא\s+עבר|לא\s+נקלט|כפול|פעמיים|זיכוי|החזר)(?![\u0590-\u05FF])|\d{3,}|\b(?:my|i paid|charged me|twice|refund)\b/iu;
+  return infoQuestion(t) && !own.test(t) && knowledgeSpeaksTo(t, knowledge);
 }
 /** The engine's own not-found lines (notFoundReply). */
 export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
@@ -1394,7 +1401,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // Recomputed: what the rewrite's lookups return is grounding too.
   const groundingNow = () => [
     ...turnTools.records.map((r) => r.content),
-    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency }))),
+    // The store's own earlier price of a product on sale is the store's too (dev round k5 on 0b5f2b46: "was ₪379").
+    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency, ...(c.discount?.was != null ? { was: c.discount.was } : {}) }))),
     renderState(state),
     knowledge ?? "",
     ...turnTools.knowledgeText,
@@ -1457,7 +1465,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     customerText: inbound.join("\n"),
     openTeamText: openTeam.join("\n"),
     knownInactiveOrders: String(state.facts?.[INACTIVE_ORDERS_FACT] ?? "").split(",").filter(Boolean),
-    candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? Number(c.price) : null })).filter((c: any) => c.title),
+    candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? Number(c.price) : null, was: c?.discount?.was != null && !c?.priceOnSite ? Number(c.discount.was) : null })).filter((c: any) => c.title),
     onOpenItem: openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? ""))),
     safety: safetyConversation,
     searchFailed: turnTools.records.some((r) => /list_products|search_products/.test(r.tool) && (r.outcome === "timeout" || r.outcome === "error")),
@@ -2022,7 +2030,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         heldTurn = onSubject;
         if (onSubject && output.teamQuestion) { output = { ...output, teamQuestion: null }; heldMerged = true; (trace as any).holding.teamQuestionMerged = true; }
       }
-    } else if (holdingItem([String(opts.incomingMessage ?? "")]) && aboutHeld(String(opts.incomingMessage ?? ""))) {
+    } else if (holdingItem([String(opts.incomingMessage ?? "")]) && aboutHeld(String(opts.incomingMessage ?? "")) && !generalPolicyAsk(String(opts.incomingMessage ?? ""), [knowledge ?? "", ...turnTools.knowledgeText].join("\n"))) {
       // The turn the item OPENS is held too (rating 657e5f85: "בוטלה כי התשלום לא נקלט" on the first turn of a
       // charge complaint): no state or cause; the team has it, and the reply says so.
       const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
@@ -2535,7 +2543,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         metadata: {
           engine: "v2", promptVersion: ENGINE_PROMPT_VERSION, aiAgentId: config.id, model, stageMs, rounds: trace.rounds,
           tokens: trace.tokens,
-          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined })),
+          // A refused call keeps its query and the reason (dev round k5 on 0b5f2b46: a denied search with neither).
+          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined, ...(r.decision === "deny" ? { q: String((r.args as any)?.query ?? "").slice(0, 60), reason: (() => { try { return String(JSON.parse(String(r.content ?? "{}"))?.reason ?? "").slice(0, 100); } catch { return ""; } })() } : {}) })),
           gate3: trace.gate3, teamQuestion: final.teamQuestion ?? undefined,
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
           // What the cleanup cut and why, the bot's own words only (internal: never read by a customer or tenant screen).

@@ -156,6 +156,9 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   const t0 = Date.now();
   const tool = call.function?.name ?? "";
   let args = redactCardDetailsInArgs(parseArgs(call.function?.arguments));
+  // A query of filter words only ("מבצע", "sale", "חדש") is that filter with no query (dev round k5 on 0b5f2b46: "מה יש
+  // במבצע?" was refused as no product word and answered with one scarf).
+  if (/^woocommerce\.list_products$/.test(String(call.function?.name ?? ""))) args = filterWordsQuery(args);
   const deps: RunnerDeps = {
     dispatch: dispatchToolCall,
     mcp: runMcpTool,
@@ -425,4 +428,16 @@ export async function runToolRound(env: RunnerEnv, calls: ModelToolCall[]): Prom
     }
   }
   return out.map(({ side, ...r }) => r);
+}
+
+const SALE_WORDS = /^(?:מבצע|מבצעים|במבצע|הנחה|הנחות|בהנחה|sale|sales|on|discount|discounts|deals?)$/iu;
+const NEW_WORDS = /^(?:חדש|חדשים|חדשות|חדשה|new|newest|latest|arrivals)$/iu;
+/** A store search whose query is filter words only becomes that filter with an empty query. */
+export function filterWordsQuery(args: any): any {
+  const q = String(args?.query ?? "").trim();
+  const words = q.split(/\s+/).filter(Boolean);
+  if (!words.length) return args;
+  if (words.every((w) => SALE_WORDS.test(w)) && words.some((w) => !/^on$/i.test(w))) return { ...args, query: "", on_sale: true };
+  if (words.every((w) => NEW_WORDS.test(w) || SALE_WORDS.test(w)) && words.some((w) => NEW_WORDS.test(w))) return { ...args, query: "", ...(words.some((w) => SALE_WORDS.test(w) && !/^on$/i.test(w)) ? { on_sale: true } : {}) };
+  return args;
 }

@@ -119,6 +119,7 @@ const TOOLS: ToolDefinition[] = [
         price_min: { type: "number", description: "Lowest price, in the store's currency." },
         price_max: { type: "number", description: "Highest price (the customer's budget), in the store's currency." },
         in_stock: { type: "boolean", description: "true = only products in stock." },
+        on_sale: { type: "boolean", description: "true = only products on sale (the customer asks what is on sale)." },
         audience: {
           type: "string",
           enum: ["men", "women"],
@@ -1633,6 +1634,7 @@ const WooCommerceAdapter: ProviderAdapter = {
         // A budget of 0 is no budget (gpt-6-luna fills every field: price_max 0).
         if (price(args.price_max) && Number(args.price_max) > 0) params.set("max_price", price(args.price_max)!);
         if (args.in_stock === true) params.set("stock_status", "instock");
+        if (args.on_sale === true) params.set("on_sale", "true");
         // Internal callers only (the web chat's complementary products): not in
         // the model's schema. Numeric ids and a numeric category, nothing else.
         const ids = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()).filter((x) => /^\d{1,12}$/.test(x)).slice(0, 100);

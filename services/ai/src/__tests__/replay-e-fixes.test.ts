@@ -1148,3 +1148,65 @@ describe("dev round k4 on 259d48ea", () => {
     expect(danglingReferences("המלאי והמחירים מופיעים בפריטים.", true)).toEqual([]);
   });
 });
+
+describe("dev round k5 on 0b5f2b46", () => {
+  it("★ K5-1: the search's arguments exactly as the engine records them (customer_query added): the empty search backs the absence", async () => {
+    const { ungroundedAbsence, searchTextOf } = await import("../services/reply-engine/gates");
+    const rec = { tool: "woocommerce.list_products", args: { query: "black jeans", customer_query: "יש לכם ג'ינס שחור?", per_page: 10 }, outcome: "empty", content: "[]" } as any;
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג כרגע.", [rec])).toEqual([]);
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [rec])).toEqual([]);
+    expect(searchTextOf(rec)).not.toMatch(/יש|לכם/);
+    // A search that returned other things (ok, not empty), her message riding along: it covers the claim.
+    const ok = { tool: "woocommerce.list_products", args: { query: "ג'ינס שחור", customer_query: "יש לכם ג'ינס שחור?" }, outcome: "ok", content: '[{"name":"Heavyweight Hoodie"}]' } as any;
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [ok])).toEqual([]);
+    // Pinned in the source: the store adapter forwards on_sale, and the grounding carries the store's was-price.
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/connectors/woocommerce.adapter.ts", "utf8")).toMatch(/if \(args\.on_sale === true\) params\.set\("on_sale", "true"\);/);
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/currency: c\.currency, \.\.\.\(c\.discount\?\.was != null \? \{ was: c\.discount\.was \} : \{\}\)/);
+    // A search for something else, with her message riding along, still backs nothing.
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [{ ...rec, args: { query: "black hoodie", customer_query: "יש לכם ג'ינס שחור?" } }])).toHaveLength(1);
+  });
+  it("★ K5-3: filter words alone become the filter", async () => {
+    const { filterWordsQuery } = await import("../services/reply-engine/tools");
+    expect(filterWordsQuery({ query: "מבצע" })).toEqual({ query: "", on_sale: true });
+    expect(filterWordsQuery({ query: "on sale" })).toEqual({ query: "", on_sale: true });
+    expect(filterWordsQuery({ query: "חדשים" })).toEqual({ query: "" });
+    expect(filterWordsQuery({ query: "קפוצ'ון מבצע" })).toEqual({ query: "קפוצ'ון מבצע" });
+    expect(filterWordsQuery({ query: "on" })).toEqual({ query: "on" });
+  });
+  it("★ K5-6: a product priced with no store read is unsearched; stock or sizes \"not checked\" is process talk", async () => {
+    const { claimsOrPromisesUnsearched, internalJargon } = await import("../services/reply-engine/gates");
+    const W = ["woocommerce.list_products", "search_knowledge"];
+    const r = "כן, יש קפוצ'ון קצר ב-299 ש\"ח וקפוצ'ון Heavyweight ב-359 ש\"ח. המלאי והמידות לא נבדקו, יש אחד מהם שמעניין אותך?";
+    expect(claimsOrPromisesUnsearched(r, "יש לכם קפוצ'ון?", [{ tool: "search_knowledge", outcome: "ok" } as any], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched(r, "יש לכם קפוצ'ון?", [{ tool: "woocommerce.list_products", outcome: "ok" } as any], W)).toBe(false);
+    // The prices from the knowledge snapshot count; a price only the store gave does not.
+    const K = "קפוצ'ון קצר 299 ש\"ח, קפוצ'ון Heavyweight 359 ש\"ח (תמונת מצב, לא מלאי חי)";
+    expect(claimsOrPromisesUnsearched(r, "יש לכם קפוצ'ון?", [], W, { grounding: K, knowledge: K })).toBe(true);
+    expect(claimsOrPromisesUnsearched("יש קפוצ'ון קצר ב-299 ש\"ח.", "יש לכם קפוצ'ון?", [], W, { grounding: "Cropped Hoodie 299 ₪", knowledge: "" })).toBe(false);
+    expect(internalJargon("המלאי והמידות לא נבדקו, יש אחד מהם שמעניין אותך?")).toBe(true);
+    expect(internalJargon("ההזמנה עדיין לא נבדקה על ידי הצוות.")).toBe(false);
+  });
+  it("★ K5-7: \"שים לב\" goes, the fact stays", async () => {
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    expect(cleanStyle("הקפוצ'ון עם הרוכסן עולה 299 ש\"ח. שים לב, הקפוצ'ון הקצר מגיע כרגע באקרו או ורוד מעושן, לא בשחור.", ["imperative_notice"])).toBe("הקפוצ'ון עם הרוכסן עולה 299 ש\"ח. הקפוצ'ון הקצר מגיע כרגע באקרו או ורוד מעושן, לא בשחור.");
+  });
+  it("★ K5-8: the store's own was-price of a product on sale is no clash", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    const c = [{ title: "Zip Hoodie", price: 299, was: 379 }];
+    const t = [{ tool: "woocommerce.get_product", outcome: "ok", content: "{}" } as any];
+    expect(priceAgainstStore("The Zip Hoodie is currently on sale for ₪299 (was ₪379).", c, t, true)).toEqual([]);
+    expect(priceAgainstStore("The Zip Hoodie is ₪349.", c, t, true)).toHaveLength(1);
+  });
+});
+
+describe("dev round k5: a general question about payment options opens no held item", () => {
+  it("★ the knowledge speaks to it and nothing is about her own case", async () => {
+    const { generalPolicyAsk } = await import("../services/reply-engine/engine");
+    const K = "**מה שיטות התשלום הנתמכות?** אפשר לשלם בהעברה בנקאית או במזומן בעת המסירה. כרגע אין תשלום בכרטיס אשראי, בביט או ב-PayPal.";
+    expect(generalPolicyAsk("מה אפשרויות התשלום?", K)).toBe(true);
+    expect(generalPolicyAsk("שילמתי פעמיים, מה אפשרויות התשלום להחזר?", K)).toBe(false);
+    expect(generalPolicyAsk("התשלום שלי נכשל, מה אפשר לעשות?", K)).toBe(false);
+    expect(generalPolicyAsk("מה אפשרויות התשלום?", "משלוח חינם מעל 300.")).toBe(false);
+  });
+});

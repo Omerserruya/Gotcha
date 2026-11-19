@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   teamQuestions: [] as any[],
   historyQueries: [] as any[],
   failReads: 0,
+  chunks: null as any,
   slowReads: 0,
   slowOrders: 0,
   orderDelay: 900,
@@ -135,7 +136,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   }))(h.groundSeq.length ? h.groundSeq.shift()! : h.groundTitle),
 }));
 vi.mock("../services/knowledge.service", () => ({
-  retrieveRelevantChunks: async () => [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
+  retrieveRelevantChunks: async () => h.chunks ?? [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
   lexicalKnowledge: async (_t: string, q: string) => (h.lexicalFor ? h.lexicalFor(q) : h.lexical), mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
   knowledgeLimit: () => 5, documentAddress: async () => h.docAddress,
 }));
@@ -166,6 +167,7 @@ const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stag
 beforeEach(() => {
   for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
   h.failReads = 0;
+  h.chunks = null;
   h.slowReads = 0;
   h.slowOrders = 0;
   h.orderDelay = 900;
@@ -3145,5 +3147,24 @@ describe("dev round k4 on 259d48ea, through a whole turn", () => {
   it("★ K4-2: the audit row holds the heads of the knowledge the turn saw", async () => {
     const { readFileSync } = await import("fs");
     expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/knowledgeHeads: \[\.\.\.\(knowledgeChunks as any\[\]\)/);
+  });
+});
+
+describe("dev round k5 on 0b5f2b46, through a whole turn", () => {
+  it("★ K5-2: the team line as the whole reply, team_question null, the knowledge has it: rewritten from the knowledge", async () => {
+    h.chunks = [{ content: "**מה שיטות התשלום הנתמכות - כרטיס אשראי, ביט, PayPal או תשלום במזומן?** אפשר לשלם בהעברה בנקאית או במזומן בעת המסירה. כרגע אין תשלום בכרטיס אשראי, בביט או ב-PayPal.", score: 0.8 }];
+    h.responses.push({ toolCalls: [respond("p1", { reply: "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: null })] }, { toolCalls: [respond("p2", { reply: "אפשר לשלם בהעברה בנקאית או במזומן בעת המסירה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה אפשרויות התשלום?" }, "autonomous");
+    expect(JSON.stringify((r.trace as any).gate3)).toMatch(/knowledge_has_it/);
+    expect(r.reply).toMatch(/העברה בנקאית/);
+  });
+  it("★ K5-3: a query of filter words is that filter: \"מבצע\" runs with on_sale and no query; the refusal keeps its query and reason", async () => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "מבצע" })] }, { toolCalls: [respond("s2", { reply: "יש Canvas Tote במבצע." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה יש במבצע?" }, "autonomous");
+    const d = h.dispatched.find((x) => x.name === "woocommerce.list_products");
+    expect(d?.args).toMatchObject({ query: "", on_sale: true });
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/\.\.\.\(r\.decision === "deny" \? \{ q: String\(\(r\.args as any\)\?\.query \?\? ""\)\.slice\(0, 60\), reason:/);
+    expect(r.reply).toBeTruthy();
   });
 });

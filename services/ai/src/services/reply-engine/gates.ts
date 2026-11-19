@@ -355,7 +355,7 @@ const stem = (w: string) => unfinal((w.length > 3 && /^[הובלמשכ]/.test(w)
 const CAPABILITY_STEMS = new Set([...CAPABILITY_WORDS].flatMap((w) => [w, stem(w)]));
 const termsOf = (sentence: string) => [...new Set((sentence.match(/\p{L}+(?:['’]\p{L}+)*/gu) ?? []).map((w) => w.replace(/’/g, "'")).filter((w) => w.length >= 3).filter((w) => !ABSENCE_WORDS.has(w.toLowerCase())).map(stem))];
 const SEARCH_TOOL = /list_products|search_products|get_product|variation|search_knowledge|categor/i;
-const NARROWING = ["price_min", "price_max", "min_price", "max_price", "in_stock", "stock_status", "product_type", "vendor", "tag", "category", "option", "options", "size", "color", "colour", "fits_cm", "fits_cm_all", "audience"];
+const NARROWING = ["on_sale", "price_min", "price_max", "min_price", "max_price", "in_stock", "stock_status", "product_type", "vendor", "tag", "category", "option", "options", "size", "color", "colour", "fits_cm", "fits_cm_all", "audience"];
 /** A product search narrowed by a filter, or a Shopify one that is in stock only by default. */
 export function filteredSearch(t: ToolRunRecord): boolean {
   const a: any = t.args ?? {};
@@ -363,6 +363,14 @@ export function filteredSearch(t: ToolRunRecord): boolean {
   return /(?:^|\.)search_products$/.test(String(t.tool)) && !/^woocommerce\./.test(String(t.tool)) && a.in_stock_only !== false;
 }
 const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
+/** What a search searched: its own string arguments, and of customer_query (her whole message, added by the engine
+ *  when the query is not Hebrew) only its product words (dev round k5 on 0b5f2b46: "יש", "לכם" in no claim). */
+export function searchTextOf(t: ToolRunRecord): string {
+  const a: any = t.args ?? {};
+  const own = Object.entries(a).filter(([k, v]) => k !== "customer_query" && typeof v === "string").map(([, v]) => String(v));
+  const cq = typeof a.customer_query === "string" ? storeQueryWords(a.customer_query) : null;
+  return [...own, ...(cq ? [cq] : [])].join(" ");
+}
 /**
  * Absence claims no search backs: grounded only by a search this turn whose query
  * covers the claim's words and that did not return them. Without such words
@@ -403,7 +411,7 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
     let grounded: boolean;
     if (!terms.length) grounded = searches.some((t) => PRODUCT_TOOL.test(t.tool));
     else {
-      const query = (t: ToolRunRecord) => termsOf(Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" "));
+      const query = (t: ToolRunRecord) => termsOf(searchTextOf(t));
       // The search must cover the claim's words (all of two, all but one of more): "pads" alone is not "bamboo pads".
       const need = terms.length <= 2 ? terms.length : terms.length - 1;
       const ranFor = searches.filter((t) => { const q = query(t); return terms.filter((w) => q.some((x) => x.includes(w) || w.includes(x))).length >= need; });
@@ -421,7 +429,7 @@ export function ungroundedAbsence(reply: string, tools: ToolRunRecord[], knowled
       const bare = (x: string) => x.replace(/['׳"״]/g, "").toLowerCase();
       const claimWords = (clause.match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
       const claimAsWritten = (normalizeQuotes(clause).match(/[\p{L}\p{N}'׳]+/gu) ?? []) as string[];
-      const rawWords = (t: ToolRunRecord) => (Object.values(t.args ?? {}).filter((v) => typeof v === "string").join(" ").match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
+      const rawWords = (t: ToolRunRecord) => (searchTextOf(t).match(/[\p{L}\p{N}'׳]+/gu) ?? []).map(bare);
       // A query in the other language counts too (dev round k4 on 259d48ea: "black jeans" came back empty for "לא
       // מצאנו ג'ינס שחור"): a colour by the colour map, a borrowed noun by its consonants (ג'ינס, jeans: "jns").
       const emptyWithin = searches.some((t) => t.outcome === "empty" && PRODUCT_TOOL.test(t.tool) && !filteredSearch(t) && rawWords(t).length > 0 && rawWords(t).every((x) => claimWords.some((w) => w === x || (x.length >= 3 && w.includes(x))) || claimAsWritten.some((w) => sameAcrossLanguages(w, x))));
@@ -444,7 +452,7 @@ const numbersIn = (t: string) => new Set((String(t ?? "").match(/\d+(?:[.,]\d+)?
 // A product's price from the knowledge while the store says otherwise (prod replay 2026-11-17, NE'A:
 // 178 from a document, the store 160.20): the store wins, and a product price needs a store read.
 const PRICE_IN = /(?:₪\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:₪|ש["״']?ח|NIS|ILS|shekels?))/giu;
-export function priceAgainstStore(reply: string, candidates: Array<{ title: string; price?: number | null }>, tools: ToolRunRecord[], storeOffered: boolean): string[] {
+export function priceAgainstStore(reply: string, candidates: Array<{ title: string; price?: number | null; was?: number | null }>, tools: ToolRunRecord[], storeOffered: boolean): string[] {
   const read = tools.some((t) => /list_products|search_products|get_product|variation/i.test(t.tool) && t.outcome === "ok");
   const toolText = tools.map((t) => String(t.content ?? "")).join("\n");
   const out: string[] = [];
@@ -453,7 +461,7 @@ export function priceAgainstStore(reply: string, candidates: Array<{ title: stri
     if (!prices.length) continue;
     const named = candidates.filter((c) => c?.title && x.toLowerCase().includes(String(c.title).toLowerCase()) && c.price != null);
     // The store's own price for a product this sentence names, and the sentence says another.
-    if (named.length && prices.some((p) => !named.some((c) => Math.abs(Number(c.price) - p) < 0.01))) { out.push(x.trim().slice(0, 120)); continue; }
+    if (named.length && prices.some((p) => !named.some((c) => Math.abs(Number(c.price) - p) < 0.01 || (c.was != null && Math.abs(Number(c.was) - p) < 0.01)))) { out.push(x.trim().slice(0, 120)); continue; }
     // A product price with no store read at all, from a document only.
     if (storeOffered && !read && PRODUCT_NOUN.test(x) && prices.some((p) => !toolText.includes(String(p)))) out.push(x.trim().slice(0, 120));
   }
@@ -762,7 +770,7 @@ export const stripForeignScript = (reply: string, allowedText = "") => String(re
 const INTERNAL_JARGON = /(?<![\u0590-\u05FF])(?:(?:מקושר|מקושרת|משויך|משויכת)\s+ל(?:פרטי\s+(?:ה)?קשר|איש\s+(?:ה)?קשר|חשבון|כרטיס)|פרטי\s+הקשר\s+(?:השמורים|המאומתים|המקושרים)|אימות\s+זהות|הרשאות?\s+גישה|במערכת\s+שלנו\s+(?:מופיע|רשום))(?![\u0590-\u05FF])|access_denied|cross_customer|(?<![\u0590-\u05FF])(?:לא\s+מפורט(?:ים|ות|ת)?\s+(?:כאן|אצלנו|במידע)|אין\s+במידע|במידע\s+(?:שיש\s+)?(?:לי|לנו)\s+(?:אין|לא))(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:בתיאור\s+העסק|בפרטי\s+העסק|במידע\s+שלנו\s+(?:מופיע|מופיעה|מופיעים|כתוב)|אצלנו\s+(?:מופיע|מופיעה|מופיעים|רשום)|לא\s+(?:מופיע|מופיעה|מופיעים|מופיעות)\s+אצלנו|צירוף\s+(?:של\s+)?תבנית|הודעה\s+(?:קריאה|שאינה\s+קריאה)|לא\s+התקבלה\s+הודעה\s+קריאה)(?![\u0590-\u05FF])|\b(?:template attachment|template message|readable message)\b|(?<![\u0590-\u05FF])(?:נוסף|נוספה|הוספתי|הוספנו|שמרתי|שמרנו|עודכן|עודכנה|עדכנו)\s+(?:את\s+\S+\s+)?(?:ל|אל\s+)?(?:פרטי\s+(?:ה)?קשר|הכרטיס\s+שלך|לכרטיס|למערכת)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ההודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת)|הודעה\s+(?:שלא\s+נתמכה|שאינה\s+נתמכת|לא\s+נתמכת))(?![\u0590-\u05FF])|\bunsupported (?:message|media)\b|\b(?:linked to your contact|contact details on file|verified identity|tool call|the system shows)\b|(?<![\u0590-\u05FF])[וש]?(?:מקור\s+(?:נוסף|אחר)|במקור\s+(?:אחר|נוסף)|לפי\s+(?:המסמך|המסמכים|המקור|המקורות)|במסמך\s+(?:אחר|נוסף)|התקנון\s+(?:מציין|אומר|קובע)[^.\n]{0,80}\s+ו(?:במקום|מקור|בשאלות|ב?מסמך)|יש\s+סתירה\s+בין)(?![\u0590-\u05FF])|\b(?:another source|one (?:document|source) says|according to the documents?)\b/iu;
 // The bot describing its own lookup or what it did or did not verify (rating of b3d2bbf3 and dev round k3: "בחיפוש
 // לפי חולצת טי", "לא אומתו", "מחיר מאומת", "שתוארו קודם", "לא בדקנו את התיאור", "המידע שיש לנו מתאר").
-const PROCESS_TALK = /(?<![\u0590-\u05FF])(?:בחיפוש\s+(?:לפי|של|על)|לא\s+מצוין\s+(?:אם|האם)|(?:ב|ש|ה)?(?:פריטים|מוצרים|חולצות|דגמים)\s+ש(?:מופיעים|מופיעות)\s+(?:אצלנו|כאן|באתר)|לא\s+(?:אומת|אומתו|אומתה|מאומת|מאומתים|מאומתות|מאומתת)|(?:מחיר|מחירים|צבע|צבעים|מלאי)\s+(?:מאומת|מאומתים|מאומתות)|ש(?:תוארו|תואר|תוארה|הוזכרו|הוזכר|הוזכרה)\s+(?:קודם|לפני\s+כן|מקודם)|(?:לא\s+)?(?:בדקנו|בדקתי)\s+את\s+(?:ה)?(?:תיאור|מידע|פרטים)|המידע\s+שיש\s+(?:לנו|לי)\s+(?:מתאר|מציין|אומר))(?![\u0590-\u05FF])/u;
+const PROCESS_TALK = /(?<![\u0590-\u05FF])(?:בחיפוש\s+(?:לפי|של|על)|לא\s+מצוין\s+(?:אם|האם)|(?:ה)?(?:מלאי|מידות|צבעים|מחיר|מחירים|זמינות)(?:\s+ו?(?:ה)?(?:מלאי|מידות|צבעים|מחיר|מחירים|זמינות))?\s+(?:לא|טרם)\s+(?:נבדק|נבדקו|נבדקה|אומתו)(?![\u0590-\u05FF])|(?:ב|ש|ה)?(?:פריטים|מוצרים|חולצות|דגמים)\s+ש(?:מופיעים|מופיעות)\s+(?:אצלנו|כאן|באתר)|לא\s+(?:אומת|אומתו|אומתה|מאומת|מאומתים|מאומתות|מאומתת)|(?:מחיר|מחירים|צבע|צבעים|מלאי)\s+(?:מאומת|מאומתים|מאומתות)|ש(?:תוארו|תואר|תוארה|הוזכרו|הוזכר|הוזכרה)\s+(?:קודם|לפני\s+כן|מקודם)|(?:לא\s+)?(?:בדקנו|בדקתי)\s+את\s+(?:ה)?(?:תיאור|מידע|פרטים)|המידע\s+שיש\s+(?:לנו|לי)\s+(?:מתאר|מציין|אומר))(?![\u0590-\u05FF])/u;
 // The same as a clause before the real question ("אין כאן פנייה קודמת פתוחה ..., אפשר לכתוב במה מדובר?"): the clause goes.
 const PROCESS_CLAUSE = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי\s+)?(?:כאן|פה|אצלנו)\s+(?:פנייה|בקשה|שיחה|הודעה)[^,.!?\n]{0,80}),\s*/gu;
 export const internalJargon = (reply: string) => INTERNAL_JARGON.test(reply ?? "") || PROCESS_TALK.test(reply ?? "") || new RegExp(PROCESS_CLAUSE.source, "u").test(reply ?? "");
@@ -1316,11 +1324,13 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     || (!i.cardsChannel && namesProductsUnsearched(reply, i.incomingMessage, i.tools, i.toolsOffered))
     // Any channel: "יש כמה מטפחות..." or "נחפש..." with no store read this turn (rating of dcf2158e, Tehila: three
     // turns about a scarf with the knowledge searched only; on cards channels nothing flagged them).
-    || claimsOrPromisesUnsearched(reply, i.incomingMessage, i.tools, i.toolsOffered))) problems.push({ kind: "no_search" });
+    || claimsOrPromisesUnsearched(reply, i.incomingMessage, i.tools, i.toolsOffered, { grounding: i.grounding, knowledge: i.knowledge }))) problems.push({ kind: "no_search" });
   if (i.searchFailed && i.teamQuestion && knowledgeHasIt(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
   // A bare team line to an information question the retrieved knowledge speaks to (dev round k3 on b3d2bbf3: "מה
   // אפשרויות התשלום?" went to the team with the payment methods in the knowledge).
-  else if (i.teamQuestion && bareTeamLine(reply) && infoQuestion(i.incomingMessage) && !productAskNow(i.incomingMessage ?? "") && knowledgeSpeaksTo(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
+  // With or without a team question: the model may write the team line as its reply and leave team_question empty
+  // (dev round k5 on 0b5f2b46).
+  else if (bareTeamLine(reply) && infoQuestion(i.incomingMessage) && !productAskNow(i.incomingMessage ?? "") && knowledgeSpeaksTo(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
   if (couponSourceMissed(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"))) problems.push({ kind: "coupon_source" });
   if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
   const tips = unsafeTips(reply, i.knowledge ?? "", !!i.safety);
@@ -1551,7 +1561,7 @@ export function nonProductAsk(incoming: string): boolean {
  */
 // Words of a conversation, never of a product (the Supervisor's probes on 7100b0b6, L224 and L789): greetings, fillers,
 // past and existence verbs, pronouns, the frame of a question.
-const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison", "מומלץ", "מומלצים", "מומלצות", "מומלצת", "נשמע", "קיבלתי", "ממך", "מכם", "מצליח", "מצליחה", "לשלם", "הסבר", "להסבר", "וכו", "וכדומה", "עדכון", "עדכונים", "המלצה", "מלצה", "המלצות", "אלה", "אלו", "יחלק", "גוון", "כרגע", "למכשיר", "מכשיר", "להשתמש", "השתמש", "שימוש", "show", "me"]);
+const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison", "מומלץ", "מומלצים", "מומלצות", "מומלצת", "נשמע", "קיבלתי", "ממך", "מכם", "מצליח", "מצליחה", "לשלם", "הסבר", "להסבר", "וכו", "וכדומה", "עדכון", "עדכונים", "חינם", "המלצה", "מלצה", "המלצות", "אלה", "אלו", "יחלק", "גוון", "כרגע", "למכשיר", "מכשיר", "להשתמש", "השתמש", "שימוש", "show", "me"]);
 const PLAIN_ADJECTIVES = new Set(["יפה", "יפות", "יפים", "יפהפייה", "חדש", "חדשה", "חדשים", "חדשות", "נחמד", "נחמדה", "טוב", "טובה", "קלילה", "קליל", "עדין", "עדינה", "מיוחד", "מיוחדת", "שווה", "beautiful", "nice", "new", "pretty", "special"]);
 const CONTEXT_NOUNS = new Set(["מכירה", "מכירות", "סניף", "חנות", "אתר", "אינסטגרם", "פייסבוק", "טיקטוק", "וואטסאפ", "סטורי", "פוסט", "תערוכה", "יריד", "שוק", "אירוע", "הופעה", "קבוצה", "מבצע", "פרסומת", "ניוזלטר"]);
 const talkWord = (w: string) => { const l = w.toLowerCase(); return TALK_WORDS.has(l) || (/^[הושל][\u0590-\u05FF]{2,}$/u.test(l) && TALK_WORDS.has(l.slice(1))) || (/^ש[\u0590-\u05FF]{3,}$/u.test(l) && (TALK_WORDS.has(l.slice(1)) || /^ש(?:מוצר|הוא|היא|זה)/u.test(l))); };
@@ -1796,6 +1806,8 @@ export function cleanStyle(reply: string, codes: string[], previousBotReplies: s
     s = (s.match(SENTENCES) ?? [s]).filter((x) => !again.has(x.trim())).reduce(joinKept, "").trim();
   }
   if (c.has("gendered_address")) s = neutralSecondPerson(s);
+  // "שים לב," before a fact: the fact alone (dev round k5 on 0b5f2b46: the clean left it in).
+  if (c.has("imperative_notice")) s = s.replace(/(?<![\u0590-\u05FF])(?:שים|שימי)\s+לב(?:\s+ש)?\s*[,:]?\s*/gu, "");
   if (c.has("wrong_identity")) { const bad = wrongSelfName(s, employeeName); if (bad) s = (s.match(SENTENCES) ?? [s]).filter((x) => wrongSelfName(x, employeeName) == null).reduce(joinKept, "").trim(); }
   if (c.has("mixed_language")) { const en = new Set(foreignLanguageSentences(s, titles)); s = (s.match(SENTENCES) ?? [s]).filter((x) => !en.has(x.trim())).reduce(joinKept, "").trim(); }
   if (c.has("familiar_address")) s = s
@@ -3034,7 +3046,7 @@ export function asksAboutProduct(incoming: string): boolean {
 const PRODUCTS_EXIST = /(?<![\u0590-\u05FF])(?:יש\s+(?:(?:לנו|אצלנו|באתר|בחנות|כאן|במלאי)\s+)?(?:כמה|מגוון|מספר)|קיימות|קיימים)\s+([\u0590-\u05FF]{3,})|\b(?:we have (?:a few|several|some)|there are (?:a few|several|some))\s+(\w{3,})/iu;
 const SEARCH_PROMISE = /(?<![\u0590-\u05FF])[וש]?(?:נחפש|אחפש|נבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|אבדוק\s+(?:אם\s+)?(?:יש|במלאי|בקטלוג)|נמצא\s+לך)(?![\u0590-\u05FF])|\b(?:(?:i|we)(?:'ll| will) (?:search|look (?:for|it up)|check (?:the )?(?:stock|catalog(?:ue)?)))\b/iu;
 /** A product claim or a promise to search, with a store offered and no store read this turn, on a message about a product. */
-export function claimsOrPromisesUnsearched(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[]): boolean {
+export function claimsOrPromisesUnsearched(reply: string, incoming: string, tools: ToolRunRecord[], toolsOffered: string[], evidence: { grounding?: string; knowledge?: string } = {}): boolean {
   if (!toolsOffered.some((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n))) return false;
   if (tools.some((t) => /list_products|search_products|get_product/i.test(t.tool))) return false;
   const r = String(reply ?? "");
@@ -3046,7 +3058,15 @@ export function claimsOrPromisesUnsearched(reply: string, incoming: string, tool
   // "המידע שיש לנו מתאר את הטוש ... אבל לא כולל הוראות או סרטון": what the information lacks about a product needs its
   // store read first (rating of b3d2bbf3, NE'A).
   const infoLacks = /(?<![\u0590-\u05FF])(?:ה)?(?:מידע|תיאור|פרטים|הפרטים)(?:\s+[\u0590-\u05FF,]+){0,10}?\s+(?:לא|אינו|אינם)\s+(?:כולל|כוללים|כוללת|מציין|מציינים|מפרט|מפרטים|מזכיר|מתאר)(?![\u0590-\u05FF])|\b(?:the (?:information|description|details) (?:we have )?(?:does not|doesn't|do not|don't) (?:include|mention|say))\b/iu.test(r);
-  return (claim || SEARCH_PROMISE.test(r) || noInfo || infoLacks) && asksAboutProduct(incoming);
+  // A product with its price, named with no store read (dev round k5 on 0b5f2b46: two hoodies and their prices from a
+  // knowledge snapshot, on a cards channel).
+  // Only a sentence that names the product she asked about ("יש קפוצ'ון קצר ב-299"), never a policy price.
+  const herNouns = (storeQueryOf(incoming) ?? "").split(/\s+/).filter((w) => w.length >= 3).map((w) => normalizeQuotes(w).replace(/^ה(?=[\u0590-\u05FF]{3,})/u, "").slice(0, 4));
+  // A price the store gave (in the grounding, not from the knowledge) is no unsearched one.
+  const fromStore = (p: string) => String(evidence.grounding ?? "").includes(p) && !String(evidence.knowledge ?? "").includes(p);
+  const pricesIn = (x: string) => [...x.matchAll(/(\d{2,5}(?:[.,]\d{1,2})?)\s*(?:₪|ש["״]ח|שקל|ILS|NIS)|₪\s*(\d{2,5}(?:[.,]\d{1,2})?)/gu)].map((m) => String(m[1] ?? m[2]));
+  const priced = herNouns.length > 0 && (r.match(/[^.!?\n]+[.!?]*/g) ?? []).some((x) => pricesIn(x).some((p) => !fromStore(p)) && herNouns.some((n) => normalizeQuotes(x).includes(n)));
+  return (claim || SEARCH_PROMISE.test(r) || noInfo || infoLacks || priced) && asksAboutProduct(incoming);
 }
 
 /**
