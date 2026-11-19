@@ -119,6 +119,7 @@ describe('★★ the AI employee’s line, under the person-held one', () => {
 
   it.each([
     ['unread', owner(), { kind: 'unread' } as BotIdleSetup],
+    ['not released (flat route)', owner(), { kind: 'absent' } as BotIdleSetup],
     ['not an Owner', { kind: 'forbidden' } as IdleSetup, BOT],
     ['not given', owner(), undefined],
   ])('%s: no second line', (_, setup, bot) => {

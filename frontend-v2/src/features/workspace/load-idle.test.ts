@@ -77,8 +77,14 @@ describe('★★ the AI employee’s groups', () => {
     expect(got.kind === 'read' && got.groups.messaging?.reminderAfterMinutes).toBe(10);
   });
 
-  it('★ no group described (today’s flat route): unread, so nothing is offered', async () => {
+  it('★★ today’s flat route names no group: absent - not released, never "unread"', async () => {
     get.mockResolvedValue({ reminderEnabled: true, channels: ['WEBCHAT'] });
+    expect(await loadBotIdleSetup()).toEqual({ kind: 'absent' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('★ groups named and none parsing: a failed read', async () => {
+    get.mockResolvedValue({ liveChat: { enabled: 'yes' }, messaging: {} });
     expect(await loadBotIdleSetup()).toEqual({ kind: 'unread' });
   });
 

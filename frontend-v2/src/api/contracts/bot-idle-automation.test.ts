@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   botIdleBody,
+  botIdleDescribed,
   botIdleGroupProblem,
   botIdleGroupsOf,
   type BotIdleGroupWrite,
@@ -122,4 +123,23 @@ describe('★★ the write: only the groups given, each whole', () => {
     expect(botIdleGroupProblem(write({ enabled: false, reminderText: '' }))).toBeNull();
     expect(botIdleGroupProblem(write({ closeText: '' }))).toBeNull();
   });
+});
+
+describe('★★ released or not: does the answer name a group at all', () => {
+  it('★ today’s flat object names none - the part is absent, not unread', () => {
+    expect(
+      botIdleDescribed({ reminderEnabled: true, reminderDelayMinutes: 10, channels: ['WEBCHAT'] }),
+    ).toBe(false);
+  });
+
+  it.each([null, 'x', [], {}])('%j names none', (raw) => {
+    expect(botIdleDescribed(raw)).toBe(false);
+  });
+
+  it.each([{ liveChat: {} }, { messaging: null }, { liveChat: group() }])(
+    '★ %j names one - a group that does not parse is a failed read',
+    (raw) => {
+      expect(botIdleDescribed(raw)).toBe(true);
+    },
+  );
 });

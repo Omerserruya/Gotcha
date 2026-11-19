@@ -12,8 +12,11 @@ import { z } from 'zod';
  *   here and nowhere else.
  *
  * The route live today stores one flat object (reminderEnabled, …, channels)
- * and refuses unknown keys. Against it this read finds no group, so the
- * drawer says it could not read them and writes nothing.
+ * and refuses unknown keys. That answer names no group: the part is not
+ * released yet, so the drawer and the row draw nothing of it - an owner never
+ * reads "we couldn't read" only because Backend's side has not shipped
+ * (Supervisior, 2026-11-19). Only a failed request, or groups that are named
+ * and do not parse, are a failed read.
  *
  * No value is invented here: the defaults (10 + 10 minutes on live chat,
  * 30 + 15 on messaging, the two texts) are the server's, read from the GET.
@@ -74,6 +77,16 @@ const groupSchema = z.looseObject({
 export type BotIdleGroups = Readonly<Record<BotIdleGroupKey, BotIdleGroup | null>>;
 
 export const botIdleResponseSchema = z.unknown();
+
+/**
+ * Whether the answer names any group at all. The flat route of today names
+ * none: the part is absent, not unread.
+ */
+export function botIdleDescribed(raw: unknown): boolean {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const body = raw as Record<string, unknown>;
+  return BOT_IDLE_GROUPS.some((key) => body[key] !== undefined);
+}
 
 /** Each group on its own: one odd group is unread, never the other. */
 export function botIdleGroupsOf(raw: unknown): BotIdleGroups {

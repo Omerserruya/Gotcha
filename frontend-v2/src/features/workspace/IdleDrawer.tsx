@@ -140,7 +140,7 @@ export function IdleDrawer({
   bot,
 }: {
   readonly settings: IdleAutomation;
-  /** The AI employee's groups; absent, the drawer has only the person-held part. */
+  /** The AI employee's groups; not given, or `absent` (not released), the drawer has only the person-held part. */
   readonly bot?: BotIdleSetup;
 }) {
   const t = useTranslations('workspace');
@@ -173,7 +173,8 @@ export function IdleDrawer({
   const remindMinutes = minutesOf(person.remindAfter);
   const closeMinutes = minutesOf(person.closeAfter);
   const remindTextMissing = person.remind && person.remindText.trim() === '';
-  const parts = bot !== undefined;
+  // Not released (`absent`) or not given: the person-held part alone, as before.
+  const parts = bot !== undefined && bot.kind !== 'absent';
 
   /** The first field of a group Save would refuse, by test id; `null` when it can go. */
   const firstBad = (key: BotIdleGroupKey, d: GroupDraft): string | null => {

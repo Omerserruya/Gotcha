@@ -3,6 +3,7 @@ import 'server-only';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
+  botIdleDescribed,
   botIdleGroupsOf,
   botIdleResponseSchema,
   type BotIdleGroups,
@@ -33,17 +34,23 @@ export async function loadIdleSetup(): Promise<IdleSetup> {
 }
 
 /**
- * The AI employee's own follow-up and auto-close, per group. `unread` when
- * the read failed or described no group: the drawer then offers nothing to
- * change there, and the row says nothing about it.
+ * The AI employee's own follow-up and auto-close, per group.
+ * - `read`: at least one group, drawn.
+ * - `absent`: the answer names no group (the flat route live today) - the
+ *   part is not released, so nothing of it is drawn anywhere.
+ * - `unread`: the request failed, or it named groups and none parsed - the
+ *   drawer says it could not read them and offers nothing to change.
  */
 export type BotIdleSetup =
-  { readonly kind: 'read'; readonly groups: BotIdleGroups } | { readonly kind: 'unread' };
+  | { readonly kind: 'read'; readonly groups: BotIdleGroups }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'unread' };
 
 export async function loadBotIdleSetup(): Promise<BotIdleSetup> {
   return serverApi()
     .get({ endpoint: workspaceEndpoints.botIdleAutomation(), payload: botIdleResponseSchema })
     .then((raw): BotIdleSetup => {
+      if (!botIdleDescribed(raw)) return { kind: 'absent' };
       const groups = botIdleGroupsOf(raw);
       return groups.liveChat || groups.messaging ? { kind: 'read', groups } : { kind: 'unread' };
     })

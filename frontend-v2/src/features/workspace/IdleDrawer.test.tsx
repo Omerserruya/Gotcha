@@ -289,9 +289,25 @@ describe('★★ the AI employee’s conversations: two groups, one Save, only w
     expect(saveIdleAutomation).toHaveBeenCalledTimes(1);
   });
 
-  it('an unread read: the part says so and offers nothing to change', () => {
+  it('★★ not released (the flat route): no part, no heading, no error - and the person-held part saves as before', async () => {
+    showBoth({ kind: 'absent' });
+    expect(screen.queryByTestId('idle-part-bot')).toBeNull();
+    expect(screen.queryByTestId('idle-part-person')).toBeNull();
+    expect(screen.queryByTestId('bot-idle-unread')).toBeNull();
+    expect(screen.queryByText(/AI employee/)).toBeNull();
+    fireEvent.click(screen.getByTestId('idle-close-enabled'));
+    fireEvent.click(screen.getByTestId('drawer-save-idle'));
+    await waitFor(() => expect(saveIdleAutomation).toHaveBeenCalledTimes(1));
+    expect(saveIdleAutomation.mock.calls[0]![0]).toMatchObject({ autoCloseEnabled: true });
+    expect(saveBotIdleAutomation).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('idle-saved')).toBeInTheDocument();
+  });
+
+  it('a failed read: the part says so and offers nothing to change', () => {
     showBoth({ kind: 'unread' });
-    expect(screen.getByTestId('bot-idle-unread')).toBeInTheDocument();
+    expect(screen.getByTestId('bot-idle-unread')).toHaveTextContent(
+      'We couldn’t read your AI employee’s settings just now',
+    );
     expect(screen.queryByTestId('bot-idle-liveChat-toggle')).toBeNull();
   });
 
