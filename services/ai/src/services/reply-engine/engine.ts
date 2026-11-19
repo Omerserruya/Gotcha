@@ -490,11 +490,21 @@ export function assembleOnce(prose: string, list: string | null, titles: string[
     return words.length >= 2 ? proseText.includes(words.slice(0, 2).join(" ")) : proseText.includes(t.toLowerCase());
   };
   blocks = blocks.filter((b) => { const t = titles.find((x) => b.split("\n")[0].trim() === x.trim()); return !t || (!priced(t) && !pricedShort(t, b)); });
-  const all = [stripDirectives(String(prose ?? "")).trim(), ...blocks].filter(Boolean).join("\n\n");
-  // No line twice (a header, a bullet), blank lines kept as separators.
+  // No line twice in the text (a header, a bullet), blank lines kept as separators. A product block is whole: two
+  // products at the same price, both in stock, keep their own price and stock lines (dev round on 6320af2f: the second
+  // ₪299 hoodie lost its price and "במלאי"). A block goes only when the very same block, or its title, is already there.
   const seen = new Set<string>();
   // A line's ending punctuation does not make it new ("…שמתאים." and "…שמתאים:" are one header).
-  return all.split("\n").filter((l) => { const k = l.trim().replace(/[\s.:!,]+$/u, ""); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const key = (l: string) => l.trim().replace(/[\s.:!,]+$/u, "");
+  const text = stripDirectives(String(prose ?? "")).trim().split("\n").filter((l) => { const k = key(l); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }).join("\n");
+  const kept: string[] = [];
+  for (const b of blocks) {
+    const head = key(b.split("\n")[0] ?? "");
+    if (!b.trim() || kept.includes(b.trim()) || (head && seen.has(head))) continue;
+    if (head) seen.add(head);
+    kept.push(b.trim());
+  }
+  return [text, ...kept].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /** The fallback for a product ask with nothing grounded to show: one question about what is wanted. */

@@ -922,3 +922,17 @@ describe("dev recheck on 6320af2f", () => {
     expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/reply: notFoundReply\(locale, String\(opts\.incomingMessage \?\? ""\)\)/);
   });
 });
+
+describe("dev round on 6320af2f, item 7: a list block is whole", () => {
+  it("★ two hoodies at ₪299, both in stock, each keep their price and stock line", async () => {
+    const { assembleOnce } = await import("../services/reply-engine/engine");
+    const list = "Cropped Hoodie\n₪299\nבמלאי\nhttps://shop.example/cropped\n\nZip Hoodie\n₪299\nבמלאי\nhttps://shop.example/zip\n\nHeavyweight Hoodie\n₪359\nבמלאי\nhttps://shop.example/heavy";
+    const out = assembleOnce("יש כמה קפוצ'ונים, ה-Zip Hoodie כרגע במבצע.", list, ["Cropped Hoodie", "Zip Hoodie", "Heavyweight Hoodie"]);
+    expect(out).toContain("Zip Hoodie\n₪299\nבמלאי\nhttps://shop.example/zip");
+    expect(out).toContain("Heavyweight Hoodie\n₪359\nבמלאי");
+    expect(out.match(/₪299/g)).toHaveLength(2);
+    // The text still never says a line twice, and a block never goes out twice.
+    expect(assembleOnce("הנה מה שמצאתי:\nהנה מה שמצאתי.", "A\n₪10\n\nA\n₪10", ["A"]).match(/הנה מה שמצאתי/g)).toHaveLength(1);
+    expect(assembleOnce("שלום", "A\n₪10\n\nA\n₪10", ["A"]).match(/₪10/g)).toHaveLength(1);
+  });
+});
