@@ -2056,3 +2056,133 @@ describe("commit 4: where a product id came from, and the page as background (pr
     expect(shopify).toMatch(/lines\.push\("", "The customer is currently viewing THIS product:"\);\n\s+lines\.push\(describeProduct\(r\.data\)\);/);
   });
 });
+
+describe("commit 5 (A4): what the check flags as said to the customer has a neutral form (prod replay e, L1677)", () => {
+  const ctx = { locale: "he" as const, isFirstReply: false, incomingMessage: "", productFactsAvailable: true, shopFloor: true, toolsOffered: [], customerClosing: false };
+  const load = async () => {
+    const { ADDRESS_WORDS, addressFormsUsed, checkReplyStyle } = await import("../services/reply-style-check.service");
+    const { cleanStyle } = await import("../services/reply-engine/gates");
+    const flagged = (t: string) => { const f = addressFormsUsed(t); return !!(f.masculine || f.feminine); };
+    const gendered = (t: string) => checkReplyStyle(t, ctx as any).some((v: any) => v.kind === "gendered_address");
+    return { W: ADDRESS_WORDS, flagged, gendered, cleanStyle };
+  };
+  /** Every sentence is flagged as written, changes, and is not flagged after. */
+  const holds = (sentences: string[], flagged: (t: string) => boolean) => {
+    expect(sentences.length).toBeGreaterThan(0);
+    const notFlagged = sentences.filter((x) => !flagged(x));
+    expect(notFlagged, "the test's own sentence is not one the check flags").toEqual([]);
+    const left = sentences.filter((x) => { const n = neutralSecondPerson(x); return n === x || flagged(n); }).map((x) => `${x} -> ${neutralSecondPerson(x)}`);
+    expect(left, "flagged by the check, no neutral form in the map").toEqual([]);
+  };
+
+  it("★ L1677: the masculine order that went out as written is the plural, and the sentence says \"לכם\"", async () => {
+    const { gendered, cleanStyle } = await load();
+    const sent = "למכונת קפה אחרת, כתוב לי את רוחב ועומק הבסיס בס\"מ, וגם איזה דגם נינג'ה יש לך?";
+    const neutral = "למכונת קפה אחרת, כתבו לי את רוחב ועומק הבסיס בס\"מ, וגם איזה דגם נינג'ה יש לכם?";
+    expect(gendered(sent)).toBe(true);
+    expect(neutralSecondPerson(sent)).toBe(neutral);
+    expect(cleanStyle(sent, ["gendered_address"])).toBe(neutral);
+    expect(gendered(neutral)).toBe(false);
+  });
+
+  it("★ every order the check reads, masculine and feminine: opening the sentence, with \"ו\", and after a comma", async () => {
+    const { W, flagged } = await load();
+    const frame = (w: string) => ((W.pressedOnly as readonly string[]).includes(w) ? `${w} על הקישור בבקשה.` : w.endsWith(" ל") ? `${w}-Checkout בבקשה.` : w.includes(" ") ? `${w} בבקשה.` : `${w} בבקשה את הפרטים.`);
+    const orders = [...W.imperativeMasculine, ...W.imperativeFeminine];
+    expect(orders.length).toBeGreaterThanOrEqual(40);
+    holds(orders.flatMap((w) => [frame(w), `ו${frame(w)}`, `אם זה מתאים, ${frame(w)}`, `זה מתאים. ${frame(w)}`]), flagged);
+    // The plural itself, for the ones the map lacked.
+    expect(neutralSecondPerson("שלח לי תמונה של המוצר.")).toBe("שלחו לי תמונה של המוצר.");
+    expect(neutralSecondPerson("בחר צבע ונמשיך.")).toBe("בחרו צבע ונמשיך.");
+    expect(neutralSecondPerson("לחץ על הקישור כדי לשלם.")).toBe("לחצו על הקישור כדי לשלם.");
+    expect(neutralSecondPerson("ציין את המידה שלך.")).toBe("ציינו את המידה שלך.");
+    expect(neutralSecondPerson("תן לי רגע לבדוק.")).toBe("תנו לי רגע לבדוק.");
+    expect(neutralSecondPerson("שים לב, המשלוח לוקח שבוע.")).toBe("שימו לב, המשלוח לוקח שבוע.");
+    expect(neutralSecondPerson("כנס לאתר וראה את המידות.")).toBe("היכנסו לאתר וראו את המידות.");
+    expect(neutralSecondPerson("תראה, זה תלוי בדגם שיש לך.")).toBe("תראו, זה תלוי בדגם שיש לכם.");
+    expect(neutralSecondPerson("פשוט כתוב כאן את מספר ההזמנה.")).toBe("פשוט כתבו כאן את מספר ההזמנה.");
+  });
+
+  it("★ every second-person form of the two lists, bare, with \"ו\" and with \"ש\"; a pronoun opener with each verb, and with an adverb between", async () => {
+    const { W, flagged } = await load();
+    const lists = [...W.masculine, ...W.feminine];
+    expect(lists.length).toBeGreaterThanOrEqual(28);
+    const opener = (e: string) => /(?:^|\s|כש)(?:אתה|את)$/.test(e);
+    const sentences = lists.flatMap((e) => {
+      if (!opener(e)) return [`${e} משהו אחר, יש עוד.`, `ו${e} משהו אחר, יש עוד.`, ...(e.includes(" ") ? [] : [`כדי ש${e} משהו אחר, יש עוד.`])];
+      return W.afterPronoun.flatMap((v) => [`${e} ${v} משהו אחר, יש עוד.`, `ו${e} ${v} משהו אחר, יש עוד.`, `${e} עדיין ${v} משהו אחר, יש עוד.`, `${e} לא ${v} משהו אחר, יש עוד.`]);
+    });
+    expect(lists.filter(opener)).toEqual(["אם אתה", "כשאתה", "כשאת"]);
+    holds(sentences, flagged);
+    expect(neutralSecondPerson("אם אתה מחפש משהו חם, יש לנו מעיל.")).toBe("אם מחפשים משהו חם, יש לנו מעיל.");
+    expect(neutralSecondPerson("כשאת לא יודעת איזו מידה, אפשר למדוד.")).toBe("כשלא יודעים איזו מידה, אפשר למדוד.");
+    expect(neutralSecondPerson("אם אתה עדיין מתלבט, אפשר לשאול.")).toBe("אם עדיין מתלבטים, אפשר לשאול.");
+    expect(neutralSecondPerson("מעוניין לשמוע על עוד אפשרויות?")).toBe("מעוניינים לשמוע על עוד אפשרויות?");
+    expect(neutralSecondPerson("ואם מחפשת משהו קל יותר, יש גם חולצות.")).toBe("ואם מחפשים משהו קל יותר, יש גם חולצות.");
+  });
+
+  it("★ a pronoun and a present-tense verb: every verb of the check's list", async () => {
+    const { W, flagged } = await load();
+    expect(W.afterPronoun.length).toBeGreaterThanOrEqual(21);
+    holds(W.afterPronoun.flatMap((v) => [`אתה ${v} לבחור צבע אחר.`, `את ${v} לבחור צבע אחר.`, `יש עוד, את ${v} לראות?`]), flagged);
+    expect(neutralSecondPerson("את יכולה לשלם באשראי.")).toBe("יכולים לשלם באשראי.");
+    expect(neutralSecondPerson("אתה יודע איזו מידה יש לך?")).toBe("יודעים איזו מידה יש לכם?");
+    expect(neutralSecondPerson("המעיל שאת מחפשת נמצא במלאי.")).toBe("המעיל שמחפשים נמצא במלאי.");
+  });
+
+  it("★ a participle said in a question: opening it after every lead the check reads, after a question word, after \"או\" or a comma", async () => {
+    const { W, flagged } = await load();
+    const leads = ["", "היי. ", "יש כמה, ", "שאלה: ", "רגע; ", "היי\n", "הי \u2013 ", "הי \u2014 ", "הי - "];
+    holds(W.openingQuestion.flatMap((p) => leads.map((l) => `${l}${p} משהו חגיגי?`)), flagged);
+    holds(W.questionWords.flatMap((q) => W.afterQuestionWord.map((p) => `${q} צבע ${p}?`)), flagged);
+    holds(W.insideQuestion.flatMap((p) => [`יותר מתאים לשכבות או ${p} משהו חם?`, `זה מתאים לשכבות, ${p} משהו חם?`]), flagged);
+    expect(neutralSecondPerson("מחפש מעיל לחורף?")).toBe("מחפשים מעיל לחורף?");
+    expect(neutralSecondPerson("איזה צבע מעדיף?")).toBe("איזה צבע מעדיפים?");
+    expect(neutralSecondPerson("יותר מתאים לשכבות או מעדיף משהו חם?")).toBe("יותר מתאים לשכבות או מעדיפים משהו חם?");
+    // About someone else: not flagged, not changed.
+    for (const other of W.otherSubjects.filter((o) => !/^של/.test(o))) {
+      const t = `איזה צבע ${other} מעדיפה?`;
+      expect(flagged(t), t).toBe(false);
+      expect(neutralSecondPerson(t), t).toBe(t);
+    }
+    expect(neutralSecondPerson("היא מחפשת מתנה.")).toBe("היא מחפשת מתנה.");
+  });
+
+  it("★ a word that is an order only where an order stands: \"he sent\", \"written\", \"pressure\" and \"he chose\" stay", () => {
+    for (const t of [
+      "הצוות שלח לך מייל עם הפרטים.",
+      "בתקנון כתוב 14 יום, ובמקור אחר כתוב שבוע.",
+      "כתוב באתר שהמשלוח חינם.",
+      "כתוב כאן שהמשלוח חינם.",
+      "לפי התיאור, כתוב שהמשטח מתאים.",
+      "יש לחץ על המלאי בחגים.",
+      "לחץ המים בברז משפיע על הזרימה.",
+      "הלקוח בחר מידה M.",
+      "מי שראה את הסרטון מכיר את זה.",
+      "המוכר ציין שהמשלוח חינם.",
+      "ההזמנה תגיע עד לחצי שעה.",
+      "יש לך ל-3 ימים אפשרות לבטל.",
+    ]) expect(neutralSecondPerson(t), t).toBe(t);
+    // A future form is no order, so the past tense joined to it stays.
+    expect(neutralSecondPerson("תוכל לראות שהצוות בדק ושלח אישור.")).toBe("תוכלו לראות שהצוות בדק ושלח אישור.");
+  });
+
+  it("★ an order joined by \"ו\" to an order follows it", () => {
+    expect(neutralSecondPerson("הוסף לסל ובחר משלוח.")).toBe("הוסיפו לסל ובחרו משלוח.");
+    expect(neutralSecondPerson("בחר מידה ולחץ על הקישור.")).toBe("בחרו מידה ולחצו על הקישור.");
+    expect(neutralSecondPerson("בחרי מידה ואז שלח לי את הכתובת.")).toBe("בחרו מידה ואז שלחו לי את הכתובת.");
+    // No order in the sentence: "ושלח" is "and sent".
+    expect(neutralSecondPerson("הצוות בדק ושלח אישור.")).toBe("הצוות בדק ושלח אישור.");
+    // "ולחץ" joined to an order is pressed only before what is pressed.
+    expect(neutralSecondPerson("בחרו מידה, שלח לי אותה ולחץ המים יעלה.")).toBe("בחרו מידה, שלחו לי אותה ולחץ המים יעלה.");
+  });
+
+  it("★ the stated limits: a verb the lists do not hold after \"אם אתה\", and an order in the middle of a clause, stay as written", async () => {
+    const { flagged } = await load();
+    // Changing only the pronoun would leave a singular verb after a plural one.
+    expect(neutralSecondPerson("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.")).toBe("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.");
+    expect(flagged("אם אתה גר בחיפה, המשלוח מגיע תוך יומיים.")).toBe(true);
+    expect(neutralSecondPerson("כדי לשלם לחץ על הקישור.")).toBe("כדי לשלם לחץ על הקישור.");
+    expect(flagged("כדי לשלם לחץ על הקישור.")).toBe(true);
+  });
+});

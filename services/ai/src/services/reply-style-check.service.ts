@@ -100,17 +100,42 @@ export const BANNED_EN = ["happy to help", "great question", "i hope this helps"
  * Two whole words ("אירופה/בריטניה", eval e6 F02) are a list, not a form.
  */
 const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}])|(?<![${HE}])(?:אתה\\/את|את\\/ה)(?![${HE}])`, "u");
+/**
+ * The words the gendered_address check reads, as lists. The engine's neutral rewrite (reply-engine/gates.ts
+ * neutralSecondPerson) is built from the same lists, and a test holds the two together: a word added here with
+ * no neutral form there fails it (prod replay e, L1677: "כתוב לי" was flagged and went out as written).
+ */
+export const ADDRESS_WORDS = {
+  masculine: ["אם מחפש", "אם אתה", "כשאתה", "תשלח", "תבחר", "תוכל", "תרצה", "תגיד", "תכתוב", "תלחץ", "תזמין", "אתה מעוניין", "אתה מחפש", "מעוניין לשמוע", "אם תרצה"],
+  feminine: ["אם מחפשת", "אם את מחפשת", "כשאת", "תשלחי", "תבחרי", "תוכלי", "תרצי", "תגידי", "תכתבי", "תזמיני", "את מעוניינת", "את מחפשת", "אם תרצי"],
+  /** After "אתה" / "את". */
+  afterPronoun: ["רוצה", "מחפש", "מחפשת", "צריך", "צריכה", "מעדיף", "מעדיפה", "יכול", "יכולה", "מעוניין", "מעוניינת", "יודע", "יודעת", "חושב", "חושבת", "מתכוון", "מתכוונת", "אוהב", "אוהבת", "לובש", "לובשת"],
+  /** Opening a question. */
+  openingQuestion: ["מחפש", "מחפשת", "מעדיף", "מעדיפה", "מעוניין", "מעוניינת", "צריך", "צריכה", "מתלבט", "מתלבטת"],
+  /** A question word, and the participle that follows it inside the question. */
+  questionWords: ["איזה", "איזו", "מה", "באיזה", "באיזו"],
+  afterQuestionWord: ["מחפש", "מחפשת", "מעדיף", "מעדיפה", "מעוניין", "מעוניינת", "צריך", "צריכה"],
+  /** A subject of its own right before the participle: about someone else, not to the customer. */
+  otherSubjects: ["היא", "הוא", "הם", "הן", "הזוג", "זוג", "הבת", "הבן", "שלך", "שלו", "שלה"],
+  /** After "או" or a comma, inside a question. */
+  insideQuestion: ["מעדיף", "מעדיפה", "מחפש", "מחפשת", "מעוניין", "מעוניינת", "מתלבט", "מתלבטת"],
+  imperativeMasculine: ["הסתכל", "תסתכל", "שים לב", "ראה", "שלח", "תאר", "הוסף", "בחר", "תראה", "תוסיף", "תבדוק", "בדוק", "כנס", "היכנס", "לך ל", "ציין", "תציין", "תן לי", "כתוב", "לחץ"],
+  imperativeFeminine: ["הסתכלי", "תסתכלי", "שימי לב", "ראי", "שלחי", "תארי", "הוסיפי", "בחרי", "תראי", "תוסיפי", "תבדקי", "בדקי", "כנסי", "היכנסי", "לכי ל", "צייני", "תצייני", "תני לי", "כתבי", "לחצי"],
+  /** An order only before what is pressed ("לחץ על", "לחצי כאן"). */
+  pressedOnly: ["לחץ", "לחצי"],
+} as const;
+const alts = (words: readonly string[]) => words.join("|");
 /** Second-person forms that choose a gender, addressed to the customer. A bare imperative is in the lists below. */
-const MASC_TO_CUSTOMER = w("אם מחפש|אם אתה|כשאתה|תשלח|תבחר|תוכל|תרצה|תגיד|תכתוב|תלחץ|תזמין|אתה מעוניין|אתה מחפש|מעוניין לשמוע|אם תרצה");
-const FEM_TO_CUSTOMER = w("אם מחפשת|אם את מחפשת|כשאת|תשלחי|תבחרי|תוכלי|תרצי|תגידי|תכתבי|תזמיני|את מעוניינת|את מחפשת|אם תרצי");
+const MASC_TO_CUSTOMER = w(alts(ADDRESS_WORDS.masculine));
+const FEM_TO_CUSTOMER = w(alts(ADDRESS_WORDS.feminine));
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
-const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:רוצה|מחפש|מחפשת|צריך|צריכה|מעדיף|מעדיפה|יכול|יכולה|מעוניין|מעוניינת|יודע|יודעת|חושב|חושבת|מתכוון|מתכוונת|אוהב|אוהבת|לובש|לובשת)(?![${HE}])`, "u");
+const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:${alts(ADDRESS_WORDS.afterPronoun)})(?![${HE}])`, "u");
 // About someone else, "איזה צבע היא מעדיפה?" (urban-e33), is not to the customer.
 /** A participle that opens a question to the customer: "מעדיפה לראות...?", "מחפש מתנה...?" (eval e11 B01, B03, B04, F01). */
 // After a dash too: "הי — מחפש מעיל?" (dev 2026-10-27, urban-e22).
-const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה|מתלבט|מתלבטת)(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:איזה|איזו|מה|באיזה|באיזו)\\s[^.!?\\n]{0,30}?(?<![${HE}])(?<!(?:היא|הוא|הם|הן|הזוג|זוג|הבת|הבן|שלך|שלו|שלה)\\s)(?:מחפש|מחפשת|מעדיף|מעדיפה|מעוניין|מעוניינת|צריך|צריכה)(?![${HE}])[^.!?\\n]*[?؟]`, "u");
+const PARTICIPLE_TO_CUSTOMER = new RegExp(`(?:^|[.!?,:;\\n\u2013\u2014-]\\s*)(?:${alts(ADDRESS_WORDS.openingQuestion)})(?![${HE}])[^.!?\\n]*[?؟]|(?<![${HE}])(?:${alts(ADDRESS_WORDS.questionWords)})\\s[^.!?\\n]{0,30}?(?<![${HE}])(?<!(?:${alts(ADDRESS_WORDS.otherSubjects)})\\s)(?:${alts(ADDRESS_WORDS.afterQuestionWord)})(?![${HE}])[^.!?\\n]*[?؟]`, "u");
 /** A participle to the customer opening a clause inside a question, after "או" or a comma: "יותר מתאים לשכבות או מעדיף משהו חם?" (urban-e30). "הבת שלך מחפשת" has its subject. */
-const PARTICIPLE_IN_QUESTION = /(?:(?<![\u0590-\u05FF])או\s+|,\s*)(?:מעדיף|מעדיפה|מחפש|מחפשת|מעוניין|מעוניינת|מתלבט|מתלבטת)(?![\u0590-\u05FF])(?=[^.!?؟\n]*[?؟])/u;
+const PARTICIPLE_IN_QUESTION = new RegExp(`(?:(?<![\\u0590-\\u05FF])או\\s+|,\\s*)(?:${alts(ADDRESS_WORDS.insideQuestion)})(?![\\u0590-\\u05FF])(?=[^.!?؟\\n]*[?؟])`, "u");
 /**
  * Short imperatives that ARE ordinary words with a prefix ("מראה", "מבחר"): only bare or with ו.
  * "כתוב" and "לחץ" too (prod replay of 18aedcf2, NE'A: "אפשר לכתוב איזה מוצר" was read as "write!" to a man, and
@@ -118,8 +143,9 @@ const PARTICIPLE_IN_QUESTION = /(?:(?<![\u0590-\u05FF])או\s+|,\s*)(?:מעדי�
  * "לחץ" / "לחצי" only before what is pressed ("לחץ על", "לחצי כאן"): "לחצי שעה" is half an hour, "לחץ המים" is pressure.
  */
 const PRESSED = "(?=\\s+(?:על|כאן|פה)(?![\\u0590-\\u05FF]))";
-const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:הסתכל|תסתכל|שים לב|ראה|שלח|תאר|הוסף|בחר|תראה|תוסיף|תבדוק|בדוק|כנס|היכנס|לך ל|ציין|תציין|תן לי|כתוב|לחץ${PRESSED})(?![${HE}])`, "u");
-const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:הסתכלי|תסתכלי|שימי לב|ראי|שלחי|תארי|הוסיפי|בחרי|תראי|תוסיפי|תבדקי|בדקי|כנסי|היכנסי|לכי ל|צייני|תצייני|תני לי|כתבי|לחצי${PRESSED})(?![${HE}])`, "u");
+const orders = (words: readonly string[]) => words.map((x) => ((ADDRESS_WORDS.pressedOnly as readonly string[]).includes(x) ? `${x}${PRESSED}` : x)).join("|");
+const IMPERATIVE_MASC = new RegExp(`(?<![${HE}])ו?(?:${orders(ADDRESS_WORDS.imperativeMasculine)})(?![${HE}])`, "u");
+const IMPERATIVE_FEM = new RegExp(`(?<![${HE}])ו?(?:${orders(ADDRESS_WORDS.imperativeFeminine)})(?![${HE}])`, "u");
 const FEM_MARK = new RegExp(`(?<![${HE}])(?:את|מחפשת|צריכה|מעדיפה|יכולה|מעוניינת|יודעת|חושבת|מתכוונת|אוהבת|לובשת|מתלבטת)(?![${HE}])`, "u");
 const MASC_MARK = new RegExp(`(?<![${HE}])(?:אתה|מחפש|צריך|מעדיף|יכול|מעוניין|יודע|חושב|מתכוון|אוהב|לובש|מתלבט)(?![${HE}])`, "u");
 /**

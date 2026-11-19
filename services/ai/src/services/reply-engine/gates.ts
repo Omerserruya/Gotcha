@@ -9,7 +9,7 @@
  * budget allows a turn.
  */
 import { checkAiAllowed } from "@chatcenter/shared";
-import { ungroundedPrices, stripPrices, checkReplyStyle, addressFormsUsed, type StyleViolationKind } from "../reply-style-check.service";
+import { ungroundedPrices, stripPrices, checkReplyStyle, addressFormsUsed, ADDRESS_WORDS, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
 import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE, neverSaid, neverSaidNote, type AddressForm } from "./owner-rules";
@@ -959,32 +959,96 @@ export function noRecommendation(reply: string, incoming: string, candidateCount
 }
 
 // Gendered forms to a customer whose gender is not known become the plural (prod replay 2026-11-17).
+// The words are the ones the gendered_address check reads (reply-style-check ADDRESS_WORDS), and a test holds the
+// two together: what the check flags as said to the customer has a neutral form here (prod replay e, L1677:
+// "כתוב לי את רוחב ועומק הבסיס" was flagged, had no form here, and went out as written).
 const TO_PLURAL: Record<string, string> = {
   תשלחי: "תשלחו", שלחי: "שלחו", בחרי: "בחרו", תבחרי: "תבחרו", תוכלי: "תוכלו", תרצי: "תרצו", תרצה: "תרצו", תגידי: "תגידו",
   כתבי: "כתבו", תכתבי: "תכתבו", לחצי: "לחצו", תלחצי: "תלחצו", תזמיני: "תזמינו", הזמיני: "הזמינו", הסתכלי: "הסתכלו", תסתכלי: "תסתכלו",
   ראי: "ראו", תראי: "תראו", תארי: "תארו", הוסיפי: "הוסיפו", תוסיפי: "תוסיפו", תבדקי: "תבדקו", בדקי: "בדקו",
   כנסי: "היכנסו", היכנסי: "היכנסו", תיכנסי: "תיכנסו", תכנסי: "תיכנסו", צייני: "ציינו", תצייני: "תציינו", תני: "תנו", נסי: "נסו", תנסי: "תנסו",
-  תגללי: "תגללו", שימי: "שימו", תשימי: "תשימו",
+  תגללי: "תגללו", שימי: "שימו", תשימי: "תשימו", "לכי ל": "לכו ל",
   תוכל: "תוכלו", תבחר: "תבחרו", תבדוק: "תבדקו", בדוק: "בדקו", תסתכל: "תסתכלו", הסתכל: "הסתכלו", היכנס: "היכנסו", תיכנס: "תיכנסו",
   תוסיף: "תוסיפו", הוסף: "הוסיפו", תציין: "תציינו", תשלח: "תשלחו", תכתוב: "תכתבו", תלחץ: "תלחצו", תזמין: "תזמינו", תגיד: "תגידו", תנסה: "תנסו", נסה: "נסו",
-  מחפשת: "מחפשים", מעדיפה: "מעדיפים", מעוניינת: "מעוניינים", צריכה: "צריכים", מתלבטת: "מתלבטים", רוצה: "רוצים",
+  תראה: "תראו",
 };
-const PLURAL_WORDS = Object.keys(TO_PLURAL).sort((a, b) => b.length - a.length).join("|");
+/** Present-tense forms said to the customer ("את מחפשת", "מעדיף משהו חם?"). */
+const PARTICIPLE_PLURAL: Record<string, string> = {
+  מחפש: "מחפשים", מחפשת: "מחפשים", מעדיף: "מעדיפים", מעדיפה: "מעדיפים", מעוניין: "מעוניינים", מעוניינת: "מעוניינים", צריך: "צריכים", צריכה: "צריכים",
+  מתלבט: "מתלבטים", מתלבטת: "מתלבטים", רוצה: "רוצים", יכול: "יכולים", יכולה: "יכולים", יודע: "יודעים", יודעת: "יודעים", חושב: "חושבים", חושבת: "חושבים",
+  מתכוון: "מתכוונים", מתכוונת: "מתכוונים", אוהב: "אוהבים", אוהבת: "אוהבים", לובש: "לובשים", לובשת: "לובשים",
+};
+/**
+ * Masculine orders that are ordinary words too: "שלח" is "he sent", "בחר" is "he chose", "כתוב" is "written",
+ * "כנס" is a conference, "לחץ" is pressure. They change only where an order stands: opening a clause, or joined
+ * by "ו" to an order the sentence already holds ("הוסיפו לסל ובחרו משלוח"). Anywhere else the word stays.
+ */
+const ORDER_PLURAL: Record<string, string> = { ראה: "ראו", שלח: "שלחו", תאר: "תארו", בחר: "בחרו", כנס: "היכנסו", "לך ל": "לכו ל", ציין: "ציינו", כתוב: "כתבו", לחץ: "לחצו" };
+/** Orders that are nothing else, bare or with "ו" ("שתן" is another word). */
+const PHRASE_PLURAL: Record<string, string> = { "שים לב": "שימו לב", "תן לי": "תנו לי" };
+const HEB = "\\u0590-\\u05FF";
+const longestFirst = (words: readonly string[]) => [...new Set(words)].sort((x, y) => y.length - x.length).join("|");
+const said = (words: readonly string[]) => longestFirst(words.filter((x) => PARTICIPLE_PLURAL[x]));
+const PRESSED_ONLY: readonly string[] = ADDRESS_WORDS.pressedOnly;
+const PRESSED_NEXT = /^\s+(?:על|כאן|פה)(?![֐-׿])/u;
+/** "כתוב" is an order before what to write or to whom; "כתוב באתר ש", "כתוב 14 יום" and "כתוב כאן ש" are "it says". */
+const WRITE_NEXT = /^\s+(?:לי|לנו|את|מה|איזה|איזו|אילו|כמה|בבקשה|רק|גם|שוב|(?:כאן|פה)(?!\s+ש))(?![֐-׿])/u;
+const ORDERS = new Set<string>([...ADDRESS_WORDS.imperativeMasculine, ...ADDRESS_WORDS.imperativeFeminine]);
+const VERB_SAID = new RegExp(`(?<![${HEB}])(ו?ש?|כש)(${longestFirst(Object.keys(TO_PLURAL))})(?![${HEB}])`, "gu");
+const PHRASE_SAID = new RegExp(`(?<![${HEB}])(ו?)(${longestFirst(Object.keys(PHRASE_PLURAL))})(?![${HEB}])`, "gu");
+/** Opens a clause: the start (after a bullet or a number), punctuation or a dash, with one lead-in word at most. */
+const CLAUSE_OPENS = `(?:^[^${HEB}A-Za-z]*|[.!?\\u061F,:;\\n\\u2013\\u2014-]\\s*)(?:ו?(?:אז|פשוט|רק|בבקשה|אנא|או|גם|עכשיו)\\s+)?`;
+const ORDER_OPENING = new RegExp(`(${CLAUSE_OPENS})(ו?)(${longestFirst(Object.keys(ORDER_PLURAL))})(?![${HEB}])`, "gu");
+const ORDER_JOINED = new RegExp(`(?<![${HEB}])(ו(?:אז\\s+)?)(${longestFirst(Object.keys(ORDER_PLURAL))})(?![${HEB}])`, "gu");
+const PRONOUN_SAID = new RegExp(`(?<![${HEB}])(ו?(?:כש|ש)?)(?:את|אתה)\\s+(${said([...ADDRESS_WORDS.afterPronoun, ...ADDRESS_WORDS.openingQuestion])})(?![${HEB}])`, "gu");
+/** "אם אתה עדיין מתלבט", "כשאת לא יודעת": the pronoun goes and the verb is plural ("אם עדיין מתלבטים"). */
+const PRONOUN_THEN_SAID = new RegExp(`(?<![${HEB}])(ו?(?:אם\\s+|כש))(?:את|אתה)\\s+(לא|כבר|עדיין|גם|רק|עוד)\\s+(${said([...ADDRESS_WORDS.afterPronoun, ...ADDRESS_WORDS.openingQuestion])})(?![${HEB}])`, "gu");
+const IF_SAID = new RegExp(`(?<![${HEB}])([ושכלבהמ]?אם\\s+)(מחפשת|מחפש)(?![${HEB}])`, "gu");
+const KEEN_TO_HEAR = new RegExp(`(?<![${HEB}])([ושכלבהמ]?)(מעוניין)(?=\\s+לשמוע(?![${HEB}]))`, "gu");
+const OPENS_QUESTION = new RegExp(`(^|[.!?,:;\\n\\u2013\\u2014-]\\s*)(${said(ADDRESS_WORDS.openingQuestion)})(?![${HEB}])(?=[^.!?\\n]*[?\\u061F])`, "gu");
+const AFTER_QUESTION_WORD = new RegExp(`((?<![${HEB}])(?:${ADDRESS_WORDS.questionWords.join("|")})\\s[^.!?\\n]{0,30}?(?<![${HEB}])(?<!(?:${ADDRESS_WORDS.otherSubjects.join("|")})\\s))(${said(ADDRESS_WORDS.afterQuestionWord)})(?![${HEB}])(?=[^.!?\\n]*[?\\u061F])`, "gu");
+const INSIDE_QUESTION = new RegExp(`((?<![${HEB}])או\\s+|,\\s*)(${said(ADDRESS_WORDS.insideQuestion)})(?![${HEB}])(?=[^.!?\\u061F\\n]*[?\\u061F])`, "gu");
 /** Second-person gendered verbs and participles as the plural ("תשלחי" -> "תשלחו"). Participles only where the customer is the subject ("את מחפשת", a question). */
 export function neutralSecondPerson(s: string): string {
   // A sentence the plural reached says "לכם" too, never "כתבו ... יש לך" (prod replay of 9480dfb2, NE'A).
-  const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
+  const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[֐-׿0-9])\.(?=[֐-׿0-9]))+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
   return parts.map((p) => {
     const q = neutralSecondPersonPart(p);
-    return q === p ? p : q.replace(/(?<![\u0590-\u05FF])(ו?)(?:לך)(?![\u0590-\u05FF])/gu, "$1לכם").replace(/(?<![\u0590-\u05FF])(ו?)(?:אלייך|אליך)(?![\u0590-\u05FF])/gu, "$1אליכם");
+    return q === p ? p : q.replace(/(?<![֐-׿])(ו?)(?:לך)(?![֐-׿])/gu, "$1לכם").replace(/(?<![֐-׿])(ו?)(?:אלייך|אליך)(?![֐-׿])/gu, "$1אליכם");
   }).join("");
 }
 function neutralSecondPersonPart(s: string): string {
+  // An order this sentence holds, so that one joined to it by "ו" is an order too.
+  let order = false;
+  const next = (all: string, at: number, m: string) => all.slice(at + m.length);
   return String(s ?? "")
-    .replace(/(?<![\u0590-\u05FF])(?:את|אתה)\s+(מחפשת|מחפש|מעדיפה|מעדיף|מעוניינת|מעוניין|צריכה|צריך|רוצה)(?![\u0590-\u05FF])/gu, (_m, w) => TO_PLURAL[w] ?? ({ מחפש: "מחפשים", מעדיף: "מעדיפים", מעוניין: "מעוניינים", צריך: "צריכים" } as Record<string, string>)[w] ?? w)
-    .replace(new RegExp(`(?<![\\u0590-\\u05FF])(ו?ש?|כש)(${PLURAL_WORDS.split("|").filter((w) => !["מחפשת", "מעדיפה", "מעוניינת", "צריכה", "מתלבטת", "רוצה"].includes(w)).join("|")})(?![\\u0590-\\u05FF])`, "gu"), (m, v, w, at: number, all: string) => (w === "לחצי" && !/^\s+(?:על|כאן|פה)(?![\u0590-\u05FF])/u.test(all.slice(at + m.length)) ? m : `${v}${TO_PLURAL[w]}`))
-    // A participle opening a question to the customer ("מחפשת משהו חגיגי?").
-    .replace(/(^|[.!?,]\s*)(מחפשת|מעדיפה|מעוניינת|מתלבטת)(?=[^.!?\n]*\?)/gu, (_m, p, w) => `${p}${TO_PLURAL[w]}`);
+    .replace(PRONOUN_THEN_SAID, (_m, lead: string, adverb: string, w: string) => `${lead}${adverb} ${PARTICIPLE_PLURAL[w]}`)
+    .replace(PRONOUN_SAID, (_m, lead: string, w: string) => `${lead}${PARTICIPLE_PLURAL[w]}`)
+    .replace(IF_SAID, (_m, lead: string, w: string) => `${lead}${PARTICIPLE_PLURAL[w]}`)
+    .replace(KEEN_TO_HEAR, (_m, lead: string, w: string) => `${lead}${PARTICIPLE_PLURAL[w]}`)
+    .replace(VERB_SAID, (m, v: string, w: string, at: number, all: string) => {
+      if (PRESSED_ONLY.includes(w) && !PRESSED_NEXT.test(next(all, at, m))) return m;
+      if (ORDERS.has(w)) order = true;
+      return `${v}${TO_PLURAL[w]}`;
+    })
+    .replace(PHRASE_SAID, (_m, v: string, w: string) => { order = true; return `${v}${PHRASE_PLURAL[w]}`; })
+    .replace(ORDER_OPENING, (m, lead: string, v: string, w: string, at: number, all: string) => {
+      if (PRESSED_ONLY.includes(w) && !PRESSED_NEXT.test(next(all, at, m))) return m;
+      if (w === "כתוב" && !WRITE_NEXT.test(next(all, at, m))) return m;
+      order = true;
+      return `${lead}${v}${ORDER_PLURAL[w]}`;
+    })
+    .replace(ORDER_JOINED, (m, v: string, w: string, at: number, all: string) => {
+      if (!order) return m;
+      if (PRESSED_ONLY.includes(w) && !PRESSED_NEXT.test(next(all, at, m))) return m;
+      if (w === "כתוב" && !WRITE_NEXT.test(next(all, at, m))) return m;
+      return `${v}${ORDER_PLURAL[w]}`;
+    })
+    // A participle said to the customer in a question: opening it ("מחפשת משהו חגיגי?"), after a question word
+    // ("איזה צבע מעדיף?"), after "או" or a comma ("... או מעדיפה משהו חם?").
+    .replace(OPENS_QUESTION, (_m, p: string, w: string) => `${p}${PARTICIPLE_PLURAL[w]}`)
+    .replace(AFTER_QUESTION_WORD, (_m, p: string, w: string) => `${p}${PARTICIPLE_PLURAL[w]}`)
+    .replace(INSIDE_QUESTION, (_m, p: string, w: string) => `${p}${PARTICIPLE_PLURAL[w]}`);
 }
 
 // An English sentence inside a Hebrew reply (eval 2026-11-17, twice). Four or more Latin words and
