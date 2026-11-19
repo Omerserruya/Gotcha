@@ -271,7 +271,7 @@ export const caveatHolds = (x: string, sources: string) => {
   const lines = String(sources ?? "").split(/\n+|(?<=[.!?])\s+(?!\d)/u);
   return !lines.some((l) => RESTOCK_STATEMENT.test(l) && item.every((w) => new RegExp(`(?<![\\p{L}])[הולב]?${w}(?![\\p{L}])`, "iu").test(l)));
 };
-const RESTOCK_STATEMENT = /(?<![\u0590-\u05FF])(?:יחזור|יחזרו|תחזור|יגיע|יגיעו|תגיע)\s+(?:שוב\s+)?ל?מלאי|(?<![\u0590-\u05FF])צפי(?![\u0590-\u05FF])|חידוש\s+(?:ה)?מלאי\s+(?:ב|צפוי)|\b(?:back in stock|restock(?:ed|ing)?\s+(?:on|by)|expected (?:on|by|in))\b/iu;
+const RESTOCK_STATEMENT = /(?<![\u0590-\u05FF])(?:(?:יחזור|יחזרו|תחזור|יגיע|יגיעו|תגיע)|(?:צפוי|צפויה|צפויים|צפויות)\s+(?:לחזור|להגיע))\s+(?:שוב\s+)?ל?מלאי|(?<![\u0590-\u05FF])צפי(?![\u0590-\u05FF])|חידוש\s+(?:ה)?מלאי\s+(?:ב|צפוי)|\b(?:back in stock|restock(?:ed|ing)?\s+(?:on|by)|expected (?:on|by|in))\b/iu;
 const CAVEAT = /(?<![\u0590-\u05FF])ו?(?:אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)|אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
@@ -1370,7 +1370,9 @@ export function stripFactProblems(reply: string, problems: ClaimProblem[]): stri
       if (marks.length) s = (s.match(SENTENCES) ?? [s]).filter((x) => !marks.some((m) => x.includes(m))).reduce(joinKept, "").trim();
     }
     if (p.kind === "ungrounded_price") {
-      const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== x);
+      // Compared with the sentence normalized the same way: stripPrices trims, so a sentence with its trailing space
+      // counted as priced and one made-up price cut the whole reply (found on d2f10620; on every sha back to b369e939).
+      const priced = (x: string) => p.prices.some((pr) => stripPrices(x, [pr]) !== stripPrices(x, []));
       s = (s.match(SENTENCES) ?? [s]).filter((x) => !priced(x)).reduce(joinKept, "").trim();
     }
     if (p.kind === "ungrounded_absence" || p.kind === "unsupported_action" || p.kind === "card_reference" || p.kind === "echoed_size" || p.kind === "unsafe_tip" || p.kind === "ungrounded_number" || p.kind === "dangling_reference" || p.kind === "ungrounded_payment" || p.kind === "inactive_order_unlabelled" || p.kind === "option_without_variation" || p.kind === "ungrounded_source" || p.kind === "price_against_store" || p.kind === "order_state_unread" || p.kind === "claims_attachment" || p.kind === "device_mismatch" || p.kind === "ungrounded_negative_fit" || p.kind === "ungrounded_positive_fit") {
@@ -2108,7 +2110,12 @@ export function ungroundedAttribute(reply: string, evidence: string, incoming = 
     if (ATTRIBUTES.some((re) => { const u = new RegExp(unfinal(re.source), re.flags); return u.test(t) && !u.test(ev); })) return true;
     // A colour the data does not give. In a general explanation a colour that is said of no product passes ("איך אדע
     // מה התת גוון": the veins' colours); one said of a product ("מגיע/קיים/יש ... בגוון", a product's name) never does.
-    if (explanationAsk(incoming) && !PRODUCT_COLOUR_SAID.test(x) && !productSubject(x, String(evidence ?? ""), titles)) return false;
+    // Checked only in the clause that says it OF a product (d2f10620 queue: "כדי לבחור גוון מייקאפ אפשר לבדוק את
+    // הוורידים: כחולים..." names the product in another clause).
+    if (explanationAsk(incoming)) {
+      const said = x.split(/[:;,]|\s-\s/u).filter((c) => PRODUCT_COLOUR_SAID.test(c) || productSubject(c, String(evidence ?? ""), titles));
+      return said.some((c) => COLOURS.some((col) => COLOUR_RE(col).test(c) && !COLOUR_RE(col).test(String(evidence ?? ""))));
+    }
     return COLOURS.some((c) => COLOUR_RE(c).test(x) && !COLOUR_RE(c).test(String(evidence ?? "")));
   }).map((x) => x.trim().slice(0, 120));
 }
@@ -2403,7 +2410,9 @@ export const videoAsk = (incoming: string) => {
     const plural = /^(?:סרטונים|סרטוני)$/u.test(m[2]);
     if (!plural) { if (m[2] !== "הסבר") return true; continue; }
     const before = t.slice(0, m.index).trim().split(/\s+/).pop() ?? "";
-    const qualifies = /ל/u.test(m[1] ?? "") || /^ל[\u0590-\u05FF]{2,}$/u.test(before) || before === "של";
+    // "יש לכם סרטונים?", "אפשר לקבל סרטונים?": a pronoun or an infinitive before it is no noun it qualifies.
+    const pronounOrVerb = /^(?:לכם|לך|לי|לנו|להם|להן|לקבל|לשלוח|לראות|לצפות|למצוא|להוריד|לשתף)$/u.test(before);
+    const qualifies = /ל/u.test(m[1] ?? "") || (/^ל[\u0590-\u05FF]{2,}$/u.test(before) && !pronounOrVerb) || before === "של";
     if (!qualifies) return true;
   }
   return false;
@@ -2681,6 +2690,9 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
       return joined(next, true) || (/^ו/u.test(hayTokens[p] ?? "") && joined(prev, false));
     });
     const counts = (w: string) => said(w) && (w.length >= 5 || companion(w) || byPlace(w));
+    // Two sizes or colours of one name ("מלאני גדולה" / "מלאני קטנה"): the variant word with a word of its title beside it.
+    const variantOnly = wordsOf(base).filter((w) => owners(w) === 1 && VARIANT_WORDS.has(w));
+    const variantSaid = !distinct.length && variantOnly.some((w) => said(w) && companion(w));
     // Every word of the title within a run of (its word count + 1) reply words: "הבובון השטוח", "קרם הלחות שלנו",
     // "הבובון שלנו שטוח"; never "הקרם שומר על לחות".
     const all = wordsOf(base).filter((w) => !TITLE_STOP.has(w));
@@ -2689,7 +2701,7 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
       for (let st = Math.max(0, p0 - all.length); st <= p0; st++) if (places.every((ps) => ps.some((p) => p >= st && p <= st + all.length))) return true;
       return false;
     });
-    if ((base.length >= 4 && hay.includes(base)) || allSaid || distinct.some(counts)) out.push(i);
+    if ((base.length >= 4 && hay.includes(base)) || allSaid || distinct.some(counts) || variantSaid) out.push(i);
   });
   // A title inside a longer one that is also said: only the longer counts ("Classic Tee Long Sleeve", never also
   // "Classic Tee"); the same words (one base, two variants) keep both.
@@ -2733,4 +2745,12 @@ export function fixCardCount(reply: string, cards: number): string {
 /** "גם כן" / "as well" closing a sentence after a cut took what it pointed back to. */
 export function dropOrphanAlso(reply: string): string {
   return String(reply ?? "").replace(/\s+(?:גם\s+כן|גם\s+היא|גם\s+הוא)(?=\s*[.!?]|\s*$)/gu, "").replace(/,?\s+(?:as well|too)(?=\s*[.!?]|\s*$)/giu, "");
+}
+
+
+/** A question about a product's own attribute (material, stopper, size, care), no product wanted: no list for it. */
+export function attributeOnlyAsk(incoming: string): boolean {
+  const t = normalizeQuotes(String(incoming ?? ""));
+  return (ATTRIBUTE_ASK.test(t) || MATERIAL_ASK.test(t) || /(?<![\u0590-\u05FF])[הל]?(?:פקק|מכסה|ידית|מעצור|מעצורים|רגליות)(?![\u0590-\u05FF])/u.test(t))
+    && !/(?<![\u0590-\u05FF])(?:מחפש|מחפשת|מחפשים|רוצה|רוצים|יש\s+לכם|יש\s+לך|המלצה|ממליצים|תמליצו|אפשר\s+לקבל|מה\s+יש)(?![\u0590-\u05FF])|\b(?:looking for|do you have|recommend|i want|i need)\b/iu.test(t);
 }

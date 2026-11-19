@@ -1,7 +1,7 @@
 /** The independent rating of the 1b35c535 prod replay (replay e, 2026-11-18): the units. Every rule generic. */
 import { describe, it, expect } from "vitest";
 import { fixCardCount, dropOrphanAlso, ungroundedPositiveFit, neutralSecondPerson, cardReferences } from "../services/reply-engine/gates";
-import { cutFragment, withoutSlashForms, productQuestionLine } from "../services/reply-engine/engine";
+import { cutFragment, withoutSlashForms, productQuestionLine, oneTeamPass as onePass } from "../services/reply-engine/engine";
 import { ungroundedAttribute, unlabelledInactiveOrders, videoAsk, productAskNow, caveatHolds } from "../services/reply-engine/gates";
 import { referredCandidates, focusTitle, purchaseWithoutSearch, simulationLeak, unreadProduct } from "../services/reply-engine/gates";
 import { storeQueryOf, explanationAsk, autoLookups, derivedMeasure, stripFactProblems, wantsItSettled, nameSizeLines, colourList, howToLink } from "../services/reply-engine/gates";
@@ -595,5 +595,38 @@ describe("92486ac8 verify, with the inputs of a real turn", () => {
     expect(referredCandidates(smoovee, "ממליצים על גפן הקטנה.", "")).toEqual([0]);
     expect(referredCandidates([{ title: "קרם יום" }, { title: "סרום לילה" }, { title: "קרם לחות" }], "כדאי לבחור בלחות גבוהה.", "")).toEqual([]);
     expect(referredCandidates([{ title: "מלאני גדולה" }, { title: "מלאני קטנה" }, { title: "גפן למכונות קפה" }], "כדאי לבחור במלאני גדולה.", "")).toEqual([0]);
+  });
+});
+
+describe("rating of the d2f10620 prod replay: units", () => {
+  it("★ B1e: a team line behind an emoji is the same pass: one team line", () => {
+    const r = "בטח, אבדוק את זה והתשובה תגיע כאן בצ'אט 😊 העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    expect((onePass(r).match(/תגיע כאן/g) ?? []).length).toBe(1);
+    expect(onePass("יש לנו 😊 עוד משהו.")).toBe("יש לנו 😊 עוד משהו.");
+  });
+  it("★ queue 1: a colour in another clause than the product is never checked", () => {
+    const titles = ["מייקאפ - Cover me by light foundation"];
+    expect(ungroundedAttribute("כדי לבחור גוון מייקאפ אפשר לבדוק את הוורידים: כחולים או סגולים מצביעים על תת-גוון קר, ירוקים על חם.", "מייקאפ Cover me גוונים: Sand, Beige", "איך אדע מה התת גוון", titles)).toEqual([]);
+    expect(ungroundedAttribute("המייקאפ בגוון כחול עמוק.", "מייקאפ Cover me גוונים: Sand, Beige", "איך אדע מה התת גוון", titles)).toHaveLength(1);
+  });
+  it("★ queue 2: plural video asks after a pronoun or an infinitive", () => {
+    for (const v of ["יש לכם סרטונים?", "אפשר לקבל סרטונים?", "יש לכם קורס הדרכה לאיפור?"]) { expect(videoAsk(v), v).toBe(true); expect(productAskNow(v), v).toBe(false); }
+    expect(videoAsk("יש לכם מעמד לצילום סרטונים?")).toBe(false);
+  });
+  it("★ queue 3: \"צפוי לחזור למלאי\" is a restock statement", () => {
+    expect(caveatHolds("אין לנו כרגע תאריך לחידוש המלאי של סמובי אליס שחור.", "סמובי אליס בצבע שחור צפוי לחזור למלאי בתחילת דצמבר.")).toBe(false);
+  });
+  it("★ queue 4: two sizes of one name are marked by the size word beside the name", () => {
+    const t = [{ title: "משטח הזזה סמובי מלאני גדולה" }, { title: "משטח הזזה סמובי מלאני קטנה" }];
+    expect(referredCandidates(t, "סמובי מלאני גדולה מתאים למיקסר.", "")).toEqual([0]);
+    expect(referredCandidates(t, "כדאי לבחור במלאני גדולה.", "")).toEqual([0]);
+    expect(referredCandidates(t, "יש לנו משטחים בכמה גדלים.", "")).toEqual([]);
+  });
+});
+
+describe("the price cut takes only its own sentence (stripPrices trims)", () => {
+  it("★ one made-up price never wipes the other sentences", () => {
+    expect(stripFactProblems("יש לנו את Canvas Tote, תיק בד חזק ונוח לשימוש יומיומי וגם לקניות. הוא עולה ₪999.", [{ kind: "ungrounded_price", prices: ["999"] }] as any)).toBe("יש לנו את Canvas Tote, תיק בד חזק ונוח לשימוש יומיומי וגם לקניות.");
+    expect(stripFactProblems("התיק עולה ₪120. מתאים לך?", [{ kind: "ungrounded_price", prices: ["120"] }] as any)).toBe("מתאים לך?");
   });
 });

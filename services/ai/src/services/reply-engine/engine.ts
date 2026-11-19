@@ -35,7 +35,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf } from "./gates";
+import { teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -530,7 +530,7 @@ export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -542,6 +542,13 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
   if (markers.length) out.markers = markers;
   return Object.keys(out).length ? out : undefined;
 }
+// A sentence that says the fit is not stated ("ולא מצוין שהוא מתאים ל..."): a caveat of its own.
+const NEG_THAT_FIT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*(?:מצוין|מצוינת|כתוב|ידוע|אישור|מידע|מופיע|בטוח|ברור)\s+ש[^,.:;!?\n]*(?:מתאים|מתאימה|מתאימים|יתאים)/u;
+// A request for the base's sizes ("אפשר לשלוח את רוחב ועומק הבסיס", "מה המידות של המכשיר?").
+const ASKS_FOR_SIZES = /(?<![\u0590-\u05FF])(?:לשלוח|תשלחו|שלחו|לכתוב|כתבו|מה)\s+(?:לי\s+|לנו\s+)?(?:את\s+)?(?:ה)?(?:רוחב|עומק|אורך|מידות|גודל|מידה)|\b(?:send|tell) (?:me |us )?(?:the )?(?:width|depth|size|dimensions)\b/iu;
+const stillCheckingRe = /(?<![\u0590-\u05FF])(?:עדיין\s+(?:בבדיקה|בודקים|נבדק)|אצל\s+הצוות)(?![\u0590-\u05FF])|\bstill (?:checking|being checked)\b/iu;
+// The problems the cleanup removes itself (a sentence cut or a style fix), with no model round.
+const DIRECT_KINDS = new Set<string>(["style", "ungrounded_price", "price_of_other_product", "derived_measure", "ungrounded_attribute", "card_reference", "dangling_reference", "echoed_size", "ungrounded_number", "unsafe_tip", "option_without_variation", "device_mismatch", "ungrounded_positive_fit", "ungrounded_negative_fit", "claims_attachment", "ungrounded_source", "price_against_store", "inactive_order_unlabelled", "order_state_unread"]);
 // The titles the last product lookup found (the focus when the reply named none by its exact title).
 const FOCUS_FACT = "_focusTitles";
 export function focusTitlesOf(facts: Record<string, unknown> | null | undefined): string[] {
@@ -610,9 +617,12 @@ export function danglingQuestion(reply: string, incoming: string): boolean {
 // "העברנו" is the same told pass (prod replay on 1b35c535, Bimi payment: two team clauses in one reply).
 const FIXED_PASS = /(?<![\u0590-\u05FF])[ו]?(?:העברתי|העברנו)\s+(?:את\s+(?:זה|השאלה|הבקשה|הפנייה|הבדיקה|הנושא)\s+)?לצוות|\b(?:I|we)'ve passed (?:this|it|the question) to the team\b/iu;
 const OTHER_PASS = /(?<![\u0590-\u05FF])(?:להעביר|אעביר|נעביר|לשאול\s+את|אשאל\s+את|נשאל\s+את|לבדוק\s+עם)\s+(?:\S+\s+){0,3}?(?:[לה]|לה)?צוות|והתשובה\s+תגיע\s+כאן|(?<![\u0590-\u05FF])ו?הצוות\s+(?:יבדוק|יחזור|יעדכן|יענה|יטפל)(?![\u0590-\u05FF])|\b(?:pass (?:it|this) (?:on )?to the team|ask the team|check with the team|the answer will come here)\b/iu;
-export function oneTeamPass(reply: string): string {
-  const parts = String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
-  if (!parts.some((p) => FIXED_PASS.test(p))) return reply;
+export function oneTeamPass(reply0: string): string {
+  // An emoji then a new word ends a sentence ("...כאן בצ'אט 😊 העברתי את זה לצוות", rating of d2f10620, NE'A).
+  const MARK = "\u2063";
+  const reply = String(reply0 ?? "").replace(/(\p{Extended_Pictographic}\uFE0F?)\s+(?=\p{L})/gu, `$1${MARK}`);
+  const parts = String(reply ?? "").replace(new RegExp(MARK, "g"), `${MARK}\n`).match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|\.(?=\d))+[.!?]*\s*|\n+/g) ?? [];
+  if (!parts.some((p) => FIXED_PASS.test(p))) return reply0;
   // The most specific told pass stays ("את שאר הפריטים העברתי לצוות" over the generic line), the others go.
   const keep = parts.filter((p) => FIXED_PASS.test(p)).sort((a, b) => b.trim().length - a.trim().length)[0];
   // A sentence goes only when the pass is all it says; with other content only its pass clause goes
@@ -632,7 +642,7 @@ export function oneTeamPass(reply: string): string {
     if (p.includes(HOLD_LINE_CORE.he) || p.includes(HOLD_LINE_CORE.en) || p.includes(HOLD_SETTLED_HE) || p.includes(HOLD_SETTLED_EN)) return p;
     return OTHER_PASS.test(p) ? withoutPass(p, OTHER_PASS) : p;
   }).filter((p) => p !== "");
-  return kept.join("").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return kept.join("").replace(new RegExp(`${MARK}\\n?`, "g"), " ").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 /** The customer will look on their own ("אני אחפש לבד", "אסתכל באתר", "I'll look myself"). */
 const SELF_SEARCH = /(?<![\u0590-\u05FF])(?:(?:אני\s+)?(?:אחפש|אסתכל|אבדוק|אעבור|אציץ)\s+(?:לבד|בעצמי|באתר|על\s+האתר)|(?:אני\s+)?אסתדר\s+(?:לבד|בעצמי))(?![\u0590-\u05FF])|\b(?:i'?ll (?:look|search|browse|check) (?:myself|on my own|on the (?:site|website))|i'?ll find it myself)\b/iu;
@@ -1403,7 +1413,76 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (!r) { (trace as any).rewriteCut = "deadline"; throw Object.assign(new Error("rewrite past the turn budget"), { name: "RewriteDeadline" }); }
       return r;
     };
-    try {
+    const salvage = (o0: ModelTurnOutput | null) => {
+      if (!o0) return null;
+      // The text points at a card it forgot to attach ("שמופיע כאן" with no card, rating of d2f10620, NE'A): on a
+      // cards channel the products the reply names are attached, never cut away with their sentence.
+      // Only when the draft does point at a card (a dangling reference); otherwise its title stays plain text.
+      let o: ModelTurnOutput = o0;
+      let v = gate3(g3Input(o));
+      if (cardChannel && !(o.cards ?? []).length && candidates.length && v.problems.some((p) => p.kind === "dangling_reference")) {
+        const refs = referredCandidates(candidates as any[], resolveKeysInText(o.reply, candidates), String(o.stateUpdate?.intent ?? "")).slice(0, 3);
+        if (refs.length) { o = { ...o, cards: refs.map((n) => `PRODUCT_${n + 1}`) }; v = gate3(g3Input(o)); (trace as any).cardsAttached = refs.length; }
+      }
+      const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
+      const needless = v.problems.some((p) => p.kind === "needless_handoff");
+      const handoff = needless ? null
+        : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
+        : o.handoff;
+      let facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
+      // A handoff removed as needless takes its words with it (prod replay 2026-11-17, Smoovee: "העברנו
+      // את הבדיקה לצוות ונמשיך כאן" went out with neither): "a person continues" is cut, and "passed to
+      // the team" becomes true by recording the question for the team (or is cut when one is open).
+      let teamQ = o.teamQuestion ?? null;
+      if (needless && o.handoff) {
+        facts = dropPersonPromises(facts);
+        if (teamLineIn(facts) && !teamQ) {
+          if (!teamAlreadyOpen) teamQ = String(opts.incomingMessage ?? "").slice(0, 300) || o.handoff;
+          else facts = removeTeamLines(facts);
+        }
+      }
+      const cleaned: ModelTurnOutput = { ...o, teamQuestion: teamQ, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? "", candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean), config.name ?? null), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
+      // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
+      if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
+      if (!cleaned.reply) return null;
+      const after = gate3(g3Input(cleaned));
+      if (factualProblems(after.problems).length) return null;
+      // A remnant that no longer answers (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on a safety
+      // complaint) is kept only as the last resort, never as the answer while the model can still give one.
+      const removed = removedSentences(resolveKeysInText(o.reply, candidates), cleaned.reply);
+      const thin = tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) });
+      // Hollow: thin, or most of the reply cut away (a style edit keeps its words).
+      // A fragment after a cut (prod replay of 9480dfb2: "וכשמקפלים אותה מתקבל משולש." alone): never sent.
+      // A request for what she gave in this very message (her sizes) goes (rating of d2f10620, Smoovee B: five sizes
+      // given, "אפשר לשלוח את רוחב ועומק הבסיס" left).
+      if (removed.length && sizedItems(String(opts.incomingMessage ?? "")).length) {
+        const asked = dropSentencesBy(cleaned.reply, ASKS_FOR_SIZES);
+        if (asked !== cleaned.reply) cleaned.reply = asked;
+      }
+      // What a cut leaves must stand as an answer: words, not an emoji alone ("🙂"), and not a condition without its
+      // claim ("אם זו מכונת קפה קטנה..., כתבו את הדגמים ואדייק.").
+      const noWords = removed.length > 0 && !/[\p{L}\p{N}]{2,}/u.test(cleaned.reply);
+      const onlyCondition = removed.length > 0 && (cleaned.reply.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).every((x) => /^\s*(?:ו?אם|if)\s/iu.test(x));
+      const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition);
+      // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
+      // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
+      const lostPass = removed.some((x) => teamPassIn(x)) && !teamPassIn(cleaned.reply) && (asksSomething(opts.incomingMessage ?? "") || imperativeAsk(opts.incomingMessage ?? ""));
+      // A video or link ask whose answer was the cut sentence (dev live round on b369e939: "אין לנו כרגע סרטון" cut,
+      // the care-label advice sent alone): what is left does not answer it, so the team line (or the link) instead.
+      const linkAskNow = videoAsk(opts.incomingMessage ?? "") || HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? ""));
+      const lostLink = linkAskNow && removed.some((x) => /סרטון|הדרכה|מדריך|קישור|לינק|video|tutorial|guide|link/iu.test(x)) && !/https?:\/\//i.test(cleaned.reply) && !teamPassIn(cleaned.reply);
+      const hollow = thin || fragment || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
+      return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass, lostLink };
+    };
+    // No rewrite round when the cleanup can fix the draft itself (rating of d2f10620: 7 rewrites cut by the budget, 0
+    // live): every problem is one a cut or a style fix removes, and at most one sentence goes, leaving a full answer.
+    // The model is called only for what needs a lookup or a new answer.
+    const directOk = first.problems.every((p) => DIRECT_KINDS.has(p.kind as string));
+    const pre = directOk ? salvage(original) : null;
+    const direct = !!pre && !pre.hollow && !pre.fragment && !pre.lostPass && !pre.lostLink && pre.removed.length <= 1 && wordCount(pre.o.reply) >= 8;
+    if (direct) (trace as any).rewriteSkipped = "direct_clean";
+    else if (directOk) (trace as any).directRejected = pre ? `${pre.hollow ? "hollow " : ""}${pre.fragment ? "fragment " : ""}${pre.lostPass ? "lostPass " : ""}removed=${pre.removed.length} words=${wordCount(pre.o.reply)}`.trim() : "facts_left";
+    if (!direct) try {
       const forceRespond = { type: "function", function: { name: "respond" } };
       if (left() < 4000) { (trace as any).rewriteCut = "budget"; throw Object.assign(new Error("no time left for a rewrite"), { name: "RewriteDeadline" }); }
       // The lookups the engine can make itself run first, with no model round:
@@ -1455,49 +1534,6 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // Not clean: what is left is cleaned and sent. A FACT problem (a price, a
       // product, an absence or an action no tool backs) loses its sentence; the
       // rest goes out if it still answers. The rewrite first, else the original.
-      const salvage = (o: ModelTurnOutput | null) => {
-        if (!o) return null;
-        const v = gate3(g3Input(o));
-        const codes = v.problems.flatMap((p) => (p.kind === "style" ? p.codes : []));
-        const needless = v.problems.some((p) => p.kind === "needless_handoff");
-        const handoff = needless ? null
-          : v.problems.some((p) => p.kind === "ignored_yes") ? "the customer accepted the offer of a person"
-          : o.handoff;
-        let facts = stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems);
-        // A handoff removed as needless takes its words with it (prod replay 2026-11-17, Smoovee: "העברנו
-        // את הבדיקה לצוות ונמשיך כאן" went out with neither): "a person continues" is cut, and "passed to
-        // the team" becomes true by recording the question for the team (or is cut when one is open).
-        let teamQ = o.teamQuestion ?? null;
-        if (needless && o.handoff) {
-          facts = dropPersonPromises(facts);
-          if (teamLineIn(facts) && !teamQ) {
-            if (!teamAlreadyOpen) teamQ = String(opts.incomingMessage ?? "").slice(0, 300) || o.handoff;
-            else facts = removeTeamLines(facts);
-          }
-        }
-        const cleaned: ModelTurnOutput = { ...o, teamQuestion: teamQ, reply: cleanStyle(facts, codes, previousBotReplies, inbound.join("\n"), opts.incomingMessage ?? "", candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean), config.name ?? null), handoff, cards: (o.cards ?? []).filter((k) => { const n = Number(/PRODUCT_(\d+)/i.exec(k)?.[1]); return n >= 1 && n <= candidates.length; }) };
-        // The same paragraph again is never sent (prod replay 6: seven times in one conversation).
-        if (codes.includes("near_duplicate") && gate3(g3Input({ ...o, reply: cleanStyle(stripFactProblems(resolveKeysInText(o.reply, candidates), v.problems), codes, [], inbound.join("\n")) })).problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"))) return null;
-        if (!cleaned.reply) return null;
-        const after = gate3(g3Input(cleaned));
-        if (factualProblems(after.problems).length) return null;
-        // A remnant that no longer answers (prod replay 9: "ההכוונה הקודמת לא הייתה נכונה." alone on a safety
-        // complaint) is kept only as the last resort, never as the answer while the model can still give one.
-        const removed = removedSentences(resolveKeysInText(o.reply, candidates), cleaned.reply);
-        const thin = tooThin(cleaned.reply, o.reply, opts.incomingMessage ?? "", { cards: cleaned.cards ?? [], titles: candidates.map((c: any) => c?.title).filter(Boolean) });
-        // Hollow: thin, or most of the reply cut away (a style edit keeps its words).
-        // A fragment after a cut (prod replay of 9480dfb2: "וכשמקפלים אותה מתקבל משולש." alone): never sent.
-        const fragment = removed.length > 0 && cutFragment(cleaned.reply);
-        // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
-        // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
-        const lostPass = removed.some((x) => teamPassIn(x)) && !teamPassIn(cleaned.reply) && (asksSomething(opts.incomingMessage ?? "") || imperativeAsk(opts.incomingMessage ?? ""));
-        // A video or link ask whose answer was the cut sentence (dev live round on b369e939: "אין לנו כרגע סרטון" cut,
-        // the care-label advice sent alone): what is left does not answer it, so the team line (or the link) instead.
-        const linkAskNow = videoAsk(opts.incomingMessage ?? "") || HOWTO_LINK_ASK.test(String(opts.incomingMessage ?? ""));
-        const lostLink = linkAskNow && removed.some((x) => /סרטון|הדרכה|מדריך|קישור|לינק|video|tutorial|guide|link/iu.test(x)) && !/https?:\/\//i.test(cleaned.reply) && !teamPassIn(cleaned.reply);
-        const hollow = thin || fragment || (wordCount(cleaned.reply) < 8 && wordCount(cleaned.reply) < 0.6 * wordCount(o.reply));
-        return { o: cleaned, v: after, hollow, thin, removed, problems: v.problems, fragment, lostPass, lostLink };
-      };
       const fromSecond = salvage(second);
       const fromOriginal = salvage(original);
       // A recommendation ask: the version that picks a product is kept over one that does not
@@ -1554,7 +1590,11 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const store = surface.names.find((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n));
           const ran = turnTools.records.some((t) => /list_products|search_products/.test(t.tool));
           // Never when the customer's words call for a person, or products were shown before (that turn gets a question).
-          if (store && !ran && !(candidates as any[]).length && productAskNow(inc) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && !(state.offeredItems?.length ?? 0)) {
+          // After products were shown, only when she names a product of her own (not a colour alone): "רוצה לבן" keeps
+          // its question; "מחפשת דווקא חגיגי, גווני כחול" searches (rating of d2f10620, Tehila c55b9).
+          const own = storeQueryOf(inc);
+          const ownProduct = !!own && own.split(/\s+/).some((w) => !/^[\u0590-\u05FF]?(?:לבן|לבנה|שחור|שחורה|כחול|כחולה|אדום|אדומה|ירוק|ירוקה|אפור|אפורה|ורוד|ורודה|חום|חומה|בז'|white|black|blue|red|green|grey|gray|pink|brown|beige)$/iu.test(w));
+          if (store && !ran && !(candidates as any[]).length && productAskNow(inc) && left() > 2500 && needlessHandoff("reply_failed_checks", inbound, approvalPending) && (!(state.offeredItems?.length ?? 0) || ownProduct)) {
             const q = storeQueryOf(inc, { substring: /^woocommerce\./.test(store) }) ?? (nonProductAsk(inc) ? null : focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title));
             if (q) {
               const few = /(?:^|\.)search_products$/.test(store) && !/^woocommerce\./.test(store) ? { limit: 5 } : { per_page: 5 };
@@ -1587,7 +1627,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const onlyRepeat = !factLeft.length && first.problems.some((p) => p.kind === "style" && p.codes.includes("near_duplicate"));
         // A question is never answered with silence (prod rating 2026-11-17, Smoovee A: a coupon question):
         // the team line once, then one holding line, then nothing more.
-        const asked = asksSomething(opts.incomingMessage ?? "");
+        // A request is an ask too ("אשמח לסרטון הדרכה", rating of d2f10620: a direct ask went silent).
+        const asked = asksSomething(opts.incomingMessage ?? "") || imperativeAsk(opts.incomingMessage ?? "") || videoAsk(opts.incomingMessage ?? "");
         const holding = stillCheckingLine(opts.incomingMessage ?? "", locale === "en" ? "en" : "he");
         const lastOutBody = String([...history].reverse().find((m: any) => m?.direction === "OUTBOUND")?.body ?? "").trim();
         // The holding line only for a question on an open item it repeats, or on the held subject; a product's
@@ -1615,7 +1656,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // Never on a product ask (prod replay 2026-11-17, Tehila): that one gets the products or a question.
           output = { reply: "", stateUpdate: {}, claims: [], handoff: null, cards: [] };
           trace.gate3 = { ...first, rewrite: "silent" };
-        } else if (!grounded && searched && first.problems.some((p) => p.kind === "ungrounded_absence") && needlessHandoff("reply_failed_checks", inbound, approvalPending)
+        } else if ((!grounded || (noun && !ofHerKind.length)) && searched && first.problems.some((p) => p.kind === "ungrounded_absence") && needlessHandoff("reply_failed_checks", inbound, approvalPending)
           // Only a product ask whose named item the search really did not find (prod replay 2026-11-17: on a
           // stopper or coupon question, with the model in the results).
           && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
@@ -1626,8 +1667,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           const fitCut = factLeft.includes("ungrounded_positive_fit" as any) || factLeft.includes("ungrounded_negative_fit" as any);
           // With the caveat, the products by name on a cards channel (a bare header and a caveat reads as a shrug).
           const shownNames = (candidates as any[]).filter((c: any) => c?.title && c.inventoryState !== "out_of_stock" && (!noun || ofNoun(c, noun))).slice(0, 3).map((c: any) => String(c.title));
-          const header = fitCut && cardChannel && shownNames.length ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownNames.join(", ")}.` : grounded;
-          output = { reply: fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
+          // The draft's own caveat is the answer's point ("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים",
+          // rating of d2f10620, NE'A): it stays with the products, in place of the fixed line.
+          const srcs = [knowledge ?? "", ...turnTools.knowledgeText, groundingNow()].join("\n");
+          const draftCaveats = [...new Set([original, second].flatMap((o) => (String(o?.reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=\d)\.(?=\d))+[.!?]*/g) ?? []).map((x) => x.trim()).filter((x) => caveatHolds(x, srcs) || NEG_THAT_FIT.test(x))))].slice(0, 1);
+          const header = (fitCut || draftCaveats.length > 0) && cardChannel && shownNames.length ? `${locale === "en" ? "Here are some options" : "הנה כמה אפשרויות"}: ${shownNames.join(", ")}.` : grounded;
+          output = { reply: draftCaveats.length ? `${header} ${draftCaveats[0]}` : fitCut ? `${header} ${locale === "en" ? FIT_UNCONFIRMED_EN : FIT_UNCONFIRMED_HE}` : grounded, stateUpdate: {}, claims: [], handoff: null, cards: candidates.map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun))).slice(0, 3).map((x: any) => `PRODUCT_${x.i + 1}`) };
         } else if (productAskNow(opts.incomingMessage ?? "") && (state.offeredItems?.length ?? 0) > 0 && needlessHandoff("reply_failed_checks", inbound, approvalPending)) {
           // A simple product ask with nothing grounded to show: one question that moves the choice on,
           // never a question for the team (prod replay 2026-11-17: "רוצה לבן" sent to the team).
@@ -2148,7 +2193,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (cardsNow.join() !== (final.cards ?? []).join()) (trace as any).cardsByNoun = cardsNow;
     final = { ...final, cards: cardsNow };
   }
-  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  // No list for a question about the product itself (rating of d2f10620, Smoovee A: a stopper question got three
+  // products from a garbled search).
+  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") ? textProductList(final, prose, herIdx ? candidates.map((c: any, i: number) => (herIdx.has(i + 1) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);

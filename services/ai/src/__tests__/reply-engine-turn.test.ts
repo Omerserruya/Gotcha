@@ -1821,7 +1821,10 @@ describe("83086356 rating: engine passes", () => {
     // The gate cuts the made-up price; the apology is all that is left.
     h.responses.push({ toolCalls: [respond("ap1", { reply: "נכון, סליחה על הבלבול. הסרטון עולה ₪50." })] }, { toolCalls: [respond("ap1b", { reply: "נכון, סליחה על הבלבול. הסרטון עולה ₪50." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון?" }, "autonomous");
-    expect(r.reply).toBe("הנה הקישור: https://youtu.be/abc123");
+    // The price cut takes only its own sentence now (the stripPrices compare was trimming): the apology may stay in
+    // front; the link is the answer.
+    expect(r.reply).toMatch(/הנה הקישור: https:\/\/youtu\.be\/abc123$/);
+    expect(r.reply).not.toMatch(/₪/);
   });
 });
 
@@ -2808,5 +2811,86 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר להזמין?" }, "autonomous");
     expect(r.trace.gate3.problems?.map((p: any) => p.kind) ?? []).not.toContain("no_search");
     expect(r.reply).not.toMatch(/לצוות/);
+  });
+});
+
+describe("rating of the d2f10620 prod replay, through a whole turn", () => {
+  const withState = async (st: any, fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [], turnCount: 3, ...st });
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  it("★ B3: a draft the cleanup can fix goes out with no rewrite round", async () => {
+    h.responses.push({ toolCalls: [tc("d0", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("d1", { reply: "יש לנו את Canvas Tote, תיק בד חזק ונוח לשימוש יומיומי וגם לקניות. הוא עולה ₪999." })] });
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect((r.trace as any).rewriteSkipped, `${JSON.stringify(r.trace.gate3)} ${(r.trace as any).directRejected} ${r.reply}`).toBe("direct_clean");
+    // Two calls (the search round and the answer), no rewrite call.
+    expect(h.calls).toHaveLength(2);
+    expect((r.trace as any).rewriteRounds).toBe(0);
+    expect(r.reply).toMatch(/Canvas Tote/);
+    expect(r.reply).not.toMatch(/999/);
+  });
+  it("★ B1a: a cut that leaves an emoji alone never sends it", async () => {
+    const reply = "העברנו את זה לצוות. 🙂";
+    h.responses.push({ toolCalls: [respond("e1", { reply })] }, { toolCalls: [respond("e2", { reply })] }, { toolCalls: [respond("e3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני לא טובה בלראות באתר וכו.." }, "autonomous");
+    expect((r.reply ?? "").trim()).not.toBe("🙂");
+  });
+  it("★ B1b: a direct video ask after the team pass is never silent: the still-checking line", async () => {
+    await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() }, pending: [{ kind: "promise", text: "checking with the team: האם יש סרטון הדרכה לטוש הגבות", at: new Date().toISOString() }] }, async () => {
+      const no = "אין לנו סרטון הדרכה לטוש.";
+      h.responses.push({ toolCalls: [respond("s1", { reply: no })] }, { toolCalls: [respond("s2", { reply: no })] }, { toolCalls: [respond("s3", { reply: no })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה" }, "autonomous");
+      expect((r.reply ?? "").trim()).not.toBe("");
+      // The still-checking line for the open item, never a fresh "passed to the team".
+      expect(r.reply).toMatch(/עדיין בבדיקה/);
+    });
+  });
+  it("★ B1c: a condition left without its claim is never sent", async () => {
+    h.groundTitle = "סמובי אסף";
+    const reply = "סמובי אסף מתאים לנינג'ה קריספי. אם זו מכונת קפה קטנה או דגם מסוים של נינג'ה, כתבו את הדגמים ואדייק.";
+    h.responses.push({ toolCalls: [tc("c0", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("c1", { reply })] }, { toolCalls: [respond("c2", { reply })] }, { toolCalls: [respond("c3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משטח לנינג'ה קריספי?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/^\s*אם זו מכונת קפה/);
+  });
+  it("★ B2a: a reply that points at a card it forgot gets the card, never a fallback", async () => {
+    h.groundTitle = "first coffee";
+    h.responses.push({ toolCalls: [tc("f0", "woocommerce.list_products", { query: "עיפרון חום" })] }, { toolCalls: [respond("f1", { reply: "לעיפרון חום מתחת לעיניים, ה-first coffee שמופיע כאן הוא בגוון חום שוקולדי." })] }, { toolCalls: [respond("f2", { reply: "לעיפרון חום מתחת לעיניים, ה-first coffee שמופיע כאן הוא בגוון חום שוקולדי." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני רוצה גוון חום למתחת לעיניים" }, "autonomous");
+    expect(r.trace.gate3.rewrite).not.toBe("fallback");
+    expect(r.reply).toMatch(/first coffee/);
+    expect((r.trace as any).cardsAttached).toBe(1);
+  });
+  it("★ queue 6: an empty search for her noun and others of another kind: \"not found\", never their cards", async () => {
+    h.groundTitle = "Leather Crossbody Bag";
+    // As on prod (rewriteCut=budget): the claim is broader than the search, flagged, and no time is left to rewrite.
+    const no = "אין לנו מעמדים בקטלוג.";
+    h.responses.push({ toolCalls: [tc("n0", "woocommerce.list_products", { query: "מעמד לצילום סרטונים" })] }, { toolCalls: [respond("n1", { reply: no })] });
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "5000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    (generateResponse as any).mockImplementationOnce(async (p: any) => orig(p)).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 4500; return out; });
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם מעמד לצילום סרטונים?" }, "autonomous"); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    if (r.trace.gate3.rewrite !== "fallback") throw new Error(`not the fallback path: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
+    expect(r.reply ?? "").not.toMatch(/Leather|הנה כמה אפשרויות/);
+  });
+  it("★ B1d: a request for the sizes she just gave is never left after a cut", async () => {
+    h.groundTitle = "סמובי גפן 40x50";
+    const reply = "למיקסר מתאים סמובי גפן 40x50. הוא עולה ₪999. אפשר לשלוח את רוחב ועומק הבסיס של כל אחד מהם?";
+    h.responses.push({ toolCalls: [tc("z0", "woocommerce.list_products", { query: "משטח" })] }, { toolCalls: [respond("z1", { reply })] }, { toolCalls: [respond("z2", { reply })] }, { toolCalls: [respond("z3", { reply })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "משטח למיקסר 35x45 וטוסטר 25x35" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/רוחב ועומק/);
+    expect(r.reply ?? "").not.toMatch(/999/);
+  });
+
+  it("★ queue 7: a team question opened now is told to her", async () => {
+    h.responses.push({ toolCalls: [respond("t1", { reply: "אין לנו כרגע תאריך מאומת לחידוש המלאי בשחור.", team_question: "מתי צפוי חידוש מלאי של התיק בצבע שחור?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יחזור למלאי בצבע שחור?" }, "autonomous");
+    if (r.trace.teamQuestion) expect(r.reply).toMatch(/לצוות/);
+    else throw new Error(`no team question was opened: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
   });
 });
