@@ -1552,3 +1552,259 @@ describe("89935bf8 prod replay: R8 on the real turn", () => {
     expect(namedOnce("יש סמובי.", [{ title: "סמובי - משטח" }])).toBe(-1);
   });
 });
+
+describe("commit 4, A2 + A7: a product named in product_id (prod replay e, L1437)", () => {
+  const ALICE = { id: 31, name: "סמובי אליס - משטח הזזה 40*30 ס\"מ" };
+  const ALEXA = { id: 30, name: "סמובי אלכסה - משטח הזזה 35*28 ס\"מ" };
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const row = (p: { id: unknown; name: string }) => ({ id: String(p.id), title: p.name });
+
+  it("★ A7: the exact title, or a single result that holds the whole name; anything else is unknown, with what was found", async () => {
+    const { pickByName, titleHoldsName } = await import("../services/reply-engine/engine");
+    // L1437: the model name alone, and with the article.
+    expect(pickByName("אליס", [ALICE])).toEqual({ id: "31" });
+    expect(pickByName("סמובי אליס", [ALICE])).toEqual({ id: "31" });
+    expect(pickByName("המשטח אליס", [ALICE])).toEqual({ id: "31" });
+    // A single result that shares no word with the name is never the product.
+    expect(pickByName("מייקאפ Cover me", [{ id: 1112, name: "ערכת קונטור" }])).toEqual({ candidates: [{ id: "1112", title: "ערכת קונטור" }] });
+    // A name under a one-letter prefix is not taken: the result is handed back, and the call is made again by its id.
+    expect(pickByName("לאליס", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(pickByName("באליס", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(titleHoldsName("האליס", ALICE.name)).toBe(true);
+    // One shared word of several is not the name: the same kind, another model; the same model, another size.
+    expect(pickByName("סמובי אליס", [ALEXA])).toEqual({ candidates: [row(ALEXA)] });
+    expect(pickByName("אליס 35", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    expect(titleHoldsName("אליס 40", ALICE.name)).toBe(true);
+    // Several results: only the exact title is taken.
+    expect(pickByName("אליס", [ALEXA, ALICE])).toEqual({ candidates: [row(ALEXA), row(ALICE)] });
+    expect(pickByName("Oak Desk Pad", [{ id: "gid://shopify/Product/10", title: "Oak Desk Pad XL" }, { id: "gid://shopify/Product/9", title: "Oak Desk Pad" }])).toEqual({ id: "gid://shopify/Product/9" });
+    // Nothing found, not a list, a row with no id, a name of no words.
+    expect(pickByName("אליס", [])).toEqual({ candidates: [] });
+    expect(pickByName("אליס", null)).toEqual({ candidates: [] });
+    expect(pickByName("אליס", [{ name: "סמובי אליס" }])).toEqual({ candidates: [] });
+    expect(pickByName("?", [ALICE])).toEqual({ candidates: [row(ALICE)] });
+    // At most five are handed back.
+    expect((pickByName("משטח", Array.from({ length: 8 }, (_, i) => ({ id: i + 1, name: `משטח ${i + 10}` }))) as any).candidates).toHaveLength(5);
+  });
+
+  const hook = async (over: Record<string, unknown> = {}) => {
+    const { productIdBefore } = await import("../services/reply-engine/engine");
+    const found = new Set<string>();
+    const calls: any[] = [];
+    const before = productIdBefore({
+      locale: "he",
+      known: (v: unknown) => (/^\d+$/.test(String(v)) || found.has(String(v)) ? String(v) : null),
+      search: async (tool: string, args: any) => { calls.push([tool, args]); return { ok: true, result: [ALICE] }; },
+      found,
+      ...over,
+    } as any);
+    return { before, found, calls };
+  };
+
+  it("★ A2: a name is looked up by the store's own search, once, and the call goes on with the store's id", async () => {
+    const { before, found, calls } = await hook();
+    expect(await before("woocommerce.get_product", { product_id: "אליס", fields: "x" }, 8000)).toEqual({ args: { product_id: "31", fields: "x" } });
+    expect(calls).toEqual([["woocommerce.list_products", { query: "אליס", per_page: 5, lang: "he" }]]);
+    expect([...found]).toEqual(["31"]);
+  });
+
+  it("★ A2: a miss is unknown_product at once, with the candidates; their ids are taken on the next call", async () => {
+    const { errorKindOf, outcomeOf, readErrored } = await import("../services/reply-engine/tools");
+    const { resolveProductId } = await import("../services/reply-engine/engine");
+    const gid = "gid://shopify/Product/30";
+    let searches = 0;
+    const { before, found } = await hook({ search: async () => { searches++; return { ok: true, result: [{ id: gid, title: "Alexa Pad" }, { id: "gid://shopify/Product/31", title: "Alice Pad" }] }; } });
+    const r: any = await before("shopify.get_product", { product_id: "Pad" }, 8000);
+    const body = JSON.parse(r.content);
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(/^unknown_product: /);
+    expect(body.candidates).toEqual([{ product_id: gid, title: "Alexa Pad" }, { product_id: "gid://shopify/Product/31", title: "Alice Pad" }]);
+    expect(body.note).toMatch(/call again with its product_id/);
+    // The record: an error by its code, never retried as a failed read.
+    expect(outcomeOf("allow", r.content)).toBe("error");
+    expect(errorKindOf(r.content)).toBe("unknown_product");
+    expect(readErrored(r.content)).toBe(false);
+    // The model's next call with a candidate's id: known, no second search.
+    expect(found.has(gid)).toBe(true);
+    expect(await before("shopify.get_product", { product_id: gid }, 8000)).toBeNull();
+    expect(searches).toBe(1);
+    expect(resolveProductId(gid, null, [], found)).toBe(gid);
+    expect(resolveProductId(gid, null, [])).toBeNull();
+  });
+
+  it("★ A2: no lookup for an id, a key, a call with no product, or a tool with no search by name", async () => {
+    const { before, calls } = await hook();
+    expect(await before("woocommerce.get_product", { product_id: "1112" }, 8000)).toBeNull();
+    expect(await before("woocommerce.get_product", { product_id: "PRODUCT_3" }, 8000)).toBeNull();
+    expect(await before("woocommerce.get_product", { product_id: "" }, 8000)).toBeNull();
+    expect(await before("woocommerce.list_products", { query: "אליס" }, 8000)).toBeNull();
+    expect(await before("custom.get_thing", { product_id: "אליס" }, 8000)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it("★ A2: the lookup has its own short bound; a slow, failed or throwing search is unknown_product with nothing made up", async () => {
+    const { LOOKUP_MS } = await import("../services/reply-engine/tools");
+    expect(LOOKUP_MS).toBe(3000);
+    const plain = (r: any) => { const b = JSON.parse(r.content); return b.ok === false && /^unknown_product: /.test(b.reason) && !("candidates" in b); };
+    // Slow: answered inside the bound given, not when the store answers.
+    const slow = await hook({ ms: 40, search: async () => { await sleep(600); return { ok: true, result: [ALICE] }; } });
+    let t0 = Date.now();
+    expect(plain(await slow.before("woocommerce.get_product", { product_id: "אליס" }, 8000))).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(400);
+    expect([...slow.found]).toEqual([]);
+    // Never more than the runner gives it.
+    const narrowed = await hook({ search: async () => { await sleep(600); return { ok: true, result: [ALICE] }; } });
+    t0 = Date.now();
+    expect(plain(await narrowed.before("woocommerce.get_product", { product_id: "אליס" }, 80))).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(400);
+    for (const search of [async () => ({ ok: false, reason: "http_500" }), async () => { throw new Error("down"); }, () => { throw new Error("sync"); }, async () => null]) {
+      const h = await hook({ search });
+      expect(plain(await h.before("woocommerce.get_product", { product_id: "אליס" }, 8000))).toBe(true);
+    }
+  });
+
+  const runner = async (over: Record<string, unknown> = {}, readMs = 0) => {
+    const { runToolRound, newTurnTools } = await import("../services/reply-engine/tools");
+    const dispatched: any[] = [];
+    const env: any = {
+      tenantId: "T", conversationId: "C", aiAgentId: "A", lane: "replay", locale: "he", cardChannel: false, ctx: {}, skills: [],
+      toolTimeoutMs: 1000, turn: newTurnTools(),
+      deps: {
+        evaluate: async () => ({ decision: "ALLOW" }),
+        ground: async () => null,
+        dispatch: async (call: any) => { dispatched.push(JSON.parse(call.function.arguments)); await sleep(readMs); return { toolCallId: call.id, content: JSON.stringify({ ok: true, result: { id: 31, name: ALICE.name } }) }; },
+      },
+      ...over,
+    };
+    const run = (args: Record<string, unknown>) => runToolRound(env, [{ id: "c1", function: { name: "woocommerce.get_product", arguments: JSON.stringify(args) } }]);
+    return { run, dispatched, env };
+  };
+
+  const lookupOf = (ms: number, seen: number[] = []) => async (_t: string, args: any, budgetMs: number) => { seen.push(budgetMs); await sleep(ms); return { args: { ...args, product_id: "31" } }; };
+
+  it("★ A2: with room in the turn the product read has its whole budget after the lookup (L1437: the two shared one budget and the read timed out)", async () => {
+    // 400ms of lookup and 800ms of read against a 1000ms tool bound, the turn has the extra time.
+    const seen: number[] = [];
+    const { run, dispatched } = await runner({ lookupExtraMs: 3000, before: lookupOf(400, seen) }, 800);
+    const [rec]: any[] = await run({ product_id: "אליס" });
+    expect(rec.decision).toBe("allow");
+    expect(rec.outcome).toBe("ok");
+    expect(dispatched).toEqual([{ product_id: "31" }]);
+    // The record holds the store's id: what follows this read (its variations) is asked by it.
+    expect(rec.args).toEqual({ product_id: "31" });
+    expect(seen).toEqual([3000]);
+  });
+
+  it("★ A2: a round narrowed for time is never run over: the lookup and the read share its bound, the lookup at most half", async () => {
+    // No extra time (every rewrite round): the same 400ms + 800ms against 1000ms ends at the bound, as a timeout.
+    const seen: number[] = [];
+    const shared = await runner({ before: lookupOf(400, seen) }, 800);
+    let t0 = Date.now();
+    const [late]: any[] = await shared.run({ product_id: "אליס" });
+    const took = Date.now() - t0;
+    expect([late.decision, late.outcome]).toEqual(["timeout", "timeout"]);
+    expect(took).toBeGreaterThanOrEqual(950);
+    expect(took).toBeLessThan(1150);
+    expect(seen).toEqual([500]);
+    // A read that fits what is left goes through.
+    const fits = await runner({ before: lookupOf(300) }, 400);
+    expect((await fits.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("ok");
+    // Some extra time, less than the lookup took: the read's clock gets back only that much (1000 + 200).
+    const some = await runner({ lookupExtraMs: 200, before: lookupOf(400) }, 600);
+    expect((await some.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("ok");
+    const over = await runner({ lookupExtraMs: 200, before: lookupOf(400) }, 1100);
+    t0 = Date.now();
+    expect((await over.run({ product_id: "אליס" }) as any[])[0].outcome).toBe("timeout");
+    expect(Date.now() - t0).toBeLessThan(1350);
+  });
+
+  it("★ A2: the extra time is what the turn's hard ceiling leaves, so a lookup never moves the end of a round", async () => {
+    const { lookupExtraMs } = await import("../services/reply-engine/tools");
+    // L1437's shape: 3.5s into the turn, a 7.5s bound, 19.5s to the ceiling, 4s kept for the answer.
+    expect(lookupExtraMs(7500, 19500, 4000)).toBe(3000);
+    // Less room: only what is there. No room, or a ceiling already passed: none.
+    expect(lookupExtraMs(7500, 12000, 4000)).toBe(500);
+    expect(lookupExtraMs(4000, 8000, 4000)).toBe(0);
+    expect(lookupExtraMs(2000, 3000, 4000)).toBe(0);
+    expect(lookupExtraMs(2000, -500, 4000)).toBe(0);
+    expect(lookupExtraMs(8000, NaN, 4000)).toBe(0);
+    // Whatever the numbers: the bound plus the extra leaves the kept time under the ceiling whenever the bound alone did.
+    for (const bound of [1500, 2000, 4000, 7500, 8000]) for (const left of [0, 3000, 6000, 9000, 12000, 15000, 23000]) {
+      const extra = lookupExtraMs(bound, left, 4000);
+      expect(extra).toBeGreaterThanOrEqual(0);
+      expect(extra).toBeLessThanOrEqual(3000);
+      if (bound + 4000 <= left) expect(bound + extra + 4000).toBeLessThanOrEqual(left);
+      else expect(extra).toBe(0);
+    }
+  });
+
+  it("★ A2: unknown_product returns without a store call or a retry; a hook that throws changes nothing; one lookup across a retry", async () => {
+    const content = JSON.stringify({ ok: false, reason: "unknown_product: x", candidates: [{ product_id: "30", title: "t" }] });
+    const miss = await runner({ before: async () => ({ content }) });
+    // The store grounding reads any "ok": false of a product tool as a store failure: this result never goes to it,
+    // or the model is told the store was slow and never sees the candidates.
+    let grounded = 0;
+    miss.env.deps.ground = async () => { grounded++; return { provider: "woocommerce", tool: "woocommerce_product_search", status: "error", candidates: [], appliedFilters: [], unavailableFilters: [], safeModelSummary: "" }; };
+    const [rec]: any[] = await miss.run({ product_id: "אליס" });
+    expect([rec.decision, rec.outcome, rec.errorKind, rec.retried, rec.content]).toEqual(["allow", "error", "unknown_product", false, content]);
+    expect(grounded).toBe(0);
+    expect(miss.dispatched).toEqual([]);
+    expect(miss.env.turn.records).toHaveLength(1);
+
+    const broken = await runner({ before: async () => { throw new Error("boom"); } });
+    const [kept]: any[] = await broken.run({ product_id: "31" });
+    expect(kept.outcome).toBe("ok");
+    expect(broken.dispatched).toEqual([{ product_id: "31" }]);
+
+    // The read failed once and is retried: the name is not looked up a second time.
+    let looked = 0;
+    let reads = 0;
+    const again = await runner({ before: async (_t: string, args: any) => { looked++; return { args: { ...args, product_id: "31" } }; } });
+    again.env.deps.dispatch = async (call: any) => { reads++; return { toolCallId: call.id, content: reads === 1 ? JSON.stringify({ ok: false, failure: "errored" }) : JSON.stringify({ ok: true, result: { id: 31 } }) }; };
+    const [second]: any[] = await again.run({ product_id: "אליס" });
+    expect([second.outcome, second.retried, looked, reads]).toEqual(["ok", true, 1, 2]);
+  });
+
+  it("★ A2: the policy comes first: a call refused this turn, denied, or waiting for approval is never looked up", async () => {
+    const content = JSON.stringify({ ok: false, reason: "unknown_product: x" });
+    let looked = 0;
+    const before = async () => { looked++; return { content }; };
+    const refused = await runner({ refuse: () => "closing turn", before });
+    const [no]: any[] = await refused.run({ product_id: "אליס" });
+    expect([no.decision, no.outcome, looked]).toEqual(["deny", "denied", 0]);
+
+    const denied = await runner({ before });
+    denied.env.deps.evaluate = async () => ({ decision: "DENY", reason: "policy" });
+    const [d]: any[] = await denied.run({ product_id: "אליס" });
+    expect([d.decision, d.outcome, looked]).toEqual(["deny", "denied", 0]);
+    expect(d.content).not.toMatch(/unknown_product/);
+
+    const approval = await runner({ before });
+    approval.env.deps.evaluate = async () => ({ decision: "REQUIRE_APPROVAL" });
+    const [a]: any[] = await approval.run({ product_id: "אליס" });
+    expect([a.decision, looked]).toEqual(["simulated", 0]);
+    expect([...refused.dispatched, ...denied.dispatched, ...approval.dispatched]).toEqual([]);
+
+    // The runner has one place that looks up, and it is inside the run the policy allowed (live: the orchestrator's executor).
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/tools.ts", "utf8");
+    expect(src.match(/env\.before!?\(/g)).toHaveLength(1);
+    expect(src.match(/await lookup\(/g)).toHaveLength(1);
+    const run = src.slice(src.indexOf("const run = async (ctx: AgentToolContext"), src.indexOf("const exec = async ("));
+    expect(run).toMatch(/await lookup\(more\)/);
+    expect(src).toMatch(/\(\) => run\(env\.ctx, more\),/);
+  });
+
+  it("★ the engine wires it: the lookup is the runner's, never inside the adapter call; only the main round has extra time", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    const adapter = src.slice(src.indexOf("runAdapterTool: async"), src.indexOf("executeAdapterTool({", src.indexOf("runAdapterTool: async")));
+    expect(adapter).toMatch(/knownProductId\(rawArgs\.product_id\)/);
+    expect(adapter).toMatch(/if \(!id\) return unknownProduct\(\);/);
+    expect(adapter).not.toMatch(/storeSearchByName|pickByName/);
+    expect(src).toMatch(/before: productIdBefore\(\{/);
+    // Only the main round gives the lookup time of its own; a rewrite round's lookup shares that round's bound.
+    expect(src.match(/lookupExtraMs: /g)).toHaveLength(1);
+    expect(src).toMatch(/toolTimeoutMs: bound, lookupExtraMs: lookupExtraMs\(bound, cfg\.turnBudgetMs \+ HARD_CEILING_EXTRA_MS - \(Date\.now\(\) - t0\), 4000\)/);
+  });
+});

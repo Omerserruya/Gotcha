@@ -51,7 +51,18 @@ export interface RunnerEnv {
   refuse?: (tool: string, args: Record<string, unknown>) => string | null;
   /** The arguments as the store is asked them (the engine's own cleaning): the record holds these. */
   prepare?: (tool: string, args: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * The engine's own lookup before an allowed call runs (a product named instead of keyed), at most `budgetMs`:
+   * the arguments to call with, or the result to return at once; null = the call as it is. Never for a call the
+   * turn refused or the policy did not allow.
+   */
+  before?: (tool: string, args: Record<string, unknown>, budgetMs: number) => Promise<{ args: Record<string, unknown> } | { content: string } | null>;
   toolTimeoutMs: number;
+  /**
+   * Time the lookup may take on top of the call's own bound (lookupExtraMs). None (the default): the lookup and the
+   * call share the bound, so a round narrowed for time never runs over it.
+   */
+  lookupExtraMs?: number;
   /** Mutable, turn-wide. */
   turn: TurnTools;
   deps?: Partial<RunnerDeps>;
@@ -120,6 +131,31 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMEOUT> 
     p,
     new Promise<typeof TIMEOUT>((r) => { timer = setTimeout(() => r(TIMEOUT), ms); }),
   ]).finally(() => clearTimeout(timer));
+}
+/** The same, with a clock the work itself can give time back to (`more`): what it spent that is not on this clock. */
+function withClock<T>(work: (more: (ms: number) => void) => Promise<T>, ms: number): Promise<T | typeof TIMEOUT> {
+  let end = Date.now() + ms;
+  let timer: NodeJS.Timeout | undefined;
+  let open = true;
+  return new Promise<T | typeof TIMEOUT>((resolve, reject) => {
+    const arm = () => { timer = setTimeout(() => (Date.now() >= end ? resolve(TIMEOUT) : arm()), Math.max(0, end - Date.now())); };
+    arm();
+    Promise.resolve()
+      .then(() => work((more) => { if (open && more > 0) { end += more; clearTimeout(timer); arm(); } }))
+      .then(resolve, reject);
+  }).finally(() => { open = false; clearTimeout(timer); });
+}
+
+/** The engine's lookup before a call takes at most this long, and at most this much on top of the call's own bound. */
+export const LOOKUP_MS = 3000;
+/**
+ * The time a round's lookup gets on top of the round's tool bound: what the turn's hard ceiling leaves after the
+ * bound and the time kept for the answer, never more than LOOKUP_MS and never below zero. So a call with a
+ * lookup ends no later than the round was allowed to end, and a turn is never pushed past its ceiling by one.
+ */
+export function lookupExtraMs(boundMs: number, ceilingLeftMs: number, keepMs: number): number {
+  const room = Math.floor(ceilingLeftMs - keepMs - boundMs);
+  return Number.isFinite(room) ? Math.max(0, Math.min(LOOKUP_MS, room)) : 0;
 }
 
 /** Append a search's candidates to the turn envelope and renumber its keys to match. */
@@ -196,8 +232,26 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   // Smoovee 376b13: get_order 97837 timed out at 8s on a slow store).
   const singleOrder = SINGLE_ORDER_READ.test(tool);
   const timeoutMs = singleOrder ? Math.max(env.toolTimeoutMs, orderReadTimeoutMs()) : isRead ? env.toolTimeoutMs : Math.max(env.toolTimeoutMs * 3, 20000);
+  // The engine's lookup before the call (prod replay e, L1437: a product named by name was searched and then read
+  // inside one 7.5s budget, and the read timed out). It runs here, so only for a call that was not refused and that
+  // the policy allowed; once per call; at most half the call's bound, or the round's extra time when that is more.
+  // The call's clock gets back what the lookup took, up to that extra: with none, the two share the bound.
+  let looked = false;
+  const lookup = async (more: (ms: number) => void): Promise<AgentToolDispatchResult | null> => {
+    if (!env.before || looked) return null;
+    looked = true;
+    const extra = Math.max(0, Math.floor(env.lookupExtraMs ?? 0));
+    const s0 = Date.now();
+    const b = await Promise.resolve().then(() => env.before!(tool, args, Math.max(extra, Math.floor(timeoutMs / 2)))).catch(() => null);
+    more(Math.min(extra, Date.now() - s0));
+    if (b && "content" in b) return { toolCallId: call.id, content: b.content };
+    if (b && "args" in b) args = b.args as any;
+    return null;
+  };
   // MCP tools run on the tenant's server; everything else through the shared dispatcher.
-  const run = async (ctx: AgentToolContext): Promise<AgentToolDispatchResult> => {
+  const run = async (ctx: AgentToolContext, more: (ms: number) => void): Promise<AgentToolDispatchResult> => {
+    const answered = await lookup(more);
+    if (answered) return answered;
     if (tool.startsWith("mcp.")) {
       if (ctx.sandbox?.enabled && ctx.sandbox.writes === "safe" && !isRead) {
         return { toolCallId: call.id, content: JSON.stringify({ ok: true, tool, status: "done" }), sideEffect: { simulated: true } as any };
@@ -207,7 +261,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     }
     return deps.dispatch({ id: call.id, function: { name: tool, arguments: JSON.stringify(args) } }, ctx);
   };
-  const exec = async (): Promise<{ decision: ToolGateDecision | "simulated"; r: AgentToolDispatchResult }> => {
+  const exec = async (more: (ms: number) => void): Promise<{ decision: ToolGateDecision | "simulated"; r: AgentToolDispatchResult }> => {
     // Refused on this turn, on every lane, before anything is proposed or simulated (prod rating 2026-11-18:
     // a simulated add_order_note ran on a closing turn, unasked).
     const refused = env.refuse?.(tool, args) ?? null;
@@ -219,7 +273,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
       if (v.decision === "REQUIRE_APPROVAL" || (!isRead && env.tightenApproval?.({ tool, args }))) {
         return { decision: "simulated", r: { toolCallId: call.id, content: JSON.stringify({ ok: false, status: "awaiting_approval", note: "A person on the team must approve this first." }) } };
       }
-      const r = await run({ ...env.ctx, sandbox: { enabled: true, writes: "safe" } });
+      const r = await run({ ...env.ctx, sandbox: { enabled: true, writes: "safe" } }, more);
       // The model on these lanes must act exactly as live, so it never sees a
       // simulation note (prod replay 2026-11-16: "לא בוצעה בפועל בסביבת הבדיקה"
       // reached a reply). A write it was allowed is reported as done, as live would.
@@ -238,7 +292,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
         rationale: "reply engine v2 tool call",
         urgency: "low",
       },
-      () => run(env.ctx),
+      () => run(env.ctx, more),
       { ledger: env.turn.ledger, ctx: { contactId: env.ctx.contactId }, idempotency: true, tightenApproval: env.tightenApproval },
     );
     const r = unwrap(call.id, tool, result);
@@ -249,7 +303,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   let outcome: Awaited<ReturnType<typeof exec>> | typeof TIMEOUT;
   let retried = false;
   const attempt = async () => {
-    try { return await withTimeout(exec(), timeoutMs); } catch (err: any) { return { thrown: err } as const; }
+    try { return await withClock(exec, timeoutMs); } catch (err: any) { return { thrown: err } as const; }
   };
   let first: any = await attempt();
   // A read that threw or came back errored is retried once (a write never is).
@@ -270,7 +324,9 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
 
   let content = outcome.r.content;
   let resultCount: number | undefined;
-  if (isProductSearchTool(tool) && outcome.decision === "allow") {
+  // Not a result the engine itself gave for the call's arguments (unknown_product): that is no store failure, and
+  // read as one it reached the model as "the store search did not answer in time", without its candidates.
+  if (isProductSearchTool(tool) && outcome.decision === "allow" && errorKindOf(content) !== "unknown_product") {
     let envlp = await deps.ground({ tenantId: env.tenantId, conversationId: env.conversationId, toolName: tool, rawContent: content }).catch(() => null);
     // Results, and none of them is her noun (C pinned rating, Tehila: "בובון לקשירה נמוכה" gave 10 and the cards
     // were scarves): once more on the noun alone, and its results are used when they hold her noun.

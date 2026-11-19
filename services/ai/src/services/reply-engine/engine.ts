@@ -35,7 +35,7 @@ import { relevanceGateMode, relevanceForTurn } from "./relevance-gate";
 import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conversation-relevance.service";
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
-import { newTurnTools, runToolRound, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
+import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
 import { nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
@@ -893,17 +893,18 @@ const normTitle = (t: unknown) => String(t ?? "").toLowerCase().replace(/[^\p{L}
  * passed titles, "Zip Hoodie", and keys from an EARLIER turn, "PRODUCT_2"; the
  * store answered 404 and the model told the customer the catalogue was down).
  * In order: a store id as is; this turn's key; a title of this turn's results;
- * a title or id already shown in this conversation (newest first). Null when
- * none: the caller searches by name.
+ * a title or id already shown in this conversation (newest first); an id the
+ * store's own search by name gave this turn (`found`). Null when none.
  */
 export function resolveProductId(
   value: unknown,
   envelope: { candidates: Array<{ title: string; productId?: string | null }> } | null,
   offered: Array<{ title: string; productId?: string | null }>,
+  found?: ReadonlySet<string>,
 ): string | null {
   const v = String(value ?? "").trim();
   if (!v) return null;
-  if (/^\d{1,15}$/.test(v)) return v;
+  if (/^\d{1,15}$/.test(v) || found?.has(v)) return v;
   const key = /^PRODUCT_(\d{1,3})$/i.exec(v);
   if (key) {
     const c = envelope?.candidates[Number(key[1]) - 1];
@@ -917,6 +918,80 @@ export function resolveProductId(
     if (o.productId && (normTitle(o.title) === want || String(o.productId) === v)) return String(o.productId);
   }
   return null;
+}
+
+const UNKNOWN_PRODUCT = "unknown_product: product_id must be a PRODUCT_n key from THIS turn's results or a store id; search the store by name first. This is not a catalogue failure.";
+/** The refusal for a product_id nothing resolves, with what the store's own search by that name found. */
+export function unknownProduct(candidates: Array<{ id: string; title: string }> = []): { ok: false; reason: string; candidates?: Array<{ product_id: string; title: string }>; note?: string } {
+  if (!candidates.length) return { ok: false, reason: UNKNOWN_PRODUCT };
+  return {
+    ok: false,
+    reason: UNKNOWN_PRODUCT,
+    candidates: candidates.map((c) => ({ product_id: c.id, title: c.title })),
+    note: "The store has no product by exactly that name. These are what its search by that name found: if one is the product the customer means, call again with its product_id; if it is not clear which, ask. State nothing about them that a tool did not return.",
+  };
+}
+
+const nameTokens = (t: unknown) => normTitle(t).split(" ").filter((w) => w.length >= 2).map((w) => w.replace(/^ה(?=[\u0590-\u05FF]{3,})/u, ""));
+/** The title holds the whole asked name, word for word ("אליס" in "סמובי אליס - משטח הזזה"): one shared word of several is not the name. */
+export function titleHoldsName(name: unknown, title: unknown): boolean {
+  const asked = nameTokens(name);
+  const inTitle = new Set(nameTokens(title));
+  return asked.length > 0 && asked.every((w) => inTitle.has(w));
+}
+
+export type ProductByName = { id: string } | { candidates: Array<{ id: string; title: string }> };
+/**
+ * The store's product for a name the model put in product_id, out of the store's own search by that name: the
+ * exact title; else a single result whose title holds the whole name (prod replay e, L1332: a foundation shade
+ * was read as the search's one result, a contour kit). Anything else is unknown, with what was found.
+ */
+export function pickByName(name: unknown, list: unknown): ProductByName {
+  const rows = (Array.isArray(list) ? list : [])
+    .filter((p: any) => p?.id != null && String(p.id) !== "")
+    .map((p: any) => ({ id: String(p.id), title: String(p?.name ?? p?.title ?? "").trim() }));
+  const want = normTitle(name);
+  const exact = want ? rows.find((p) => normTitle(p.title) === want) : undefined;
+  if (exact) return { id: exact.id };
+  if (rows.length === 1 && titleHoldsName(name, rows[0].title)) return { id: rows[0].id };
+  return { candidates: rows.slice(0, 5) };
+}
+
+/**
+ * The lookup before a product call (RunnerEnv.before): a product named in product_id that nothing here knows is
+ * searched by the store's own search by name, once, inside the time the runner gives it (never more than LOOKUP_MS;
+ * prod replay e, L1437: a model name was searched and then read inside one 7.5s budget, and the read timed out).
+ * Found: the call goes on with the store's id. Not found, or the search was slow: unknown_product at once, with
+ * what the search found.
+ */
+export function productIdBefore(a: {
+  locale: string;
+  /** What this turn and this conversation already resolve (resolveProductId). */
+  known: (value: unknown) => string | null;
+  search: (tool: string, args: Record<string, unknown>) => Promise<any>;
+  /** The store ids the search gave this turn, the one taken and the ones handed back: a later call takes them as they are. */
+  found: Set<string>;
+  ms?: number;
+}): NonNullable<RunnerEnv["before"]> {
+  return async (tool, args, budgetMs) => {
+    const raw = (args as any)?.product_id;
+    if (raw == null || String(raw).trim() === "" || /^PRODUCT_\d+$/i.test(String(raw).trim()) || a.known(raw)) return null;
+    const byName = storeSearchByName(tool, String(raw), a.locale);
+    if (!byName) return null;
+    const ms = Math.max(1, Math.min(a.ms ?? LOOKUP_MS, budgetMs));
+    let timer: NodeJS.Timeout | undefined;
+    const res: any = await Promise.race([
+      Promise.resolve().then(() => a.search(byName.tool, byName.args)).catch(() => null),
+      new Promise<null>((r) => { timer = setTimeout(() => r(null), ms); }),
+    ]).finally(() => clearTimeout(timer));
+    const picked = pickByName(raw, res?.ok && Array.isArray(res.result) ? res.result : []);
+    if ("candidates" in picked) {
+      for (const c of picked.candidates) a.found.add(c.id);
+      return { content: JSON.stringify(unknownProduct(picked.candidates)) };
+    }
+    a.found.add(picked.id);
+    return { args: { ...args, product_id: picked.id } };
+  };
 }
 
 /** PRODUCT_n keys never reach the customer: each becomes the product's title. */
@@ -1200,6 +1275,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // ── The tool context (what each dispatch can reach) ──
   const turnTools = newTurnTools();
+  // Store ids the by-name search gave this turn (productIdBefore): a call takes them as they are.
+  const byNameIds = new Set<string>();
+  const knownProductId = (v: unknown) => resolveProductId(v, turnTools.envelope as any, state.offeredItems, byNameIds);
   const booker = { tenantId: opts.tenantId, aiAgentId: config.id, conversationId: opts.conversationId, customerExternalId: conversation.customerExternalId ?? undefined, customerEmail: contactRow?.email ?? undefined };
   const ctx: any = {
     tenantId: opts.tenantId,
@@ -1237,22 +1315,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     runAdapterTool: async ({ toolFunctionName, args: rawArgs }: any) => {
       let args: Record<string, unknown> = rawArgs ?? {};
       if (rawArgs && rawArgs.product_id != null && rawArgs.product_id !== "") {
-        let id = resolveProductId(rawArgs.product_id, turnTools.envelope as any, state.offeredItems);
-        // A name nothing here knows: find it in the store by that name, once, and take an exact title match.
-        const byName = storeSearchByName(toolFunctionName, String(rawArgs.product_id), locale);
-        if (!id && byName && !/^PRODUCT_\d+$/i.test(String(rawArgs.product_id))) {
-          const found: any = await executeAdapterTool({
-            tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: contactRow?.id,
-            toolFunctionName: byName.tool, args: byName.args, accessScope: "customer",
-          }).catch(() => null);
-          const list: any[] = found?.ok && Array.isArray(found.result) ? found.result : [];
-          const want = normTitle(rawArgs.product_id);
-          const hit = list.find((p) => normTitle(p?.name ?? p?.title) === want) ?? (list.length === 1 ? list[0] : null);
-          if (hit?.id != null) id = String(hit.id);
-        }
-        if (!id) {
-          return { ok: false as const, reason: "unknown_product: product_id must be a PRODUCT_n key from THIS turn's results or a store id; search the store by name first. This is not a catalogue failure." };
-        }
+        // A name nothing here knows was looked up before the call (productIdBefore), outside this call's clock.
+        const id = knownProductId(rawArgs.product_id);
+        if (!id) return unknownProduct();
         args = { ...rawArgs, product_id: id };
       }
       // A state-changing order tool may only touch the order the customer's latest message allows.
@@ -1337,6 +1402,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
     },
+    before: productIdBefore({
+      locale,
+      known: knownProductId,
+      search: (tool, args) => executeAdapterTool({ tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: contactRow?.id, toolFunctionName: tool, args, accessScope: "customer" }),
+      found: byNameIds,
+    }),
     toolTimeoutMs: cfg.toolTimeoutMs,
     turn: turnTools,
   };
@@ -1438,7 +1509,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     const work = calls.filter((c) => c.function?.name !== "respond");
     if (work.length) {
       const tStart = Date.now();
-      await waited(() => runToolRound({ ...env, toolTimeoutMs: Math.min(env.toolTimeoutMs, Math.max(2000, turnLeft() - 4000)) }, work));
+      // A lookup before a call (a product named by name) gets time of its own only where the hard ceiling has it.
+      const bound = Math.min(env.toolTimeoutMs, Math.max(2000, turnLeft() - 4000));
+      await waited(() => runToolRound({ ...env, toolTimeoutMs: bound, lookupExtraMs: lookupExtraMs(bound, cfg.turnBudgetMs + HARD_CEILING_EXTRA_MS - (Date.now() - t0), 4000) }, work));
       stageMs[`tools_r${round}`] = Date.now() - tStart;
       for (const c of work) {
         const rec = turnTools.records.find((x) => x.callId === c.id);
