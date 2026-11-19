@@ -2498,7 +2498,10 @@ const NAMED_PRICE = /(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:₪|ש["״']?ח|ils|nis)|(?:
 export function namedOnce(sentence: string, candidates: Array<{ title?: string }>): number {
   const t = String(sentence ?? "").toLowerCase();
   const bare = (x: string) => x.toLowerCase().replace(/\s*\d{2,3}(?:\.\d)?\s*[x×*]\s*\d{2,3}(?:\.\d)?.*$/u, "").trim();
-  const hits = candidates.map((c, i) => ({ i, title: String(c?.title ?? "") })).filter((c) => c.title && (t.includes(c.title.toLowerCase()) || (bare(c.title).length >= 4 && t.includes(bare(c.title)))));
+  // A title's head before " - " names it too ("סמובי אלכסה - משטח הזזה 35*28 ס"מ" as "סמובי אלכסה": 89935bf8 prod
+  // replay, L1705, the sale line never ran), when it is two words or more.
+  const head = (x: string) => { const h = x.toLowerCase().split(/\s+[-\u2013\u2014]\s+/u)[0].trim(); return h.split(/\s+/).length >= 2 && h !== x.toLowerCase() ? h : ""; };
+  const hits = candidates.map((c, i) => ({ i, title: String(c?.title ?? "") })).filter((c) => c.title && (t.includes(c.title.toLowerCase()) || (bare(c.title).length >= 4 && t.includes(bare(c.title))) || (!!head(c.title) && t.includes(head(c.title)))));
   // The longest match wins over a shorter title it contains ("סמובי אליס" inside "סמובי אליס XL").
   const kept = hits.filter((h) => !hits.some((o) => o !== h && o.title.length > h.title.length && o.title.toLowerCase().includes(h.title.toLowerCase())));
   return kept.length === 1 ? kept[0].i : -1;

@@ -1481,3 +1481,15 @@ describe("Omer 2026-11-19: a fit ask never asks for a model the texts do not lis
     expect(readFileSync("src/services/reply-engine/prompt.ts", "utf8")).toMatch(/never ask for a model or brand the texts do not list/);
   });
 });
+
+describe("89935bf8 prod replay: R8 on the real turn", () => {
+  it("★ L1705: the short name names the store title by its head; the longest title still wins", async () => {
+    const { namedOnce } = await import("../services/reply-engine/gates");
+    const r = "לתמי 4 מתאים משטח סמובי אלכסה, גם לדגמי באבלס, אדג', אדג' פלוס, פרימו, פמילי ושבת. הוא במבצע עכשיו.";
+    const C = [{ title: "סמובי אלכסה - משטח הזזה 35*28 ס\"מ" }, { title: "סמובי אליס - משטח הזזה 40*30 ס\"מ" }];
+    expect(namedOnce(r, C)).toBe(0);
+    expect(namedOnce("יש סמובי אלכסה וסמובי אליס.", C)).toBe(-1);
+    // A one-word head never names it.
+    expect(namedOnce("יש סמובי.", [{ title: "סמובי - משטח" }])).toBe(-1);
+  });
+});
