@@ -3168,3 +3168,30 @@ describe("dev round k5 on 0b5f2b46, through a whole turn", () => {
     expect(r.reply).toBeTruthy();
   });
 });
+
+describe("dev round k6 on 622fcae0, through a whole turn with model-shaped calls", () => {
+  const modelArgs = (query: string) => ({ query, on_sale: false, audience: "women", in_stock: false, per_page: 10, price_max: 0, price_min: 0 });
+  it("★ K6-1: an empty search with every schema field filled backs \"לא מצאנו ג'ינס שחור\"; the draft goes as written", async () => {
+    h.groundStatus = "no_results";
+    h.responses.push({ toolCalls: [tc("j1", "woocommerce.list_products", modelArgs("ג'ינס שחור"))] }, { toolCalls: [respond("j2", { reply: "לא מצאנו ג'ינס שחור בקטלוג." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם ג'ינס שחור?" }, "autonomous");
+    expect(JSON.stringify((r.trace as any).gate3 ?? {})).not.toMatch(/ungrounded_absence/);
+    expect(r.reply).toMatch(/^לא מצאנו ג'ינס שחור בקטלוג\./);
+    // The record holds what the store was asked: no audience she never named, no 0..0 price.
+    const rec = (r.trace as any).tools.find((t: any) => t.tool === "woocommerce.list_products");
+    expect(JSON.stringify(rec?.args ?? {})).not.toMatch(/audience|price_max|price_min/);
+  });
+  it("★ K6-2: the same for \"חולצה תכלת\"", async () => {
+    h.groundStatus = "no_results";
+    h.responses.push({ toolCalls: [tc("b1", "woocommerce.list_products", modelArgs("חולצה תכלת"))] }, { toolCalls: [respond("b2", { reply: "לא מצאנו חולצה בתכלת בקטלוג." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם חולצה בתכלת?" }, "autonomous");
+    expect(JSON.stringify((r.trace as any).gate3 ?? {})).not.toMatch(/ungrounded_absence/);
+  });
+  it("★ K6-3: a fresh \"מה יש במבצע?\" never inherits the last turn's budget", async () => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "", on_sale: true, price_max: 100 })] }, { toolCalls: [respond("s2", { reply: "יש Canvas Tote במבצע." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "מה יש במבצע?" }, "autonomous");
+    const d = h.dispatched.find((x) => x.name === "woocommerce.list_products");
+    expect(d?.args.price_max).toBeUndefined();
+    expect(d?.args.on_sale).toBe(true);
+  });
+});

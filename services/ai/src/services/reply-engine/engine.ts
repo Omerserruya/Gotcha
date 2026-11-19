@@ -631,11 +631,15 @@ const FOCUS_FACT = "_focusTitles";
 export function focusTitlesOf(facts: Record<string, unknown> | null | undefined): string[] {
   try { const v = JSON.parse(String(facts?.[FOCUS_FACT] ?? "[]")); return Array.isArray(v) ? v.map(String).filter(Boolean).slice(0, 5) : []; } catch { return []; }
 }
+const BUDGET_CONTINUES = /(?<![\u0590-\u05FF])(?:מזה|מזאת|מהם|מהן|מתוכם|מתוכן|מאלה|מאלו|באותו\s+תקציב|באותו\s+מחיר|בתקציב|תקציב|זול|זולים|זולה|יותר\s+זול)(?![\u0590-\u05FF])|\b(?:of these|of them|within (?:that|the) budget|cheaper|budget)\b/iu;
 /** A store search's args, cleaned (rating 83086356): no 0..0 price, an audience only when she names one, never her whole message as the query. */
 export function cleanSearchArgs<T extends Record<string, any>>(args: T, incoming: string): T {
   const ea: any = { ...args };
   if (!(Number(ea.price_min) > 0)) delete ea.price_min;
   if (!(Number(ea.price_max) > 0)) delete ea.price_max;
+  // A price bound only when this message names a price or continues the budget ask (dev round k6: "מה יש במבצע?" after
+  // "עד 100" kept the 100 and lost the store's other sale items).
+  if ((ea.price_min != null || ea.price_max != null) && !/\d/.test(String(incoming ?? "")) && !BUDGET_CONTINUES.test(String(incoming ?? ""))) { delete ea.price_min; delete ea.price_max; }
   if (ea.audience && !AUDIENCE_WORDS.test(String(incoming ?? ""))) delete ea.audience;
   const whole = String(incoming ?? "").trim();
   if (typeof ea.query === "string" && (ea.query.trim() === whole || ea.query.length > 60)) {
@@ -711,7 +715,10 @@ export function oneTeamPass(reply0: string): string {
     const rest = clauses.filter((c) => !re.test(c) && !FIXED_PASS.test(c) && !OTHER_PASS.test(c) && !/^\s*(?:ו|and\b)?\s*(?:ולגבי|לגבי)?\s*$/iu.test(c));
     if (rest.length === clauses.length) return "";
     const words = rest.join(" ").trim().split(/\s+/).filter(Boolean).length;
-    return words >= 2 ? `${rest.join(", ").trim()}${end.trim() ? end.trim()[0] : "."} ` : "";
+    // A tail with no head goes with its sentence (0b5f2b46 prod replay, Smoovee: "או לעדכן כשיש יחידות אחרונות.").
+    const left = rest.join(", ").trim();
+    if (/^(?:או|ו?אבל|אך|וגם|ו?לכן|or|and|but)(?![\p{L}])/iu.test(left) || cutFragment(left)) return "";
+    return words >= 2 ? `${left}${end.trim() ? end.trim()[0] : "."} ` : "";
   };
   const kept = parts.map((p) => {
     if (FIXED_PASS.test(p)) return p === keep ? p : withoutPass(p, FIXED_PASS);
@@ -1259,6 +1266,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ctx,
     skills,
     // A verb, a question word or a talk word alone is never a store search (rating of dcf2158e: q="להזמין").
+    // The record the gates read holds what the store is asked, cleaned as the executor cleans it (dev round k6 on
+    // 622fcae0: the model's raw audience "women" and price 0..0 made an empty search look narrowed).
+    prepare: (tool, args) => (/(?:list_products|search_products)$/.test(tool) ? cleanSearchArgs(args as any, String(opts.incomingMessage ?? "")) : args),
     refuse: (tool, args) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? "")
       ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null)
       // An empty query lists the whole store: never when her message names no product (rating of b3d2bbf3: "אפשר
@@ -1402,7 +1412,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const groundingNow = () => [
     ...turnTools.records.map((r) => r.content),
     // The store's own earlier price of a product on sale is the store's too (dev round k5 on 0b5f2b46: "was ₪379").
-    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency, ...(c.discount?.was != null ? { was: c.discount.was } : {}) }))),
+    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency, ...(c.discount?.was != null ? { regular_price: c.discount.was } : {}) }))),
     renderState(state),
     knowledge ?? "",
     ...turnTools.knowledgeText,
@@ -1561,7 +1571,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // claim ("אם זו מכונת קפה קטנה..., כתבו את הדגמים ואדייק.").
       const noWords = removed.length > 0 && !/[\p{L}\p{N}]{2,}/u.test(cleaned.reply);
       const onlyCondition = removed.length > 0 && (cleaned.reply.match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).every((x) => /^\s*(?:ו?אם|if)\s/iu.test(x));
-      const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition);
+      // A first sentence that points at the cut items ("לשניהם צריך מעצור", 0b5f2b46 prod replay, Smoovee) is no answer.
+      const leansOnCut = removed.length > 0 && /^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu.test(cleaned.reply);
+      const fragment = removed.length > 0 && (cutFragment(cleaned.reply) || noWords || onlyCondition || leansOnCut);
       // The cut took the team pass the answer was (NE'A: "נכון, לא צירפנו סרטון." left): the remnant answers nothing.
       // Only on an ask: a statement or a thanks keeps its remnant as the last resort (prod replay 9).
       const lostPass = removed.some((x) => teamPassIn(x)) && !teamPassIn(cleaned.reply) && (asksSomething(opts.incomingMessage ?? "") || imperativeAsk(opts.incomingMessage ?? ""));

@@ -1162,7 +1162,7 @@ describe("dev round k5 on 0b5f2b46", () => {
     // Pinned in the source: the store adapter forwards on_sale, and the grounding carries the store's was-price.
     const { readFileSync } = await import("fs");
     expect(readFileSync("src/services/connectors/woocommerce.adapter.ts", "utf8")).toMatch(/if \(args\.on_sale === true\) params\.set\("on_sale", "true"\);/);
-    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/currency: c\.currency, \.\.\.\(c\.discount\?\.was != null \? \{ was: c\.discount\.was \} : \{\}\)/);
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/currency: c\.currency, \.\.\.\(c\.discount\?\.was != null \? \{ regular_price: c\.discount\.was \} : \{\}\)/);
     // A search for something else, with her message riding along, still backs nothing.
     expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [{ ...rec, args: { query: "black hoodie", customer_query: "יש לכם ג'ינס שחור?" } }])).toHaveLength(1);
   });
@@ -1208,5 +1208,44 @@ describe("dev round k5: a general question about payment options opens no held i
     expect(generalPolicyAsk("שילמתי פעמיים, מה אפשרויות התשלום להחזר?", K)).toBe(false);
     expect(generalPolicyAsk("התשלום שלי נכשל, מה אפשר לעשות?", K)).toBe(false);
     expect(generalPolicyAsk("מה אפשרויות התשלום?", "משלוח חינם מעל 300.")).toBe(false);
+  });
+});
+
+describe("dev round k6 on 622fcae0", () => {
+  it("★ searchTextOf reads only the search-text keys", async () => {
+    const { searchTextOf, ungroundedAbsence } = await import("../services/reply-engine/gates");
+    const rec = { tool: "woocommerce.list_products", args: { query: "ג'ינס שחור", orderby: "relevance", lang: "he", audience: "women" }, outcome: "empty", content: "[]" } as any;
+    expect(searchTextOf(rec)).toBe("ג'ינס שחור");
+    expect(ungroundedAbsence("לא מצאנו ג'ינס שחור בקטלוג.", [{ ...rec, args: { query: "ג'ינס שחור", orderby: "relevance", lang: "he" } }])).toEqual([]);
+  });
+  it("★ a price bound stays only when this message names a price or continues the budget ask", async () => {
+    const { cleanSearchArgs } = await import("../services/reply-engine/engine");
+    expect(cleanSearchArgs({ query: "", on_sale: true, price_max: 100 }, "מה יש במבצע?")).not.toHaveProperty("price_max");
+    expect(cleanSearchArgs({ query: "", on_sale: true, price_max: 100 }, "ומה מזה במבצע?")).toMatchObject({ price_max: 100 });
+    expect(cleanSearchArgs({ query: "", price_max: 100 }, "מה יש לכם עד 100 שקל?")).toMatchObject({ price_max: 100 });
+  });
+  it("★ the was-price in the grounding reads as money", async () => {
+    const { ungroundedPrices } = await import("../services/reply-style-check.service");
+    expect(ungroundedPrices("The Zip Hoodie is on sale for ₪299 (was ₪379).", JSON.stringify([{ title: "Zip Hoodie", price: "299", currency: "ILS", regular_price: "379" }]))).toEqual([]);
+  });
+});
+
+describe("0b5f2b46 prod replay: P-1, P-2", () => {
+  it("★ P-1: the team-line dedupe never leaves a tail with no head", async () => {
+    const { oneTeamPass } = await import("../services/reply-engine/engine");
+    const r = "שלום! אין לנו כרגע תאריך לחידוש המלאי של אליס בשחור. אפשר להעביר לצוות לבדוק, או לעדכן כשיש יחידות אחרונות. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
+    const out = oneTeamPass(r);
+    expect(out).not.toMatch(/(?:^|[.!?]\s+)או לעדכן/);
+    expect(out).toMatch(/אין לנו כרגע תאריך לחידוש המלאי של אליס בשחור\./);
+    // Content before the pass clause stays.
+    expect(oneTeamPass("גפן מתאים למיקסר, ולגבי הטוסטר אשאל את הצוות. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.")).toMatch(/גפן מתאים למיקסר/);
+  });
+  it("★ P-2: after a cut, a reply that opens by pointing at the cut items is a fragment (source check of the salvage)", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("src/services/reply-engine/engine.ts", "utf8");
+    expect(src).toMatch(/const fragment = removed\.length > 0 && \(cutFragment\(cleaned\.reply\) \|\| noWords \|\| onlyCondition \|\| leansOnCut\);/);
+    const re = /^\s*(?:ו?ל?(?:שניהם|שתיהן|שניהן|שתיהם)|(?:ל|ב)?(?:שני|שתי)\s+(?:ה)?(?:דגמים|משטחים|מוצרים|האפשרויות)|both(?:\s+of\s+them)?|each of them)(?![\p{L}])/iu;
+    expect(re.test("לשניהם צריך מעצור נוסף, ובזמן הפעלת המיקסר חשוב לא להשאיר אותו על המשטח ללא השגחה.")).toBe(true);
+    expect(re.test("למיקסר דאבו מתאים אליס.")).toBe(false);
   });
 });

@@ -367,7 +367,8 @@ const PRODUCT_TOOL = /list_products|search_products|get_product|variation/i;
  *  when the query is not Hebrew) only its product words (dev round k5 on 0b5f2b46: "יש", "לכם" in no claim). */
 export function searchTextOf(t: ToolRunRecord): string {
   const a: any = t.args ?? {};
-  const own = Object.entries(a).filter(([k, v]) => k !== "customer_query" && typeof v === "string").map(([, v]) => String(v));
+  // Only the keys that hold search text: never orderby, lang, audience or a category slug (dev round k6 on 622fcae0).
+  const own = ["query", "search", "q", "name", "keyword", "keywords", "title", "sku"].filter((k) => typeof a[k] === "string").map((k) => String(a[k]));
   const cq = typeof a.customer_query === "string" ? storeQueryWords(a.customer_query) : null;
   return [...own, ...(cq ? [cq] : [])].join(" ");
 }

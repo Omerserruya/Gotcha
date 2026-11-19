@@ -49,6 +49,8 @@ export interface RunnerEnv {
   tightenApproval?: (a: { tool: string; args?: unknown }) => string | null;
   /** Why this call may not run on this turn (an unasked write or order read), on every lane; null = it may. */
   refuse?: (tool: string, args: Record<string, unknown>) => string | null;
+  /** The arguments as the store is asked them (the engine's own cleaning): the record holds these. */
+  prepare?: (tool: string, args: Record<string, unknown>) => Record<string, unknown>;
   toolTimeoutMs: number;
   /** Mutable, turn-wide. */
   turn: TurnTools;
@@ -159,6 +161,7 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
   // A query of filter words only ("מבצע", "sale", "חדש") is that filter with no query (dev round k5 on 0b5f2b46: "מה יש
   // במבצע?" was refused as no product word and answered with one scarf).
   if (/^woocommerce\.list_products$/.test(String(call.function?.name ?? ""))) args = filterWordsQuery(args);
+  if (env.prepare) args = env.prepare(tool, args) as any;
   const deps: RunnerDeps = {
     dispatch: dispatchToolCall,
     mcp: runMcpTool,
