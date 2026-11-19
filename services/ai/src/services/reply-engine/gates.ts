@@ -273,7 +273,12 @@ export const caveatHolds = (x: string, sources: string) => {
 };
 const RESTOCK_STATEMENT = /(?<![\u0590-\u05FF])(?:(?:יחזור|יחזרו|תחזור|יגיע|יגיעו|תגיע)|(?:צפוי|צפויה|צפויים|צפויות)\s+(?:לחזור|להגיע))\s+(?:שוב\s+)?ל?מלאי|(?<![\u0590-\u05FF])צפי(?![\u0590-\u05FF])|חידוש\s+(?:ה)?מלאי\s+(?:ב|צפוי)|\b(?:back in stock|restock(?:ed|ing)?\s+(?:on|by)|expected (?:on|by|in))\b/iu;
 const CAVEAT = /(?<![\u0590-\u05FF])ו?(?:אין\s+(?:לנו\s+|לי\s+)?(?:כרגע\s+)?(?:תאריך|מועד|צפי)|אין\s+(?:לנו\s+|לי\s+)?(?:במידע|בנתונים|בתיאור|בפרטי\s+המוצר)\s+(?:אישור|ציון|מידע)|אין\s+(?:לנו\s+|לי\s+)?אישור|לא\s+(?:מאושר|מאושרת|אושר|אושרה|מצוין|מצוינת)\s+(?:ל|כ|ש)|לא\s+מופיע\s+(?:אישור|ש))|\b(?:not confirmed|no confirmation|isn'?t confirmed|not (?:stated|listed) (?:as|for))\b/iu;
-const herCardTalk = (i: { incomingMessage?: string; recentInbound?: string[] }) => /(?<![\u0590-\u05FF])[הבול]?(?:כרטיס|האשראי|אשראי|חיוב|חויבתי|חייבו|תשלום|שילמתי|עסקה|ויזה)(?![\u0590-\u05FF])|\b(?:card|charged?|payment|paid)\b/iu.test([i.incomingMessage ?? "", ...(i.recentInbound ?? [])].join("\n"));
+const PAYMENT_TALK = /(?<![\u0590-\u05FF])[הבול]?(?:כרטיס|האשראי|אשראי|חיוב|חויבתי|חייבו|תשלום|שילמתי|עסקה|ויזה)(?![\u0590-\u05FF])|\b(?:card|charged?|payment|paid)\b/iu;
+const herCardTalk = (i: { incomingMessage?: string; recentInbound?: string[] }) => PAYMENT_TALK.test([i.incomingMessage ?? "", ...(i.recentInbound ?? [])].join("\n"));
+// A sentence that names or points at a product card, whatever she wrote.
+const PRODUCT_CARD = /(?<![\u0590-\u05FF])(?:[בהל]?כרטיס(?:י)?\s+(?:ה)?מוצר|[בהל]?כרטיס\s+של\s+(?:ה)?מוצר|[בהלו]?(?:ה)?כרטיסים|[בהל]?כרטיס(?:\s+[\u0590-\u05FF]+){0,2}\s+(?:למטה|למעלה|שלמעלה|שלמטה|כאן|הראשון|השני|השלישי|ששלחתי|ששלחנו|המצורף)|[בהל]?כרטיס\s+(?:הראשון|השני|השלישי|שלמעלה|שלמטה|המצורף)|(?:מופיע|מופיעה|מופיעים|מופיעות|רואים|רואה|תראי|תראה|ראי|ראו|תסתכלי|תסתכל)\s+(?:[\u0590-\u05FF]+\s+){0,3}?[בהל]?כרטיס)(?![\u0590-\u05FF])|\b(?:product cards?|cards? (?:below|above)|the (?:first|second) card)\b/iu;
+/** A bare payment-card mention: the card word, no product card named or pointed at. */
+const barePaymentCard = (x: string) => /כרטיס|\bcards?\b/iu.test(x) && !PRODUCT_CARD.test(x);
 export const simulationLeak = (reply: string, sources = "") => {
   const m = SIMULATION_LEAK.exec(reply ?? "");
   return !!m && !String(sources ?? "").toLowerCase().includes(m[0].toLowerCase());
@@ -1244,10 +1249,10 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (echoed.length) problems.push({ kind: "echoed_size", claims: echoed });
   const numbers = ungroundedNumbers(reply, [i.grounding, i.sourceText ?? "", i.customerText ?? i.incomingMessage, i.knowledge ?? "", i.businessAddress ?? ""].join("\n"));
   if (numbers.length) problems.push({ kind: "ungrounded_number", claims: numbers });
-  // Her payment card: when her messages speak of her card or a payment, "בכרטיס" in the reply is that card, never a
-  // product card (pre-check of 51d0273e: "אישור בכרטיס לא בהכרח אומר שההזמנה הושלמה.").
-  const herCard = /(?<![\u0590-\u05FF])[הבול]?(?:כרטיס|האשראי|אשראי|חיוב|חויבתי|חייבו|תשלום|שילמתי|עסקה|ויזה)(?![\u0590-\u05FF])|\b(?:card|charged?|payment|paid)\b/iu.test([i.incomingMessage ?? "", ...(i.recentInbound ?? [])].join("\n"));
-  const pictures = herCard ? cardReferences(reply, true) : cardReferences(reply, !!i.cardsChannel && i.cards.length > 0);
+  // Her payment card: when her messages speak of her card or a payment, a BARE "בכרטיס" in a reply sentence is that card
+  // (pre-check of 51d0273e: "אישור בכרטיס לא בהכרח אומר שההזמנה הושלמה."). Per sentence: one that names the product
+  // card or points at one ("כרטיס המוצר", "הכרטיסים", "בכרטיס ... למטה/הראשון") stays a card reference.
+  const pictures = cardReferences(reply, !!i.cardsChannel && i.cards.length > 0).filter((x) => !(herCardTalk(i) && barePaymentCard(x)));
   if (pictures.length) problems.push({ kind: "card_reference", claims: pictures });
   const dangling = danglingReferences(reply, (!!i.cardsChannel && i.cards.length > 0) || !!i.listAppended).filter((x) => !pictures.includes(x));
   if (dangling.length) problems.push({ kind: "dangling_reference", claims: dangling });
@@ -1307,7 +1312,11 @@ export function gate3(input: Gate3Input): Gate3Verdict {
     .map((v) => v.kind)
     // Prices are the claims check above, with the same grounding.
     .filter((k) => HARD_STYLE.has(k) && k !== "ungrounded_price") as string[];
-  if (herCardTalk(i)) { const k = style.indexOf("card_narration"); if (k >= 0) style.splice(k, 1); }
+  // card_narration is dropped only when every card mention in the reply is a bare payment-card one.
+  if (herCardTalk(i)) {
+    const cardSentences = (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n])+[.!?]*/g) ?? []).filter((x) => /כרטיס|\bcards?\b/iu.test(x));
+    if (cardSentences.length && cardSentences.every(barePaymentCard)) { const k = style.indexOf("card_narration"); if (k >= 0) style.splice(k, 1); }
+  }
   if (i.locale === "he") for (const [code, re] of V2_BANS_HE) if (re.test(reply)) style.push(code);
   for (const [code, re] of V2_BANS_ANY) if (re.test(reply)) style.push(code);
   if (simulationLeak(reply, `${i.knowledge ?? ""}\n${i.grounding ?? ""}`)) style.push("simulation_leak");

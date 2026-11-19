@@ -823,3 +823,29 @@ describe("pre-check of 51d0273e: the follow-ups", () => {
     expect(storeQueryOf("קניתי טוש למילוי גבות, אשמח להסבר /סרטון איך להשתמש?")).not.toMatch(/הסבר/);
   });
 });
+
+describe("abed8d54 rerun: the payment-card waiver is per sentence", () => {
+  const g = async (reply: string, incoming: string) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: [], grounding: "", locale: "he", incomingMessage: incoming, recentInbound: [incoming], isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: [], shopFloor: false, handedOff: false, approvalPending: false } as any).problems;
+  };
+  const refs = (p: any[]) => p.filter((x) => x.kind === "card_reference").flatMap((x) => x.claims);
+  it("★ a bare payment-card mention is waived; a sentence that names or points at a product card is not", async () => {
+    expect(refs(await g("אישור בכרטיס לא בהכרח אומר שההזמנה הושלמה.", "אין לי מספר הזמנה אבל בכרטיס רשום שאושר"))).toEqual([]);
+    expect(refs(await g("אפשר לראות את המחיר בכרטיס המוצר למטה.", "מה אפשרויות התשלום?"))).toHaveLength(1);
+    const mixed = refs(await g("החיוב בכרטיס יופיע תוך שלושה ימים. תראי בכרטיס הראשון את הדגם.", "שילמתי בכרטיס אשראי"));
+    expect(mixed).toHaveLength(1);
+    expect(mixed[0]).toMatch(/הראשון/);
+    for (const r of ["הפרטים המלאים מופיעים בכרטיס.", "בכרטיס שלמעלה רואים את הצבעים.", "תראי בכרטיס הראשון."]) {
+      expect(refs(await g(r, "יש לכם משטח למיקסר?")), r).toHaveLength(1);
+    }
+    for (const r of ["הפרטים המלאים מופיעים בכרטיס.", "בכרטיס שלמעלה רואים את הצבעים.", "תראי בכרטיס הראשון.", "אפשר לראות את המחיר בכרטיס המוצר למטה."]) {
+      expect(refs(await g(r, "מה אפשרויות התשלום?")), r).toHaveLength(1);
+    }
+    // Card narration stays raised when a sentence narrates the product cards, payment talk or not.
+    const codes = (await g("מתחת מופיעים הכרטיסים עם הפרטים.", "מה אפשרויות התשלום?")).flatMap((x: any) => (x.kind === "style" ? x.codes : []));
+    expect(codes).toContain("card_narration");
+    // A bare charge on her card in the same payment talk stays waived.
+    expect(refs(await g("החיוב בכרטיס יופיע תוך שלושה ימים.", "מה אפשרויות התשלום?"))).toEqual([]);
+  });
+});
