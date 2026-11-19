@@ -865,6 +865,17 @@ describe("prod replay 7: store caches", () => {
     // Too old: the caller waits for the new value.
     cache.set("k", { at: Date.now() - 20_000, value: 2 });
     expect(await swrCached(cache, "k", 1000, 10_000, load)).toBe(3);
+    // Counted by what it was: fresh, past its fresh window, missing; and a caller that refreshes earlier than a
+    // reader's fresh window (the warm pass) is a warm reload, not a stale serve.
+    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
+    const c3 = new Map<string, { at: number; value: number }>();
+    const at = (age: number) => c3.set("counted|k", { at: Date.now() - age, value: 1 });
+    await swrCached(c3, "counted|k", 1000, 10_000, load);
+    at(500); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(2000); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(6000); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(2000); await swrCached(c3, "counted|k", 1000, 10_000, load);
+    expect(cacheCounts.counted).toEqual({ hit: 1, stale: 2, miss: 1, warmReload: 1 });
     // A load the keep() rejects is not cached.
     const c2 = new Map<string, { at: number; value: number | null }>();
     await swrCached(c2, "x", 1000, 10_000, async () => null, (v) => v !== null);
@@ -2199,6 +2210,52 @@ describe("1f510cc4 rating fixes", () => {
     expect(deviceMismatch("סמובי גפן מתאימה לנינג'ה קריספי.", "יש משטח לנינג'ה קריספי?")).toEqual([]);
     expect(deviceMismatch("סמובי גפן מתאימה לכל המכשירים.", "יש משטח לנינג'ה קריספי?")).toEqual([]);
     expect(kinds(await g3("סמובי גפן מתאימה לנינג'ה סלושי.", { incomingMessage: "יש משטח לנינג'ה קריספי?" }))).toContain("device_mismatch");
+  });
+
+  it("★ a fit word after a \"not\" is no fit for another device; a plain one beside it in the same sentence still is", async () => {
+    const { deviceMismatch } = await import("../services/reply-engine/gates");
+    const pens = "יש טוש לעיניים?", penEn = "do you have a pen for eyes?";
+    // An honest "does not fit" (Supervisor, 2026-11-19), each beside the same words without the "not".
+    for (const [no, plain, incoming] of [
+      ["הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות הם מתאימים.", "הטושים מתאימים לעיניים רגישות, אבל לעיניים רגילות הם מתאימים.", pens],
+      ["הטושים לא מתאימים לעיניים רגישות.", "הטושים מתאימים לעיניים רגישות.", pens],
+      ["הטוש אינו מתאים לעיניים רגישות.", "הטוש מתאים לעיניים רגישות.", pens],
+      ["הטוש אינה מתאימה לעיניים רגישות.", "הטוש מתאימה לעיניים רגישות.", pens],
+      ["הטושים אינם מתאימים לעיניים רגישות.", "הטושים מתאימים לעיניים רגישות.", pens],
+      ["הטוש אינו מיועד לעיניים רגישות.", "הטוש מיועד לעיניים רגישות.", pens],
+      ["הטושים אינן מתאימות לעיניים רגישות.", "הטושים מתאימות לעיניים רגישות.", pens],
+      ["הטוש לא ממש מתאים לעיניים רגישות.", "הטוש ממש מתאים לעיניים רגישות.", pens],
+      ["וחשוב לדעת שלא מתאים לעיניים רגישות.", "וחשוב לדעת, מתאים לעיניים רגישות.", pens],
+      ["The pens are not made for sensitive eyes.", "The pens are made for sensitive eyes.", penEn],
+      ["The pen isn't compatible with sensitive eyes.", "The pen is compatible with sensitive eyes.", penEn],
+      ["The pen is not really made for sensitive eyes.", "The pen is really made for sensitive eyes.", penEn],
+      ["The pen never fits sensitive eyes.", "The pen fits sensitive eyes.", penEn],
+    ]) expect([no, deviceMismatch(no, incoming).length, deviceMismatch(plain, incoming).length]).toEqual([no, 0, 1]);
+    // Forms the fit pattern never took as a fit.
+    for (const t of ["The pens do not fit sensitive eyes.", "The pens are not for sensitive eyes."]) expect([t, deviceMismatch(t, penEn)]).toEqual([t, []]);
+    // The original case stands: said not to fit hers and to fit another, in one sentence, in either order.
+    const crispi = "יש משטח לנינג'ה קריספי?", crispiEn = "a mat for my Ninja Crispi?";
+    for (const t of [
+      "סמובי גפן לא מתאימה לנינג'ה קריספי, אבל מתאימה לנינג'ה סלושי.",
+      "סמובי גפן מתאימה לנינג'ה סלושי, אבל לא מתאימה לנינג'ה מקס.",
+      // "Not only" negates nothing, and neither does a "not" that ended before a comma or belongs to another word.
+      "סמובי גפן לא רק מתאימה לנינג'ה סלושי, היא גם נשטפת במדיח.",
+      "אם לא, מתאימה לנינג'ה סלושי סמובי גפן.",
+      "הסט המלא מתאים לנינג'ה סלושי.",
+      "סמובי גפן לא יקרה בכלל ומחזיקה שנים, מתאימה לנינג'ה סלושי.",
+    ]) expect([t, deviceMismatch(t, crispi).length]).toEqual([t, 1]);
+    for (const t of [
+      "The Gefen mat is not made for the Ninja Crispi, but it fits the Ninja Slushi.",
+      "The Gefen mat is not only made for the Ninja Slushi.",
+      "The Gefen mat is not just made for the Ninja Slushi.",
+      "It is not new, but it fits the Ninja Slushi.",
+    ]) expect([t, deviceMismatch(t, crispiEn).length]).toEqual([t, 1]);
+    // Said not to fit another device: no fit claimed.
+    expect(deviceMismatch("סמובי גפן לא מתאימה לנינג'ה סלושי.", crispi)).toEqual([]);
+    expect(deviceMismatch("The Gefen mat is not made for the Ninja Slushi.", crispiEn)).toEqual([]);
+    // In the whole check.
+    expect(kinds(await g3("הטושים לא מתאימים לעיניים רגישות.", { incomingMessage: pens }))).not.toContain("device_mismatch");
+    expect(kinds(await g3("סמובי גפן לא מתאימה לנינג'ה קריספי, אבל מתאימה לנינג'ה סלושי.", { incomingMessage: crispi }))).toContain("device_mismatch");
   });
 });
 

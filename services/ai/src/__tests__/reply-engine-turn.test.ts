@@ -4357,13 +4357,36 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(cards).toEqual([]);
   });
 
+  it("★ (K2) a found product of another kind whose title holds her use word is never put in: the model's own remaining card stays", async () => {
+    storeSays("נעלי ריצה Air Zoom ונעלי הליכה Comfort: לא מתאימות לריצה ארוכה. סנדלי שטח Trek: לטיולים.");
+    // Cards on all three shoes: the two ruled out go, the sandals stay, and the socks ("גרבי ריצה") do not come in.
+    const { r, cards } = await runFive("יש נעליים לריצה?", `${K2_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_2", "PRODUCT_3"], [...SHOES, SOCKS]);
+    expect(r.reply).toBe(K2_SENTENCE);
+    expect(cards).toEqual(["203"]);
+    // The socks the model carded itself stay (the old rule).
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    const b = await runFive("יש נעליים לריצה?", `${K2_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_4"], [...SHOES, SOCKS]);
+    expect(b.cards).toEqual(["204"]);
+  });
+
   it("★ (K3) a later side says the same subject does fit for part of what she asks: its products keep their cards", async () => {
     storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
-    // The use in front: the sentence with the subject in front is read by the device check as said for another use.
+    // With the use in front.
     const st = "לעיניים רגישות הטושים לא מתאימים, אבל לעיניים רגילות הם מתאימים.";
     const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
     expect(r.reply).toBe(st);
     expect(cards).toEqual(["201", "202"]);
+  });
+
+  // The device check read "לא מתאימים לעיניים רגישות" as a fit for another use and the turn went to the general list.
+  it.each([
+    [K3_SENTENCE, ["201", "202"]],
+    ["הטושים לא מתאימים לעיניים רגישות.", []],
+  ])("★ (K3, the device check) a \"does not fit\" is no fit for another device: the sentence goes out as written (%s)", async (st, want) => {
+    storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(want);
   });
 
   it("★ (K) the helpers: another product of her kind's word, the use word's place, and a side with no subject of its own", async () => {
@@ -4958,6 +4981,11 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_3", "PRODUCT_4"], candidates: five, hers, unfit: new Set([0, 1]) })).toEqual({ cards: ["PRODUCT_3", "PRODUCT_4"], why: [] });
     expect(shown({ text: "אולי מברשת איפור תתאים.", cards: ["PRODUCT_4"], candidates: five, hers })).toEqual({ cards: ["PRODUCT_4"], why: [] });
     expect(shown({ text: "הנה מה שמצאתי.", candidates: five, hers })).toEqual({ cards: [], why: [] });
+    // A product of another kind whose title holds her use word stays when it was carded, and is never put in.
+    const ofUse = new Set([2]);
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_3", "PRODUCT_4"], candidates: five, hers, ofUse })).toEqual({ cards: ["PRODUCT_3"], why: ["kind"] });
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_4"], candidates: five, hers, ofUse, unfit: new Set([0, 1]) })).toEqual({ cards: ["PRODUCT_4"], why: [] });
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_4"], candidates: five, hers, ofUse, unfit: new Set([0]) })).toEqual({ cards: ["PRODUCT_2"], why: ["kind"] });
     // Each product once: the same id, or the same title at the same price; the same title at another price is another
     // product. A key past the list is dropped.
     const twins = [{ productId: "1", title: "A Pen", price: 79 }, { productId: "1", title: "A Pen", price: 79 }, { productId: "2", title: "A Pen", price: 79 }, { productId: "3", title: "A Pen", price: 89 }, { productId: "4", title: "B Pen", price: 79 }, { productId: "4", title: "C Pen", price: 99 }];

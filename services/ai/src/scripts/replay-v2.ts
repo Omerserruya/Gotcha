@@ -506,8 +506,8 @@ async function main() {
   } else {
     console.log(`[replay] kept the replay-lane rows (${replayed.size} conversations)`);
   }
-  // Store caches after the warm-up, by the turns and by the timed warm passes: hit, stale (served while
-  // refreshing), miss.
+  // Store caches after the warm-up, by the turns and by the timed warm passes: hit, stale (past its fresh window,
+  // served while refreshing), miss, warmReload (a warm pass reloading an entry still fresh for readers).
   console.log(`[replay] store cache ${JSON.stringify(cacheCounts)} (the turns and ${warmer.passes()} timed warm passes)`);
   // The console carries numbers only; the markdown (customer messages) is in the file.
   // Each tenant's summary was logged as it finished.

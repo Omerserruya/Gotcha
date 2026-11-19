@@ -354,6 +354,8 @@ const TOOLS: ToolDefinition[] = [
 // in series; warm runs 1.0-1.5s). Stale-while-revalidate: a fresh entry is
 // served; a stale one is served AND refreshed in the background (one refresh
 // per key at a time); only a missing or too-old one makes the caller wait.
+// readerFreshMs: how long the entry is fresh for a customer's read, when the caller refreshes earlier than that
+// (the warm pass). An entry refreshed while still fresh for readers is counted "warmReload", never "stale".
 const inflight = new Map<string, Promise<unknown>>();
 export async function swrCached<T>(
   cache: Map<string, { at: number; value: T }>,
@@ -362,6 +364,7 @@ export async function swrCached<T>(
   staleMs: number,
   load: () => Promise<T>,
   keep: (v: T) => boolean = () => true,
+  readerFreshMs = freshMs,
 ): Promise<T> {
   const hit = cache.get(key);
   const age = hit ? Date.now() - hit.at : Infinity;
@@ -375,14 +378,18 @@ export async function swrCached<T>(
   };
   const kind = key.split("|")[0];
   if (hit && age < freshMs) { countCache(kind, "hit"); return hit.value; }
-  if (hit && age < staleMs) { countCache(kind, "stale"); refresh().catch(() => {}); return hit.value; }
+  if (hit && age < staleMs) { countCache(kind, age < readerFreshMs ? "warmReload" : "stale"); refresh().catch(() => {}); return hit.value; }
   countCache(kind, "miss");
   return refresh();
 }
-/** Cache hits, stale serves and misses by kind (cats, catalog), for the replay's summary. */
-export const cacheCounts: Record<string, { hit: number; stale: number; miss: number }> = {};
-function countCache(kind: string, what: "hit" | "stale" | "miss") {
-  (cacheCounts[kind] ??= { hit: 0, stale: 0, miss: 0 })[what]++;
+/**
+ * Cache hits, stale serves, misses and warm reloads by kind (cats, catalog), for the replay's summary. "stale" is
+ * only an entry past its fresh window served while it refreshes; "warmReload" is a warm pass reloading an entry
+ * that is still fresh for a customer's read.
+ */
+export const cacheCounts: Record<string, { hit: number; stale: number; miss: number; warmReload: number }> = {};
+function countCache(kind: string, what: "hit" | "stale" | "miss" | "warmReload") {
+  (cacheCounts[kind] ??= { hit: 0, stale: 0, miss: 0, warmReload: 0 })[what]++;
 }
 /** Categories change rarely: fresh 6h, served stale up to 24h. */
 const CATEGORY_FRESH_MS = 6 * 60 * 60_000;
@@ -918,7 +925,7 @@ async function wholeCatalog(auth: string, base: string, lang: string | null, fre
     }
     if (list) rememberSizedStore(base, list);
     return list;
-  });
+  }, undefined, CATALOG_FRESH_MS);
 }
 
 /**
