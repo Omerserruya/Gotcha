@@ -4371,11 +4371,22 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
 
   it("★ (K3) a later side says the same subject does fit for part of what she asks: its products keep their cards", async () => {
     storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
-    // The use in front: the sentence with the subject in front is read by the device check as said for another use.
+    // With the use in front.
     const st = "לעיניים רגישות הטושים לא מתאימים, אבל לעיניים רגילות הם מתאימים.";
     const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
     expect(r.reply).toBe(st);
     expect(cards).toEqual(["201", "202"]);
+  });
+
+  // The device check read "לא מתאימים לעיניים רגישות" as a fit for another use and the turn went to the general list.
+  it.each([
+    [K3_SENTENCE, ["201", "202"]],
+    ["הטושים לא מתאימים לעיניים רגישות.", []],
+  ])("★ (K3, the device check) a \"does not fit\" is no fit for another device: the sentence goes out as written (%s)", async (st, want) => {
+    storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(want);
   });
 
   it("★ (K) the helpers: another product of her kind's word, the use word's place, and a side with no subject of its own", async () => {

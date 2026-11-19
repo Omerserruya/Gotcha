@@ -1368,10 +1368,15 @@ export function unnamedRecommendation(reply: string, titles: string[]): boolean 
   return titles.filter(Boolean).length > 0 && statements.some((x) => PICK_WORDS.test(x));
 }
 
+// What stands right before a negated fit word: the "not", and at most one word between ("לא ממש", "not really").
+const NOT_BEFORE_FIT = /(?<![\u0590-\u05FF])[וש]?(?:לא|אינו|אינה|אינם|אינן)\s+(?:(?!רק\s)[\u0590-\u05FF]+\s+)?$|(?:not|n't|never)\s+(?:(?!only\s|just\s)[a-z]+\s+)?$/iu;
 /**
  * A product said to fit a device other than the customer's (prod replay 2026-11-17, Smoovee: asked for a
  * Ninja Crispi, offered one that "fits the Ninja Slushi" with a link). The target shares the customer's
  * brand word but lacks their model word and names another: that sentence is cut.
+ * A fit word that follows a "not" ("לא מתאימים ל...", "אינו מיועד ל...", "is not made for") says the product does
+ * not fit that target: no claim of a fit for another device. Each fit word is read by itself, so a plain one beside
+ * a negated one in the same sentence still counts; "not only" negates nothing.
  */
 export function deviceMismatch(reply: string, incoming: string, grounding = ""): string[] {
   const theirs = (String(incoming ?? "").match(/\p{L}{3,}/gu) ?? []).filter((w) => !ASK_STOP.has(w.toLowerCase())).map((w) => stem(w));
@@ -1379,6 +1384,7 @@ export function deviceMismatch(reply: string, incoming: string, grounding = ""):
   const out: string[] = [];
   for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []) {
     for (const m of x.matchAll(FITS_TARGET)) {
+      if (NOT_BEFORE_FIT.test(x.slice(0, m.index ?? 0))) continue;
       const target = (String(m[1] ?? m[2] ?? "").match(/\p{L}{3,}/gu) ?? []).map((w) => stem(w));
       const shared = target.filter((w) => theirs.some((a) => a === w || (a.length >= 4 && (a.includes(w) || w.includes(a)))));
       const missing = theirs.filter((a) => !target.some((w) => w === a || (a.length >= 4 && (a.includes(w) || w.includes(a)))));
