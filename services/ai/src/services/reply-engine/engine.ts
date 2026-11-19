@@ -1790,9 +1790,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // team line. The worst case is that draft with its word-level fixes (prod replay of 38b164c6, NE'A: a shade answer
       // with one style finding counted as thin, and "הנה כמה אפשרויות" went out with three unrelated products).
       // A draft that says something, by the measure "hollow" uses above (eight words): a bare "בטח, אשמח!" on a product
-      // ask is no answer, and the store search below still runs for it.
+      // ask is no answer, and the store search below still runs for it. Never when the cut sentence was the team pass
+      // on an ask: what is left is not the answer, as the line below already holds.
       const styleOnly = first.problems.length > 0 && first.problems.every((p) => p.kind === "style");
-      if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && wordCount(fromOriginal.o.reply) >= 8) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
+      if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && !fromOriginal.lostPass && wordCount(fromOriginal.o.reply) >= 8) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
       if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass)) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };

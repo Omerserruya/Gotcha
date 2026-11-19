@@ -3798,4 +3798,22 @@ describe("only style was wrong with the draft: the turn never ends in the produc
     expect(eight.reply).toBe("המייקאפ שלנו מגיע בכמה וכמה גוונים שונים מאוד.");
     expect((eight.trace as any).styleOnlyKept).toBe(true);
   });
+
+  it("★ the cut sentence was the team pass on an ask: what is left is not the answer, so the turn ends as it did before", async () => {
+    // An item is open with the team, and the draft says "passed to the team" again beside eight words of its own.
+    const OPEN = { kind: "promise", text: "checking with the team: הלקוחה שואלת אם יש גוון כהה יותר במייקאפ", at: new Date().toISOString() };
+    const PASS = "למייקאפ טינט יש פטנט שינוי גוון שמתאים כמעט לכולן. השאלה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט.";
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
+    let t: any;
+    try { t = await turn(ASK, PASS, PASS, PASS); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+    // Style only, and what is left has eight words and is no fragment: only the lost pass keeps it from going out.
+    expect(t.r.trace.gate3).toMatchObject({ problems: [{ kind: "style", codes: ["repeated_team_line"] }], rewrite: "fallback" });
+    expect((t.r.trace as any).fallbackKinds).toEqual(["thin_or_empty"]);
+    expect(t.r.reply).toBe(LIST);
+    expect(t.r.reply).not.toContain("פטנט שינוי גוון");
+    expect((t.r.trace as any).styleOnlyKept).toBeUndefined();
+    expect(t.cuts.markers ?? []).not.toContain("styleOnlyKept");
+    expect(t.calls).toBe(4);
+  });
 });
