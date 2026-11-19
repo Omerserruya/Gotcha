@@ -3700,3 +3700,102 @@ describe("the owner sets how the customer is addressed (2026-11-19: \"לפנות
     expect(withRules.cuts.ownerRules).toEqual({ rules: 2, handover: 0, never: 0 });
   });
 });
+
+describe("only style was wrong with the draft: the turn never ends in the product list or a team line (prod replay of 38b164c6, NE'A: a shade answer with one style finding, and \"הנה כמה אפשרויות\" went out with three unrelated products)", () => {
+  // The draft of that turn, with a real gendered address in it. On a product ask it names no store title, no price and
+  // asks nothing, so what the cleanup leaves counts as thin.
+  const DRAFT = "למייקאפ טינט יש פטנט שינוי גוון שמתאים כמעט לכולן. אם את מחפשת מייקאפ אחר, אפשר לכתוב איזה מוצר, ואכוון לפי הגוון שלו.";
+  const FIXED = "למייקאפ טינט יש פטנט שינוי גוון שמתאים כמעט לכולן. אם מחפשים מייקאפ אחר, אפשר לכתוב איזה מוצר, ואכוון לפי הגוון שלו.";
+  const LIST = "הנה כמה אפשרויות: סדרת שפתונים מט.";
+  const ASK = "איזה גוון מייקאפ יש לכם?";
+  // Products found, and the model gives the same kind of draft on every rewrite unless told otherwise.
+  const turn = async (incoming: string, ...drafts: string[]) => {
+    h.responses.length = 0; h.calls.length = 0; h.audits.length = 0;
+    h.groundTitle = "סדרת שפתונים מט";
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "מייקאפ" })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`a${i}`, { reply: d })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    return { r, cuts: h.audits.find((a) => a.data.action === "ai.bot_turn").data.metadata.cuts, calls: h.calls.length };
+  };
+
+  it("★ a product ask, products found, style only, the rewrites thin: the first draft goes out with its word-level fix, and the marker says so", async () => {
+    const { r, cuts, calls } = await turn(ASK, DRAFT, DRAFT, DRAFT);
+    expect(r.reply).toBe(FIXED);
+    expect(r.reply).not.toMatch(/הנה כמה אפשרויות|צוות/);
+    expect(r.trace.gate3).toMatchObject({ problems: [{ kind: "style", codes: ["gendered_address"] }], rewrite: "cleaned_partial" });
+    expect((r.trace as any).styleOnlyKept).toBe(true);
+    expect((r.trace as any).fallbackKinds).toBeUndefined();
+    expect((r.trace as any).teamQuestion ?? null).toBeNull();
+    expect(r.escalation ?? null).toBeNull();
+    expect(cuts.markers).toContain("styleOnlyKept");
+    // The rewrite and the one targeted rewrite were both tried first.
+    expect(calls).toBe(4);
+    const { cutLine } = await import("../scripts/replay-v2");
+    expect(cutLine(r.trace)).toContain(" | styleOnlyKept | ");
+  });
+
+  it("★ the same when the clock cut the rewrite: the first draft with its fix, never the list", async () => {
+    process.env.REPLY_ENGINE_TURN_BUDGET_MS = "15000";
+    const realNow = Date.now;
+    let shift = 0;
+    Date.now = () => realNow() + shift;
+    const { generateResponse } = await import("../services/ai.service");
+    const orig = (generateResponse as any).getMockImplementation();
+    // The search, then the draft; the clock is at 13s when the draft arrives.
+    (generateResponse as any).mockImplementationOnce(orig).mockImplementationOnce(async (p: any) => { const out = await orig(p); shift = 13000; return out; });
+    let t: any;
+    try { t = await turn(ASK, DRAFT, DRAFT); } finally { Date.now = realNow; delete process.env.REPLY_ENGINE_TURN_BUDGET_MS; }
+    expect((t.r.trace as any).rewriteCut).toBeTruthy();
+    expect(t.calls).toBe(2);
+    expect(t.r.reply).toBe(FIXED);
+    expect((t.r.trace as any).styleOnlyKept).toBe(true);
+  });
+
+  it("★ a rewrite that passes is still the answer, with no marker", async () => {
+    const { r, cuts, calls } = await turn(ASK, DRAFT, FIXED);
+    expect(r.reply).toBe(FIXED);
+    expect(r.trace.gate3.rewrite).toBe("rewritten");
+    expect(calls).toBe(3);
+    expect((r.trace as any).styleOnlyKept).toBeUndefined();
+    expect(cuts.markers ?? []).not.toContain("styleOnlyKept");
+  });
+
+  it("★ a rewrite that fails only by a word but stands after its fix is still preferred over the first draft", async () => {
+    // The rewrite names a store product, so what its cleanup leaves is no thin reply.
+    const second = "יש אצלנו את סדרת שפתונים מט. אם את מחפשת גוון אחר, אפשר לכתוב איזה.";
+    const { r, cuts } = await turn(ASK, DRAFT, second, second);
+    expect(r.reply).toBe("יש אצלנו את סדרת שפתונים מט. אם מחפשים גוון אחר, אפשר לכתוב איזה.");
+    expect(r.trace.gate3.rewrite).toBe("cleaned");
+    expect((r.trace as any).styleOnlyKept).toBeUndefined();
+    expect(cuts.markers ?? []).not.toContain("styleOnlyKept");
+  });
+
+  it("★ a fact or hard finding beside the style one: today's path, the product list", async () => {
+    // "מתאים לי" asks for a pick, and the draft picks nothing.
+    const { r, cuts } = await turn("איזה גוון מייקאפ מתאים לי?", DRAFT, DRAFT, DRAFT);
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toEqual(["no_recommendation", "style"]);
+    expect(r.reply).toBe(LIST);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect((r.trace as any).styleOnlyKept).toBeUndefined();
+    expect(cuts.markers ?? []).not.toContain("styleOnlyKept");
+  });
+
+  it("★ what the style cleanup leaves must still say something: a fragment, or fewer than eight words, keeps today's path", async () => {
+    const EN = "Thank you very much for your patience today.";
+    const left = async (he: string) => { const t = await turn(ASK, ...Array(3).fill(`${he} ${EN}`)); expect(t.r.trace.gate3.problems, he).toEqual([{ kind: "style", codes: ["mixed_language"] }]); return t.r; };
+    // The English sentence is cut: a condition without its claim is left.
+    const fragment = await left("ואם מדובר במייקאפ אחר, אפשר לכתוב כאן איזה מוצר מעניין אותך.");
+    expect(fragment.reply).toBe(LIST);
+    expect((fragment.trace as any).styleOnlyKept).toBeUndefined();
+    // A pleasantry is no answer to a product ask.
+    const pleasantry = await left("בשמחה רבה, נעים מאוד.");
+    expect(pleasantry.reply).toBe(LIST);
+    expect((pleasantry.trace as any).styleOnlyKept).toBeUndefined();
+    // Seven words: today's path. Eight: the draft goes out.
+    const seven = await left("המייקאפ שלנו מגיע בכמה גוונים שונים מאוד.");
+    expect(seven.reply).toBe(LIST);
+    expect((seven.trace as any).styleOnlyKept).toBeUndefined();
+    const eight = await left("המייקאפ שלנו מגיע בכמה וכמה גוונים שונים מאוד.");
+    expect(eight.reply).toBe("המייקאפ שלנו מגיע בכמה וכמה גוונים שונים מאוד.");
+    expect((eight.trace as any).styleOnlyKept).toBe(true);
+  });
+});

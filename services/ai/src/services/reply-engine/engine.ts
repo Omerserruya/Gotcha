@@ -614,7 +614,7 @@ export function sharedTitleNoun(titles: string[]): string | null {
   return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut"] as const;
+const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut", "styleOnlyKept"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -1786,6 +1786,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // When the budget or the deadline cut the rewrite, the smallest repair of the draft goes out, never the generic
       // list in its place (rating of dcf2158e: four budget turns ended on "הנה כמה אפשרויות").
       const cutByTime = !!(trace as any).rewriteCut;
+      // Only style was wrong with the first draft (no fact, no hard kind): the turn never ends in the product list or a
+      // team line. The worst case is that draft with its word-level fixes (prod replay of 38b164c6, NE'A: a shade answer
+      // with one style finding counted as thin, and "הנה כמה אפשרויות" went out with three unrelated products).
+      // A draft that says something, by the measure "hollow" uses above (eight words): a bare "בטח, אשמח!" on a product
+      // ask is no answer, and the store search below still runs for it.
+      const styleOnly = first.problems.length > 0 && first.problems.every((p) => p.kind === "style");
+      if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && wordCount(fromOriginal.o.reply) >= 8) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
       if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass)) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };

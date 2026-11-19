@@ -1636,6 +1636,16 @@ describe("e9a75ca5 rating fixes", () => {
     expect(wrongSelfName("היי, כאן נועה. במה אפשר לעזור?", "נועה")).toBeNull();
     expect(wrongSelfName("זה נכון, יש במלאי.", "נועה")).toBeNull();
     expect(wrongSelfName("I'm sorry, it's sold out.", "Noa")).toBeNull();
+    // "from <place>" needs its dash: a word that starts with מ after "זה <word>" is no place (2026-11-19).
+    for (const ordinary of ["כן, זה ממש מתאים לך.", "את צודקת, זה באמת מבלבל.", "כן, זה בהחלט מומלץ.", "נכון, זה דגם מצוין."]) {
+      expect(wrongSelfName(ordinary, "נועה"), ordinary).toBeNull();
+      expect(kinds(await g3(ordinary)), ordinary).not.toContain("wrong_identity");
+      expect(styleCodes(await g3(ordinary)), ordinary).not.toContain("wrong_identity");
+    }
+    expect(wrongSelfName("היי, זה מתן מ-GOTCHA.", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי, כאן מתן מ- החנות.", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי, זה מתן.", "נועה")).toBe("מתן");
+    expect(wrongSelfName("היי, זאת מיכל מ-GOTCHA.", "נועה")).toBe("מיכל");
     expect(styleCodes(await g3("היי, כאן מתן מהצוות. במה אפשר לעזור?"))).toContain("wrong_identity");
     expect(cleanStyle("היי, כאן מתן מהצוות. במה אפשר לעזור?", ["wrong_identity"], [], "", "", [], "נועה")).toBe("במה אפשר לעזור?");
   });

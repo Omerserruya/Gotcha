@@ -1037,7 +1037,9 @@ export function unlabelledInactiveOrders(reply: string, tools: ToolRunRecord[], 
 
 // Presenting as a named person who is not this employee (prod replay 2026-11-17, GOTCHA: "מתן",
 // a real team member's name taken from the conversation). Only the configured name is the employee's.
-const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ-?\s*[֐-׿A-Za-z]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות|\s*מ-\s*[֐-׿A-Za-z]{2,})|(?<![֐-׿])(?:זה|כאן)\s+([֐-׿]{2,12})(?=\s*(?:מ(?:ה)?צוות|מ-\s*[֐-׿A-Za-z]{2,}))/gu;
+// "from <place>" needs its dash ("מ-GOTCHA"): without it any word that starts with מ counted, and "כן, זה ממש מתאים
+// לך." named the employee "ממש" (2026-11-19).
+const NAMED_SELF = /(?:קוראים\s+לי|שמי|my name is)\s+([֐-׿]{2,12}|[A-Z][a-z]{1,14})|(?:^|[.!?,]\s*|(?<![֐-׿])(?:היי|הי|שלום|אהלן)\s*,?\s*)(?:כאן|זה|זאת|זו)\s+([֐-׿]{2,12})(?=\s*(?:[,.!]|$|מ(?:ה)?צוות|מ-\s*[֐-׿A-Za-z]{2,}))|\b(?:this is|i'?m|it'?s)\s+([A-Z][a-z]{1,14})(?=\s*(?:[,.!]|$|from\b))|(?<![֐-׿])אני\s+([֐-׿]{2,12})(?=\s+מ(?:ה)?צוות|\s*מ-\s*[֐-׿A-Za-z]{2,})|(?<![֐-׿])(?:זה|כאן)\s+([֐-׿]{2,12})(?=\s*(?:מ(?:ה)?צוות|מ-\s*[֐-׿A-Za-z]{2,}))/gu;
 const NOT_A_NAME = new Set(["here", "sorry", "happy", "glad", "back", "sure", "afraid", "available", "the", "your", "נכון", "בסדר", "מעולה", "בדיוק", "הכל", "טוב", "אני", "אנחנו"]);
 // A name's consonant skeleton across Hebrew and Latin ("דניאל" is "Daniel": d-n-l), so the
 // configured name written in the other alphabet is still the employee's own.
