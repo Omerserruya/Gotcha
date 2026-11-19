@@ -275,11 +275,33 @@ describe("relevance exclusions (2026-11-19): no profile words, no placeholders, 
       expect(S.reads).toHaveLength(1);
       expect(Object.keys(S.reads[0].where)[0]).toBe("tenantId");
       expect(S.reads[0]).toMatchObject({ where: { tenantId: "t1", channel: "WHATSAPP", relevanceSource: "override", id: { not: "c9" } }, orderBy: { relevanceOverriddenAt: "desc" }, select: { relevanceCategory: true } });
-      // Before the fast path too: a person's mark is over every rule.
-      const mail = { channel: "EMAIL", customerExternalId: "news@brand.example", firstDirection: "INBOUND" as const, messages: [{ direction: "INBOUND", body: "Our autumn sale", metadata: { email: { bulk: "list" } } }] };
-      S.rows = [mark({ channel: "EMAIL", customerExternalId: "news@brand.example" })];
-      expect(await classifyConversation("t1", profile, mail, { generate: gen })).toMatchObject({ category: "personal", source: "sender" });
+      // Before the fast path too: a person's mark is over every rule (here a one-time code, a notice by the fast path).
+      const code = conv({ messages: [{ direction: "INBOUND", body: "קוד האימות שלך הוא 482913" }] });
+      expect(fastRelevance(code)).toMatchObject({ category: "notice", source: "fast" });
+      expect(await classifyConversation("t1", profile, code, { generate: gen })).toMatchObject({ category: "personal", source: "sender" });
       expect(gen).not.toHaveBeenCalled();
+    });
+
+    it("★ never on email: one address is not one person, so a newer personal mark on it changes nothing", async () => {
+      for (const channel of ["EMAIL", "GMAIL", "OUTLOOK", "email"]) {
+        // A site's form mailer: the same address carries a different customer each time.
+        const mail = { channel, customerExternalId: "forms@shop.example", conversationId: "c9", firstDirection: "INBOUND" as const, messages: [{ direction: "INBOUND", body: "how much does the plan cost?" }] };
+        S.rows = [mark({ channel, customerExternalId: "forms@shop.example", relevanceOverriddenAt: day(18) })];
+        S.reads = [];
+        const gen = as("business", 0.95);
+        expect(await classifyConversation("t1", profile, mail, { generate: gen }), channel).toMatchObject({ category: "business", confidence: 0.95, source: "model" });
+        expect(gen, channel).toHaveBeenCalledTimes(1);
+        // Not even a read.
+        expect(S.reads, channel).toHaveLength(0);
+        expect(await senderMarkedPersonal("t1", mail), channel).toBe(false);
+        // The fast path still has its say on mail no person wrote.
+        const bulk = { ...mail, customerExternalId: "news@brand.example", messages: [{ direction: "INBOUND", body: "Our autumn sale", metadata: { email: { bulk: "list" } } }] };
+        S.rows = [mark({ channel, customerExternalId: "news@brand.example" })];
+        expect((await classifyConversation("t1", profile, bulk, { generate: gen })).source, channel).toBe("fast");
+      }
+      // The same mark on a person's own id (a phone number) does apply.
+      S.rows = [mark({ relevanceOverriddenAt: day(18) })];
+      expect((await classifyConversation("t1", profile, conv(), { generate: as("business", 0.95) })).source).toBe("sender");
     });
 
     it("★ the newest mark is business, after an older personal one: the rule does nothing", async () => {

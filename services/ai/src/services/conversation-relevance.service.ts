@@ -196,8 +196,11 @@ export function personalBound(p: { category: RelevanceCategory; confidence: numb
  * The sender rule (2026-11-19, Omer: a hand-marked "personal" excludes the sender). No store of its own: it reads
  * the marks people already made on this sender's other conversations (same tenant, channel and id). The newest
  * mark decides: "personal" labels this conversation personal with no model call; any other mark does nothing.
+ * Not on email, for now: one address is not one person there (a site's form mailer, a marketplace relay, a shared
+ * mailbox), and one mark would hide every later customer writing through it. Email goes on to the fast path and the model.
  */
 export const SENDER_PERSONAL_REASON = "this sender was marked personal by hand";
+const EMAIL_CHANNEL = /^(?:EMAIL|GMAIL|OUTLOOK)$/i;
 /** The sender's id as a channel may have stored it: a number with and without the leading "+". */
 export function senderIds(externalId: unknown): string[] {
   const raw = String(externalId ?? "").trim();
@@ -208,7 +211,7 @@ export function senderIds(externalId: unknown): string[] {
 /** One bounded read (the tenant, channel and sender index). A failed read is no mark: the classifier goes on as before. */
 export async function senderMarkedPersonal(tenantId: string, c: RelevanceInput, db?: any): Promise<boolean> {
   const ids = senderIds(c.customerExternalId);
-  if (!tenantId || !c.channel || !ids.length || c.overriddenBy) return false;
+  if (!tenantId || !c.channel || !ids.length || c.overriddenBy || EMAIL_CHANNEL.test(c.channel)) return false;
   try {
     const newest = await (db ?? prisma).conversation?.findFirst?.({
       where: { tenantId, channel: c.channel, customerExternalId: { in: ids }, relevanceSource: "override", relevanceOverriddenAt: { not: null }, ...(c.conversationId ? { id: { not: c.conversationId } } : {}) },
@@ -261,7 +264,7 @@ export function relevancePrompt(profile: RelevanceProfile | null, c: RelevanceIn
       ].filter(Boolean).join("\n")
     : "Business: (no profile)";
   const lines = realMessages(c.messages).slice(-8).map((m) => `[${m.direction === "OUTBOUND" ? "business" : "contact"}] ${clip(m.body, 300)}`);
-  const email = /^(?:EMAIL|GMAIL|OUTLOOK)$/i.test(c.channel) ? `\nEmail from: ${clip(c.customerExternalId, 80)}${c.subject ? `\nSubject: ${clip(c.subject, 120)}` : ""}` : "";
+  const email = EMAIL_CHANNEL.test(c.channel) ? `\nEmail from: ${clip(c.customerExternalId, 80)}${c.subject ? `\nSubject: ${clip(c.subject, 120)}` : ""}` : "";
   const user = `${biz}\n\nChannel: ${c.channel}\nWho wrote first: ${c.firstDirection === "OUTBOUND" ? "the business" : c.firstDirection === "INBOUND" ? "the contact (so NOT reply_to_outbound: the business answering the contact's opener never makes it one)" : "unknown"}${email}\n\nLast messages (oldest first):\n${lines.join("\n") || "(none)"}`;
   return [{ role: "system", content: RUBRIC }, { role: "user", content: user }];
 }
