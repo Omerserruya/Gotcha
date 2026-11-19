@@ -46,10 +46,10 @@ const cell = (s: string) => s.replace(/\|/g, "\\|");
 export function dryRunReport(tenant: string, days: number, rows: DryRow[]): string {
   const md: string[] = [`# Relevance dry run: tenant ${tenant}, last ${days} days`, "", `Conversations: ${rows.length}`, ""];
   const by = (f: (r: DryRow) => string) => { const m = new Map<string, number>(); for (const r of rows) m.set(f(r), (m.get(f(r)) ?? 0) + 1); return m; };
-  md.push("## Per category", "", "| category | count | fast path | model |", "|---|---|---|---|");
+  md.push("## Per category", "", "| category | count | fast path | model | sender rule |", "|---|---|---|---|---|");
   for (const c of RELEVANCE_CATEGORIES) {
     const of = rows.filter((r) => r.label.category === c);
-    md.push(`| ${c} | ${of.length} | ${of.filter((r) => r.label.source === "fast").length} | ${of.filter((r) => r.label.source === "model").length} |`);
+    md.push(`| ${c} | ${of.length} | ${of.filter((r) => r.label.source === "fast").length} | ${of.filter((r) => r.label.source === "model").length} | ${of.filter((r) => r.label.source === "sender").length} |`);
   }
   md.push("", "## Per channel", "", `| channel | ${RELEVANCE_CATEGORIES.join(" | ")} |`, `|---|${RELEVANCE_CATEGORIES.map(() => "---").join("|")}|`);
   for (const ch of [...by((r) => r.channel).keys()].sort()) {
@@ -101,7 +101,7 @@ async function main() {
       where: { tenantId: a.tenant, lastMessageAt: { gte: since }, NOT: { customerExternalId: { startsWith: "sandbox:" } } },
       orderBy: { lastMessageAt: "desc" },
       take: a.limit,
-      select: { id: true, channel: true, customerExternalId: true, ...(a.write ? { relevanceOverriddenBy: true, channelAccount: { select: { relevanceFilterEnabled: true } } } : {}) },
+      select: { id: true, channel: true, customerExternalId: true, relevanceOverriddenBy: true, ...(a.write ? { channelAccount: { select: { relevanceFilterEnabled: true } } } : {}) },
     });
     console.log(`[classify] tenant=${a.tenant} conversations=${convs.length}`);
     let done = 0;
@@ -115,7 +115,7 @@ async function main() {
       const messages = (last as any[]).reverse();
       const lastIn = [...messages].reverse().find((m) => m.direction === "INBOUND");
       const subject = (lastIn?.metadata as any)?.email?.subject ?? null;
-      const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, firstDirection: first?.direction ?? null, messages, subject, team };
+      const input: RelevanceInput = { channel: String(c.channel), customerExternalId: c.customerExternalId, conversationId: c.id, overriddenBy: c.relevanceOverriddenBy ?? null, firstDirection: first?.direction ?? null, messages, subject, team };
       const label = await classifyConversation(a.tenant, profile, input).catch((err: any) => ({ category: "unclear" as const, confidence: 0, reason: `error: ${clip(err?.message ?? err, 60)}`, source: "model" as const, classifiedAt: new Date().toISOString() }));
       // The backfill: never over a person's override, never an error's "unclear".
       // Never on an account whose filter the business turned off (2026-11-18).

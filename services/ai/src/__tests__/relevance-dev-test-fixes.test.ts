@@ -66,7 +66,8 @@ describe("R2: reply_to_outbound only when the first message is the business's ow
   ] };
   it("★ the model's reply_to_outbound on a contact's opener is unclear, decided in code", async () => {
     const generate: any = vi.fn(async () => ({ content: JSON.stringify({ category: "reply_to_outbound", confidence: 0.99, reason: "the business replied to that unsolicited offer" }) }));
-    const r = await classifyConversation("t1", null, pitch, { generate, now: () => now });
+    // db: {} keeps the sender rule's read off the real database.
+    const r = await classifyConversation("t1", null, pitch, { generate, now: () => now, db: {} });
     expect(r.category).toBe("unclear");
     expect(r.confidence).toBe(0);
   });

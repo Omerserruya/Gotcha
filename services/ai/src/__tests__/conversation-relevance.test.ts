@@ -4,7 +4,23 @@
  */
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/ai.service", async (orig) => ({ ...(await orig<any>()), getDefaultModel: () => "test-model" }));
-import { classifyConversation, fastRelevance, parseRelevance, relevancePrompt, shouldReclassify, SILENCING, teamIdentityOf, autoReply, firstMover, type RelevanceInput } from "../services/conversation-relevance.service";
+// The sender rule's one read, answered from S.rows by the conditions the service wrote (never a database).
+const S = vi.hoisted(() => ({ rows: [] as any[], reads: [] as any[] }));
+vi.mock("@chatcenter/shared", async (orig) => ({
+  ...(await orig<any>()),
+  prisma: {
+    conversation: {
+      findFirst: async (a: any) => {
+        S.reads.push(a);
+        const w = a.where;
+        const hit = S.rows.filter((r) => r.tenantId === w.tenantId && r.channel === w.channel && w.customerExternalId.in.includes(r.customerExternalId) && r.relevanceSource === w.relevanceSource && r.relevanceOverriddenAt != null && r.id !== w.id?.not);
+        hit.sort((x, y) => (a.orderBy.relevanceOverriddenAt === "desc" ? -1 : 1) * (x.relevanceOverriddenAt.getTime() - y.relevanceOverriddenAt.getTime()));
+        return hit[0] ? { relevanceCategory: hit[0].relevanceCategory } : null;
+      },
+    },
+  },
+}));
+import { classifyConversation, fastRelevance, parseRelevance, relevancePrompt, shouldReclassify, SILENCING, teamIdentityOf, autoReply, firstMover, couldBeCustomer, bracketOnly, personalBound, senderIds, senderMarkedPersonal, type RelevanceInput } from "../services/conversation-relevance.service";
 import { platformPaidScope, laneFeature } from "../services/ai.service";
 import { dryRunReport, parseDryArgs, type DryRow } from "../scripts/classify-dry-run";
 
@@ -171,7 +187,7 @@ describe("casual chat is personal; a customer opener never is (Omer 2026-11-19)"
   });
   it("★ eight short customer openers are never personal, whatever the model says", async () => {
     const { classifyConversation } = await import("../services/conversation-relevance.service");
-    for (const m of ["היי", "שלום!", "אפשר שאלה?", "יש לכם בוט לוואטסאפ?", "כמה עולה המנוי?", "אני רוצה להזמין דמו", "hi", "do you have a free trial?", "מה המחיר?", "chatbot"]) {
+    for (const m of ["היי", "שלום!", "אפשר שאלה?", "יש לכם בוט לוואטסאפ?", "כמה עולה המנוי?", "אני רוצה להזמין דמו", "hi", "do you have a free trial?", "מה המחיר?"]) {
       const r = await classifyConversation("t1", profile, conv(m), { generate: as("personal", 0.9) });
       expect(r.category, m).toBe("unclear");
     }
@@ -184,10 +200,8 @@ describe("casual chat is personal; a customer opener never is (Omer 2026-11-19)"
     expect((await classifyConversation("t1", profile, many("היי", "טובה מגניב ה GTA vi"), { generate: as("personal", 0.85) })).category).toBe("personal");
     expect((await classifyConversation("t1", profile, many("היי", "שלום"), { generate: as("personal", 0.85) })).category).toBe("unclear");
     // The joined prefix: המחיר, והמחיר, למשלוח, שהזמנתי; never a longer word that only contains one (מחירת is no word of ours).
-    for (const m of ["מה המחיר?", "והמחיר?", "מתי זה יוצא למשלוח", "מה שהזמנתי לא הגיע", "בתמיכה אמרו לי"]) expect(couldBeCustomer(m, null), m).toBe(true);
-    for (const m of ["איזה חזק אפשר לשפר את הרכב", "טובה מגניב ה GTA vi", "ראית את המשחק אתמול?", "נפגשים בשמונה אצל דני"]) expect(couldBeCustomer(m, profile), m).toBe(false);
-    // The business's own words, from its profile: the same sentence is a customer's for a garage and casual for a chat platform.
-    expect(couldBeCustomer("איזה חזק אפשר לשפר את הרכב", { organizationName: "G", industry: "מוסך", businessDescription: "שיפור ושדרוג רכבים", whatWeSell: "טיפולים לרכב" } as any)).toBe(true);
+    for (const m of ["מה המחיר?", "והמחיר?", "מתי זה יוצא למשלוח", "מה שהזמנתי לא הגיע", "בתמיכה אמרו לי"]) expect(couldBeCustomer(m), m).toBe(true);
+    for (const m of ["איזה חזק אפשר לשפר את הרכב", "טובה מגניב ה GTA vi", "ראית את המשחק אתמול?", "נפגשים בשמונה אצל דני"]) expect(couldBeCustomer(m), m).toBe(false);
   });
   it("★ personal under 0.75 is unclear; the rubric says what personal is", async () => {
     const { classifyConversation, relevancePrompt, MIN_PERSONAL_CONFIDENCE } = await import("../services/conversation-relevance.service");
@@ -196,5 +210,135 @@ describe("casual chat is personal; a customer opener never is (Omer 2026-11-19)"
     expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/casual chat about something that has nothing to do with what this business does/);
     expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/A short opener that could be a customer \(a greeting, "can I ask", "do you have", a product, price or order word\) is never personal: business or unclear/);
     expect(relevancePrompt(profile, conv("x") as any)[0].content).toMatch(/Name that subject in the reason/);
+  });
+});
+
+describe("relevance exclusions (2026-11-19): no profile words, no placeholders, the sender rule", () => {
+  // A profile full of everyday words: none of them makes a chat a customer's.
+  const profile = { organizationName: "Acme Chat", industry: "messaging", businessDescription: "Message and call customers on WhatsApp chat at any time", whatWeSell: "chat subscriptions" };
+  const many = (...bodies: string[]) => ({ channel: "WHATSAPP", firstDirection: "INBOUND" as const, customerExternalId: "972500000009", messages: bodies.map((body) => ({ direction: "INBOUND", body, createdAt: new Date() })) });
+  const as = (category: string, confidence: number) => vi.fn(async () => ({ content: JSON.stringify({ category, confidence, reason: "a chat between friends" }) } as any));
+
+  it("★ a word of the business's profile no longer binds; an ask and a bare greeting still do", async () => {
+    S.rows = [];
+    for (const m of ["saw your message on whatsapp, call me when you have time", "acme chat was fun last night", "chatbot", "שלחתי לך הודעה בצ'אט, תתקשר כשיש זמן"]) {
+      expect(couldBeCustomer(m), m).toBe(false);
+      expect((await classifyConversation("t1", profile, many(m), { generate: as("personal", 0.9) })).category, m).toBe("personal");
+    }
+    // The ask pattern binds in both modes, anywhere in the sender's messages.
+    for (const m of ["how much does the plan cost?", "can i ask something", "יש לכם מקום מחר?"]) {
+      expect(couldBeCustomer(m), m).toBe(true);
+      expect(couldBeCustomer(m, true), m).toBe(true);
+      expect((await classifyConversation("t1", profile, many(m, "great game last night"), { generate: as("personal", 0.9) })).category, m).toBe("unclear");
+    }
+    // A bare greeting binds only when it is not strongOnly: alone it could be a customer, before a casual chat it is not.
+    expect(couldBeCustomer("hi")).toBe(true);
+    expect(couldBeCustomer("hi", true)).toBe(false);
+    expect((await classifyConversation("t1", profile, many("hi"), { generate: as("personal", 0.9) })).category).toBe("unclear");
+    expect((await classifyConversation("t1", profile, many("hi", "great game last night"), { generate: as("personal", 0.9) })).category).toBe("personal");
+  });
+
+  it("★ a bracketed placeholder is not the sender's text: it never binds and never counts as an inbound message", async () => {
+    S.rows = [];
+    for (const m of ["[edit message]", "[image]", "[sticker]", "[deleted]", "  [order update]  ", "[תמונה]", "[]"]) {
+      expect(bracketOnly(m), m).toBe(true);
+      expect(couldBeCustomer(m), m).toBe(false);
+      expect(couldBeCustomer(m, true), m).toBe(false);
+    }
+    // Words around a bracket, or two tokens, are a written message.
+    for (const m of ["[image] how much is it?", "see [image]", "[image] [sticker]", "", "image"]) expect(bracketOnly(m), m).toBe(false);
+    expect(couldBeCustomer("[image] how much is it? what is the price")).toBe(true);
+    // A word inside a placeholder is no ask: the casual chat stays personal.
+    expect((await classifyConversation("t1", profile, many("[order update]", "[sticker]", "great game last night"), { generate: as("personal", 0.9) })).category).toBe("personal");
+    // The placeholder does not count: greetings are all the sender wrote, so it could be a customer.
+    expect((await classifyConversation("t1", profile, many("hi", "[image]"), { generate: as("personal", 0.9) })).category).toBe("unclear");
+    // Nor does an empty body or a system line (the file's realMessages), whatever the system line says.
+    const sys = (body: string) => ({ direction: "INBOUND", body, messageType: "system" });
+    expect(personalBound({ category: "personal", confidence: 0.9, reason: "r" }, { ...many(), messages: [...many("hi", "").messages, sys("missed voice call")] }).category).toBe("unclear");
+    expect(personalBound({ category: "personal", confidence: 0.9, reason: "r" }, { ...many(), messages: [...many("great game last night").messages, sys("the price changed")] }).category).toBe("personal");
+  });
+
+  describe("the sender rule", () => {
+    const day = (d: number) => new Date(Date.UTC(2026, 10, d, 9, 0, 0));
+    const mark = (o: any = {}) => ({ id: "c0", tenantId: "t1", channel: "WHATSAPP", customerExternalId: "972500000009", relevanceCategory: "personal", relevanceSource: "override", relevanceOverriddenBy: "u1", relevanceOverriddenAt: day(10), ...o });
+    const conv = (o: any = {}) => ({ ...many("how much does the plan cost?"), conversationId: "c9", ...o });
+    const now = new Date("2026-11-19T12:00:00Z");
+
+    it("★ the newest hand mark of the sender is personal: personal, confidence 1, source sender, no model call", async () => {
+      S.rows = [mark({ id: "c1", relevanceCategory: "business", relevanceOverriddenAt: day(5) }), mark({ id: "c2", relevanceOverriddenAt: day(12) })];
+      S.reads = [];
+      const gen = as("business", 0.95);
+      const r = await classifyConversation("t1", profile, conv(), { generate: gen, now: () => now });
+      expect(r).toEqual({ category: "personal", confidence: 1, reason: "this sender was marked personal by hand", source: "sender", classifiedAt: now.toISOString() });
+      expect(gen).not.toHaveBeenCalled();
+      // One bounded read: the tenant first, the channel, the sender, hand marks only, newest first, never itself.
+      expect(S.reads).toHaveLength(1);
+      expect(Object.keys(S.reads[0].where)[0]).toBe("tenantId");
+      expect(S.reads[0]).toMatchObject({ where: { tenantId: "t1", channel: "WHATSAPP", relevanceSource: "override", id: { not: "c9" } }, orderBy: { relevanceOverriddenAt: "desc" }, select: { relevanceCategory: true } });
+      // Before the fast path too: a person's mark is over every rule.
+      const mail = { channel: "EMAIL", customerExternalId: "news@brand.example", firstDirection: "INBOUND" as const, messages: [{ direction: "INBOUND", body: "Our autumn sale", metadata: { email: { bulk: "list" } } }] };
+      S.rows = [mark({ channel: "EMAIL", customerExternalId: "news@brand.example" })];
+      expect(await classifyConversation("t1", profile, mail, { generate: gen })).toMatchObject({ category: "personal", source: "sender" });
+      expect(gen).not.toHaveBeenCalled();
+    });
+
+    it("★ the newest mark is business, after an older personal one: the rule does nothing", async () => {
+      S.rows = [mark({ id: "c1", relevanceOverriddenAt: day(5) }), mark({ id: "c2", relevanceCategory: "business", relevanceOverriddenAt: day(12) })];
+      const gen = as("business", 0.95);
+      expect(await classifyConversation("t1", profile, conv(), { generate: gen })).toMatchObject({ category: "business", confidence: 0.95, source: "model" });
+      expect(gen).toHaveBeenCalledTimes(1);
+    });
+
+    it("★ no sender id: no read, nothing changes", async () => {
+      S.rows = [mark({ customerExternalId: "" }), mark({ id: "c3", customerExternalId: "+" })];
+      S.reads = [];
+      for (const id of [null, undefined, "", "   ", "+"]) {
+        const gen = as("business", 0.95);
+        expect((await classifyConversation("t1", profile, conv({ customerExternalId: id }), { generate: gen })).source, String(id)).toBe("model");
+        expect(gen).toHaveBeenCalledTimes(1);
+      }
+      expect(S.reads).toHaveLength(0);
+    });
+
+    it("★ a number matches with and without the leading plus; an email only as written", async () => {
+      expect(senderIds("972500000009")).toEqual(["972500000009", "+972500000009"]);
+      expect(senderIds(" +972500000009 ")).toEqual(["972500000009", "+972500000009"]);
+      expect(senderIds("dana@friends.example")).toEqual(["dana@friends.example"]);
+      const gen = as("business", 0.95);
+      S.rows = [mark({ customerExternalId: "+972500000009" })];
+      expect((await classifyConversation("t1", profile, conv({ customerExternalId: "972500000009" }), { generate: gen })).source).toBe("sender");
+      S.rows = [mark({ customerExternalId: "972500000009" })];
+      expect((await classifyConversation("t1", profile, conv({ customerExternalId: "+972500000009" }), { generate: gen })).source).toBe("sender");
+      expect(gen).not.toHaveBeenCalled();
+    });
+
+    it("★ only a hand mark of the same tenant, channel and sender on ANOTHER conversation; a marked conversation is never relabelled", async () => {
+      const others = [mark({ tenantId: "t2" }), mark({ channel: "INSTAGRAM" }), mark({ customerExternalId: "972500000008" }), mark({ relevanceSource: "model", relevanceOverriddenBy: null, relevanceOverriddenAt: null }), mark({ id: "c9" })];
+      for (const row of others) {
+        S.rows = [row];
+        expect((await classifyConversation("t1", profile, conv(), { generate: as("business", 0.95) })).source, JSON.stringify(row)).toBe("model");
+      }
+      // The conversation carries a person's own mark: the rule does not even read.
+      S.rows = [mark()];
+      S.reads = [];
+      expect(await senderMarkedPersonal("t1", conv({ overriddenBy: "u2" }))).toBe(false);
+      expect(S.reads).toHaveLength(0);
+      expect(await senderMarkedPersonal("t1", conv())).toBe(true);
+    });
+
+    it("★ a failed read is no mark: the classifier goes on as before", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const gen = as("business", 0.95);
+      const r = await classifyConversation("t1", profile, conv(), { generate: gen, db: { conversation: { findFirst: async () => { throw new Error("down"); } } } });
+      expect(r).toMatchObject({ category: "business", source: "model" });
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("★ the dry-run report counts the sender rule's labels in their own column", () => {
+      const md = dryRunReport("t1", 60, [{ conversationId: "c1", channel: "WHATSAPP", firstWriter: "contact", line: "x", label: { category: "personal", confidence: 1, reason: "this sender was marked personal by hand", source: "sender", classifiedAt: "" } }]);
+      expect(md).toMatch(/\| category \| count \| fast path \| model \| sender rule \|/);
+      expect(md).toMatch(/\| personal \| 1 \| 0 \| 0 \| 1 \|/);
+    });
   });
 });
