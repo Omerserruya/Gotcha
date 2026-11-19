@@ -3099,3 +3099,39 @@ describe("probe of d9f7c248, through a whole turn", () => {
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 });
+
+describe("rating of b3d2bbf3 and dev round k3, through a whole turn", () => {
+  it("★ k3-A: a draft true on what the automatic search returned goes as it is, with no rewrite", async () => {
+    h.groundStatus = "no_results";
+    h.responses.push({ toolCalls: [respond("a1", { reply: "אין לנו תיק עור." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק עור?" }, "autonomous");
+    expect(h.dispatched.some((d) => d.name === "woocommerce.list_products")).toBe(true);
+    expect(r.reply).toMatch(/^אין לנו תיק עור\./);
+    expect((r.trace as any).passedAfterLookup).toBe(true);
+    expect(h.calls).toHaveLength(1);
+  });
+  it("★ 5: an empty query is refused when she names no product", async () => {
+    h.responses.push({ toolCalls: [tc("m1", "woocommerce.list_products", { query: "" })] }, { toolCalls: [respond("m2", { reply: "בשמחה! למה זה נחוץ לך?" })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר המלצה" }, "autonomous");
+    expect(h.dispatched.filter((d) => d.name === "woocommerce.list_products")).toHaveLength(0);
+  });
+  it("★ k3-A (2): a reply with product cards never says nothing was found", async () => {
+    const { NOT_FOUND_LINE, notFoundReply, closestMatchLine } = await import("../services/reply-engine/engine").then(async (e) => ({ ...e, notFoundReply: (await import("../services/reply-engine/gates")).notFoundReply }));
+    expect(NOT_FOUND_LINE.test(notFoundReply("he", "יש לכם ג'ינס שחור?"))).toBe(true);
+    expect(NOT_FOUND_LINE.test(notFoundReply("he", "יש לכם משטח לתמי 4?"))).toBe(true);
+    expect(NOT_FOUND_LINE.test(notFoundReply("en", "do you have jeans?"))).toBe(true);
+    expect(closestMatchLine("he")).not.toMatch(/לא מצאתי את זה/);
+    const { readFileSync } = await import("fs");
+    expect(readFileSync("src/services/reply-engine/engine.ts", "utf8")).toMatch(/if \(output\?\.reply && \(output\.cards \?\? \[\]\)\.length && NOT_FOUND_LINE\.test\(output\.reply\)\)/);
+  });
+});
+
+describe("rating of b3d2bbf3, E: dashes in store titles", () => {
+  it("★ the header that names the cards writes a title's en dash as a hyphen; the product is still in focus", async () => {
+    h.groundTitle = "Tote \u2013 Canvas";
+    h.responses.push({ toolCalls: [tc("t1", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("t2", { reply: "", cards: ["PRODUCT_1"] })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם תיק בד?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/[\u2010-\u2015\u2212]/);
+    h.groundTitle = "Canvas Tote";
+  });
+});

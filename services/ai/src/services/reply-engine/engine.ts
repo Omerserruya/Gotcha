@@ -539,6 +539,11 @@ const TEAM_PASS_SENTENCE = /(?<![\u0590-\u05FF])[וש]?(?:אעביר|נעביר|
 export function withoutSlashForms(text: string): string {
   return String(text ?? "").split(/(https?:\/\/\S+)/).map((part, i) => (i % 2 ? part : part.replace(/([\u0590-\u05FF]{2,})\/(?:י|ת|ה|ית|ים|ות|ן|ני)(?![\u0590-\u05FF])/gu, "$1"))).join("");
 }
+/** The engine's own not-found lines (notFoundReply). */
+export const NOT_FOUND_LINE = /^(?:לא מצאתי דגם בשם הזה|לא מצאתי את זה בקטלוג כרגע|I didn't find a model by that name|I couldn't find that in the catalogue right now)/u;
+export function closestMatchLine(locale: "he" | "en"): string {
+  return locale === "he" ? "לא מצאתי בדיוק את זה, אבל זה הכי קרוב שיש בקטלוג:" : "I didn't find exactly that, but this is the closest in the catalogue:";
+}
 const EN_TALK = /\b(?:do|does|did|have|has|is|are|was|the|a|an|how|what|when|where|which|why|can|could|would|will|hi|hello|hey|please|thanks|thank|want|need|looking|any|you|your|my|i'?m|price|cost)\b/i;
 /** The word every title of the last search shares ("Heavyweight Hoodie", "Zip Hoodie", "Pullover Hoodie": "Hoodie"). */
 export function sharedTitleNoun(titles: string[]): string | null {
@@ -1226,7 +1231,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     skills,
     // A verb, a question word or a talk word alone is never a store search (rating of dcf2158e: q="להזמין").
     refuse: (tool, args) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? "")
-      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null),
+      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null)
+      // An empty query lists the whole store: never when her message names no product (rating of b3d2bbf3: "אפשר
+      // המלצה" got three arbitrary cards); ask what she is looking for.
+      ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && !String((args as any)?.query ?? "").trim() && !storeQueryOf(String(opts.incomingMessage ?? "")) ? "she named no product: ask what she is looking for before searching" : null),
     tightenApproval: (a) => {
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
@@ -1570,10 +1578,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         candidates = turnTools.envelope?.candidates ?? [];
         (trace as any).autoLookupMs = Date.now() - ta;
       }
+      // The draft judged again on what the lookups returned: true now, it goes as it is (dev round k3 on b3d2bbf3: "לא
+      // מצאנו ג'ינס שחור בקטלוג." was flagged before the searches ran, and true after them).
+      // Only when they returned nothing: then the draft's absence is proven and a rewrite has nothing new to use.
+      const autoStore = turnTools.records.filter((x) => auto.some((c) => c.id === x.callId && /(?:list_products|search_products)$/.test(c.function.name)));
+      const again = autoStore.length && autoStore.every((x) => x.outcome === "empty") && original ? gate3(g3Input(original)) : null;
+      if (again?.ok) { second = original; (trace as any).passedAfterLookup = true; }
       // A lookup only the model can make (which product, which order) gets one tool round, if there is time for two calls.
-      const modelRead = left() > 9000 && first.problems.some((p) => (p.kind === "unread_product" && !auto.length) || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
-      let r = await rewriteCall(modelRead ? "required" : forceRespond);
-      if (modelRead) {
+      const modelRead = !again?.ok && left() > 9000 && first.problems.some((p) => (p.kind === "unread_product" && !auto.length) || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
+      let r: any = again?.ok ? null : await rewriteCall(modelRead ? "required" : forceRespond);
+      if (r && modelRead) {
         const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
         const work = calls.filter((c) => c.function?.name !== "respond");
         if (work.length) {
@@ -1587,9 +1601,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           r = await rewriteCall(forceRespond);
         }
       }
-      const rc = (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond");
-      second = rc ? parseRespond(rc.function.arguments) : null;
-      if (second) second = { ...second, reply: fixNearTitles(normalizeQuotes(second.reply), (turnTools.envelope?.candidates ?? []).map((c: any) => String(c?.title ?? "")).filter(Boolean)) };
+      const rc = r ? (r.toolCalls ?? []).find((c: any) => c.function?.name === "respond") : null;
+      if (r) second = rc ? parseRespond(rc.function.arguments) : null;
+      if (second && r) second = { ...second, reply: fixNearTitles(normalizeQuotes(second.reply), (turnTools.envelope?.candidates ?? []).map((c: any) => String(c?.title ?? "")).filter(Boolean)) };
     } catch (err: any) {
       if ((err as any)?.name === "AbortError") throw err;
       second = null;
@@ -2250,6 +2264,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // Never the same sentence twice in one reply (prod replay 12: the stop-use line twice).
   if (output?.reply) output = { ...output, reply: dedupeSentences(output.reply) };
+  // A reply that carries product cards never says nothing was found (dev round k3 on b3d2bbf3: the not-found line
+  // went out with a jeans card): the fixed closest-match line instead.
+  if (output?.reply && (output.cards ?? []).length && NOT_FOUND_LINE.test(output.reply)) {
+    output = { ...output, reply: closestMatchLine(locale) };
+    (trace as any).notFoundWithCards = true;
+  }
   let final: ModelTurnOutput = output ?? { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
   (trace as any).cards = final.cards ?? [];
 
@@ -2397,6 +2417,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     (trace as any).hollowHeader = shownCards.length ? "named" : "question";
   }
   if (listed) (trace as any).listedProducts = listed.keys;
+  // The lines built after the text pass (the header that names the cards, the holding lines) get the same hyphens:
+  // a store title with an en dash reached the reply as is (ratings of 6320af2f and dcf2158e). The cards keep theirs.
+  if (reply) reply = reply.replace(/[\u2010-\u2015\u2212]/g, "-");
   const offered: OfferedItem[] = [];
   const now = new Date().toISOString();
   const cardKeys = (final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])).filter((n) => n >= 1 && n <= candidates.length);
@@ -2410,7 +2433,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // What the customer was shown or told about this turn becomes "already shown".
   const named = new Set<number>(cardKeys);
-  candidates.forEach((c: any, i: number) => { if (c?.title && reply.includes(c.title)) named.add(i + 1); });
+  candidates.forEach((c: any, i: number) => { if (c?.title && reply.includes(String(c.title).replace(/[\u2010-\u2015\u2212]/g, "-"))) named.add(i + 1); });
   // Named without the exact title (a shortened or translated name, or the model's own intent): in focus too.
   if (reply) for (const i of referredCandidates(candidates as any[], reply, String(final.stateUpdate?.intent ?? ""), [firstName])) named.add(i + 1);
   for (const n of named) {

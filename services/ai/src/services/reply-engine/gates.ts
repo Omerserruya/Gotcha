@@ -296,6 +296,9 @@ const STATUS_ASK = /(?<![\u0590-\u05FF])(?:מה (?:קורה|קרה|המצב|עם
 export function repeatedTeamLine(reply: string, incoming: string, teamAlreadyOpen: boolean, newTeamQuestion: boolean, onOpenItem = false): boolean {
   // Back on that very subject: saying it is with the team is the answer (prod replay 2026-11-17, NE'A).
   if (!teamAlreadyOpen || newTeamQuestion || onOpenItem) return false;
+  // New details for the open item (a card's last four, an order number: the digits withNewDetails adds) are passed on
+  // now; saying so is no repeat (rating of b3d2bbf3: that sentence was cut, the waiting line went out twice in a row).
+  if (/\d{4,}/.test(String(incoming ?? ""))) return false;
   return TEAM_LINE.test(reply ?? "") && !STATUS_ASK.test(incoming ?? "");
 }
 
@@ -1500,7 +1503,7 @@ export function nonProductAsk(incoming: string): boolean {
  */
 // Words of a conversation, never of a product (the Supervisor's probes on 7100b0b6, L224 and L789): greetings, fillers,
 // past and existence verbs, pronouns, the frame of a question.
-const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison", "מומלץ", "מומלצים", "מומלצות", "מומלצת", "נשמע", "קיבלתי", "ממך", "מכם", "מצליח", "מצליחה", "לשלם", "הסבר", "להסבר", "וכו", "וכדומה", "עדכון", "עדכונים", "show", "me"]);
+const TALK_WORDS = new Set(["שאלה", "שאלות", "לגבי", "דוקא", "דווקא", "הייתה", "היתה", "היה", "היו", "הייתי", "אחת", "אחד", "מאוד", "עדיין", "ישנה", "יישנה", "ישנו", "ישנם", "שלום", "הי", "היי", "אולי", "פעם", "כבר", "ממש", "כזה", "כזאת", "כזו", "משהו", "ראיתי", "קניתי", "הזמנתי", "לי", "כדי", "לכל", "מוצרים", "פריטים", "בה", "בו", "בהם", "מתחת", "מעל", "ליד", "שוב", "יותר", "פחות", "מישהו", "תודה", "אשמח", "סליחה", "בבקשה", "בירור", "בדיקת", "בדיקה", "התאמת", "השוואה", "השוואת", "חיפוש", "מידע", "פרטי", "checking", "asking", "comparison", "מומלץ", "מומלצים", "מומלצות", "מומלצת", "נשמע", "קיבלתי", "ממך", "מכם", "מצליח", "מצליחה", "לשלם", "הסבר", "להסבר", "וכו", "וכדומה", "עדכון", "עדכונים", "המלצה", "מלצה", "המלצות", "אלה", "אלו", "יחלק", "גוון", "כרגע", "למכשיר", "מכשיר", "להשתמש", "השתמש", "שימוש", "show", "me"]);
 const PLAIN_ADJECTIVES = new Set(["יפה", "יפות", "יפים", "יפהפייה", "חדש", "חדשה", "חדשים", "חדשות", "נחמד", "נחמדה", "טוב", "טובה", "קלילה", "קליל", "עדין", "עדינה", "מיוחד", "מיוחדת", "שווה", "beautiful", "nice", "new", "pretty", "special"]);
 const CONTEXT_NOUNS = new Set(["מכירה", "מכירות", "סניף", "חנות", "אתר", "אינסטגרם", "פייסבוק", "טיקטוק", "וואטסאפ", "סטורי", "פוסט", "תערוכה", "יריד", "שוק", "אירוע", "הופעה", "קבוצה", "מבצע", "פרסומת", "ניוזלטר"]);
 const talkWord = (w: string) => { const l = w.toLowerCase(); return TALK_WORDS.has(l) || (/^[הושל][\u0590-\u05FF]{2,}$/u.test(l) && TALK_WORDS.has(l.slice(1))) || (/^ש[\u0590-\u05FF]{3,}$/u.test(l) && (TALK_WORDS.has(l.slice(1)) || /^ש(?:מוצר|הוא|היא|זה)/u.test(l))); };
@@ -1671,6 +1674,10 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
     return written.find((w) => { const x = unfinal(w.toLowerCase()); return x.includes(pick) || (x.length >= 3 && pick.includes(x)); }) ?? pick;
   })();
   const orderOnly = !!absence && absence.claims.every((c) => ORDER_ABSENCE.test(c)) && !has("no_search");
+  // After a store search timed out, no second store try when the knowledge answers (rating of b3d2bbf3: "מתי יתחדש
+  // המלאי" took 20s and more, two store tries, and the customer got the team line only).
+  const storeTimedOut = done.some((t) => PRODUCT_TOOL.test(t.tool) && t.outcome === "timeout");
+  if (storeTimedOut && has("knowledge_has_it")) return out;
   if (store && !orderOnly && (has("ungrounded_absence") || has("no_search"))) {
     out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: broad ?? (has("unread_product") && String(subject ?? "").trim() ? String(subject).trim().slice(0, 80) : query), ...few, ...(shopifyLike && has("ungrounded_absence") ? { in_stock_only: false } : {}) }) } });
   } else if (store && problems.some((p: any) => p.kind === "style" && p.codes?.includes("internal_reasoning")) && !done.some((t) => t.tool === store && String((t.args as any)?.query ?? "") === query)) {
@@ -1683,6 +1690,12 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
     // (the model asks which one), never a search for the attribute word.
     // Decided by what is left of her words: attribute and question words alone are no product (storeQueryOf null).
     const q = String(subject ?? "").trim().slice(0, 80) || query;
+    if (q) out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
+  } else if (store && has("unknown_product") && asksAboutProduct(incoming) && !done.some((t) => PRODUCT_TOOL.test(t.tool))) {
+    // Products named with no store read this turn (rating of b3d2bbf3, NE'A: "קניתי טוש למילוי גבות, אשמח להסבר
+    // /סרטון" answered from the knowledge with "no video"; the product page had the tip and the video): her product
+    // words, else the product the conversation is about.
+    const q = query ?? (String(subject ?? "").trim().slice(0, 80) || null);
     if (q) out.push({ id: "auto_store_1", function: { name: store, arguments: JSON.stringify({ query: q, ...few }) } });
   } else if (store && has("gave_up_search")) {
     const last = [...done].reverse().find((t) => t.tool === store && t.outcome === "timeout");
@@ -2982,7 +2995,10 @@ export function claimsOrPromisesUnsearched(reply: string, incoming: string, tool
   const claim = !!m && !NOT_LENT.has(bareNoun(String(m[1] ?? m[2] ?? "")));
   // "אין מידע מאומת על ... המלאי" with the store offered and nothing read: an unsearched answer too.
   const noInfo = /(?<![\u0590-\u05FF])(?:אין\s+(?:לי\s+|לנו\s+)?(?:כרגע\s+)?מידע(?:\s+מאומת)?\s+(?:על|לגבי)[^.!?\n]{0,40}(?:מלאי|צבע|גוון|גווני|מידה|מידות|זמינות)|לא\s+(?:בדקתי|בדקנו)\s+(?:את\s+)?(?:ה)?מלאי)(?![\u0590-\u05FF])|\b(?:no (?:verified )?(?:information|info) (?:on|about) (?:the )?(?:stock|colou?rs?|sizes?|availability))\b/iu.test(r);
-  return (claim || SEARCH_PROMISE.test(r) || noInfo) && asksAboutProduct(incoming);
+  // "המידע שיש לנו מתאר את הטוש ... אבל לא כולל הוראות או סרטון": what the information lacks about a product needs its
+  // store read first (rating of b3d2bbf3, NE'A).
+  const infoLacks = /(?<![\u0590-\u05FF])(?:ה)?(?:מידע|תיאור|פרטים|הפרטים)(?:\s+[\u0590-\u05FF,]+){0,10}?\s+(?:לא|אינו|אינם)\s+(?:כולל|כוללים|כוללת|מציין|מציינים|מפרט|מפרטים|מזכיר|מתאר)(?![\u0590-\u05FF])|\b(?:the (?:information|description|details) (?:we have )?(?:does not|doesn't|do not|don't) (?:include|mention|say))\b/iu.test(r);
+  return (claim || SEARCH_PROMISE.test(r) || noInfo || infoLacks) && asksAboutProduct(incoming);
 }
 
 /**

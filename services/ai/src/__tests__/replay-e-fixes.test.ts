@@ -984,3 +984,48 @@ describe("probe of d9f7c248", () => {
     expect(notFoundReply("en", "do you have jeans?")).toMatch(/couldn't find that in the catalogue/);
   });
 });
+
+describe("rating of b3d2bbf3", () => {
+  const W = ["woocommerce.list_products", "search_knowledge"];
+  it("★ 1: products named with no store read start the store search; \"the information does not include X\" needs a store read", async () => {
+    const { autoLookups } = await import("../services/reply-engine/gates");
+    const her = "קניתי טוש למילוי גבות, אשמח להסבר /סרטון איך להשתמש?";
+    const q = (m: string) => JSON.parse(autoLookups([{ kind: "unknown_product" } as any], m, W, [{ tool: "search_knowledge", outcome: "ok" } as any])[0]?.function.arguments ?? "{}").query;
+    expect(q(her)).toBe("טוש מילוי גבות");
+    expect(q("יש קרם איפור במקום המייקאפ? אני פחות מתחברת למייקאפ")).toMatch(/^קרם איפור/);
+    // A store read this turn: no second one.
+    expect(autoLookups([{ kind: "unknown_product" } as any], her, W, [{ tool: "woocommerce.list_products", outcome: "ok" } as any])).toEqual([]);
+    expect(claimsOrPromisesUnsearched("המידע שיש לנו מתאר את הטוש כמוצר למילוי גבות בקלילות, אבל לא כולל הוראות מפורטות או סרטון.", her, [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("התיאור לא מציין שימוש מתחת לעיניים.", "יש לכם פנסטיק שמתאים מתחת לעיניים?", [], W)).toBe(true);
+    expect(claimsOrPromisesUnsearched("המידע שיש לנו מתאר את הטוש כמוצר למילוי גבות בקלילות, אבל לא כולל הוראות מפורטות או סרטון.", her, [{ tool: "woocommerce.get_product", outcome: "ok" } as any], W)).toBe(false);
+  });
+  it("★ 7: conversation words never reach the store", () => {
+    expect(storeQueryOf("אפשר המלצה?")).toBeNull();
+    expect(storeQueryWords("מלצה")).toBeNull();
+    expect(storeQueryWords("גוון כרגע")).toBeNull();
+    expect(cleanStoreQuery("משטח למכשיר אלה")).toBe("משטח");
+  });
+});
+
+describe("rating of b3d2bbf3, 3: new details are passed on, no repeat", () => {
+  it("★ the last four digits of the card: the sentence that passes them on stays", async () => {
+    const { repeatedTeamLine } = await import("../services/reply-engine/gates");
+    const r = "תודה, העברנו את ארבע הספרות האחרונות לצוות יחד עם הבקשה לבדוק את החיוב.";
+    expect(repeatedTeamLine(r, "4155", true, false)).toBe(false);
+    expect(repeatedTeamLine(r, "הספרות האחרונות הן 4155", true, false)).toBe(false);
+    // With nothing new, the same line is a repeat as before.
+    expect(repeatedTeamLine("העברנו את זה לצוות, והתשובה תגיע כאן בצ'אט.", "תודה", true, false)).toBe(true);
+  });
+});
+
+describe("rating of b3d2bbf3, 2: no second store try after a timeout when the knowledge answers", () => {
+  it("★ timeout plus knowledge_has_it: no automatic store search; without the knowledge it still retries narrower", async () => {
+    const { autoLookups } = await import("../services/reply-engine/gates");
+    const W = ["woocommerce.list_products", "search_knowledge"];
+    const timedOut = [{ tool: "woocommerce.list_products", args: { query: "אליס שחור" }, outcome: "timeout" } as any];
+    const her = "שלום מתי יתחדש המלאי אליס שחור";
+    expect(autoLookups([{ kind: "gave_up_search" } as any, { kind: "knowledge_has_it" } as any], her, W, timedOut)).toEqual([]);
+    expect(autoLookups([{ kind: "ungrounded_absence", claims: ["אין לנו אליס בשחור."] } as any, { kind: "knowledge_has_it" } as any], her, W, timedOut)).toEqual([]);
+    expect(autoLookups([{ kind: "gave_up_search" } as any], her, W, timedOut)).toHaveLength(1);
+  });
+});
