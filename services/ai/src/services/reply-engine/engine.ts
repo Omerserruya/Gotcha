@@ -14,7 +14,7 @@ import { computeCalendarCapability } from "../calendar-capability.service";
 import { makeScheduleMeetingHandler, makeCheckAvailabilityHandler, makeRescheduleMeetingHandler, makeCancelMeetingHandler, resolveActiveBooking } from "../schedule-handler.service";
 import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
-import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed } from "../discovery-integration.service";
+import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed, isProductSearchTool } from "../discovery-integration.service";
 import { resolveProductRef, salePriceLine } from "../product-search.service";
 import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
@@ -24,7 +24,7 @@ import { getCrmAdapter } from "../connectors/crm-adapter-resolver";
 import { invalidateCrmPrefetch } from "../crm-prefetch.service";
 import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order-reference.service";
 import type { AIBotReplyResult } from "../ai-bot.service";
-import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ReplyEngineMode, StateLane } from "./contract";
+import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ProductIdOrigin, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
 import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT, INACTIVE_ORDERS_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
@@ -888,6 +888,44 @@ export function parseRespond(raw: string | undefined): ModelTurnOutput | null {
 
 const normTitle = (t: unknown) => String(t ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
+/** The engine's own tools whose result is the business's text. */
+const ENGINE_TEXT_TOOL = /^(?:search_knowledge|read_skill)$/;
+/**
+ * Where the model could have taken a call's product_id from (log only; prod replay e, L1332: the id of the page the
+ * customer was on, read for a question about another kind of product). The first that holds it: this turn's
+ * results (a key, a title or an id); the state (an id or a title shown in this conversation); the page the customer
+ * is on (its product_id line; a name, anywhere in it); another tool's raw result this turn; the knowledge or the
+ * conversation's own text. "none": nothing held it. Undefined for a call with no product_id.
+ */
+export function productIdOrigin(
+  value: unknown,
+  a: {
+    envelope: { candidates: Array<{ title: string; productId?: string | null }> } | null;
+    offered: Array<{ title: string; productId?: string | null }>;
+    page?: string | null;
+    results?: Array<string | null | undefined>;
+    texts?: Array<string | null | undefined>;
+  },
+): ProductIdOrigin | undefined {
+  const v = String(value ?? "").trim();
+  if (!v) return undefined;
+  const want = normTitle(v);
+  const cands = a.envelope?.candidates ?? [];
+  const key = /^PRODUCT_(\d{1,3})$/i.exec(v);
+  if ((key && cands[Number(key[1]) - 1]?.productId) || cands.some((c) => String(c.productId ?? "") === v || (!!want && normTitle(c.title) === want))) return "turn";
+  if (a.offered.some((o) => o.productId && (String(o.productId) === v || (!!want && normTitle(o.title) === want)))) return "state";
+  const lit = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The whole value: "1112" is not held by "11120" or by "a1112".
+  const whole = new RegExp(`(?<![\\p{L}\\p{N}])${lit}(?![\\p{L}\\p{N}])`, "iu");
+  const isId = /^\d{1,15}$/.test(v) || /^gid:/i.test(v);
+  const holds = (list?: Array<string | null | undefined>) => (list ?? []).some((t) => !!t && whole.test(t));
+  // An id only as the page's own product_id (the same digits may be its price), whole or as the number a gid ends in.
+  if (a.page && (isId ? new RegExp(`^[ \\t]*product_id:[ \\t]*(?:\\S*/)?${lit}[ \\t]*$`, "mu").test(a.page) : whole.test(a.page))) return "page";
+  if (holds(a.results)) return "tool_result";
+  if (holds(a.texts)) return "text";
+  return "none";
+}
+
 /**
  * The store's id for whatever the model put in product_id (eval 2026-11-16: it
  * passed titles, "Zip Hoodie", and keys from an EARLIER turn, "PRODUCT_2"; the
@@ -1402,6 +1440,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const c = skillByName(turnTools.openedSkill ?? state.activeSkill);
       return c ? skillApprovalReason({ ...c, mode: "on" }, a.tool, (a.args ?? {}) as Record<string, unknown>) : null;
     },
+    idOrigin: (_tool, args) => productIdOrigin((args as any)?.product_id, {
+      envelope: turnTools.envelope as any,
+      offered: state.offeredItems,
+      page,
+      // Raw results only: a product search reaches the model keyed (the envelope above), the knowledge is text.
+      results: turnTools.records.filter((r) => !isProductSearchTool(r.tool) && !ENGINE_TEXT_TOOL.test(r.tool)).map((r) => r.content),
+      texts: [knowledge, String(opts.incomingMessage ?? ""), ...chat.map((m: any) => (typeof m?.content === "string" ? m.content : "")), ...turnTools.records.filter((r) => ENGINE_TEXT_TOOL.test(r.tool)).map((r) => r.content)],
+    }),
     before: productIdBefore({
       locale,
       known: knownProductId,
@@ -2774,7 +2820,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           engine: "v2", promptVersion: ENGINE_PROMPT_VERSION, aiAgentId: config.id, model, stageMs, rounds: trace.rounds,
           tokens: trace.tokens,
           // A refused call keeps its query and the reason (dev round k5 on 0b5f2b46: a denied search with neither).
-          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined, ...(r.decision === "deny" ? { q: String((r.args as any)?.query ?? "").slice(0, 60), reason: (() => { try { return String(JSON.parse(String(r.content ?? "{}"))?.reason ?? "").slice(0, 100); } catch { return ""; } })() } : {}) })),
+          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined, idOrigin: r.idOrigin, ...(r.decision === "deny" ? { q: String((r.args as any)?.query ?? "").slice(0, 60), reason: (() => { try { return String(JSON.parse(String(r.content ?? "{}"))?.reason ?? "").slice(0, 100); } catch { return ""; } })() } : {}) })),
           gate3: trace.gate3, teamQuestion: final.teamQuestion ?? undefined,
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
           // What the cleanup cut and why, the bot's own words only (internal: never read by a customer or tenant screen).

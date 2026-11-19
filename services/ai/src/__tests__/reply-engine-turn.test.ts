@@ -80,7 +80,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
       if (tc.function.name === "woocommerce.list_products" && h.slowReads > 0) { h.slowReads--; await new Promise((r) => setTimeout(r, 900)); }
       if (tc.function.name === "woocommerce.get_order" && h.slowOrders > 0) { h.slowOrders--; await new Promise((r) => setTimeout(r, h.orderDelay)); }
       if (tc.function.name === "woocommerce.list_products" && h.failReads > 0) { h.failReads--; return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "errored", reason: "woocommerce_500" }) }; }
-      if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "denied") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
+      if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "40300") return { toolCallId: tc.id, content: JSON.stringify({ ok: false, failure: "refused", reason: "access_denied_cross_customer: this chat may only access the customer's own records." }) };
       if (tc.function.name === "woocommerce.list_products") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 101, name: "Canvas Tote", price: "79" }] }) };
       if (tc.function.name === "woocommerce.list_product_variations") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: [{ id: 9, attributes: { Color: "Black", Size: "L" }, stock_status: "instock", available: true }] }) };
       if (tc.function.name === "woocommerce.get_product" && JSON.parse(tc.function.arguments).product_id === "77") return { toolCallId: tc.id, content: JSON.stringify({ ok: true, result: { id: 77, name: "Heavyweight Hoodie", description: "Organic cotton, heavy fleece." } }) };
@@ -652,7 +652,7 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
 
   it("★ an order lookup refused as another customer's: the model is told to ask for the order number", async () => {
     h.responses.push(
-      { toolCalls: [tc("o1", "woocommerce.get_product", { product_id: "denied" })] },
+      { toolCalls: [tc("o1", "woocommerce.get_product", { product_id: "40300" })] },
       { toolCalls: [respond("o2", { reply: "מה מספר ההזמנה?" })] },
     );
     const r = await runReplyEngineTurn(opts, "autonomous");

@@ -57,6 +57,8 @@ export interface RunnerEnv {
    * turn refused or the policy did not allow.
    */
   before?: (tool: string, args: Record<string, unknown>, budgetMs: number) => Promise<{ args: Record<string, unknown> } | { content: string } | null>;
+  /** Where the product id of a call could have come from, from the arguments as the model sent them. Log only: it never changes a call. */
+  idOrigin?: (tool: string, args: Record<string, unknown>) => ToolRunRecord["idOrigin"] | undefined;
   toolTimeoutMs: number;
   /**
    * Time the lookup may take on top of the call's own bound (lookupExtraMs). None (the default): the lookup and the
@@ -207,8 +209,14 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     knowledge: defaultKnowledge,
     ...env.deps,
   };
+  // The id as the model sent it, and where it could have taken it from. An id nothing held that the engine's own
+  // lookup then replaced is "lookup".
+  const askedId = String((args as any)?.product_id ?? "");
+  let origin: ToolRunRecord["idOrigin"];
+  try { origin = env.idOrigin?.(tool, args) ?? undefined; } catch { origin = undefined; }
   const rec = (decision: ToolRunRecord["decision"], content: string, side?: AgentToolDispatchResult["sideEffect"]) => ({
     callId: call.id, tool, args, decision, content, ms: Date.now() - t0, side,
+    ...(origin ? { idOrigin: origin === "none" && String((args as any)?.product_id ?? "") !== askedId ? "lookup" as const : origin } : {}),
   });
 
   // ── Engine tools ──

@@ -23,7 +23,7 @@ function readPrompt(name: string): string {
 }
 const HEBREW = readPrompt("hebrew.md");
 
-export const ENGINE_PROMPT_VERSION = "reply-engine-v2.0";
+export const ENGINE_PROMPT_VERSION = "reply-engine-v2.1";
 
 export const PLATFORM_RULES = `# How you work
 You are a member of this business's team, answering customers in a chat. Think like a good employee: understand what the customer needs, check the real data with your tools, act when you can, and answer briefly and warmly.
@@ -234,6 +234,17 @@ export interface TurnPartInput {
   replyLanguage?: string | null;
 }
 
+/**
+ * The page product as background (prod replay e, L1332: asked which makeup shade fits her skin while on another
+ * product's page, the model read the page product). Only under a page block that names a product (its product_id line).
+ */
+export const PAGE_IS_BACKGROUND = [
+  "The page is background, not the subject. Use the product on it only when the customer's message points at it: \"this\", \"it\", \"this one\" (זה, המוצר הזה), or a question about one product that names none (its price, stock, sizes, delivery).",
+  "When the message names a product or a kind of product, answer about what they named: search for it, and do not read, show or recommend the page product unless the search returns it.",
+  "A general question (opening hours, delivery policy, returns) is answered as asked, without bringing up the page product.",
+].join(" ");
+const PAGE_NAMES_PRODUCT = /^[ \t]*product_id:[ \t]*\S/m;
+
 export function buildTurnPart(t: TurnPartInput): string {
   const parts: string[] = [`# This turn (now ${t.nowIso})`];
   if (t.replyLanguage) parts.push(`## Reply language\nThe customer writes in ${t.replyLanguage}: reply in ${t.replyLanguage}, whatever the language of the business's texts.`);
@@ -243,7 +254,7 @@ export function buildTurnPart(t: TurnPartInput): string {
   if (t.activeSkill) parts.push(`## Playbook in use (already open; read_skill only to switch to another)\n${t.activeSkill}`);
   if (t.pendingApprovals.length) parts.push(`## Waiting for a person's approval\n${t.pendingApprovals.map((a) => `- ${a}`).join("\n")}`);
   if (t.closedHours) parts.push(`## Hours\n${t.closedHours}`);
-  if (t.page) parts.push(`## Where the customer is on the site\n${t.page}`);
+  if (t.page) parts.push(`## Where the customer is on the site\n${t.page}${PAGE_NAMES_PRODUCT.test(t.page) ? `\n${PAGE_IS_BACKGROUND}` : ""}`);
   parts.push(`## Knowledge (the business's own documents, best matches for the latest message)\n${t.knowledge || "(nothing matched; search_knowledge can look for something else)"}`);
   return parts.join("\n\n");
 }

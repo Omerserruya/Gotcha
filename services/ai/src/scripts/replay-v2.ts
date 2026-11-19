@@ -26,6 +26,7 @@ import { isPersonOutbound } from "../services/conversation-history.service";
 import { initAIService } from "../services/ai.service";
 import "../services/connectors";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
+import { ENGINE_PROMPT_VERSION } from "../services/reply-engine/prompt";
 import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
 
 interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null; ids: string[] | null }
@@ -137,6 +138,11 @@ export function searchArgsLine(list: any[]): string {
   return list.map((a) => `${String(a?.tool ?? "").replace(/^.*\./, "")} q=${q(a?.q)}${a?.cq ? ` cq=${q(a.cq)}` : ""}${a?.audience ? ` audience=${a.audience}` : ""}${a?.in_stock != null ? ` in_stock=${a.in_stock}` : ""}${a?.price?.some((x: any) => x != null) ? ` price=${a.price.map((x: any) => x ?? "-").join("..")}` : ""}`).join("; ");
 }
 
+/** The report's own line: the model and the prompt wording that ran. */
+export function reportHeadLine(model: string): string {
+  return `Model: ${model}. Prompt: ${ENGINE_PROMPT_VERSION}. Lane: replay (writes simulated, platform-paid).`;
+}
+
 export function searchLine(trace: any): string {
   const asked = Array.isArray(trace?.searchArgs) && trace.searchArgs.length ? searchArgsLine(trace.searchArgs) : "";
   const ran = (Array.isArray(trace?.tools) ? trace.tools : [])
@@ -144,7 +150,7 @@ export function searchLine(trace: any): string {
     .map((t: any) => {
       // The first three products it returned (C pinned rating: which two titles answered every appliance).
       const titles = [...String(t.content ?? "").matchAll(/PRODUCT_\d+:\s*"([^"]+)"/g)].slice(0, 3).map((m) => JSON.stringify(m[1].slice(0, 60)));
-      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
+      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)}${t.idOrigin ? ` id=${t.idOrigin}` : ""} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
     });
   // "sent": the args the store got, cleaned; "model args": what the model asked for (an audience there may
   // never have been sent).
@@ -275,7 +281,7 @@ async function main() {
     return;
   }
 
-  const md: string[] = [`# Reply engine v2 replay (${new Date().toISOString()})`, "", `Model: ${process.env.REPLY_ENGINE_MODEL || process.env.OPENAI_DEFAULT_MODEL || "default"}. Lane: replay (writes simulated, platform-paid).`, ""];
+  const md: string[] = [`# Reply engine v2 replay (${new Date().toISOString()})`, "", reportHeadLine(process.env.REPLY_ENGINE_MODEL || process.env.OPENAI_DEFAULT_MODEL || "default"), ""];
   const summaries: TenantSummary[] = [];
   const replayed = new Set<string>();
 
