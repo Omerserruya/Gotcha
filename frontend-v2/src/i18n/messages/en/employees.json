@@ -389,8 +389,8 @@
       "mayUse": "This employee may use {name}"
     },
     "limits": {
-      "title": "Limits",
-      "lead": "Rules it always keeps, in your words. For example: “Never promise a delivery date.”",
+      "title": "Rules",
+      "lead": "Rules it always keeps, in your words. You can write what not to do and also what to do, for example: when a customer asks about delivery, mention that self-pickup is available too.",
       "none": "No rules yet.",
       "unread": "Its rules couldn't be read just now, so they can't be changed here. Reload to try again.",
       "add": "Add a rule",
