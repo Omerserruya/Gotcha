@@ -11,7 +11,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return { ...actual, assertPublicUrl: vi.fn(async () => undefined) };
 });
 
-import Woo, { localProductList, warmWooCatalog } from "../services/connectors/woocommerce.adapter";
+import Woo, { cacheCounts, localProductList, warmWooCatalog } from "../services/connectors/woocommerce.adapter";
 import { warmWooCachesOnce, WARM_EVERY_MS, type WarmDeps } from "../services/woo-cache-warmer.service";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -26,6 +26,7 @@ let n = 0;
 async function walk(minutes: number, warm?: WarmDeps["warm"]) {
   vi.useFakeTimers({ now: new Date("2026-11-19T10:00:00Z") });
   const base = `https://warm${++n}.example.com`;
+  for (const k of Object.keys(cacheCounts)) delete (cacheCounts as any)[k];
   // Whole-catalogue page reads, by language.
   const pageReads: Record<string, number> = {};
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
@@ -67,7 +68,7 @@ async function walk(minutes: number, warm?: WarmDeps["warm"]) {
   }
   await vi.advanceTimersByTimeAsync(1000);
   const reads = Object.fromEntries(Object.entries(pageReads).map(([k, v]) => [k, v - (cold[k] ?? 0)]));
-  return { live, cold, reads };
+  return { live, cold, reads, counts: { ...cacheCounts.catalog } };
 }
 
 describe("the warmer reloads a catalogue before it goes stale", () => {
@@ -92,6 +93,15 @@ describe("the warmer reloads a catalogue before it goes stale", () => {
     // Per catalogue language: 20 reloads of 5 page reads against 10. Per hour: 37.5 against 18.75.
     expect(now.reads).toEqual({ "": 100, he: 100 });
     expect(old.reads).toEqual({ "": 50, he: 50 });
+  });
+
+  it("the counters: a pass that reloads a catalogue still fresh for readers is a warmReload, never a stale serve", async () => {
+    // 40 minutes, two catalogue languages: the boot pass loads both (2 misses), then 5 passes.
+    const now = await walk(40);
+    expect(now.counts).toEqual({ hit: 0, stale: 0, miss: 2, warmReload: 10 });
+    // The old pass: fresh at minutes 8, 24 and 40 (hits), past its window at 16 and 32 (stale, in its real meaning).
+    const old = await walk(40, (c, cfg) => warmWooCatalog(c, cfg));
+    expect(old.counts).toEqual({ hit: 6, stale: 4, miss: 2, warmReload: 0 });
   });
 
   it("a customer's own search between two passes reloads nothing: the earlier reload is the pass's alone", async () => {

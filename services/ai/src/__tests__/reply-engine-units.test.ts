@@ -865,6 +865,17 @@ describe("prod replay 7: store caches", () => {
     // Too old: the caller waits for the new value.
     cache.set("k", { at: Date.now() - 20_000, value: 2 });
     expect(await swrCached(cache, "k", 1000, 10_000, load)).toBe(3);
+    // Counted by what it was: fresh, past its fresh window, missing; and a caller that refreshes earlier than a
+    // reader's fresh window (the warm pass) is a warm reload, not a stale serve.
+    const { cacheCounts } = await import("../services/connectors/woocommerce.adapter");
+    const c3 = new Map<string, { at: number; value: number }>();
+    const at = (age: number) => c3.set("counted|k", { at: Date.now() - age, value: 1 });
+    await swrCached(c3, "counted|k", 1000, 10_000, load);
+    at(500); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(2000); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(6000); await swrCached(c3, "counted|k", 1000, 10_000, load, undefined, 5000);
+    at(2000); await swrCached(c3, "counted|k", 1000, 10_000, load);
+    expect(cacheCounts.counted).toEqual({ hit: 1, stale: 2, miss: 1, warmReload: 1 });
     // A load the keep() rejects is not cached.
     const c2 = new Map<string, { at: number; value: number | null }>();
     await swrCached(c2, "x", 1000, 10_000, async () => null, (v) => v !== null);
