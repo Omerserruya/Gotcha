@@ -792,12 +792,14 @@ function onceEach(candidates: any[]): (i: number) => boolean {
  *  - a text that names none and is one question offering other products carries none;
  *  - a product the text names (its title, or a word only its title has) that it does not rule out and that is in
  *    stock is shown: in place of products the text names none of, and with none set on a product turn;
- *  - when she named a kind and found products are of it, a product stays when it is of her kind or the text names
- *    it; with none of those, the found products of her kind the text does not rule out;
+ *  - when she named a kind and found products are of it, a product stays when it is of her kind, when its title
+ *    holds a word she said as the use, or when the text names it; with none of those, the found products of her kind
+ *    the text does not rule out. Only her kind is ever added: a product of another kind is never put in for its use
+ *    word ("גרבי ריצה" on "יש נעליים לריצה?");
  *  - each product once: by its id, and by its title at the same price.
  * `why` says which of these changed the set.
  */
-export function shownProducts(a: { text: string; cards: string[]; candidates: any[]; unfit?: Set<number> | null; removed?: string[]; hers?: Set<number> | null; uses?: string[]; contactNames?: Array<string | null | undefined>; addNamed?: boolean }): { cards: string[]; why: string[] } {
+export function shownProducts(a: { text: string; cards: string[]; candidates: any[]; unfit?: Set<number> | null; removed?: string[]; hers?: Set<number> | null; ofUse?: Set<number> | null; uses?: string[]; contactNames?: Array<string | null | undefined>; addNamed?: boolean }): { cards: string[]; why: string[] } {
   const { candidates } = a;
   const text = String(a.text ?? "");
   const unfit = a.unfit ?? new Set<number>();
@@ -824,7 +826,7 @@ export function shownProducts(a: { text: string; cards: string[]; candidates: an
   const recommended = [...byName].filter((i) => !unfit.has(i) && candidates[i]?.inventoryState !== "out_of_stock").slice(0, 3);
   if (recommended.length && !own.some((i) => byName.has(i)) && (had || a.addNamed)) step("named", recommended);
   if (a.hers?.size && own.length) {
-    const keep = own.filter((i) => a.hers!.has(i) || byName.has(i));
+    const keep = own.filter((i) => a.hers!.has(i) || !!a.ofUse?.has(i) || byName.has(i));
     const refill = [...a.hers].filter((i) => !unfit.has(i)).slice(0, 3);
     step("kind", keep.length ? keep : refill.length ? refill : own);
   }
@@ -3073,8 +3075,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const productAskS = !!prose && !final.handoff && !payProblem && productAskNow(incS) && !attributeOnlyAsk(incS) && (!!storeQueryOf(incS) || (state.offeredItems?.length ?? 0) > 0);
   const usesS = herUseWords(incS, kindS);
   // Hers: of her kind, and a found product whose title holds the use she named ("קונסילר לעיניים" on "יש טוש לעיניים?").
-  const hersS = herIdx ? new Set([...[...herIdx].map((n) => n - 1), ...forHerUse(candidates as any[], usesS)]) : null;
-  const shown = shownProducts({ text: prose ?? "", cards: final.cards ?? [], candidates: candidates as any[], unfit: unfitNow, removed: cutRemoved, hers: hersS, uses: usesS, contactNames: [firstName], addNamed: productAskS });
+  const ofKindS = herIdx ? new Set([...herIdx].map((n) => n - 1)) : null;
+  const useS = new Set(forHerUse(candidates as any[], usesS));
+  const hersS = ofKindS ? new Set([...ofKindS, ...useS]) : null;
+  const shown = shownProducts({ text: prose ?? "", cards: final.cards ?? [], candidates: candidates as any[], unfit: unfitNow, removed: cutRemoved, hers: ofKindS, ofUse: useS, uses: usesS, contactNames: [firstName], addNamed: productAskS });
   let shownApplied = false;
   if (shown.cards.join() !== (final.cards ?? []).join()) {
     // A card taken away never leaves the text pointing at nothing: with a new factual finding the cards stay.
