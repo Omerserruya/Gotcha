@@ -3987,7 +3987,9 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     const { r, cards } = await run("טוש אני רוצה", "טוש", `${st} ${named}`, `${st} ${named}`, `${st} ${named}`);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect((r.trace as any).statementKept).toBeUndefined();
-    expect(cards).toEqual(["101", "102"]);
+    // Rule S: the list leaves out the product the draft itself said is not advisable there.
+    expect(r.reply).toBe("הנה כמה אפשרויות: Miss eyebrows Pen.");
+    expect(cards).toEqual(["101"]);
   });
 
   it("★ a kept statement on a cheap ask carries the cheapest of the found products first", async () => {
@@ -4274,10 +4276,10 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect((r.trace as any).memberCut).toBe(true);
     expect((r.trace as any).statementKept).toBe(true);
     expect(cuts.markers).toEqual(expect.arrayContaining(["memberCut", "statementKept"]));
-    // The statement, never the list of the pens it rules out, and neither pen's card.
+    // The statement, never the list of the pens it rules out, and neither pen's card: only the found product whose
+    // title holds her use word (rule S: never the makeup brush, which is not what she asked for).
     expect(r.reply).toBe(STATEMENT);
-    expect(cards).not.toContain("201");
-    expect(cards).not.toContain("202");
+    expect(cards).toEqual(["203"]);
   });
 
   it("★ (G) a shipping price that equals a found product's price names no product: the answer left is no member cut", async () => {
@@ -4320,6 +4322,111 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     const { r, cards } = await runFive("יש טוש לעיניים?", `${J_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_3"], list as any[]);
     expect(r.reply).toBe(J_SENTENCE);
     expect(cards).toEqual(["203"]);
+  });
+
+  // Three last cases (Supervisor, 2026-11-19): her kind's word naming another product, a use word away from the
+  // kind's word, and a later side that says the same subject does fit.
+  const SHOES = [{ title: "נעלי ריצה Air Zoom", price: 300 }, { title: "נעלי הליכה Comfort", price: 250 }, { title: "סנדלי שטח Trek", price: 200 }];
+  const SOCKS = { title: "גרבי ריצה", price: 30 };
+  const HAND_CREAM = { title: "קרם ידיים", price: 40 };
+  const K1_SENTENCE = "קרם ידיים לא מתאים לפנים.";
+  const K2_SENTENCE = "לריצה ארוכה הנעליים שמצאנו לא מתאימות.";
+  const K3_SENTENCE = "הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות הם מתאימים.";
+  // The store's own text says what the sentence says, so it stands as a checked fact; one more sentence is cut.
+  const storeSays = (content: string) => {
+    h.chunks = [{ content, score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "k" }];
+    h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+  };
+
+  it("★ (K1) her kind's word with a word no found title of her kind holds: it speaks of another product, and the found ones keep their cards", async () => {
+    storeSays("קרם ידיים: לא מתאים לפנים. קרם פנים לעור יבש: לעור יבש. קרם פנים לעור שמן: מתאים לעור שמן.");
+    const a = await runFive("יש קרם לעור שמן?", `${K1_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], CREAMS);
+    expect(a.r.reply).toBe(K1_SENTENCE);
+    expect(a.cards).toEqual(["201", "202"]);
+    // With that product found, it is the one the sentence rules out.
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    const b = await runFive("יש קרם לעור שמן?", `${K1_SENTENCE} ${CUT}`, ["PRODUCT_2", "PRODUCT_4"], [...CREAMS, HAND_CREAM]);
+    expect(b.r.reply).toBe(K1_SENTENCE);
+    expect(b.cards).toEqual(["202"]);
+  });
+
+  it.each([[3, SHOES], [4, [...SHOES, SOCKS]]])("★ (K2) a use word away from the kind's word, with %i found products: all of her kind are ruled out, whatever else was found", async (_n, list) => {
+    storeSays("נעלי ריצה Air Zoom ונעלי הליכה Comfort: לא מתאימות לריצה ארוכה. סנדלי שטח Trek: לטיולים.");
+    const { r, cards } = await runFive("יש נעליים לריצה?", `${K2_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], list as any[]);
+    expect(r.reply).toBe(K2_SENTENCE);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ (K3) a later side says the same subject does fit for part of what she asks: its products keep their cards", async () => {
+    storeSays("טוש גבות: לא מתאים לעיניים רגישות, מתאים לעיניים רגילות. קונסילר לעיניים: מתאים לאזור העיניים.");
+    // The use in front: the sentence with the subject in front is read by the device check as said for another use.
+    const st = "לעיניים רגישות הטושים לא מתאימים, אבל לעיניים רגילות הם מתאימים.";
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${st} ${CUT}`, ["PRODUCT_1", "PRODUCT_2"], THREE);
+    expect(r.reply).toBe(st);
+    expect(cards).toEqual(["201", "202"]);
+  });
+
+  it("★ (K) the helpers: another product of her kind's word, the use word's place, and a side with no subject of its own", async () => {
+    const { unfitProducts } = await import("../services/reply-engine/engine");
+    const on = (t: string, list: any[], noun = "טוש", incoming = "יש טוש לעיניים?") => [list.length, [...unfitProducts(t, list, noun, incoming)].sort()];
+    const cream = (t: string, list: any[] = CREAMS) => on(t, list, "קרם", "יש קרם לעור שמן?");
+    const shoe = (t: string, list: any[] = SHOES) => on(t, list, "נעליים", "יש נעליים לריצה?");
+    // K1. Her kind's word, no "the", and right after it a word no found title of her kind holds: another product.
+    expect(cream(K1_SENTENCE)).toEqual([3, []]);
+    expect(cream(K1_SENTENCE, [...CREAMS, HAND_CREAM])).toEqual([4, [3]]);
+    expect(on("טוש שפתיים לא מתאים לעיניים.", THREE)).toEqual([3, []]);
+    expect(shoe("נעלי עבודה לא מתאימות לריצה.")).toEqual([3, []]);
+    // Also when nothing of her kind was found: the brow pencil is not the brow pen it speaks of.
+    expect(on("טוש גבות לא מתאים לעיניים.", [FIVE[2], { title: "עיפרון גבות", price: 49 }, FIVE[4]])).toEqual([3, []]);
+    // A word a found title of her kind holds tells that one apart, also with an ending, also beside a product of
+    // another kind whose title holds the same word.
+    expect(on("טוש שחור לא מתאים לעיניים.", THREE)).toEqual([3, [1]]);
+    expect(on("טושים שחורים לא מתאימים לעיניים.", THREE)).toEqual([3, [1]]);
+    expect(on("טוש גבות לא מתאים לעיניים.", [FIVE[0], { title: "טוש שחור", price: 149 }, { title: "עיפרון גבות", price: 99 }])).toEqual([3, [0]]);
+    // A word she said as the use, right after the kind's word, names no other product.
+    expect(on("טוש לעיניים לא מתאים לעור רגיש.", THREE)).toEqual([3, [0, 1]]);
+    expect(cream("קרם פנים לא מתאים לעור שמן.")).toEqual([3, [0, 1]]);
+    // Said with "the", or followed by a pointing word or by the sentence going on: the found ones.
+    expect(cream("הקרם לידיים לא מתאים לפנים.")).toEqual([3, [0, 1]]);
+    expect(cream("הקרם הזה לא מתאים לעור שמן.")).toEqual([3, [0, 1]]);
+    expect(on("הטושים שלנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים האלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים אלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים כאלה לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טוש זה לא מתאים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים שמצאנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים אצלנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טושים, לצערי, לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    // Another product and the found ones in one text: the found ones are ruled out.
+    expect(on("אין לנו טוש שפתיים, והטושים שמצאנו לא מתאימים לעיניים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("טוש שפתיים לא מתאים לעיניים, וגם הטושים שמצאנו לא.", THREE)).toEqual([3, [0, 1]]);
+    // K2. A word she said as the use tells one of her kind apart only right at the kind's word, on any list.
+    expect(shoe(K2_SENTENCE)).toEqual([3, [0, 1]]);
+    expect(shoe(K2_SENTENCE, [...SHOES, SOCKS])).toEqual([4, [0, 1]]);
+    expect(shoe("נעלי הריצה לא מתאימות למרתון.")).toEqual([3, [0]]);
+    expect(shoe("נעלי הריצה לא מתאימות למרתון.", [...SHOES, SOCKS])).toEqual([4, [0]]);
+    expect(shoe("נעלי ההליכה לא מתאימות לריצה.")).toEqual([3, [1]]);
+    expect(shoe("נעלי ההליכה לא מתאימות לריצה.", [...SHOES, SOCKS])).toEqual([4, [1]]);
+    expect(shoe("הנעליים לריצה לא מתאימות למרתון.")).toEqual([3, [0]]);
+    expect(cream("הקרם לעור יבש לא מתאים לעור שמן.")).toEqual([3, [0]]);
+    // K3. A side, or a sentence, that says fits for a use she named with no subject of its own.
+    expect(on(K3_SENTENCE, THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות כן.", THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל הם מתאימים לעיניים רגילות.", THREE)).toEqual([3, []]);
+    expect(on("טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים.", THREE)).toEqual([3, []]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות. לעיניים רגילות הם מתאימים.", THREE)).toEqual([3, []]);
+    // Only the subject of the one before it: a product ruled out earlier or later stays ruled out.
+    expect(on("טוש גבות שחור לא מתאים לעיניים. טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים.", THREE)).toEqual([3, [1]]);
+    expect(on("טוש גבות חום לא מתאים לעיניים רגישות, אבל לעיניים רגילות הוא מתאים. טוש גבות שחור לא מתאים לעיניים.", THREE)).toEqual([3, [1]]);
+    // No "fits" in it, no use she named, a use she did not name, or a subject of its own: the one before it stands.
+    expect(on("הטושים לא מתאימים לעיניים רגישות. גם לעיניים רגילות.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים. זה מתאים?", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל לגבות הם מתאימים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים. הם מתאימים לגבות.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל קונסילר לעיניים מתאים.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים, אבל לעיניים מתאים איילינר.", THREE)).toEqual([3, [0, 1]]);
+    expect(on("הטושים לא מתאימים לעיניים רגישות, אבל לעיניים רגילות מתאים סרום.", THREE)).toEqual([3, [0, 1]]);
   });
 
   it("★ (I, J) the helpers: who the sentence speaks of, in order, on any list of found products", async () => {
@@ -4432,6 +4539,8 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(u("טוש גבות שחור מתאים לגבות. טוש גבות לא מתאים לעיניים.")).toEqual([0]);
     // Also when the sentence that says it fits is the yes to her own ask ("for brows, not for eyes" on an ask for brows).
     expect([...unfitProducts("טוש גבות חום מיועד לגבות, לא לעיניים. טוש גבות לא מתאים לעור רגיש.", FIVE, "טוש", "יש טוש לגבות?")]).toEqual([1]);
+    // The same beside a pen the second sentence does not speak of (the word at the kind's word tells the brow pens apart).
+    expect([...unfitProducts("טוש גבות חום מיועד לגבות, לא לעיניים. טוש גבות לא מתאים לעור רגיש.", [FIVE[0], FIVE[1], { title: "טוש שחור", price: 149 }], "טוש", "יש טוש לגבות?")]).toEqual([1]);
     // The use ends at the comma: a product named after it is still named.
     expect(u("טוש גבות חום לא מתאים לעיניים, וגם טוש גבות שחור.")).toEqual([0, 1]);
     // C: names none, speaks of her kind: that kind only. With no kind and no title word in it: none.
@@ -4576,5 +4685,318 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect(aboutFound(STATEMENT, brows, "טוש")).toBe(true);
     expect(aboutFound("אפשר לשלם באשראי או בביט, לפי מה שנוח.", brows, "טוש")).toBe(false);
     expect([...namedMembers(ABSENCE, brows)]).toEqual([]);
+  });
+
+  // Rule S: the shown set follows the final text, one measure for the cards and the text channel's product lines.
+  // Rating round on 9ce8a62b. Item 2: "מה מתאים למכשיר תמי 4?" got "לתמי 4 מתאים משטח סמובי אלכסה, ..." with no card
+  // and no product line in 7 of 18 replays (one word of the title, "אלכסה", against titles that share the rest).
+  const MATS = [{ title: "סמובי אלכסה - משטח הזזה 35*28 ס\"מ", price: 227 }, { title: "סמובי אריאל - משטח הזזה 34*38 ס\"מ", price: 189 }, { title: "סמובי גפן - משטח הזזה 20*30 ס\"מ", price: 149 }];
+  const MAT_DATA = [{ content: "סמובי אלכסה: מתאים לתמי 4.", score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "m" }];
+  const MAT_ASK = "מה מתאים למכשיר תמי 4?";
+  const MAT_FIT = "לתמי 4 מתאים משטח סמובי אלכסה.";
+  const B_SENTENCE = "טוש גבות חום לא מתאים לעיניים, אבל קונסילר לעיניים מתאים.";
+  const OTHERS = "מתאים לך שאציג עוד פריטים במחירים נמוכים?";
+  const COATS = [{ title: "Leather Jacket", price: 799 }, { title: "Wool Coat", price: 529 }, { title: "Ribbed Tank Top", price: 79 }];
+  /** A turn whose drafts differ (the first, then the rewrites), each with its own cards. */
+  const runDrafts = async (incoming: string, list: any[], ...drafts: Array<{ reply: string; cards?: string[] }>) => {
+    h.groundList = list;
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "x" })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`d${i}`, d)] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    return { r, t: r.trace as any, cards: h.staged.flatMap((x: any) => (x.products ?? []).map((p: any) => String(p.productId))) };
+  };
+
+  it("★ (rule S, item 2) a product the reply recommends by name gets its product line on a text channel", async () => {
+    h.chunks = MAT_DATA; h.textChannel = true;
+    const { r, t, cards } = await runDrafts(MAT_ASK, MATS, { reply: MAT_FIT });
+    expect(r.trace.gate3.rewrite).toBe("none");
+    expect(t.shownBy).toEqual(["named"]);
+    expect(t.listedProducts).toEqual(["PRODUCT_1"]);
+    expect(String(r.reply).startsWith(`${MAT_FIT}\n\nסמובי אלכסה - משטח הזזה 35*28 ס"מ\n₪227`)).toBe(true);
+    expect(r.reply).not.toContain("אריאל");
+    expect(r.reply).not.toContain("גפן");
+    expect(cards).toEqual([]);
+  });
+
+  it("★ (rule S, item 2) the same on a cards channel: its card, with no card from the model and with the model's card on another product", async () => {
+    h.chunks = MAT_DATA;
+    const none = await runDrafts(MAT_ASK, MATS, { reply: MAT_FIT });
+    expect(none.r.reply).toBe(MAT_FIT);
+    expect(none.cards).toEqual(["201"]);
+    expect(none.t.cards).toEqual(["PRODUCT_1"]);
+    h.responses.length = 0; h.staged.length = 0;
+    // Prod 2026-11-18 (a08a83): Alexa named, Ariel's card sent.
+    const wrong = await runDrafts(MAT_ASK, MATS, { reply: MAT_FIT, cards: ["PRODUCT_2"] });
+    expect(wrong.cards).toEqual(["201"]);
+    expect(wrong.t.cardToNamed).toBe(true);
+    h.responses.length = 0; h.staged.length = 0;
+    // A card of the named product keeps the model's other cards beside it.
+    const both = await runDrafts(MAT_ASK, MATS, { reply: MAT_FIT, cards: ["PRODUCT_1", "PRODUCT_3"] });
+    expect(both.cards).toEqual(["201", "203"]);
+    expect(both.t.shownBy).toBeUndefined();
+  });
+
+  it("★ (rule S) a question that names two found products shows both; a named product that is out of stock is not shown", async () => {
+    const two = await runDrafts("מה יש לכם במעילים?", COATS, { reply: "מה מעניין אותך יותר, Leather Jacket או Wool Coat?" });
+    expect(two.cards).toEqual(["201", "202"]);
+    expect(two.t.shownBy).toEqual(["named"]);
+    h.responses.length = 0; h.staged.length = 0;
+    const out = await runFive("יש לכם שפתון?", "יש לנו שפתון אדום.");
+    expect(out.cards).toEqual([]);
+  });
+
+  it("★ (rule S) the card swap: the text rules the brown pen out and says the concealer fits: the concealer's card, never the black pen's", async () => {
+    // The draft passes the checks whole: nothing was cut, and the model's card on the brown pen still goes.
+    h.chunks = FIT_DATA;
+    const clean = await runFive("יש טוש לעיניים?", B_SENTENCE, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(clean.r.trace.gate3.rewrite).toBe("none");
+    expect(clean.r.reply).toBe(B_SENTENCE);
+    expect(clean.cards).toEqual(["203"]);
+    expect((clean.r.trace as any).shownBy).toEqual(["unfit"]);
+    expect((clean.r.trace as any).cardsByNoun).toBeUndefined();
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // With a cut beside it (the cards-by-kind step swapped the concealer for the black pen: ["202"]).
+    withCut();
+    const cut = await runFive("יש טוש לעיניים?", `${B_SENTENCE} ${CUT}`, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(cut.r.reply).toBe(B_SENTENCE);
+    expect(cut.cards).toEqual(["203"]);
+    expect((cut.r.trace as any).cardsByNoun).toBeUndefined();
+  });
+
+  it("★ (rule S, item 1) the list that goes out when the statement is cut never offers what the draft ruled out", async () => {
+    // Nothing grounds the sentence: both drafts are cut and the found products go out in its place.
+    const { r, cards } = await runFive("יש טוש לעיניים?", B_SENTENCE, ["PRODUCT_1", "PRODUCT_3"]);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect((r.trace as any).fallbackKinds).toEqual(["ungrounded_negative_fit"]);
+    expect(r.reply).toBe("הנה כמה אפשרויות: טוש גבות שחור, קונסילר לעיניים. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.");
+    expect(cards).toEqual(["202", "203"]);
+  });
+
+  it("★ (rule S, item 1) the same on a text channel: the product lines are the same set", async () => {
+    h.textChannel = true;
+    const { r } = await runFive("יש טוש לעיניים?", B_SENTENCE, ["PRODUCT_1", "PRODUCT_3"]);
+    expect((r.trace as any).listedProducts).toEqual(["PRODUCT_2", "PRODUCT_3"]);
+    expect(r.reply).not.toContain("טוש גבות חום");
+    expect(r.reply).toContain("טוש גבות שחור\n₪149");
+    expect(r.reply).toContain("קונסילר לעיניים\n₪99");
+  });
+
+  it("★ (rule S, item 1) the same name is said once, and two found products she cannot tell apart are one card", async () => {
+    const fit = "הטושים שמצאנו מתאימים גם לאזור שמתחת לעיניים.";
+    // Two store products with one title at two prices: one name in the line, both cards.
+    const twins = await runFive("מה יש לכם לאיפור?", fit, [], [{ title: BROW, price: 79 }, { title: BROW, price: 89 }, { title: "קונסילר לעיניים", price: 99 }]);
+    expect((twins.r.trace as any).fallbackKinds).toEqual(["ungrounded_positive_fit"]);
+    expect(twins.r.reply).toBe(`הנה כמה אפשרויות: ${BROW}, קונסילר לעיניים. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.`);
+    expect(twins.cards).toEqual(["201", "202", "203"]);
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // The same title at the same price: once.
+    const same = [{ title: BROW, price: 79 }, { title: BROW, price: 79 }, { title: "קונסילר לעיניים", price: 99 }];
+    const one = await runFive("מה יש לכם לאיפור?", fit, [], same);
+    expect(one.r.reply).toBe(`הנה כמה אפשרויות: ${BROW}, קונסילר לעיניים. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.`);
+    expect(one.cards).toEqual(["201", "203"]);
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // The place of the second one goes to the next found product.
+    const next = await runFive("מה יש לכם לאיפור?", fit, [], [...same, { title: "שפתון אדום", price: 59 }]);
+    expect(next.r.reply).toBe(`הנה כמה אפשרויות: ${BROW}, קונסילר לעיניים, שפתון אדום. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.`);
+    expect(next.cards).toEqual(["201", "203", "204"]);
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // And on the model's own cards.
+    const own = await runFive("מה יש לכם לאיפור?", "אלה המוצרים שיש אצלנו בחנות, אפשר לבחור מה שנוח לך.", ["PRODUCT_1", "PRODUCT_2", "PRODUCT_3"], same);
+    expect(own.cards).toEqual(["201", "203"]);
+    expect((own.r.trace as any).shownBy).toEqual(["twice"]);
+  });
+
+  it("★ (rule S, b) a question that offers other products carries no cards of the ones at hand", async () => {
+    // The owner's topic is blocked: the first draft loses its sentence, the rewrite is the question alone, and the
+    // model's cards (₪799 and ₪529) came with both.
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    const { r, t, cards } = await runDrafts("מה יש לכם במעילים?", COATS, { reply: `Leather Jacket ו-Wool Coat הם לא הכי זול שיש. ${OTHERS}`, cards: ["PRODUCT_1", "PRODUCT_2"] }, { reply: OTHERS, cards: ["PRODUCT_1", "PRODUCT_2"] }, { reply: OTHERS, cards: ["PRODUCT_1", "PRODUCT_2"] });
+    expect(r.reply).toBe(OTHERS);
+    expect(cards).toEqual([]);
+    expect(t.shownBy).toEqual(["others"]);
+    expect(t.cards).toEqual([]);
+  });
+
+  it("★ (rule S, b) on a text channel the question goes out with no product lines", async () => {
+    h.textChannel = true;
+    const { r, t } = await runDrafts("מה יש לכם במעילים?", COATS, { reply: OTHERS, cards: ["PRODUCT_1", "PRODUCT_2"] });
+    expect(r.reply).toBe(OTHERS);
+    expect(t.listedProducts).toBeUndefined();
+    h.responses.length = 0; h.staged.length = 0;
+    // And with no cards from the model.
+    const bare = await runDrafts("מה יש לכם במעילים?", COATS, { reply: OTHERS });
+    expect(bare.r.reply).toBe(OTHERS);
+    expect(bare.t.listedProducts).toBeUndefined();
+  });
+
+  it("★ (rule S, b) the cards stay when the text speaks of them: it points at them, names one, or says more than the question", async () => {
+    for (const reply of ["רוצה שאציג עוד מוצרים כמו האלה?", "שאציג עוד פריטים כמו Wool Coat?", "אלה המעילים שלנו. שאציג עוד פריטים במחירים נמוכים?", "יש לנו עוד פריטים במחירים נמוכים."]) {
+      const { r, t, cards } = await runDrafts("מה יש לכם במעילים?", COATS, { reply, cards: ["PRODUCT_1", "PRODUCT_2"] });
+      expect(r.reply, reply).toBe(reply);
+      expect(cards, reply).toEqual(["201", "202"]);
+      // Without the cards the pointer would point at nothing: the check on the final text keeps them.
+      expect(t.shownKept, reply).toEqual(reply.includes("האלה") ? ["others"] : undefined);
+      h.responses.length = 0; h.staged.length = 0;
+    }
+  });
+
+  it("★ (rule S) a card whose product only a removed sentence named goes with the sentence", async () => {
+    h.policyRow = { data: { blockedTopics: ["זול"] } };
+    const kept = "כל המעילים שלנו עשויים מחומרים טבעיים ונשלחים בתוך שלושה ימי עסקים.";
+    const { r, cards } = await runFive("מה יש לכם במעילים?", `Leather Jacket הוא לא הכי זול שיש לנו. ${kept}`, ["PRODUCT_1", "PRODUCT_2"], COATS);
+    expect(r.reply).toBe(kept);
+    expect((r.trace as any).cutText).toEqual(["Leather Jacket הוא לא הכי זול שיש לנו."]);
+    expect(cards).toEqual(["202"]);
+    expect((r.trace as any).shownBy).toEqual(["cut"]);
+  });
+
+  it("★ (rule S, item 1) on a cheap ask the list is the cheapest of her kind, never a cheaper product of another kind for the use she named", async () => {
+    // The concealer (₪99) is for the use she named and costs less than the black pen (₪149): she asked for a cheap pen.
+    const { r, cards } = await runFive("יש טוש זול לעיניים?", "הטושים שמצאנו מתאימים גם לאזור שמתחת לעיניים.");
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(r.reply).toBe("הנה כמה אפשרויות: טוש גבות חום, טוש גבות שחור. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.");
+    expect(cards).toEqual(["201", "202"]);
+  });
+
+  it("★ (rule S, item 1) a product either draft ruled out stays off the list, whichever draft said it", async () => {
+    const fits = "הטושים שמצאנו מתאימים גם לאזור שמתחת לעיניים.";
+    const line = "הנה כמה אפשרויות: טוש גבות שחור, קונסילר לעיניים. אין לנו אישור שהם מתאימים בדיוק למה שביקשת.";
+    // The first draft rules the brown pen out and the rewrite does not.
+    const first = await runDrafts("יש טוש לעיניים?", FIVE, { reply: B_SENTENCE, cards: ["PRODUCT_1", "PRODUCT_3"] }, { reply: fits, cards: ["PRODUCT_1", "PRODUCT_2"] });
+    expect(first.r.trace.gate3.rewrite).toBe("fallback");
+    expect(first.r.reply).toBe(line);
+    expect(first.cards).toEqual(["202", "203"]);
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // Only the rewrite does.
+    const second = await runDrafts("יש טוש לעיניים?", FIVE, { reply: fits, cards: ["PRODUCT_1", "PRODUCT_2"] }, { reply: B_SENTENCE, cards: ["PRODUCT_1", "PRODUCT_3"] });
+    expect(second.r.trace.gate3.rewrite).toBe("fallback");
+    expect(second.r.reply).toBe(line);
+    expect(second.cards).toEqual(["202", "203"]);
+  });
+
+  it("★ (rule S) the statement that stands on a member cut shows what she asked for, wherever it stands on the list", async () => {
+    withCut();
+    const six = [{ title: "מברשת איפור", price: 39 }, { title: "קונסילר לעיניים", price: 99 }, { title: "שפתון ורוד", price: 59 }, { title: "טוש גבות חום", price: 79 }, { title: "טוש גבות שחור", price: 149 }, { title: "קרם עיניים", price: 89 }];
+    const { r, cards } = await runFive("יש טוש לעיניים?", `${STATEMENT} יש אחריות על טוש גבות חום גם בשימוש מתחת לעיניים.`, [], six);
+    expect((r.trace as any).statementKept).toBe(true);
+    // Both products for the use she named, not only the one among the first three found; never the pens it rules out.
+    expect(cards).toEqual(["202", "206"]);
+  });
+
+  it("★ (rule S) a word she said as the use names no product, and a message that asks for no product gets no card by a name", async () => {
+    h.chunks = FIT_DATA;
+    const use = "יש לנו כמה מוצרים לעיניים, אשמח לעזור לבחור.";
+    const a = await runFive("יש טוש לעיניים?", use);
+    expect(a.r.reply).toBe(use);
+    expect(a.cards).toEqual([]);
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // A returns question: the reply names a found product, and no card goes with it.
+    h.chunks = [{ content: "אפשר להחזיר כל מוצר בתוך 14 יום מיום הקבלה.", score: 0.9, documentTitle: "מדיניות", chunkIndex: 1, documentId: "p" }];
+    const policy = "את Wool Coat אפשר להחזיר בתוך 14 יום מיום הקבלה.";
+    const b = await runFive("מה מדיניות ההחזרות שלכם?", policy, [], COATS);
+    expect(b.r.reply).toBe(policy);
+    expect(b.cards).toEqual([]);
+  });
+
+  it("★ (rule S) the product lines of a text channel: only what she asked for, and the shown set even when it is another kind", async () => {
+    h.textChannel = true;
+    h.chunks = FIT_DATA;
+    const mixed = [{ title: "מברשת איפור", price: 59 }, { title: "טוש גבות חום", price: 79 }, { title: "שפתון ורוד", price: 49 }, { title: "טוש גבות שחור", price: 149 }];
+    const a = await runFive("יש לכם טוש?", "יש לנו כמה טושים, הנה הם.", [], mixed);
+    expect((a.r.trace as any).listedProducts).toEqual(["PRODUCT_2", "PRODUCT_4"]);
+    expect(a.r.reply).not.toContain("מברשת");
+    expect(a.r.reply).not.toContain("שפתון");
+    h.responses.length = 0; h.staged.length = 0; h.audits.length = 0;
+    // The model's own card on a product of another kind that the text offers: its line goes out.
+    const b = await runFive("יש טוש לעיניים?", "אולי מברשת איפור תתאים.", ["PRODUCT_4"]);
+    expect((b.r.trace as any).listedProducts).toEqual(["PRODUCT_4"]);
+    expect(b.r.reply).toContain("אולי מברשת איפור תתאים.\n\nמברשת איפור\n");
+  });
+
+  it("★ (rule S) the helpers: the shown set, the products of her ask, and a product said by name", async () => {
+    const { shownProducts, ofHerAsk, forHerUse, namedMembers } = await import("../services/reply-engine/engine");
+    const found = (list: any[]) => list.map((c, i) => ({ productId: String(201 + i), inventoryState: "in_stock", ...c }));
+    const five = found(FIVE), coats = found(COATS), mats = found(MATS);
+    const shown = (a: any) => shownProducts({ cards: [], ...a });
+    // Never a product the text rules out; and the word after "not for" is the use, it names no product.
+    expect(shown({ text: B_SENTENCE, cards: ["PRODUCT_1", "PRODUCT_3"], candidates: five, unfit: new Set([0]) })).toEqual({ cards: ["PRODUCT_3"], why: ["unfit"] });
+    expect(shown({ text: "הטושים לא מתאימים לעיניים.", cards: ["PRODUCT_1", "PRODUCT_2"], candidates: five, unfit: new Set([0, 1]) })).toEqual({ cards: [], why: ["unfit"] });
+    expect(shown({ text: "טוש גבות חום לא מתאים לעיניים.", candidates: five, unfit: new Set([0]), addNamed: true })).toEqual({ cards: [], why: [] });
+    expect(shown({ text: "The pens are not meant for eyes.", candidates: found([{ title: "Brow Pen", price: 79 }, { title: "Eyes Concealer", price: 99 }]), addNamed: true })).toEqual({ cards: [], why: [] });
+    // After a cut: a product only the removed sentence named goes with it; one the text still speaks of stays, and a
+    // removed sentence that names none (or says a price) takes none.
+    const ships = "כל המעילים נשלחים בתוך שלושה ימי עסקים.";
+    const cutS = "Leather Jacket הוא לא הכי זול שיש לנו.";
+    expect(shown({ text: ships, cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats, removed: [cutS] })).toEqual({ cards: ["PRODUCT_2"], why: ["cut"] });
+    expect(shown({ text: "Leather Jacket נשלח בתוך שלושה ימי עסקים.", cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats, removed: [cutS] })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2"], why: [] });
+    expect(shown({ text: ships, cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats, removed: [CUT] })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2"], why: [] });
+    expect(shown({ text: ships, cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats, removed: ["המשלוח עולה ₪799."] })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2"], why: [] });
+    // One question that offers other products, naming none of the found ones.
+    const offers = [OTHERS, "רוצה לראות עוד מוצרים?", "שאציג עוד כמה אפשרויות?", "רוצה לראות עוד דגמים?", "רוצה לראות עוד חלופות?",
+      "רוצה לראות פריטים אחרים?", "רוצה לראות מוצרים נוספים?", "רוצה לראות אפשרויות אחרות?", "רוצה לראות את הדגמים האחרים?", "רוצה לראות חלופות נוספות?",
+      "Would you like to see more options at lower prices?", "Want to see other items?", "Shall I show another model?", "Want different products?"];
+    for (const t of offers) expect(shown({ text: t, cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats }), t).toEqual({ cards: [], why: ["others"] });
+    for (const t of ["יש לנו עוד פריטים במחירים נמוכים.", "אלה המעילים שלנו. שאציג עוד פריטים במחירים נמוכים?", "שאציג עוד פריטים כמו Wool Coat?", "מה עוד מעניין אותך?", "רוצה לשמוע עוד פרטים?", "רוצה לראות עוד?"]) expect(shown({ text: t, cards: ["PRODUCT_1", "PRODUCT_2"], candidates: coats }), t).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2"], why: [] });
+    // A product the text names: in place of cards on products it names none of; with no cards only on a product turn.
+    expect(shown({ text: MAT_FIT, candidates: mats })).toEqual({ cards: [], why: [] });
+    expect(shown({ text: MAT_FIT, candidates: mats, addNamed: true })).toEqual({ cards: ["PRODUCT_1"], why: ["named"] });
+    expect(shown({ text: MAT_FIT, cards: ["PRODUCT_2"], candidates: mats })).toEqual({ cards: ["PRODUCT_1"], why: ["named"] });
+    expect(shown({ text: MAT_FIT, cards: ["PRODUCT_1", "PRODUCT_3"], candidates: mats })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_3"], why: [] });
+    // Words the titles share name none of them.
+    expect(shown({ text: "לתמי 4 מתאים משטח הזזה של סמובי.", cards: ["PRODUCT_2"], candidates: mats, addNamed: true })).toEqual({ cards: ["PRODUCT_2"], why: [] });
+    // Never one out of stock, never by the customer's own first name, never by a word she said as the use; three at most.
+    expect(shown({ text: "יש לנו שפתון אדום.", candidates: five, addNamed: true })).toEqual({ cards: [], why: [] });
+    expect(shown({ text: "נשמח לעזור, אריאל.", candidates: mats, addNamed: true, contactNames: ["אריאל"] })).toEqual({ cards: [], why: [] });
+    expect(shown({ text: "נשמח לעזור, אריאל.", candidates: mats, addNamed: true })).toEqual({ cards: ["PRODUCT_2"], why: ["named"] });
+    expect(shown({ text: "יש לנו כמה מוצרים לעיניים.", candidates: five, addNamed: true, uses: ["עיניים"] })).toEqual({ cards: [], why: [] });
+    expect(shown({ text: "יש לנו כמה מוצרים לעיניים.", candidates: five, addNamed: true })).toEqual({ cards: ["PRODUCT_3"], why: ["named"] });
+    expect(shown({ text: "יש לנו טוש גבות חום, טוש גבות שחור, קונסילר לעיניים ומברשת איפור.", candidates: five, addNamed: true })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2", "PRODUCT_3"], why: ["named"] });
+    // Her kind: a card stays when it is of her kind or the text names it; with none, her kind's that are not ruled out.
+    const hers = new Set([0, 1]);
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_1", "PRODUCT_3"], candidates: five, hers })).toEqual({ cards: ["PRODUCT_1"], why: ["kind"] });
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_3", "PRODUCT_4"], candidates: five, hers })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_2"], why: ["kind"] });
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_3", "PRODUCT_4"], candidates: five, hers, unfit: new Set([0]) })).toEqual({ cards: ["PRODUCT_2"], why: ["kind"] });
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_3", "PRODUCT_4"], candidates: five, hers, unfit: new Set([0, 1]) })).toEqual({ cards: ["PRODUCT_3", "PRODUCT_4"], why: [] });
+    expect(shown({ text: "אולי מברשת איפור תתאים.", cards: ["PRODUCT_4"], candidates: five, hers })).toEqual({ cards: ["PRODUCT_4"], why: [] });
+    expect(shown({ text: "הנה מה שמצאתי.", candidates: five, hers })).toEqual({ cards: [], why: [] });
+    // Each product once: the same id, or the same title at the same price; the same title at another price is another
+    // product. A key past the list is dropped.
+    const twins = [{ productId: "1", title: "A Pen", price: 79 }, { productId: "1", title: "A Pen", price: 79 }, { productId: "2", title: "A Pen", price: 79 }, { productId: "3", title: "A Pen", price: 89 }, { productId: "4", title: "B Pen", price: 79 }, { productId: "4", title: "C Pen", price: 99 }];
+    expect(shown({ text: "הנה מה שמצאתי.", cards: ["PRODUCT_1", "PRODUCT_2", "PRODUCT_3", "PRODUCT_4", "PRODUCT_5", "PRODUCT_6", "PRODUCT_1", "PRODUCT_9"], candidates: twins })).toEqual({ cards: ["PRODUCT_1", "PRODUCT_4", "PRODUCT_5"], why: ["twice"] });
+    // The found products of her ask: of her kind and in stock, with the ones whose title holds her use word.
+    expect(ofHerAsk(five, "טוש", "יש טוש לעיניים?")).toEqual([0, 1, 2]);
+    expect(ofHerAsk(five, "טוש", "יש טוש?")).toEqual([0, 1]);
+    expect(ofHerAsk(five, null, "מה יש לכם?")).toEqual([0, 1, 2, 3]);
+    expect(ofHerAsk(five, "מעיל", "יש מעיל לעיניים?")).toEqual([0, 1, 2, 3]);
+    // A found product whose own category is another kind is not of her ask.
+    const bags = [{ productId: "1", title: "Canvas Tote", inventoryState: "in_stock" }, { productId: "2", title: "קשת לשיער", inventoryState: "in_stock", attributes: { category: "קשתות" } }];
+    expect(ofHerAsk(bags, "תיק", "יש תיק?")).toEqual([0]);
+    expect(forHerUse(five, ["עיניים"])).toEqual([2]);
+    expect(forHerUse(five, [])).toEqual([]);
+    // By name: a word only one title has; two words the titles share, a price, or being the only one found is no name.
+    expect([...namedMembers(MAT_FIT, mats, "name")]).toEqual([0]);
+    expect([...namedMembers("משטח הזזה של סמובי מתאים.", mats, "name")]).toEqual([]);
+    // By name: the whole title, the title with no size, its head, in any letter case.
+    for (const said of ["לתמי 4 מתאים סמובי אלכסה - משטח הזזה 35*28 ס\"מ.", "לתמי 4 מתאים סמובי אלכסה - משטח הזזה.", "לתמי 4 מתאים סמובי אלכסה."]) expect([...namedMembers(said, mats, "name")]).toEqual([0]);
+    expect([...namedMembers("the wool coat is warm.", coats, "name")]).toEqual([1]);
+    expect([...namedMembers("יש לנו טוש גבות.", five)]).toEqual([0, 1]);
+    expect([...namedMembers("יש לנו טוש גבות.", five, "name")]).toEqual([]);
+    expect(shown({ text: "יש לנו טוש גבות.", candidates: five, addNamed: true })).toEqual({ cards: [], why: [] });
+    // A whole title in another letter case, when each of its words is in another title too.
+    const pens = found([{ title: "Brow Pen", price: 79 }, { title: "Eye Pen", price: 89 }, { title: "Brow Pencil", price: 59 }]);
+    expect([...namedMembers("We have the brow pen in stock.", pens, "name")]).toEqual([0]);
+    // A title inside a longer found title the text says is not said itself, in any letter case and in every mode.
+    for (const how of ["any", "words", "name"] as const) {
+      expect([...namedMembers("We have the brow pencil in stock.", pens, how)], how).toEqual([2]);
+      expect([...namedMembers("We have the Brow Pencil in stock.", pens, how)], how).toEqual([2]);
+    }
+    expect([...namedMembers("We have the Brow Pen in stock.", pens, "name")]).toEqual([0]);
+    expect(shown({ text: "For brows we recommend the brow pencil.", candidates: pens, addNamed: true })).toEqual({ cards: ["PRODUCT_3"], why: ["named"] });
+    expect([...namedMembers("We have a pen for brows.", pens, "name")]).toEqual([]);
+    expect([...namedMembers("המחיר הוא ₪799.", coats)]).toEqual([0]);
+    expect([...namedMembers("המחיר הוא ₪799.", coats, "name")]).toEqual([]);
+    expect([...namedMembers("המחיר הוא ₪799.", coats, "words")]).toEqual([]);
+    expect([...namedMembers("המוצר הזה מתאים.", [coats[0]])]).toEqual([0]);
+    expect([...namedMembers("המוצר הזה מתאים.", [coats[0]], "name")]).toEqual([]);
+    expect([...namedMembers("המוצר הזה מתאים.", [coats[0]], "words")]).toEqual([]);
   });
 });
