@@ -253,12 +253,14 @@ export function commonTitleWords(titles: string[]): Set<string> {
   return new Set([...n].filter(([w, k]) => k >= 2 && k >= list.length / 2 && !/^\d/.test(w)).map(([w]) => w));
 }
 /** The text names this product: its whole title, two of its distinctive words, or its size. */
-export function namesTitle(prose: string, title: string, common: Set<string> = new Set()): boolean {
+export function namesTitle(prose: string, title: string, common: Set<string> = new Set(), whole = false): boolean {
   if (prose.includes(title)) return true;
   const text = String(prose ?? "").toLowerCase();
   const words = titleWords(title, common);
   const size = words.find((w) => /\d+[*x×]\d+/.test(w));
   if (size && new RegExp(size.replace(/[*x×]/, "\\s*[*x×]\\s*")).test(text)) return true;
+  // Whole only: two words of the title are no name.
+  if (whole) return false;
   return words.filter((w) => !/^\d+$/.test(w) && text.includes(w)).length >= 2;
 }
 /** The text speaks of specific products (a distinctive title word) even if none matches fully: no generic list then. */
@@ -717,31 +719,40 @@ const SHIPPING_PRICE = /(?<!(?:כולל|עם|with|including)\s+)(?:(?<![\u0590-\
  * The found products a text names (their indexes): by title, by a word only one found title has, or by a found
  * product's own price written with a currency mark (a shipping price or a size is no product).
  */
-export function namedMembers(text: string, candidates: any[]): Set<number> {
+export function namedMembers(text: string, candidates: any[], how: "any" | "words" | "name" = "any", uses: string[] = [], contactNames: Array<string | null | undefined> = []): Set<number> {
   const out = new Set<number>();
   const t = String(text ?? "");
   if (!t.trim() || !candidates.length) return out;
   const common = commonTitleWords(candidates.map((c) => String(c?.title ?? "")));
-  candidates.forEach((c, i) => { if (c?.title && namesTitle(t, String(c.title), common)) out.add(i); });
-  const referred = new Set(referredCandidates(candidates as any[], t, ""));
+  // By name ("name"): the title said whole, with no size or by its head, or a word only that title has; never two
+  // words several titles share, and never a word her own message says as the use ("לעיניים" on "יש טוש לעיניים?").
+  const byName = how === "name";
+  candidates.forEach((c, i) => { if (c?.title && namesTitle(t, String(c.title), common, byName)) out.add(i); });
+  const lessUses = byName ? uses.reduce((v, w) => v.replace(new RegExp(`(?<![\\p{L}])[הולבמשכ]{0,2}${w}(?![\\p{L}])`, "giu"), (m) => " ".repeat(m.length)), t) : t;
+  // The only product found is named by no word of the text: that counts for "any" alone.
+  const referred = new Set(referredCandidates(candidates as any[], lessUses, "", contactNames, how === "any"));
   for (const i of referred) out.add(i);
   // Never a price said of the shipping ("המשלוח עולה ₪79"): the shipping word before it in its own clause.
-  const prices = [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)]
+  // A price names a product for "any" alone.
+  const prices = how !== "any" ? [] : [...t.matchAll(/[₪$€]\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:₪|ש["״']?ח|שקל(?:ים)?|NIS|ILS|[$€])/giu)]
     .filter((m) => !SHIPPING_PRICE.test(t.slice(0, m.index ?? 0)))
     .map((m) => Number(String(m[1] ?? m[2]).replace(/,/g, "")));
   candidates.forEach((c, i) => { const p = priceOf(c); if (p != null && prices.includes(p)) out.add(i); });
+  // A title inside a longer found title the text says is not said itself ("Brow Pen" in "the brow pencil").
+  const low = t.toLowerCase();
+  const title = (i: number) => String(candidates[i]?.title ?? "");
+  const lowTitle = (i: number) => title(i).trim().toLowerCase();
+  for (const i of [...out]) if (lowTitle(i) && candidates.some((_, j) => j !== i && lowTitle(j).length > lowTitle(i).length && lowTitle(j).includes(lowTitle(i)) && low.includes(lowTitle(j)))) out.delete(i);
   if (out.size < 2) return out;
   // Several matched, some through words they share (the usual store: variants of one title, "טוש גבות חום" and
   // "טוש גבות שחור"). Only those the text tells apart count: by the whole title, or by a word or a price none of the
   // others matched has. With none told apart the text speaks of them all.
-  const low = t.toLowerCase();
   const idx = [...out];
-  const title = (i: number) => String(candidates[i]?.title ?? "");
   const words = new Map(idx.map((i) => [i, new Set(titleWords(title(i)))]));
   const apart = idx.filter((i) => {
     const others = idx.filter((j) => j !== i);
-    // Its whole title, unless that is only the start of a longer title the text says.
-    if (title(i) && t.includes(title(i)) && !others.some((j) => title(j).length > title(i).length && title(j).includes(title(i)) && t.includes(title(j)))) return true;
+    // Its whole title.
+    if (title(i) && t.includes(title(i))) return true;
     if (referred.has(i)) return true;
     const p = priceOf(candidates[i]);
     if (p != null && prices.includes(p) && !others.some((j) => priceOf(candidates[j]) === p)) return true;
@@ -758,6 +769,83 @@ export function memberCutOf(removed: string[], left: string, candidates: any[]):
   if (!removed.length || !candidates.length) return false;
   const still = namedMembers(left, candidates);
   return still.size > 0 && removed.some((r) => [...namedMembers(r, candidates)].some((i) => !still.has(i)));
+}
+// A question that offers other products than the ones at hand ("שאציג עוד פריטים במחירים נמוכים?").
+const OFFERS_OTHERS = /(?<![\u0590-\u05FF])(?:עוד\s+(?:כמה\s+)?(?:פריט|מוצר|אפשרו|דגמ|חלופ)[\u0590-\u05FF]*|(?:ה)?(?:פריטים|מוצרים|אפשרויות|דגמים|חלופות)\s+(?:ה)?(?:אחרים|אחרות|נוספים|נוספות))(?![\u0590-\u05FF])|\b(?:other|more|another|different)\s+(?:items?|products?|options?|models?)\b/iu;
+/** Each product once: the same store id, or the same title at the same price (she cannot tell those two apart). */
+function onceEach(candidates: any[]): (i: number) => boolean {
+  const seen = new Set<string>();
+  return (i) => {
+    const c = candidates[i] ?? {};
+    const title = String(c.title ?? "").trim().toLowerCase();
+    const keys = [...(c.productId != null && String(c.productId) ? [`id:${c.productId}`] : []), ...(title ? [`t:${title}|${c.price ?? ""}`] : [])];
+    if (keys.some((k) => seen.has(k))) return false;
+    keys.forEach((k) => seen.add(k));
+    return true;
+  };
+}
+/**
+ * Rule S: the products that go out with a reply, one measure for the cards and for the product lines of a text
+ * channel. The set follows what the final text says:
+ *  - never a product the text rules out;
+ *  - after a cut, a product only a removed sentence named goes with that sentence;
+ *  - a text that names none and is one question offering other products carries none;
+ *  - a product the text names (its title, or a word only its title has) that it does not rule out and that is in
+ *    stock is shown: in place of products the text names none of, and with none set on a product turn;
+ *  - when she named a kind and found products are of it, a product stays when it is of her kind or the text names
+ *    it; with none of those, the found products of her kind the text does not rule out;
+ *  - each product once: by its id, and by its title at the same price.
+ * `why` says which of these changed the set.
+ */
+export function shownProducts(a: { text: string; cards: string[]; candidates: any[]; unfit?: Set<number> | null; removed?: string[]; hers?: Set<number> | null; uses?: string[]; contactNames?: Array<string | null | undefined>; addNamed?: boolean }): { cards: string[]; why: string[] } {
+  const { candidates } = a;
+  const text = String(a.text ?? "");
+  const unfit = a.unfit ?? new Set<number>();
+  const why: string[] = [];
+  let own = [...new Set(a.cards.map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1]) - 1).filter((i) => i >= 0 && i < candidates.length))];
+  const had = own.length > 0;
+  const step = (name: string, next: number[]) => { if (next.join() !== own.join()) { why.push(name); own = next; } };
+  // Never by the customer's own first name ("נשמח לעזור, אריאל" with a product of that name found).
+  // Nor by what follows a "not for", up to the comma: that is the use ("הטושים לא מתאימים לעיניים" names no product
+  // whose title holds "לעיניים").
+  let said = text;
+  for (const m of text.matchAll(SAYS_UNFIT_ALL)) {
+    const from = (m.index ?? 0) + m[0].length;
+    const stop = said.slice(from).search(/[,;:.!?\n]/);
+    const to = stop < 0 ? said.length : from + stop;
+    said = said.slice(0, from) + " ".repeat(to - from) + said.slice(to);
+  }
+  const byName = namedMembers(said, candidates, "name", a.uses ?? [], a.contactNames ?? []);
+  const spoken = namedMembers(text, candidates, "words");
+  step("unfit", own.filter((i) => !unfit.has(i)));
+  const cutNamed = new Set((a.removed ?? []).flatMap((r) => [...namedMembers(r, candidates, "name", a.uses ?? [])]));
+  step("cut", own.filter((i) => !cutNamed.has(i) || spoken.has(i)));
+  if (!spoken.size && (text.match(SENTENCES_RE) ?? []).filter((x) => x.trim()).length === 1 && /[?؟]\s*$/.test(text.trim()) && OFFERS_OTHERS.test(text)) { why.push("others"); own = []; }
+  const recommended = [...byName].filter((i) => !unfit.has(i) && candidates[i]?.inventoryState !== "out_of_stock").slice(0, 3);
+  if (recommended.length && !own.some((i) => byName.has(i)) && (had || a.addNamed)) step("named", recommended);
+  if (a.hers?.size && own.length) {
+    const keep = own.filter((i) => a.hers!.has(i) || byName.has(i));
+    const refill = [...a.hers].filter((i) => !unfit.has(i)).slice(0, 3);
+    step("kind", keep.length ? keep : refill.length ? refill : own);
+  }
+  const once = onceEach(candidates);
+  step("twice", own.filter((i) => once(i)));
+  return { cards: own.map((i) => `PRODUCT_${i + 1}`), why };
+}
+/**
+ * The found products that can go out with a text that names none of them: in stock and of her kind. When some are of
+ * her kind by title or category, only those and the ones whose title holds a word she said as the use ("קונסילר
+ * לעיניים" on "יש טוש לעיניים?"); any other found product is not what she asked for.
+ */
+export function ofHerAsk(candidates: any[], noun: string | null, incoming: string): number[] {
+  const all = candidates.map((c, i) => ({ c, i })).filter((x) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun)));
+  if (!noun || !all.some((x) => ofHerKindStrict(x.c, noun))) return all.map((x) => x.i);
+  const use = new Set(forHerUse(candidates, herUseWords(incoming, noun)));
+  return all.filter((x) => ofHerKindStrict(x.c, noun) || use.has(x.i)).map((x) => x.i);
+}
+/** The found products whose title holds a word she said as the use. */
+export function forHerUse(candidates: any[], uses: string[]): number[] {
+  return candidates.flatMap((c, i) => (c?.title && uses.some((w) => String(c.title).toLowerCase().includes(w)) ? [i] : []));
 }
 /** The text speaks of the found products: the customer's noun when the found products are of it, or a word of a found title. */
 export function aboutFound(text: string, candidates: any[], noun: string | null): boolean {
@@ -1954,6 +2042,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   let openItemSpoken: string | null = null;
   // The found products a kept statement says do not fit (their indexes): never shown with it, as a card or a line.
   let unfitShown: Set<number> | null = null;
+  // The sentences the cut removed from the text that goes out (rule S: a product only they named is not shown).
+  let cutRemoved: string[] = [];
   (trace as any).rewriteRounds = 0;
   let firstDraft = String(output?.reply ?? "");
   if (!verdict.ok) {
@@ -2200,7 +2290,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         if (st && !st.unfit && rulesOut(st)) { kept = st; (trace as any).statementKept = true; }
         else if (st) {
           const unfit = st.unfit ?? new Set<number>();
-          const pool = (cheapNow ? cheapestOfKind(listable.map((x) => x.c), kindNow).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : listable).filter((x) => !unfit.has(x.i)).slice(0, 3);
+          // Of what she asked for: her kind, or a product for the use she named (rule S; a makeup brush went out
+          // under the statement about the pens).
+          const asked = new Set(ofHerAsk(candidates as any[], kindNow, incNow));
+          const pool = (cheapNow ? cheapestOfKind(listable.map((x) => x.c), kindNow).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : listable.filter((x) => asked.has(x.i))).filter((x) => !unfit.has(x.i)).slice(0, 3);
           // With none of them left to show, the cards the cleanup left under it stay (none of them ruled out).
           const cards = pool.length ? pool.map((x) => `PRODUCT_${x.i + 1}`) : (st.o.cards ?? []);
           const o: ModelTurnOutput = { ...st.o, reply: cards.length || /[?؟]/.test(st.o.reply) ? st.o.reply : `${st.o.reply.trim()} ${productQuestionLine(locale)}`, cards };
@@ -2243,6 +2336,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
         // The products the kept text rules out stay off the cards and the product list added below.
         unfitShown = kept.unfit ?? null;
+        cutRemoved = kept.removed ?? [];
         // How many sentences the cut took (a "cleaned" verdict may remove nothing, e.g. no_search).
         (trace as any).cutSentences = kept.removed?.length ?? 0;
         // The bot's own cut words, short, for the replay printout (prod replay on 1b35c535, Tehila: a noun fragment
@@ -2369,9 +2463,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // One set for the names and the cards. On a cheap ask: the cheapest of the found products by the store's own
           // prices (the dev owner-rule round: "אני מחפשת את הכי זול שיש" got cards at ₪799, ₪529, ₪299), and with none
           // priced no cards at all. The header makes no ranking claim.
-          const shownPool = (candidates as any[]).map((c: any, i: number) => ({ c, i })).filter((x: any) => x.c?.title && x.c.inventoryState !== "out_of_stock" && (!noun || ofNoun(x.c, noun)));
+          // Never a product the drafts themselves said does not fit (rule S: the list offered exactly what the draft
+          // ruled out), each product once and each name once, and only what she asked for.
+          const ruled = new Set([original, second].flatMap((d) => (d?.reply ? [...unfitProducts(resolveKeysInText(d.reply, candidates), candidates as any[], noun, incNow)] : [])));
+          const once = onceEach(candidates as any[]);
+          const shownPool = ofHerAsk(candidates as any[], noun, incNow).filter((i) => !ruled.has(i) && once(i)).map((i) => ({ c: (candidates as any[])[i], i }));
           const shownSet = (cheapNow ? cheapestOfKind(shownPool.map((x: any) => x.c), noun).map((c: any) => ({ c, i: (candidates as any[]).indexOf(c) })) : shownPool).slice(0, 3);
-          const shownNames = shownSet.map((x: any) => String(x.c.title));
+          const shownNames = [...new Set(shownSet.map((x: any) => String(x.c.title)))];
           // The draft's own caveat is the answer's point ("מיועד למילוי גבות, ולא מצוין שהוא מתאים למתחת לעיניים",
           // rating of d2f10620, NE'A): it stays with the products, in place of the fixed line.
           const srcs = [knowledge ?? "", ...turnTools.knowledgeText, groundingNow()].join("\n");
@@ -2922,32 +3020,48 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // and the list show only those (rating ed780586: scarves for "בובון" a third time, a freckle pen for "טינט").
   const hers = productsOfNoun(candidates as any[], String(opts.incomingMessage ?? ""));
   const herIdx = hers ? new Set(hers.map((c: any) => candidates.indexOf(c) + 1)) : null;
-  if (herIdx) {
-    const keep = (final.cards ?? []).filter((k) => herIdx.has(Number(/PRODUCT_(\d+)/i.exec(k)?.[1])));
-    // Never one the kept text rules out (rule T). When it rules out all of her kind, the model's own cards stay:
-    // they are what the text offers in its place, and a pointer at them would dangle without them.
-    const refill = [...herIdx].filter((n) => !unfitShown?.has(n - 1)).slice(0, 3).map((n) => `PRODUCT_${n}`);
-    const cardsNow = keep.length || !(final.cards ?? []).length ? keep : refill.length ? refill : (final.cards ?? []);
-    if (cardsNow.join() !== (final.cards ?? []).join()) (trace as any).cardsByNoun = cardsNow;
-    final = { ...final, cards: cardsNow };
+  // Rule S: the shown set follows the final text, by one measure for the cards and for the text channel's product
+  // lines (rating round on 9ce8a62b: the list offered what the draft ruled out; "לתמי 4 מתאים משטח סמובי אלכסה" went
+  // out with no product in 7 of 18 replays; cards at ₪799 and ₪529 under "שאציג עוד פריטים במחירים נמוכים?").
+  const incS = String(opts.incomingMessage ?? "");
+  const kindS = cheapAsk(incS) ? cheapNoun(incS) : headNoun(incS);
+  // What the text itself rules out, also on a draft no cut touched (the brown pen's card under "טוש גבות חום לא מתאים
+  // לעיניים").
+  const unfitNow = new Set<number>(prose ? unfitProducts(prose, candidates as any[], kindS, incS) : []);
+  const productAskS = !!prose && !final.handoff && !payProblem && productAskNow(incS) && !attributeOnlyAsk(incS) && (!!storeQueryOf(incS) || (state.offeredItems?.length ?? 0) > 0);
+  const usesS = herUseWords(incS, kindS);
+  // Hers: of her kind, and a found product whose title holds the use she named ("קונסילר לעיניים" on "יש טוש לעיניים?").
+  const hersS = herIdx ? new Set([...[...herIdx].map((n) => n - 1), ...forHerUse(candidates as any[], usesS)]) : null;
+  const shown = shownProducts({ text: prose ?? "", cards: final.cards ?? [], candidates: candidates as any[], unfit: unfitNow, removed: cutRemoved, hers: hersS, uses: usesS, contactNames: [firstName], addNamed: productAskS });
+  let shownApplied = false;
+  if (shown.cards.join() !== (final.cards ?? []).join()) {
+    // A card taken away never leaves the text pointing at nothing: with a new factual finding the cards stay.
+    const kinds = (o: ModelTurnOutput) => new Set(factualProblems(gate3(g3Input(o)).problems).map((p) => p.kind as string));
+    const lost = (final.cards ?? []).some((k) => !shown.cards.includes(k));
+    const before = lost ? kinds(final) : null;
+    if (before && [...kinds({ ...final, cards: shown.cards })].some((k) => !before.has(k))) (trace as any).shownKept = shown.why;
+    else {
+      shownApplied = true;
+      final = { ...final, cards: shown.cards };
+      (trace as any).shownBy = shown.why;
+      if (shown.why.includes("kind")) (trace as any).cardsByNoun = shown.cards;
+      if (shown.why.includes("named")) (trace as any).cardToNamed = true;
+      // What goes out, for the replay's "cards" line.
+      (trace as any).cards = shown.cards;
+    }
   }
+  const shownIdx = new Set((final.cards ?? []).map((k) => Number(/PRODUCT_(\d+)/i.exec(k)?.[1])));
   // No list for a question about the product itself (rating of d2f10620, Smoovee A: a stopper question got three
   // products from a garbled search).
   // No list for an ask that names no product ("אפשר להזמין?", rating of dcf2158e: three products nobody asked for).
-  const listed = !cardChannel && prose && !final.handoff && !payProblem && productAskNow(opts.incomingMessage ?? "") && !attributeOnlyAsk(opts.incomingMessage ?? "") && (!!storeQueryOf(opts.incomingMessage ?? "") || (state.offeredItems?.length ?? 0) > 0) ? textProductList(final, prose, herIdx || unfitShown ? candidates.map((c: any, i: number) => ((!herIdx || herIdx.has(i + 1)) && !unfitShown?.has(i) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
+  // Never under a question that offers other products; a product of the shown set is listed whatever its kind.
+  const listed = !cardChannel && productAskS && !(shown.why.includes("others") && (shownApplied || !(final.cards ?? []).length)) ? textProductList(final, prose, hersS || unfitNow.size ? candidates.map((c: any, i: number) => ((!hersS || hersS.has(i) || shownIdx.has(i + 1)) && !unfitNow.has(i) ? c : { ...c, title: "" })) : candidates, /[\u0590-\u05FF]/.test(prose) ? "he" : locale) : null;
   // The model's text is sanitized as the very last step (prod replay 13: "+#+#+#+#+#+" at the
   // end of a reply); the appended list is the store's exact fields and is left as it is.
   const clean = sanitizeReply(prose);
   if (clean !== prose) (trace as any).sanitized = true;
   // One message, no product twice and no line twice (prod replay 2026-11-17, both Smoovee runs).
-  // The card is the product the reply names (prod 2026-11-18, a08a83: Alexa named, Ariel's card sent).
-  {
-    const one = namedOnce(clean, candidates);
-    if (one >= 0 && output && (output.cards ?? []).length && !(output.cards ?? []).includes(`PRODUCT_${one + 1}`)) {
-      output = { ...output, cards: [`PRODUCT_${one + 1}`] };
-      (trace as any).cardToNamed = true;
-    }
-  }
+  // The card is the product the reply names (prod 2026-11-18, a08a83: Alexa named, Ariel's card sent): rule S above.
   let reply = assembleOnce(clean, listed?.text ?? null, candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean));
   // A sale price is said as one (Omer 2026-11-18): the named product's own sale line when the reply has none.
   {

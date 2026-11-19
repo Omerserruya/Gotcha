@@ -3176,7 +3176,7 @@ const NEAR_FILLER = new Set(["שלך", "שלכם", "שלי", "שלנו", "מתא
 const GREETINGS = new Set(["שלום", "היי", "הי", "hi", "hello", "hey"]);
 const TITLE_STOP = new Set(["the", "and", "for", "with", "new", "set", "pro", "one", "של", "עם", "את", "לכל", "כל", "סט", "חדש", "חדשה"]);
 const VARIANT_WORDS = new Set(["black", "white", "grey", "gray", "red", "blue", "green", "pink", "navy", "beige", "brown", "sand", "cream", "charcoal", "melange", "olive", "yellow", "orange", "purple", "silver", "gold", "small", "medium", "large", "xlarge", "size", "שחור", "שחורה", "לבן", "לבנה", "אפור", "אפורה", "אדום", "אדומה", "כחול", "כחולה", "ירוק", "ירוקה", "ורוד", "ורודה", "בז'", "חום", "חומה", "קרם", "זהב", "כסף", "צהוב", "כתום", "סגול", "קטן", "קטנה", "בינוני", "בינונית", "גדול", "גדולה", "מידה"]);
-export function referredCandidates(candidates: Array<{ title?: string }>, reply: string, intent: string, contactNames: Array<string | null | undefined> = []): number[] {
+export function referredCandidates(candidates: Array<{ title?: string }>, reply: string, intent: string, contactNames: Array<string | null | undefined> = [], sole = true): number[] {
   // One apostrophe form, kept inside a word ("ג'יני" is one word, never "יני").
   const apos = (x: string) => x.replace(/[׳’`]/g, "'");
   const hay = apos(`${String(reply ?? "")}\n${String(intent ?? "")}`.toLowerCase());
@@ -3253,7 +3253,8 @@ export function referredCandidates(candidates: Array<{ title?: string }>, reply:
   const inside = (a: Set<string>, b: Set<string>) => [...a].every((w) => b.has(w)) && b.size > a.size;
   const kept = out.filter((i) => !out.some((j) => j !== i && inside(setOf(i), setOf(j))));
   out.splice(0, out.length, ...kept);
-  if (!out.length && titles.filter(Boolean).length === 1 && !TEAM_LINE.test(reply ?? "") && !NO_INFO.test(reply ?? "")) out.push(titles.findIndex(Boolean));
+  // The only product found counts for a reply about a product; never where the text must name it (sole = false).
+  if (sole && !out.length && titles.filter(Boolean).length === 1 && !TEAM_LINE.test(reply ?? "") && !NO_INFO.test(reply ?? "")) out.push(titles.findIndex(Boolean));
   return out;
 }
 
