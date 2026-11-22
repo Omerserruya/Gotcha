@@ -358,7 +358,7 @@ export function publicWebchatConfig(
   appearance: Record<string, unknown>;
   welcome: Record<string, unknown>;
   offline: Record<string, unknown>;
-  features: { humanHandoff: boolean; productMessaging: boolean; addToCart: boolean };
+  features: { humanHandoff: boolean; productMessaging: boolean; addToCart: boolean; waHandoffMode?: "phone" | "code" | "off" };
   ux: ReturnType<typeof publicUx>;
 } {
   return {

@@ -28,7 +28,17 @@ import {
   webchatSeedConfig,
   WEBCHAT_COPY,
   normalizeWhatsappPhone,
+  PHONE_HANDOFF_TEMPLATE_NAME,
+  waHandoffMode,
+  isPaymentBlocked,
+  clearPaymentBlock,
+  readDurableSetting,
+  writeDurableSetting,
+  type WaHandoffMode,
 } from "@chatcenter/shared";
+
+/** The durable setting the payment signal lives in, through the shared reader and writer. */
+const SETTINGS = { read: (t: string, k: string) => readDurableSetting(t, k), write: (t: string, k: string, v: string | null, by?: string) => writeDurableSetting(t, k, v, by) };
 import crypto from "crypto";
 import { listChannels, saveChannelConfig } from "./shopify-live-chat.service";
 import { activationSnapshot, provisionStoreChat } from "./shopify-chat-install.service";
@@ -160,6 +170,75 @@ export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string
  */
 async function liveStoreChannels(tenantId: string) {
   return (await listChannels(tenantId)).filter((c) => c.connectionStatus !== "DISCONNECTED");
+}
+
+/** A required template's state, as the templates screen says it (conversation lib/required-templates stateOf). */
+export type PhoneHandoffTemplateState = "missing" | "draft" | "pending" | "approved" | "rejected";
+export interface PhoneHandoffState {
+  template: PhoneHandoffTemplateState;
+  /** Meta's reason when it was rejected. */
+  templateReason: string | null;
+  /** A send failed for the WABA's payment in the last 24 hours (Meta 131042). */
+  paymentBlocked: boolean;
+  /** The number can send it now: connected, template approved, no payment failure. */
+  ready: boolean;
+}
+
+/** The workspace's template language: its system language, one per workspace (as the required templates). */
+async function workspaceLanguage(tenantId: string): Promise<"he" | "en"> {
+  const t = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { defaultLocale: true } }).catch(() => null);
+  return String(t?.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : "en";
+}
+
+/** The approved-or-not template a number would send for "leave your number" (W2), and its language. */
+export async function phoneHandoffTemplate(tenantId: string, channelAccountId: string): Promise<{ row: any | null; language: "he" | "en" }> {
+  const language = await workspaceLanguage(tenantId);
+  const rows = await prisma.messageTemplate.findMany({
+    where: { tenantId, channel: "WHATSAPP" as any, name: PHONE_HANDOFF_TEMPLATE_NAME, language, OR: [{ channelAccountId }, { channelAccountId: null }] },
+  });
+  // This number's own row first, else an unbound one (the required-templates rule).
+  const row = (rows as any[]).find((r) => r.channelAccountId === channelAccountId) ?? (rows as any[])[0] ?? null;
+  return { row, language };
+}
+
+function templateStateOf(row: { status?: string } | null): PhoneHandoffTemplateState {
+  if (!row) return "missing";
+  switch (row.status) {
+    case "APPROVED": return "approved";
+    case "PENDING_APPROVAL": return "pending";
+    case "REJECTED": return "rejected";
+    default: return "draft";
+  }
+}
+
+export async function phoneHandoffState(tenantId: string, channelAccountId: string, connected: boolean, now = new Date()): Promise<PhoneHandoffState> {
+  const [{ row }, paymentBlocked] = await Promise.all([
+    phoneHandoffTemplate(tenantId, channelAccountId),
+    isPaymentBlocked(tenantId, channelAccountId, now, SETTINGS),
+  ]);
+  const template = templateStateOf(row);
+  return { template, templateReason: row?.rejectionReason ?? null, paymentBlocked, ready: connected && template === "approved" && !paymentBlocked };
+}
+
+/**
+ * The one state the widget gets (W2): "phone" (leave your number), "code" (the wa.me link with the
+ * code, as before), "off" (no WhatsApp handoff). The WhatsApp kind of widget has no on-site chat to
+ * leave a number in: it stays "code".
+ */
+export async function waHandoffModeFor(tenantId: string, ux: ShopifyChatUx, now = new Date()): Promise<{ mode: WaHandoffMode; target: { channelAccountId: string | null; digits: string } | null }> {
+  const target = await handoffTarget(tenantId, ux);
+  if (!target) return { mode: "off", target };
+  if (!target.channelAccountId || !ux.whatsapp.phoneHandoff || ux.kind === "whatsapp") return { mode: "code", target };
+  // handoffTarget names a channel only while it is connected and has a number.
+  const state = await phoneHandoffState(tenantId, target.channelAccountId, true, now).catch(() => null);
+  const mode = waHandoffMode({
+    codeAvailable: true,
+    phoneHandoffOn: true,
+    numberConnected: true,
+    templateApproved: state?.template === "approved",
+    paymentBlocked: state?.paymentBlocked ?? false,
+  });
+  return { mode, target };
 }
 
 /** The workspace's WhatsApp numbers, for "Continue on WhatsApp", and whether each can take it. */
@@ -307,8 +386,14 @@ export async function getWidget(tenantId: string) {
     // automation <name>"); the header shows this employee's name when
     // settings.nameSource is "employee".
     answering: await answeringEmployee(tenantId, "WEBCHAT").catch(() => ({ employee: null, automation: null })),
-    // For "Continue on WhatsApp": the numbers to choose from, each with whether it can take it.
-    whatsappNumbers: await whatsappNumbers(tenantId),
+    // For "Continue on WhatsApp": the numbers to choose from, each with whether it can take it, and
+    // whether it can send the "leave your number" template (W2).
+    whatsappNumbers: await Promise.all((await whatsappNumbers(tenantId)).map(async (n) => ({
+      ...n,
+      phoneHandoff: await phoneHandoffState(tenantId, n.channelId, n.reason !== "not_connected").catch(() => null),
+    }))),
+    // What the widget offers now (W2): "phone", "code" or "off".
+    waHandoffMode: (await waHandoffModeFor(tenantId, settings.ux).catch(() => ({ mode: "off" as WaHandoffMode }))).mode,
     places: {
       code: webchat ? { channelId: webchat.id } : null,
       shopify: shops.map((s) => ({ channelId: s.id, shopDomain: s.config.shopDomain })),
@@ -382,6 +467,11 @@ export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>
   }
   if (webchat) {
     await prisma.channelAccount.update({ where: { id: webchat.id }, data: { credentials: next as any } });
+  }
+  // "Leave your number" switched on (W2): a payment failure recorded before is forgotten, so the
+  // person who just fixed the WABA's payment sees it work now, not in a day.
+  if (next.ux.whatsapp.phoneHandoff && !current.ux.whatsapp.phoneHandoff && next.ux.whatsapp.channelAccountId) {
+    await clearPaymentBlock(tenantId, next.ux.whatsapp.channelAccountId, SETTINGS);
   }
   const shared = fromWebchat(next);
   for (const shop of shops) {

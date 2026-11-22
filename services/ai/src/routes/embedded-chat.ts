@@ -14,10 +14,12 @@ import {
   evaluateBusinessHours, readDurableSetting, normalizeStorefrontContext,
   visitorLocaleOf, widgetTextsOf, isWidgetLocale, projectWooCommerce, wooCartLine,
   HANDOFF_TTL_SECONDS, handoffRefKey, handoffConversationKey, newHandoffRef, handoffMessage, plainHandoffMessage, handoffButtonLabel, waMeUrl,
-  type HandoffRecord, type WebchatConfig, visitorSenderName, visitorAuthor, assignSoleMemberOnHandoff } from "@chatcenter/shared";
+  type HandoffRecord, type WebchatConfig, visitorSenderName, visitorAuthor, assignSoleMemberOnHandoff,
+  outgoingMessageQueue, normalizeWhatsappPhone, waMeDigits, PHONE_HANDOFF_SOURCE, handoffButtonPayload,
+  handoffPendingKey, phoneHandoffLimitKeys, type HandoffPending } from "@chatcenter/shared";
 import crypto from "crypto";
 import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanitizer.service";
-import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf } from "../services/website-widget.service";
+import { recordWebchatSeen, hostOf, handoffTarget, mintHandoffRef, connectedWooStore, brandOf, waHandoffModeFor, phoneHandoffTemplate } from "../services/website-widget.service";
 import { answeringEmployee } from "../services/widget-assignment.service";
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
@@ -26,6 +28,7 @@ import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { tryEmit } from "../services/notifications-emit";
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
 import { reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
+import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
 import { offerCrossSellAfterCart } from "../services/woo-chat-turn.service";
 import { mintWebchatDraft, draftChannelAccount, createDraftConversation, visitorNameFromOrigin } from "../services/webchat-draft.service";
 
@@ -271,7 +274,9 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
   const promotionCurrency = promotions.length
     ? (await withCrossTenantAccess(() => resolveWooCurrency(tenantId)).catch(() => ({ currency: undefined }))).currency ?? null
     : null;
-  const target = await withCrossTenantAccess(() => handoffTarget(tenantId, config.ux)).catch(() => null);
+  // The WhatsApp handoff and which form it takes (W2): "phone", "code" (the wa.me link) or "off".
+  const { mode: waHandoffMode, target } = await withCrossTenantAccess(() => waHandoffModeFor(tenantId, config.ux))
+    .catch(() => ({ mode: "off" as const, target: null }));
   const lang = await openingLanguage(tenantId, config);
   if (config.ux.kind === "whatsapp" && !target) return null;
   // The business's wordmark on the bubble and pop-up (design 7).
@@ -291,7 +296,7 @@ async function withHandoff(tenantId: string, config: WebchatConfig, offline = fa
     nameSource: employeeName ? "employee" : "custom",
     brand,
     promotions: promotions.map(({ id: _id, ...p }) => ({ ...p, currency: promotionCurrency })),
-    features: { ...base.features, whatsappHandoff: !!target },
+    features: { ...base.features, whatsappHandoff: !!target, waHandoffMode },
     ...(target ? { whatsapp: { label: handoffButtonLabel(lang) } } : {}),
   };
 }
@@ -407,6 +412,142 @@ router.post("/handoff", messageLimiter, async (req: Request, res: Response) => {
 });
 
 /**
+ * The website conversation's one handoff code (the link and the phone send share it, W2): the stored
+ * one, else a new one tied to this conversation and number, kept a week. Null when five random codes in
+ * a row were taken (the caller answers "try again").
+ */
+async function conversationRef(conv: { id: string; tenantId: string }, whatsappChannelAccountId: string): Promise<string | null> {
+  const redis = getRedis();
+  let ref: string | null = await redis.get(handoffConversationKey(conv.id));
+  if (ref) return ref;
+  const record: HandoffRecord = { tenantId: conv.tenantId, conversationId: conv.id, whatsappChannelAccountId, createdAt: new Date().toISOString() };
+  for (let i = 0; i < 5 && !ref; i++) {
+    const candidate = newHandoffRef((n) => crypto.randomBytes(n));
+    if (await redis.set(handoffRefKey(candidate), JSON.stringify(record), "EX", HANDOFF_TTL_SECONDS, "NX")) ref = candidate;
+  }
+  if (!ref) return null;
+  await redis.set(handoffConversationKey(conv.id), ref, "EX", HANDOFF_TTL_SECONDS);
+  return ref;
+}
+
+/** Keep the visitor's own words in the website chat, with no website reply (the answer comes on WhatsApp). */
+async function recordVisitorText(conv: any, raw: unknown, source: string): Promise<string> {
+  const text = typeof raw === "string" ? sanitizeUntrusted(raw, { wrap: false, maxLength: 500 }).trim() : "";
+  if (!text) return "";
+  const written = await withCrossTenantAccess(() => prisma.message.create({
+    data: {
+      tenantId: conv.tenantId, conversationId: conv.id, channel: "WEBCHAT", direction: "INBOUND",
+      body: text, messageType: "text", status: "DELIVERED", senderName: conv.customerName || "Visitor",
+      metadata: { source },
+    },
+  }));
+  // Never through the incoming worker, so it announces itself (the rule lives in shared).
+  emitInboundMessage({ tenantId: conv.tenantId, conversation: conv, messageId: written.id, body: text, messageType: "text", channel: "WEBCHAT" });
+  return text;
+}
+
+/** One counter per limit; the first one over its maximum refuses. Counts the attempt either way. */
+async function overLimit(keys: Array<{ key: string; max: number; ttl: number }>): Promise<boolean> {
+  const redis = getRedis();
+  let over = false;
+  for (const k of keys) {
+    const n = Number(await redis.incr(k.key));
+    if (n === 1) await redis.expire(k.key, k.ttl);
+    if (n > k.max) over = true;
+  }
+  return over;
+}
+
+/** The consent line as the widget showed it: kept with the send, cut at 300 characters. */
+const CONSENT_MAX = 300;
+
+/**
+ * POST /whatsapp-phone-handoff { sessionId, sessionToken, phone, consent: true, consentText, locale?, text? }
+ *   -> 200 { data: { sent: true } }
+ * "Continue on WhatsApp? Enter your phone" (W2, 2026-11-22). The business's connected WhatsApp number
+ * sends the visitor its approved template, from its own WABA (Meta bills the business), carrying this
+ * conversation's code in the button, so the reply joins the same thread (W1). Only while the widget's
+ * mode is "phone" (waHandoffModeFor: connected, template approved, no payment failure).
+ *   400 invalid_phone | consent_required
+ *   409 not_available { data: { url, ref } }: the widget falls back to the wa.me link (the mode is not
+ *       "phone" now, or the visitor's number opted out of WhatsApp messages from this business)
+ *   429 rate_limited: one per visitor number per business number a day, two per web chat a day, five
+ *       per address an hour, 200 per business a day
+ *   404 unavailable: no such visitor chat, or no WhatsApp handoff at all
+ * No WhatsApp conversation is opened here: the template's row waits with no conversation and joins the
+ * one the visitor's answer opens (incoming-worker).
+ */
+router.post("/whatsapp-phone-handoff", messageLimiter, async (req: Request, res: Response) => {
+  try {
+    const conv = await withCrossTenantAccess(() => visitorConversationOrCreate(String(req.body?.sessionId ?? ""), req.body?.sessionToken, req));
+    if (!conv || !conv.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
+    const account = await withCrossTenantAccess(() => prisma.channelAccount.findFirst({
+      where: { id: conv.channelAccountId!, tenantId: conv.tenantId, channel: "WEBCHAT" },
+      select: { credentials: true },
+    }));
+    if (!account) { res.status(404).json({ error: "unavailable" }); return; }
+    const config = normalizeWebchatConfig(account.credentials);
+    const { mode, target } = await withCrossTenantAccess(() => waHandoffModeFor(conv.tenantId, config.ux));
+    if (!target || !target.channelAccountId) { res.status(404).json({ error: "unavailable" }); return; }
+
+    const consentText = typeof req.body?.consentText === "string" ? req.body.consentText.trim().slice(0, CONSENT_MAX) : "";
+    if (req.body?.consent !== true || !consentText) { res.status(400).json({ error: "consent_required" }); return; }
+    const digits = waMeDigits(normalizeWhatsappPhone(req.body?.phone));
+    if (!digits) { res.status(400).json({ error: "invalid_phone" }); return; }
+
+    const ref = await conversationRef(conv, target.channelAccountId);
+    if (!ref) { res.status(503).json({ error: "try_again" }); return; }
+    const asked = req.body?.locale;
+    const locale = asked === "he" || asked === "en" ? asked : await openingLanguage(conv.tenantId, config);
+    const fallback = () => res.status(409).json({ error: "not_available", data: { url: waMeUrl(target.digits, handoffMessage(ref, locale)), ref } });
+    if (mode !== "phone") { fallback(); return; }
+
+    // A number that opted out of this business's WhatsApp messages gets none, not even this one.
+    const contact = await withCrossTenantAccess(() => prisma.contact.findFirst({
+      where: { tenantId: conv.tenantId, channel: "WHATSAPP" as any, externalId: { in: [digits, `+${digits}`] } },
+      select: { optOutChannels: true },
+    }));
+    if (contact && isOptedOutOn(contact.optOutChannels, "WHATSAPP")) { fallback(); return; }
+
+    const now = new Date();
+    const limited = await overLimit(phoneHandoffLimitKeys({
+      channelAccountId: target.channelAccountId, digits, websiteConversationId: conv.id, ip: String(req.ip ?? "-"),
+      tenantId: conv.tenantId, day: now.toISOString().slice(0, 10), hour: now.toISOString().slice(0, 13),
+    }));
+    if (limited) { res.status(429).json({ error: "rate_limited" }); return; }
+
+    const { row: template, language } = await withCrossTenantAccess(() => phoneHandoffTemplate(conv.tenantId, target.channelAccountId!));
+    if (!template || template.status !== "APPROVED") { fallback(); return; }
+
+    await recordVisitorText(conv, req.body?.text, PHONE_HANDOFF_SOURCE);
+    const message = await withCrossTenantAccess(() => prisma.message.create({
+      data: {
+        tenantId: conv.tenantId, conversationId: null, channel: "WHATSAPP" as any, direction: "OUTBOUND",
+        body: template.body, messageType: "template", status: "PENDING", senderName: "System",
+        metadata: {
+          source: PHONE_HANDOFF_SOURCE,
+          template: { name: template.name, language },
+          handoff: { websiteConversationId: conv.id, ref, channelAccountId: target.channelAccountId, consent: { text: consentText, at: now.toISOString() } },
+        },
+      },
+    }));
+    const pending: HandoffPending = { ref, messageId: message.id, websiteConversationId: conv.id };
+    await getRedis().set(handoffPendingKey(target.channelAccountId, digits), JSON.stringify(pending), "EX", HANDOFF_TTL_SECONDS);
+    await outgoingMessageQueue.add("send", {
+      tenantId: conv.tenantId, conversationId: null, channel: "WHATSAPP", channelAccountId: target.channelAccountId,
+      recipientExternalId: digits, body: template.body, messageType: "template", senderName: "System", messageId: message.id,
+      templateName: template.name, templateLanguage: language,
+      templateComponents: [{ type: "button", sub_type: "quick_reply", index: "0", parameters: [{ type: "payload", payload: handoffButtonPayload(ref) }] }],
+    } as any, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+    console.log(`[wa-phone-handoff] sent conv=${conv.id} number=${target.channelAccountId} message=${message.id}`);
+    res.json({ data: { sent: true } });
+  } catch (err) {
+    console.error("Embedded chat whatsapp-phone-handoff error:", (err as Error)?.message);
+    res.status(500).json({ error: "unavailable" });
+  }
+});
+
+/**
  * POST /whatsapp-handoff { sessionId, sessionToken, locale?, text? } -> { url, ref }
  * "Continue on WhatsApp": a short code tied to this visitor's conversation,
  * and the wa.me link with the message that carries it. The same conversation
@@ -431,36 +572,14 @@ router.post("/whatsapp-handoff", messageLimiter, async (req: Request, res: Respo
     const target = await withCrossTenantAccess(() => handoffTarget(conv.tenantId, config.ux));
     if (!target) { res.status(404).json({ error: "unavailable" }); return; }
 
-    const redis = getRedis();
     // A typed number (no channel behind it): the link only. A code would ask
     // the customer to carry something nobody will ever read.
-    let ref: string | null = target.channelAccountId ? await redis.get(handoffConversationKey(conv.id)) : null;
-    if (!ref && target.channelAccountId) {
-      const record: HandoffRecord = { tenantId: conv.tenantId, conversationId: conv.id, whatsappChannelAccountId: target.channelAccountId, createdAt: new Date().toISOString() };
-      for (let i = 0; i < 5 && !ref; i++) {
-        const candidate = newHandoffRef((n) => crypto.randomBytes(n));
-        if (await redis.set(handoffRefKey(candidate), JSON.stringify(record), "EX", HANDOFF_TTL_SECONDS, "NX")) ref = candidate;
-      }
-      if (!ref) { res.status(503).json({ error: "try_again" }); return; }
-      await redis.set(handoffConversationKey(conv.id), ref, "EX", HANDOFF_TTL_SECONDS);
-    }
+    const ref = target.channelAccountId ? await conversationRef(conv, target.channelAccountId) : null;
+    if (target.channelAccountId && !ref) { res.status(503).json({ error: "try_again" }); return; }
     const asked = req.body?.locale;
     const locale = asked === "he" || asked === "en" ? asked : await openingLanguage(conv.tenantId, config);
-    const text = typeof req.body?.text === "string" ? sanitizeUntrusted(req.body.text, { wrap: false, maxLength: 500 }).trim() : "";
-    if (text) {
-      // Recorded, not queued: no website answer to a question asked on WhatsApp.
-      const written = await withCrossTenantAccess(() => prisma.message.create({
-        data: {
-          tenantId: conv.tenantId, conversationId: conv.id, channel: "WEBCHAT", direction: "INBOUND",
-          body: text, messageType: "text", status: "DELIVERED", senderName: conv.customerName || "Visitor",
-          metadata: { source: "whatsapp_handoff" },
-        },
-      }));
-      // Never through the incoming worker, so it announces itself: the
-      // assignee's phone, when a person owns this chat (a queue publish,
-      // fire-and-forget; the rule lives in shared).
-      emitInboundMessage({ tenantId: conv.tenantId, conversation: conv, messageId: written.id, body: text, messageType: "text", channel: "WEBCHAT" });
-    }
+    // Recorded, not queued: no website answer to a question asked on WhatsApp.
+    const text = await recordVisitorText(conv, req.body?.text, "whatsapp_handoff");
     const prefilled = ref ? (text ? `${text} (${ref})` : handoffMessage(ref, locale)) : (text || plainHandoffMessage(locale));
     res.json({ data: { url: waMeUrl(target.digits, prefilled), ref } });
   } catch (err) {
