@@ -5,6 +5,13 @@ import { recordBroadcastResult } from "./broadcast.worker";
 import { outboundMediaUrl } from "../lib/outbound-media-url";
 // Deep import: the pure rule, because this service's tests mock the barrel.
 import { listUnsubscribeHeaders } from "@chatcenter/shared/src/lib/list-unsubscribe";
+import * as sharedIndex from "@chatcenter/shared";
+import { PHONE_HANDOFF_SOURCE, isPaymentBlockError, recordPaymentBlock } from "@chatcenter/shared/src/lib/whatsapp-phone-handoff";
+/** The payment signal's durable setting, through the shared reader and writer (read when used). */
+const PAYMENT_SETTINGS = {
+  read: (t: string, k: string) => sharedIndex.readDurableSetting(t, k),
+  write: (t: string, k: string, v: string | null, by?: string) => sharedIndex.writeDurableSetting(t, k, v, by),
+};
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
@@ -182,6 +189,11 @@ export async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Prom
     const base = (existing?.metadata && typeof existing.metadata === "object")
       ? (existing.metadata as Record<string, any>)
       : {};
+    // "Leave your number" (W2): the business's WABA could not pay for the template (Meta 131042).
+    // The widget goes back to the WhatsApp link for a day; logged without the visitor's number.
+    if (sendErrorDetail && base.source === PHONE_HANDOFF_SOURCE && isPaymentBlockError(sendErrorDetail) && channelAccountId) {
+      await recordPaymentBlock(tenantId, channelAccountId, Number(sendErrorDetail.code), "send", new Date(), PAYMENT_SETTINGS);
+    }
     metadataUpdate = {
       ...base,
       ...(sendErrorDetail ? { sendError: sendErrorDetail } : {}),

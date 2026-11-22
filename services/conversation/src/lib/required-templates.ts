@@ -18,8 +18,14 @@
  * is fixed because voice-copilot sends it by name. It used to be created at
  * Meta automatically when the routing was saved, in English only and with no
  * person approving it; now it is a draft here like the others.
+ *
+ * website_handoff (W2, 2026-11-22) is required only on the number the website widget's "leave your
+ * number" uses, while that option is on. The number sends it to a visitor who typed their phone on the
+ * website, from the business's own WABA, so the business pays Meta for it. Its name is fixed (the ai
+ * sends it by name, PHONE_HANDOFF_TEMPLATE_NAME) and its button carries the conversation's code. The
+ * wording is Omer's (2026-11-22).
  */
-export type RequiredRole = "reopen" | "followup" | "missed_call";
+export type RequiredRole = "reopen" | "followup" | "missed_call" | "website_handoff";
 export type TemplateLanguage = "he" | "en";
 
 interface Suggestion {
@@ -34,7 +40,7 @@ interface RequiredTemplate {
   /** QUICK_REPLY, or a URL button whose {{1}} suffix the sender fills per message. */
   buttonKind?: "QUICK_REPLY" | "URL";
   /** Required only while the feature that sends it is in use. */
-  when?: "voice_missed_call";
+  when?: "voice_missed_call" | "website_phone_handoff";
   text: Record<TemplateLanguage, Suggestion>;
 }
 
@@ -68,6 +74,16 @@ export const REQUIRED_TEMPLATES: Record<RequiredRole, RequiredTemplate> = {
       en: { body: "{{1}} tried to reach you. Tap below to call them back: we'll ring your phone first.", button: "Call them back", sample: "Dana Cohen" },
     },
   },
+  website_handoff: {
+    name: "website_chat_handoff",
+    category: "UTILITY",
+    buttonKind: "QUICK_REPLY",
+    when: "website_phone_handoff",
+    text: {
+      he: { body: "שלום, תודה שפניתם אלינו באתר. אפשר להמשיך כאן את השיחה בוואטסאפ: כתבו לנו, ונשמח לעזור מאותה נקודה.", button: "להמשך השיחה", sample: "" },
+      en: { body: "Hello, thank you for contacting us on our website. You can continue the conversation here on WhatsApp: write to us and we'll gladly pick up from the same point.", button: "Continue the chat", sample: "" },
+    },
+  },
 };
 
 export const REQUIRED_ROLES = Object.keys(REQUIRED_TEMPLATES) as RequiredRole[];
@@ -76,12 +92,19 @@ export function roleOfTemplateName(name: string): RequiredRole | null {
   return REQUIRED_ROLES.find((r) => REQUIRED_TEMPLATES[r].name === name) ?? null;
 }
 
-/** The roles required for a workspace: the unconditional ones, and the conditional ones in use. */
-export function requiredRolesFor(inUse: { voiceMissedCall: boolean }): RequiredRole[] {
+/** The roles required for a number: the unconditional ones, and the conditional ones in use on it. */
+export function requiredRolesFor(inUse: { voiceMissedCall: boolean; websitePhoneHandoff?: boolean }): RequiredRole[] {
   return REQUIRED_ROLES.filter((r) => {
     const when = REQUIRED_TEMPLATES[r].when;
-    return !when || (when === "voice_missed_call" && inUse.voiceMissedCall);
+    if (!when) return true;
+    if (when === "voice_missed_call") return inUse.voiceMissedCall;
+    return when === "website_phone_handoff" && !!inUse.websitePhoneHandoff;
   });
+}
+
+/** A required template the person may not strip of its button: the feature exists for it. */
+export function buttonRequired(role: RequiredRole): boolean {
+  return role === "website_handoff" || REQUIRED_TEMPLATES[role].buttonKind === "URL";
 }
 
 /** The voice modes under which a missed call messages the agent (and so needs the template). */
@@ -99,8 +122,8 @@ export function draftFields(role: RequiredRole, language: TemplateLanguage, edit
   const def = REQUIRED_TEMPLATES[role];
   const s = def.text[language];
   const body = (edit?.body ?? s.body).trim();
-  // A URL button cannot be removed: the template exists for it.
-  const button = def.buttonKind === "URL" ? (edit?.button || s.button) : edit?.button === undefined ? s.button : edit.button;
+  // A URL button, or the handoff's quick reply (it carries the code), cannot be removed.
+  const button = buttonRequired(role) ? (edit?.button || s.button) : edit?.button === undefined ? s.button : edit.button;
   let buttons: any[] = [];
   if (button && def.buttonKind === "URL") {
     if (!voiceOrigin) throw new Error("voiceOrigin is required for a URL-button template");

@@ -299,3 +299,52 @@ describe("missed_call: required only while a voice number uses it (B1)", () => {
     expect(H.templates).toHaveLength(0);
   });
 });
+
+describe("website_handoff: required only on the number the widget's \"leave your number\" uses, while on (W2)", () => {
+  const webchat = (wa: any) => ({ id: "wc1", tenantId: "T", channel: "WEBCHAT", connectionStatus: "CONNECTED", isActive: true, credentials: { v: 2, ux: { whatsapp: wa } } });
+  const HE = "שלום, תודה שפניתם אלינו באתר. אפשר להמשיך כאן את השיחה בוואטסאפ: כתבו לנו, ונשמח לעזור מאותה נקודה.";
+  const EN = "Hello, thank you for contacting us on our website. You can continue the conversation here on WhatsApp: write to us and we'll gladly pick up from the same point.";
+
+  it("★ not listed while the option is off, on another number, or the handoff itself is off", async () => {
+    for (const wa of [
+      { enabled: true, channelAccountId: "ca1", phoneHandoff: false },
+      { enabled: true, channelAccountId: "ca2", phoneHandoff: true },
+      { enabled: false, channelAccountId: "ca1", phoneHandoff: true },
+    ]) {
+      H.accounts.push(webchat(wa));
+      expect((await getRequired()).body.data.items.map((i: any) => i.role)).toEqual(["reopen", "followup"]);
+      H.accounts.pop();
+    }
+  });
+
+  it("★ listed while on for this number: conditional, Omer's exact Hebrew wording, the quick-reply button, no variables", async () => {
+    H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: true }));
+    const items = (await getRequired()).body.data.items;
+    expect(items.map((i: any) => [i.role, i.conditional])).toEqual([["reopen", false], ["followup", false], ["website_handoff", true]]);
+    expect(items[2]).toMatchObject({ name: "website_chat_handoff", language: "he", category: "UTILITY", state: "missing", body: HE, buttons: [{ type: "QUICK_REPLY", text: "להמשך השיחה" }] });
+  });
+
+  it("an English workspace gets the matching English wording", async () => {
+    H.locale = "en";
+    H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: true }));
+    const item = (await getRequired()).body.data.items[2];
+    expect(item).toMatchObject({ body: EN, buttons: [{ type: "QUICK_REPLY", text: "Continue the chat" }] });
+  });
+
+  it("★ approved by the person: a DRAFT with the button, which cannot be removed (it carries the code); nothing reaches Meta", async () => {
+    H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: true }));
+    const r = await save({ role: "website_handoff", button: null });
+    expect(r.status).toBe(201);
+    expect(H.templates[0]).toMatchObject({ name: "website_chat_handoff", status: "DRAFT", body: HE, variables: [], channelAccountId: "ca1" });
+    expect(H.templates[0].buttons).toEqual([{ type: "QUICK_REPLY", text: "להמשך השיחה" }]);
+    expect(H.fetches).toHaveLength(0);
+  });
+
+  it("submitted only when the person says so (Meta doubled here)", async () => {
+    H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: true }));
+    const r = await save({ role: "website_handoff", submit: true });
+    expect(r.status).toBe(200);
+    const payload = JSON.parse(H.fetches.find((f) => f.init?.method === "POST")!.init.body);
+    expect(payload).toMatchObject({ name: "website_chat_handoff", category: "UTILITY", language: "he" });
+  });
+});

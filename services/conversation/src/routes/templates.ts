@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, decryptCredentials, assertPublicUrl, metaGraphBaseUrl, resolveVoicePublicUrl, AppOriginError, resolvePrimaryWhatsAppAccount } from "@chatcenter/shared";
 import { REMOVAL_LINE, hasRemovalLine } from "@chatcenter/shared/src/lib/marketing-optout";
+import { normalizeWebchatConfig } from "@chatcenter/shared/src/lib/webchat-widget";
 import { REQUIRED_TEMPLATES, REQUIRED_ROLES, draftFields, stateOf, languagesFor, requiredRolesFor, type RequiredRole, type TemplateLanguage } from "../lib/required-templates";
 
 const router = Router();
@@ -314,6 +315,22 @@ async function voiceMissedCallInUse(tenantId: string): Promise<boolean> {
   return !!v;
 }
 
+/**
+ * Is the website widget's "leave your number" on, on THIS number (W2)? The widget's settings live on the
+ * workspace's web chat; the option is in use when the WhatsApp handoff is on, the option is on, and it
+ * names this number.
+ */
+export async function websitePhoneHandoffOn(tenantId: string, channelAccountId: string): Promise<boolean> {
+  const webchat = await prisma.channelAccount.findFirst({
+    where: { tenantId, channel: "WEBCHAT" as any },
+    orderBy: { createdAt: "asc" },
+    select: { credentials: true },
+  });
+  if (!webchat) return false;
+  const wa = normalizeWebchatConfig(webchat.credentials).ux.whatsapp;
+  return wa.enabled && wa.phoneHandoff && wa.channelAccountId === channelAccountId;
+}
+
 /** The public voice address, or null when it is not configured (production without VOICE_PUBLIC_URL). */
 function voiceOrigin(): string | null {
   try { return resolveVoicePublicUrl(); } catch (e) { if (e instanceof AppOriginError) return null; throw e; }
@@ -336,7 +353,11 @@ router.get("/required", authenticate, resolveTenant, requireOnboardingOrActiveTe
     const defaultLanguage = languagesFor(tenant?.defaultLocale)[0];
     const languages: TemplateLanguage[] = asked ? [asked as TemplateLanguage] : [defaultLanguage];
     // missed_call only while a voice number uses it (B1).
-    const roles = requiredRolesFor({ voiceMissedCall: await voiceMissedCallInUse(tenantId) });
+    // website_handoff only on the number the widget's "leave your number" uses, while it is on (W2).
+    const roles = requiredRolesFor({
+      voiceMissedCall: await voiceMissedCallInUse(tenantId),
+      websitePhoneHandoff: await websitePhoneHandoffOn(tenantId, account.id),
+    });
     const origin = voiceOrigin();
     const names = roles.map((r) => REQUIRED_TEMPLATES[r].name);
     const existing = await prisma.messageTemplate.findMany({

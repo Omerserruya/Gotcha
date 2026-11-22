@@ -28,6 +28,13 @@ import {
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 import type { NormalizedInboundMessage, NormalizedStatusUpdate, NormalizedOutboundEcho } from "@chatcenter/shared";
+import * as sharedIndex from "@chatcenter/shared";
+import { paymentBlockFromStatus } from "@chatcenter/shared/src/lib/whatsapp-phone-handoff";
+/** The payment signal's durable setting, through the shared reader and writer (read when used). */
+const PAYMENT_SETTINGS = {
+  read: (t: string, k: string) => sharedIndex.readDurableSetting(t, k),
+  write: (t: string, k: string, v: string | null, by?: string) => sharedIndex.writeDurableSetting(t, k, v, by),
+};
 
 const router = Router();
 
@@ -729,6 +736,9 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
         ...failureData,
       },
     });
+    // "Leave your number" (W2): Meta accepted the template, then could not bill the business's WABA
+    // (131042 on delivery). The widget goes back to the WhatsApp link for a day.
+    await paymentBlockFromStatus(tenantId, message, { mapped: mappedStatus, error: status.error as any }, new Date(), PAYMENT_SETTINGS).catch(() => false);
     // Mirror onto ScheduledMessage so its UI reflects the real outcome
     // instead of the optimistic SENT the scheduled worker set earlier.
     if (mappedStatus === "FAILED" && (message as any).scheduledMessageId) {

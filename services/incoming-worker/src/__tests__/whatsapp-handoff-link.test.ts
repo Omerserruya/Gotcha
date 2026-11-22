@@ -39,7 +39,14 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
         findFirst: async (a: any) => H.contacts.find((c) => match(c, a.where)) ?? null,
         update: async (a: any) => { const c = H.contacts.find((x) => x.id === a.where.id); Object.assign(c, a.data); return c; },
       },
-      message: { create: async (a: any) => { const m = { id: `m${H.messages.length + 1}`, ...a.data }; H.messages.push(m); return m; } },
+      message: {
+        create: async (a: any) => { const m = { id: `m${H.messages.length + 1}`, ...a.data }; H.messages.push(m); return m; },
+        updateMany: async (a: any) => {
+          const hit = H.messages.filter((m) => m.id === a.where.id && m.tenantId === a.where.tenantId && (m.conversationId ?? null) === a.where.conversationId);
+          hit.forEach((m) => Object.assign(m, a.data));
+          return { count: hit.length };
+        },
+      },
       $transaction: async (ops: any[]) => Promise.all(ops),
     },
   };
@@ -222,5 +229,51 @@ describe("★ one thread: the divider's time, and the website chat archived", ()
     expect(H.messages).toHaveLength(1);
     expect(H.messages[0].metadata).toMatchObject({ systemEvent: "continued_from_website", fromConversationId: null });
     expect(H.messages[0].createdAt).toBeUndefined();
+  });
+});
+
+describe("W2: the template's answer (2026-11-22)", () => {
+  const PENDING = "wahandoff:pending:wa_1:972521112222";
+  const sentRow = (o: any = {}) => ({ id: "tpl_msg", tenantId: "T", conversationId: null, messageType: "template", metadata: { source: "website_phone_handoff" }, ...o });
+  beforeEach(() => {
+    H.messages = [sentRow()];
+    H.kv.set(PENDING, JSON.stringify({ ref: REF, messageId: "tpl_msg", websiteConversationId: "web1" }));
+  });
+
+  it("★ the button tapped: linked by its code, and the sent template joins this conversation", async () => {
+    const r = await arrive({ body: "להמשך השיחה", buttonPayload: `wah_${REF}`, senderId: "972521112222" });
+    expect(r).toMatchObject({ linked: true, websiteConversationId: "web1" });
+    expect(H.messages.find((m) => m.id === "tpl_msg").conversationId).toBe("wa_conv");
+    expect(H.kv.has(PENDING)).toBe(false);
+  });
+
+  it("★ a reply typed instead of the button (no code in it): linked by the code the template carried", async () => {
+    const r = await arrive({ body: "שלום, אני רוצה להמשיך", buttonPayload: null, senderId: "+972521112222" });
+    expect(r).toMatchObject({ linked: true, websiteConversationId: "web1" });
+    expect(H.messages.find((m) => m.id === "tpl_msg").conversationId).toBe("wa_conv");
+  });
+
+  it("another sender: nothing taken, nothing attached, no link", async () => {
+    const r = await arrive({ body: "hi", senderId: "972529999999" });
+    expect(r).toEqual({ linked: false, reason: "no_code" });
+    expect(H.messages.find((m) => m.id === "tpl_msg").conversationId).toBeNull();
+    expect(H.kv.has(PENDING)).toBe(true);
+  });
+
+  it("the template row is attached once: a row that already has a conversation is never moved", async () => {
+    H.messages = [sentRow({ conversationId: "elsewhere" })];
+    await arrive({ body: "hi", senderId: "972521112222" });
+    expect(H.messages[0].conversationId).toBe("elsewhere");
+  });
+
+  it("★ the button alone links (no waiting send: it lapsed, or the number Meta reports differs from the one typed)", async () => {
+    H.kv.delete(PENDING);
+    const r = await arrive({ body: "להמשך השיחה", buttonPayload: `wah_${REF}`, senderId: "5511999998888" });
+    expect(r).toMatchObject({ linked: true, websiteConversationId: "web1" });
+  });
+
+  it("a payload that is not ours links nothing by itself", async () => {
+    H.kv.delete(PENDING);
+    expect(await arrive({ body: "hi", buttonPayload: "apv_123", senderId: "972521112222" })).toEqual({ linked: false, reason: "no_code" });
   });
 });

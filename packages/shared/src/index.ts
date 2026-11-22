@@ -1397,6 +1397,12 @@ export {
   type HandoffRecord,
   type HandoffPageContext,
 } from "./lib/whatsapp-handoff";
+export {
+  PHONE_HANDOFF_TEMPLATE_NAME, PHONE_HANDOFF_SOURCE, waHandoffMode, handoffButtonPayload, handoffRefFromButton,
+  handoffPendingKey, PHONE_HANDOFF_LIMITS, phoneHandoffLimitKeys, PAYMENT_BLOCK_CODES, PAYMENT_BLOCK_LAPSE_MS,
+  paymentBlockKey, isPaymentBlockError, paymentBlockedAt, isPaymentBlocked, recordPaymentBlock, clearPaymentBlock, paymentBlockFromStatus,
+  type WaHandoffMode, type HandoffPending,
+} from "./lib/whatsapp-phone-handoff";
 
 // The business's real conversations (no rehearsals, no test rows): one definition.
 export { REAL_CONVERSATION } from "./lib/real-conversation";

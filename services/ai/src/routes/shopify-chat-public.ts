@@ -337,7 +337,8 @@ router.post("/bootstrap", bootstrapLimiter, async (req: Request, res: Response) 
           ...widget,
           // The business's wordmark on the bubble and pop-up (design 7).
           brand: await brandOf(channel.tenantId).catch(() => null),
-          features: { ...widget.features, whatsappHandoff: !!waTarget },
+          // The store chat offers the wa.me link only (W2: "leave your number" is the web chat's).
+          features: { ...widget.features, whatsappHandoff: !!waTarget, waHandoffMode: waTarget ? "code" : "off" },
         },
       },
     });

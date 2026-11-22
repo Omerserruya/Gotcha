@@ -55,6 +55,8 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       conversation: { findUnique: async (a: any) => H.conversations.find((c) => c.id === a.where.id) ?? null },
       message: { create: async (a: any) => { H.created.push(a.data); return { id: "m1", ...a.data }; } },
       flowCanvas: { findUnique: async () => null },
+      // "Leave your number" (W2): no template made here.
+      messageTemplate: { findMany: async () => [] },
       businessProfile: { findUnique: async (a: any) => (a.where.tenantId === "T" ? H.profile : null) },
       tenant: { findUnique: async (a: any) => (a.where.id === "T" ? { name: "Workspace T" } : null) },
       shopifyChatInstallation: { findMany: async () => [] },
@@ -161,11 +163,14 @@ describe("★ POST /whatsapp-handoff", () => {
 describe("settings", () => {
   it("lists the numbers with why one cannot take it", async () => {
     const d = (await request(app()).get("/api/website-widget")).body.data;
+    // Each with whether it can send the "leave your number" template (W2): none made here.
+    const none = { template: "missing", templateReason: null, paymentBlocked: false, ready: false };
     expect(d.whatsappNumbers).toEqual([
-      { channelId: "wa_1", name: "WA wa_1", phone: "+972 52-555-1234", available: true },
-      { channelId: "wa_old", name: "WA wa_old", phone: null, available: false, reason: "number_unknown" },
-      { channelId: "wa_off", name: "WA wa_off", phone: "+972 52-555-9999", available: false, reason: "not_connected" },
+      { channelId: "wa_1", name: "WA wa_1", phone: "+972 52-555-1234", available: true, phoneHandoff: none },
+      { channelId: "wa_old", name: "WA wa_old", phone: null, available: false, reason: "number_unknown", phoneHandoff: none },
+      { channelId: "wa_off", name: "WA wa_off", phone: "+972 52-555-9999", available: false, reason: "not_connected", phoneHandoff: none },
     ]);
+    expect(d.waHandoffMode).toBe("code");
     expect(d.settings.ux).toMatchObject({ look: "gotcha", whatsapp: { enabled: true, channelAccountId: "wa_1" } });
   });
 
@@ -297,7 +302,7 @@ describe("★ a number connected before WhatsAppNumber rows existed", () => {
   it("the phone the account stored at connect counts: available, and the handoff opens it", async () => {
     H.accounts.push(wa("wa_legacy", { platformMeta: { displayPhoneNumber: "+972 55-777-3421" } }));
     const d = (await request(app()).get("/api/website-widget")).body.data;
-    expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_legacy")).toEqual({ channelId: "wa_legacy", name: "WA wa_legacy", phone: "+972 55-777-3421", available: true });
+    expect(d.whatsappNumbers.find((n: any) => n.channelId === "wa_legacy")).toEqual({ channelId: "wa_legacy", name: "WA wa_legacy", phone: "+972 55-777-3421", available: true, phoneHandoff: expect.objectContaining({ template: "missing" }) });
     H.accounts[0] = web({ whatsapp: { enabled: true, channelAccountId: "wa_legacy" } });
     const r = await handoff();
     expect(r.body.data.url).toMatch(/^https:\/\/wa\.me\/972557773421\?text=/);

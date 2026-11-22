@@ -759,6 +759,10 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         body,
         // The divider is dated just before this message (one thread, 2026-11-22).
         whatsappMessageAt: message.createdAt,
+        // "Leave your number" (W2): the template's button carries the code, and a template sent to
+        // this number waits for its first message.
+        buttonPayload: interactiveReply?.payload ?? null,
+        senderId,
       });
       if (linked.linked) console.log(linked.websiteConversationId
         ? `[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`
