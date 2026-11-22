@@ -80,6 +80,11 @@ export const AuditAction = {
   // ── Self sign-up ──
   // An operator changed the platform's sign-up settings (metadata: before, after).
   SELF_SIGNUP_SETTINGS_CHANGED: "platform.self_signup_settings_changed",
+  // An admin switched "join by email domain" on or off (metadata: domain, on).
+  JOIN_BY_DOMAIN_CHANGED: "tenant.join_by_domain_changed",
+  // A person who signed up joined an organization by their email domain
+  // (metadata: email, domain, role).
+  MEMBER_JOINED_BY_DOMAIN: "member.joined_by_domain",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

@@ -7,10 +7,13 @@
  * whatever happens here. The price is that a failure here has no screen to
  * appear on, so every failure is logged with enough to act on.
  *
- * Three ends:
+ * Four ends:
  *   - the address already has an account: nothing is created. The person gets
  *     the sign-in hint, or a fresh set-password link when they never finished
  *     setting one;
+ *   - an organization holds the address's domain (join by domain): the
+ *     person joins it as an agent, the way an invitee does, and no
+ *     organization is created. The business name on the form is not used;
  *   - a new organization, made by the same function the console's "new
  *     organization" uses, in trial mode, with the days and credits the
  *     platform settings name today;
@@ -33,6 +36,7 @@ import {
 } from "@chatcenter/shared";
 import { createTenantWithAdmin, LICENSE_DOMAINS } from "./tenant-creation.service";
 import { sendSetupLinkEmail, sendSignInHintEmail } from "./notification.service";
+import { organizationHolding, admitByDomain } from "./domain-join.service";
 import { termsConsentRows } from "../lib/terms-consent";
 import { signupSlug, type SignupInput } from "../lib/self-signup-input";
 
@@ -55,6 +59,10 @@ export type SelfSignupOutcome =
   | { kind: "existing_setup_link" }
   /** An account that cannot be mailed anything true: no way to sign in, or no organization to set a password into. */
   | { kind: "existing_no_mail" }
+  /** Joined the organization that holds the address's domain, as an agent. */
+  | { kind: "joined_by_domain"; tenantId: string }
+  /** An organization holds the domain and could not take the person: nothing was created, nobody was mailed. */
+  | { kind: "not_joined"; tenantId: string; reason: string }
   | { kind: "duplicate_in_flight" }
   | { kind: "closed" }
   | { kind: "failed"; reason: string };
@@ -72,7 +80,7 @@ export async function runSelfSignup(req: SelfSignupRequest, now: Date = new Date
   inFlight.add(req.email);
   try {
     const outcome = await handle(req, now);
-    if (outcome.kind === "failed" || outcome.kind === "created_incomplete") {
+    if (outcome.kind === "failed" || outcome.kind === "created_incomplete" || outcome.kind === "not_joined") {
       console.error(`[self-signup] ${outcome.kind}:`, JSON.stringify({ ...outcome, emailDomain: req.email.split("@")[1] }));
     } else {
       console.log(`[self-signup] ${outcome.kind}`);
@@ -98,6 +106,18 @@ async function handle(req: SelfSignupRequest, now: Date): Promise<SelfSignupOutc
     select: { id: true, authentikSubject: true },
   });
   if (identity) return existingPerson(identity, req);
+
+  // A domain that an organization holds never opens a second organization,
+  // also when that organization cannot take the person today.
+  const org = await organizationHolding(req.email);
+  if (org) {
+    const admitted = await admitByDomain(org, { email: req.email, name: req.name });
+    if (admitted.kind !== "joined") return admitted;
+    await recordAcceptance(org.tenantId, admitted.userId, req, now).catch((err) =>
+      console.error("[self-signup] the Terms acceptance was not recorded:", org.tenantId, (err as Error)?.message),
+    );
+    return { kind: "joined_by_domain", tenantId: org.tenantId };
+  }
 
   return newOrganization(req, state, now);
 }

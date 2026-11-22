@@ -21,6 +21,7 @@ import {
   getMfaEnrollmentMap,
   type MfaEnrollmentState,
 } from "@chatcenter/shared";
+import { joinDomainView, setJoinDomain } from "../services/domain-join.service";
 
 const router = Router();
 router.use(authenticate, resolveTenant);
@@ -301,6 +302,46 @@ router.get("/review", requirePermissionOrRole("settings:workspace:update", "ADMI
     return { ...m, required: req.required, requirementReason: req.reason, compliant: !req.required || m.enrolled };
   });
   res.json({ idpAvailable, members });
+});
+
+// ── Join by email domain ─────────────────────────────────────────────────────
+// A new address at the organization's domain that signs up joins this
+// organization. The domain is the asking admin's own: it is read from their
+// membership, never from the request. Answers are bare (no envelope).
+
+async function askingAdmin(req: Request): Promise<{ tenantId: string; userId: string; email: string } | null> {
+  const tenantId = req.tenantId || req.user!.tenantId;
+  const me = await prisma.user.findFirst({
+    where: { id: req.user!.userId, tenantId, isActive: true },
+    select: { id: true, email: true },
+  });
+  return me ? { tenantId, userId: me.id, email: me.email } : null;
+}
+
+router.get("/join-domain", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  const admin = await askingAdmin(req);
+  if (!admin) { res.status(403).json({ error: "forbidden" }); return; }
+  const view = await joinDomainView(admin.tenantId, admin.email);
+  if (!view) { res.status(409).json({ error: "no_domain" }); return; }
+  res.json(view);
+});
+
+router.put("/join-domain", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  const on = (req.body ?? {}).joinByDomain;
+  if (typeof on !== "boolean") {
+    res.status(400).json({ error: "validation", fields: { joinByDomain: on === undefined || on === null ? "required" : "invalid" } });
+    return;
+  }
+  const admin = await askingAdmin(req);
+  if (!admin) { res.status(403).json({ error: "forbidden" }); return; }
+  try {
+    const result = await setJoinDomain(admin.tenantId, admin, on);
+    if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+    res.json(result.view);
+  } catch (err) {
+    console.error("[tenant-security] join-domain was not saved:", (err as Error)?.message ?? err);
+    res.status(500).json({ error: "not_saved" });
+  }
 });
 
 export default router;

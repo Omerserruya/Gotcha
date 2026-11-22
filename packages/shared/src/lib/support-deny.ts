@@ -13,6 +13,7 @@
  *   support_denied:ownership  removing a user, changing a role, inviting an admin;
  *                             signing a member out (one session or all others),
  *                             removing an MFA device, changing the MFA policy;
+ *                             switching join by email domain on or off;
  *                             removing a member's sign-in connection (Google);
  *                             accepting the Terms in a member's name;
  *                             any change to roles, role assignments or grants
@@ -69,6 +70,8 @@ const RULES: Rule[] = [
   // A person's own acceptance of the Terms: theirs to give, not support's (2026-11-22).
   { methods: ["POST"], path: /^\/api\/account\/terms\/accept$/, code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/tenant\/security$/, code: "support_denied:ownership" },
+  // Who may join the organization by their email domain: an admin's own domain, never support's (2026-11-22).
+  { methods: "WRITE", path: /^\/api\/tenant\/security\/join-domain$/, code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/permissions\/(users|roles)(\/|$)/, code: "support_denied:ownership" },
   // A person's own notification settings (and their WhatsApp number): theirs, not support's (2026-11-02).
   { methods: "WRITE", path: /^\/api\/notification-preferences\/me(\/|$)/, code: "support_denied:ownership" },

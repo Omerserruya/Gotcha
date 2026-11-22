@@ -294,6 +294,7 @@ const ADMINS_FOR = new Set([
   "invoice.paid", "payment.failed", "subscription.activated", "subscription.canceled", "subscription.past_due", "subscription.plan_changed",
   "subscription.resumed", "subscription.suspended", "subscription.trial_started", "credit.threshold", "credit.exhausted",
   "credit.auto_purchase_succeeded", "credit.auto_purchase_failed", "credit.auto_purchase_ceiling_reached",
+  "member.joined_by_domain",
 ]);
 export function defaultRoute(event: SystemEvent): { recipients: RecipientSpec; channels: string[]; priority: string; conditions: null; departmentId: null } | null {
   const base = { priority: "MEDIUM", conditions: null, departmentId: null } as const;

@@ -283,3 +283,39 @@ export function isPublicEmailDomain(domain: unknown): boolean {
   }
   return false;
 }
+
+// ── Join by domain ───────────────────────────────────────────────────────────
+
+/**
+ * Durable setting on an organization: a new address at this domain that signs
+ * up joins the organization instead of opening one of its own.
+ */
+export const JOIN_BY_DOMAIN_KEY = "joinByDomain";
+
+export interface JoinByDomain {
+  /** The one domain, lowercased. Never a public mail domain. */
+  domain: string;
+  /** The admin who switched it on (their user id), when known. */
+  enabledBy: string | null;
+  /** When it was switched on (ISO), "" when the stored value does not say. */
+  enabledAt: string;
+}
+
+/**
+ * The stored setting, read strictly. Null means off: nothing stored, a value
+ * that is not an object, no usable domain, or a domain that is public mail. A
+ * domain that becomes public (the list grows) therefore stops joining anyone
+ * the day the list ships, with no data change.
+ */
+export function parseJoinByDomain(raw: unknown): JoinByDomain | null {
+  const o = typeof raw === "string" ? parseObject(raw) : raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  // A domain only: an address ("dana@acme.com") is not read as its domain.
+  if (!o || typeof o.domain !== "string" || o.domain.includes("@")) return null;
+  const domain = emailDomain(`x@${o.domain}`);
+  if (!domain || isPublicEmailDomain(domain)) return null;
+  return {
+    domain,
+    enabledBy: typeof o.enabledBy === "string" && o.enabledBy ? o.enabledBy : null,
+    enabledAt: typeof o.enabledAt === "string" ? o.enabledAt : "",
+  };
+}

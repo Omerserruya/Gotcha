@@ -29,6 +29,10 @@ const H = vi.hoisted(() => ({
   hintFails: false,
   setupLinks: [] as any[],
   calls: [] as string[],
+  org: null as any,
+  orgFails: false,
+  admit: null as any,
+  admissions: [] as any[],
 }));
 
 vi.mock("@chatcenter/shared", async (importOriginal) => {
@@ -81,6 +85,15 @@ vi.mock("../services/tenant-creation.service", () => ({
   },
 }));
 
+vi.mock("../services/domain-join.service", () => ({
+  organizationHolding: async (email: string) => {
+    H.calls.push("holding:" + email);
+    if (H.orgFails) throw new Error("db down");
+    return H.org;
+  },
+  admitByDomain: async (...a: any[]) => { H.admissions.push(a); return H.admit; },
+}));
+
 vi.mock("../services/notification.service", () => ({
   sendSignInHintEmail: async (...a: any[]) => { H.hints.push(a); if (H.hintFails) throw new Error("smtp down"); },
   sendSetupLinkEmail: async (...a: any[]) => { H.setupLinks.push(a); },
@@ -110,6 +123,7 @@ beforeEach(() => {
   H.durable = []; H.durableFails = false;
   H.consents = []; H.consentFails = false;
   H.audits = []; H.hints = []; H.hintFails = false; H.setupLinks = []; H.calls = [];
+  H.org = null; H.orgFails = false; H.admit = null; H.admissions = [];
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   vi.spyOn(console, "log").mockImplementation(() => undefined);
 });
@@ -410,5 +424,88 @@ describe("what the log may hold", () => {
     expect(line).toContain("acme.co.il");
     expect(line).not.toContain("dana@");
     expect(line).not.toContain("Dana Katz");
+  });
+});
+
+describe("an address at a domain an organization holds: join it, never a second organization", () => {
+  const ORG = { tenantId: "t_acme", domain: "acme.co.il", open: true };
+
+  it("the person joins as the organization admits them, and their Terms acceptance is kept under it", async () => {
+    H.org = ORG;
+    H.admit = { kind: "joined", tenantId: "t_acme", userId: "u_dana" };
+    expect(await runSelfSignup(REQ, NOW)).toEqual({ kind: "joined_by_domain", tenantId: "t_acme" });
+    expect(H.admissions).toEqual([[ORG, { email: "dana@acme.co.il", name: "Dana Katz" }]]);
+    expect(H.creations).toEqual([]);
+    expect(H.durable).toEqual([]);
+    expect(H.consents.map((r) => [r.tenantId, r.subjectId, r.purpose, r.source, r.granted])).toEqual([
+      ["t_acme", "u_dana", "terms_of_service", "self_signup", true],
+      ["t_acme", "u_dana", "privacy_policy", "self_signup", true],
+    ]);
+    noMail();
+  });
+
+  it("the business name on the form is not used for anything", async () => {
+    H.org = ORG;
+    H.admit = { kind: "joined", tenantId: "t_acme", userId: "u_dana" };
+    await runSelfSignup({ ...REQ, businessName: "My Own Shop" }, NOW);
+    expect(JSON.stringify([H.admissions, H.consents, H.durable, H.audits])).not.toContain("My Own Shop");
+  });
+
+  it.each([["seats_full"], ["organization_closed"], ["already_member"], ["email_taken"]])(
+    "not admitted (%s): nothing is created, nobody is mailed, and no organization of their own",
+    async (reason) => {
+      H.org = reason === "organization_closed" ? { ...ORG, open: false } : ORG;
+      H.admit = { kind: "not_joined", tenantId: "t_acme", reason };
+      expect(await runSelfSignup(REQ, NOW)).toEqual({ kind: "not_joined", tenantId: "t_acme", reason });
+      nothingCreated(); noMail();
+      expect(H.audits).toEqual([]);
+    },
+  );
+
+  it("an acceptance that could not be recorded does not undo the join", async () => {
+    H.org = ORG;
+    H.admit = { kind: "joined", tenantId: "t_acme", userId: "u_dana" };
+    H.consentFails = true;
+    expect(await runSelfSignup(REQ, NOW)).toEqual({ kind: "joined_by_domain", tenantId: "t_acme" });
+    expect(H.creations).toEqual([]);
+  });
+
+  it("a person who already has an account gets the sign-in hint: the domain is not even looked up", async () => {
+    H.org = ORG;
+    H.identity = { id: "i1", authentikSubject: "sub-1" };
+    H.lastLogin = new Date("2026-11-01T00:00:00Z");
+    H.member = { id: "u1", tenantId: "t_other", name: "Dana Katz" };
+    const out = await runSelfSignup(REQ, NOW);
+    expect(out.kind).toBe("existing_sign_in_hint");
+    expect(H.calls.some((c) => c.startsWith("holding:"))).toBe(false);
+    expect(H.admissions).toEqual([]);
+  });
+
+  it("the lookup comes after the account check and before any organization is made", async () => {
+    H.org = ORG;
+    H.admit = { kind: "joined", tenantId: "t_acme", userId: "u_dana" };
+    await runSelfSignup(REQ, NOW);
+    const order = H.calls.map((c) => c.split(":")[0]);
+    expect(order.indexOf("holding")).toBeGreaterThan(order.indexOf("identity"));
+    expect(H.calls).toContain("holding:dana@acme.co.il");
+  });
+
+  it("nobody holds the domain: the person opens their own organization, as before", async () => {
+    expect(await runSelfSignup(REQ, NOW)).toEqual({ kind: "created", tenantId: "t_new" });
+    expect(H.calls).toContain("holding:dana@acme.co.il");
+    expect(H.admissions).toEqual([]);
+  });
+
+  it("sign-up closed: the domain is not looked up", async () => {
+    H.org = ORG;
+    H.state = { ...H.state, enabled: false, open: false };
+    expect((await runSelfSignup(REQ, NOW)).kind).toBe("closed");
+    expect(H.calls.some((c) => c.startsWith("holding:"))).toBe(false);
+  });
+
+  it("a lookup that breaks opens NO organization: a domain that may be held is never forked", async () => {
+    H.orgFails = true;
+    await expect(runSelfSignup(REQ, NOW)).resolves.toEqual({ kind: "failed", reason: "db down" });
+    nothingCreated(); noMail();
   });
 });

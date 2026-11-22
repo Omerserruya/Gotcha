@@ -37,7 +37,7 @@ import {
   parseSelfSignupSettings, validateSelfSignupSettings, selfSignupEnvEnabled,
   readSelfSignupSettings, writeSelfSignupSettings, selfSignupState,
   newSelfSignupOrigin, parseSelfSignupOrigin, cardDueAt, cardIsDue,
-  emailDomain, isPublicEmailDomain,
+  emailDomain, isPublicEmailDomain, JOIN_BY_DOMAIN_KEY, parseJoinByDomain,
 } from "../lib/self-signup";
 
 const GOOD = { enabled: true, trialDays: 21, cardRequiredAfterDays: 7, trialCredits: 2000 };
@@ -299,5 +299,50 @@ describe("a domain anyone can open a mailbox at", () => {
 
   it.each([[""], [null], [undefined], [7]])("%j is not a domain at all", (d) => {
     expect(isPublicEmailDomain(d)).toBe(false);
+  });
+});
+
+describe("an organization's join-by-domain setting, read strictly", () => {
+  const AT = "2026-11-22T16:00:00.000Z";
+
+  it("lives under its own key", () => {
+    expect(JOIN_BY_DOMAIN_KEY).toBe("joinByDomain");
+  });
+
+  it("a stored object reads back as it was written", () => {
+    expect(parseJoinByDomain({ domain: "acme-flowers.co.il", enabledBy: "u_dana", enabledAt: AT })).toEqual({
+      domain: "acme-flowers.co.il", enabledBy: "u_dana", enabledAt: AT,
+    });
+  });
+
+  it("the cached string form reads the same", () => {
+    expect(parseJoinByDomain(JSON.stringify({ domain: "acme-flowers.co.il", enabledBy: "u_dana", enabledAt: AT }))).toEqual({
+      domain: "acme-flowers.co.il", enabledBy: "u_dana", enabledAt: AT,
+    });
+  });
+
+  it.each([["ACME-Flowers.CO.IL"], [" acme-flowers.co.il "], ["acme-flowers.co.il."]])("%j is the same domain, in one form", (domain) => {
+    expect(parseJoinByDomain({ domain, enabledBy: "u1", enabledAt: AT })!.domain).toBe("acme-flowers.co.il");
+  });
+
+  it.each([["gmail.com"], ["GMAIL.com"], ["walla.co.il"], ["outlook.com"], ["mail.yahoo.com"]])(
+    "%s: a public mail domain is never a setting, whoever wrote the row",
+    (domain) => {
+      expect(parseJoinByDomain({ domain, enabledBy: "u1", enabledAt: AT })).toBeNull();
+    },
+  );
+
+  it.each([
+    [null], [undefined], [""], ["acme-flowers.co.il"], ["{not json"], [7], [true], [[]], [["acme-flowers.co.il"]], [{}],
+    [{ domain: "" }], [{ domain: 7 }], [{ domain: null }], [{ domain: "acme" }], [{ domain: "dana@acme-flowers.co.il" }],
+    [{ domain: "acme flowers.co.il" }], [{ enabledBy: "u1", enabledAt: AT }],
+  ])("%j is no setting", (raw) => {
+    expect(parseJoinByDomain(raw)).toBeNull();
+  });
+
+  it("who and when are kept only when they are text", () => {
+    expect(parseJoinByDomain({ domain: "acme-flowers.co.il" })).toEqual({ domain: "acme-flowers.co.il", enabledBy: null, enabledAt: "" });
+    expect(parseJoinByDomain({ domain: "acme-flowers.co.il", enabledBy: 7, enabledAt: 9 })).toEqual({ domain: "acme-flowers.co.il", enabledBy: null, enabledAt: "" });
+    expect(parseJoinByDomain({ domain: "acme-flowers.co.il", enabledBy: "", enabledAt: AT })).toEqual({ domain: "acme-flowers.co.il", enabledBy: null, enabledAt: AT });
   });
 });

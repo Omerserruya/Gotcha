@@ -159,6 +159,16 @@ export const EVENT_CATALOGUE: CatalogueEntry[] = [
       "rejected - not continuous monitoring, and not 'the provider is down'.",
   },
   {
+    key: "member.joined_by_domain",
+    label: "A new user joined through your email domain",
+    group: "operations",
+    emitted: true,
+    emitters: [E("services/auth/src/services/domain-join.service.ts", "notificationsQueue")],
+    caveat:
+      "Joined, not signed in. The person has a membership and a set-password " +
+      "link in their inbox; until they use it nobody has proven the address.",
+  },
+  {
     key: "broadcast.completed",
     label: "A campaign finished sending",
     group: "operations",
