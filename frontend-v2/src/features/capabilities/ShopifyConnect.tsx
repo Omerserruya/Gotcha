@@ -10,6 +10,7 @@ import {
   startShopifyInstall,
   verifyShopifyBilling,
   type ShopifyBillingCheck,
+  type ShopifyStart,
 } from './shopify-actions';
 import styles from './Capabilities.module.css';
 
@@ -24,6 +25,7 @@ import styles from './Capabilities.module.css';
  * read, the button stays and the server's 402 `core_plan_required` is said.
  */
 export function ShopifyConnect({
+  helpUrl = null,
   connectAllowed = null,
   flow = 'redesign_studio',
   reconnect = false,
@@ -61,6 +63,7 @@ export function ShopifyConnect({
         label={reconnect ? t('reconnect') : t('connect')}
         flow={flow}
         testId="shopify-start"
+        helpUrl={helpUrl}
       />
     </div>
   );
@@ -75,14 +78,17 @@ export function ShopifyStartButton({
   flow = 'redesign_studio',
   testId,
   note = true,
+  helpUrl = null,
 }: {
+  /** Not published yet: where "How to install" goes. */
+  readonly helpUrl?: string | null;
   readonly label: string;
   readonly flow?: ConnectFlow;
   readonly testId: string;
   readonly note?: boolean;
 }) {
   const t = useTranslations('capabilities.shopify');
-  const [failed, setFailed] = useState<'forbidden' | 'failed' | 'core_plan_required' | null>(null);
+  const [failed, setFailed] = useState<Exclude<ShopifyStart, { ok: true }>['reason'] | null>(null);
   const [isPending, startTransition] = useTransition();
   return (
     <>
@@ -105,6 +111,19 @@ export function ShopifyStartButton({
       {failed ? (
         <span className={styles.connectProblem} role="alert" data-testid="shopify-problem">
           {t(`error.${failed}`)}
+          {failed === 'not_published' && helpUrl ? (
+            <>
+              {' '}
+              <a
+                href={helpUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="shopify-help"
+              >
+                {t('help')}
+              </a>
+            </>
+          ) : null}
         </span>
       ) : note ? (
         <span className={styles.connectNote}>{t('note')}</span>

@@ -73,15 +73,57 @@ describe('★★ the intent cookie, read off Set-Cookie', () => {
 });
 
 describe('★★ start - the intent is handed on to the browser, or nothing opens', () => {
-  const answer = (setCookie: string[]) =>
+  const answer = (
+    setCookie: string[],
+    body: Record<string, unknown> = { url: 'https://apps.shopify.com/gotcha', mode: 'listing' },
+  ) =>
     get.mockImplementation(
       async ({ onResponseHeaders }: { onResponseHeaders?: (h: Headers) => void }) => {
         const headers = new Headers();
         for (const c of setCookie) headers.append('set-cookie', c);
         onResponseHeaders?.(headers);
-        return { url: 'https://apps.shopify.com/gotcha', mode: 'listing' };
+        return body;
       },
     );
+  const intent = [`${INTENT_COOKIE}=handle1; Path=/; HttpOnly`];
+
+  it.each([
+    ['listing', 'https://apps.shopify.com/gotcha'],
+    ['reconnect', 'https://old.myshopify.com/admin/oauth/authorize?client_id=x'],
+    ['install_link', 'https://admin.shopify.com/oauth/install_custom_app?client_id=x'],
+    [undefined, 'https://apps.shopify.com/gotcha'],
+  ])('★★ 165bbe05: mode %s is followed like a listing', async (mode, url) => {
+    answer(intent, mode === undefined ? { url } : { url, mode });
+    expect(await startShopifyInstall()).toEqual({ ok: true, url });
+    expect(jar.set).toHaveBeenCalledWith(INTENT_COOKIE, 'handle1', expect.anything());
+  });
+
+  it('★★ not_published (url null): said as that - never "couldn’t be opened, try again"', async () => {
+    answer(intent, { url: null, mode: 'not_published' });
+    expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'not_published' });
+    expect(jar.set).not.toHaveBeenCalled();
+  });
+
+  it('a mode we do not know, or a url that is not https, is not followed', async () => {
+    answer(intent, { url: 'https://example.com/x', mode: 'teleport' });
+    expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'failed' });
+    answer(intent, { url: 'http://apps.shopify.com/gotcha', mode: 'reconnect' });
+    expect(await startShopifyInstall()).toEqual({ ok: false, reason: 'failed' });
+  });
+
+  it('the screen: not_published is the sentence and How to install, beside the button that stays', async () => {
+    answer(intent, { url: null, mode: 'not_published' });
+    intl(<ShopifyConnect helpUrl="https://help.example/install" />);
+    await userEvent.click(screen.getByTestId('shopify-start'));
+    expect(await screen.findByTestId('shopify-problem')).toHaveTextContent(
+      'Installation starts in Shopify',
+    );
+    expect(screen.getByTestId('shopify-help')).toHaveAttribute(
+      'href',
+      'https://help.example/install',
+    );
+    expect(screen.getByTestId('shopify-start')).toBeInTheDocument();
+  });
 
   it('the redesign flow; the cookie set at /, HttpOnly, Lax, with its age', async () => {
     answer([`${INTENT_COOKIE}=handle1; Max-Age=600; Path=/; HttpOnly`]);

@@ -212,7 +212,8 @@
     "error": {
       "forbidden": "אין לכם הרשאה לחבר מערכות.",
       "failed": "לא הצלחנו לפתוח את Shopify - אפשר לנסות שוב.",
-      "core_plan_required": "כדי לחבר את Shopify צריך קודם תוכנית GOTCHA Core פעילה. שום דבר לא חובר."
+      "core_plan_required": "כדי לחבר את Shopify צריך קודם תוכנית GOTCHA Core פעילה. שום דבר לא חובר.",
+      "not_published": "ההתקנה מתחילה ב‑Shopify: מוסיפים את GOTCHA מניהול החנות, והחנות מתחברת כאן."
     },
     "pending": {
       "replaceLead": "אישרת את {shop} ב‑Shopify. חנות אחרת מחוברת כאן כרגע - החלפה תנתק אותה.",
