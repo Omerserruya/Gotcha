@@ -60,6 +60,9 @@ const H = vi.hoisted(() => {
     /** The workspace's own Shopify store as the claim prompt describes it (App Review 132211). */
     current: { current: null as { shopDomain: string; status: "CONNECTED" | "DISCONNECTED" } | null },
     dismissed: [] as any[],
+    /** Replace retirements, in call order with the billing calls (App Review 132211). */
+    order: [] as string[],
+    retired: [] as any[],
   };
 });
 
@@ -136,6 +139,7 @@ vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => 
     ...actual,
     resolveShopifyBillingOutcome: vi.fn(async (input: any) => {
       H.billingCalls.push(input);
+      H.order.push("billing");
       if (H.billing.current === "taken") throw new actual.CrossTenantShopError("held elsewhere");
       return H.billing.current;
     }),
@@ -156,6 +160,10 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   findShopOwner: vi.fn(async () => H.owner.current),
   shopHeldElsewhere: (owner: any, tenantId: string) => !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED",
   currentStoreOf: vi.fn(async () => H.current.current),
+}));
+
+vi.mock("../services/shopify-store-replace.service", () => ({
+  retireReplacedStore: vi.fn(async (input: any) => { H.retired.push(input); H.order.push("retire"); return { shopDomain: input.shopDomain, shopify: null, outcome: "x" }; }),
 }));
 
 import router from "../routes/shopify-install";
@@ -196,6 +204,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   H.current.current = null;
   H.dismissed = [];
+  H.order = [];
+  H.retired = [];
   H.corePaid.yes = true;
   H.permission.granted = true;
   H.tenantId.current = "tenant-A";
@@ -1021,5 +1031,80 @@ describe("App Review 132211: the claim prompt from any page, and Not now (2026-1
     H.authed.yes = false;
     expect((await request(app()).post("/api/connectors/shopify/install/pending/dismiss").set("Cookie", `${C}=${P}`)).status).toBe(401);
     expect(H.dismissed).toEqual([]);
+  });
+});
+
+describe("App Review 132211: Replace retires the old store before the new one is billed and attached", () => {
+  const P = "p".repeat(64);
+  const C = "gotcha_shopify_pending";
+  const NEW = "random-randomizer.myshopify.com";
+  const OLD = "app-review-old.myshopify.com";
+  const claim = (body: any = {}) => request(app()).post("/api/connectors/shopify/install/claim").set("Cookie", `${C}=${P}`).send(body);
+  beforeEach(() => {
+    H.owner.current = null;
+    H.pendings.set(P, { shopDomain: NEW, credentials: { accessToken: "shpat_new" } });
+  });
+
+  it("★ a connected old store, Replace confirmed: retired (at Shopify too) first, then billing, then the new store linked", async () => {
+    H.current.current = { shopDomain: OLD, status: "CONNECTED" };
+    H.replacing.current = OLD;
+    const r = await claim({ replace: true });
+    expect(r.status).toBe(200);
+    expect(H.retired).toEqual([{ tenantId: "tenant-A", shopDomain: OLD, connected: true }]);
+    expect(H.order).toEqual(["retire", "billing"]);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: NEW, tenantId: "tenant-A" });
+  });
+
+  it("★ Replace not confirmed: 409 with both stores, nothing retired, the approval kept", async () => {
+    H.current.current = { shopDomain: OLD, status: "CONNECTED" };
+    H.replacing.current = OLD;
+    const r = await claim({});
+    expect(r.status).toBe(409);
+    expect(r.body.data).toMatchObject({ currentShopDomain: OLD, incomingShopDomain: NEW });
+    expect(H.retired).toEqual([]);
+    expect(H.billingCalls).toEqual([]);
+    expect(H.pendings.has(P)).toBe(true);
+  });
+
+  it("★ the old store already uninstalled: its leftovers cleared (nothing asked of Shopify), then attached", async () => {
+    H.current.current = { shopDomain: OLD, status: "DISCONNECTED" };
+    const r = await claim({});
+    expect(r.status).toBe(200);
+    expect(H.retired).toEqual([{ tenantId: "tenant-A", shopDomain: OLD, connected: false }]);
+    expect(H.order).toEqual(["retire", "billing"]);
+  });
+
+  it("an empty workspace, or the same store again: nothing retired", async () => {
+    expect((await claim({})).status).toBe(200);
+    H.pendings.set(P, { shopDomain: NEW, credentials: { accessToken: "shpat_new" } });
+    H.current.current = { shopDomain: NEW, status: "CONNECTED" };
+    expect((await claim({ replace: true })).status).toBe(200);
+    expect(H.retired).toEqual([]);
+  });
+
+  it("★ the new store held by another workspace: refused before anything of the old store is touched", async () => {
+    H.current.current = { shopDomain: OLD, status: "CONNECTED" };
+    H.replacing.current = OLD;
+    H.owner.current = { tenantId: "tenant-B", connectionId: "c9", status: "CONNECTED" };
+    const r = await claim({ replace: true });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe("shop_connected_to_another_workspace");
+    expect(H.retired).toEqual([]);
+  });
+
+  it("a connected old store is never retired without the person's Replace, even if the earlier question missed it", async () => {
+    // The two reads disagree (a store connected between them): the retirement keeps its own guard.
+    H.current.current = { shopDomain: OLD, status: "CONNECTED" };
+    H.replacing.current = null;
+    await claim({});
+    expect(H.retired).toEqual([]);
+  });
+
+  it("Core unpaid: refused before anything", async () => {
+    H.current.current = { shopDomain: OLD, status: "CONNECTED" };
+    H.replacing.current = OLD;
+    H.corePaid.yes = false;
+    expect((await claim({ replace: true })).status).toBe(402);
+    expect(H.retired).toEqual([]);
   });
 });

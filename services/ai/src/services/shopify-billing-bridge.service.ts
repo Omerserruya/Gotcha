@@ -119,6 +119,10 @@ export async function notifyShopifyConnected(input: {
 export async function notifyShopifyUninstalled(input: {
   externalShopId?: string | null;
   shopDomain?: string | null;
+  /** The workspace replaced this store (App Review 132211): billing also spends the grandfather grant. */
+  replaced?: boolean;
+  /** With `replaced`: the workspace whose own connection this is (billing looks no further). */
+  tenantId?: string;
 }): Promise<void> {
   const res = await post("/api/internal/billing/shopify/uninstalled", input);
   if (!res.ok) throw new Error(`billing uninstall hook returned ${res.status}`);

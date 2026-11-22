@@ -153,6 +153,15 @@ export async function assignedEmployeeOf(tenantId: string): Promise<{ id: string
   return (await answeringEmployee(tenantId, "WEBCHAT")).employee;
 }
 
+/**
+ * The workspace's store chats that still belong to a store it holds (App Review 132211, 2026-11-22):
+ * a channel retired with its store (uninstalled or replaced: DISCONNECTED) no longer feeds the widget's
+ * settings, its places or its Install tab. Its conversations are untouched.
+ */
+async function liveStoreChannels(tenantId: string) {
+  return (await listChannels(tenantId)).filter((c) => c.connectionStatus !== "DISCONNECTED");
+}
+
 /** The workspace's WhatsApp numbers, for "Continue on WhatsApp", and whether each can take it. */
 export async function whatsappNumbers(tenantId: string): Promise<Array<{ channelId: string; name: string; phone: string | null; available: boolean; reason?: "not_connected" | "number_unknown" }>> {
   const accounts = await prisma.channelAccount.findMany({
@@ -278,7 +287,7 @@ function settingsOf(webchat: { credentials: unknown } | null, shops: Array<{ con
 export async function widgetPatchFor(tenantId: string, exceptChannelId: string): Promise<Record<string, unknown> | null> {
   const [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
-    listChannels(tenantId),
+    liveStoreChannels(tenantId),
   ]);
   const others = shops.filter((s) => s.id !== exceptChannelId);
   if (!webchat && !others.length) return null;
@@ -288,7 +297,7 @@ export async function widgetPatchFor(tenantId: string, exceptChannelId: string):
 export async function getWidget(tenantId: string) {
   const [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
-    listChannels(tenantId),
+    liveStoreChannels(tenantId),
   ]);
   const settings = settingsOf(webchat, shops);
   return {
@@ -344,7 +353,7 @@ export async function ensureWebchat(tenantId: string) {
 export async function putWidget(tenantId: string, patch: Partial<WidgetSettings>) {
   let [webchat, shops] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
-    listChannels(tenantId),
+    liveStoreChannels(tenantId),
   ]);
   if (!webchat && !shops.length) webchat = await ensureWebchat(tenantId);
   // A WhatsApp number for the handoff must be one of this workspace's.
@@ -413,7 +422,7 @@ export async function installOf(tenantId: string, now = new Date()) {
   }
   const [webchat, allShops, installations] = await Promise.all([
     prisma.channelAccount.findFirst({ where: { tenantId, channel: "WEBCHAT" as any }, orderBy: { createdAt: "asc" } }),
-    listChannels(tenantId),
+    liveStoreChannels(tenantId),
     (prisma as any).shopifyChatInstallation.findMany({ where: { tenantId } }),
   ]);
   // Only the store that is connected now. A channel left from a store this
