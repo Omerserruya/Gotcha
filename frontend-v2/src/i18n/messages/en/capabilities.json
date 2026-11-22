@@ -289,6 +289,28 @@
         "replace_required": "Another store is connected here. Replace it to connect {shop}.",
         "blocked": "{shop} can’t be connected to this workspace right now."
       }
+    },
+    "private": {
+      "label": "Your store’s Shopify address",
+      "hint": "It ends in .myshopify.com. You’ll find it in your Shopify admin under Settings › Domains.",
+      "submit": "Request access",
+      "sending": "Sending…",
+      "requested": "Request sent for {shop}. We’re preparing a private install link, and it will reach you by email.",
+      "install": "Install GOTCHA on {shop}",
+      "linkReady": "Your private install link is ready.",
+      "linkReadyUntil": "The link works until {day}.",
+      "linkExpired": "The install link for {shop} has expired. Contact us and we’ll send a new one.",
+      "revoked": "Access for {shop} was revoked. You can ask again for a store.",
+      "unread": "We couldn’t check your request right now. Try again in a moment.",
+      "error": {
+        "invalid_shop_domain": "Enter the store’s address, like your-store.myshopify.com.",
+        "already_requested": "This workspace already asked for a store. We’ll email you when the link is ready.",
+        "shop_requested_elsewhere": "{shop} was already requested by another GOTCHA workspace.",
+        "store_connected": "A Shopify store is already connected to this workspace.",
+        "private_apps_off": "Requests aren’t open right now. Try again later.",
+        "forbidden": "You don’t have permission to connect systems.",
+        "failed": "The request wasn’t sent. Try again."
+      }
     }
   },
   "systemCategory": {

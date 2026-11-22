@@ -5,6 +5,11 @@ import { cache } from 'react';
 import { z } from 'zod';
 
 import { pendingInstallSchema, type PendingInstall } from '@/api/contracts/shopify-install';
+import {
+  CUSTOM_APP_MODE,
+  merchantRequestReadSchema,
+  type MerchantRequest,
+} from '@/api/contracts/shopify-private-apps';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -106,11 +111,16 @@ export interface ShopifyAvailability {
    * `null`: not said - the server's 402 `core_plan_required` is the answer.
    */
   readonly connectAllowed?: boolean | null;
+  /**
+   * On mode `custom_app_request` (private apps): this workspace's request,
+   * `null` when none was made, `undefined` when it could not be read.
+   */
+  readonly customAppRequest?: MerchantRequest | null;
 }
 
 /** Before the button (backend 98676242): read-only, no intent minted. `null` when unread. */
 export async function loadShopifyAvailability(): Promise<ShopifyAvailability | null> {
-  return serverApi()
+  const availability = await serverApi()
     .get({
       endpoint: integrationEndpoints.shopifyAvailability(),
       payload: z.object({
@@ -122,6 +132,20 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
       logger.warn('capabilities.shopify_availability_failed', { cause });
       return null;
     });
+  if (availability?.mode !== CUSTOM_APP_MODE) return availability;
+  // Private apps: the card says what came of a request, so it is read with the mode.
+  const customAppRequest = await serverApi()
+    .get({
+      endpoint: integrationEndpoints.shopifyCustomAppRequest(),
+      payload: merchantRequestReadSchema,
+    })
+    .catch((cause: unknown) => {
+      logger.warn('capabilities.shopify_custom_app_request_unread', {
+        status: isApiError(cause) ? cause.status : undefined,
+      });
+      return undefined;
+    });
+  return { ...availability, customAppRequest };
 }
 
 /**

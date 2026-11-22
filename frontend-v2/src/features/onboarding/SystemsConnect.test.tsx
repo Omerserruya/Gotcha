@@ -13,6 +13,9 @@ const startWooOAuth = vi.hoisted(() => vi.fn());
 const startShopifyInstall = vi.hoisted(() => vi.fn());
 vi.mock('@/features/capabilities/connect-actions', () => ({ startOAuth, startWooOAuth }));
 vi.mock('@/features/capabilities/shopify-actions', () => ({ startShopifyInstall }));
+vi.mock('@/features/capabilities/shopify-private-actions', () => ({
+  requestShopifyPrivateApp: vi.fn(),
+}));
 vi.mock('@/features/capabilities/ConnectForm', () => ({
   ConnectForm: ({ slug, label }: { slug: string; label: string }) => (
     <span data-testid={`form-${slug}`}>{label}</span>
@@ -143,6 +146,15 @@ describe('★★ every start from step 2 asks to come back to step 2 (flow=onboa
     expect(await screen.findByTestId('systems-start-problem-shopify')).toHaveTextContent(
       'Install GOTCHA from the Shopify App Store first, then come back here.',
     );
+  });
+
+  it('★★ private apps: on mode custom_app_request, the request card - the same as Studio’s', () => {
+    show({
+      integration: shopify,
+      shopify: { mode: 'custom_app_request', helpUrl: null, customAppRequest: null },
+    });
+    expect(screen.getByTestId('shopify-private-request')).toBeInTheDocument();
+    expect(screen.queryByTestId('systems-start-shopify')).toBeNull();
   });
 
   it('★★ …and a reconnect or install link from the start is followed', async () => {

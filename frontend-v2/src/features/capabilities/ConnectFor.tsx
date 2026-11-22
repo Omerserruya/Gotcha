@@ -1,4 +1,5 @@
 import type { Integration } from '@/api/contracts/integrations';
+import type { MerchantRequest } from '@/api/contracts/shopify-private-apps';
 
 import { ConnectForm } from './ConnectForm';
 import { OAuthButton } from './OAuthButton';
@@ -38,6 +39,7 @@ export function ConnectFor({
     readonly helpUrl: string | null;
     /** The server's `core.allowsShopifyConnect`: `false` waits for GOTCHA Core. */
     readonly connectAllowed?: boolean | null;
+    readonly customAppRequest?: MerchantRequest | null | undefined;
   } | null;
   /** The drawn button's words - the caller's catalogue (synchronous, so it renders nested). */
   readonly drawn: {
@@ -59,6 +61,7 @@ export function ConnectFor({
           mode={shopify?.mode ?? null}
           helpUrl={shopify?.helpUrl ?? null}
           connectAllowed={shopify?.connectAllowed ?? null}
+          customAppRequest={shopify?.customAppRequest}
           reconnect={reconnect}
         />
       ) : integration.slug === 'woocommerce' ? (

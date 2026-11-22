@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
+import { CUSTOM_APP_MODE, type MerchantRequest } from '@/api/contracts/shopify-private-apps';
 import type { ConnectFlow } from '@/api/endpoints/registry';
 import { Link, useRouter } from '@/i18n/navigation';
 
@@ -13,6 +14,7 @@ import {
   type ShopifyStart,
 } from './shopify-actions';
 import styles from './Capabilities.module.css';
+import { ShopifyPrivateRequest } from './ShopifyPrivateRequest';
 
 /**
  * 10's "Connect Shopify" (backend 98676242). No store is typed - Shopify
@@ -25,11 +27,15 @@ import styles from './Capabilities.module.css';
  * read, the button stays and the server's 402 `core_plan_required` is said.
  */
 export function ShopifyConnect({
+  mode = null,
   helpUrl = null,
   connectAllowed = null,
   flow = 'redesign_studio',
   reconnect = false,
+  customAppRequest = null,
 }: {
+  /** Private apps (2026-11-22), on mode custom_app_request: this workspace's request. */
+  readonly customAppRequest?: MerchantRequest | null | undefined;
   /** Kept for callers; the button no longer waits on the listing mode (App Review 132211). */
   readonly mode?: string | null;
   readonly helpUrl?: string | null;
@@ -50,6 +56,11 @@ export function ShopifyConnect({
         </Link>
       </p>
     );
+  }
+
+  // Before the listing is live: a new store asks for its private app (a store held here reconnects).
+  if (mode === CUSTOM_APP_MODE && !reconnect) {
+    return <ShopifyPrivateRequest request={customAppRequest} />;
   }
 
   /*

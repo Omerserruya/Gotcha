@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 
 import { sentenceCase, type Integration } from '@/api/contracts/integrations';
+import type { MerchantRequest } from '@/api/contracts/shopify-private-apps';
 import { platformErrorReason } from '@/api/contracts/platform-errors';
 import type { ConnectorVerdict } from '@/api/contracts/shopify-connector';
 
@@ -33,6 +34,7 @@ export async function AvailableSystem({
     readonly mode: string;
     readonly helpUrl: string | null;
     readonly connectAllowed?: boolean | null;
+    readonly customAppRequest?: MerchantRequest | null | undefined;
   } | null;
   /**
    * Shopify only: the Connector verdict, the Billing page's. It wins over the
