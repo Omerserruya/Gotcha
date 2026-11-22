@@ -123,9 +123,24 @@ describe('★★ a member’s login email', () => {
     [502, 'IDP_SYNC_FAILED', 'idp_failed'],
     [502, 'IDP_STATE_UNKNOWN', 'idp_unknown'],
     [404, 'TENANT_NOT_FOUND', 'not_found'],
+    [409, 'NO_OTHER_SIGN_IN', 'no_other_sign_in'],
   ])('★ %i %s reads as %s', async (status, code, reason) => {
     refuseWith(api.patch, { kind: 'server', status, code });
     expect(await changeMemberEmail('t1', 'u1', 'a@b.co', 'r')).toEqual({ ok: false, reason });
+  });
+
+  it('★★ a FAILED change still says what it left: the Google connection gone (Backend’s 502 warning)', async () => {
+    refuseWith(api.patch, {
+      kind: 'integration',
+      status: 502,
+      code: 'IDP_SYNC_FAILED',
+      issues: { errors: [], warnings: ['google_connection_removed', 7] },
+    });
+    expect(await changeMemberEmail('t1', 'u1', 'a@b.co', 'r')).toEqual({
+      ok: false,
+      reason: 'idp_failed',
+      warnings: ['google_connection_removed'],
+    });
   });
 });
 

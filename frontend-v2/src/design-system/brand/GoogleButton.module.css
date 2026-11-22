@@ -1,0 +1,36 @@
+@layer patterns {
+  /*
+   * Google's light theme, by its numbers (GoogleButton.tsx says where they
+   * come from). Above `primitives`, so the Button's own variant colours lose.
+   * Hex on purpose: these are Google's values, not tokens of ours, and a
+   * theme change here must not move them.
+   */
+  .google {
+    gap: 10px;
+    padding-inline: 12px;
+    border-color: #747775;
+    background-color: #fff;
+    color: #1f1f1f;
+    font-family: var(--font-google-sans), var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  /* A state layer over the same white, so the logo stays on its white ground. */
+  .google:hover:not(:disabled) {
+    background-image: linear-gradient(rgb(31 31 31 / 8%), rgb(31 31 31 / 8%));
+  }
+
+  .logo {
+    flex: none;
+    inline-size: 20px;
+    block-size: 20px;
+  }
+
+  .label {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

@@ -15,6 +15,7 @@ import { nowInSeconds, sealSession, sessionCookieOptions, unsealSession } from '
 import { PUBLIC_PATH_PATTERN, SIGNED_OUT_PATH_PATTERN } from './auth-surface';
 import { isLocale } from '@/i18n/locales';
 import { inLocaleOf, mountOf } from '@/auth/sign-in-url';
+import { CONNECT_COOKIE } from '@/auth/google-connect-cookie';
 import { legacyLocale, legacyRedirect } from '@/i18n/legacy-redirect';
 
 const intlMiddleware = createIntlMiddleware(routing);
@@ -271,6 +272,16 @@ export function gate(request: NextRequest, renewal: Renewal = { kind: 'kept' }):
       moved.pathname = `${mountOf(moved)}${pathname}`;
       for (const [key, value] of request.nextUrl.searchParams) {
         moved.searchParams.set(key, value);
+      }
+      /*
+       * Connecting Google: the sign-out lands on `/sign-in` here, and the
+       * provider's post-logout address cannot carry a hint (it must equal a
+       * registered URI). The intent cookie's PRESENCE adds it on the way to
+       * the sign-in origin, which cannot see this host's cookies. A sentence
+       * only: the subject stays sealed in the cookie, for the callback.
+       */
+      if (request.cookies.has(CONNECT_COOKIE) && /\/sign-in$/.test(pathname)) {
+        moved.searchParams.set('connect', 'google');
       }
       const relocated = withSecurityHeaders(NextResponse.redirect(moved));
       relocated.headers.set('cache-control', 'no-store');

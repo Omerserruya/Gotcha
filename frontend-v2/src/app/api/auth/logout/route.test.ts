@@ -240,3 +240,21 @@ describe('★★ support mode ends with the sign-out (Backend 41755eb2)', () => 
     expect(endSupportOnLogout).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ Google sign-in’s two cookies at sign-out (2026-11-22)', () => {
+  it('★★ the Terms still owed belong to this sign-in: cleared, at the session’s path', async () => {
+    const response = await post(true);
+    const terms = response.cookies
+      .getAll()
+      .find((cookie) => cookie.name === 'gotcha_terms_pending');
+    expect(terms?.value).toBe('');
+    expect(terms?.path).toBe('/');
+  });
+
+  it('⚠⚠ the connect intent is NOT cleared: it is set just before this sign-out, for the callback after it', async () => {
+    const response = await post(true);
+    expect(
+      response.cookies.getAll().find((cookie) => cookie.name === 'gotcha_google_connect'),
+    ).toBeUndefined();
+  });
+});

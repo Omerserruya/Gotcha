@@ -540,3 +540,96 @@ describe('★★ a first password accepts the Terms and the Privacy Policy first
     });
   });
 });
+
+describe('★★ Google from a setup link: the Terms first, then sign-in (2026-11-22)', () => {
+  const assign = vi.fn();
+  const withGoogle = (
+    google: { email: string | null } | null,
+    purpose: 'setup' | 'reset' = 'setup',
+  ) =>
+    render(
+      <NextIntlClientProvider locale="he" messages={{ auth: heMessages }}>
+        <ResetPanel
+          flow={purpose === 'setup' ? 'gotcha-recovery' : 'gotcha-recovery-self'}
+          link={
+            purpose === 'setup' ? { kind: 'setup', token: SETUP } : { kind: 'flow', token: TOKEN }
+          }
+          purpose={purpose}
+          loginHref="/api/auth/login?handover=1&finish=1"
+          signInHref="/he/sign-in"
+          recoverHref={null}
+          google={google}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  beforeEach(() => {
+    assign.mockReset();
+    Object.defineProperty(window, 'location', {
+      value: { assign, href: 'https://auth-dev.gotcha.co.il/v2/he/recover', search: '' },
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('★★ offered only when the link’s state says Google is on', () => {
+    withGoogle(null);
+    expect(screen.queryByTestId('reset-google')).toBeNull();
+  });
+
+  it('★★ under the password path, behind the same Terms box: disabled until ticked', async () => {
+    withGoogle({ email: 'maya@avivco.il' });
+    const google = screen.getByTestId('reset-google');
+    expect(google).toHaveTextContent('המשך עם Google');
+    expect(google).toBeDisabled();
+    await userEvent.click(screen.getByTestId('reset-terms-box'));
+    expect(google).toBeEnabled();
+  });
+
+  it('★ the hint names the invited address, isolated left-to-right', () => {
+    withGoogle({ email: 'maya@avivco.il' });
+    const hint = screen.getByTestId('reset-google-hint');
+    expect(hint).toHaveTextContent('השתמשו בחשבון Google של maya@avivco.il.');
+    expect(hint.querySelector('bdi')).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('★ with no address, the approved line without one', () => {
+    withGoogle({ email: null });
+    expect(screen.getByTestId('reset-google-hint')).toHaveTextContent(
+      heMessages.google.setupHintNoEmail,
+    );
+  });
+
+  it('★★ records the Terms exactly as Continue does, THEN goes to sign-in with ?google=start', async () => {
+    withGoogle({ email: 'maya@avivco.il' });
+    await userEvent.click(screen.getByTestId('reset-terms-box'));
+    await userEvent.click(screen.getByTestId('reset-google'));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/he/sign-in?google=start'));
+    expect(acceptSetupTerms).toHaveBeenCalledWith(
+      SETUP,
+      expect.objectContaining({ terms: true, privacy: true, locale: 'he' }),
+    );
+    expect(acceptSetupTerms.mock.invocationCallOrder[0]).toBeLessThan(
+      assign.mock.invocationCallOrder[0] ?? 0,
+    );
+    // It never starts a flow here: a second flow would delete the first.
+    expect(startFlow).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: 'unreachable' }, 'reset-unreachable'],
+    [{ kind: 'expired' }, 'reset-expired'],
+  ])('⚠⚠ a refused acceptance (%j) never leaves for Google', async (outcome, testid) => {
+    acceptSetupTerms.mockResolvedValue(outcome);
+    withGoogle({ email: null });
+    await userEvent.click(screen.getByTestId('reset-terms-box'));
+    await userEvent.click(screen.getByTestId('reset-google'));
+    expect(await screen.findByTestId(testid)).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('★ never on a reset link', () => {
+    withGoogle({ email: null }, 'reset');
+    expect(screen.queryByTestId('reset-google')).toBeNull();
+  });
+});

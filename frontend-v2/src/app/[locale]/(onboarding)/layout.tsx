@@ -13,6 +13,7 @@ import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { asksForPreview } from '@/shell/workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
 import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
+import { termsGateScreen } from '@/shell/terms/terms-gate-screen';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
@@ -49,6 +50,9 @@ export default async function OnboardingLayout({
     ★★ Two-step sign-in owed: the enrolment step instead of this area
     (supervisor, 2026-11-09: every signed-in door, one rule).
   */
+  // The Terms a Google sign-in still owes, before two-step (terms-gate-screen.tsx).
+  const terms = await termsGateScreen(resolved);
+  if (terms) return terms;
   const mfa = await mfaGateScreen(resolved);
   if (mfa) return mfa;
   const previewing =

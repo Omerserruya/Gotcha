@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
 import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
+import { termsGateScreen } from '@/shell/terms/terms-gate-screen';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
 import { CHECKOUT_NAMESPACES } from '@/i18n/namespaces';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
@@ -36,6 +37,9 @@ export default async function CheckoutLayout({
     behind a session, since there is nothing to enrol without one.
   */
   if (await activeSession()) {
+    // The Terms a Google sign-in still owes, before two-step (terms-gate-screen.tsx).
+    const terms = await termsGateScreen(resolved);
+    if (terms) return terms;
     const mfa = await mfaGateScreen(resolved);
     if (mfa) return mfa;
   }

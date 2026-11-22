@@ -13,10 +13,12 @@ import {
   staySignedInBody,
   type FlowStep,
 } from '@/api/contracts/auth-flow';
+import { GoogleButton } from '@/design-system/brand/GoogleButton';
+import { OrRule } from '@/design-system/patterns/OrRule';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { UserText } from '@/design-system/primitives/text/UserText';
-import { legalUrls } from '@/lib/legal';
+import { TermsBox } from '@/shell/terms/TermsBox';
 
 import {
   PASSWORD_MIN_LENGTH,
@@ -90,6 +92,7 @@ export function ResetPanel({
   loginHref,
   signInHref,
   recoverHref,
+  google,
 }: {
   readonly flow: string;
   readonly link: ResetLink;
@@ -103,8 +106,14 @@ export function ResetPanel({
    * invite whose link died may not have one yet.
    */
   readonly recoverHref: string | null;
+  /**
+   * Google, on a setup link whose state says it is on (Backend's `google`
+   * flag), with the address the invitation went to. Absent: no Google here.
+   */
+  readonly google?: { readonly email: string | null } | null;
 }) {
   const t = useTranslations('auth.recover.reset');
+  const tg = useTranslations('auth.google');
   const ts = useTranslations('auth.signIn');
   const tr = useTranslations('auth.recover');
   const locale = useLocale() === 'he' ? 'he' : 'en';
@@ -158,6 +167,46 @@ export function ResetPanel({
       return;
     }
     setPhase({ name: 'unexpected' });
+  }
+
+  /* Pressed Google: the Terms are being recorded, then the page leaves. */
+  const [leaving, setLeaving] = useState(false);
+
+  /*
+   * ═════════════════════════════════════════════════════════════════════════
+   * ★★ GOOGLE FROM A SETUP LINK: THE TERMS FIRST, THEN SIGN-IN (2026-11-22)
+   * ═════════════════════════════════════════════════════════════════════════
+   * The acceptance is what records the consent (Backend), so it runs exactly
+   * as Continue runs it - the same call, the same words - before the page
+   * leaves. Then our own sign-in with `?google=start`, whose panel follows
+   * the Google source from ITS OWN challenge: this page never starts the
+   * authentication flow (a second flow deletes the first, Backend) and never
+   * holds a source slug.
+   *
+   * ★ The recovery token the acceptance mints goes unused: single use, about
+   *   30 minutes, in this person's browser only (Backend: a clean outcome).
+   *   The Google sign-in retires the link, and reopened it reads "used".
+   */
+  async function continueWithGoogle() {
+    if (!google || !accepted || link.kind !== 'setup') return;
+    setLeaving(true);
+    setPhase({ name: 'opening' });
+    if (started === null) {
+      const outcome = await acceptSetupTerms(link.token, {
+        terms: true,
+        privacy: true,
+        locale,
+        capturedText: termsLabel.current?.textContent?.trim() ?? '',
+      });
+      if (outcome.kind !== 'recovery') setLeaving(false);
+      if (outcome.kind === 'unreachable') return setPhase({ name: 'ready', unreachable: true });
+      if (outcome.kind === 'expired') return setPhase({ name: 'expired' });
+      if (outcome.kind === 'hasPassword') return setPhase({ name: 'hasPassword' });
+      if (outcome.kind === 'refused') return setPhase({ name: 'unexpected' });
+    }
+    // A full load: the sign-in panel starts its own flow, and nothing of this one may linger.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign(`${signInHref}?google=start`);
   }
 
   async function open() {
@@ -336,41 +385,13 @@ export function ResetPanel({
           </p>
         ) : null}
         {needsTerms ? (
-          <label className={styles.terms} data-testid="reset-terms">
-            <input
-              type="checkbox"
-              className={styles.termsBox}
-              checked={accepted}
-              required
-              disabled={phase.name === 'opening'}
-              onChange={(event) => setAccepted(event.target.checked)}
-              data-testid="reset-terms-box"
-            />
-            <span ref={termsLabel}>
-              {t.rich('terms', {
-                terms: (chunks) => (
-                  <a
-                    href={legalUrls(locale).terms}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="reset-terms-link"
-                  >
-                    {chunks}
-                  </a>
-                ),
-                privacy: (chunks) => (
-                  <a
-                    href={legalUrls(locale).privacy}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="reset-privacy-link"
-                  >
-                    {chunks}
-                  </a>
-                ),
-              })}
-            </span>
-          </label>
+          <TermsBox
+            checked={accepted}
+            onChange={setAccepted}
+            disabled={phase.name === 'opening'}
+            labelRef={termsLabel}
+            testIdPrefix="reset"
+          />
         ) : null}
         <Button
           variant="primary"
@@ -380,8 +401,26 @@ export function ResetPanel({
           onClick={() => void open()}
           data-testid="reset-open"
         >
-          {phase.name === 'opening' ? t('starting') : t('continue')}
+          {phase.name === 'opening' && !leaving ? t('starting') : t('continue')}
         </Button>
+        {needsTerms && google ? (
+          <>
+            <OrRule word={tg('or')} />
+            <GoogleButton
+              label={leaving ? tg('busy') : tg('continue')}
+              disabled={phase.name === 'opening' || !accepted}
+              onClick={() => void continueWithGoogle()}
+              testId="reset-google"
+            />
+            <p className={styles.googleHint} data-testid="reset-google-hint">
+              {google.email
+                ? tg.rich('setupHint', {
+                    email: () => <bdi dir="ltr">{google.email}</bdi>,
+                  })
+                : tg('setupHintNoEmail')}
+            </p>
+          </>
+        ) : null}
       </div>
     );
   }

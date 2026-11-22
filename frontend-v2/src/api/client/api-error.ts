@@ -126,6 +126,8 @@ export interface ApiErrorInit {
   readonly height?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
+  /** An email change's 502: the Google connection was removed before it failed. */
+  readonly googleDisconnected?: boolean;
   readonly cause?: unknown;
 }
 
@@ -178,6 +180,8 @@ export class ApiError extends Error {
   readonly height?: number;
   /** A validator's refusal: its `errors` and `warnings`, unparsed - the screen's contract reads them. */
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
+  /** An email change's 502: the Google connection was removed before it failed. */
+  readonly googleDisconnected?: boolean;
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -217,6 +221,7 @@ export class ApiError extends Error {
     this.width = init.width;
     this.height = init.height;
     this.issues = init.issues;
+    this.googleDisconnected = init.googleDisconnected;
   }
 
   /**

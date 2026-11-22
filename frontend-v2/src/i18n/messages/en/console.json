@@ -395,7 +395,9 @@
       "billing_may_resuspend": "This tenant is behind on payment. Billing may suspend it again.",
       "renewal_will_unsuspend": "The next renewal sets this tenant back to active.",
       "no_idp_identity": "The email changed here, but this person has no sign-in identity to update.",
-      "unknown": "The platform added a note this screen can't read. Reload the page to see the tenant as it is now."
+      "unknown": "The platform added a note this screen can't read. Reload the page to see the tenant as it is now.",
+      "google_connection_removed": "The member's Google connection was removed because the email changed.",
+      "google_connection_removed_failed": "The member's Google connection was removed, although the email change did not complete."
     },
     "refusal": {
       "not_found": "This tenant no longer exists.",
@@ -428,7 +430,8 @@
       "plan_unavailable": "That plan can't be chosen for this tenant. Choose another.",
       "volume_invalid": "That volume isn't offered for this plan.",
       "unknown_domain": "A feature area is no longer offered. Reload the page.",
-      "billing_unreachable": "Billing didn't answer, and nothing was changed. Try again."
+      "billing_unreachable": "Billing didn't answer, and nothing was changed. Try again.",
+      "no_other_sign_in": "This member signs in with Google only. Changing the email would disconnect it and leave no way in."
     },
     "members": {
       "title": "Owners and users",

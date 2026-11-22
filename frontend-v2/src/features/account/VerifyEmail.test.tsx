@@ -99,3 +99,44 @@ describe('★★ /account/verify-email - opening the link confirms it', () => {
     expect(verifyEmailChange).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('★★ Google sign-in and the address change (2026-11-22)', () => {
+  it('★★ done, with the Google connection gone: says so, in the approved words', async () => {
+    verifyEmailChange.mockResolvedValue({
+      ok: true,
+      email: 'new@aviv.co',
+      googleDisconnected: true,
+    });
+    show('t.sig');
+    expect(await screen.findByTestId('verify-email-google-disconnected')).toHaveTextContent(
+      security.verifyEmail.googleDisconnected,
+    );
+  });
+
+  it('★ done, Google untouched: no such line', async () => {
+    verifyEmailChange.mockResolvedValue({
+      ok: true,
+      email: 'new@aviv.co',
+      googleDisconnected: false,
+    });
+    show('t.sig');
+    await screen.findByTestId('verify-email-done');
+    expect(screen.queryByTestId('verify-email-google-disconnected')).toBeNull();
+  });
+
+  it('⚠⚠ Google the only way in: its reason, and no retry - a password comes first', async () => {
+    verifyEmailChange.mockResolvedValue({ ok: false, reason: 'no_other_sign_in' });
+    show('t.sig');
+    const refused = await screen.findByTestId('verify-email-refused');
+    expect(refused).toHaveTextContent(security.verifyEmail.reason.no_other_sign_in);
+    expect(screen.queryByRole('button', { name: security.verifyEmail.retry })).toBeNull();
+  });
+
+  it('★ did not complete, Google already gone: its reason, and a retry', async () => {
+    verifyEmailChange.mockResolvedValue({ ok: false, reason: 'unfinished_google' });
+    show('t.sig');
+    const refused = await screen.findByTestId('verify-email-refused');
+    expect(refused).toHaveTextContent(security.verifyEmail.reason.unfinished_google);
+    expect(screen.getByRole('button', { name: security.verifyEmail.retry })).toBeInTheDocument();
+  });
+});

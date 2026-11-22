@@ -18,7 +18,7 @@ type Shown =
   | { readonly kind: 'done'; readonly result: VerifyEmailResult };
 
 /** The refusals worth another press: nothing changed, and nothing is wrong with the link. */
-const RETRYABLE = new Set(['unfinished', 'failed']);
+const RETRYABLE = new Set(['unfinished', 'unfinished_google', 'failed']);
 
 /**
  * `/account/verify-email?token=` - the link mailed to a NEW sign-in address.
@@ -70,6 +70,14 @@ export function VerifyEmail({ token }: { readonly token: string | null }) {
             email: () => <bdi dir="ltr">{shown.result.ok ? shown.result.email : ''}</bdi>,
           })}
         </Text>
+        {/* Google sign-in: the address change took the Google connection with it. */}
+        {shown.result.googleDisconnected ? (
+          <div data-testid="verify-email-google-disconnected">
+            <Text role="body" tone="muted" as="p">
+              {t('googleDisconnected')}
+            </Text>
+          </div>
+        ) : null}
         <Link className={styles.onward} href="/home">
           {t('continue')}
         </Link>

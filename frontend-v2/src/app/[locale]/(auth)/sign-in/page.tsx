@@ -2,7 +2,8 @@ import { getLocale, getTranslations } from 'next-intl/server';
 
 import { SignInScreen } from './SignInScreen';
 import { FinishSignIn } from './FinishSignIn';
-import { isProviderEndpoint } from '@/api/contracts/auth-flow';
+import { checkedFlowSlug, isProviderEndpoint } from '@/api/contracts/auth-flow';
+import { markerOf, SIGN_IN_GOOGLE_MARKERS } from '@/api/contracts/google-sign-in';
 import { oidcConfiguration, productCallbackUrl } from '@/auth/oidc';
 import { appUrl } from '@/lib/base-path';
 import { Logo } from '@/design-system/brand/Logo';
@@ -14,6 +15,37 @@ import { FINISH_PARAM, HANDOVER_PARAM } from '@/app/api/auth/login/route';
 import styles from './SignIn.module.css';
 
 const KNOWN_ERRORS = ['expired', 'denied', 'exchange_failed', 'ended'] as const;
+
+/** A Google outcome marker's sentence (`auth.google.*`); `start` has none. */
+const GOOGLE_NOTICE = {
+  'no-account': 'noAccount',
+  cancelled: 'cancelled',
+  failed: 'failed',
+} as const;
+
+/**
+ * Our own parameters on this page. Everything else on a `?flow=` visit is the
+ * source flow's query as Google returned it, handed to the executor whole.
+ */
+const OWN_PARAMS = new Set([
+  'flow',
+  'google',
+  'connect',
+  'returnTo',
+  'error',
+  'authorize',
+  'finishHold',
+]);
+
+function flowQueryOf(params: Record<string, string | string[] | undefined>): string | undefined {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (OWN_PARAMS.has(key) || value === undefined) continue;
+    for (const one of Array.isArray(value) ? value : [value]) query.append(key, one);
+  }
+  const text = query.toString();
+  return text === '' ? undefined : text;
+}
 
 /**
  * Sign-in - screen 00a.
@@ -73,9 +105,23 @@ export default async function SignInPage({
     returnTo?: string;
     authorize?: string;
     finishHold?: string;
+    google?: string;
+    flow?: string;
+    connect?: string;
+    [other: string]: string | string[] | undefined;
   }>;
 }) {
-  const { error, returnTo, authorize, finishHold } = await searchParams;
+  const params = await searchParams;
+  const { error, returnTo, authorize, finishHold } = params;
+  /*
+   * Google sign-in (2026-11-22). Each from a fixed list or a checked pattern:
+   * a typed URL can pick a sentence or resume a flow the person could reach
+   * anyway, and nothing more.
+   */
+  const googleMarker = markerOf(params.google, SIGN_IN_GOOGLE_MARKERS);
+  const flow = checkedFlowSlug(params.flow) ?? undefined;
+  const flowQuery = flow ? flowQueryOf(params) : undefined;
+  const connecting = params.connect === 'google';
   const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
@@ -222,6 +268,9 @@ export default async function SignInPage({
       handOverHref={loginHref}
       recoverPath={appPath(`/${locale}/recover`)}
       returnTo={returnTo}
+      flow={flow}
+      flowQuery={flowQuery}
+      followGoogle={googleMarker === 'start'}
       brand={
         <div className={styles.brand}>
           <Logo variant="framed" size={38} />
@@ -275,6 +324,17 @@ export default async function SignInPage({
           // discovered by someone who happens to read down the page.
           <p className={styles.notice} role="alert">
             {t(`error.${knownError}`)}
+          </p>
+        ) : googleMarker && googleMarker !== 'start' ? (
+          <p className={styles.notice} role="alert" data-testid="google-notice">
+            {t(`google.${GOOGLE_NOTICE[googleMarker]}`)}
+          </p>
+        ) : connecting ? (
+          // Connecting Google from Settings: the sign-out just happened, and
+          // this says why the person is here. A hint, never a requirement -
+          // the account to connect is held server-side, not in this URL.
+          <p className={styles.notice} role="status" data-testid="google-connect-hint">
+            {t('google.connectHint')}
           </p>
         ) : null
       }

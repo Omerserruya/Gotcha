@@ -55,3 +55,31 @@ describe('★★ confirming a new sign-in address', () => {
     expect(signInIfSignedOut).toHaveBeenCalledWith(signedOut);
   });
 });
+
+describe('★★ Google sign-in and the address change (Backend ff3a1b9f)', () => {
+  it('★★ the 200 says whether the Google connection went with the old address', async () => {
+    api.post.mockResolvedValue({ ok: true, email: 'new@aviv.co', googleDisconnected: true });
+    expect(await verifyEmailChange('t')).toEqual({
+      ok: true,
+      email: 'new@aviv.co',
+      googleDisconnected: true,
+    });
+  });
+
+  it('⚠⚠ 409 no_other_sign_in: Google is the only way in - its own reason, nothing changed', async () => {
+    refuse(409, 'no_other_sign_in');
+    expect(await verifyEmailChange('t')).toEqual({ ok: false, reason: 'no_other_sign_in' });
+  });
+
+  it('⚠⚠ the 502 that says Google is already gone is "did not complete", not "nothing changed"', async () => {
+    api.post.mockRejectedValueOnce(
+      new ApiError({
+        kind: 'integration',
+        status: 502,
+        developerMessage: 'idp_sync_failed',
+        googleDisconnected: true,
+      }),
+    );
+    expect(await verifyEmailChange('t')).toEqual({ ok: false, reason: 'unfinished_google' });
+  });
+});

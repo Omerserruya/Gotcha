@@ -6,6 +6,10 @@ import { FINISH_PARAM, HANDOVER_PARAM } from '@/app/api/auth/login/route';
 import { Button } from '@/design-system/primitives/button/Button';
 import { appPath } from '@/lib/base-path';
 import { serverEnv } from '@/config/env.server';
+import { serverApi } from '@/api/client/server-api';
+import { setupStateSchema } from '@/api/contracts/google-sign-in';
+import { publicLinkEndpoints } from '@/api/endpoints/registry';
+import { logger } from '@/observability/logger';
 
 import signIn from '../sign-in/SignIn.module.css';
 import styles from './Recover.module.css';
@@ -56,6 +60,26 @@ const FLOW_TOKEN = /^[^\s\p{C}]{8,512}$/u;
 const SETUP_FLOW = 'gotcha-recovery';
 const purposeOf = (flow: string): ResetPurpose => (flow === SETUP_FLOW ? 'setup' : 'reset');
 
+/**
+ * Whether a setup link may offer Google, and the address it went to - read
+ * from the link's own state (Backend's `google` flag, 2026-11-22), never by
+ * starting the authentication flow here (a second flow deletes the first).
+ * Reading it never redeems the link. Unread: no Google, the password path
+ * as it was.
+ */
+async function setupGoogle(token: string): Promise<{ readonly email: string | null } | null> {
+  try {
+    const state = await serverApi().get({
+      endpoint: publicLinkEndpoints.setupState(token),
+      payload: setupStateSchema,
+    });
+    return state.google ? { email: state.email } : null;
+  } catch (cause) {
+    logger.warn('recover.setup_state_unread', { cause });
+    return null;
+  }
+}
+
 export default async function RecoverPage({
   params,
   searchParams,
@@ -83,6 +107,10 @@ export default async function RecoverPage({
         : null;
   const linked = slug !== null && raw !== null;
   const link: ResetLink | null = raw && FLOW_TOKEN.test(raw.token) ? raw : null;
+  const google =
+    purpose === 'setup' && slug !== null && link?.kind === 'setup'
+      ? await setupGoogle(link.token)
+      : null;
   const recoverHref =
     purpose === 'reset' && slug ? appPath(`/${locale}/recover?flow=${slug}`) : null;
   /*
@@ -137,6 +165,7 @@ export default async function RecoverPage({
               loginHref={loginHref}
               signInHref={signInHref}
               recoverHref={recoverHref}
+              google={google}
             />
           ) : linked ? (
             <div data-testid="reset-malformed" className={styles.done}>

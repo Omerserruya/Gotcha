@@ -94,6 +94,12 @@ export const errorEnvelopeSchema = z.object({
   errors: z.array(z.unknown()).optional().catch(undefined),
   warnings: z.array(z.unknown()).optional().catch(undefined),
   /**
+   * An email change that failed after the Google connection was already
+   * removed (`502 { error: 'idp_sync_failed', googleDisconnected: true }`,
+   * auth account.ts). Declared, or `z.object` strips it.
+   */
+  googleDisconnected: z.boolean().optional().catch(undefined),
+  /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *
    * `purchase.service.ts` returns `failureCode` on every refusal -

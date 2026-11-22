@@ -30,6 +30,11 @@ vi.mock('@/features/roles/load-person', () => ({ loadViewerId: async () => 'u' }
 const MobileShell = vi.hoisted(() => vi.fn(() => null));
 vi.mock('@/shell/mobile/MobileShell', () => ({ MobileShell }));
 const MfaGate = vi.hoisted(() => vi.fn(() => null));
+/* The Terms gate (Google sign-in, 2026-11-22): owed only when `terms.owed` says so. */
+const terms = vi.hoisted(() => ({ owed: false }));
+vi.mock('@/shell/terms/terms-gate-screen', () => ({
+  termsGateScreen: async () => (terms.owed ? <p data-testid="terms-gate" /> : null),
+}));
 vi.mock('@/shell/mfa/MfaGate', () => ({ MfaGate }));
 vi.mock('@/shell/mfa/MfaWatch', () => ({ MfaWatch: () => null }));
 vi.mock('@/config/env.server', async (importOriginal) => ({

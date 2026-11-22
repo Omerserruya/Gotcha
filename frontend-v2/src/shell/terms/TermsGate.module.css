@@ -1,0 +1,31 @@
+@layer shell {
+  /*
+   * The two-step gate's card at its natural height: its own is tall for the
+   * enrolment frame, and this one holds a box and a button.
+   */
+  .card {
+    inline-size: min(440px, 100%);
+    border-radius: 16px;
+    background-color: var(--panel-base);
+    color: var(--text-primary);
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-14);
+    padding: 24px;
+  }
+
+  .problem {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--alert-text);
+  }
+
+  .notNow {
+    margin: 0;
+    font-size: var(--font-size-meta);
+    color: var(--text-muted);
+  }
+}

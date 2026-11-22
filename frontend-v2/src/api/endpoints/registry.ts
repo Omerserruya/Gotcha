@@ -874,6 +874,8 @@ export const publicLinkEndpoints = {
   invite: (token: string) => endpoint('/api/public/onboarding/invite/{token}', { token }),
   acceptInvite: () => endpoint('/api/public/onboarding/invite/accept'),
   resendSetup: () => endpoint('/api/auth/setup/resend'),
+  /** A setup link as data (setup-link.ts:84): read only for its `google` flag. Never redeems. */
+  setupState: (token: string) => endpoint('/api/auth/setup/{token}/state', { token }),
 } as const;
 
 /**
@@ -1077,6 +1079,14 @@ export const securityEndpoints = {
    * to the new one (auth account.ts:448). Needs the session.
    */
   verifyEmailChange: () => endpoint('/api/account/email-change/verify'),
+  /** Google sign-in (contracts/google-sign-in.ts): the connection, and removing it. */
+  signInConnections: () => endpoint('/api/account/sign-in-connections'),
+  googleConnection: () => endpoint('/api/account/sign-in-connections/google'),
+  /** Posted by our OIDC callback after the code exchange, best effort. */
+  signInRecord: () => endpoint('/api/account/security/sign-in'),
+  /** The Terms before first entry with Google: the flag, and the acceptance. */
+  terms: () => endpoint('/api/account/terms'),
+  acceptTerms: () => endpoint('/api/account/terms/accept'),
   /**
    * `/api/tenant/security` - a SLASH, and it is an exception.
    *
