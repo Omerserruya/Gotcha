@@ -2999,3 +2999,11 @@ describe("nothing new from the customer: the only turns silence may meet (2026-1
     expect(nothingNewFromCustomer(said, [])).toBe(false);
   });
 });
+
+describe("a sentence that opens with a bare pronoun leans on the one before it (the 41805962 replay, Smoovee L511)", () => {
+  it("★ the L511 opening and its forms lean; a word that only starts like a pronoun does not", async () => {
+    const { LEANS_ON_BEFORE } = await import("../services/reply-engine/engine");
+    for (const x of ["הוא במבצע עכשיו ב-₪129.15.", " והיא מגיעה בשלושה צבעים.", "הם במלאי.", "הן עשויות במבוק.", "It is on sale now at 129.15.", "They come in three colours."]) expect(LEANS_ON_BEFORE.test(x), x).toBe(true);
+    for (const x of ["הואיל והמיקסר כבד, נדרש מעצור.", "המשטח במבצע עכשיו ב-₪129.15.", "למיקסר יש התאמות לפי דגם, איזה דגם יש לך?", "המשלוח הוא חינם.", "Items ship in three days.", "Theyre is no word."]) expect(LEANS_ON_BEFORE.test(x), x).toBe(false);
+  });
+});
