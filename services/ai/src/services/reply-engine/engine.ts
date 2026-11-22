@@ -2,7 +2,7 @@
  * Reply engine v2: one turn, end to end. See contract.ts and
  * docs/architecture/reply-engine-v2.md.
  */
-import { prisma, recordUnansweredQuestion } from "@chatcenter/shared";
+import { prisma, recordUnansweredQuestion, readDurableSetting } from "@chatcenter/shared";
 import { generateResponse, platformPaidScope } from "../ai.service";
 import { resolveAgentModel } from "../../lib/agent-model";
 import { loadRecentHistory, historyChatMessages, earlierNote, isPersonOutbound } from "../conversation-history.service";
@@ -26,8 +26,8 @@ import { assertOrderTargetMatchesTurn, isOrderStateChangingTool } from "../order
 import type { AIBotReplyResult } from "../ai-bot.service";
 import type { Claim, EngineTurnTrace, ModelTurnOutput, OfferedItem, ProductIdOrigin, ReplyEngineMode, StateLane } from "./contract";
 import { engineConfig } from "./flags";
-import { endMarkFact } from "./end-mark";
-import { ENDED_FACT } from "@chatcenter/shared/src/lib/bot-idle";
+import { endMarkFact, customerEnded, quietCloseRuns, closeCallRefusal, closeWasDeferred, closeHeldBack } from "./end-mark";
+import { ENDED_FACT, BOT_IDLE_KEY, botIdleDefaultOn } from "@chatcenter/shared/src/lib/bot-idle";
 import { loadState, mergeState, saveState, saveSummary, renderState, isTeamPromise, TEAM_OPEN_MS, CANNED_SENT_FACT, SAFETY_FACT, SEARCH_FAIL_FACT, INACTIVE_ORDERS_FACT } from "./state";
 import { loadEngineSkills, splitInline } from "./skills";
 import { buildSurface } from "./surface";
@@ -1823,6 +1823,12 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     },
   };
 
+  // The model's own close (end-mark.ts): does the idle sweep close a marked end here? The business's idle setting
+  // is read only on a turn whose customer message is an end, and only with the default switched on.
+  const quietClose = botIdleDefaultOn() && customerEnded(opts.incomingMessage, history)
+    ? await readDurableSetting(opts.tenantId, BOT_IDLE_KEY).then((raw) => quietCloseRuns(conversation.channel, raw, true)).catch(() => false)
+    : false;
+
   // The active business skill (opened via read_skill this turn or kept in state) tightens approval.
   const skillByName = (n: string | null) => skills.find((s) => s.name === n)?.candidate ?? null;
   const env: RunnerEnv = {
@@ -1840,6 +1846,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // 622fcae0: the model's raw audience "women" and price 0..0 made an empty search look narrowed).
     prepare: (tool, args) => (/(?:list_products|search_products)$/.test(tool) ? cleanSearchArgs(args as any, String(opts.incomingMessage ?? "")) : args),
     refuse: (tool, args) => refuseOrderRead(tool, opts.incomingMessage ?? "", history) ?? refuseWrite(tool, opts.incomingMessage ?? "")
+      // The model's close is refused when the customer has not ended it, and deferred to the quiet close when she has.
+      ?? closeCallRefusal(tool, { incoming: opts.incomingMessage, history, quietClose })
       ?? (/(?:^|\.)(?:list_products|search_products)$/.test(tool) && typeof (args as any)?.query === "string" && String((args as any).query).trim() && !storeQueryWords(String((args as any).query)) ? "the query holds no product word: search by the product's name or type, or answer without a search" : null)
       // An empty query lists the whole store: never when her message names no product (rating of b3d2bbf3: "אפשר
       // המלצה" got three arbitrary cards); ask what she is looking for.
@@ -2056,7 +2064,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     teamAlreadyOpen,
     newTeamQuestion: isNewTeamQuestion(o.teamQuestion),
     recentInbound: inbound,
-    toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny"),
+    // A close the engine held back is its own rule, not a call a person has to pick up.
+    toolsNeedPerson: approvalPending || turnTools.records.some((r) => r.decision === "deny" && !closeHeldBack(r)),
     knowledge: [knowledge ?? "", ...turnTools.knowledgeText].join("\n"),
     previousBotReplies,
     candidateTitles: candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean),
@@ -3324,7 +3333,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     engineFacts: { ...holdFacts, ...(candidates.length ? { [FOCUS_FACT]: JSON.stringify(candidates.map((c: any) => String(c?.title ?? "")).filter(Boolean).slice(0, 5)) } : nonProductAsk(String(opts.incomingMessage ?? "")) && state.facts?.[FOCUS_FACT] ? { [FOCUS_FACT]: "" } : {}), ...(reply ? { [SPOKE_FACT]: String(Number(state.turnCount ?? 0)) } : {}), ...(cannedNow ? { [CANNED_SENT_FACT]: now } : {}), ...(safetyConversation && !state.facts?.[SAFETY_FACT] ? { [SAFETY_FACT]: now } : {}), ...(searchFailedNow ? { [SEARCH_FAIL_FACT]: now } : state.facts?.[SEARCH_FAIL_FACT] ? { [SEARCH_FAIL_FACT]: "" } : {}), ...inactiveOrdersFact(state.facts?.[INACTIVE_ORDERS_FACT], inactiveOrdersIn(turnTools.records)) },
   });
   // The customer ended it and nothing is open: marked for the idle sweep's quiet close (end-mark.ts). Any later turn clears it.
-  if (lane === "live") Object.assign(next.facts, endMarkFact(state.facts?.[ENDED_FACT], { incoming: opts.incomingMessage, history, reply, handoff: !!escalation, awaitingApproval: !!awaitingApproval, pending: next.pending, turnStartedAt: t0 }));
+  if (lane === "live") Object.assign(next.facts, endMarkFact(state.facts?.[ENDED_FACT], { incoming: opts.incomingMessage, history, reply, handoff: !!escalation, awaitingApproval: !!awaitingApproval, pending: next.pending, turnStartedAt: t0, closeDeferred: turnTools.records.some(closeWasDeferred) }));
   await saveState(opts.tenantId, opts.conversationId, lane, config.id, next);
   mark("save");
   trace.tools = turnTools.records;

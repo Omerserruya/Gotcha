@@ -5,7 +5,7 @@
  * grounded into keys, cards staged from keys, Gate 3 rewrite then fallback,
  * shadow simulating writes on the platform's credits, Gate 1 stopping early.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const h = vi.hoisted(() => ({
@@ -20,6 +20,13 @@ const h = vi.hoisted(() => ({
   agentStatus: "ACTIVE",
   textChannel: false,
   offerWrite: false,
+  /** The business switched the close tool on for its employee. */
+  offerClose: false,
+  /** The conversation's channel, the business's stored idle setting, and whether reading it fails. */
+  channel: "WEBCHAT",
+  idleRow: null as string | null,
+  idleReadThrows: false,
+  settingReads: [] as any[],
   variations: false,
   onTool: null as null | ((name: string) => void),
   lexicalFor: null as null | ((q: string) => any[]),
@@ -55,7 +62,7 @@ vi.mock("@chatcenter/shared", async (orig) => {
     prisma: {
       aIAgent: { findUnique: async () => ({ id: "ag1", tenantId: "t1", name: "נועה", role: "customer_support", status: h.agentStatus, model: "gpt-6-luna", persona: { gender: "female" }, escalationMessage: "x", ...h.agentExtra }) },
       businessPolicy: { findUnique: async () => h.policyRow },
-      conversation: { findFirst: async () => ({ id: "c1", tenantId: "t1", channel: "WEBCHAT", customerExternalId: "v1" }) },
+      conversation: { findFirst: async () => ({ id: "c1", tenantId: "t1", channel: h.channel, customerExternalId: "v1" }) },
       contact: { findFirst: async () => null },
       message: { findMany: async (a: any) => { h.historyQueries.push(a); return [{ direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null }]; } },
       approvalRequest: { findMany: async () => [] },
@@ -68,11 +75,17 @@ vi.mock("@chatcenter/shared", async (orig) => {
       auditLog: { create: async (a: any) => { h.audits.push(a); return {}; } },
     },
     checkAiAllowed: async () => ({ allowed: true }),
+    readDurableSetting: async (tenantId: string, key: string) => {
+      h.settingReads.push([tenantId, key]);
+      if (h.idleReadThrows) throw new Error("settings store down");
+      return h.idleRow;
+    },
     recordUnansweredQuestion: async (q: any) => { h.teamQuestions.push(q); },
     buildAgentToolsForAIAgent: async () => [
       { type: "function", function: { name: "escalate_to_human", description: "hand over", parameters: { type: "object", properties: {} } } },
       { type: "function", function: { name: "send_product_card", description: "card", parameters: { type: "object", properties: {} } } },
       ...(h.offerWrite ? [{ type: "function", function: { name: "woocommerce.add_order_note", description: "note", parameters: { type: "object", properties: {} } } }] : []),
+      ...(h.offerClose ? [{ type: "function", function: { name: "close_conversation", description: "close", parameters: { type: "object", properties: { reason: { type: "string" } } } } }] : []),
       ...(h.variations ? [{ type: "function", function: { name: "woocommerce.list_product_variations", description: "variations", parameters: { type: "object", properties: { product_id: { type: "string" } } } } }] : []),
     ],
     evaluatePolicies: async ({ toolName }: any) => ({ decision: h.policy[toolName] ?? "ALLOW", reason: "test" }),
@@ -171,7 +184,12 @@ const tc = (id: string, name: string, args: any) => ({ id, function: { name, arg
 const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stage: "choosing", intent: "תיק בד", facts: {}, pending: [] }, claims: [], handoff: null, cards: [], ...a });
 
 beforeEach(() => {
-  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries"] as const) (h as any)[k].length = 0;
+  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries", "settingReads"] as const) (h as any)[k].length = 0;
+  h.offerClose = false;
+  h.channel = "WEBCHAT";
+  h.idleRow = null;
+  h.idleReadThrows = false;
+  delete process.env.BOT_IDLE_DEFAULT_ON;
   h.failReads = 0;
   h.chunks = null;
   h.slowReads = 0;
@@ -5271,5 +5289,186 @@ describe("the customer ended it: the turn is marked for the quiet close (2026-11
     await runReplyEngineTurn(end, "shadow");
     expect(h.upserts[0].where.conversationId_lane.lane).toBe("shadow");
     expect(h.upserts[0].create.facts._endedAt).toBeUndefined();
+  });
+});
+
+/**
+ * The model's own close_conversation (2026-11-22). On dev, with the bot idle default on, a customer wrote
+ * "תודה רבה, זה הכל" and the model called the business's close tool: the conversation closed at once, with no
+ * closing event, so a late "and one more thing" would open a new conversation instead of landing in this one.
+ */
+describe("the model's own close_conversation, through a whole turn", () => {
+  const at = new Date("2026-11-22T09:00:00.000Z");
+  const STOCK = "יש גופיית ריב בגווני שחור ואקרו, אבל לא בלבן.";
+  const ASKED = "יש בשחור ובאקרו. עוד משהו שאוכל לעזור בו?";
+  const DEFERRED = "close_deferred: the customer said goodbye. Do not close now: the conversation closes by itself a few minutes after a goodbye and stays open for a late message. Answer the customer as you would answer any goodbye, and do not call close_conversation again.";
+  const NOT_ALLOWED = "close_not_allowed: do NOT close this conversation. The customer has not ended it (an explicit thanks, bye or that's all after their need was met). Answer their latest message and keep the conversation open.";
+  const talk = (botLine: string, incoming: string) => [
+    { direction: "INBOUND", body: "יש גופיית ריב בלבן?", metadata: null, createdAt: new Date(at.getTime() - 120_000) },
+    { direction: "OUTBOUND", body: botLine, senderName: "AI Bot", metadata: { source: "ai_bot" }, createdAt: new Date(at.getTime() - 60_000) },
+    { direction: "INBOUND", body: incoming, metadata: null, createdAt: at },
+  ];
+  const group = (enabled: boolean) => ({ enabled, reminderAfterMinutes: 45, closeAfterReminderMinutes: 20, reminderText: "", closeText: "" });
+  /** The model calls the close tool first, reads the result, then answers. */
+  const closeTurn = async (incoming: string, o: { botLine?: string; lane?: "autonomous" | "shadow"; answer?: Record<string, unknown> } = {}) => {
+    h.offerClose = true;
+    h.history = talk(o.botLine ?? STOCK, incoming);
+    h.responses.push(
+      { toolCalls: [tc("k1", "close_conversation", { reason: "the customer said goodbye" })] },
+      { toolCalls: [respond("k2", { reply: "בשמחה, יום נעים!", ...(o.answer ?? {}) })] },
+    );
+    return runReplyEngineTurn({ ...opts, incomingMessage: incoming }, o.lane ?? "autonomous");
+  };
+  const closeRan = () => h.dispatched.some((d: any) => d.name === "close_conversation") || h.submitted.includes("close_conversation");
+  const modelRead = () => String(h.calls[1]?.messages.find((m: any) => m.role === "tool" && m.tool_call_id === "k1")?.content ?? "");
+  const reasonRead = () => { try { return JSON.parse(modelRead()).reason ?? null; } catch { return null; } };
+  const logged = (r: any) => r.toolCallLog.find((t: any) => t.tool === "close_conversation")?.decision;
+  const auditCode = () => h.audits.find((a: any) => a.data.action === "ai.tool_call.close_conversation")?.data.metadata.errorCode;
+  const mark = () => h.upserts[0]?.create.facts._endedAt;
+  afterEach(() => { delete process.env.BOT_IDLE_DEFAULT_ON; });
+
+  it("★ the dev case: \"תודה רבה, זה הכל\" with the default on: the close never runs, the model is told why, the turn is marked", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    const r = await closeTurn("תודה רבה, זה הכל");
+    expect(closeRan()).toBe(false);
+    expect(h.dispatched).toEqual([]);
+    expect(reasonRead()).toBe(DEFERRED);
+    expect(JSON.parse(modelRead())).toEqual({ ok: false, failure: "refused", reason: DEFERRED });
+    // Never read as a close that happened: the worker announces a close only for an "executed" call.
+    expect(logged(r)).toBe("deny");
+    expect(r.trace.tools.find((t: any) => t.tool === "close_conversation")).toMatchObject({ decision: "deny" });
+    expect(auditCode()).toBe("refused:close_deferred");
+    expect(r.reply).toBe("בשמחה, יום נעים!");
+    expect(r.escalation).toBeNull();
+    expect(mark()).toBe(at.toISOString());
+    expect(h.settingReads).toEqual([["t1", "botIdleAutomation"]]);
+  });
+
+  it("★ the same on every channel of the two groups, and for a business with its own saved rule", async () => {
+    for (const [channel, row] of [["WHATSAPP", null], ["INSTAGRAM", null], ["SHOPIFY_LIVE_CHAT", null], ["WHATSAPP", JSON.stringify({ groups: { messaging: group(true) } })], ["WEBCHAT", JSON.stringify({ groups: { liveChat: group(true) } })]] as const) {
+      for (const k of ["responses", "calls", "dispatched", "submitted", "upserts", "audits"] as const) (h as any)[k].length = 0;
+      process.env.BOT_IDLE_DEFAULT_ON = "true";
+      h.channel = channel;
+      h.idleRow = row;
+      const r = await closeTurn("לא תודה, זה הכל");
+      expect([channel, row, closeRan(), reasonRead(), logged(r), mark()]).toEqual([channel, row, false, DEFERRED, "deny", at.toISOString()]);
+    }
+  });
+
+  it("★ after the bot's own question: a deferred close marks the turn; with no close call the same words do not", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    await closeTurn("לא תודה, זה הכל", { botLine: ASKED });
+    expect([closeRan(), reasonRead(), mark()]).toEqual([false, DEFERRED, at.toISOString()]);
+
+    h.upserts.length = 0; h.responses.length = 0; h.calls.length = 0;
+    h.history = talk(ASKED, "לא תודה, זה הכל");
+    h.responses.push({ toolCalls: [respond("k3", { reply: "בשמחה, יום נעים!" })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "לא תודה, זה הכל" }, "autonomous");
+    expect(mark()).toBeUndefined();
+  });
+
+  it("★ a deferred close does not mark a turn that is still open: the reply asks, or it goes to a person", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    await closeTurn("תודה רבה, זה הכל", { answer: { reply: "בשמחה! רוצה שאשלח לך קישור לגופייה בשחור?" } });
+    expect([closeRan(), reasonRead(), mark()]).toEqual([false, DEFERRED, undefined]);
+  });
+
+  it("★ no quiet close here: the close runs at once, as before (switch off, group switched off, a channel with no rule)", async () => {
+    const cases: Array<[string | undefined, string, string | null, number]> = [
+      [undefined, "WEBCHAT", null, 0],
+      ["off", "WEBCHAT", null, 0],
+      ["", "WHATSAPP", JSON.stringify({ groups: { messaging: group(true) } }), 0],
+      ["on", "WEBCHAT", JSON.stringify({ groups: { liveChat: group(false) } }), 1],
+      ["on", "WHATSAPP", JSON.stringify({ groups: { messaging: group(false) } }), 1],
+      ["on", "SMS", null, 1],
+    ];
+    for (const [env, channel, row, reads] of cases) {
+      for (const k of ["responses", "calls", "dispatched", "submitted", "upserts", "audits", "settingReads"] as const) (h as any)[k].length = 0;
+      if (env === undefined) delete process.env.BOT_IDLE_DEFAULT_ON; else process.env.BOT_IDLE_DEFAULT_ON = env;
+      h.channel = channel;
+      h.idleRow = row;
+      const r = await closeTurn("תודה רבה, זה הכל");
+      expect([env, channel, h.dispatched.map((d: any) => d.name), logged(r), reasonRead(), h.settingReads.length]).toEqual([env, channel, ["close_conversation"], "executed", null, reads]);
+    }
+  });
+
+  it("★ the setting could not be read: the close runs, because nothing proves a quiet close would follow", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    h.idleReadThrows = true;
+    const r = await closeTurn("תודה רבה, זה הכל");
+    expect(h.dispatched.map((d: any) => d.name)).toEqual(["close_conversation"]);
+    expect(logged(r)).toBe("executed");
+    expect(h.settingReads).toHaveLength(1);
+  });
+
+  it("★ the customer has not ended it: the close is refused, with the switch on or off, and nothing is marked", async () => {
+    for (const env of ["on", undefined]) {
+      for (const incoming of ["תודה, אבל עוד שאלה", "יש גם בכחול"]) {
+        for (const k of ["responses", "calls", "dispatched", "submitted", "upserts", "audits", "settingReads"] as const) (h as any)[k].length = 0;
+        if (env === undefined) delete process.env.BOT_IDLE_DEFAULT_ON; else process.env.BOT_IDLE_DEFAULT_ON = env;
+        const r = await closeTurn(incoming, { answer: { reply: "בטח, אני כאן." } });
+        expect([env, incoming, closeRan(), reasonRead(), logged(r), auditCode(), mark(), h.settingReads.length])
+          .toEqual([env, incoming, false, NOT_ALLOWED, "deny", "refused:close_not_allowed", undefined, 0]);
+      }
+    }
+  });
+
+  it("★ a first message is never an end: the close is refused before the bot has answered anything", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    h.offerClose = true;
+    h.history = [{ direction: "INBOUND", body: "תודה", metadata: null, createdAt: at }];
+    h.responses.push({ toolCalls: [tc("k1", "close_conversation", { reason: "thanks" })] }, { toolCalls: [respond("k2", { reply: "היי! איך אפשר לעזור?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
+    expect([closeRan(), reasonRead(), logged(r), mark()]).toEqual([false, NOT_ALLOWED, "deny", undefined]);
+  });
+
+  it("★ the model asks again in the same turn: still held back", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    h.offerClose = true;
+    h.history = talk(STOCK, "תודה רבה, זה הכל");
+    h.responses.push(
+      { toolCalls: [tc("k1", "close_conversation", { reason: "bye" })] },
+      { toolCalls: [tc("k1b", "close_conversation", { reason: "bye again" })] },
+      { toolCalls: [respond("k2", { reply: "בשמחה, יום נעים!" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה רבה, זה הכל" }, "autonomous");
+    expect(closeRan()).toBe(false);
+    expect(r.toolCallLog.filter((t: any) => t.tool === "close_conversation").map((t: any) => t.decision)).toEqual(["deny", "deny"]);
+    expect(mark()).toBe(at.toISOString());
+  });
+
+  it("★ the shadow lane: the same hold-back, nothing simulated, and no mark", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    const r = await closeTurn("תודה רבה, זה הכל", { lane: "shadow" });
+    expect([closeRan(), reasonRead(), logged(r)]).toEqual([false, DEFERRED, "deny"]);
+    expect(h.upserts[0].where.conversationId_lane.lane).toBe("shadow");
+    expect(mark()).toBeUndefined();
+  });
+
+  it("★ a held-back close is not a tool asking for a person: a handoff on that turn is still judged on its own", async () => {
+    process.env.BOT_IDLE_DEFAULT_ON = "on";
+    for (const [incoming, reason] of [["תודה רבה, זה הכל", DEFERRED], ["יש גם בכחול", NOT_ALLOWED]] as const) {
+      for (const k of ["responses", "calls", "dispatched", "submitted", "upserts", "audits"] as const) (h as any)[k].length = 0;
+      h.offerClose = true;
+      h.history = talk(STOCK, incoming);
+      h.responses.push(
+        { toolCalls: [tc("k1", "close_conversation", { reason: "done" })] },
+        { toolCalls: [respond("k2", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "closing the conversation" })] },
+        { toolCalls: [respond("k3", { reply: "בשמחה, אני כאן אם צריך." })] },
+      );
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+      expect([incoming, reasonRead(), r.trace.gate3.problems.map((p: any) => p.kind).includes("needless_handoff"), r.escalation]).toEqual([incoming, reason, true, null]);
+    }
+  });
+
+  it("the control for that: any other refused tool still lets the handoff through", async () => {
+    h.offerWrite = true;
+    h.history = talk(STOCK, "תודה רבה, זה הכל");
+    h.responses.push(
+      { toolCalls: [tc("w1", "woocommerce.add_order_note", { order_id: "5", note: "x", customer_visible: true })] },
+      { toolCalls: [respond("w2", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "could not write the note" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה רבה, זה הכל" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
   });
 });

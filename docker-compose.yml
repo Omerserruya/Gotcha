@@ -529,6 +529,10 @@ services:
       args:
         BUILD_SHA: ${BUILD_SHA:-dev}
     environment:
+      # Bot idle default: with it on, the reply engine defers the model's own close after a customer goodbye to
+      # the quiet close the sweep does (services/ai reply-engine/end-mark.ts). Off: that close goes through at
+      # once, as before. Same value as `incoming-worker`, which is the service that does the quiet close.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       # ── Data retention (GDPR Art. 5(1)(e)) ──
       #
       # DELETE SCHEDULES. Every one of these is empty, and that is the

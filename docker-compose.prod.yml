@@ -596,6 +596,10 @@ services:
     <<: *default-restart
     logging: *default-logging
     environment:
+      # Bot idle default: with it on, the reply engine defers the model's own close after a customer goodbye to
+      # the quiet close the sweep does (services/ai reply-engine/end-mark.ts). Off: that close goes through at
+      # once, as before. Same value as `incoming-worker`, which is the service that does the quiet close.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       # Decides whether unpaid or suspended organizations are refused AI, and
       # whether a capability outside their plan is refused. Undeclared means
       # "off", which fails OPEN - so it is stated here rather than left to a
