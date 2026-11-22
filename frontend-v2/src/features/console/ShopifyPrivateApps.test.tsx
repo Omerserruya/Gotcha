@@ -120,7 +120,10 @@ describe('★★ each state offers its own steps', () => {
     ['link_sent', 'included', ['newLink', 'revoke']],
     ['installed', 'included', ['revoke']],
     ['revoked', 'included', []],
-    ['revoked', 'manual', ['grant']],
+    // Grant on requested and link_sent only - never revoked, never installed (Supervisor).
+    ['revoked', 'manual', []],
+    ['installed', 'manual', ['revoke']],
+    ['link_sent', 'manual', ['newLink', 'revoke', 'grant']],
     ['requested', 'manual', ['link', 'grant']],
   ] as const)('%s (%s): %j', (status, entitlement, steps) => {
     draw([row({ status })], { enabled: true, entitlement });
@@ -136,7 +139,7 @@ describe('★★ each state offers its own steps', () => {
     await userEvent.click(screen.getByTestId('shopify-app-t1-next'));
     expect(shopifyCustomAppStep).not.toHaveBeenCalled();
     expect(screen.getByTestId('shopify-app-t1-confirm')).toHaveTextContent(
-      'Revoke the private app for acme.myshopify.com (Acme)?',
+      'Revoke the private app for acme.myshopify.com (Acme)? GOTCHA’s Shopify features stop for that workspace. The store stays connected only until it moves to the official app through Replace.',
     );
     await userEvent.click(screen.getByTestId('shopify-app-t1-go'));
     expect(shopifyCustomAppStep).toHaveBeenCalledWith('t1', 'revoke');

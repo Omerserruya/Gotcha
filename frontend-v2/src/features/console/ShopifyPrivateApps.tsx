@@ -168,7 +168,10 @@ function RequestRow({
     ...(request.status === 'link_sent' || request.status === 'installed'
       ? (['revoke'] as const)
       : []),
-    ...(manual && request.status !== 'installed' ? (['grant'] as const) : []),
+    // Grant: manual entitlement, and only before the store is installed or revoked (Supervisor).
+    ...(manual && (request.status === 'requested' || request.status === 'link_sent')
+      ? (['grant'] as const)
+      : []),
   ];
 
   const ready =

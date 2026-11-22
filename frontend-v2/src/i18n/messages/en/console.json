@@ -900,7 +900,7 @@
     "confirm": {
       "link": "Store the app for {shop} and email the install link to {workspace}?",
       "newLink": "Email a new install link for {shop} to {workspace}?",
-      "revoke": "Revoke the private app for {shop} ({workspace})?",
+      "revoke": "Revoke the private app for {shop} ({workspace})? GOTCHA’s Shopify features stop for that workspace. The store stays connected only until it moves to the official app through Replace.",
       "grant": "Let {workspace} ask for a private install?"
     },
     "go": {
