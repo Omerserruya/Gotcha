@@ -2286,13 +2286,17 @@ http {
             # A location with its own add_header inherits none, so this
             # server's headers are repeated word for word, then the two a demo
             # page adds: never indexed, never cached.
+            # One difference, here only: script-src also allows blob:. An
+            # exported page starts its runtime from blob: script URLs, and
+            # without it the browser refuses the runtime and the page shows its
+            # raw template text. The server's own policy stays as it is.
             # scripts/gateway/check-demo-pages.sh fails when they drift apart.
             add_header X-Content-Type-Options "nosniff" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             add_header X-Frame-Options "SAMEORIGIN" always;
             add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://connect.facebook.net blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
             add_header X-Robots-Tag "noindex, nofollow" always;
             add_header Cache-Control "no-store" always;
 

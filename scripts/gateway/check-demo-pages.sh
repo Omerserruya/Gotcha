@@ -116,13 +116,21 @@ body_has() { grep -q "$1" "$WORK/out/b"; }
 
 SEC="X-Content-Type-Options Referrer-Policy Strict-Transport-Security X-Frame-Options Permissions-Policy Content-Security-Policy"
 
-# The headers this server sends on its own page: the demo page must send the same ones.
-if [ "$MODE" = prod ]; then get "/"; else get "/health"; fi
+# The headers this server sends on its own page (prod: the home page; dev: the catch-all,
+# which answers 502 here with the server's headers on it). The demo page must send the same
+# five, and the same policy with ONE token added: blob: in script-src, because an exported
+# page starts its runtime from blob: script URLs.
+get "/"
 for h in $SEC; do eval "BASE_${h//-/_}=\"\$(hdr $h)\""; done
 if [ "$MODE" = prod ]; then
   [ "$CODE" = 200 ] && body_has LANDING-HOME && ok "the site's own home page still serves (200)" || bad "home page: $CODE"
-  [ -n "$BASE_Content_Security_Policy" ] && ok "the home page carries a CSP to compare with" || bad "home page has no CSP"
 fi
+[ -n "$BASE_Content_Security_Policy" ] && ok "the server's own page carries a CSP to compare with" || bad "the server's own page has no CSP"
+BASE_SCRIPT_SRC="$(printf '%s' "$BASE_Content_Security_Policy" | tr ';' '\n' | sed 's/^ *//' | { grep '^script-src ' || true; })"
+[ "$(printf '%s\n' "$BASE_SCRIPT_SRC" | grep -c '^script-src ')" = 1 ] && ! printf '%s' "$BASE_SCRIPT_SRC" | grep -q 'blob:' \
+  && ok "the server's own script-src is as it was: no blob:" || bad "the server's own script-src: $BASE_SCRIPT_SRC"
+# The policy a demo page must carry: the server's, with " blob:" at the end of script-src.
+WANT_CSP="$(printf '%s' "$BASE_Content_Security_Policy" | sed 's/\(script-src [^;]*\)/\1 blob:/')"
 
 served() { # served <path> <marker> <content-type prefix> <what>
   get "$1"
@@ -132,15 +140,12 @@ served() { # served <path> <marker> <content-type prefix> <what>
   case "$(hdr Content-Type)" in "$3"*) ;; *) why="$why type=$(hdr Content-Type)" ;; esac
   [ "$(hdr X-Robots-Tag)" = "noindex, nofollow" ] || why="$why robots=$(hdr X-Robots-Tag)"
   [ "$(hdr Cache-Control)" = "no-store" ] || why="$why cache=$(hdr Cache-Control)"
-  if [ "$MODE" = prod ]; then
-    for h in $SEC; do
-      eval "want=\"\$BASE_${h//-/_}\""
-      [ -n "$want" ] && [ "$(hdr "$h")" = "$want" ] || why="$why $h"
-    done
-  else
-    for h in $SEC; do [ -n "$(hdr "$h")" ] || why="$why $h"; done
-  fi
-  [ -z "$why" ] && ok "$4: 200, noindex, no-store, the server's security headers ($1)" || bad "$4 ($1):$why"
+  for h in $SEC; do
+    eval "want=\"\$BASE_${h//-/_}\""
+    [ "$h" = Content-Security-Policy ] && want="$WANT_CSP"
+    [ -n "$want" ] && [ "$(hdr "$h")" = "$want" ] || why="$why $h"
+  done
+  [ -z "$why" ] && ok "$4: 200, noindex, no-store, the server's five headers, its CSP plus blob: ($1)" || bad "$4 ($1):$why"
 }
 
 refused() { # refused <path> <what>
@@ -156,6 +161,20 @@ refused() { # refused <path> <what>
 }
 # A dot segment is refused before any location runs, so it gets nginx's bare 404, not the site's page.
 dotted() { refused "$1" "$2" bare; }
+
+echo "--- the demo policy is the server's plus one token"
+get "/demo/$ID"
+GOT_CSP="$(hdr Content-Security-Policy)"
+[ -n "$WANT_CSP" ] && [ "$GOT_CSP" = "$WANT_CSP" ] && [ "$GOT_CSP" != "$BASE_Content_Security_Policy" ] \
+  && ok "the /demo CSP equals the server's CSP with blob: added to script-src, nothing else" \
+  || { bad "the /demo CSP is not the server's plus blob: in script-src"; echo "      want: $WANT_CSP"; echo "      got:  $GOT_CSP"; }
+# Word by word: what /demo has that the server does not, and the other way round.
+words() { printf '%s' "$1" | sed 's/;/ ;/g' | tr -s ' ' '\n' | sort; }
+ADDED="$(comm -13 <(words "$BASE_Content_Security_Policy") <(words "$GOT_CSP") | tr '\n' ' ')"
+GONE="$(comm -23 <(words "$BASE_Content_Security_Policy") <(words "$GOT_CSP") | tr '\n' ' ')"
+[ "$ADDED" = "blob: " ] && [ -z "$GONE" ] && ok "added tokens: [blob:], removed tokens: none" || bad "added tokens: [$ADDED] removed tokens: [$GONE]"
+printf '%s' "$GOT_CSP" | tr ';' '\n' | sed 's/^ *//' | grep '^script-src ' | sed 's/^/      \/demo  /'
+printf '%s\n' "$BASE_SCRIPT_SRC" | sed 's/^/      server /'
 
 echo "--- a valid id serves"
 served "/demo/$ID" "DEMO-PAGE-$ID" "text/html" "the page"
