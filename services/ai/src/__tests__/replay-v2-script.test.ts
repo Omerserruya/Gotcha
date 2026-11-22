@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/connectors", () => ({}));
 vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn() }));
-import { parseArgs, planReplay, gateAsOf, stagesLine, reportPath } from "../scripts/replay-v2";
+import { parseArgs, planReplay, gateAsOf, stagesLine, searchLine, reportPath } from "../scripts/replay-v2";
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
 function db(convs: any[], msgs: Record<string, any[]>, agent: any = { id: "noa" }, opts: { ownerRecent?: boolean; handovers?: Record<string, any[]> } = {}) {
@@ -163,5 +163,39 @@ describe("the store searches in the report (rating ed780586)", () => {
     const line = searchArgsLine([{ tool: "woocommerce.list_products", q: "מטפחת לקשירה נמוכה", cq: "היי מחפשת את הבובון לקשירה נמוכה", audience: "women", in_stock: true, price: [null, 200] }]);
     expect(line).toBe('list_products q="מטפחת לקשירה נמוכה" cq="היי מחפשת את הבובון לקשירה נמוכה" audience=women in_stock=true price=-..200');
     expect(searchArgsLine([{ tool: "x.list_products", q: "a".repeat(80), price: [null, null] }])).toBe(`list_products q="${"a".repeat(60)}"`);
+  });
+});
+
+describe("the calls of a turn, around its first draft (log only)", () => {
+  const knowledge = { callId: "call_1", tool: "search_knowledge", outcome: "ok", ms: 5 };
+  const own = { callId: "auto_store_1", tool: "woocommerce.list_products", outcome: "ok", ms: 7, args: { query: "y" }, resultCount: 1 };
+  const model = { callId: "call_2", tool: "woocommerce.list_products", outcome: "ok", ms: 9, args: { query: "x" }, resultCount: 2, content: 'PRODUCT_1: "A"' };
+  const head = "- stages: - | rounds=? rewriteRounds=0 autoLookupMs=0 rewriteMs=0 | tools: ";
+
+  it("★ the stages line prints the calls after the draft apart, and marks the engine's own", () => {
+    expect(stagesLine({ tools: [knowledge, own], toolsAtFirstGate: 1 })).toBe(`${head}search_knowledge:ok:5ms | after the draft: engine:woocommerce.list_products:ok:7ms:{query}`);
+    expect(stagesLine({ tools: [own], toolsAtFirstGate: 0 })).toBe(`${head}- | after the draft: engine:woocommerce.list_products:ok:7ms:{query}`);
+    // A model's own call after the draft carries no mark.
+    expect(stagesLine({ tools: [knowledge, model], toolsAtFirstGate: 1 })).toBe(`${head}search_knowledge:ok:5ms | after the draft: woocommerce.list_products:ok:9ms:{query}`);
+    // Nothing after the draft: the line of before.
+    expect(stagesLine({ tools: [knowledge, model], toolsAtFirstGate: 2 })).toBe(`${head}search_knowledge:ok:5ms woocommerce.list_products:ok:9ms:{query}`);
+  });
+
+  it("★ a trace that does not say where the draft was prints as one part", () => {
+    for (const at of [undefined, null, -1, 1.5, "1", NaN]) {
+      expect(stagesLine({ tools: [knowledge, model], toolsAtFirstGate: at }), String(at)).toBe(`${head}search_knowledge:ok:5ms woocommerce.list_products:ok:9ms:{query}`);
+    }
+    // The engine's own call is marked by its id alone.
+    expect(stagesLine({ tools: [own] })).toBe(`${head}engine:woocommerce.list_products:ok:7ms:{query}`);
+    expect(stagesLine({ tools: [{ ...own, callId: "call_auto_1" }] })).toBe(`${head}woocommerce.list_products:ok:7ms:{query}`);
+  });
+
+  it("★ the search line: a search after the draft is not the model's args for it", () => {
+    expect(searchLine({ tools: [model, knowledge, own], toolsAtFirstGate: 2 })).toBe('model args: list_products {"query":"x"} -> ok (2) ["A"] | after the draft: engine: list_products {"query":"y"} -> ok (1)');
+    expect(searchLine({ tools: [knowledge, own], toolsAtFirstGate: 1 })).toBe('after the draft: engine: list_products {"query":"y"} -> ok (1)');
+    expect(searchLine({ tools: [knowledge, model], toolsAtFirstGate: 1 })).toBe('after the draft: list_products {"query":"x"} -> ok (2) ["A"]');
+    // No mark of the draft: one part, as before, the engine's own still marked.
+    expect(searchLine({ tools: [model, own] })).toBe('model args: list_products {"query":"x"} -> ok (2) ["A"]; engine: list_products {"query":"y"} -> ok (1)');
+    expect(searchLine({ tools: [knowledge], toolsAtFirstGate: 0 })).toBe("none");
   });
 });

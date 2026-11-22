@@ -3007,3 +3007,140 @@ describe("a sentence that opens with a bare pronoun leans on the one before it (
     for (const x of ["הואיל והמיקסר כבד, נדרש מעצור.", "המשטח במבצע עכשיו ב-₪129.15.", "למיקסר יש התאמות לפי דגם, איזה דגם יש לך?", "המשלוח הוא חינם.", "Items ship in three days.", "Theyre is no word."]) expect(LEANS_ON_BEFORE.test(x), x).toBe(false);
   });
 });
+
+// The customer's message, the draft and the sent text are the replay's own (prod replay 2026-11-22, a webchat
+// conversation whose earlier turn had read the product at its sale price).
+describe("prod replay 2026-11-22: a price said of a product an earlier turn showed", () => {
+  const INCOMING = "איזה גוון מייקאפ יתאים לעור שלי?";
+  const DRAFT = "יש לנו מייקאפ טינט שמתאים כמעט לכולן ומשנה גוון מלבן לצבע העור. אם הכוונה למייקאפ אחר, כתבי איזה מוצר ואכוון לפי הגוונים שלו.";
+  const SENT = "מייקאפ טינט מתאים כמעט לכולן, הוא משנה גוון מלבן לצבע העור ומחירו 178 ₪. אם התכוונת למייקאפ אחר, כתבו איזה מוצר ואכוון אותך לפי הגוונים שלו.";
+  // The price as the store wrote it and the state kept it.
+  const SHOWN = [{ title: "מייקאפ טינט", price: "160.20" }];
+  // The turn's only tool was the knowledge search, and the document gives the regular price.
+  const DOCUMENT = [{ callId: "call_k", tool: "search_knowledge", outcome: "ok", content: "מייקאפ טינט, 178 ₪" }] as any;
+  const STORE = ["search_knowledge", "woocommerce.list_products"];
+  const run = async (reply: string, over: any = {}) => {
+    const { gate3 } = await import("../services/reply-engine/gates");
+    return gate3({ reply, claims: [], cards: [], candidateCount: 0, tools: DOCUMENT, grounding: "מייקאפ טינט, 178 ₪ 160.20 ₪", locale: "he", incomingMessage: INCOMING, isFirstReply: false, employeeGender: null, employeeName: "נועה", toolsOffered: STORE, shopFloor: true, handedOff: false, approvalPending: false, ...over } as any).problems;
+  };
+  const kindsOf = (ps: any[]) => ps.map((p) => p.kind);
+
+  it("★ the draft names the product an earlier turn showed: it is not \"products without a name\"", async () => {
+    const { namelessProducts } = await import("../services/reply-engine/gates");
+    // The defect: only this turn's products counted as names, and this turn read none.
+    expect(namelessProducts(DRAFT, INCOMING, [], [], false)).toBe(true);
+    expect(namelessProducts(DRAFT, INCOMING, [], ["מייקאפ טינט"], false)).toBe(false);
+    expect(kindsOf(await run(DRAFT))).toContain("nameless_products");
+    expect(kindsOf(await run(DRAFT, { carriedPrices: SHOWN }))).not.toContain("nameless_products");
+    // A shown product the draft does not name leaves the draft nameless.
+    expect(kindsOf(await run(DRAFT, { carriedPrices: [{ title: "סרום לילה", price: 90 }] }))).toContain("nameless_products");
+    // A shown product whose price was never read is a name all the same.
+    expect(kindsOf(await run(DRAFT, { carriedPrices: [{ title: "מייקאפ טינט", price: null }] }))).not.toContain("nameless_products");
+  });
+
+  it("★ the sent text: the document's 178 for a product read earlier at 160.20 is a price against the store", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    expect(priceAgainstStore(SENT, [], DOCUMENT, true, SHOWN)).toEqual([SENT.split(". ")[0] + "."]);
+    // The defect: without the earlier read, nothing named a product the gate knew.
+    expect(priceAgainstStore(SENT, [], DOCUMENT, true)).toEqual([]);
+    const flagged = (await run(SENT, { carriedPrices: SHOWN })).find((p) => p.kind === "price_against_store") as any;
+    expect(flagged.claims).toHaveLength(1);
+    expect(flagged.store).toEqual(["מייקאפ טינט: 160.20"]);
+    expect(kindsOf(await run(SENT))).not.toContain("price_against_store");
+    // The price read then passes, alone or beside the regular one.
+    for (const ok of [SENT.replace("178", "160.20"), SENT.replace("178 ₪", "160.20 ₪ במקום 178 ₪"), SENT.replace("178 ₪", "‏160.2 ש\"ח")]) {
+      expect(priceAgainstStore(ok, [], DOCUMENT, true, SHOWN), ok).toEqual([]);
+      expect(kindsOf(await run(ok, { carriedPrices: SHOWN })), ok).not.toContain("price_against_store");
+    }
+    // It does not need a store search to be offered: the price was the store's own.
+    expect(priceAgainstStore(SENT, [], DOCUMENT, false, SHOWN)).toHaveLength(1);
+  });
+
+  it("★ this turn's read is the newer one; a read that brought no product still read a price", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    const now = [{ title: "מייקאפ טינט", price: 149 }];
+    const read = [{ callId: "c1", tool: "woocommerce.list_products", outcome: "ok", content: "PRODUCT_1: \"מייקאפ טינט\" ₪149" }] as any;
+    expect(priceAgainstStore("מייקאפ טינט עולה 149 ₪.", now, read, true, SHOWN)).toEqual([]);
+    expect(priceAgainstStore("מייקאפ טינט עולה 160.20 ₪.", now, read, true, SHOWN)).toHaveLength(1);
+    // A sentence that gives this turn's product its own price is that product's, though it names a shown one too.
+    expect(priceAgainstStore("Velvet Foundation עולה 50 ₪, פחות ממייקאפ טינט.", [{ title: "Velvet Foundation", price: 50 }], [], true, SHOWN)).toEqual([]);
+    // The same title in another letter case is the same product.
+    expect(priceAgainstStore("Tint Makeup costs ₪160.20.", [{ title: "TINT MAKEUP", price: 149 }], read, true, [{ title: "Tint Makeup", price: 160.2 }])).toHaveLength(1);
+    const one = [{ callId: "c2", tool: "woocommerce.get_product", outcome: "ok", content: "{\"name\":\"מייקאפ טינט\",\"price\":\"149\"}" }] as any;
+    expect(priceAgainstStore("מייקאפ טינט עולה 149 ₪.", [], one, true, SHOWN)).toEqual([]);
+    // A failed read, or the same number in a document, is no store price.
+    expect(priceAgainstStore("מייקאפ טינט עולה 149 ₪.", [], [{ ...one[0], outcome: "error" }] as any, true, SHOWN)).toHaveLength(1);
+    expect(priceAgainstStore("מייקאפ טינט עולה 149 ₪.", [], [{ callId: "k", tool: "search_knowledge", outcome: "ok", content: "149 ₪" }] as any, true, SHOWN)).toHaveLength(1);
+  });
+
+  it("★ a shipping price beside the product's name is not the product's; another product's price is not held to this one", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    for (const ok of ["המשלוח של מייקאפ טינט עולה 30 ₪.", "משלוח עד הבית למייקאפ טינט: 30 ₪.", "מייקאפ טינט נשלח עם שליח ב-30 ₪.", "כתוב שהמשלוח של מייקאפ טינט עולה 30 ₪.", "ולמשלוחים של מייקאפ טינט יש מחיר: 30 ₪.", "Shipping for מייקאפ טינט is ₪30.", "Delivery of מייקאפ טינט costs ₪30."]) {
+      expect(priceAgainstStore(ok, [], DOCUMENT, true, SHOWN), ok).toEqual([]);
+    }
+    // A word that only contains the letters is not shipping.
+    expect(priceAgainstStore("מייקאפ טינט, המשלוחן ממליץ, עולה 178 ₪.", [], DOCUMENT, true, SHOWN)).toHaveLength(1);
+    // A sentence that does not name the shown product is left to the other checks.
+    expect(priceAgainstStore("קרם היום עולה 178 ₪.", [], DOCUMENT, true, SHOWN)).toEqual([]);
+  });
+
+  it("★ a shown product whose price was never read: a price for it needs a store read", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    const unread = [{ title: "מייקאפ טינט", price: null }];
+    expect(priceAgainstStore(SENT, [], DOCUMENT, true, unread)).toHaveLength(1);
+    // No store to read from: the document is all there is.
+    expect(priceAgainstStore(SENT, [], DOCUMENT, false, unread)).toEqual([]);
+    // A store read this turn gave the number; so did another tool that is no document (her order).
+    const read = [{ callId: "c3", tool: "woocommerce.get_product", outcome: "ok", content: "{\"price\":\"178\"}" }] as any;
+    expect(priceAgainstStore(SENT, [], read, true, unread)).toEqual([]);
+    expect(priceAgainstStore(SENT, [], [{ callId: "c5", tool: "woocommerce.get_order", outcome: "ok", content: "{\"total\":\"178\"}" }] as any, true, unread)).toEqual([]);
+    expect(priceAgainstStore(SENT, [], [], true, unread)).toHaveLength(1);
+    // A read of another product this turn did not read this one.
+    expect(priceAgainstStore(SENT, [], [{ callId: "c6", tool: "woocommerce.list_products", outcome: "ok", content: "PRODUCT_1: \"סרום לילה\" ₪95" }] as any, true, unread)).toHaveLength(1);
+    // One shown product with a read price and it is said: the unread one beside it is not the ground to flag.
+    expect(priceAgainstStore("מייקאפ טינט וסרום לילה ב-160.20 ₪.", [], DOCUMENT, true, [...SHOWN, { title: "סרום לילה", price: null }])).toEqual([]);
+  });
+
+  it("★ a regular price alone is no price of a product on sale: it counts only beside the sale price", async () => {
+    const { priceAgainstStore } = await import("../services/reply-engine/gates");
+    const c = [{ title: "Velvet Foundation", price: 160.2, was: 178 }];
+    const read = [{ callId: "c4", tool: "woocommerce.list_products", outcome: "ok", content: "[{\"price\":\"160.20\",\"regular_price\":\"178\"}]" }] as any;
+    expect(priceAgainstStore("Velvet Foundation עולה 178 ₪.", c, read, true)).toHaveLength(1);
+    expect(priceAgainstStore("Velvet Foundation במבצע ב-160.20 ₪ במקום 178 ₪.", c, read, true)).toEqual([]);
+    // The sale price in another sentence of the same reply is beside it too.
+    expect(priceAgainstStore("Velvet Foundation עולה בדרך כלל 178 ₪. עכשיו הוא ב-160.20 ₪.", c, read, true)).toEqual([]);
+    // Another number in the reply is not the sale price.
+    expect(priceAgainstStore("Velvet Foundation עולה 178 ₪. משלוח ב-30 ₪.", c, read, true)).toHaveLength(1);
+  });
+
+  it("★ the correction gives the store's price, and never asks for a price a document may hold", async () => {
+    const { storePricesNamed } = await import("../services/reply-engine/gates");
+    expect(storePricesNamed(SENT, [], SHOWN)).toEqual(["מייקאפ טינט: 160.20"]);
+    // Each price in the form it was read in (that form grounds it); this turn's read before an earlier one of the same product.
+    expect(storePricesNamed("Canvas Tote and Velvet Foundation", [{ title: "Canvas Tote", price: 79 }, { title: "Velvet Foundation", price: "160.20", was: 178 }], [{ title: "canvas tote", price: 99 }, { title: "Unnamed", price: 5 }])).toEqual(["Canvas Tote: 79", "Velvet Foundation: 160.20 (regular 178)"]);
+    expect(storePricesNamed("Velvet Foundation", [], [{ title: "Velvet Foundation", price: 160.2 }])).toEqual(["Velvet Foundation: 160.2"]);
+    expect(storePricesNamed("Velvet Foundation", [{ title: "Velvet Foundation", price: " 160.20 ", was: "178.00" }])).toEqual(["Velvet Foundation: 160.20 (regular 178.00)"]);
+    // No price read, or a regular price that is the price: nothing to give, nothing to add.
+    expect(storePricesNamed(SENT, [], [{ title: "מייקאפ טינט", price: null }])).toEqual([]);
+    expect(storePricesNamed("Canvas Tote", [{ title: "Canvas Tote", price: 79, was: 79 }])).toEqual(["Canvas Tote: 79"]);
+    const withPrice = correctionNote([{ kind: "price_against_store", claims: ["x"], store: ["מייקאפ טינט: 160.20"] }], "he");
+    expect(withPrice).toContain("The store's price: מייקאפ טינט: 160.20. Give that one; a regular price only next to it, as the price before the sale.");
+    expect(withPrice).not.toContain("Read the product");
+    for (const none of [undefined, []]) {
+      const n = correctionNote([{ kind: "price_against_store", claims: ["x"], store: none as any }], "he");
+      expect(n).toContain("Read the product (search or get_product) and give the store's price.");
+      expect(n).not.toContain("The store's price:");
+    }
+    expect(correctionNote([{ kind: "nameless_products" }], "he")).toContain("each with the price the search gave for it (never a price from a document)");
+  });
+
+  it("★ what the state carries into the check: each shown product with the price read then", async () => {
+    const { carriedPricesOf } = await import("../services/reply-engine/engine");
+    expect(carriedPricesOf([
+      { title: " מייקאפ טינט ", price: "160.20" as any }, { title: "", price: 5 }, { title: "A", price: null }, { title: "B", price: 0 }, { title: "C", price: "soon" as any }, { title: null, price: 9 },
+      { title: "D", price: 89 }, { title: "E", price: -5 },
+    ])).toEqual([{ title: "מייקאפ טינט", price: "160.20" }, { title: "A", price: null }, { title: "B", price: null }, { title: "C", price: null }, { title: "D", price: 89 }, { title: "E", price: null }]);
+    expect(carriedPricesOf(null)).toEqual([]);
+    expect(carriedPricesOf(undefined)).toEqual([]);
+  });
+});
