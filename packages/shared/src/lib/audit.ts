@@ -183,6 +183,9 @@ export const AuditAction = {
   PLATFORM_WHATSAPP_TEMPLATES_SYNCED: "platform_whatsapp.templates_synced",
   PLATFORM_WHATSAPP_ALERT_TOGGLED: "platform_whatsapp.alert_toggled",
   PLATFORM_WHATSAPP_ALERT_AUTO_DISABLED: "platform_whatsapp.alert_auto_disabled",
+  // ── Inbox ──
+  // An admin deleted one conversation and its messages. Metadata: counts only.
+  CONVERSATION_DELETED: "conversation.deleted",
   // ── GDPR data-subject actions ──
   DSR_EXPORT_REQUESTED: "gdpr.export_requested",
   DSR_EXPORT_COMPLETED: "gdpr.export_completed",
