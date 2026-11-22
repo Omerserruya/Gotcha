@@ -21,13 +21,40 @@
  * Best effort: a failure here never costs the inbound message.
  */
 import { randomUUID } from "crypto";
-import { prisma, getRedis, publishEvent, findHandoffRef, handoffRefKey, handoffConversationKey, type HandoffRecord } from "@chatcenter/shared";
+import { prisma, getRedis, publishEvent, findHandoffRef, handoffRefKey, handoffConversationKey, waMeDigits, type HandoffRecord } from "@chatcenter/shared";
+import { handoffRefFromButton, handoffPendingKey, type HandoffPending } from "@chatcenter/shared/src/lib/whatsapp-phone-handoff";
 
 export type HandoffLinkResult =
   | { linked: true; websiteConversationId: string; identity: "linked" | "conflict" }
   /** The WhatsApp kind of widget: no website conversation, the page it started from. */
   | { linked: true; websiteConversationId: null; identity: "none" }
   | { linked: false; reason: "no_code" | "unknown_code" | "other_number" | "website_chat_gone" };
+
+/**
+ * "Leave your number" (W2, 2026-11-22): the business's number sent this visitor a template, with no
+ * WhatsApp conversation yet. The visitor's first message from that number takes it: read and deleted in
+ * one step. Null when nothing was sent to this number from this business number.
+ */
+async function takePendingSend(channelAccountId: string | null | undefined, senderId: string | null | undefined): Promise<HandoffPending | null> {
+  const digits = waMeDigits(senderId ?? null);
+  if (!channelAccountId || !digits) return null;
+  try {
+    const out = await getRedis().multi().get(handoffPendingKey(channelAccountId, digits)).del(handoffPendingKey(channelAccountId, digits)).exec();
+    const raw = out?.[0]?.[1];
+    return typeof raw === "string" ? (JSON.parse(raw) as HandoffPending) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The template row joins the conversation the visitor's answer opened (it had none). Only that row. */
+async function attachSentTemplate(tenantId: string, pending: HandoffPending, whatsappConversationId: string): Promise<void> {
+  const r = await prisma.message.updateMany({
+    where: { id: pending.messageId, tenantId, conversationId: null },
+    data: { conversationId: whatsappConversationId },
+  }).catch(() => ({ count: 0 }));
+  if (r.count) console.log(`[wa-phone-handoff] template ${pending.messageId} joined conversation ${whatsappConversationId}`);
+}
 
 /** Read and delete in one step: only one inbound message can claim a code. */
 async function claim(ref: string): Promise<HandoffRecord | null> {
@@ -45,8 +72,16 @@ export async function linkWebsiteHandoff(args: {
   body: string | null | undefined;
   /** When the customer's WhatsApp message (the one carrying the code) was saved. */
   whatsappMessageAt?: Date | null;
+  /** The tapped quick-reply button's payload, when there is one (W2: the template's button carries the code). */
+  buttonPayload?: string | null;
+  /** Who wrote (W2: a template sent to this number waits for its first message). */
+  senderId?: string | null;
 }): Promise<HandoffLinkResult> {
-  const ref = findHandoffRef(args.body);
+  // W2: a template sent to this number joins this conversation whatever the visitor answered with.
+  const pending = await takePendingSend(args.channelAccountId, args.senderId);
+  if (pending) await attachSentTemplate(args.tenantId, pending, args.whatsappConversationId);
+  // The code in the text (the wa.me link), else in the template's button, else the one the template carried.
+  const ref = findHandoffRef(args.body) ?? handoffRefFromButton(args.buttonPayload) ?? pending?.ref ?? null;
   if (!ref) return { linked: false, reason: "no_code" };
   const record = await claim(ref);
   if (!record) return { linked: false, reason: "unknown_code" };

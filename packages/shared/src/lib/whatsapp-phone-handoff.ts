@@ -144,3 +144,22 @@ export async function clearPaymentBlock(tenantId: string, channelAccountId: stri
     /* nothing stored is the same as cleared */
   }
 }
+
+/**
+ * A delivery status for one of our messages (the webhook): a FAILED handoff template with 131042 is the
+ * WABA's payment failing after Meta accepted the send. Records the block; true when it did.
+ */
+export async function paymentBlockFromStatus(
+  tenantId: string,
+  message: { metadata?: unknown },
+  status: { status?: string | null; mapped?: string | null; error?: { code?: unknown } | null },
+  now = new Date(),
+  s?: SettingIo,
+): Promise<boolean> {
+  const meta = message?.metadata && typeof message.metadata === "object" ? (message.metadata as Record<string, any>) : {};
+  const failed = status.mapped === "FAILED" || status.status === "failed";
+  const account = meta.handoff?.channelAccountId;
+  if (!failed || meta.source !== PHONE_HANDOFF_SOURCE || !account || !isPaymentBlockError(status.error ?? null)) return false;
+  await recordPaymentBlock(tenantId, String(account), Number((status.error as any).code), "delivery", now, s);
+  return true;
+}

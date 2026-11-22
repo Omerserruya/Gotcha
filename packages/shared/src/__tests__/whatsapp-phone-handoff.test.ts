@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   waHandoffMode, handoffButtonPayload, handoffRefFromButton, handoffPendingKey, PHONE_HANDOFF_LIMITS, phoneHandoffLimitKeys,
   isPaymentBlockError, paymentBlockedAt, isPaymentBlocked, recordPaymentBlock, clearPaymentBlock, paymentBlockKey, PAYMENT_BLOCK_LAPSE_MS,
-  PHONE_HANDOFF_TEMPLATE_NAME,
+  PHONE_HANDOFF_TEMPLATE_NAME, paymentBlockFromStatus,
 } from "../lib/whatsapp-phone-handoff";
 import { normalizeWhatsapp, defaultWhatsapp } from "../lib/shopify-chat-ux";
 
@@ -96,5 +96,26 @@ describe("the stored setting", () => {
     expect(normalizeWhatsapp({ enabled: false }, on).phoneHandoff).toBe(true);
     expect(normalizeWhatsapp({ phoneHandoff: false }, on).phoneHandoff).toBe(false);
     expect(normalizeWhatsapp({ phoneHandoff: "yes" }).phoneHandoff).toBe(false);
+  });
+});
+
+describe("the payment signal at delivery (the webhook)", () => {
+  const io = () => { const store = new Map<string, string>(); return { store, read: async (_t: string, k: string) => store.get(k) ?? null, write: async (_t: string, k: string, v: string | null) => { if (v === null) store.delete(k); else store.set(k, v); } }; };
+  const handoffMsg = { metadata: { source: "website_phone_handoff", handoff: { channelAccountId: "ca1" } } };
+  it("★ a FAILED handoff template with 131042 blocks its number", async () => {
+    const s = io();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await paymentBlockFromStatus("t1", handoffMsg, { mapped: "FAILED", error: { code: 131042 } }, new Date(), s)).toBe(true);
+    expect(JSON.parse(s.store.get(paymentBlockKey("ca1"))!)).toMatchObject({ code: 131042, phase: "delivery" });
+  });
+  it("delivered, another code, or another message: nothing", async () => {
+    const s = io();
+    expect(await paymentBlockFromStatus("t1", handoffMsg, { mapped: "DELIVERED", error: null }, new Date(), s)).toBe(false);
+    // Delivered with a code still attached (a stale error on a later status) is not a payment failure.
+    expect(await paymentBlockFromStatus("t1", handoffMsg, { mapped: "DELIVERED", status: "delivered", error: { code: 131042 } }, new Date(), s)).toBe(false);
+    expect(await paymentBlockFromStatus("t1", handoffMsg, { mapped: "FAILED", error: { code: 131026 } }, new Date(), s)).toBe(false);
+    expect(await paymentBlockFromStatus("t1", { metadata: { source: "broadcast" } }, { mapped: "FAILED", error: { code: 131042 } }, new Date(), s)).toBe(false);
+    expect(await paymentBlockFromStatus("t1", { metadata: { source: "website_phone_handoff" } }, { mapped: "FAILED", error: { code: 131042 } }, new Date(), s)).toBe(false);
+    expect(s.store.size).toBe(0);
   });
 });
