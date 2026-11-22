@@ -61,7 +61,8 @@ router.post("/internal/auth/payment-succeeded", async (req, res) => {
 /**
  * The emails of a per-merchant Shopify custom app (2026-11-22; ai routes/shopify-custom-app.ts asks):
  *   - request_notice: to SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL (unset: nothing sent, the console list remains);
- *   - install_link: to the admin who asked (userId, in this workspace), else the workspace's admin.
+ *   - install_link: to EVERY active admin of the workspace (Omer, 2026-11-22), and to the person who asked
+ *     when they are not one, one email each (no address sees another).
  * 200 with sent:false when there is nobody to send to; 500 when the mail itself failed.
  */
 router.post("/internal/auth/shopify-custom-app-email", async (req, res) => {
@@ -72,27 +73,41 @@ router.post("/internal/auth/shopify-custom-app-email", async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({ where: { id: String(tenantId) }, select: { name: true, defaultLocale: true } });
     if (!tenant) return res.status(404).json({ error: "tenant_not_found" });
-    let to: string | null = null;
+    let recipients: string[] = [];
     if (kind === "request_notice") {
-      to = (process.env.SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL || "").trim() || null;
+      const notify = (process.env.SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL || "").trim();
+      recipients = notify ? [notify] : [];
     } else {
+      const admins = await prisma.user.findMany({
+        where: { tenantId: String(tenantId), role: "ADMIN", isActive: true },
+        select: { email: true },
+        orderBy: { createdAt: "asc" },
+      });
       const asker = userId
-        ? await prisma.user.findFirst({ where: { id: String(userId), tenantId: String(tenantId) }, select: { email: true } })
+        ? await prisma.user.findFirst({ where: { id: String(userId), tenantId: String(tenantId), isActive: true }, select: { email: true } })
         : null;
-      to = asker?.email ?? (await tenantAdminEntry(String(tenantId)))?.user.email ?? null;
+      const seen = new Set<string>();
+      for (const e of [...admins.map((a: any) => a.email), asker?.email]) {
+        const k = String(e ?? "").trim().toLowerCase();
+        if (k && !seen.has(k)) { seen.add(k); recipients.push(String(e).trim()); }
+      }
     }
-    if (!to) return res.json({ ok: true, sent: false, reason: "no_recipient" });
+    if (!recipients.length) return res.json({ ok: true, sent: false, reason: "no_recipient" });
     let consoleUrl = "";
     try { consoleUrl = `${resolveAppPublicUrl()}/system/shopify-custom-apps`; } catch { consoleUrl = ""; }
-    await sendShopifyCustomAppEmail({
-      kind, tenantId: String(tenantId), tenantName: tenant.name, shopDomain: String(shopDomain), to,
-      locale: String(tenant.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : "en",
-      installLink: typeof installLink === "string" ? installLink : undefined,
-      expiresAt: typeof expiresAt === "string" ? expiresAt : undefined,
-      requestedAt: typeof requestedAt === "string" ? requestedAt : undefined,
-      consoleUrl,
-    });
-    return res.json({ ok: true, sent: true });
+    let sent = 0;
+    for (const to of recipients) {
+      await sendShopifyCustomAppEmail({
+        kind, tenantId: String(tenantId), tenantName: tenant.name, shopDomain: String(shopDomain), to,
+        locale: String(tenant.defaultLocale ?? "").toLowerCase().startsWith("he") ? "he" : "en",
+        installLink: typeof installLink === "string" ? installLink : undefined,
+        expiresAt: typeof expiresAt === "string" ? expiresAt : undefined,
+        requestedAt: typeof requestedAt === "string" ? requestedAt : undefined,
+        consoleUrl,
+      });
+      sent++;
+    }
+    return res.json({ ok: true, sent: true, recipients: sent });
   } catch (err: any) {
     console.error("[internal] shopify custom-app email failed:", err?.message);
     return res.status(500).json({ error: "email_failed" });
