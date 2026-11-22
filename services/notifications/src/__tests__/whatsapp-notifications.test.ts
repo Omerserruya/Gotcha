@@ -36,6 +36,8 @@ import { startVerification, confirmVerification } from "../services/whatsapp-ver
 import { PS } from "./helpers/platform-sender-double";
 
 const ME = { userId: "u1", tenantId: "T" };
+/** The same person as deliverWhatsAppNotice takes them (the notification engine's recipient: `id`). */
+const ME_RECIPIENT = { id: ME.userId, tenantId: ME.tenantId };
 const env = { id: process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID, tok: process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN };
 const platformOn = () => { process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = "pn_1"; process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = "tok"; };
 beforeEach(() => { PS.reset(); H.kv.clear(); H.sent = []; H.logs = []; H.prefs.clear(); delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID; delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN; });
@@ -64,13 +66,13 @@ describe("personal: who may get WhatsApp", () => {
 describe("delivery", () => {
   const event = { type: "conversation.waiting", data: { minutes: 42, channel: "WEBCHAT", conversationId: "c9" }, metadata: { conversationId: "c9" } };
   it("no platform number: skipped with the reason, nothing sent", async () => {
-    expect(await deliverWhatsAppNotice({ user: ME, event, phone: "+972521234567" })).toBe("skipped");
+    expect(await deliverWhatsAppNotice({ user: ME_RECIPIENT, event, phone: "+972521234567" })).toBe("skipped");
     expect(H.sent).toEqual([]);
     expect(H.logs[0]).toMatchObject({ channel: "whatsapp", status: "skipped", error: "no_platform_number" });
   });
   it("with it: the event's template from GOTCHA's number, in the person's language, with the parameters and the link", async () => {
     platformOn();
-    expect(await deliverWhatsAppNotice({ user: ME, event, phone: "+972521234567" })).toBe("sent");
+    expect(await deliverWhatsAppNotice({ user: ME_RECIPIENT, event, phone: "+972521234567" })).toBe("sent");
     const [creds, from, to, name, locale, components] = H.sent[0];
     expect([creds.accessToken, from, to, name, locale]).toEqual(["tok", "pn_1", "972521234567", "gotcha_customer_waiting", "he"]);
     expect(components).toEqual([
@@ -81,7 +83,7 @@ describe("delivery", () => {
   });
   it("no confirmed number: skipped", async () => {
     platformOn();
-    expect(await deliverWhatsAppNotice({ user: ME, event, phone: null })).toBe("skipped");
+    expect(await deliverWhatsAppNotice({ user: ME_RECIPIENT, event, phone: null })).toBe("skipped");
   });
 });
 
