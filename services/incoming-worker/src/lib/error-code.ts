@@ -15,6 +15,10 @@ export const ERROR_CODES_KNOWN = {
   WATCH_FAILED: "Connected, but new mail cannot arrive: the Gmail watch is missing or expired.",
   // Graph mail subscription missing or could not be renewed.
   OUTLOOK_SUBSCRIPTION_FAILED: "Connected, but new mail cannot arrive: the Outlook mail subscription is missing or could not be renewed.",
+  // WhatsApp (2026-11-22): Meta told us our app was removed from the business's account (PARTNER_REMOVED or PARTNER_APP_UNINSTALLED).
+  WHATSAPP_ACCESS_REMOVED: "GOTCHA's access to this WhatsApp Business account was removed at Meta. Connect the number again.",
+  // WhatsApp (2026-11-22): two number reads in a row answered Meta 100/33 (object missing, or no permission).
+  WHATSAPP_NUMBER_UNREADABLE: "Meta refused two checks of this number in a row: it does not exist there or GOTCHA may not read it. Connect the number again.",
 } as const;
 export type KnownErrorCode = keyof typeof ERROR_CODES_KNOWN;
 

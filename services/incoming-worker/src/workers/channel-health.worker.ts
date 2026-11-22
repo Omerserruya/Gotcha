@@ -5,8 +5,9 @@ import {
   createWorker,
   channelHealthQueue,
   decryptCredentials,
-  encryptCredentials, metaGraphBaseUrl, whatsappNumberDetails, withWhatsAppNumberDetails } from "@chatcenter/shared";
+  encryptCredentials, metaGraphBaseUrl, whatsappNumberDetails, readWhatsAppNumber } from "@chatcenter/shared";
 import { withErrorCode, errorCodeOf, clearOwnError } from "../lib/error-code";
+import { afterNumberRead, onWhatsAppAccessRemoved } from "../services/whatsapp-access";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 
@@ -24,10 +25,13 @@ const OUTLOOK_SCOPES =
   "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access";
 
 interface ChannelHealthJob {
-  type: "health_check" | "token_refresh" | "gmail_watch_renew";
+  type: "health_check" | "token_refresh" | "gmail_watch_renew" | "whatsapp_access_removed";
+  /** whatsapp_access_removed only: the WABA Meta named, and its event. */
+  wabaId?: string;
+  event?: string;
 }
 
-async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
+export async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
   const { type } = job.data;
 
   if (type === "health_check") {
@@ -40,6 +44,10 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
     await runTokenRefresh();
   } else if (type === "gmail_watch_renew") {
     await runGmailWatchRenewal();
+  } else if (type === "whatsapp_access_removed") {
+    // Forwarded by the webhook: Meta removed our app from a business's
+    // WhatsApp account (2026-11-22).
+    await onWhatsAppAccessRemoved({ wabaId: job.data.wabaId, event: job.data.event });
   }
 }
 
@@ -148,16 +156,26 @@ export async function runHealthCheck(): Promise<void> {
           connectionStatus: "CONNECTED",
           lastError: null,
         };
-        if (account.connectionStatus === "ERROR") recovered++;
         if (tokenData.expires_at && tokenData.expires_at > 0) {
           updateData.tokenExpiresAt = new Date(tokenData.expires_at * 1000);
         }
         // A WhatsApp number's own details, so the channels screen can show the
         // number (it was fetched at connect and dropped, 2026-10-09). One read,
-        // never a write to Meta; a failure here changes nothing else.
+        // never a write to Meta.
+        //
+        // The same read is the only proof that our app still reaches the
+        // number: the token stays valid after a business removes us at Meta
+        // (2026-11-22). So for WhatsApp the status follows the read, not the
+        // token alone: refused twice in a row is the error state, and a row in
+        // that state leaves it only on a read that succeeds. A read that fails
+        // for any other reason changes nothing else, as before.
+        let becameUnreadable = false;
         if (account.channel === "WHATSAPP") {
-          const meta = await whatsappNumberDetails(account.externalId, accessToken);
-          if (meta) updateData.platformMeta = withWhatsAppNumberDetails(account.platformMeta, meta);
+          const step = afterNumberRead(account, await readWhatsAppNumber(account.externalId, accessToken));
+          updateData.connectionStatus = step.connectionStatus;
+          updateData.lastError = step.lastError;
+          if (step.platformMeta) updateData.platformMeta = step.platformMeta;
+          becameUnreadable = step.becameUnreadable;
         }
         // A valid Page token says nothing about whether messages still reach
         // us: the Page can drop our app while the token lives on (2026-10-09).
@@ -168,6 +186,11 @@ export async function runHealthCheck(): Promise<void> {
           where: { id: account.id },
           data: updateData,
         });
+        if (updateData.connectionStatus === "ERROR") errors++;
+        else if (account.connectionStatus === "ERROR") recovered++;
+        if (becameUnreadable) {
+          console.warn(`[channel-health] WhatsApp number ${account.externalId}: Meta refused two reads in a row, set to ERROR (WHATSAPP_NUMBER_UNREADABLE)`);
+        }
       } else {
         await prisma.channelAccount.update({
           where: { id: account.id },
