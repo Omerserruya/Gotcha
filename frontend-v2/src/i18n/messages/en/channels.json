@@ -955,7 +955,7 @@
         "hint": "Visitors can leave their number, and the business sends them a WhatsApp message from its connected number.",
         "pendingTag": "Waiting for Meta's approval",
         "pending": "Meta is reviewing the business's message template. You can turn this on once it's approved.",
-        "rejected": "Meta didn't approve the message template, so this can't be turned on.",
+        "rejected": "Meta didn't approve the message template. Fix it and send it again in <channels>Settings · Channels</channels>, then turn this on.",
         "noNumber": "To turn this on, connect a WhatsApp number first.",
         "payment": "To turn this on, the business's WhatsApp account at Meta needs a payment method.",
         "submit": "The message template is sent for Meta's approval in <channels>Settings · Channels</channels>."

@@ -2025,7 +2025,7 @@ describe('★★ W2 (2026-11-22) - "Offer to continue on WhatsApp by number"', (
         ready: false,
       },
       'Not available yet',
-      "Meta didn't approve the message template, so this can't be turned on. Promotional content.",
+      "Meta didn't approve the message template. Fix it and send it again in Settings · Channels, then turn this on. Promotional content.",
     ],
     [
       'a payment method Meta refused',
@@ -2039,6 +2039,11 @@ describe('★★ W2 (2026-11-22) - "Offer to continue on WhatsApp by number"', (
     const row = screen.getByTestId('webchat-wa-phone');
     expect(row).toHaveTextContent(tag);
     expect(row).toHaveTextContent(why);
+    // Rejected is fixed in the number's required templates: the line links there (f1331cf8).
+    const link = row.querySelector('a[href="/settings/channels"]');
+    expect(link !== null).toBe(
+      phoneHandoff.template === 'rejected' && !phoneHandoff.paymentBlocked,
+    );
   });
 
   it('⚠⚠ the chosen number is not connected: no switch, "connect a WhatsApp number first"', () => {

@@ -179,7 +179,7 @@ describe('★★ replace - Omer’s question, in a dialog', () => {
     );
     await userEvent.click(screen.getByTestId('shopify-claim-go'));
     expect(screen.getByTestId('shopify-replace-dialog')).toHaveTextContent(
-      'הארגון הזה תומך בחנות Shopify אחת. להחליף את old.myshopify.com ב‑new.myshopify.com?',
+      'סביבת העבודה הזו תומכת בחנות Shopify אחת. להחליף את old.myshopify.com ב‑new.myshopify.com?',
     );
     expect(screen.getByTestId('shopify-replace-go')).toHaveTextContent('החלפה');
     expect(screen.getByTestId('shopify-replace-cancel')).toHaveTextContent('ביטול');

@@ -80,7 +80,8 @@ export function UnavailableItem({
 }: {
   readonly title: ReactNode;
   readonly tag: string;
-  readonly why: string;
+  /** A sentence, or a sentence with its way on (a link). */
+  readonly why: ReactNode;
   readonly icon?: ReactNode;
   readonly testid?: string;
 }) {
