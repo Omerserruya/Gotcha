@@ -22,6 +22,8 @@ import { relevanceHidden } from "@chatcenter/shared/src/lib/relevance-hidden";
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 /** The longest a customer's message waits for its label. */
 export const INLINE_WAIT_MS = 3000;
+/** A brand-new conversation's first inbound waits longer (2026-11-22): its reply must never answer a personal message. */
+export const INLINE_WAIT_NEW_MS = 8000;
 
 export interface InlineRelevance {
   hidden: boolean;
@@ -46,6 +48,8 @@ export interface InlineDeps {
   enqueue?: typeof shared.enqueueRelevanceClassification;
   db?: any;
   waitMs?: number;
+  /** This inbound opened the conversation (its first message). */
+  newConversation?: boolean;
 }
 
 async function accountFilterOn(tenantId: string, channelAccountId: string | null | undefined, db: any): Promise<boolean> {
@@ -100,8 +104,8 @@ async function classifyNow(tenantId: string, conversationId: string, filterOn: b
     const res = await (deps.fetch ?? fetch)(`${AI_SERVICE_URL.replace(/\/$/, "")}/api/internal/relevance/classify`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Key": shared.getInternalServiceKey() },
-      body: JSON.stringify({ tenantId, conversationId }),
-      signal: AbortSignal.timeout(deps.waitMs ?? INLINE_WAIT_MS),
+      body: JSON.stringify({ tenantId, conversationId, ...(deps.newConversation ? { newConversation: true } : {}) }),
+      signal: AbortSignal.timeout(deps.waitMs ?? (deps.newConversation ? INLINE_WAIT_NEW_MS : INLINE_WAIT_MS)),
     });
     if (!res.ok) throw new Error(`classify ${res.status}`);
     const body: any = await res.json();

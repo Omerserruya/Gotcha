@@ -2,6 +2,7 @@ import { toolCallRecord } from "@chatcenter/shared/src/lib/tool-call-record";
 import { routingWithdrawn, releaseWithdrawnRouting } from "./routing-withdrawn.service";
 import { localizedFallback } from "./escalation-language";
 import { emitEscalated } from "./notifications-emit";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 import { getInternalServiceKey, readDurableSetting, recordHandover, assignSoleMemberOnHandoff } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
@@ -419,6 +420,12 @@ export async function processAIBot(
 
   // Side-effect: send the AI reply.
   if (!result.reply) return false;
+  // Labelled hidden while the AI worked (2026-11-22: the inline label timed out and landed seconds
+  // later): a personal, notice, marketing, auto-reply or internal conversation gets no reply. Read now.
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("ai_reply", conversationId);
+    return true;
+  }
   // Overtaken while the AI worked: the newer turn answers with this message in its history; never two replies.
   if (triggerMessageId && (await overtaken(tenantId, conversationId, triggerMessageId))) {
     console.log(`[AI-Bot] conv=${conversationId}: reply dropped, a newer message's turn answers (msg=${triggerMessageId})`);
@@ -963,6 +970,11 @@ export async function sendHoldingMessage(
   sendContext: any,
   incomingMessage: string,
 ): Promise<void> {
+  // The same last check as the reply's: a hidden conversation gets no "one moment" either.
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("holding_message", conversationId);
+    return;
+  }
   let hebrew = HEBREW.test(incomingMessage ?? "");
   if (!hebrew) {
     const recent = await prisma.message.findMany({
@@ -1066,6 +1078,11 @@ async function escalateToHuman(
   aiAgentId?: string,
   reason?: { case: string; summary?: string; notify?: boolean },
 ): Promise<void> {
+  // A hidden conversation is not escalated: no handoff line to the customer, no team alert.
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("escalation", conversationId);
+    return;
+  }
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
 

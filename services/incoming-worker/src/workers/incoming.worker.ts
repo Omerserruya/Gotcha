@@ -519,6 +519,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     } catch { /* silent */ }
   }
 
+  // This inbound opened the conversation (its first message): its label gets the longer wait.
+  let openedNow = false;
   if (!conversation) {
     // The owner wrote to this customer from the phone in the last 24 hours:
     // the new conversation is theirs, not the bot's (services/owner-recent).
@@ -553,6 +555,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       },
     });
     conversation = opened.conversation;
+    openedNow = !!opened.created;
     // Inside this branch TypeScript has narrowed `conversation` to null, so
     // NonNullable<typeof conversation> is never: the id is read through the row shape.
     const openedId = (opened.conversation as { id: string }).id;
@@ -778,7 +781,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // A first inbound is labelled now (at most 3 s); a timeout or an error goes
   // on as before (services/relevance-inline.service.ts).
   const { relevanceBeforeDispatch } = await import("../services/relevance-inline.service");
-  const relevance = await relevanceBeforeDispatch(tenantId, conversation as any);
+  const relevance = await relevanceBeforeDispatch(tenantId, conversation as any, { newConversation: openedNow });
   const hidden = relevance.hidden;
 
   // Contact.lastInteractionAt - the column the customer list sorts and filters

@@ -12,6 +12,8 @@ const S = vi.hoisted(() => ({
   answeredBefore: false,
   afterAutomation: null as any,
   hidden: false,
+  /** No conversation yet: this inbound opens one. */
+  brandNew: false,
 }));
 
 const { prisma, mocks } = vi.hoisted(() => {
@@ -38,7 +40,7 @@ const { prisma, mocks } = vi.hoisted(() => {
     },
     conversation: {
       // 1st read: the lookup; later reads: the refresh after automations ran.
-      findFirst: vi.fn(async () => { reads++; return reads === 1 ? { ...S.conv } : { ...(S.afterAutomation ?? S.conv) }; }),
+      findFirst: vi.fn(async () => { reads++; if (reads === 1 && S.brandNew) return null; return reads === 1 ? { ...S.conv } : { ...(S.afterAutomation ?? S.conv) }; }),
       create: vi.fn(),
       update: vi.fn(async () => ({})),
       __reset: () => { reads = 0; },
@@ -78,6 +80,11 @@ vi.mock("../services/ensure-contact.service", () => ({ ensureContactForInbound: 
 vi.mock("../services/locale-detect.service", () => ({ recordDetectedLocaleIfMissing: vi.fn(async () => undefined) }));
 vi.mock("../services/identity-link.service", () => ({ tryLinkIdentifierFromInbound: mocks.tryLinkIdentifierFromInbound }));
 vi.mock("../services/relevance-inline.service", () => ({ relevanceBeforeDispatch: mocks.relevanceBeforeDispatch }));
+vi.mock("../services/inbound-dedupe", async (orig) => ({
+  ...(await orig<any>()),
+  findOrCreateOpenConversation: vi.fn(async () => ({ conversation: { ...S.conv }, created: true, reopened: false })),
+}));
+vi.mock("../services/owner-recent.service", () => ({ ownerWroteRecently: async () => false }));
 vi.mock("@chatcenter/shared/src/lib/notifications/inbound-push", () => ({ emitInboundMessage: mocks.emitInboundMessage }));
 vi.mock("../services/marketing-optout.service", () => ({ interceptOptOutReply: mocks.interceptOptOutReply }));
 vi.mock("../services/undeliverable-message.service", () => ({ handleUndeliverable: mocks.handleUndeliverable }));
@@ -122,7 +129,7 @@ beforeEach(() => {
   Object.values(mocks).forEach((f: any) => f.mockClear());
   (prisma.conversation as any).__reset();
   prisma.message.create.mockClear();
-  S.conv = baseConv(); S.afterAutomation = null; S.messageCount = 1; S.answered = false; S.answeredBefore = false; S.hidden = false;
+  S.conv = baseConv(); S.afterAutomation = null; S.messageCount = 1; S.answered = false; S.answeredBefore = false; S.hidden = false; S.brandNew = false;
 });
 
 describe("a hidden conversation: the message is stored, nothing acts on it", () => {
@@ -130,7 +137,8 @@ describe("a hidden conversation: the message is stored, nothing acts on it", () 
     S.hidden = true;
     await dispatch(JOB);
     await settle();
-    expect(mocks.relevanceBeforeDispatch).toHaveBeenCalledWith("t1", expect.objectContaining({ id: "c1" }));
+    // An existing conversation: the ordinary wait (a brand-new one is told so and waits 8 s).
+    expect(mocks.relevanceBeforeDispatch).toHaveBeenCalledWith("t1", expect.objectContaining({ id: "c1" }), { newConversation: false });
     expect(prisma.message.create).toHaveBeenCalledTimes(1);
     expect(prisma.message.create.mock.calls[0][0].data).toMatchObject({ direction: "INBOUND", body: "hello" });
     expect(responders()).toEqual(NONE);
@@ -196,5 +204,13 @@ describe("not hidden: the path is as before", () => {
     S.conv = baseConv({ assignedAgentId: "u1", handledBy: "human" });
     await dispatch(JOB);
     expect(mocks.emitInboundMessage).toHaveBeenCalled();
+  });
+});
+
+describe("a brand-new conversation's first inbound gets the longer label wait", () => {
+  it("★ the conversation opened by this message: newConversation true", async () => {
+    S.brandNew = true;
+    await dispatch(JOB);
+    expect(mocks.relevanceBeforeDispatch).toHaveBeenCalledWith("t1", expect.objectContaining({ id: "c1" }), { newConversation: true });
   });
 });

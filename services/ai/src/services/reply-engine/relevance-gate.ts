@@ -118,8 +118,11 @@ export async function relevanceForTurn(args: {
   // on an imported-history conversation is not seen. Whoever lets the import review write marks must ask for
   // historical rows on purpose in that read.
   const db = deps.db ?? prisma;
-  try {
-    const label = await withTimeout((async () => {
+  // The classification itself, started once. A caller's timer may give up on it (the inbound path waits a
+  // few seconds), but the model call still finishes: its label is then written in the background
+  // instead of being thrown away (dev 2026-11-22: a first call after a restart took 2.8 s, its reply went
+  // out unlabelled while the label waited 2 minutes for the delayed job).
+  const work = (async () => {
       const [users, first] = await Promise.all([
         db.user.findMany({ where: { tenantId }, select: { email: true, phoneNumber: true }, take: 500 }).catch(() => []),
         db.message.findFirst({ where: { tenantId, conversationId: conversation.id, NOT: { messageType: "system" } }, orderBy: { createdAt: "asc" }, select: { direction: true } }).catch(() => null),
@@ -130,11 +133,19 @@ export async function relevanceForTurn(args: {
         channel: String(conversation.channel ?? ""), customerExternalId: conversation.customerExternalId, conversationId: conversation.id,
         firstDirection: first?.direction ?? null, messages, subject, team: teamIdentityOf(users),
       }, { db });
-    })(), deps.timeoutMs ?? 3000);
+    })();
+  try {
+    const label = await withTimeout(work, deps.timeoutMs ?? 3000);
     (deps.write ?? writeLabel)(tenantId, conversation.id, label).catch((err) => console.warn("[relevance] write failed:", (err as Error)?.message));
     return { mode, category: label.category, confidence: label.confidence, source: label.source, hold: holdsBack(label.category, label.confidence, false) };
   } catch (err) {
     console.warn("[relevance] classify failed:", (err as Error)?.message);
+    if ((err as Error)?.message === "relevance_timeout") {
+      work
+        .then((late) => (deps.write ?? writeLabel)(tenantId, conversation.id, late))
+        .then(() => console.log(`[relevance] late label written conv=${conversation.id}`))
+        .catch((e) => console.warn("[relevance] late label not written:", (e as Error)?.message));
+    }
     return { ...off, source: "error" };
   }
 }

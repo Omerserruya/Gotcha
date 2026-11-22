@@ -17,7 +17,7 @@ vi.mock("@chatcenter/shared", async () => {
   };
 });
 
-import { relevanceBeforeDispatch, INLINE_WAIT_MS } from "../services/relevance-inline.service";
+import { relevanceBeforeDispatch, INLINE_WAIT_MS, INLINE_WAIT_NEW_MS } from "../services/relevance-inline.service";
 
 const conv = (o: any = {}) => ({ id: "c1", channel: "WHATSAPP", channelAccountId: "ca1", customerExternalId: "972501111111", relevanceCategory: null, relevanceConfidence: null, relevanceOverriddenBy: null, ...o });
 const db = (filter = true) => ({ channelAccount: { findFirst: vi.fn(async () => ({ relevanceFilterEnabled: filter })) } });
@@ -75,8 +75,14 @@ describe("relevanceBeforeDispatch", () => {
     expect(enqueue).toHaveBeenCalledTimes(4);
   });
 
-  it("waits at most 3 s by default", () => {
+  it("waits at most 3 s by default, 8 s for a brand-new conversation's first inbound (the route told so)", async () => {
     expect(INLINE_WAIT_MS).toBe(3000);
+    expect(INLINE_WAIT_NEW_MS).toBe(8000);
+    const fetch = answer({ category: "business", confidence: 0.9, source: "model" });
+    await relevanceBeforeDispatch("t1", conv(), { fetch, enqueue, db: db(), newConversation: true });
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ tenantId: "t1", conversationId: "c1", newConversation: true });
+    await relevanceBeforeDispatch("t1", conv(), { fetch, enqueue, db: db() });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ tenantId: "t1", conversationId: "c1" });
   });
 
   it("a stored label decides with no call: hidden from 0.7, and the job is queued as on every inbound", async () => {

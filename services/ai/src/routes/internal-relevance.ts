@@ -19,18 +19,24 @@ import { processRelevanceJob } from "../workers/relevance/worker";
 
 /** Below the worker's own 3 s cap, so the answer arrives before the worker gives up on the call. */
 export const INLINE_CLASSIFY_TIMEOUT_MS = 2700;
+/**
+ * A brand-new conversation's first inbound (2026-11-22): the worker waits 8 s for it, so this route may take
+ * up to 7.7 s. The reply takes longer than that anyway; a personal message must not be answered.
+ */
+export const NEW_CONVERSATION_CLASSIFY_TIMEOUT_MS = 7700;
 
 const router = Router();
 
 router.post("/internal/relevance/classify", requireInternalKey, async (req: Request, res: Response) => {
-  const { tenantId, conversationId } = (req.body ?? {}) as { tenantId?: string; conversationId?: string };
+  const { tenantId, conversationId, newConversation } = (req.body ?? {}) as { tenantId?: string; conversationId?: string; newConversation?: boolean };
   if (!tenantId || !conversationId) {
     res.status(400).json({ error: "tenantId and conversationId are required" });
     return;
   }
   const started = Date.now();
   try {
-    const r = await processRelevanceJob({ tenantId, conversationId }, { timeoutMs: INLINE_CLASSIFY_TIMEOUT_MS });
+    const timeoutMs = newConversation === true ? NEW_CONVERSATION_CLASSIFY_TIMEOUT_MS : INLINE_CLASSIFY_TIMEOUT_MS;
+    const r = await processRelevanceJob({ tenantId, conversationId }, { timeoutMs });
     const ms = Date.now() - started;
     console.log(`[relevance] inline conv=${conversationId} source=${r?.source ?? "none"} category=${r?.category ?? "-"} ms=${ms}`);
     res.json({ data: { category: r?.category ?? null, confidence: r?.confidence ?? null, source: r?.source ?? null, ms } });
