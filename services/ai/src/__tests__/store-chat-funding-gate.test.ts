@@ -25,11 +25,23 @@ vi.mock("../../../../packages/shared/src/lib/prisma", async (importOriginal) => 
   const actual: any = await importOriginal();
   const prisma = {
     tenantEntitlement: {
-      findMany: async ({ where }: any) =>
-        DB.entitlements.filter((r) =>
-          r.tenantId === where.tenantId
-          && (!where.entitlementKey || (typeof where.entitlementKey === "string" ? r.entitlementKey === where.entitlementKey : where.entitlementKey.in.includes(r.entitlementKey)))
-          && (!where.source || where.source.in.includes(r.source))),
+      // The where as Prisma reads it: keys AND together, OR / AND / NOT lists, equality, { in }, { notIn },
+      // { not } (2026-11-22: the Shopify gate names its sources as an OR of (source[, reason])).
+      findMany: async ({ where }: any) => {
+        const m = (r: any, w: any): boolean => Object.entries(w ?? {}).every(([k, v]: [string, any]) => {
+          if (k === "OR") return (v as any[]).some((x) => m(r, x));
+          if (k === "AND") return (Array.isArray(v) ? v : [v]).every((x: any) => m(r, x));
+          if (k === "NOT") return !(Array.isArray(v) ? v : [v]).some((x: any) => m(r, x));
+          if (v && typeof v === "object" && !(v instanceof Date)) {
+            if ("in" in v) return (v.in as any[]).includes(r[k]);
+            if ("notIn" in v) return !(v.notIn as any[]).includes(r[k]);
+            if ("not" in v) return (r[k] ?? null) !== v.not;
+            return true;
+          }
+          return (r[k] ?? null) === v;
+        });
+        return DB.entitlements.filter((r) => m(r, where));
+      },
     },
     tenantFeature: { findMany: async ({ where }: any) => DB.features.filter((r) => r.tenantId === where.tenantId) },
     tenant: { findUnique: async () => ({ botEnabled: true, firstTakeCareEnabled: false, voiceCopilotEnabled: false, voiceInboxUiEnabled: false, voiceIncomingEnabled: false }) },

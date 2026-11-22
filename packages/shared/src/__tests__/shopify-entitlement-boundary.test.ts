@@ -18,6 +18,9 @@ const prismaMock = vi.hoisted(() => ({
         if (r.tenantId !== where.tenantId) return false;
         if (where.entitlementKey?.in && !where.entitlementKey.in.includes(r.entitlementKey)) return false;
         if (where.source?.in && !where.source.in.includes(r.source)) return false;
+        // An OR of (source[, reason]), as Prisma reads it (the Shopify gate, 2026-11-22).
+        if (Array.isArray(where.OR) && !where.OR.some((w: any) =>
+          (w.source?.in ? w.source.in.includes(r.source) : w.source === r.source) && (w.reason === undefined || w.reason === r.reason))) return false;
         return true;
       }),
     ),

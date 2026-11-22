@@ -9,17 +9,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const db = vi.hoisted(() => ({ rows: [] as any[] }));
-const prismaMock = vi.hoisted(() => ({
-  tenantEntitlement: {
-    findMany: vi.fn(async ({ where }: any) =>
-      db.rows.filter((r: any) =>
-        r.tenantId === where.tenantId &&
-        (!where.entitlementKey?.in || where.entitlementKey.in.includes(r.entitlementKey)) &&
-        (!where.source?.in || where.source.in.includes(r.source)),
-      ),
-    ),
-  },
-}));
+const prismaMock = vi.hoisted(() => {
+  /**
+   * The where as Prisma reads it (2026-11-22: the gate now names its sources as an OR of (source[, reason]),
+   * checked on dev Postgres: key IN (...) AND (source IN (SUB, GRAND) OR (source = ADDON AND reason = ...))).
+   * Keys AND together; OR / AND / NOT take lists; a value is equality, { in }, { notIn } or { not }.
+   */
+  function whereMatches(r: any, w: any): boolean {
+    return Object.entries(w ?? {}).every(([k, v]: [string, any]) => {
+      if (k === "OR") return (v as any[]).some((x) => whereMatches(r, x));
+      if (k === "AND") return (Array.isArray(v) ? v : [v]).every((x: any) => whereMatches(r, x));
+      if (k === "NOT") return !(Array.isArray(v) ? v : [v]).some((x: any) => whereMatches(r, x));
+      if (v && typeof v === "object" && !(v instanceof Date)) {
+        if ("in" in v) return (v.in as any[]).includes(r[k]);
+        if ("notIn" in v) return !(v.notIn as any[]).includes(r[k]);
+        if ("not" in v) return (r[k] ?? null) !== v.not;
+        return true;
+      }
+      return (r[k] ?? null) === v;
+    });
+  }
+  return {
+    tenantEntitlement: {
+      findMany: vi.fn(async ({ where }: any) => db.rows.filter((r: any) => whereMatches(r, where))),
+    },
+  };
+});
 vi.mock("../lib/prisma", () => ({ prisma: prismaMock }));
 
 import { isShopifyAuthorized, SHOPIFY_FUNDED_ENTITLEMENTS } from "../lib/billing/shopify-authorization";
