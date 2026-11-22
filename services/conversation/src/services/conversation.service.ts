@@ -1222,22 +1222,29 @@ export async function setClassifiedRelevance(
     throw Object.assign(new Error(`invalid_category: one of ${RELEVANCE_CATEGORY_VALUES.join(", ")}`), { status: 400 });
   }
   // "sender": a person marked this sender personal by hand on another conversation (the ai's sender rule).
-  const source = body.source === "fast" || body.source === "model" || body.source === "sender" ? body.source : null;
-  if (!source) throw Object.assign(new Error("invalid_source: fast, model or sender"), { status: 400 });
+  // "import" (2026-11-22): the history import's verdict on a contact, written on that contact's
+  // imported-history conversation only, personal or business only. A person's mark always wins.
+  const source = body.source === "fast" || body.source === "model" || body.source === "sender" || body.source === "import" ? body.source : null;
+  if (!source) throw Object.assign(new Error("invalid_source: fast, model, sender or import"), { status: 400 });
+  if (source === "import" && category !== "personal" && category !== "business") {
+    throw Object.assign(new Error("invalid_category: an import mark is personal or business"), { status: 400 });
+  }
+  // An import mark lives on the imported conversation (never in the inbox); every other label on a live one.
+  const scope = source === "import" ? { origin: "HISTORICAL_IMPORT" } : {};
   const n = Number(body.confidence);
   const confidence = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null;
   const at = typeof body.classifiedAt === "string" && Number.isFinite(Date.parse(body.classifiedAt)) ? new Date(body.classifiedAt) : new Date();
   const reason = typeof body.reason === "string" ? body.reason.replace(/\s+/g, " ").trim().slice(0, 120) || null : null;
 
-  const before = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId }, select: { id: true, relevanceCategory: true } as any });
+  const before = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId, ...scope } as any, select: { id: true, relevanceCategory: true } as any });
   if (!before) return null;
   const done = await prisma.conversation.updateMany({
-    where: { id: conversationId, tenantId, relevanceOverriddenBy: null } as any,
+    where: { id: conversationId, tenantId, relevanceOverriddenBy: null, ...scope } as any,
     data: { relevanceCategory: category, relevanceConfidence: confidence, relevanceReason: reason, relevanceSource: source, relevanceClassifiedAt: at } as any,
   });
-  const row = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  const row = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId, ...scope } as any });
   const relevance = withRelevance((row ?? {}) as any).relevance;
-  // The list moves the row live when the label changed.
-  if (done.count > 0 && (before as any).relevanceCategory !== category) emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
+  // The list moves the row live when the label changed (an imported conversation is in no list).
+  if (source !== "import" && done.count > 0 && (before as any).relevanceCategory !== category) emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
   return { relevance, written: done.count > 0 };
 }

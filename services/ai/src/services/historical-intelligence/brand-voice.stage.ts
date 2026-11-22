@@ -148,7 +148,12 @@ export async function runBrandVoiceStage(args: {
   // there are still their writing, the register is different and it is not the
   // voice we are trying to reproduce.
   const customers = await prisma.historicalCustomer.findMany({
-    where: { importId, tenantId, conversationId: { not: null } },
+    where: {
+      importId, tenantId, conversationId: { not: null },
+      // Not a contact the import marked personal (relevance.stage, 2026-11-22): the owner writes to
+      // family and friends in another register, which is not the business's voice.
+      NOT: { conversation: { is: { relevanceSource: "import", relevanceCategory: "personal" } } },
+    },
     select: { conversationId: true },
   });
   const conversationIds = customers.map((c) => c.conversationId!).filter(Boolean);

@@ -12,10 +12,11 @@ vi.mock("@chatcenter/shared", () => ({
   withHistoricalRecords: (fn: any) => fn(), replyWindowsFor: async () => new Map(),
   prisma: {
     conversation: {
-      findFirst: async (a: any) => { const r = S.rows.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId); return r ? { ...r } : null; },
+      // origin as the real client sees it: LIVE unless the where names one (the live-by-default guard).
+      findFirst: async (a: any) => { const r = S.rows.find((x) => x.id === a.where.id && x.tenantId === a.where.tenantId && (x.origin ?? "LIVE") === (a.where.origin ?? "LIVE")); return r ? { ...r } : null; },
       updateMany: async (a: any) => {
         // Only the conditions the caller wrote: the override guard must come from the service's where.
-        const hit = S.rows.filter((r) => r.id === a.where.id && r.tenantId === a.where.tenantId && (!("relevanceOverriddenBy" in a.where) || (r.relevanceOverriddenBy ?? null) === a.where.relevanceOverriddenBy));
+        const hit = S.rows.filter((r) => r.id === a.where.id && r.tenantId === a.where.tenantId && (r.origin ?? "LIVE") === (a.where.origin ?? "LIVE") && (!("relevanceOverriddenBy" in a.where) || (r.relevanceOverriddenBy ?? null) === a.where.relevanceOverriddenBy));
         for (const r of hit) Object.assign(r, a.data);
         return { count: hit.length };
       },
@@ -53,5 +54,27 @@ describe("internal relevance write", () => {
     expect(await setClassifiedRelevance("OTHER", "c1", { category: "business", source: "model" })).toBeNull();
     await expect(setClassifiedRelevance("T", "c1", { category: "spam", source: "model" })).rejects.toMatchObject({ status: 400 });
     await expect(setClassifiedRelevance("T", "c1", { category: "business", source: "override" })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("the history import's mark (2026-11-22)", () => {
+  it("★ written on the contact's imported conversation, personal or business only, no live event", async () => {
+    S.rows = [row({ id: "imp1", origin: "HISTORICAL_IMPORT" })]; S.events = [];
+    const out = await setClassifiedRelevance("T", "imp1", { category: "personal", confidence: 0.9, reason: "import: personal in every part of the history", source: "import" });
+    expect(out).toMatchObject({ written: true, relevance: { category: "personal", source: "import" } });
+    expect(S.events).toHaveLength(0);
+    await expect(setClassifiedRelevance("T", "imp1", { category: "marketing", source: "import" })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("★ never on a live conversation; and never over a person's mark", async () => {
+    S.rows = [row({ id: "live1" })];
+    expect(await setClassifiedRelevance("T", "live1", { category: "personal", source: "import" })).toBeNull();
+    S.rows = [row({ id: "imp1", origin: "HISTORICAL_IMPORT", relevanceCategory: "business", relevanceOverriddenBy: "u1" })];
+    expect(await setClassifiedRelevance("T", "imp1", { category: "personal", source: "import" })).toMatchObject({ written: false });
+  });
+
+  it("the classifier's own labels still never reach an imported conversation", async () => {
+    S.rows = [row({ id: "imp1", origin: "HISTORICAL_IMPORT" })];
+    expect(await setClassifiedRelevance("T", "imp1", { category: "personal", source: "model" })).toBeNull();
   });
 });

@@ -254,7 +254,9 @@ describe("the decision, piece by piece", () => {
     // The read: hand marks only, the newest decides, and only "personal" arms the rule.
     expect(ai).toContain('relevanceSource: "override", relevanceOverriddenAt: { not: null }');
     expect(ai).toContain('orderBy: { relevanceOverriddenAt: "desc" }');
-    expect(ai).toContain('return newest?.relevanceCategory === "personal";');
+    // A person's newest mark decides both ways (the import's personal mark counts only when no person
+    // ever marked the sender, 2026-11-22: it never lifts or applies anything a person decided).
+    expect(ai).toContain('if (newest) return newest.relevanceCategory === "personal";');
     expect(ai).toContain("EMAIL_CHANNEL.test(c.channel)) return false;");
   });
 });

@@ -218,7 +218,18 @@ export async function senderMarkedPersonal(tenantId: string, c: RelevanceInput, 
       orderBy: { relevanceOverriddenAt: "desc" },
       select: { relevanceCategory: true },
     });
-    return newest?.relevanceCategory === "personal";
+    // A person's newest mark decides, both ways.
+    if (newest) return newest.relevanceCategory === "personal";
+    // No person ever marked this sender: the history import's verdict on them (2026-11-22, source
+    // "import", personal only, on their imported conversation; the import never marks a mixed contact).
+    const imported = await (db ?? prisma).conversation?.findFirst?.({
+      where: {
+        tenantId, channel: c.channel, customerExternalId: { in: ids }, origin: "HISTORICAL_IMPORT",
+        relevanceSource: "import", relevanceCategory: "personal", relevanceOverriddenBy: null,
+      },
+      select: { id: true },
+    });
+    return !!imported;
   } catch (err) {
     console.warn("[relevance] sender rule read failed:", (err as Error)?.message);
     return false;

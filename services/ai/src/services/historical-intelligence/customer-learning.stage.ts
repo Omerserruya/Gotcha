@@ -183,7 +183,31 @@ export async function runCustomerLearningStage(args: {
   let skipped = 0;
   let failed = 0;
 
+  // Contacts the import marked personal (relevance.stage, 2026-11-22): no customer memory from a private chat.
+  // A failed read skips nobody: learning goes on as before the marks existed.
+  const personal = new Set<string>();
+  try {
+    const rows = await prisma.conversation.findMany({
+      where: {
+        tenantId, origin: "HISTORICAL_IMPORT", relevanceSource: "import", relevanceCategory: "personal",
+        id: { in: pending.map((p) => p.conversationId).filter((x): x is string => !!x) },
+      },
+      select: { id: true },
+    });
+    for (const c of rows) personal.add(c.id);
+  } catch (err) {
+    console.warn("[historical-intelligence] personal contacts unreadable, none skipped:", (err as Error)?.message);
+  }
+
   await mapLimited(pending, CONCURRENCY, async (customer) => {
+    if (customer.conversationId && personal.has(customer.conversationId)) {
+      await prisma.historicalCustomer.update({
+        where: { id: customer.id },
+        data: { learningStatus: "SKIPPED", learningError: "personal contact" },
+      });
+      skipped += 1;
+      return;
+    }
     if (!customer.conversationId || customer.inboundCount < MIN_INBOUND_MESSAGES) {
       await prisma.historicalCustomer.update({
         where: { id: customer.id },
