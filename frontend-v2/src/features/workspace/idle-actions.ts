@@ -6,6 +6,13 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
+import {
+  BOT_IDLE_GROUPS,
+  botIdleBody,
+  botIdleGroupProblem,
+  type BotIdleGroupKey,
+  type BotIdleGroupWrite,
+} from '@/api/contracts/bot-idle-automation';
 import { IDLE_DELAY_MAX_MINUTES } from '@/api/contracts/idle-automation';
 import { workspaceEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
@@ -62,6 +69,36 @@ export async function saveIdleAutomation(write: IdleWrite): Promise<IdleWriteRes
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('workspace.idle_save_failed', { cause });
+    if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
+    if (isApiError(cause) && cause.kind === 'validation') return { ok: false, reason: 'invalid' };
+    return { ok: false, reason: 'failed' };
+  }
+  revalidatePath('/[locale]/settings/workspace', 'page');
+  return { ok: true };
+}
+
+/**
+ * Saves the AI employee's groups that the reader changed - only those, each
+ * whole (Supervisior, 2026-11-19): a group left untouched is never sent, so
+ * saving never turns the platform's default into the business's own.
+ */
+export async function saveBotIdleAutomation(
+  groups: Partial<Record<BotIdleGroupKey, BotIdleGroupWrite>>,
+): Promise<IdleWriteResult> {
+  const given = BOT_IDLE_GROUPS.filter((key) => groups[key]);
+  if (given.length === 0) return { ok: false, reason: 'invalid' };
+  if (given.some((key) => botIdleGroupProblem(groups[key]!) !== null)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  try {
+    await serverApi().put({
+      endpoint: workspaceEndpoints.botIdleAutomation(),
+      body: botIdleBody(groups),
+      payload: z.unknown(),
+    });
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('workspace.bot_idle_save_failed', { cause });
     if (isApiError(cause) && cause.status === 403) return { ok: false, reason: 'forbidden' };
     if (isApiError(cause) && cause.kind === 'validation') return { ok: false, reason: 'invalid' };
     return { ok: false, reason: 'failed' };

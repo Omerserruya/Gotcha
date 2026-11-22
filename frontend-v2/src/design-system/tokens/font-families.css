@@ -12,4 +12,6 @@
   --font-instrument-serif: 'Instrument Serif';
   --font-frank-ruhl-libre: 'Frank Ruhl Libre';
   --font-ibm-plex-mono: 'IBM Plex Mono';
+  /* Google's own face, for the Google sign-in button and nothing else. */
+  --font-google-sans: 'Google Sans';
 }

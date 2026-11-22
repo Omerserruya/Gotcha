@@ -696,3 +696,41 @@ describe('★★ a link to the old app lands on its screen here (2026-10-21, the
     expect(await at('/he/inbox?c=1')).toBeNull();
   });
 });
+
+describe('★★ connecting Google: the hint rides the move to the sign-in origin (2026-11-22)', () => {
+  const AUTH_SIGN_IN = 'https://auth-dev.gotcha.co.il/sign-in';
+  const moveFrom = async (path: string, cookie?: string) => {
+    vi.resetModules();
+    vi.stubEnv('SIGN_IN_URL', AUTH_SIGN_IN);
+    const { gate: freshProxy } = await import('./proxy');
+    const response = freshProxy(
+      new NextRequest(`https://dev.gotcha.co.il${path}`, {
+        headers: cookie ? { cookie } : undefined,
+      }),
+    );
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    return new URL(response.headers.get('location') ?? 'https://none.invalid/');
+  };
+
+  it('★★ the sign-out lands on /sign-in with the connect cookie: ?connect=google is added', async () => {
+    const to = await moveFrom('/sign-in', 'gotcha_google_connect=sealed');
+    expect(to.origin).toBe('https://auth-dev.gotcha.co.il');
+    expect(to.searchParams.get('connect')).toBe('google');
+  });
+
+  it('★ and in a language too', async () => {
+    const to = await moveFrom('/he/sign-in', 'gotcha_google_connect=sealed');
+    expect(to.searchParams.get('connect')).toBe('google');
+  });
+
+  it('⚠⚠ no cookie, no hint', async () => {
+    const to = await moveFrom('/sign-in');
+    expect(to.searchParams.has('connect')).toBe(false);
+  });
+
+  it('⚠⚠ never on recover: a password reset is not a connect', async () => {
+    const to = await moveFrom('/he/recover?flow=abc', 'gotcha_google_connect=sealed');
+    expect(to.searchParams.has('connect')).toBe(false);
+  });
+});

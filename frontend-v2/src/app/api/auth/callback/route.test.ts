@@ -1,3 +1,5 @@
+// @vitest-environment node
+// jose seals with Node's Uint8Array; jsdom's TextEncoder hands it another realm's.
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,7 +52,12 @@ vi.mock('@/auth/session', async (importOriginal) => {
   return { ...actual, sealSession };
 });
 
+const recordSignIn = vi.hoisted(() => vi.fn());
+vi.mock('@/api/client/sign-in-record', () => ({ recordSignIn }));
+
 const { GET } = await import('./route');
+const { sealConnectIntent, CONNECT_COOKIE, TERMS_PENDING_COOKIE } =
+  await import('@/auth/google-sign-in');
 
 const CODE_URL = 'https://dev.gotcha.co.il/v2/api/auth/callback?code=the-code&state=the-state';
 
@@ -72,6 +79,7 @@ beforeEach(() => {
   authorizationCodeGrant.mockResolvedValue(tokens);
   sealSession.mockResolvedValue('sealed-session');
   unsealLoginState.mockResolvedValue({ v: 'verifier', s: 'the-state', r: '/inbox', n: 'nonce' });
+  recordSignIn.mockResolvedValue({ method: 'password', google: null, termsRequired: false });
 });
 
 describe('⚠⚠ the nonce is expected only when one was sent', () => {
@@ -164,5 +172,97 @@ describe('★ what it hands openid-client is built here, not taken from the requ
     expect(currentUrl).toBeInstanceOf(URL);
     expect(currentUrl.origin).toBe('https://dev.gotcha.co.il');
     expect(currentUrl.searchParams.get('code')).toBe('the-code');
+  });
+});
+
+describe('★★ Google sign-in: the record, the connect answer, the Terms (2026-11-22)', () => {
+  const withConnect = async (subject: string | null, url = CODE_URL) => {
+    const request = new NextRequest(url);
+    request.cookies.set(LOGIN_STATE_COOKIE, 'sealed');
+    if (subject) request.cookies.set(CONNECT_COOKIE, await sealConnectIntent(subject));
+    return GET(request);
+  };
+  const deleted = (
+    response: Response & { cookies: { get: (n: string) => unknown } },
+    name: string,
+  ) => {
+    const cookie = response.cookies.get(name) as { value: string; expires?: Date } | undefined;
+    return cookie !== undefined && cookie.value === '';
+  };
+
+  it('★★ posts the record with the NEW token, and no subject when nobody started a connect', async () => {
+    await get();
+    expect(recordSignIn).toHaveBeenCalledWith('at', null, expect.anything());
+  });
+
+  it('★★ hands over the sealed subject of a connect, read back from its cookie', async () => {
+    await withConnect('user-1');
+    expect(recordSignIn).toHaveBeenCalledWith('at', 'user-1', expect.anything());
+  });
+
+  it('⚠⚠ a tampered connect cookie is no subject at all', async () => {
+    const request = new NextRequest(CODE_URL);
+    request.cookies.set(LOGIN_STATE_COOKIE, 'sealed');
+    request.cookies.set(CONNECT_COOKIE, 'not-a-sealed-value');
+    await GET(request);
+    expect(recordSignIn).toHaveBeenCalledWith('at', null, expect.anything());
+  });
+
+  it('★★ Backend’s marker lands on the connected-accounts card', async () => {
+    recordSignIn.mockResolvedValue({ method: 'google', google: 'connected', termsRequired: false });
+    const response = await withConnect('user-1');
+    expect(response.headers.get('location')).toBe(
+      'https://dev.gotcha.co.il/settings/security?google=connected',
+    );
+  });
+
+  it('★ "other_account" lands there too, and says so', async () => {
+    recordSignIn.mockResolvedValue({
+      method: 'google',
+      google: 'other_account',
+      termsRequired: false,
+    });
+    const response = await withConnect('user-1');
+    expect(response.headers.get('location')).toBe(
+      'https://dev.gotcha.co.il/settings/security?google=other_account',
+    );
+  });
+
+  it('★ a Google sign-in after a connect with a null answer lands on the card, saying nothing', async () => {
+    recordSignIn.mockResolvedValue({ method: 'google', google: null, termsRequired: false });
+    const response = await withConnect('user-1');
+    expect(response.headers.get('location')).toBe('https://dev.gotcha.co.il/settings/security');
+  });
+
+  it('⚠⚠ a PASSWORD sign-in after an abandoned connect goes where it was going', async () => {
+    const response = await withConnect('user-1');
+    expect(response.headers.get('location')).toBe('https://dev.gotcha.co.il/inbox');
+  });
+
+  it('⚠⚠ the connect cookie is deleted on success and on failure alike', async () => {
+    expect(deleted(await withConnect('user-1'), CONNECT_COOKIE)).toBe(true);
+    authorizationCodeGrant.mockRejectedValue(new Error('nonce mismatch'));
+    expect(deleted(await withConnect('user-1'), CONNECT_COOKIE)).toBe(true);
+  });
+
+  it('★★ owed Terms set the marker for the session’s own lifetime', async () => {
+    recordSignIn.mockResolvedValue({ method: 'google', google: null, termsRequired: true });
+    const response = await get();
+    const marker = response.cookies.get(TERMS_PENDING_COOKIE);
+    expect(marker?.value).toBe('1');
+    expect(marker?.maxAge).toBe(28800);
+    expect(marker?.httpOnly).toBe(true);
+  });
+
+  it('★ no Terms owed clears an old marker', async () => {
+    expect(deleted(await get(), TERMS_PENDING_COOKIE)).toBe(true);
+  });
+
+  it('⚠⚠ a failed record is no marker of any kind, and the sign-in completes', async () => {
+    recordSignIn.mockResolvedValue(null);
+    const response = await withConnect('user-1');
+    expect(response.headers.get('location')).toBe('https://dev.gotcha.co.il/inbox');
+    expect(sealSession).toHaveBeenCalled();
+    expect(deleted(response, TERMS_PENDING_COOKIE)).toBe(true);
   });
 });

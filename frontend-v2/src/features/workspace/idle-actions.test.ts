@@ -9,7 +9,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ put }) }));
 vi.mock('@/api/client/signed-out', () => ({ signInIfSignedOut: vi.fn() }));
 
-const { saveIdleAutomation } = await import('./idle-actions');
+const { saveBotIdleAutomation, saveIdleAutomation } = await import('./idle-actions');
 
 beforeEach(() => {
   put.mockReset();
@@ -69,5 +69,40 @@ describe('★★ the whole object, every time', () => {
     expect(await saveIdleAutomation(write())).toEqual({ ok: false, reason: 'forbidden' });
     put.mockRejectedValueOnce(new Error('down'));
     expect(await saveIdleAutomation(write())).toEqual({ ok: false, reason: 'failed' });
+  });
+});
+
+describe('★★ the AI employee’s groups: only those given', () => {
+  const group = {
+    enabled: true,
+    reminderAfterMinutes: 30,
+    closeAfterReminderMinutes: 15,
+    reminderText: ' Still here? ',
+    closeText: '',
+  };
+
+  it('★ one group: its own route, only that group in the body', async () => {
+    expect(await saveBotIdleAutomation({ messaging: group })).toEqual({ ok: true });
+    expect(put.mock.calls[0]![0].endpoint.path).toBe('/api/agents/settings/bot-idle-automation');
+    expect(put.mock.calls[0]![0].body).toEqual({
+      messaging: { ...group, reminderText: 'Still here?' },
+    });
+  });
+
+  it.each([
+    ['nothing given', {}],
+    ['a delay of 0', { liveChat: { ...group, reminderAfterMinutes: 0 } }],
+    ['an empty reminder while on', { liveChat: { ...group, reminderText: ' ' } }],
+  ])('★ %s is refused before anything is sent', async (_, groups) => {
+    expect(await saveBotIdleAutomation(groups)).toEqual({ ok: false, reason: 'invalid' });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('a 403 is "forbidden"', async () => {
+    put.mockRejectedValue(new ApiError({ status: 403, kind: 'authorization' }));
+    expect(await saveBotIdleAutomation({ liveChat: group })).toEqual({
+      ok: false,
+      reason: 'forbidden',
+    });
   });
 });

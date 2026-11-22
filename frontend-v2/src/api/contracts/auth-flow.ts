@@ -133,7 +133,69 @@ export const identificationChallengeSchema = z.looseObject({
   recovery_url: z.string().nullable().default(null),
   primary_action: z.string().default(''),
   response_errors: flowErrorsSchema,
+  /**
+   * The outside sign-in sources bound to this stage (Google, 2026-11-22).
+   * Unparsed here and read one by one in `googleSourceUrl`: an odd entry is
+   * skipped, never the stage.
+   */
+  sources: z.array(z.unknown()).default([]).catch([]),
 });
+
+const sourceSchema = z.looseObject({
+  name: z.string(),
+  challenge: z.looseObject({ component: z.literal('xak-flow-redirect'), to: z.string() }),
+});
+
+/** The only shape a source's login path has: `/source/oauth/login/<slug>/`. */
+const SOURCE_LOGIN_PATH = /^\/source\/oauth\/login\/[a-z0-9][a-z0-9_-]{0,63}\/$/;
+
+/**
+ * The Google source's login URL, absolute on the provider's origin, or `null`
+ * when the stage offers none we can follow.
+ *
+ * Observed on auth-dev (2026-11-22): `{ name: "Google", icon_url, promoted,
+ * challenge: { component: "xak-flow-redirect", to: "/source/oauth/login/google/" } }`.
+ *
+ * ★ The slug is read from the challenge, never a constant of ours (an
+ *   administrator can rename it, like the recovery flow's). What is checked is
+ *   the destination: the provider's own origin and the source-login path,
+ *   with any query or fragment dropped. Anything else draws no button - the
+ *   same rule as `followableCompletion` and `recoveryFlowSlug`.
+ * ★ Matched by name, because the button is Google's: its logo and its words
+ *   would be wrong on any other source.
+ */
+export function googleSourceUrl(
+  /** `undefined` too: a stage built by hand (or by an older contract) carries none. */
+  sources: readonly unknown[] | undefined,
+  providerOrigin: string | null,
+): string | null {
+  if (!providerOrigin) return null;
+  let origin: string;
+  try {
+    origin = new URL(providerOrigin).origin;
+  } catch {
+    return null;
+  }
+  for (const raw of sources ?? []) {
+    const source = sourceSchema.safeParse(raw);
+    if (!source.success || source.data.name.trim().toLowerCase() !== 'google') continue;
+    let url: URL;
+    try {
+      url = new URL(source.data.challenge.to, origin);
+    } catch {
+      continue;
+    }
+    if (url.origin !== origin || !SOURCE_LOGIN_PATH.test(url.pathname)) continue;
+    return `${url.origin}${url.pathname}`;
+  }
+  return null;
+}
+
+/** A flow slug from a URL, as `/recover` checks it: bounded, plain, or `null`. */
+const FLOW_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+export function checkedFlowSlug(raw: unknown): string | null {
+  return typeof raw === 'string' && FLOW_SLUG_PATTERN.test(raw) ? raw : null;
+}
 
 /** "Stay signed in?" - a stage, which is why it can live in our own panel. */
 export const userLoginChallengeSchema = z.looseObject({

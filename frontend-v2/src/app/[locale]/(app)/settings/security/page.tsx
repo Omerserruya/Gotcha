@@ -1,5 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 
+import { ACCOUNT_GOOGLE_MARKERS, markerOf } from '@/api/contracts/google-sign-in';
+import { GoogleConnection } from '@/features/security/GoogleConnection';
+import { ConnectGoogleButton } from '@/shell/account/ConnectGoogleButton';
+import { loadGoogleConnection } from '@/features/security/load-google';
 import { loadSecurity } from '@/features/security/load-security';
 import { MfaPolicy } from '@/features/security/MfaPolicy';
 import styles from '@/features/security/Security.module.css';
@@ -20,19 +24,28 @@ import { SupportRefused } from '@/features/support/SupportRefused';
  * in, then everything that happened. Recent sign-ins are not in 02 and sit
  * last.
  */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
   const t = await getTranslations('security');
-  const {
-    sessions,
-    sessionsAvailable,
-    logins,
-    loginsAvailable,
-    tenant,
-    audit,
-    auditAvailable,
-    facets,
-    facetsTruncated,
-  } = await loadSecurity();
+  // The callback's answer after a Google connect: a sentence from a fixed list.
+  const googleMarker = markerOf((await searchParams).google, ACCOUNT_GOOGLE_MARKERS);
+  const [
+    {
+      sessions,
+      sessionsAvailable,
+      logins,
+      loginsAvailable,
+      tenant,
+      audit,
+      auditAvailable,
+      facets,
+      facetsTruncated,
+    },
+    google,
+  ] = await Promise.all([loadSecurity(), loadGoogleConnection()]);
 
   /*
     16, measured: sign-in on the left beside where you are signed in, then
@@ -89,6 +102,25 @@ export default async function Page() {
           </SupportRefused>
         </section>
       </div>
+
+      {/*
+        Google sign-in (2026-11-22): the person's own connected accounts, a
+        card of its own under the top row. Not drawn where Google is off.
+      */}
+      {google.kind === 'off' ? null : (
+        <section className={styles.card} data-testid="section-google">
+          <header className={styles.cardHead}>
+            <h2 className={styles.cardTitle}>{t('google.heading')}</h2>
+          </header>
+          <SupportRefused kind="ownership">
+            <GoogleConnection
+              card={google}
+              marker={googleMarker}
+              connectGo={<ConnectGoogleButton />}
+            />
+          </SupportRefused>
+        </section>
+      )}
 
       <section className={styles.auditCard} data-testid="section-audit">
         <AuditSection

@@ -1,5 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { markerOf, ACCOUNT_GOOGLE_MARKERS } from '@/api/contracts/google-sign-in';
+import { recordSignIn } from '@/api/client/sign-in-record';
+import {
+  CONNECT_COOKIE,
+  CONNECT_COOKIE_PATH,
+  TERMS_PENDING_COOKIE,
+  termsPendingCookieOptions,
+  unsealConnectIntent,
+} from '@/auth/google-sign-in';
 import { LOGIN_STATE_COOKIE, LOGIN_STATE_COOKIE_PATH, unsealLoginState } from '@/auth/login-state';
 import { authorizationCodeGrant, oidcConfiguration } from '@/auth/oidc';
 import {
@@ -37,10 +46,19 @@ import { refuseOnCredentialSurface } from '@/api/client/credential-surface';
  *   in-memory caches this speaks to, which obey `no-store` and do not consult
  *   that rule.
  */
+/**
+ * Every answer this route gives goes through here - which is why the Google
+ * connect intent is deleted here too: on every outcome, success or failure,
+ * so a connect nobody finished never meets a later sign-in.
+ */
 function uncached(response: NextResponse): NextResponse {
   response.headers.set('cache-control', 'no-store');
+  response.cookies.delete({ name: CONNECT_COOKIE, path: CONNECT_COOKIE_PATH });
   return response;
 }
+
+/** Where a sign-in that finished a Google connect lands: the card it started from. */
+const CONNECT_LANDING = '/settings/security';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   /*
@@ -170,9 +188,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    * The most invisible failure of the whole set, because it only happens after
    * a login that worked.
    */
-  const response = NextResponse.redirect(appUrl(loginState.r as `/${string}`, env.APP_ORIGIN));
+  /*
+   * ══════════════════════════════════════════════════════════════════════
+   * ★★ GOOGLE SIGN-IN: THE RECORD, THE CONNECT ANSWER, THE TERMS (2026-11-22)
+   * ══════════════════════════════════════════════════════════════════════
+   * One best-effort call with the NEW token (`recordSignIn`): Backend writes
+   * the sign-in audit line and retires the invitation links, and answers
+   * whether this finished a Google connect and whether the Terms are owed.
+   * Its failure is `null`, and `null` means no marker of any kind.
+   */
+  const connectSubject = await unsealConnectIntent(request.cookies.get(CONNECT_COOKIE)?.value);
+  const record = await recordSignIn(tokens.access_token, connectSubject, request.headers);
+  const connectMarker = markerOf(record?.google, ACCOUNT_GOOGLE_MARKERS);
+  /*
+   * Back to the connected-accounts card when this sign-in answered a connect:
+   * with Backend's marker, or with none when it was Google and the answer was
+   * null (the card's own read then shows the state). A password sign-in after
+   * an abandoned connect goes where it was going.
+   */
+  const landing: string = connectMarker
+    ? `${CONNECT_LANDING}?google=${connectMarker}`
+    : connectSubject !== null && record?.method === 'google'
+      ? CONNECT_LANDING
+      : loginState.r;
+
+  const response = NextResponse.redirect(appUrl(landing as `/${string}`, env.APP_ORIGIN));
   const cookieOptions = sessionCookieOptions();
   response.cookies.set(cookieOptions.name, sealed, cookieOptions);
+
+  // Owed only when the record says so; anything else clears an old marker.
+  if (record?.termsRequired) {
+    const termsOptions = termsPendingCookieOptions();
+    response.cookies.set(termsOptions.name, '1', termsOptions);
+  } else {
+    response.cookies.delete({ name: TERMS_PENDING_COOKIE, path: termsPendingCookieOptions().path });
+  }
 
   /*
    * ★ Beside the session, not inside it. Scoped to the logout path, so it

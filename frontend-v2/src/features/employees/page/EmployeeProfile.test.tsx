@@ -319,12 +319,15 @@ describe('★ a switch’s words toggle it (dev, 2026-10-13)', () => {
   });
 });
 
-describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest', () => {
+describe('★★ E4 (2026-10-14) - "Rules": its own rules, saved with the rest', () => {
   const RULES = { customGuardrails: ['Never discuss competitors', 'Never promise a date'] };
 
   it('★ the stored rules, each its own words; add, reword and remove go out as ONE whole list', async () => {
     profile(RULES);
-    expect(screen.getByTestId('profile-limits')).toHaveTextContent('Limits');
+    // Named "Rules" (Omer, 2026-11-19), its lead saying both kinds of rule.
+    const limits = screen.getByTestId('profile-limits');
+    expect(within(limits).getByRole('heading', { level: 2 })).toHaveTextContent(/^Rules$/);
+    expect(limits).toHaveTextContent('what not to do and also what to do');
     expect(screen.getByTestId('profile-limit-0-text')).toHaveValue('Never discuss competitors');
     await userEvent.click(screen.getByTestId('profile-limit-1-remove'));
     const text0 = screen.getByTestId('profile-limit-0-text');
@@ -404,7 +407,7 @@ describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest'
     expect(screen.getByTestId('profile-limit-1-text')).not.toHaveAttribute('aria-invalid');
   });
 
-  it('Hebrew: מגבלות, and a refusal in its words', async () => {
+  it('Hebrew: כללים, and a refusal in its words', async () => {
     save.mockResolvedValue({
       ok: false,
       reason: 'invalid_limits',
@@ -413,7 +416,9 @@ describe('★★ E4 (2026-10-14) - "Limits": its own rules, saved with the rest'
       index: null,
     });
     profile(RULES, {}, 'he');
-    expect(screen.getByTestId('profile-limits')).toHaveTextContent('מגבלות');
+    const limits = screen.getByTestId('profile-limits');
+    expect(within(limits).getByRole('heading', { level: 2 })).toHaveTextContent(/^כללים$/);
+    expect(limits).toHaveTextContent('גם מה אסור וגם מה לעשות');
     await userEvent.type(screen.getByTestId('profile-limit-0-text'), '!');
     await userEvent.click(screen.getByTestId('profile-save'));
     await userEvent.click(await screen.findByTestId('profile-confirm-save'));

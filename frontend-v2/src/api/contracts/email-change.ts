@@ -19,6 +19,11 @@ import { z } from 'zod';
  */
 export const emailChangeVerifiedSchema = z.object({
   email: z.string(),
+  /**
+   * Google sign-in (Backend ff3a1b9f): `true` when the Google connection was
+   * removed because the address changed. Absent on a build before it: false.
+   */
+  googleDisconnected: z.boolean().catch(false).default(false),
 });
 
 export const EMAIL_CHANGE_REFUSALS = {
@@ -26,4 +31,6 @@ export const EMAIL_CHANGE_REFUSALS = {
   wrongAccount: 'wrong_account',
   taken: 'email_taken',
   idp: 'idp_sync_failed',
+  /** Google is the only way in: the change would leave none. Nothing changed. */
+  noOtherSignIn: 'no_other_sign_in',
 } as const;

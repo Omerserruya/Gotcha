@@ -107,7 +107,16 @@ function MemberRow({
                 run={({ reason }) => changeMemberEmail(tenantId, member.id, email, reason)}
                 done={() => t('members.email.done', { email: email.trim() })}
                 notes={warnings}
-                refused={refusal}
+                refused={(result) =>
+                  /*
+                   * A failed change can still have removed the member's Google
+                   * connection (Backend's 502 warning): said with the refusal,
+                   * because ConfirmedAction's notes follow a done write only.
+                   */
+                  result.warnings?.includes('google_connection_removed')
+                    ? `${refusal(result)} ${t('warnings.google_connection_removed_failed')}`
+                    : refusal(result)
+                }
                 testid={`member-email-save-${member.id}`}
               />
               <Button size="sm" onClick={() => setEditing(false)}>

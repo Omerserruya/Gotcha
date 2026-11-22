@@ -38,6 +38,16 @@ const FAMILIES = [
   ['Instrument+Serif:ital@0;1', 'instrument-serif', ['latin']],
   ['Frank+Ruhl+Libre:wght@300..900', 'frank-ruhl-libre', ['hebrew', 'latin']],
   ['IBM+Plex+Mono:wght@400;500', 'ibm-plex-mono', ['latin']],
+  // The "Continue with Google" button only, as Google's brand rules ask (2026-11-22).
+  ['Google+Sans:wght@500', 'google-sans', ['hebrew', 'latin']],
+];
+
+/** Licences shipped beside the files: the OFL asks every copy to carry its notice. */
+const LICENCES = [
+  [
+    'https://raw.githubusercontent.com/google/fonts/main/ofl/googlesans/OFL.txt',
+    'google-sans-OFL.txt',
+  ],
 ];
 
 rmSync(OUT, { recursive: true, force: true });
@@ -75,6 +85,11 @@ for (const [query, slug, keep] of FAMILIES) {
   }
 }
 writeFileSync(join(OUT, 'fonts.css'), header + '\n' + rules.join('\n'));
+for (const [url, file] of LICENCES) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  writeFileSync(join(OUT, file), await res.text());
+}
 // In the repo's style, so format:check passes on a fresh run.
 spawnSync('npx', ['prettier', '--write', join(OUT, 'fonts.css')], { stdio: 'inherit' });
 console.log(`${rules.length} faces written to ${OUT}`);

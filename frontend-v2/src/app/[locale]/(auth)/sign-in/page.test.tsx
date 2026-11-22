@@ -86,8 +86,26 @@ vi.mock('next-intl/server', () => ({
  * computes, so a failure names the URL rather than the flow.
  */
 vi.mock('@/features/auth/SignInPanel', () => ({
-  SignInPanel: ({ handOverHref, returnTo }: { handOverHref: string; returnTo?: string }) => (
-    <a data-testid="hand-over" href={handOverHref}>
+  SignInPanel: ({
+    handOverHref,
+    returnTo,
+    flow,
+    flowQuery,
+    followGoogle,
+  }: {
+    handOverHref: string;
+    returnTo?: string;
+    flow?: string;
+    flowQuery?: string;
+    followGoogle?: boolean;
+  }) => (
+    <a
+      data-testid="hand-over"
+      href={handOverHref}
+      data-flow={flow ?? ''}
+      data-flow-query={flowQuery ?? ''}
+      data-follow-google={followGoogle ? 'yes' : 'no'}
+    >
       {returnTo ?? 'no-return'}
     </a>
   ),
@@ -433,5 +451,63 @@ describe('⚠⚠ which callback the hop is told to expect', () => {
     );
     expect(callback.origin).toBe('https://dev.gotcha.co.il');
     expect(callback.pathname.endsWith('/api/auth/callback')).toBe(true);
+  });
+});
+
+describe('★★ Google sign-in on this page (2026-11-22)', () => {
+  const page = async (search: Record<string, string | string[]>) => {
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve(search) }));
+    return within(container);
+  };
+
+  it('★★ ?google=no-account says so, as an alert, in Omer’s words', async () => {
+    const view = await page({ google: 'no-account' });
+    const notice = view.getByTestId('google-notice');
+    expect(notice).toHaveAttribute('role', 'alert');
+    expect(notice).toHaveTextContent(messages.google.noAccount);
+  });
+
+  it('⚠⚠ a marker outside the list says nothing', async () => {
+    const view = await page({ google: '<b>hi</b>' });
+    expect(view.queryByTestId('google-notice')).toBeNull();
+  });
+
+  it('★ ?google=start draws no sentence: it tells the panel to follow Google', async () => {
+    const view = await page({ google: 'start' });
+    expect(view.queryByTestId('google-notice')).toBeNull();
+    expect(view.getByTestId('hand-over')).toHaveAttribute('data-follow-google', 'yes');
+  });
+
+  it('★ ?connect=google is a hint, not an alert', async () => {
+    const view = await page({ connect: 'google' });
+    expect(view.getByTestId('google-connect-hint')).toHaveAttribute('role', 'status');
+    expect(view.getByTestId('google-connect-hint')).toHaveTextContent(messages.google.connectHint);
+  });
+
+  it('★★ back from Google: the flow, and everything else as ITS query - ours left out', async () => {
+    const view = await page({
+      flow: 'default-source-authentication',
+      state: 'abc',
+      code: 'xyz',
+      iss: 'https://accounts.google.com',
+      returnTo: '/inbox',
+      connect: 'google',
+    });
+    const panel = view.getByTestId('hand-over');
+    expect(panel).toHaveAttribute('data-flow', 'default-source-authentication');
+    const query = new URLSearchParams(panel.getAttribute('data-flow-query') ?? '');
+    expect(Object.fromEntries(query)).toEqual({
+      state: 'abc',
+      code: 'xyz',
+      iss: 'https://accounts.google.com',
+    });
+  });
+
+  it('⚠⚠ a flow name outside the slug pattern resumes nothing', async () => {
+    const view = await page({ flow: '../admin', state: 'abc' });
+    const panel = view.getByTestId('hand-over');
+    expect(panel).toHaveAttribute('data-flow', '');
+    expect(panel).toHaveAttribute('data-flow-query', '');
   });
 });

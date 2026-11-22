@@ -245,6 +245,14 @@
       "minutes": "{count, plural, one {דקה} other {# דקות}}",
       "hours": "{count, plural, one {שעה} two {שעתיים} other {# שעות}}",
       "days": "{count, plural, one {יום} two {יומיים} other {# ימים}}"
+    },
+    "bot": "עובד ה‑AI: {groups}",
+    "botGroup": "{group} - {value}",
+    "botOn": "תזכורת אחרי {reminder}, סגירה {close} אחריה",
+    "botOff": "כבוי",
+    "groupShort": {
+      "liveChat": "צ׳אט",
+      "messaging": "הודעות"
     }
   },
   "idleDrawer": {
@@ -276,6 +284,33 @@
       "forbidden": "רק בעלים יכולים לשנות את זה.",
       "invalid": "אחד הערכים נדחה. כדאי לבדוק ולנסות שוב.",
       "failed": "זה לא נשמר. נסו שוב."
-    }
+    },
+    "partPerson": "שיחות שאדם מטפל בהן",
+    "partBot": "שיחות של עובד ה‑AI",
+    "nothingChanged": "אין שינויים לשמור.",
+    "partFailed": "{part}: {reason}"
+  },
+  "botIdle": {
+    "who": "כשעובד ה‑AI ענה והלקוח לא חזר. זה פועל מעצמו, וכאן אפשר לשנות את הזמנים ואת הנוסח, או לכבות.",
+    "finished": "שיחה שהלקוח סיים בבירור נסגרת מעצמה זמן קצר אחרי זה, בכל הערוצים, בלי הודעה.",
+    "unread": "לא הצלחנו לקרוא כרגע את ההגדרות של עובד ה‑AI, ולכן אי אפשר לשנות אותן כאן. אפשר לרענן ולנסות שוב.",
+    "groupUnread": "לא הצלחנו לקרוא את ההגדרה הזו כרגע.",
+    "group": {
+      "liveChat": "צ׳אט באתר וצ׳אט Shopify",
+      "messaging": "וואטסאפ, אינסטגרם ומסנג׳ר"
+    },
+    "summaryOn": "תזכורת אחרי {reminder} של שקט, וסגירה {close} אחריה.",
+    "summaryOff": "כבוי: השיחות האלה לא נסגרות מעצמן.",
+    "source": {
+      "default": "ברירת המחדל",
+      "custom": "ההגדרה שלכם",
+      "unsaved": "לא נשמר"
+    },
+    "enabled": "לשלוח תזכורת, ואז לסגור את השיחה",
+    "reminderAfter": "תזכורת אחרי",
+    "closeAfter": "סגירה, אחרי התזכורת",
+    "reminderText": "נוסח התזכורת",
+    "closeText": "הודעת הסגירה",
+    "closeTextHint": "ריק: השיחה נסגרת בלי הודעה."
   }
 }

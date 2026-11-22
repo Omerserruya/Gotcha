@@ -8,7 +8,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('@/observability/logger', () => ({ logger: { warn } }));
 
-const { loadIdleSetup } = await import('./load-idle');
+const { loadBotIdleSetup, loadIdleSetup } = await import('./load-idle');
 
 beforeEach(() => {
   get.mockReset();
@@ -57,5 +57,43 @@ describe('★★ S3 - who may see follow-up and auto-close', () => {
   it('anything else is a failed read', async () => {
     get.mockRejectedValueOnce(new Error('down'));
     expect(await loadIdleSetup()).toEqual({ kind: 'failed' });
+  });
+});
+
+describe('★★ the AI employee’s groups', () => {
+  const group = {
+    enabled: true,
+    reminderAfterMinutes: 10,
+    closeAfterReminderMinutes: 10,
+    reminderText: 'x',
+    closeText: '',
+    source: 'default',
+  };
+
+  it('reads its own route, each group', async () => {
+    get.mockResolvedValue({ liveChat: group, messaging: group });
+    const got = await loadBotIdleSetup();
+    expect(get.mock.calls[0]![0].endpoint.path).toBe('/api/agents/settings/bot-idle-automation');
+    expect(got.kind === 'read' && got.groups.messaging?.reminderAfterMinutes).toBe(10);
+  });
+
+  it('★★ today’s flat route names no group: absent - not released, never "unread"', async () => {
+    get.mockResolvedValue({ reminderEnabled: true, channels: ['WEBCHAT'] });
+    expect(await loadBotIdleSetup()).toEqual({ kind: 'absent' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('★ groups named and none parsing: a failed read', async () => {
+    get.mockResolvedValue({ liveChat: { enabled: 'yes' }, messaging: {} });
+    expect(await loadBotIdleSetup()).toEqual({ kind: 'unread' });
+  });
+
+  it('a 403 is unread and not logged; anything else is logged', async () => {
+    get.mockRejectedValueOnce(new ApiError({ status: 403, kind: 'authorization' }));
+    expect(await loadBotIdleSetup()).toEqual({ kind: 'unread' });
+    expect(warn).not.toHaveBeenCalled();
+    get.mockRejectedValueOnce(new Error('down'));
+    expect(await loadBotIdleSetup()).toEqual({ kind: 'unread' });
+    expect(warn).toHaveBeenCalledWith('workspace.bot_idle_failed', expect.anything());
   });
 });

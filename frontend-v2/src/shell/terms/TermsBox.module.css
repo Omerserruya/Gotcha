@@ -1,0 +1,24 @@
+@layer components {
+  /* Moved from Recover.module.css as it was, its layer too (2026-11-22): the same box on two screens. */
+  .terms {
+    display: flex;
+    gap: var(--space-8);
+    align-items: flex-start;
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .termsBox {
+    flex-shrink: 0;
+    margin: 0;
+    margin-block-start: var(--space-2);
+    accent-color: var(--action-base);
+  }
+
+  .terms a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}

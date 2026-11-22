@@ -7,11 +7,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   firstError,
   followableCompletion,
+  googleSourceUrl,
   recoveryFlowSlug,
   staySignedInBody,
   type FlowStep,
 } from '@/api/contracts/auth-flow';
-import { startFlow, submitStage } from '@/api/client/flow-executor';
+import { providerOrigin, startFlow, submitStage } from '@/api/client/flow-executor';
+import { GoogleButton } from '@/design-system/brand/GoogleButton';
+import { OrRule } from '@/design-system/patterns/OrRule';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { safeLinkUrl } from '@/lib/safe-url';
@@ -111,12 +114,44 @@ import styles from './SignInPanel.module.css';
 /** Which of the design's screens this panel is currently showing. */
 export type SignInScreenName = 'signIn' | 'secondFactor';
 
+/**
+ * "Stay signed in" answered on 00a, carried across the trip to Google.
+ *
+ * The checkbox sits above the Google button, so the person has answered it
+ * before they leave; the source flow asks `ak-stage-user-login` again when
+ * they come back, on a new page with none of this component's state. A tab's
+ * own storage, so it never outlives the tab, and best effort: unreadable, the
+ * stage's screen is drawn and they answer it there.
+ */
+const REMEMBER_KEY = 'gotcha.signIn.remember';
+
+function keepRememberAnswer(remember: boolean): void {
+  try {
+    window.sessionStorage.setItem(REMEMBER_KEY, remember ? '1' : '0');
+  } catch {
+    // Private mode or blocked storage: the stage's own screen asks instead.
+  }
+}
+
+function takeRememberAnswer(): boolean | null {
+  try {
+    const kept = window.sessionStorage.getItem(REMEMBER_KEY);
+    window.sessionStorage.removeItem(REMEMBER_KEY);
+    return kept === '1' ? true : kept === '0' ? false : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SignInPanel({
   handOverHref,
   recoverPath,
   callbackUrl,
   returnTo,
   onScreen,
+  flow,
+  flowQuery,
+  followGoogle = false,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
@@ -144,6 +179,25 @@ export function SignInPanel({
    * without one, and its own tests render it that way.
    */
   readonly onScreen?: (screen: SignInScreenName) => void;
+  /**
+   * A flow to resume instead of the authentication flow - the Google source's
+   * (`default-source-authentication`), which the gateway sends here after
+   * Google instead of to the provider's own page. Already checked by the page
+   * (`checkedFlowSlug`).
+   */
+  readonly flow?: string;
+  /**
+   * That flow's query, as Google returned it (state, code, iss, …): the
+   * executor resumes the source flow only with it, exactly as the provider's
+   * own page sends it.
+   */
+  readonly flowQuery?: string;
+  /**
+   * `?google=start`: the person already pressed Google (on the setup page,
+   * after the Terms), so the panel follows the stage's own Google source once
+   * rather than asking for a second press. Nothing to follow, the form shows.
+   */
+  readonly followGoogle?: boolean;
 }) {
   const t = useTranslations('auth');
   const [step, setStep] = useState<FlowStep | null>(null);
@@ -178,6 +232,15 @@ export function SignInPanel({
   const answeredStayRef = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /* Pressed Google: the page is leaving for the provider. */
+  const [leaving, setLeaving] = useState(false);
+  const followedGoogleRef = useRef(false);
+  /*
+   * A stage only ever exists in the browser (the flow is started by an
+   * effect), so reading the provider's origin from `window` here is safe.
+   */
+  const googleUrl =
+    step?.kind === 'identify' ? googleSourceUrl(step.challenge.sources, providerOrigin()) : null;
 
   /*
    * `void` and a plain effect rather than a transition: this runs once on mount
@@ -186,7 +249,7 @@ export function SignInPanel({
    */
   useEffect(() => {
     let live = true;
-    void startFlow().then((first) => {
+    void startFlow(flow, flowQuery).then((first) => {
       if (!live) return;
       if (!first) {
         window.location.assign(handOverHref);
@@ -197,7 +260,15 @@ export function SignInPanel({
     return () => {
       live = false;
     };
-  }, [handOverHref]);
+  }, [handOverHref, flow, flowQuery]);
+
+  /* `?google=start`: once, and only to the stage's own Google source. */
+  useEffect(() => {
+    if (!followGoogle || !googleUrl || followedGoogleRef.current) return;
+    followedGoogleRef.current = true;
+    setLeaving(true);
+    window.location.assign(googleUrl);
+  }, [followGoogle, googleUrl]);
 
   /*
    * ════════════════════════════════════════════════════════════════════════
@@ -228,6 +299,16 @@ export function SignInPanel({
   useEffect(() => {
     if (step?.kind !== 'staySignedIn' || answeredStayRef.current) return;
     answeredStayRef.current = true;
+    /*
+     * Back from Google: the answer given on 00a before leaving, if this tab
+     * kept it. If not, the stage's own screen below asks - never a guess.
+     */
+    if (flow !== undefined) {
+      const kept = takeRememberAnswer();
+      if (kept === null) return;
+      void send(staySignedInBody(kept));
+      return;
+    }
     void send(staySignedInBody(remember));
     // `send` and `remember` are read at the moment the stage arrives, and
     // re-running on their identity would defeat the once-only guard.
@@ -648,6 +729,35 @@ export function SignInPanel({
         />
         {t('signIn.remember')}
       </label>
+
+      {/*
+        ═══════════════════════════════════════════════════════════════════
+        ★★ GOOGLE, ONLY WHEN THE STAGE OFFERS IT (Omer, 2026-11-22)
+        ═══════════════════════════════════════════════════════════════════
+        Below the form and its "stay signed in", so the password person keeps
+        the one action 00a is built around - 00a's "one way in" is overruled
+        by Omer for Google, and for nothing else.
+
+        ★ The destination is the stage's own source, checked by
+          `googleSourceUrl` (the provider's origin, the source-login path).
+          No source, or one we cannot follow: nothing is drawn.
+        ★ A link: the browser leaves for the provider, which sends it on to
+          Google. Nothing of ours is in that trip.
+      */}
+      {googleUrl ? (
+        <>
+          <OrRule word={t('google.or')} />
+          <GoogleButton
+            href={googleUrl}
+            label={leaving ? t('google.busy') : t('google.continue')}
+            testId="google-sign-in"
+            onClick={() => {
+              keepRememberAnswer(remember);
+              setLeaving(true);
+            }}
+          />
+        </>
+      ) : null}
     </form>
   );
 }

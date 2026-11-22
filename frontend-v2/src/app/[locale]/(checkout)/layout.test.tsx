@@ -19,6 +19,11 @@ vi.mock('@/support/load-support', () => ({ loadSupport: async () => null }));
 vi.mock('@/features/support/SupportBanner', () => ({
   WithSupportBanner: ({ children }: { children: React.ReactNode }) => children,
 }));
+/* The Terms gate (Google sign-in, 2026-11-22): owed only when `terms.owed` says so. */
+const terms = vi.hoisted(() => ({ owed: false }));
+vi.mock('@/shell/terms/terms-gate-screen', () => ({
+  termsGateScreen: async () => (terms.owed ? <p data-testid="terms-gate" /> : null),
+}));
 vi.mock('@/shell/mfa/mfa-gate-screen', () => ({
   mfaGateScreen: async () => {
     asked();
@@ -45,6 +50,30 @@ describe('★★ checkout and two-step sign-in', () => {
     render(await open());
     expect(screen.getByTestId('mfa-gate')).toBeInTheDocument();
     expect(screen.queryByTestId('checkout')).toBeNull();
+  });
+
+  it('★★ the Terms a Google sign-in owes come first, before two-step (2026-11-22)', async () => {
+    terms.owed = true;
+    owed.value = true;
+    try {
+      render(await open());
+      expect(screen.getByTestId('terms-gate')).toBeInTheDocument();
+      expect(screen.queryByTestId('mfa-gate')).toBeNull();
+      expect(screen.queryByTestId('checkout')).toBeNull();
+    } finally {
+      terms.owed = false;
+    }
+  });
+
+  it('★ signed out: no Terms gate either - there is no sign-in to owe them', async () => {
+    session.value = null;
+    terms.owed = true;
+    try {
+      render(await open());
+      expect(screen.getByTestId('checkout')).toBeInTheDocument();
+    } finally {
+      terms.owed = false;
+    }
   });
 
   it('signed in, not owed: checkout', async () => {

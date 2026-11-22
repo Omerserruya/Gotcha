@@ -4,7 +4,7 @@ import { FactRows } from '@/features/workspace/FactRows';
 import { HoursDrawer } from '@/features/workspace/HoursDrawer';
 import { LanguageDrawer } from '@/features/workspace/LanguageDrawer';
 import { loadLanguages } from '@/features/workspace/load-languages';
-import { loadIdleSetup } from '@/features/workspace/load-idle';
+import { loadBotIdleSetup, loadIdleSetup } from '@/features/workspace/load-idle';
 import { loadDepartmentSlas, loadSlaSetup } from '@/features/workspace/load-sla-setup';
 import { loadWebsiteScan, loadWorkspace } from '@/features/workspace/load-workspace';
 import { placeLabels } from '@/features/workspace/zones';
@@ -39,12 +39,14 @@ export default async function Page({
   // The time zone and currency words, built here so the browser never recomputes them (zones.ts).
   const locale = await getLocale();
   const panel = (await searchParams)?.panel;
-  const [{ workspace, voice, claims }, languages, scan, sla, idle] = await Promise.all([
+  const [{ workspace, voice, claims }, languages, scan, sla, idle, botIdle] = await Promise.all([
     loadWorkspace(),
     loadLanguages(),
     loadWebsiteScan(),
     loadSlaSetup(),
     loadIdleSetup(),
+    // The AI employee's own follow-up (Omer, 2026-11-19): its row line and the drawer's second part.
+    loadBotIdleSetup(),
   ]);
   // W2: the departments' own targets - read only with the drawer open.
   const slaDepartments =
@@ -68,7 +70,7 @@ export default async function Page({
           systemLocale={languages.systemLocale}
           places={placeLabels(locale, workspace)}
           sla={<SlaRow setup={sla} />}
-          idle={<IdleRow setup={idle} />}
+          idle={<IdleRow setup={idle} bot={botIdle} />}
         />
       ) : (
         <p>{t('unavailable')}</p>
@@ -114,7 +116,7 @@ export default async function Page({
           closeHref="/settings/workspace"
           testId="drawer-idle"
         >
-          <IdleDrawer settings={idle.settings} />
+          <IdleDrawer settings={idle.settings} bot={botIdle} />
         </Drawer>
       ) : null}
     </SettingsSection>

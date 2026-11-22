@@ -14,6 +14,8 @@ import {
   recoveryFlowSlug,
   followableCompletion,
   isProviderEndpoint,
+  checkedFlowSlug,
+  googleSourceUrl,
 } from './auth-flow';
 
 /**
@@ -695,5 +697,123 @@ describe('★★ password reset, screen two: the captured recovery stages', () =
       kind: 'handOver',
       because: 'ak-stage-access-denied',
     });
+  });
+});
+
+describe('★★ the Google source on the identification stage (2026-11-22)', () => {
+  /** As auth-dev served it, read on 2026-11-22. */
+  const GOOGLE = {
+    name: 'Google',
+    icon_url: '/static/authentik/sources/google.svg',
+    promoted: false,
+    challenge: {
+      component: 'xak-flow-redirect',
+      to: '/source/oauth/login/google/',
+      final_redirect: false,
+    },
+  };
+  const PROVIDER = 'https://auth-dev.gotcha.co.il';
+
+  it('★★ reads the served shape into an absolute URL on the provider', () => {
+    expect(googleSourceUrl([GOOGLE], PROVIDER)).toBe(`${PROVIDER}/source/oauth/login/google/`);
+  });
+
+  it('★★ the slug is the challenge’s, never ours: a renamed source still works', () => {
+    const renamed = {
+      ...GOOGLE,
+      challenge: { ...GOOGLE.challenge, to: '/source/oauth/login/g-work/' },
+    };
+    expect(googleSourceUrl([renamed], PROVIDER)).toBe(`${PROVIDER}/source/oauth/login/g-work/`);
+  });
+
+  it('★ drops a query and a fragment, and an odd entry before it is skipped, not fatal', () => {
+    const queried = {
+      ...GOOGLE,
+      challenge: { ...GOOGLE.challenge, to: '/source/oauth/login/google/?next=//evil#x' },
+    };
+    expect(googleSourceUrl([{ nope: 1 }, null, queried], PROVIDER)).toBe(
+      `${PROVIDER}/source/oauth/login/google/`,
+    );
+  });
+
+  it.each([
+    ['no provider origin (the proxy build)', [GOOGLE], null],
+    ['no sources at all', undefined, PROVIDER],
+    ['another source', [{ ...GOOGLE, name: 'Microsoft' }], PROVIDER],
+    [
+      'another origin',
+      [
+        {
+          ...GOOGLE,
+          challenge: { ...GOOGLE.challenge, to: 'https://evil.example/source/oauth/login/google/' },
+        },
+      ],
+      PROVIDER,
+    ],
+    [
+      'a protocol-relative escape',
+      [
+        {
+          ...GOOGLE,
+          challenge: { ...GOOGLE.challenge, to: '//evil.example/source/oauth/login/google/' },
+        },
+      ],
+      PROVIDER,
+    ],
+    [
+      'a flow page',
+      [
+        {
+          ...GOOGLE,
+          challenge: { ...GOOGLE.challenge, to: '/if/flow/default-authentication-flow/' },
+        },
+      ],
+      PROVIDER,
+    ],
+    [
+      'a script',
+      [{ ...GOOGLE, challenge: { ...GOOGLE.challenge, to: 'javascript:alert(1)' } }],
+      PROVIDER,
+    ],
+    [
+      'a redirect of another kind',
+      [
+        {
+          ...GOOGLE,
+          challenge: { component: 'ak-source-plex', to: '/source/oauth/login/google/' },
+        },
+      ],
+      PROVIDER,
+    ],
+  ])('⚠⚠ nothing for %s', (_case, sources, origin) => {
+    expect(googleSourceUrl(sources as readonly unknown[] | undefined, origin)).toBeNull();
+  });
+
+  it('★ the stage keeps `sources` lenient: absent is [], an odd value is [], and the stage still reads', () => {
+    const base = {
+      component: 'ak-stage-identification',
+      user_fields: ['email'],
+      password_fields: true,
+      response_errors: {},
+    };
+    for (const sources of [undefined, 'x', [GOOGLE]]) {
+      const step = readChallenge({ ...base, sources });
+      expect(step.kind).toBe('identify');
+    }
+  });
+});
+
+describe('★ a flow slug from a URL', () => {
+  it.each([
+    ['default-source-authentication', 'default-source-authentication'],
+    ['gotcha-recovery', 'gotcha-recovery'],
+    ['../admin', null],
+    ['Default', null],
+    ['', null],
+    [['a', 'b'], null],
+    [undefined, null],
+    ['a'.repeat(65), null],
+  ])('%j reads as %j', (raw, want) => {
+    expect(checkedFlowSlug(raw)).toBe(want);
   });
 });

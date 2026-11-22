@@ -733,10 +733,16 @@
     outline-offset: 2px;
   }
 
-  .relevanceProblem {
+  .relevanceProblem,
+  .relevanceNote {
     flex-basis: 100%;
     margin: 0;
     font-size: var(--font-size-body-sm);
     color: var(--intent-urgent-text);
+  }
+
+  /* What a mark did to its sender: said, not alarming. */
+  .relevanceNote {
+    color: var(--text-muted);
   }
 }

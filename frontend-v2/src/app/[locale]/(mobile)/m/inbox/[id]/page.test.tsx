@@ -161,6 +161,7 @@ describe('★★ personal and not relevant, on the phone thread (INBOX_RELEVANCE
     expect(Object.keys(control?.classes ?? {}).sort()).toEqual([
       'button',
       'group',
+      'note',
       'problem',
       'tag',
     ]);

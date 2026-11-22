@@ -24,9 +24,26 @@ import { SignInPanel } from './SignInPanel';
  * catch somebody "simplifying" this into a server action.
  */
 
-const startFlow = vi.hoisted(() => vi.fn<() => Promise<FlowStep | null>>());
+const startFlow = vi.hoisted(() =>
+  vi.fn<(flow?: string, query?: string) => Promise<FlowStep | null>>(),
+);
 const submitStage = vi.hoisted(() => vi.fn());
-vi.mock('@/api/client/flow-executor', () => ({ startFlow, submitStage }));
+/** The provider's origin: `null` is the product's proxy build, which offers no outside sign-in. */
+const providerOrigin = vi.hoisted(() => vi.fn<() => string | null>());
+vi.mock('@/api/client/flow-executor', () => ({ startFlow, submitStage, providerOrigin }));
+
+/** The Google source exactly as auth-dev served it (2026-11-22). */
+const GOOGLE_SOURCE = {
+  name: 'Google',
+  icon_url: '/static/authentik/sources/google.svg',
+  promoted: false,
+  challenge: {
+    component: 'xak-flow-redirect',
+    to: '/source/oauth/login/google/',
+    final_redirect: false,
+  },
+};
+const PROVIDER = 'https://auth-dev.gotcha.co.il';
 
 const identify = (over: Record<string, unknown> = {}): FlowStep => ({
   kind: 'identify',
@@ -72,6 +89,8 @@ beforeEach(() => {
     configurable: true,
   });
   assign.mockReset();
+  providerOrigin.mockReset().mockReturnValue(PROVIDER);
+  window.sessionStorage.clear();
   startFlow.mockReset().mockResolvedValue(identify());
   submitStage.mockReset().mockResolvedValue({ ok: true, step: staySignedIn() });
 });
@@ -359,12 +378,17 @@ describe('⚠⚠ the two controls the mock draws and the prose does not mention'
   });
 });
 
-describe('★★ one way in', () => {
-  it('★★ offers no second method and no social sign-in', async () => {
+describe('★★ one way in - unless the stage offers Google (Omer, 2026-11-22)', () => {
+  it('★★ offers no second method and no social sign-in when the stage offers none', async () => {
     /*
      * The design: "One way in: work email and password. No social sign-in and no
      * second button to weigh up - nobody has to remember which method they picked
      * a year ago."
+     *
+     * ★★ RE-AIMED, NOT DELETED (2026-11-22). Omer overruled the design for
+     *    Google, and for nothing else: Google is drawn only when the stage
+     *    offers its source (the tests below). With no source - this stage
+     *    carries no `sources` at all - the rule stands exactly as it was.
      *
      * ⚠⚠ THIS COUNTED BUTTONS AND HAD TO BE RE-AIMED. `getAllByRole('button')`
      *    was 1, and it broke the day the design's own password reveal arrived -
@@ -384,6 +408,79 @@ describe('★★ one way in', () => {
       .filter((control) => control.getAttribute('type') !== 'button');
     expect(submits).toHaveLength(1);
     expect(screen.queryByText(/google|microsoft|sso|single sign/i)).toBeNull();
+  });
+
+  it('★★ with Google offered: still exactly one submit, and Google is a LINK to the stage’s own source', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    show();
+    await screen.findByTestId('sign-in-form');
+
+    const submits = screen
+      .getAllByRole('button')
+      .filter((control) => control.getAttribute('type') !== 'button');
+    expect(submits).toHaveLength(1);
+    const google = screen.getByTestId('google-sign-in');
+    expect(google.tagName).toBe('A');
+    expect(google).toHaveAttribute('href', `${PROVIDER}/source/oauth/login/google/`);
+    expect(google).toHaveTextContent('Continue with Google');
+    expect(screen.getByText('or')).toBeInTheDocument();
+    // Below the form's own controls: the password person's one action comes first.
+    expect(
+      screen.getByTestId('remember-me').compareDocumentPosition(google) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ['another source', { ...GOOGLE_SOURCE, name: 'Microsoft' }],
+    [
+      'another origin',
+      {
+        ...GOOGLE_SOURCE,
+        challenge: {
+          ...GOOGLE_SOURCE.challenge,
+          to: 'https://evil.example/source/oauth/login/google/',
+        },
+      },
+    ],
+    [
+      'a path that is not a source login',
+      {
+        ...GOOGLE_SOURCE,
+        challenge: { ...GOOGLE_SOURCE.challenge, to: '/if/flow/default-authentication-flow/' },
+      },
+    ],
+    [
+      'a script',
+      { ...GOOGLE_SOURCE, challenge: { ...GOOGLE_SOURCE.challenge, to: 'javascript:alert(1)' } },
+    ],
+    ['an odd entry', { name: 'Google' }],
+  ])('⚠⚠ draws no Google for %s', async (_case, source) => {
+    startFlow.mockResolvedValue(identify({ sources: [source] }));
+    show();
+    await screen.findByTestId('sign-in-form');
+    expect(screen.queryByTestId('google-sign-in')).toBeNull();
+  });
+
+  it('⚠⚠ draws no Google on the proxy build, whose origin does not serve the source path', async () => {
+    providerOrigin.mockReturnValue(null);
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    show();
+    await screen.findByTestId('sign-in-form');
+    expect(screen.queryByTestId('google-sign-in')).toBeNull();
+  });
+
+  it('★★ pressing Google keeps the "stay signed in" answer for the trip, and says it is leaving', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    show();
+    await screen.findByTestId('sign-in-form');
+    await userEvent.click(screen.getByTestId('remember-me'));
+    const google = screen.getByTestId('google-sign-in');
+    // jsdom does not navigate; the click handler is what is under test.
+    google.addEventListener('click', (event) => event.preventDefault());
+    await userEvent.click(google);
+    expect(window.sessionStorage.getItem('gotcha.signIn.remember')).toBe('0');
+    expect(google).toHaveTextContent('Taking you to Google…');
   });
 
   it('★★ takes the recovery FLOW from the challenge rather than hardcoding it', async () => {
@@ -475,6 +572,80 @@ describe('★★ one way in', () => {
      */
     show('/inbox?c=abc');
     expect(await screen.findByText(/straight back to where you were/i)).toBeInTheDocument();
+  });
+});
+
+describe('★★ back from Google: the source flow, in this panel (2026-11-22)', () => {
+  const resumed = () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel
+          handOverHref={HANDOVER}
+          recoverPath={RECOVER}
+          flow="default-source-authentication"
+          flowQuery="state=abc&code=xyz&iss=https%3A%2F%2Faccounts.google.com"
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it('★★ resumes THAT flow with Google’s query, as the provider’s own page would', async () => {
+    resumed();
+    await waitFor(() =>
+      expect(startFlow).toHaveBeenCalledWith(
+        'default-source-authentication',
+        'state=abc&code=xyz&iss=https%3A%2F%2Faccounts.google.com',
+      ),
+    );
+  });
+
+  it('★★ answers "stay signed in" with what was kept before leaving, once', async () => {
+    window.sessionStorage.setItem('gotcha.signIn.remember', '0');
+    startFlow.mockResolvedValue(staySignedIn());
+    submitStage.mockResolvedValue({ ok: true, step: { kind: 'done', idpPath: '/' } });
+    resumed();
+    await waitFor(() =>
+      expect(submitStage).toHaveBeenCalledWith(expect.objectContaining({ remember_me: false })),
+    );
+    expect(submitStage).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('gotcha.signIn.remember')).toBeNull();
+  });
+
+  it('⚠⚠ with nothing kept, asks on the stage’s own screen - never a guess', async () => {
+    startFlow.mockResolvedValue(staySignedIn());
+    resumed();
+    expect(await screen.findByTestId('stay-signed-in')).toBeInTheDocument();
+    expect(submitStage).not.toHaveBeenCalled();
+  });
+
+  it('★ the password flow is untouched: no flow named, the authentication flow starts', async () => {
+    show();
+    await screen.findByTestId('sign-in-form');
+    expect(startFlow).toHaveBeenCalledWith(undefined, undefined);
+  });
+});
+
+describe('★★ ?google=start: the press already happened on the setup page', () => {
+  const following = () =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} followGoogle />
+      </NextIntlClientProvider>,
+    );
+
+  it('★★ follows the stage’s own Google source, once', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    following();
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith(`${PROVIDER}/source/oauth/login/google/`),
+    );
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠⚠ with no Google offered, it does nothing but show the form', async () => {
+    startFlow.mockResolvedValue(identify());
+    following();
+    await screen.findByTestId('sign-in-form');
+    expect(assign).not.toHaveBeenCalled();
   });
 });
 

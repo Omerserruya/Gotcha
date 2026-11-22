@@ -1,0 +1,21 @@
+@layer patterns {
+  .rule {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    margin: 0;
+    font-size: var(--font-size-meta);
+    line-height: var(--line-height-normal);
+    color: var(--text-subtle);
+  }
+
+  .line {
+    flex: 1;
+    block-size: var(--border-width-thin);
+    background-color: var(--border-subtle);
+  }
+
+  .word {
+    flex: none;
+  }
+}

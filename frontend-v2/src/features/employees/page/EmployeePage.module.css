@@ -249,53 +249,9 @@
     font-weight: 600;
   }
 
-  .toolDomain {
-    border: var(--border-width-thin) solid var(--border-subtle);
-    border-radius: 10px;
-  }
-
+  /* The group itself is design-system/styles/disclosure (.group); its rows' inset stays here. */
   .toolDomain > .rows {
     padding: var(--space-8) var(--space-12) var(--space-12);
-  }
-
-  .toolDomainHead {
-    display: flex;
-    align-items: center;
-    gap: var(--space-8);
-    inline-size: 100%;
-    padding: var(--space-8) var(--space-12);
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
-    font-size: 13px;
-    text-align: start;
-    cursor: pointer;
-  }
-
-  .toolDomainIcon {
-    flex: none;
-    color: var(--text-secondary);
-  }
-
-  .toolDomainName {
-    flex: 1;
-    min-inline-size: 0;
-  }
-
-  .toolDomainCount {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  .toolDomainChevron {
-    flex: none;
-    color: var(--text-secondary);
-    transition: transform 0.15s ease;
-  }
-
-  .toolDomainHead[aria-expanded='true'] .toolDomainChevron {
-    transform: rotate(180deg);
   }
 
   /* Not given: the level cannot apply, so it is never drawn as active. */

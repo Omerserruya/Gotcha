@@ -6,6 +6,7 @@ import { signInHere } from '@/api/client/signed-out';
 import { activeSession } from '@/auth/session-store';
 import { loadMessages } from '@/i18n/load-messages';
 import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
+import { termsGateScreen } from '@/shell/terms/terms-gate-screen';
 import { DEFAULT_LOCALE, isLocale } from '@/i18n/locales';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
@@ -32,6 +33,9 @@ export default async function ConnectLayout({
     ★★ Two-step sign-in owed: the enrolment step instead of this area
     (supervisor, 2026-11-09: every signed-in door, one rule).
   */
+  // The Terms a Google sign-in still owes, before two-step (terms-gate-screen.tsx).
+  const terms = await termsGateScreen(resolved);
+  if (terms) return terms;
   const mfa = await mfaGateScreen(resolved);
   if (mfa) return mfa;
   // Support mode: said here too (Omer, 2026-11-01).

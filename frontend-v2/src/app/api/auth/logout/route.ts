@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { TERMS_PENDING_COOKIE, termsPendingCookieOptions } from '@/auth/google-sign-in';
 import { buildEndSessionUrl, oidcConfiguration } from '@/auth/oidc';
 import { readSession } from '@/auth/session-store';
 import {
@@ -158,5 +159,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   response.cookies.delete({ name: ID_TOKEN_COOKIE, path: ID_TOKEN_COOKIE_PATH });
   // The support cookie is bound to this login; it has nothing left to name.
   response.cookies.delete({ name: SUPPORT_COOKIE, path: '/' });
+  /*
+   * The Terms still owed belong to this sign-in (google-sign-in.ts); the next
+   * one is asked again. The Google connect intent is NOT deleted here: it is
+   * set just BEFORE this sign-out, and the callback after it is its reader.
+   */
+  response.cookies.delete({ name: TERMS_PENDING_COOKIE, path: termsPendingCookieOptions().path });
   return response;
 }

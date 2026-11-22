@@ -1,9 +1,10 @@
 import { useTranslations } from 'next-intl';
 
+import { BOT_IDLE_GROUPS } from '@/api/contracts/bot-idle-automation';
 import { Link } from '@/i18n/navigation';
 import { wholeUnit } from '@/lib/duration';
 
-import type { IdleSetup } from './load-idle';
+import type { BotIdleSetup, IdleSetup } from './load-idle';
 import styles from './Workspace.module.css';
 
 type Translate = ReturnType<typeof useTranslations<'workspace'>>;
@@ -19,7 +20,14 @@ export function delayWords(minutes: number, t: Translate): string {
  * drawer (`?panel=idle`) for an Owner; anyone else's read is a 403, and the
  * row says whose it is with no Edit that could not save.
  */
-export function IdleRow({ setup }: { readonly setup: IdleSetup }) {
+export function IdleRow({
+  setup,
+  bot,
+}: {
+  readonly setup: IdleSetup;
+  /** The AI employee's groups: a second line when read, nothing when not. */
+  readonly bot?: BotIdleSetup;
+}) {
   const t = useTranslations('workspace');
   let value: string;
   let quiet = true;
@@ -38,6 +46,25 @@ export function IdleRow({ setup }: { readonly setup: IdleSetup }) {
     quiet = parts.length === 0;
     value = parts.length === 0 ? t('idle.off') : parts.join(' · ');
   }
+  // Only beside the Owner's own line: anyone else's read says whose it is.
+  const botLine =
+    setup.kind === 'owner' && bot?.kind === 'read'
+      ? BOT_IDLE_GROUPS.flatMap((key) => {
+          const g = bot.groups[key];
+          if (!g) return [];
+          return [
+            t('idle.botGroup', {
+              group: t(`idle.groupShort.${key}`),
+              value: g.enabled
+                ? t('idle.botOn', {
+                    reminder: delayWords(g.reminderAfterMinutes, t),
+                    close: delayWords(g.closeAfterReminderMinutes, t),
+                  })
+                : t('idle.botOff'),
+            }),
+          ];
+        }).join(' · ')
+      : '';
   return (
     <div className={styles.row} data-testid="fact-idle">
       <div className={styles.label}>{t('fact.idle')}</div>
@@ -46,6 +73,11 @@ export function IdleRow({ setup }: { readonly setup: IdleSetup }) {
         data-testid="fact-value-idle"
       >
         {value}
+        {botLine ? (
+          <span className={styles.idleBotLine} data-testid="fact-value-idle-bot">
+            {t('idle.bot', { groups: botLine })}
+          </span>
+        ) : null}
       </div>
       {setup.kind === 'owner' ? (
         <Link

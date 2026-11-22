@@ -60,7 +60,10 @@ const idle = vi.hoisted(() => ({
     },
   } as { kind: string; settings?: unknown },
 }));
-vi.mock('@/features/workspace/load-idle', () => ({ loadIdleSetup: async () => idle.setup }));
+vi.mock('@/features/workspace/load-idle', () => ({
+  loadIdleSetup: async () => idle.setup,
+  loadBotIdleSetup: async () => ({ kind: 'unread' }),
+}));
 const sla = vi.hoisted(() => ({
   setup: { kind: 'owner', settings: { enabled: true, slaMinutes: 30, warningThreshold: 70 } } as {
     kind: string;

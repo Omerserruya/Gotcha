@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
+import { senderRuleOf, type SenderRule } from '@/api/contracts/relevance-mark';
 import { inboxEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 import { z } from 'zod';
@@ -42,6 +43,11 @@ const unchecked = z.unknown();
  * leaves `isHandedOver` set, so the conversation has no human and the AI is
  * still latched off it. Nobody drives it and no screen says so.
  */
+
+/** A relevance mark: a verb's result, and on success what it did to the sender (`null`: not said). */
+export type RelevanceResult =
+  | Exclude<VerbResult, { readonly ok: true }>
+  | { readonly ok: true; readonly senderRule: SenderRule | null };
 
 export type VerbResult =
   | { readonly ok: true }
@@ -368,17 +374,18 @@ async function sendRead(conversationId: string): Promise<void> {
 export async function setConversationRelevance(
   conversationId: string,
   category: string,
-): Promise<VerbResult> {
+): Promise<RelevanceResult> {
   if (category !== 'business' && category !== 'personal') return { ok: false, reason: 'failed' };
   try {
-    await serverApi().put({
+    const answer = await serverApi().put({
       endpoint: inboxEndpoints.relevance(conversationId),
       body: { category },
       payload: unchecked,
       raw: true,
     });
     refresh();
-    return { ok: true };
+    // What it did to the sender, when the response says (contracts/relevance-mark).
+    return { ok: true, senderRule: senderRuleOf(answer) };
   } catch (cause) {
     await signInIfSignedOut(cause);
     if (isApiError(cause)) {

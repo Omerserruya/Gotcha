@@ -18,14 +18,22 @@ vi.mock('next-intl/server', () => ({
       namespace: namespace as 'auth',
     }),
 }));
+/* The setup link's state, read for its Google flag (2026-11-22). */
+const get = vi.hoisted(() => vi.fn());
+vi.mock('server-only', () => ({}));
+vi.mock('@/api/client/server-api', () => ({ serverApi: () => ({ get }) }));
 vi.mock('./RecoverPanel', () => ({
   RecoverPanel: ({ flow }: { flow: string }) => <div data-testid="screen-one" data-flow={flow} />,
 }));
 vi.mock('./ResetPanel', () => ({
   ResetPanel: (
-    props: Record<string, string | null> & { link: { kind: string; token: string } },
+    props: Record<string, string | null> & {
+      link: { kind: string; token: string };
+      google?: { email: string | null } | null;
+    },
   ) => (
     <div
+      data-google={props.google ? (props.google.email ?? 'no-email') : 'off'}
       data-testid="screen-two"
       data-flow={props.flow}
       data-link={props.link.kind}
@@ -47,7 +55,10 @@ const page = async (query: Record<string, string>) =>
     }),
   );
 
-beforeEach(() => serverEnv.mockReturnValue({}));
+beforeEach(() => {
+  serverEnv.mockReturnValue({});
+  get.mockReset().mockRejectedValue(new Error('read only by a test that says so'));
+});
 
 describe('★ /recover with a token is screen two', () => {
   it('a reset link: its flow, its token, a new link from screen one, and the sign-in hand-over', async () => {
@@ -123,5 +134,38 @@ describe('★ /recover with a token is screen two', () => {
     await page({ flow: '../evil', flow_token: 'tok_ABCdef123456' });
     expect(screen.queryByTestId('screen-two')).toBeNull();
     expect(screen.getByTestId('recover-unavailable')).toBeInTheDocument();
+  });
+});
+
+describe('★★ a setup link may offer Google: its own state says so (2026-11-22)', () => {
+  it('★★ on: the flag and the invited address go to the panel; the read is the link’s, never a flow', async () => {
+    get.mockResolvedValue({ state: 'valid', email: 'maya@avivco.il', google: true });
+    await page({ flow: 'gotcha-recovery', setup: 'setup_XYZuvw987654' });
+    expect(screen.getByTestId('screen-two')).toHaveAttribute('data-google', 'maya@avivco.il');
+    expect(get).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: expect.objectContaining({ path: '/api/auth/setup/setup_XYZuvw987654/state' }),
+      }),
+    );
+  });
+
+  it.each([
+    ['off', { state: 'valid', email: 'a@b.co', google: false }],
+    ['absent (a build before the flag)', { state: 'valid', email: 'a@b.co' }],
+  ])('★ %s: no Google', async (_case, state) => {
+    get.mockResolvedValue(state);
+    await page({ flow: 'gotcha-recovery', setup: 'setup_XYZuvw987654' });
+    expect(screen.getByTestId('screen-two')).toHaveAttribute('data-google', 'off');
+  });
+
+  it('⚠⚠ unread: no Google, and the password path exactly as it was', async () => {
+    await page({ flow: 'gotcha-recovery', setup: 'setup_XYZuvw987654' });
+    expect(screen.getByTestId('screen-two')).toHaveAttribute('data-google', 'off');
+    expect(screen.getByTestId('screen-two')).toHaveAttribute('data-purpose', 'setup');
+  });
+
+  it('★ a reset link never asks', async () => {
+    await page({ flow: 'gotcha-recovery-self', flow_token: 'tok_ABCdef123456' });
+    expect(get).not.toHaveBeenCalled();
   });
 });

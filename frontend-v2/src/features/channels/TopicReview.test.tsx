@@ -1,8 +1,10 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
+import { useRef, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useSheetFocus } from '@/design-system/primitives/overlay/use-sheet-focus';
 import channels from '@/i18n/messages/en/channels.json';
 import { PermissionsProvider } from '@/permissions/permissions-context';
 
@@ -58,20 +60,34 @@ const topic = (over: Partial<TopicView> = {}): TopicView => ({
   ...over,
 });
 
+/** The drawer the report opens in: the real hook, its close a spy. */
+function InDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const sheet = useRef<HTMLDivElement>(null);
+  useSheetFocus(sheet, { onEscape: onClose });
+  return (
+    <div ref={sheet} tabIndex={-1}>
+      {children}
+    </div>
+  );
+}
+
 function show({
   pending = [topic()],
   auto = [],
   rejected = [],
   progress = { total: 4, done: 1 },
   permissions = WRITE,
+  onDrawerClose,
 }: {
   pending?: TopicView[];
   auto?: TopicView[];
   rejected?: TopicView[];
   progress?: { total: number; done: number } | null;
   permissions?: string[];
+  /** Rendered inside a drawer whose Escape closes it. */
+  onDrawerClose?: () => void;
 } = {}) {
-  return render(
+  const review = (
     <NextIntlClientProvider locale="en" messages={{ channels }}>
       <PermissionsProvider permissions={permissions as never} tenantId="tn">
         <TopicReview
@@ -82,8 +98,9 @@ function show({
           progress={progress}
         />
       </PermissionsProvider>
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+  return render(onDrawerClose ? <InDrawer onClose={onDrawerClose}>{review}</InDrawer> : review);
 }
 
 const approveButton = (id = 't1') => screen.getByTestId(`topic-approve-${id}`);
@@ -319,6 +336,38 @@ describe('★★ TopicReview', () => {
     expect(rejectTopic).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(screen.getByTestId('topic-reject-t1')).toHaveFocus());
     expect(approveButton()).toBeEnabled();
+  });
+
+  it('★★ Escape in the question cancels it alone: the drawer stays, nothing is rejected', async () => {
+    const close = vi.fn();
+    show({ pending: [three()], onDrawerClose: close });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    expect(screen.getByTestId('topic-reject-back-t1')).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByTestId('topic-reject-confirm-t1')).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    expect(rejectTopic).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.getByTestId('topic-reject-t1')).toHaveFocus());
+    expect(approveButton()).toBeEnabled();
+  });
+
+  it('★ from "Yes" too, Escape cancels the question and nothing else', async () => {
+    const close = vi.fn();
+    show({ pending: [three()], onDrawerClose: close });
+    await userEvent.click(screen.getByTestId('topic-reject-t1'));
+    screen.getByTestId('topic-reject-yes-t1').focus();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByTestId('topic-reject-confirm-t1')).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+    expect(rejectTopic).not.toHaveBeenCalled();
+  });
+
+  it('★ with no question open, Escape still closes the drawer (the harness is live)', async () => {
+    const close = vi.fn();
+    show({ pending: [three()], onDrawerClose: close });
+    screen.getByTestId('topic-reject-t1').focus();
+    await userEvent.keyboard('{Escape}');
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('★ under 3 questions, "Reject topic" goes at once', async () => {

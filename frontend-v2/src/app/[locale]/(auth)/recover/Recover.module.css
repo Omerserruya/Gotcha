@@ -191,26 +191,13 @@
    * the channel pickers' (`.pickRow input`), at the notice's size; the links
    * are underlined in the text's colour, as 00d's consent line.
    */
-  .terms {
-    display: flex;
-    gap: var(--space-8);
-    align-items: flex-start;
-    font-size: var(--font-size-meta);
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
+  /* The Terms box moved to shell/terms/TermsBox.module.css (2026-11-22). */
 
-  .termsBox {
-    flex-shrink: 0;
+  /* Under the Google button on a setup link: which Google account to use. */
+  .googleHint {
     margin: 0;
-    margin-block-start: var(--space-2);
-    accent-color: var(--action-base);
-  }
-
-  .terms a {
-    color: inherit;
-    text-decoration: underline;
-    text-underline-offset: 3px;
+    font-size: var(--font-size-meta);
+    color: var(--text-subtle);
   }
 
   .back {

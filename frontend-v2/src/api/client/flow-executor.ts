@@ -126,6 +126,21 @@ const executorUrl = (flow: string) =>
  * half needs the cookie and the header; anybody debugging a failed sign-in
  * should look elsewhere.
  */
+/**
+ * The provider's own origin, where a source's login path (`/source/oauth/…`)
+ * is served - or `null` on the product's proxy build, which proxies the
+ * executor alone: a source path there would land on the product, so no
+ * outside sign-in is offered on that build.
+ */
+export function providerOrigin(): string | null {
+  if (EXECUTOR_BASE === '') return null;
+  try {
+    return new URL(EXECUTOR_BASE, window.location.origin).origin;
+  } catch {
+    return null;
+  }
+}
+
 const CSRF_HEADER = 'X-authentik-CSRF';
 const CSRF_COOKIE = 'authentik_csrf';
 

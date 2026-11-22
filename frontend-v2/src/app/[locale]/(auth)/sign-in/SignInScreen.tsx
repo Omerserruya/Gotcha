@@ -38,6 +38,9 @@ export function SignInScreen({
   handOverHref,
   recoverPath,
   returnTo,
+  flow,
+  flowQuery,
+  followGoogle,
   notice,
   brand,
   status,
@@ -48,6 +51,10 @@ export function SignInScreen({
   readonly handOverHref: string;
   readonly recoverPath: string;
   readonly returnTo?: string;
+  /** Google sign-in: the source flow to resume, its query, and `?google=start`. */
+  readonly flow?: string;
+  readonly flowQuery?: string;
+  readonly followGoogle?: boolean;
   /** The `?error=` explanation, when there is one. Sign-in only. */
   readonly notice?: ReactNode;
   readonly brand: ReactNode;
@@ -106,6 +113,9 @@ export function SignInScreen({
             handOverHref={handOverHref}
             recoverPath={recoverPath}
             returnTo={returnTo}
+            flow={flow}
+            flowQuery={flowQuery}
+            followGoogle={followGoogle}
             onScreen={setScreen}
           />
 

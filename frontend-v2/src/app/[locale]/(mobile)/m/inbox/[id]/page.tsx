@@ -153,6 +153,7 @@ export default async function Page({
               tag: ui.tag,
               button: styles.relevanceButton,
               problem: styles.relevanceProblem,
+              note: styles.relevanceNote,
             }}
           />
         ) : null}

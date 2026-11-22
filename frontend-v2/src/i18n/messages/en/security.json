@@ -241,8 +241,11 @@
       "wrong_account": "This link belongs to a different account. Sign in as the account that asked for the change, then open the link again.",
       "taken": "That email is already in use by another account. Your sign-in email has not changed.",
       "unfinished": "We could not finish the change, and nothing was changed. Try again in a moment.",
-      "failed": "That did not go through. Try again in a moment."
-    }
+      "failed": "That did not go through. Try again in a moment.",
+      "no_other_sign_in": "You can't change the email yet: you sign in with Google only, and changing the address would disconnect it. Set a password first, then try again.",
+      "unfinished_google": "The email change didn't complete, but the Google connection was already removed. You can connect it again in Settings, with the Google account of your current address."
+    },
+    "googleDisconnected": "Your email is updated. The Google connection was removed because the address changed. You can connect again by signing in with Google using the new address."
   },
   "gate": {
     "title": "Set up two-step sign-in",
@@ -263,5 +266,23 @@
     "finishing": "Finishing setup…",
     "restart": "Restart this step",
     "finished": "I've finished this step"
+  },
+  "google": {
+    "heading": "Connected accounts",
+    "name": "Google",
+    "notConnected": "Not connected",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "refused": "This is your only way to sign in right now, so it can't be disconnected. Set a password first.",
+    "confirmDisconnect": "After disconnecting you'll sign in with your email and password only.",
+    "disconnectGo": "Disconnect Google",
+    "confirmConnect": "To connect Google, we'll sign you out and you'll sign in again with Google.",
+    "connectGo": "Continue",
+    "cancel": "Cancel",
+    "connected": "Google is now connected to your account.",
+    "disconnected": "Google is disconnected from your account.",
+    "otherAccount": "That Google account belongs to another GOTCHA account, so you're now signed in to that one. Google was not connected to your previous account.",
+    "failed": "That didn't go through. Try again.",
+    "unread": "We couldn't read which accounts are connected. That doesn't mean there are none."
   }
 }

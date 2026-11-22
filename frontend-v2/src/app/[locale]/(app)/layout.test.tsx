@@ -44,6 +44,11 @@ vi.mock('@/features/support/SupportBanner', () => ({ WithSupportBanner }));
 
 /* The MFA gate: drawn instead of the product; the issuer's origin is the frame's. */
 const MfaGate = vi.hoisted(() => vi.fn(() => null));
+/* The Terms gate (Google sign-in, 2026-11-22): owed only when `terms.owed` says so. */
+const terms = vi.hoisted(() => ({ owed: false }));
+vi.mock('@/shell/terms/terms-gate-screen', () => ({
+  termsGateScreen: async () => (terms.owed ? <p data-testid="terms-gate" /> : null),
+}));
 vi.mock('@/shell/mfa/MfaGate', () => ({ MfaGate }));
 vi.mock('@/shell/mfa/MfaWatch', () => ({ MfaWatch: () => null }));
 vi.mock('@/config/env.server', async (importOriginal) => ({
@@ -305,6 +310,19 @@ describe('★★ two-step sign-in is a gate (Omer, 2026-11-09; the legacy MfaEnr
     expect(propsOf(AppShellMock, tree)).toBeNull();
     // Every other route answers 403 mfa_enrollment_required until it is done.
     expect(reads).toEqual(['/api/auth/me', '/api/account/mfa-gate']);
+  });
+
+  it('★★ the Terms a Google sign-in owes come first: their gate, and two-step is not even asked', async () => {
+    answer(gate());
+    terms.owed = true;
+    try {
+      const tree = (await render()) as { props?: Record<string, unknown> };
+      expect(tree.props?.['data-testid']).toBe('terms-gate');
+      expect(reads).not.toContain('/api/account/mfa-gate');
+      expect(propsOf(AppShellMock, tree)).toBeNull();
+    } finally {
+      terms.owed = false;
+    }
   });
 
   it('enrolled, or not required: the product', async () => {

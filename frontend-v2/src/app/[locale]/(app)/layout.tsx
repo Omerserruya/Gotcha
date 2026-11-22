@@ -21,6 +21,7 @@ import { isConsolePath } from '@/shell/workspace-gate';
 import { MfaWatch } from '@/shell/mfa/MfaWatch';
 import { RscLoopGuard } from '@/shell/RscLoopGuard';
 import { mfaGateScreen } from '@/shell/mfa/mfa-gate-screen';
+import { termsGateScreen } from '@/shell/terms/terms-gate-screen';
 import { redirect as localeRedirect } from '@/i18n/navigation';
 
 /**
@@ -77,6 +78,9 @@ export default async function AuthenticatedLayout({
     until it is done. `/api/auth/me` above and the gate's own read are the
     routes it leaves open. Unread: the product, as legacy (the 403 still holds).
   */
+  // The Terms a Google sign-in still owes, before two-step (terms-gate-screen.tsx).
+  const terms = await termsGateScreen(resolved);
+  if (terms) return terms;
   const mfa = await mfaGateScreen(resolved);
   if (mfa) return mfa;
   /*

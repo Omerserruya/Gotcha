@@ -83,12 +83,23 @@ export type EditRefusal =
   | 'unknown_domain'
   /** Billing did not answer: nothing was changed. */
   | 'billing_unreachable'
+  /** Member email: they sign in with Google only, and the change would leave no way in. */
+  | 'no_other_sign_in'
   /** Anything else: NOT "nothing happened". The screen re-reads. */
   | 'failed';
 
 export type EditResult =
   | { readonly ok: true; readonly warnings: readonly string[] }
-  | { readonly ok: false; readonly reason: EditRefusal };
+  | {
+      readonly ok: false;
+      readonly reason: EditRefusal;
+      /**
+       * What a FAILED write still left behind - the member email's 502 with
+       * `google_connection_removed` (Backend ff3a1b9f): the email is back, the
+       * Google connection is gone.
+       */
+      readonly warnings?: readonly string[];
+    };
 
 async function refusalOf(
   cause: unknown,
@@ -123,6 +134,7 @@ const MEMBER: Readonly<Record<string, EditRefusal>> = {
   IDENTITY_SHARED: 'identity_shared',
   IDP_SYNC_FAILED: 'idp_failed',
   IDP_STATE_UNKNOWN: 'idp_unknown',
+  NO_OTHER_SIGN_IN: 'no_other_sign_in',
   LAST_ADMIN: 'last_admin',
   /** Add: already a member, case-insensitive, or the same person under another email. */
   USER_EXISTS: 'already_member',
@@ -187,7 +199,11 @@ export async function changeMemberEmail(
     return { ok: true, warnings: result.warnings };
   } catch (cause) {
     await signInIfSignedOut(cause);
-    return memberRefusal(cause, 'console.member_email_failed');
+    const refused = await memberRefusal(cause, 'console.member_email_failed');
+    const left = isApiError(cause)
+      ? (cause.issues?.warnings ?? []).filter((w): w is string => typeof w === 'string')
+      : [];
+    return left.length > 0 ? { ...refused, warnings: left } : refused;
   }
 }
 

@@ -56,6 +56,11 @@ vi.mock('@/shell/WorkspaceGate', () => ({
 
 /* Two-step sign-in: not owed unless a test says so. */
 const owed = vi.hoisted(() => ({ value: false }));
+/* The Terms gate (Google sign-in, 2026-11-22): owed only when `terms.owed` says so. */
+const terms = vi.hoisted(() => ({ owed: false }));
+vi.mock('@/shell/terms/terms-gate-screen', () => ({
+  termsGateScreen: async () => (terms.owed ? <p data-testid="terms-gate" /> : null),
+}));
 vi.mock('@/shell/mfa/mfa-gate-screen', () => ({
   mfaGateScreen: async () => (owed.value ? <p data-testid="mfa-gate" /> : null),
 }));
@@ -130,5 +135,19 @@ describe('★★ two-step sign-in owed: the enrolment step, not onboarding (supe
     render(await open());
     expect(screen.getByTestId('mfa-gate')).toBeInTheDocument();
     expect(screen.queryByTestId('onboarding')).toBeNull();
+  });
+
+  it('★★ the Terms a Google sign-in owes come first, before two-step (2026-11-22)', async () => {
+    gate.mockResolvedValue({ route: 'onboarding', setupAdmin: null, mayPreview: false });
+    terms.owed = true;
+    owed.value = true;
+    try {
+      render(await open());
+      expect(screen.getByTestId('terms-gate')).toBeInTheDocument();
+      expect(screen.queryByTestId('mfa-gate')).toBeNull();
+      expect(screen.queryByTestId('onboarding')).toBeNull();
+    } finally {
+      terms.owed = false;
+    }
   });
 });
