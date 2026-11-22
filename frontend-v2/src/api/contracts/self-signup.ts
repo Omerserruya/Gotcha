@@ -78,6 +78,30 @@ export type SignUpOutcome =
   | { readonly kind: 'closed' }
   | { readonly kind: 'failed' };
 
+/**
+ * The submit's answer, read by its status: every 2xx is `sent` (Backend
+ * answers 202 alike for a new, known or domain-joining address).
+ */
+export function readSignUpAnswer(status: number, body: unknown): SignUpOutcome {
+  if (status >= 200 && status < 300) return { kind: 'sent' };
+  if (status === 429) return { kind: 'rateLimited' };
+  if (status === 404 || status === 403) return { kind: 'closed' };
+  if (status === 400 || status === 422) {
+    const fields =
+      body !== null && typeof body === 'object' && 'fields' in body
+        ? (body as { fields?: unknown }).fields
+        : undefined;
+    return {
+      kind: 'invalid',
+      field:
+        fields !== null && typeof fields === 'object'
+          ? refusedFieldOf(fields as Record<string, unknown>)
+          : null,
+    };
+  }
+  return { kind: 'failed' };
+}
+
 /** The first form field a 400's `fields` map names, or null. */
 export function refusedFieldOf(
   fields: Readonly<Record<string, unknown>> | undefined,

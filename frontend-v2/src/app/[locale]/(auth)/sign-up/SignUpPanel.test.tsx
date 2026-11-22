@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import auth from '@/i18n/messages/he/auth.json';
 
 const submitSignUp = vi.hoisted(() => vi.fn());
-vi.mock('@/features/signup/actions', () => ({ submitSignUp }));
+vi.mock('@/api/client/self-signup', () => ({ submitSignUp }));
 
 const { SignUpPanel } = await import('./SignUpPanel');
 
@@ -61,6 +61,7 @@ describe('★★ /sign-up', () => {
     expect(sent.querySelector('bdi')).toHaveAttribute('dir', 'ltr');
     expect(submitSignUp).toHaveBeenCalledWith(
       { name: 'מאיה כהן', email: 'maya@aviv.co', businessName: 'אביב' },
+      'he',
       expect.stringContaining('תנאי השירות'),
       // The honeypot, empty for a person.
       '',
