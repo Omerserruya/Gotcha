@@ -452,25 +452,32 @@ export async function MessageStream({
                 words already are, so the composer can show what is being
                 answered before anything is sent.
             */}
-              <ReplyButton
-                target={{
-                  id: message.id,
-                  who:
-                    message.direction === 'INBOUND'
-                      ? t('stream.quote.customer')
-                      : (senderLabel(message) ?? t('stream.quote.team')),
-                  preview: (() => {
-                    const quoted = quoteOf(message);
-                    return quoted === null
-                      ? t('stream.quote.noText')
-                      : 'text' in quoted
-                        ? quoted.text.slice(0, 140)
-                        : t(`stream.quote.kind.${quoted.kind}`);
-                  })(),
-                }}
-                label={t('stream.reply')}
-                description={t('stream.replyTo')}
-              />
+              {/*
+                W1: a website row merged into the WhatsApp thread is not in
+                this conversation - the send route refuses a quote of it
+                (400, Backend). No Reply on it.
+              */}
+              {message.originChannel ? null : (
+                <ReplyButton
+                  target={{
+                    id: message.id,
+                    who:
+                      message.direction === 'INBOUND'
+                        ? t('stream.quote.customer')
+                        : (senderLabel(message) ?? t('stream.quote.team')),
+                    preview: (() => {
+                      const quoted = quoteOf(message);
+                      return quoted === null
+                        ? t('stream.quote.noText')
+                        : 'text' in quoted
+                          ? quoted.text.slice(0, 140)
+                          : t(`stream.quote.kind.${quoted.kind}`);
+                    })(),
+                  }}
+                  label={t('stream.reply')}
+                  description={t('stream.replyTo')}
+                />
+              )}
             </li>
           );
         })(),
