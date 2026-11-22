@@ -1108,3 +1108,70 @@ describe("App Review 132211: Replace retires the old store before the new one is
     expect(H.retired).toEqual([]);
   });
 });
+
+describe("App Review 132211: Connect and Reconnect work before the listing is live (F)", () => {
+  const OLD = "app-review-old.myshopify.com";
+  const start = () => request(app()).get("/api/connectors/shopify/install/start");
+
+  it("★ a store this workspace holds (connected, error or uninstalled): Shopify's authorize page for THAT store, with a signed-in state", async () => {
+    for (const status of ["CONNECTED", "DISCONNECTED"] as const) {
+      H.current.current = { shopDomain: OLD, status };
+      const res = await start();
+      expect(res.status).toBe(200);
+      expect(res.body.mode).toBe("reconnect");
+      const u = new URL(res.body.url);
+      expect(u.origin).toBe(`https://${OLD}`);
+      expect(u.pathname).toBe("/admin/oauth/authorize");
+      expect(u.searchParams.get("client_id")).toBe("core-client-id");
+      expect(u.searchParams.get("state")).toBeTruthy();
+      // An intent was minted for this workspace, so the callback links it back here.
+      expect(H.intents.get("i".repeat(64))).toMatchObject({ tenantId: "tenant-A" });
+      // The state itself names this workspace as a signed-in install of THAT store.
+      const claims = JSON.parse(Buffer.from(String(u.searchParams.get("state")).split(".")[1]!, "base64url").toString());
+      expect(claims).toMatchObject({ tenantId: "tenant-A", provider: "shopify", shop: OLD, hasIntent: true, intentHandle: "i".repeat(64) });
+    }
+  });
+
+  it("★ no store yet: the Partner Dashboard install link when one is set, never a shop prompt", async () => {
+    vi.stubEnv("SHOPIFY_INSTALL_LINK_URL", "https://admin.shopify.com/oauth/install?client_id=core-client-id");
+    const res = await start();
+    expect(res.body).toEqual({ url: "https://admin.shopify.com/oauth/install?client_id=core-client-id", mode: "install_link" });
+    vi.unstubAllEnvs();
+  });
+
+  it("an install link that is not an https Shopify URL is ignored", async () => {
+    for (const bad of ["http://admin.shopify.com/x", "https://evil.example/oauth", "not a url"]) {
+      vi.stubEnv("SHOPIFY_INSTALL_LINK_URL", bad);
+      expect((await start()).body).toEqual({ url: null, mode: "not_published" });
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it("no store and no link: the honest not_published, as before", async () => {
+    expect((await start()).body).toEqual({ url: null, mode: "not_published" });
+  });
+});
+
+describe("App Review 132211: opening the app from Shopify for an owned store lands in the app", () => {
+  it("★ a store a workspace holds CONNECTED: into the app, no anonymous OAuth, nothing parked", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("https://app.gotcha.co.il/studio/capabilities?system=shopify");
+  });
+
+  it("a store that needs authorizing again (ERROR, DISCONNECTED) or no owner: OAuth as before", async () => {
+    for (const owner of [{ tenantId: "tenant-A", connectionId: "c1", status: "ERROR" }, { tenantId: "tenant-A", connectionId: "c1", status: "DISCONNECTED" }, null]) {
+      H.owner.current = owner as any;
+      const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+      expect(res.headers.location).toContain("/admin/oauth/authorize");
+    }
+  });
+
+  it("a signed-in Connect (an intent) always goes through OAuth", async () => {
+    H.owner.current = { tenantId: "tenant-A", connectionId: "c1", status: "CONNECTED" };
+    H.intents.set("i".repeat(64), { tenantId: "tenant-A" });
+    const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`).set("Cookie", `gotcha_shopify_intent=${"i".repeat(64)}`);
+    expect(res.headers.location).toContain("/admin/oauth/authorize");
+  });
+});

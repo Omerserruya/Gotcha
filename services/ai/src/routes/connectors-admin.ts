@@ -57,6 +57,7 @@ import {
   SHOPIFY_OAUTH_SCOPES,
   linkShopifyShopToTenant,
   pendingStoreReplacement,
+  currentStoreOf,
   exchangeShopifyCode,
   findShopOwner,
   shopHeldElsewhere,
@@ -68,6 +69,7 @@ import {
   INSTALL_INTENT_COOKIE,
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
+import { retireReplacedStore } from "../services/shopify-store-replace.service";
 import { shopifyUninstallResponse } from "../services/connectors/shopify-self-uninstall.service";
 import { shopifyApiVersion } from "@chatcenter/shared";
 import { splitErrorCode } from "../lib/error-code";
@@ -863,6 +865,13 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
     if (shopHeldElsewhere(await findShopOwner(shop), tenantId)) {
       await refuse("shop_connected_elsewhere");
       return;
+    }
+    // A different store replacing one this workspace left uninstalled (App Review 132211): its
+    // leftovers go first (the grandfather grant, the chat), as on the claim. A CONNECTED one never
+    // reaches here: it was parked above for the person's Replace.
+    const before = await currentStoreOf(tenantId).catch(() => null);
+    if (before && before.status === "DISCONNECTED" && before.shopDomain !== shop) {
+      await retireReplacedStore({ tenantId, shopDomain: before.shopDomain, connected: false });
     }
     let outcome: Awaited<ReturnType<typeof resolveShopifyBillingOutcome>> = null;
     try {

@@ -226,9 +226,58 @@ router.get(
     // Sending a URL unconditionally is what put a 404 behind this button: an
     // unapproved listing is not publicly reachable, and a Limited-visibility
     // app never appears in App Store search even after approval.
+    if (entry.mode === "listing") {
+      res.json({ url: entry.url, mode: entry.mode });
+      return;
+    }
+
+    // ── No live listing yet: still a working Connect (App Review 132211, 2026-11-22) ──
+    //
+    // A store this workspace held (CONNECTED, ERROR or uninstalled): Shopify's own authorize page for
+    // THAT store, the same state the install entry mints, so the callback links it back here and the
+    // claim says reconnected. Nothing is typed: the shop is the workspace's own, from its row.
+    const known = await currentStoreOf(req.tenantId!).catch(() => null);
+    const identity = getShopifyAppIdentity();
+    if (known && identity.clientId && identity.redirectUri) {
+      const { state } = mintOAuthState({
+        tenantId: req.tenantId!,
+        provider: "shopify",
+        shop: known.shopDomain,
+        flow,
+        userId: (req as any).user?.userId,
+        intentHandle: handle,
+        hasIntent: true,
+      });
+      const url = buildShopifyAuthorizeUrl({ shop: known.shopDomain, clientId: identity.clientId, scopes: SHOPIFY_OAUTH_SCOPES, redirectUri: identity.redirectUri, state });
+      if (url) {
+        res.json({ url, mode: "reconnect" });
+        return;
+      }
+    }
+    // A workspace with no store yet: the app's install link from the Partner Dashboard, when one is set
+    // (SHOPIFY_INSTALL_LINK_URL, an https Shopify URL). The merchant picks the store at Shopify.
+    const link = shopifyInstallLink();
+    if (link) {
+      res.json({ url: link, mode: "install_link" });
+      return;
+    }
     res.json({ url: entry.url, mode: entry.mode });
   },
 );
+
+/** The Partner Dashboard install link, or null when unset or not an https Shopify URL. */
+export function shopifyInstallLink(env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = String(env.SHOPIFY_INSTALL_LINK_URL ?? "").trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    const shopifyHost = host === "admin.shopify.com" || host === "apps.shopify.com" || host.endsWith(".myshopify.com");
+    return u.protocol === "https:" && shopifyHost ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Whether a Shopify connection can be STARTED from inside GOTCHA right now.
@@ -352,6 +401,20 @@ router.get("/connectors/shopify/install", async (req: Request, res: Response) =>
   // and burning it here would make the retry land in the anonymous path.
   const intentHandle = readIntentCookie(req);
   const intent = await readInstallIntent(intentHandle);
+
+  // Opened from Shopify for a store a workspace already holds and that works (App Review 132211):
+  // into the app, not another anonymous OAuth that parks a second approval and bounces to sign-in.
+  // Shopify signed this request for this shop; who may see the workspace is still the sign-in's.
+  // A store that needs authorizing again (ERROR, DISCONNECTED) still goes through OAuth.
+  if (!intent) {
+    const owner = await findShopOwner(shop).catch(() => null);
+    if (owner && owner.status === "CONNECTED") {
+      let base = "";
+      try { base = resolveAppPublicUrl(process.env); } catch { base = ""; }
+      res.redirect(302, `${base}/studio/capabilities?system=shopify`);
+      return;
+    }
+  }
 
   // The state binds the VERIFIED shop, and the workspace only when an intent
   // established one. `tenantId` is required by the state's type, so the

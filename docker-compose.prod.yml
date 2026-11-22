@@ -706,6 +706,10 @@ services:
       #
       # Flip this to "true" on approval day. No rebuild, no code change.
       SHOPIFY_APP_STORE_LISTING_LIVE: ${SHOPIFY_APP_STORE_LISTING_LIVE:-false}
+      # App Review 132211 (2026-11-22): the app's install link from the Partner Dashboard, used by
+      # "Connect Shopify" in a workspace with no store while the listing is not live (an https
+      # admin.shopify.com / apps.shopify.com URL; anything else is ignored). Unset: as before.
+      SHOPIFY_INSTALL_LINK_URL: ${SHOPIFY_INSTALL_LINK_URL:-}
       # Optional. Where to point a merchant while the listing is not public -
       # during App Store review, the install link from the Shopify dashboard.
       # Shown as HELP beside the explanation, never as the install path, and
