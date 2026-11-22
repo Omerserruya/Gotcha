@@ -8,8 +8,10 @@
 # The rules under test (dev): on the AUTH host, the sign-up screen
 # (/sign-up, /en/sign-up, /he/sign-up) is served by the sign-in app, and the
 # form's submit, POST /api/auth/signup, goes to the auth service with the
-# visitor's own address on it. Only that exact path of /api/auth is opened
-# next to the setup accept; everything else on that host stays Authentik's.
+# visitor's own address on it. The form's settings, GET
+# /api/auth/signup/config, go there too: the page's server reads them through
+# this host. Only those two exact paths of /api/auth are opened next to the
+# setup accept; everything else on that host stays Authentik's.
 # On the product host the auth, console and billing routes the feature uses go
 # where they always went.
 #
@@ -130,6 +132,12 @@ to() {
   local got; got="$(reached)"
   [ "$CODE" = 200 ] && [ "$got" = "$1" ] && ok "$1  <- $5 ($2 $3)" || bad "$5 ($2 $3 on $4): status $CODE, reached $got, want $1"
 }
+# refused <method> <path> <host> <what>: answered 404 by the gateway itself, no service reached.
+refused() {
+  ask "$1" "$2" "$3"
+  local got; got="$(reached)"
+  [ "$CODE" = 404 ] && [ "$got" = none ] && ok "none  <- $4 ($1 $2)" || bad "$4 ($1 $2 on $3): status $CODE, reached $got, want a 404 from the gateway"
+}
 # carries <text> <what>: the last answer's line holds the text.
 carries() { case "$BODY" in *"$1"*) ok "      $2" ;; *) bad "$2: $BODY" ;; esac; }
 
@@ -161,8 +169,20 @@ if [ "$MODE" = dev ]; then
   to auth POST "/api/auth/signup?utm=a%26b" "$AUTH" "the submit with a query"
   carries "POST /api/auth/signup?utm=a%26b " "the query is passed as sent"
 
+  echo "--- the auth host: the form's settings are a read, for the page's own server"
+  to auth GET "/api/auth/signup/config" "$AUTH" "the settings"
+  carries "GET /api/auth/signup/config " "the address reaches the service unchanged"
+  carries "key=[]" "an internal key the caller sent is removed"
+  to auth GET "/api/auth/signup/config?x=1" "$AUTH" "the settings with a query"
+  refused POST "/api/auth/signup/config" "$AUTH" "a write to the settings"
+  refused PUT "/api/auth/signup/config" "$AUTH" "a replace of the settings"
+  refused DELETE "/api/auth/signup/config" "$AUTH" "a delete of the settings"
+  to authentik GET "/api/auth/signup/config/" "$AUTH" "a closing slash"
+  to authentik GET "/api/auth/signup/config/x" "$AUTH" "a longer path"
+  to authentik GET "/api/auth/signup/configx" "$AUTH" "a longer word"
+  to authentik GET "/API/AUTH/SIGNUP/CONFIG" "$AUTH" "upper case"
+
   echo "--- the auth host: nothing else of /api/auth is opened"
-  to authentik GET "/api/auth/signup/config" "$AUTH" "the form's settings are read server-side"
   to authentik POST "/api/auth/signup/" "$AUTH" "a closing slash"
   to authentik POST "/api/auth/signup/x" "$AUTH" "a longer path"
   to authentik POST "/api/auth/signupx" "$AUTH" "a longer word"

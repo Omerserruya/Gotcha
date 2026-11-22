@@ -2568,9 +2568,26 @@ http {
         # The public sign-up form's submit (2026-11-22). The browser posts it
         # same-origin, so the auth service sees each visitor's own address and
         # its per-address limit counts visitors, not the page's server. Only
-        # this exact path: /api/auth/signup/config is read server-side and
-        # nothing else of /api/auth is opened here.
+        # this exact path and the read below: nothing else of /api/auth is
+        # opened here.
         location = /api/auth/signup {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The form's settings (is sign-up open, which plan, how many days). The
+        # sign-up page reads them on its server, and that read comes through
+        # this gateway carrying this host's name. With the path closed here the
+        # read fell to Authentik, got a 404, and the page showed sign-up as
+        # closed while it was open (dev, 2026-11-22). A read only: any other
+        # method is refused here and reaches nothing.
+        location = /api/auth/signup/config {
+            if ($request_method !~ ^(GET|HEAD)$) { return 404; }
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
