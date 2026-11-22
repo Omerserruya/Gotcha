@@ -21,6 +21,7 @@ const H = vi.hoisted(() => ({
   messages: [] as any[],
   findManyArgs: [] as any[],
   messageQueries: 0,
+  messageFindManyArgs: [] as any[],
 }));
 
 /** The nested `messages` include, evaluated the way Prisma would. */
@@ -52,7 +53,7 @@ vi.mock("@chatcenter/shared", () => ({
     contact: { findMany: async () => [] },
     // A per-row lookup would land here: the list must never call it.
     message: {
-      findMany: async () => { H.messageQueries++; return []; },
+      findMany: async (a: any) => { H.messageQueries++; H.messageFindManyArgs.push(a); return []; },
       findFirst: async () => { H.messageQueries++; return null; },
     },
     conversation: {
@@ -164,18 +165,36 @@ describe("GET /api/conversations - lastMessageType", () => {
     }
   });
 
-  it("★ one list query, no per-row message lookup, and the select grew by messageType only", async () => {
+  // One batched message query per PAGE is allowed, never one per row (2026-11-22): the "continued from the
+  // website" badge (W1, lib/merged-thread continuedFromFor) reads its system events for all the page's
+  // WhatsApp rows at once. It cannot fold into the last-message include: Prisma takes one include per
+  // relation, and that one is the last message. A second query (the website side) runs only when the page
+  // has such an event; here it has none.
+  it("★ one list query, one batched badge query per page (never per row), and the select grew by messageType only", async () => {
+    H.messageQueries = 0;
+    H.messageFindManyArgs = [];
     H.conversations = Array.from({ length: 20 }, (_, i) => conv(`c${i}`, i + 1));
     H.messages = H.conversations.map((c, i) => msg(c.id, i + 1, { messageType: "image", body: "[Image]" }));
     const r = await request(app).get("/api/conversations?cursor=&limit=20");
     expect(r.body.data).toHaveLength(20);
     expect(H.findManyArgs).toHaveLength(1);
-    expect(H.messageQueries).toBe(0);
+    expect(H.messageQueries).toBe(1);
+    expect(H.messageFindManyArgs[0].where.conversationId.in).toHaveLength(20);
+    expect(H.messageFindManyArgs[0].where.messageType).toBe("system");
     // metadata stays unselected: the nested take is applied in memory, so
     // selecting it would read the JSON of every message on the page.
     expect(H.findManyArgs[0].include.messages.select).toEqual({
       direction: true, body: true, createdAt: true, messageType: true,
     });
     expect(r.body.data[0]).not.toHaveProperty("lastMessageLocationName");
+  });
+
+  it("a page with no WhatsApp row makes no message query at all", async () => {
+    H.messageQueries = 0;
+    H.conversations = Array.from({ length: 5 }, (_, i) => ({ ...conv(`w${i}`, i + 1), channel: "WEBCHAT" }));
+    H.messages = H.conversations.map((c, i) => msg(c.id, i + 1));
+    const r = await request(app).get("/api/conversations?cursor=&limit=20");
+    expect(r.body.data).toHaveLength(5);
+    expect(H.messageQueries).toBe(0);
   });
 });
