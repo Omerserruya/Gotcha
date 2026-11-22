@@ -12,6 +12,7 @@
 import { Queue } from "bullmq";
 import { prisma, getRedis, createWorker, resolveEffectiveLocale, REAL_CONVERSATION, readDurableSetting, parseBusinessHours, dayOf } from "@chatcenter/shared";
 import { generateResponse, getMicroModel } from "./ai.service";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 
 type Locale = "he" | "en";
 
@@ -51,6 +52,8 @@ export type AnalysisOutcome =
   | "not_found"
   | "not_closed"
   | "not_real"
+  /** A hidden conversation (relevance-hidden.ts): nothing is learnt from it. */
+  | "hidden"
   | "voice"
   | "up_to_date"
   | "no_customer_text"
@@ -169,6 +172,10 @@ export async function analyzeConversationOnClose(
   if (conv.isTest !== REAL_CONVERSATION.isTest || String(conv.customerExternalId ?? "").startsWith(REAL_CONVERSATION.NOT.customerExternalId.startsWith)) return "not_real";
   if (conv.channel === "VOICE") return "voice";
   if (!opts.force && conv.status !== "CLOSED") return "not_closed";
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("conversation_analysis", conversationId);
+    return "hidden";
+  }
 
   const prior = await prisma.conversationIntelligence.findUnique({ where: { conversationId }, select: { analyzedAt: true, metadata: true } });
   const contentAt = conv.lastMessageAt ?? conv.updatedAt;
@@ -296,6 +303,17 @@ export async function findUnanalyzed(days = SWEEP_DAYS, limit = SWEEP_BATCH, exc
        AND c.updated_at >= ${since}
        AND NOT (c.tenant_id = ANY(${excludeTenants}::text[]))
        AND NOT (c.id = ANY(${excludeIds}::text[]))
+       -- Not a hidden conversation (packages/shared relevance-hidden.ts, the same rule).
+       AND NOT (
+         COALESCE(c.relevance_category, '') IN ('personal', 'notice', 'marketing', 'auto_reply', 'internal')
+         AND (
+           c.relevance_overridden_by IS NOT NULL
+           OR (
+             COALESCE(c.relevance_confidence, 0)::float8 >= 0.7
+             AND NOT EXISTS (SELECT 1 FROM channel_accounts ca WHERE ca.id = c.channel_account_id AND ca.relevance_filter_enabled = false)
+           )
+         )
+       )
        AND (i.id IS NULL
             OR COALESCE(i.metadata->>'source', '') <> 'close-analysis'
             OR i.analyzed_at < COALESCE(c.last_message_at, c.updated_at))

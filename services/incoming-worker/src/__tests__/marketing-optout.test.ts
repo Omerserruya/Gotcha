@@ -71,6 +71,22 @@ describe("★ the reply opts the customer out", () => {
     expect(H.messages[0]).toMatchObject({ direction: "OUTBOUND", metadata: { systemEvent: "marketing_opt_out_confirmation" } });
   });
 
+  it("★ a hidden conversation (silent): the opt-out is recorded the same way, and no confirmation is sent", async () => {
+    expect(await reply("הסר", { silent: true })).toBe(true);
+    expect(H.contacts[0].optOutChannels).toEqual(["WHATSAPP"]);
+    expect(H.consent).toEqual([expect.objectContaining({ subjectId: "k1", granted: false, source: "reply_keyword" })]);
+    expect(H.audits).toHaveLength(1);
+    expect(H.queued).toEqual([]);
+    expect(H.messages).toEqual([]);
+  });
+
+  it("silent opt-in: consent granted, no confirmation", async () => {
+    H.contacts[0].optOutChannels = ["WHATSAPP"];
+    expect(await reply("START", { silent: true })).toBe(true);
+    expect(H.contacts[0].optOutChannels).toEqual([]);
+    expect(H.queued).toEqual([]);
+  });
+
   it("English reply, English confirmation; an earlier opt-out (any case) is not duplicated", async () => {
     H.contacts[0].optOutChannels = ["whatsapp"];
     expect(await reply("STOP")).toBe(true);

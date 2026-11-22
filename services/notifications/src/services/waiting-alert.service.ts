@@ -38,6 +38,9 @@ export interface WaitingRow {
 export interface SlaSetting { enabled: boolean; slaMinutes: number }
 
 /** Conversations with a customer message nobody has answered for at least a minute. */
+/** The hidden labels written into findWaiting's SQL; a test holds them equal to AUTOMATION_HIDDEN_CATEGORIES. */
+export const WAITING_HIDDEN_SQL_CATEGORIES = ["personal", "notice", "marketing", "auto_reply", "internal"] as const;
+
 export async function findWaiting(now: Date): Promise<WaitingRow[]> {
   const since = new Date(now.getTime() - ACTIVE_WINDOW_MS);
   const cutoff = new Date(now.getTime() - 60_000);
@@ -60,6 +63,17 @@ export async function findWaiting(now: Date): Promise<WaitingRow[]> {
     ) w
     WHERE c.status <> 'CLOSED' AND c.archived_at IS NULL AND c.origin = 'LIVE'
       AND c.last_message_at > ${since}
+      -- Not a hidden conversation (packages/shared relevance-hidden.ts, the same rule; WAITING_HIDDEN_SQL_CATEGORIES).
+      AND NOT (
+        COALESCE(c.relevance_category, '') IN ('personal', 'notice', 'marketing', 'auto_reply', 'internal')
+        AND (
+          c.relevance_overridden_by IS NOT NULL
+          OR (
+            COALESCE(c.relevance_confidence, 0)::float8 >= 0.7
+            AND NOT EXISTS (SELECT 1 FROM channel_accounts ca WHERE ca.id = c.channel_account_id AND ca.relevance_filter_enabled = false)
+          )
+        )
+      )
       AND w.waiting_since IS NOT NULL AND w.waiting_since < ${cutoff}
     LIMIT 2000
   `) as Promise<WaitingRow[]>;

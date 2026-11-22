@@ -11,6 +11,7 @@ import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 // A subpath, not the package root: this worker's tests mock "@chatcenter/shared" whole.
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
+import { logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 import { BOT_CLOSE_REOPEN_DAYS } from "@chatcenter/shared/src/lib/bot-idle";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
@@ -767,6 +768,15 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     }
   }
 
+  // The relevance label BEFORE anything acts (2026-11-22): a conversation
+  // labelled personal, notice, marketing, auto_reply or internal, or marked
+  // personal by a person, gets no automation, no push, no routing and no AI.
+  // A first inbound is labelled now (at most 3 s); a timeout or an error goes
+  // on as before (services/relevance-inline.service.ts).
+  const { relevanceBeforeDispatch } = await import("../services/relevance-inline.service");
+  const relevance = await relevanceBeforeDispatch(tenantId, conversation as any);
+  const hidden = relevance.hidden;
+
   // Contact.lastInteractionAt - the column the customer list sorts and filters
   // on, which until now had exactly ONE writer: the merge carry-forward at
   // identity.ts:172, computing max(existing, existing). Nothing ever
@@ -825,8 +835,9 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // same email/phone bridging works for AI bot, FlowCanvas, AND human-handled
   // chats (co-pilot mode). The conversation service owns idempotency, so a
   // duplicate fire from the flow-executor's Collect-Input call is a no-op.
-  console.log(`[incoming] identity-link hook firing for msg=${message.id} body=${(body || "").slice(0, 60)}`);
-  void (async () => {
+  if (hidden) logHiddenSkip("identity_link", conversation.id);
+  else console.log(`[incoming] identity-link hook firing for msg=${message.id} body=${(body || "").slice(0, 60)}`);
+  if (!hidden) void (async () => {
     try {
       const { tryLinkIdentifierFromInbound } = await import("../services/identity-link.service");
       await tryLinkIdentifierFromInbound({
@@ -841,27 +852,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     }
   })();
 
-  // Relevance label (2026-11-17): every inbound of an enabled tenant (RELEVANCE_CLASSIFY_TENANTS), whatever
-  // handles the conversation (the AI, a flow, a person, the legacy engine). Debounced per conversation;
-  // classified by the ai service. Not for a sandbox rehearsal. Never blocks the message.
-  {
-    const labelConvId = conversation.id;
-    const labelAccountId = (conversation as { channelAccountId?: string | null }).channelAccountId ?? null;
-    if (!String(conversation.customerExternalId ?? "").startsWith("sandbox:")) {
-      void (async () => {
-        // Site and store chats and voice are never classified (2026-11-18).
-        const { relevanceChannel } = await import("@chatcenter/shared");
-        if (!relevanceChannel((conversation as { channel?: string }).channel)) return;
-        // The business turned the filter off on this account (2026-11-18): nothing is classified on it.
-        if (labelAccountId) {
-          const acct = await prisma.channelAccount.findFirst({ where: { id: labelAccountId, tenantId }, select: { relevanceFilterEnabled: true } }).catch(() => null);
-          if (acct && acct.relevanceFilterEnabled === false) return;
-        }
-        const { enqueueRelevanceClassification } = await import("@chatcenter/shared");
-        await enqueueRelevanceClassification(tenantId, labelConvId);
-      })().catch(() => undefined);
-    }
-  }
+  // The 2-minute relevance job is enqueued by relevanceBeforeDispatch above (every inbound, as since 2026-11-17).
 
   // Update conversation timestamp
   await prisma.conversation.update({
@@ -894,7 +885,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // purpose: a "STOP" is still the customer writing to them. Never while the
   // bot handles it - the same test as the bot branch below (no assignee, or
   // handledBy is the bot's) - and fire-and-forget like the analytics above.
-  let announced = emitInboundMessage({
+  if (hidden) logHiddenSkip("inbound_push", conversation.id);
+  let announced = hidden ? true : emitInboundMessage({
     tenantId,
     conversation: conversation as any,
     messageId: message.id,
@@ -912,6 +904,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   const announceFallback = conversation;
   const announceNoBotAnswers = async () => {
     if (announced) return;
+    // A hidden conversation: no team push (the assignee push above is skipped the same way).
     const fresh = (await prisma.conversation.findFirst({ where: { id: announceConvId, tenantId } }).catch(() => null)) ?? announceFallback;
     announced = emitInboundMessage({
       tenantId,
@@ -934,6 +927,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     const handled = await interceptOptOutReply({
       tenantId, contactId: savedContact?.id ?? "", channel, conversationId: conversation.id,
       channelAccountId, recipientExternalId: senderId, messageId: message.id, messageType, body,
+      // Hidden: the opt-out is still recorded, the confirmation is not sent.
+      silent: hidden,
     });
     if (handled) return;
   }
@@ -941,7 +936,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // A message WhatsApp could not deliver (no content, only a placeholder body):
   // never the AI's input. The customer is asked once to resend it as text,
   // while no person owns the conversation. See undeliverable-message.service.
-  {
+  if (hidden) logHiddenSkip("undeliverable_ask", conversation.id);
+  else {
     const { handleUndeliverable } = await import("../services/undeliverable-message.service");
     const handled = await handleUndeliverable({
       tenantId, conversationId: conversation.id, channel, channelAccountId,
@@ -957,6 +953,14 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // the AI as "[Shared location: ...]" with its details in metadata. Anything
   // the AI or a person cannot use is theirs to answer, in the workspace's
   // language, never a fixed English line.
+
+  // A hidden conversation (relevance-hidden.ts): no automation, no flow, no
+  // routing or auto-assignment, no AI. The message is stored and shown in the
+  // inbox's "not relevant" view; that is all.
+  if (hidden) {
+    logHiddenSkip("responders", conversation.id);
+    return;
+  }
 
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {

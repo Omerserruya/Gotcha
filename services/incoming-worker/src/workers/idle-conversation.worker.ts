@@ -12,6 +12,7 @@ import {
   assignSoleMemberOnHandoff,
 } from "@chatcenter/shared";
 import { hasReplyWindow, lastInboundAtForRecipient, replyWindowFor } from "@chatcenter/shared/src/lib/reply-window";
+import { notHiddenWhere } from "@chatcenter/shared/src/lib/relevance-hidden";
 import {
   BOT_IDLE_KEY, BOT_IDLE_CLOSE_REASON, BOT_END_CLOSE_REASON, BOT_IDLE_SOURCE, ENDED_FACT, MARKED_END_CLOSE_MINUTES,
   botIdleDefaultOn, botIdleLang, botIdleRules, botIdleText, markedEndStep, parseBotIdleRow, type BotIdleRule,
@@ -302,6 +303,8 @@ export async function idleAutomationForTenant(tenantId: string): Promise<{ remin
       status: { in: ["OPEN", "WAITING"] },
       assignedAgentId: { not: null },
       lastMessageAt: { not: null },
+      // Never a hidden conversation (relevance-hidden.ts, 2026-11-22).
+      AND: [notHiddenWhere()],
     },
     include: {
       messages: {
@@ -572,6 +575,8 @@ const botOwned = (channels: string[]) => ({
   isHandedOver: false,
   automationRunId: null,
   OR: [{ handledBy: null }, { handledBy: { notIn: ["human", "awaiting_approval", "flow"] } }],
+  // Never a hidden conversation (relevance-hidden.ts, 2026-11-22): no reminder, no close.
+  AND: [notHiddenWhere()],
 });
 
 const lastNonSystem = async (conversationId: string, direction?: "INBOUND" | "OUTBOUND") =>

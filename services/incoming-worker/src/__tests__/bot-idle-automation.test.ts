@@ -14,7 +14,10 @@ const H = vi.hoisted(() => ({
 function matches(row: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
     if (k === "OR") return (v as any[]).some((w) => matches(row, w));
+    if (k === "AND") return (v as any[]).every((w) => matches(row, w));
+    if (v && typeof v === "object" && "is" in v) return row[k] != null && matches(row[k], v.is);
     if (v && typeof v === "object" && !(v instanceof Date)) {
+      if ("lt" in v) return row[k] != null && row[k] < v.lt;
       if ("in" in v) return v.in.includes(row[k]);
       if ("notIn" in v) return row[k] != null && !v.notIn.includes(row[k]);
       if ("not" in v) return v.not === null ? row[k] != null : row[k] !== v.not;
@@ -57,7 +60,7 @@ vi.mock("@chatcenter/shared/src/lib/reply-window", async () => {
   return { ...actual, lastInboundAtForRecipient: vi.fn(async (a: any) => (a.customerExternalId in H.windows ? H.windows[a.customerExternalId] : new Date())) };
 });
 
-import { botIdleForTenant, botIdleStep, closeByBot, SWEEP_PAGE } from "../workers/idle-conversation.worker";
+import { botIdleForTenant, botIdleStep, closeByBot, SWEEP_PAGE, idleAutomationForTenant } from "../workers/idle-conversation.worker";
 import { BOT_CLOSE_REOPEN_DAYS, BOT_IDLE_DEFAULT_TEXTS as TXT, botIdleRuleFor, parseBotIdleRow, reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
 
 const MIN = 60_000;
@@ -122,6 +125,32 @@ describe("waiting on the business: no reminder, no close (2026-11-18)", () => {
     msg("old", "OUTBOUND", 12, { body: "בדקתי." });
     await botIdleForTenant("T");
     expect(sent("old")).toEqual([A]);
+  });
+});
+
+describe("a hidden conversation (relevance-hidden.ts, 2026-11-22): no reminder, no close", () => {
+  it("★ labelled personal (0.9) or marked personal by hand: nothing; unsure (0.5) or marked business: the reminder", async () => {
+    H.convs = [
+      conv("p", { relevanceCategory: "personal", relevanceConfidence: 0.9, relevanceOverriddenBy: null }),
+      conv("h", { relevanceCategory: "personal", relevanceConfidence: null, relevanceOverriddenBy: "u1" }),
+      conv("i", { relevanceCategory: "internal", relevanceConfidence: 0.95, relevanceOverriddenBy: null }),
+      conv("u", { relevanceCategory: "personal", relevanceConfidence: 0.5, relevanceOverriddenBy: null }),
+      conv("b", { relevanceCategory: "business", relevanceConfidence: 0.3, relevanceOverriddenBy: "u1" }),
+      conv("f", { relevanceCategory: "marketing", relevanceConfidence: 0.99, relevanceOverriddenBy: null, channelAccount: { relevanceFilterEnabled: false } }),
+    ];
+    for (const id of ["p", "h", "i", "u", "b", "f"]) { msg(id, "INBOUND", 13); msg(id, "OUTBOUND", 12); }
+    await botIdleForTenant("T");
+    expect(["p", "h", "i", "u", "b", "f"].map((id) => [id, sent(id).length])).toEqual([["p", 0], ["h", 0], ["i", 0], ["u", 1], ["b", 1], ["f", 1]]);
+  });
+});
+
+describe("a person's idle conversation (idleAutomation) never reads a hidden one", () => {
+  it("its query carries the same not-hidden rule", async () => {
+    const { readDurableSetting } = await import("@chatcenter/shared");
+    (readDurableSetting as any).mockImplementationOnce(async () => JSON.stringify({ reminderEnabled: true, reminderDelayMinutes: 10, autoCloseEnabled: false }));
+    const { notHiddenWhere } = await import("@chatcenter/shared/src/lib/relevance-hidden");
+    await idleAutomationForTenant("T");
+    expect(H.reads.at(-1).where).toMatchObject({ tenantId: "T", assignedAgentId: { not: null }, AND: [notHiddenWhere()] });
   });
 });
 

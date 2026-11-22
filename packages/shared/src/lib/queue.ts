@@ -82,10 +82,11 @@ export function relevanceClassifyEnabled(tenantId: string, env: Record<string, s
  * 2-minute window joins the one waiting job (BullMQ ignores an add whose id exists); the job is removed
  * when it runs, so the next inbound after it starts a new one. Never throws.
  */
-export async function enqueueRelevanceClassification(tenantId: string, conversationId: string, queue: { add: (...a: any[]) => Promise<unknown> } = relevanceQueue): Promise<boolean> {
+export async function enqueueRelevanceClassification(tenantId: string, conversationId: string, queue: { add: (...a: any[]) => Promise<unknown> } = relevanceQueue, opts: { refine?: boolean } = {}): Promise<boolean> {
   if (!relevanceClassifyEnabled(tenantId)) return false;
   try {
-    await queue.add("classify", { tenantId, conversationId }, { jobId: `classify-relevance-${conversationId}`, delay: RELEVANCE_DEBOUNCE_MS, removeOnComplete: true, removeOnFail: true, attempts: RELEVANCE_ATTEMPTS, backoff: { type: "exponential", delay: 15_000 } });
+    // refine: the first inbound was labelled inline by the model; this job looks at it once more (ai relevance worker).
+    await queue.add("classify", { tenantId, conversationId, ...(opts.refine ? { refine: true } : {}) }, { jobId: `classify-relevance-${conversationId}`, delay: RELEVANCE_DEBOUNCE_MS, removeOnComplete: true, removeOnFail: true, attempts: RELEVANCE_ATTEMPTS, backoff: { type: "exponential", delay: 15_000 } });
     return true;
   } catch (err) {
     console.warn("[relevance] enqueue failed:", (err as Error)?.message);

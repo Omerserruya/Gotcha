@@ -17,6 +17,7 @@ import { refreshCustomerBriefFromConversation } from "../../services/customer-br
 import { resolveEffectiveLocale } from "@chatcenter/shared";
 import { syncCloseToCrm } from "../../routes/crm-panel";
 import { analyzeConversationOnClose } from "../../services/conversation-analysis.service";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 
 let _sub: ReturnType<typeof subscribeToEvents> | null = null;
 let _started = false;
@@ -55,7 +56,8 @@ async function handleUpdatedClosed(evt: ServiceEvent): Promise<void> {
   analyze(String(tenantId), String(conversationId), "updated");
 }
 
-async function handleClosed(evt: ServiceEvent): Promise<void> {
+/** Exported for its test. */
+export async function handleClosed(evt: ServiceEvent): Promise<void> {
   if (evt.event === "conversation:updated") return handleUpdatedClosed(evt);
   if (evt.event !== "conversation:closed") return;
   const data = (evt.data ?? {}) as ClosedEventData;
@@ -74,6 +76,11 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
     channel = row?.channel as unknown as string;
   }
   if (channel === "VOICE") return;
+  // A hidden conversation (relevance-hidden.ts, 2026-11-22): no summary, no CRM write, no follow-up, no brief.
+  if (await isConversationHidden(String(tenantId), String(conversationId), prisma)) {
+    logHiddenSkip("post_chat", String(conversationId));
+    return;
+  }
 
   const out = await runPostChatPipeline({
     tenantId: String(tenantId),

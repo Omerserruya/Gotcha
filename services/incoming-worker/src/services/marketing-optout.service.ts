@@ -20,6 +20,8 @@ export interface OptOutInput {
   recipientExternalId: string;
   messageId: string;
   language: "he" | "en";
+  /** A hidden conversation (relevance-hidden.ts, 2026-11-22): the choice is recorded, no confirmation is sent. */
+  silent?: boolean;
 }
 
 export async function applyMarketingOptOut(input: OptOutInput): Promise<{ alreadyOptedOut: boolean }> {
@@ -85,6 +87,10 @@ export async function applyMarketingOptIn(input: OptOutInput): Promise<boolean> 
 
 /** The short confirmation: the customer just wrote, so free text is allowed on every channel. */
 async function confirm(input: OptOutInput, body: string, systemEvent: string): Promise<void> {
+  if (input.silent) {
+    console.log(`[relevance] skip=optout_confirmation conv=${input.conversationId} reason=hidden_label`);
+    return;
+  }
   if (input.channelAccountId) {
     try {
       const reply = await prisma.message.create({

@@ -27,6 +27,7 @@
  */
 import { prisma, getRedis, isEntitled, resolveConversationLocale, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getEffectiveCopilotConfig, getSuggestions, type ConversationContext } from "./ai-assist.service";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 import { publishConvEvent } from "./intelligence/events";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
 
@@ -313,6 +314,11 @@ export async function runIfEligible(tenantId: string, conversationId: string): P
   });
   if (!conv) return { status: "skipped", reason: "not_found" };
   if (!isCopilotConversation(conv as unknown as ModeFields)) return { status: "skipped", reason: "ai_or_closed" };
+  // A hidden conversation (relevance-hidden.ts, 2026-11-22): no suggestions are made on the business's account.
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("copilot_suggestions", conversationId);
+    return { status: "skipped", reason: "hidden" };
+  }
   // The GET is gated on ai.copilot; generating for a tenant without it would
   // spend tokens on suggestions nobody is allowed to read.
   if (!(await isEntitled(tenantId, "ai.copilot"))) return { status: "skipped", reason: "not_entitled" };
