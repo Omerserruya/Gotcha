@@ -3368,6 +3368,43 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
     expect(note).toMatch(/still apply to the rewritten reply/);
   });
 
+  // Prod 2026-11-19 and 11-22: the measuring guide's link is written only in the owner's rules, with Hebrew letters
+  // in its path. It was no link source, so the repair swapped an image in for it; with the swap gone its sentence
+  // would be dropped and the customer would lose the guide.
+  describe("a link the owner's rules give is a link the reply may give", () => {
+    const GUIDE = "https://smoovee-ltd.com/wp-content/uploads/2026/11/סמובי-מדריך-מדידה.pdf";
+    const RULE = `כשלקוח שואל איך מודדים, לשלוח את מדריך המדידה: ${GUIDE}`;
+    const ask = { ...opts, incomingMessage: "איך מודדים את המכשיר?" };
+    const turn = async (reply: string) => {
+      h.responses.push({ toolCalls: [respond("g1", { reply })] }, { toolCalls: [respond("g2", { reply })] });
+      return runReplyEngineTurn(ask, "autonomous");
+    };
+
+    it("★ a raw-Hebrew PDF link present only in the owner's rules is kept whole", async () => {
+      h.agentExtra = { customGuardrails: [RULE] };
+      const r = await turn(`מדריך המדידה כאן: ${GUIDE} אחרי המדידה אפשר לכתוב לנו את המידות.`);
+      expect(prefixOf(h.calls[0])).toContain(GUIDE);
+      expect(r.reply).toContain(`${GUIDE} אחרי המדידה`);
+      expect((r.trace as any).urlsRepaired).toBeUndefined();
+    });
+
+    it("the same link in a hand-over rule or in the never list is a source too", async () => {
+      h.agentExtra = { escalationRules: [{ label: `לקוח שלא הצליח למדוד לפי ${GUIDE}`, type: "custom", enabled: true }] };
+      expect((await turn(`מדריך המדידה כאן: ${GUIDE} אחרי המדידה אפשר לכתוב לנו את המידות.`)).reply).toContain(GUIDE);
+      h.responses.length = 0; h.calls.length = 0;
+      h.agentExtra = {}; h.policyRow = { data: { blockedTopics: [`מדריכים אחרים מלבד ${GUIDE}`] } };
+      expect((await turn(`מדריך המדידה כאן: ${GUIDE} אחרי המדידה אפשר לכתוב לנו את המידות.`)).reply).toContain(GUIDE);
+    });
+
+    it("no rule has it: its sentence goes, and no other file stands in for it", async () => {
+      h.agentExtra = { customGuardrails: ["כשלקוח שואל איך מודדים, לשלוח את מדריך המדידה"] };
+      const r = await turn(`מדריך המדידה כאן: ${GUIDE} אחרי המדידה אפשר לכתוב לנו את המידות.`);
+      expect(r.reply ?? "").not.toMatch(/https?:/);
+      expect(r.reply ?? "").not.toContain("מדריך-מדידה");
+      expect((r.trace as any).urlsRepaired?.dropped).toBe(1);
+    });
+  });
+
   it("★ a rewritten turn prints its first draft; a clean turn does not", async () => {
     h.responses.push(
       { toolCalls: [respond("h1", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "instalments question" })] },

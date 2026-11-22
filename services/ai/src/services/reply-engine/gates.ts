@@ -2505,50 +2505,121 @@ export function fixListCount(text: string): string {
 }
 
 
-/**
- * Every URL in the reply as a source has it (rating 052f53ad, NE'A: "%d7%ה%d7%9e", a Hebrew letter inside the
- * percent-encoding). One that is not verbatim in a source is replaced by the source URL it starts like (same
- * host and the longest shared path), else its sentence goes. Run last, on the final text.
- */
 // A raw Hebrew letter ends a URL: "https://smoovee-ltd.העברתי" is a cut link with a line glued on (prod 2026-11-18).
 const URL_RE = /https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]+[^\s<>"'״)\].,;:!?\u05D0-\u05EA]/giu;
 const URL_SENTENCES = /(?:https?:\/\/[^\s<>"'״)\]\u05D0-\u05EA]*[^\s<>"'״)\].,;:!?\u05D0-\u05EA]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*|\n+/gu;
+/** A URL's head up to its first raw Hebrew letter, and what continues it with no space. */
+const URL_UNIT = /(https?:\/\/[^\s<>"'״)\]א-ת]+[^\s<>"'״)\].,;:!?א-ת])((?:[^\s<>"'״)\]]*[^\s<>"'״)\].,;:!?])?)/giu;
+/** A URL with the path that continues it in Hebrew letters; a sentence mark straight after the address is no path. */
+const URL_WITH_PATH = /https?:\/\/[^\s<>"'״)\]א-ת]+[^\s<>"'״)\].,;:!?א-ת](?:[א-ת](?:[^\s<>"'״)\]]*[^\s<>"'״)\].,;:!?])?)?/giu;
+const HEBREW_FIRST = /^[א-ת]/u;
+const HEBREW_WORD = /^[א-ת]+$/u;
+const IMAGE_URL = /\.(?:webp|jpe?g|png|gif|svg|bmp|avif|ico|heic|tiff?)(?:[?#]|$)/i;
+/** Marks of emphasis written around a URL, never its end. */
+const URL_MARKS = /[*_~`|\\]+$/;
+/** A file ending or a domain followed straight by a Hebrew letter: where the URL ends and glued text begins, else -1. */
+const gluedAt = (w: string) => { const m = /\.[A-Za-z0-9]{2,5}(?=[א-ת])/u.exec(w); return m ? m.index + m[0].length : -1; };
+/** One spelling for a URL however it was written: percent-encoding read as its letters, a broken byte or a stray "%" left out. */
+const urlKey = (u: string) => String(u ?? "")
+  .replace(/(?:%[0-9a-f]{2})+/gi, (run) => new TextDecoder().decode(Uint8Array.from(run.slice(1).split("%"), (h) => parseInt(h, 16))).split(String.fromCharCode(0xfffd)).join(""))
+  .replace(/%/g, "");
+const wellFormedUrl = (u: string) => { try { decodeURI(u); return true; } catch { return false; } };
+const SLOT_OPEN = String.fromCharCode(0xe000), SLOT_CLOSE = String.fromCharCode(0xe001);
+const SLOT = new RegExp(`${SLOT_OPEN}(\\d+)${SLOT_CLOSE}`, "g");
+
+/**
+ * Every URL in the reply as a source has it. Run last, on the final text.
+ *
+ * One URL is its address and whatever continues it with no space. A raw Hebrew letter can be part of the address
+ * ("https://shop.co.il/wp-content/uploads/2026/11/מדריך-מדידה.pdf"), so the whole string is asked of the sources
+ * first, raw and percent-encoded alike; found, it stays as the reply wrote it. Prod 2026-11-19 and 11-22: such a
+ * link was read up to its first Hebrew letter, that folder was "repaired" to a product image on the same host, and
+ * the file name stayed glued after the image (".../3@2x.pngמדריך-מדידה.pdf").
+ *
+ * A URL no source has is replaced only by the same address written another way: broken percent-encoding (rating
+ * 052f53ad: "%d7%ה%d7%9e"), a closing slash more or less, a query no source has, or cut short of exactly one
+ * source URL ("https://smoovee-ltd" of "https://smoovee-ltd.com/...", prod 2026-11-18) that is no image. Another
+ * file is never a substitute, on the same host or in the same folder: the sentence goes, whole, and nothing of the
+ * URL stays behind.
+ *
+ * Text glued to a URL comes apart from it: after a sentence mark ("https://smoovee-ltd.העברתי"), after a file
+ * ending or a domain ("....pngמדריך"), or one Hebrew word after a URL a source has.
+ */
 export function repairUrls(text: string, sources: string): { text: string; fixed: number; dropped: number } {
-  const known = [...new Set(String(sources ?? "").match(URL_RE) ?? [])];
+  // The sources' URLs by spelling, each with the forms it was written in.
+  const known = new Map<string, string[]>();
+  const learn = (raw: string) => { const u = raw.replace(URL_MARKS, ""); const k = urlKey(u); known.set(k, [...(known.get(k) ?? []), u]); };
+  for (const m of String(sources ?? "").matchAll(URL_UNIT)) {
+    const head = m[1], rest = m[2] ?? "", w = head + rest;
+    // A sentence mark then Hebrew: the URL ended before the mark. Hebrew straight after: its path, unless glued text.
+    if (!rest || !HEBREW_FIRST.test(rest)) learn(head);
+    else { const g = gluedAt(w); learn(g >= 0 ? w.slice(0, g) : w); }
+  }
   let fixed = 0, dropped = 0;
-  const bad = new Set<string>();
-  let out = String(text ?? "").replace(URL_RE, (u) => {
-    if (known.includes(u)) return u;
+  const slots: string[] = [], bad = new Set<number>();
+  const hold = (u: string, toGo = false) => { slots.push(u); if (toGo) bad.add(slots.length - 1); return `${SLOT_OPEN}${slots.length - 1}${SLOT_CLOSE}`; };
+  /** The URL when a source has it: the reply's own writing when that is sound, else the source's. */
+  const sourced = (u: string) => { const forms = known.get(urlKey(u)); return !forms ? null : forms.includes(u) || wellFormedUrl(u) ? u : forms[0]; };
+  const homeOfKnownHost = (u: string) => {
+    try { const h = new URL(u).host; return /^https?:\/\/[^/]+\/?$/i.test(u) && [...known.values()].some((f) => { try { return new URL(f[0]).host === h; } catch { return false; } }); } catch { return false; }
+  };
+  const one = (u: string): string => {
+    const same = sourced(u);
+    if (same) { if (same !== u) fixed++; return hold(same); }
     // The store's home on a known host ("https://shop.co.il/") is no corruption.
-    try { const h = new URL(u).host; if (/^https?:\/\/[^/]+\/?$/i.test(u) && known.some((k) => { try { return new URL(k).host === h; } catch { return false; } })) return u; } catch { /* not a URL */ }
-    let host = "";
-    try { host = new URL(u.replace(/%(?![0-9a-f]{2})/gi, "%25")).host; } catch { host = ""; }
-    const same = known.filter((k) => { try { return new URL(k).host === host; } catch { return false; } });
-    let best = "", len = 0;
-    for (const k of same) { let i = 0; while (i < k.length && i < u.length && k[i] === u[i]) i++; if (i > len) { len = i; best = k; } }
-    // Shares its host and at least the start of the path: the source's own URL.
-    if (best && len > `https://${host}/`.length) { fixed++; return best; }
-    // Cut short ("https://smoovee-ltd" of "https://smoovee-ltd.com/..."): the one source URL it begins.
-    const longer = known.filter((k) => k.startsWith(u) && k.length > u.length);
-    if (longer.length === 1) { fixed++; return longer[0]; }
-    bad.add(u);
-    return u;
+    if (homeOfKnownHost(u)) return hold(u);
+    // A mark of emphasis after it ("...*") is no part of it.
+    const marks = URL_MARKS.exec(u)?.[0] ?? "";
+    const bare = marks ? sourced(u.slice(0, -marks.length)) : null;
+    if (bare) { if (bare !== u.slice(0, -marks.length)) fixed++; return hold(bare) + marks; }
+    // A closing slash more, or a query no source has: the source's page.
+    const page = [u.replace(/\/$/, ""), u.split(/[?#]/)[0]].filter((x) => x !== u).map(sourced).find(Boolean);
+    if (page) { fixed++; return hold(page); }
+    // Cut short: the one source URL it begins, never an image; with only a closing slash missing, that one.
+    const key = urlKey(u);
+    const longer = [...known.entries()].filter(([k, forms]) => k.length > key.length && k.startsWith(key) && !IMAGE_URL.test(forms[0]));
+    const cut = longer.find(([k]) => k === `${key}/`) ?? (longer.length === 1 ? longer[0] : undefined);
+    if (cut) { fixed++; return hold(cut[1][0]); }
+    return hold(u, true);
+  };
+  /** Text that was glued to a URL, set apart from it; counted as a fix when the URL stays. */
+  const apart = (url: string, tail: string) => { const before = bad.size, was = fixed; const kept = one(url); if (bad.size === before && fixed === was) fixed++; return `${kept} ${tail}`; };
+  let out = String(text ?? "").replace(URL_UNIT, (_all: string, head: string, rest: string = "") => {
+    if (!rest) return one(head);
+    const w = head + rest;
+    // A sentence mark, then Hebrew: the URL ended before the mark.
+    if (!HEBREW_FIRST.test(rest)) return one(head) + rest;
+    // A file ending or a domain, then Hebrew: a word glued on comes apart; anything else (a second file name) is no
+    // URL and no sentence, and goes.
+    const g = gluedAt(w);
+    if (g >= 0) return HEBREW_WORD.test(w.slice(g)) ? apart(w.slice(0, g), w.slice(g)) : hold(w, true);
+    // One Hebrew word straight after a URL a source has, or after a known host's home; never after a folder, whose
+    // next letters are its path.
+    if (!sourced(w) && (sourced(head) || homeOfKnownHost(head)) && !head.endsWith("/") && HEBREW_WORD.test(rest)) return apart(head, rest);
+    // A sentence mark and Hebrew further in ("...מדריך.pdf.תודה"): a URL a source has ends before the mark.
+    if (!sourced(w)) for (const m of [...w.matchAll(/[.,;:!?]+(?=[א-ת])/gu)].reverse()) {
+      const before = sourced(w.slice(0, m.index));
+      if (before) { fixed++; return `${hold(before)}${m[0]} ${w.slice(m.index + m[0].length)}`; }
+    }
+    return one(w);
   });
   if (bad.size) {
+    // Every URL is one piece here, so a cut never falls inside one and a kept one is never joined with a space.
     const parts = out.match(URL_SENTENCES) ?? [out];
-    out = parts.filter((x) => { const hit = [...bad].some((b) => x.includes(b)); if (hit) dropped++; return !hit; }).reduce(joinKept, "").trim();
+    out = parts.filter((x) => { const hit = [...x.matchAll(SLOT)].some((m) => bad.has(Number(m[1]))); if (hit) dropped++; return !hit; }).reduce(joinKept, "").trim();
   }
-  return { text: out, fixed, dropped };
+  return { text: out.replace(SLOT, (m: string, i: string) => slots[Number(i)] ?? m), fixed, dropped };
 }
 
 /**
  * A sentence end followed straight by a Hebrew letter gets a space (prod 2026-11-18, Smoovee: a fixed team line
- * glued to a cut link, ".העברתי"). URLs are left as they are.
+ * glued to a cut link, ".העברתי"). URLs are left as they are, a path written in Hebrew letters with them
+ * (".../uploads/מדריך.מדידה.pdf").
  */
 export function spaceSentences(text: string): string {
   const t = String(text ?? "");
-  const urls = t.match(URL_RE) ?? [];
-  const parts = t.split(URL_RE);
+  const urls = t.match(URL_WITH_PATH) ?? [];
+  const parts = t.split(URL_WITH_PATH);
   return parts.map((x, i) => x.replace(/([.!?])(?=[\u05D0-\u05EA])/gu, "$1 ") + (urls[i] ?? "")).join("");
 }
 
