@@ -3123,10 +3123,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // Every URL as a source has it (prod 2026-11-18, Smoovee: "https://smoovee-ltd." cut at the domain): else the
   // source's own URL with the same start, else its sentence goes. Sources: the tools, the knowledge, the products,
-  // what was sent, the site. Then a space after every sentence end (an appended line never glued on).
+  // what was sent, the site, and the model's standing instructions (prod 2026-11-22: a guide link written only in
+  // the owner's rules was no source, so its sentence would go): a link the business wrote into its rules, its
+  // playbooks or its profile is one the reply may give. Then a space after every sentence end (an appended line
+  // never glued on).
   {
     const site = String((company as any)?.websiteDomain ?? "").trim();
-    const sources = [groundingNow(), knowledge ?? "", ...turnTools.knowledgeText, candidates.map((c: any) => `${c?.url ?? ""} ${c?.imageUrl ?? ""}`).join(" "), earlierOutboundText, site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : ""].join("\n");
+    const sources = [groundingNow(), knowledge ?? "", ...turnTools.knowledgeText, candidates.map((c: any) => `${c?.url ?? ""} ${c?.imageUrl ?? ""}`).join(" "), earlierOutboundText, site ? (/^https?:\/\//i.test(site) ? site : `https://${site}`) : "", prefix].join("\n");
     const r = repairUrls(reply ?? "", sources);
     if (r.fixed || r.dropped) { reply = r.text; (trace as any).urlsRepaired = { fixed: r.fixed, dropped: r.dropped }; }
     // A fragment with an unbalanced bracket goes (rating 1771ba14).
