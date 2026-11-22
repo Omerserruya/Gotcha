@@ -5,6 +5,7 @@ import * as conversationService from "../services/conversation.service";
 import { getIO } from "../lib/socket";
 import { unreadStates } from "../lib/unread-state";
 import { parseChannelList } from "../lib/channel-filter";
+import { deleteConversation } from "../lib/delete-conversation";
 
 async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
   if (!authHeader) return;
@@ -456,7 +457,7 @@ router.post("/:id/close", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Delete Conversation (cascade messages) ──────────────────
+// ─── Delete Conversation (lib/delete-conversation.ts) ────────
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const conversationId = req.params.id as string;
@@ -469,26 +470,21 @@ router.delete("/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: conversationId, tenantId: req.tenantId! },
+    const result = await deleteConversation({
+      tenantId: req.tenantId!,
+      conversationId,
+      force,
+      actorId: (req as any).user?.userId ?? null,
     });
-
-    if (!conversation) {
+    if (result.outcome === "not_found") {
       res.status(404).json({ error: "Conversation not found" });
       return;
     }
-
     // Must be closed unless force
-    if (conversation.status !== "CLOSED" && !force) {
+    if (result.outcome === "must_close") {
       res.status(400).json({ error: "Conversation must be closed before deletion. Use ?force=true to override." });
       return;
     }
-
-    // Delete messages first, then conversation
-    await prisma.$transaction([
-      prisma.message.deleteMany({ where: { tenantId: req.tenantId!, conversationId } }),
-      prisma.conversation.delete({ where: { id: conversationId } }),
-    ]);
 
     res.json({ data: { deleted: true, conversationId } });
   } catch (err: any) {
