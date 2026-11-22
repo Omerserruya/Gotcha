@@ -40,7 +40,8 @@ export function senderRuleReads(c: { channel?: unknown; customerExternalId?: unk
  * The effect of one mark. `newestBefore` is the sender's newest hand mark before this one, on any of the sender's
  * conversations on this channel (this conversation's own earlier mark included): what the rule went by until now.
  *  - "personal": the rule now labels this sender's new conversations personal ("applied").
- *  - "business" over a newest mark of "personal": the rule stops doing that ("lifted").
+ *  - "business" over a newest mark of "personal": the rule stops doing that ("lifted"). With no hand mark
+ *    before, the history import's personal mark on the sender counts as that newest mark (2026-11-22).
  *  - anything else (a first business mark, a business mark over a business mark): nothing changed, nothing said.
  */
 export function senderRuleEffect(category: string, reads: boolean, newestBefore: string | null | undefined): SenderRuleEffect | undefined {

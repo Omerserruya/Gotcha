@@ -1188,6 +1188,18 @@ export async function setRelevanceOverride(
       select: { relevanceCategory: true } as any,
     }).catch(() => null);
     newestBefore = newest?.relevanceCategory ?? null;
+    // No person ever marked this sender: the history import's personal mark was what the rule went by
+    // (2026-11-22, the ai's sender rule reads it the same way), so this business mark lifts it.
+    if (!newest) {
+      const imported: any = await prisma.conversation.findFirst({
+        where: {
+          tenantId, channel: found.channel, customerExternalId: { in: senderIds(found.customerExternalId) }, origin: "HISTORICAL_IMPORT",
+          relevanceSource: "import", relevanceCategory: "personal", relevanceOverriddenBy: null,
+        } as any,
+        select: { id: true },
+      }).catch(() => null);
+      if (imported) newestBefore = "personal";
+    }
   }
   const senderRule = senderRuleEffect(category, reads, newestBefore);
   const now = new Date();

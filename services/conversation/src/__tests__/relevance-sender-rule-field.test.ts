@@ -124,6 +124,18 @@ describe("★ senderRule: what a hand mark did to its sender", () => {
     expect((await mark("first", "business")).body).not.toHaveProperty("senderRule");
   });
 
+  it("★ lifted: 'this is business' when only the history import had said personal (2026-11-22)", async () => {
+    const imported = conv("imp", { origin: "HISTORICAL_IMPORT", status: "CLOSED", relevanceCategory: "personal", relevanceSource: "import", relevanceConfidence: 0.9 });
+    H.rows = [imported, conv("new", byRule)];
+    expect((await mark("new", "business")).body.senderRule).toBe("lifted");
+    // The import said business, or nothing at all: a first business mark lifts nothing.
+    H.rows = [{ ...imported, relevanceCategory: "business" }, conv("new2", byRule)];
+    expect((await mark("new2", "business")).body).not.toHaveProperty("senderRule");
+    // A person's own earlier business mark wins over the import's personal: nothing to lift.
+    H.rows = [imported, conv("earlier", marked("business", 30)), conv("new3", byRule)];
+    expect((await mark("new3", "business")).body).not.toHaveProperty("senderRule");
+  });
+
   it("★ lifted: the same number stored with and without '+', and taking back the personal mark itself", async () => {
     H.rows = [conv("plus", { customerExternalId: `+${PHONE}`, ...marked("personal", 30) }), conv("bare", byRule)];
     expect((await mark("bare", "business")).body.senderRule).toBe("lifted");
