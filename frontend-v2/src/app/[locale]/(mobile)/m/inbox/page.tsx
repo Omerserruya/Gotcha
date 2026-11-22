@@ -146,6 +146,7 @@ export default async function Page({
           filtered={channels.length > 0 || q !== ''}
           soleHuman={data.soleHuman}
           relevance={relevance}
+          role={data.role}
         />
         {data.hasMore && data.nextCursor !== null ? (
           <Link

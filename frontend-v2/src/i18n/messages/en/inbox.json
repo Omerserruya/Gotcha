@@ -189,7 +189,14 @@
       "warningTitle": "Close to the {minutes} min response target.",
       "lateTitle": "Waiting longer than the {minutes} min response target."
     },
-    "continuedFrom": "Started on the website, continues on WhatsApp"
+    "continuedFrom": "Started on the website, continues on WhatsApp",
+    "swipeDelete": {
+      "title": "Delete this conversation?",
+      "body": "The conversation and all its messages will be deleted permanently. This can't be undone.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "deleted": "The conversation was deleted."
+    }
   },
   "identity": {
     "unnamed": "Someone",

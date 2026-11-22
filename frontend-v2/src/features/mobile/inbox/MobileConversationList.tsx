@@ -14,6 +14,8 @@ import { UserText } from '@/design-system/primitives/text/UserText';
 import { PersonName } from '@/features/customers/PersonName';
 import { CustomerWho } from '@/features/inbox/CustomerWho';
 import { initials } from '@/features/inbox/initials';
+import { isAdmin } from '@/features/inbox/queue-menu-rules';
+import { RowDelete, RowDeleteNotices } from '@/features/inbox/RowDelete';
 import { quoteOf } from '@/features/inbox/media';
 import { Link } from '@/i18n/navigation';
 import { listTime } from '@/lib/list-time';
@@ -43,6 +45,7 @@ export async function MobileConversationList({
   filtered,
   soleHuman = false,
   relevance = false,
+  role = null,
 }: {
   /** `null` is a failed read, not an empty inbox. */
   readonly rows: readonly ConversationRow[] | null;
@@ -55,6 +58,8 @@ export async function MobileConversationList({
   readonly soleHuman?: boolean;
   /** `INBOX_RELEVANCE`: a row the platform calls not relevant wears its type. */
   readonly relevance?: boolean;
+  /** The viewer's role: swipe-to-delete is the route's, ADMIN and SYSTEM_ADMIN only. */
+  readonly role?: string | null;
 }) {
   const t = await getTranslations('mobile');
   const inbox = await getTranslations('inbox');
@@ -78,108 +83,120 @@ export async function MobileConversationList({
   }
 
   return (
-    <ul className={styles.list} data-testid="mobile-inbox-list">
-      {rows.map((row) => {
-        const mark = unreadMark(row);
-        const said = quoteOf({ body: row.lastMessageBody ?? '', messageType: row.lastMessageType });
-        const channel = channelName(row.channel, channelNames) ?? inbox('queue.unknownChannel');
-        const owner = rowOwner(row, meId, colleagues, soleHuman);
-        /* Which number, when the workspace has two or more (Omer, 2026-11-16). */
-        const account = channelAccountName(row);
-        const kind = relevance ? relevanceTag(row) : null;
-        return (
-          <li key={row.id}>
-            <Link
-              href={`/m/inbox/${row.id}` as '/m/inbox'}
-              className={`${ui.row} ${styles.row}`}
-              data-unread={mark === null ? undefined : ''}
-              data-testid={`mobile-row-${row.id}`}
-            >
-              <span className={styles.avatarStack} title={channel}>
-                <span
-                  className={styles.avatar}
-                  data-settled={row.status === 'CLOSED' ? '' : undefined}
-                  aria-hidden="true"
+    <RowDeleteNotices className={styles.deleteNotice}>
+      <ul className={styles.list} data-testid="mobile-inbox-list">
+        {rows.map((row) => {
+          const mark = unreadMark(row);
+          const said = quoteOf({
+            body: row.lastMessageBody ?? '',
+            messageType: row.lastMessageType,
+          });
+          const channel = channelName(row.channel, channelNames) ?? inbox('queue.unknownChannel');
+          const owner = rowOwner(row, meId, colleagues, soleHuman);
+          /* Which number, when the workspace has two or more (Omer, 2026-11-16). */
+          const account = channelAccountName(row);
+          const kind = relevance ? relevanceTag(row) : null;
+          return (
+            <li key={row.id}>
+              {/* Swipe right to delete (2026-11-22): admins only, never a thread from the website. */}
+              <RowDelete
+                id={row.id}
+                open={row.status !== 'CLOSED'}
+                enabled={isAdmin(role) && row.continuedFrom === null}
+              >
+                <Link
+                  href={`/m/inbox/${row.id}` as '/m/inbox'}
+                  className={`${ui.row} ${styles.row}`}
+                  data-unread={mark === null ? undefined : ''}
+                  data-testid={`mobile-row-${row.id}`}
                 >
-                  {initials(row.customerName)}
-                </span>
-                <span className={styles.channelBadge}>
-                  <ChannelPlate channel={row.channel} label={channel} size="xs" />
-                </span>
-              </span>
-
-              <span className={styles.body}>
-                <span className={styles.top}>
-                  <span className={styles.who}>
-                    <CustomerWho row={row} unnamed={inbox('queue.unnamed')} />
+                  <span className={styles.avatarStack} title={channel}>
+                    <span
+                      className={styles.avatar}
+                      data-settled={row.status === 'CLOSED' ? '' : undefined}
+                      aria-hidden="true"
+                    >
+                      {initials(row.customerName)}
+                    </span>
+                    <span className={styles.channelBadge}>
+                      <ChannelPlate channel={row.channel} label={channel} size="xs" />
+                    </span>
                   </span>
-                  {row.lastMessageAt === null ? null : (
-                    <span className={styles.time}>
-                      {listTime(row.lastMessageAt, now, format, (days) =>
-                        inbox('queue.daysAgo', { days }),
+
+                  <span className={styles.body}>
+                    <span className={styles.top}>
+                      <span className={styles.who}>
+                        <CustomerWho row={row} unnamed={inbox('queue.unnamed')} />
+                      </span>
+                      {row.lastMessageAt === null ? null : (
+                        <span className={styles.time}>
+                          {listTime(row.lastMessageAt, now, format, (days) =>
+                            inbox('queue.daysAgo', { days }),
+                          )}
+                        </span>
                       )}
                     </span>
-                  )}
-                </span>
-                <span className={styles.bottom}>
-                  {/* The last word was ours: the double tick, as a chat list marks a reply. */}
-                  {row.lastMessageDirection === 'OUTBOUND' ? (
-                    <CheckCheck aria-hidden size={16} strokeWidth={2} className={styles.tick} />
-                  ) : null}
-                  <span
-                    className={styles.preview}
-                    data-kind={said !== null && 'kind' in said ? said.kind : undefined}
-                  >
-                    {said === null ? null : 'text' in said ? (
-                      <UserText>{said.text}</UserText>
-                    ) : (
-                      inbox(`stream.quote.kind.${said.kind}`)
-                    )}
-                  </span>
-                  {mark === null ? null : mark.kind === 'count' ? (
-                    <span className={styles.badge}>
-                      {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
-                      <span aria-hidden="true" dir="ltr">
-                        {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
-                      </span>
-                      <span className="srOnly">
-                        {inbox('queue.unreadMessages', { count: mark.count })}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className={styles.dot}>
-                      <span className="srOnly">{inbox('queue.unread')}</span>
-                    </span>
-                  )}
-                </span>
-                {owner === null && account === null && kind === null ? null : (
-                  <span className={ui.tags}>
-                    {owner === null ? null : (
-                      <span className={ui.tag} data-tone={owner.tone}>
-                        {owner.kind === 'colleague' ? (
-                          <PersonName name={owner.name} />
+                    <span className={styles.bottom}>
+                      {/* The last word was ours: the double tick, as a chat list marks a reply. */}
+                      {row.lastMessageDirection === 'OUTBOUND' ? (
+                        <CheckCheck aria-hidden size={16} strokeWidth={2} className={styles.tick} />
+                      ) : null}
+                      <span
+                        className={styles.preview}
+                        data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                      >
+                        {said === null ? null : 'text' in said ? (
+                          <UserText>{said.text}</UserText>
                         ) : (
-                          t(`inbox.owner.${owner.kind}`)
+                          inbox(`stream.quote.kind.${said.kind}`)
+                        )}
+                      </span>
+                      {mark === null ? null : mark.kind === 'count' ? (
+                        <span className={styles.badge}>
+                          {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
+                          <span aria-hidden="true" dir="ltr">
+                            {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
+                          </span>
+                          <span className="srOnly">
+                            {inbox('queue.unreadMessages', { count: mark.count })}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className={styles.dot}>
+                          <span className="srOnly">{inbox('queue.unread')}</span>
+                        </span>
+                      )}
+                    </span>
+                    {owner === null && account === null && kind === null ? null : (
+                      <span className={ui.tags}>
+                        {owner === null ? null : (
+                          <span className={ui.tag} data-tone={owner.tone}>
+                            {owner.kind === 'colleague' ? (
+                              <PersonName name={owner.name} />
+                            ) : (
+                              t(`inbox.owner.${owner.kind}`)
+                            )}
+                          </span>
+                        )}
+                        {account === null ? null : (
+                          <span className={ui.tag} data-testid={`mobile-account-${row.id}`}>
+                            {channel} · <bdi dir="auto">{account}</bdi>
+                          </span>
+                        )}
+                        {kind === null ? null : (
+                          <span className={ui.tag} data-testid={`mobile-relevance-${row.id}`}>
+                            {inbox(`relevance.tag.${kind}`)}
+                          </span>
                         )}
                       </span>
                     )}
-                    {account === null ? null : (
-                      <span className={ui.tag} data-testid={`mobile-account-${row.id}`}>
-                        {channel} · <bdi dir="auto">{account}</bdi>
-                      </span>
-                    )}
-                    {kind === null ? null : (
-                      <span className={ui.tag} data-testid={`mobile-relevance-${row.id}`}>
-                        {inbox(`relevance.tag.${kind}`)}
-                      </span>
-                    )}
                   </span>
-                )}
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+                </Link>
+              </RowDelete>
+            </li>
+          );
+        })}
+      </ul>
+    </RowDeleteNotices>
   );
 }

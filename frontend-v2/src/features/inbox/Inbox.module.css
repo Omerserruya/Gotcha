@@ -1832,6 +1832,66 @@
   }
 
   /* What the selection is, and what the menu did when it could not do all. */
+  /* Swipe right to delete (2026-11-22): the row slides over a red strip. */
+  .rowDelete {
+    position: relative;
+    overflow: clip;
+  }
+
+  .rowDeleteBehind {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    padding-inline: var(--space-16);
+    background-color: var(--alert-surface);
+    color: var(--alert-text);
+    font-size: var(--font-size-meta);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  /* Physical left: the row moves right, so the strip shows at its left edge. */
+  .rowDeleteBehind {
+    justify-content: flex-start;
+    direction: ltr;
+  }
+
+  .rowDeleteFront {
+    position: relative;
+    background-color: inherit;
+    touch-action: pan-y;
+    transition: transform var(--duration-fast) var(--easing-standard);
+  }
+
+  .rowDeleteFront[data-swiping] {
+    transition: none;
+  }
+
+  .rowDeleteHover {
+    position: absolute;
+    inset-block-start: var(--space-8);
+    inset-inline-end: var(--space-8);
+    display: none;
+    padding: var(--space-4);
+    border: 0;
+    border-radius: var(--radius-control);
+    background-color: var(--panel-base);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .rowDeleteHover:hover {
+    color: var(--alert-text);
+  }
+
+  @media (hover: hover) {
+    .rowDelete:hover .rowDeleteHover,
+    .rowDeleteHover:focus-visible {
+      display: inline-flex;
+    }
+  }
+
   .queueNotice {
     margin: 0;
     padding: var(--space-8) var(--space-16);
