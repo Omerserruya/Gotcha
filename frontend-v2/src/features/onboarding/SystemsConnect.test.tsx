@@ -135,12 +135,21 @@ describe('★★ every start from step 2 asks to come back to step 2 (flow=onboa
     );
   });
 
-  it('★ Shopify not listed yet: a sentence, never a dead button', () => {
+  it('★★ Shopify not listed yet (165bbe05): still a real button; an honest not_published is said after the press', async () => {
+    startShopifyInstall.mockResolvedValue({ ok: false, reason: 'not_published' });
     show({ integration: shopify, shopify: { mode: 'not_published', helpUrl: null } });
-    expect(screen.getByTestId('systems-shopify-not-here')).toHaveTextContent(
-      'The Shopify install starts in Shopify',
+    expect(screen.queryByTestId('systems-shopify-not-here')).toBeNull();
+    await userEvent.click(screen.getByTestId('systems-start-shopify'));
+    expect(await screen.findByTestId('systems-start-problem-shopify')).toHaveTextContent(
+      'Install GOTCHA from the Shopify App Store first, then come back here.',
     );
-    expect(screen.queryByTestId('systems-start-shopify')).toBeNull();
+  });
+
+  it('★★ …and a reconnect or install link from the start is followed', async () => {
+    startShopifyInstall.mockResolvedValue({ ok: true, url: 'https://admin.shopify.com/oauth/x' });
+    show({ integration: shopify, shopify: { mode: 'not_published', helpUrl: null } });
+    await userEvent.click(screen.getByTestId('systems-start-shopify'));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://admin.shopify.com/oauth/x'));
   });
 
   it('★★ Shopify reconnect re-authorises at Shopify, with the flow', async () => {

@@ -25,7 +25,22 @@ import { cookieFrom, INTENT_COOKIE, PENDING_COOKIE } from './shopify-cookies';
 
 export type ShopifyStart =
   | { readonly ok: true; readonly url: string }
-  | { readonly ok: false; readonly reason: 'forbidden' | 'core_plan_required' | 'failed' };
+  | {
+      readonly ok: false;
+      readonly reason: 'forbidden' | 'core_plan_required' | 'not_published' | 'failed';
+    };
+
+/**
+ * Where the start sends the browser (Backend 165bbe05). `listing`,
+ * `reconnect` (Shopify's authorize page for the store this workspace holds)
+ * and `install_link` (the Partner Dashboard link) all carry a `url` and are
+ * followed alike; `not_published` carries none and is said in words.
+ */
+const START_MODES = ['listing', 'reconnect', 'install_link'] as const;
+const startAnswer = z.looseObject({
+  url: z.string().url().nullable().catch(null).default(null),
+  mode: z.string().nullable().catch(null).default(null),
+});
 
 /**
  * "Connect Shopify": the backend mints an install intent and answers with
@@ -40,15 +55,23 @@ export async function startShopifyInstall(
   if (!(CONNECT_FLOWS as readonly unknown[]).includes(flow)) return { ok: false, reason: 'failed' };
   let intent: ReturnType<typeof cookieFrom> = null;
   try {
-    const { url } = await serverApi().get({
+    const { url, mode } = await serverApi().get({
       endpoint: integrationEndpoints.shopifyStart(flow),
-      payload: z.object({ url: z.string().url() }),
+      payload: startAnswer,
       raw: true,
       onResponseHeaders: (headers) => {
         intent = cookieFrom(headers.getSetCookie(), INTENT_COOKIE);
       },
     });
-    if (new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
+    if (mode === 'not_published' || (url === null && mode !== null)) {
+      return { ok: false, reason: 'not_published' };
+    }
+    // An absent mode is the older answer, a listing; a mode we do not know is not followed.
+    if (mode !== null && !(START_MODES as readonly string[]).includes(mode)) {
+      logger.warn('capabilities.shopify_start_unknown_mode', { mode });
+      return { ok: false, reason: 'failed' };
+    }
+    if (url === null || new URL(url).protocol !== 'https:') return { ok: false, reason: 'failed' };
     const relayed = intent as ReturnType<typeof cookieFrom>;
     if (!relayed) {
       logger.warn('capabilities.shopify_no_intent', {});

@@ -103,25 +103,13 @@ export function SystemsConnect({
   ) : null;
 
   if (kind === 'shopify') {
-    if (shopify?.mode !== 'listing') {
-      return (
-        <p className={styles.note} data-testid="systems-shopify-not-here">
-          {shopify === null ? t('shopifyUnread') : t('shopifyFromAdmin')}{' '}
-          {shopify?.helpUrl ? (
-            <a
-              href={shopify.helpUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.link}
-            >
-              {t('shopifyHelp')}
-            </a>
-          ) : null}
-        </p>
-      );
-    }
+    /*
+     * ★★ Always a real button (App Review 132211; Backend 165bbe05): with no
+     * live listing the start still answers a reconnect or an install link,
+     * and only an honest not_published is said - after the press.
+     */
     // GOTCHA Core first (split billing): said instead of a button that would 402.
-    if (shopify.connectAllowed === false) {
+    if (shopify?.connectAllowed === false) {
       return (
         <p className={styles.note} data-testid="systems-shopify-core-first">
           {t('shopifyCoreFirst')}
@@ -130,7 +118,17 @@ export function SystemsConnect({
     }
     return (
       <div className={styles.launch}>
-        {button(() => go(() => startShopifyInstall(FLOW)))}
+        {button(() =>
+          go(async (): Promise<{ ok: true; url: string } | { ok: false; reason: StartError }> => {
+            const started = await startShopifyInstall(FLOW);
+            if (started.ok) return started;
+            // Not published: installed from the App Store first - the line that already says so.
+            return {
+              ok: false,
+              reason: started.reason === 'not_published' ? 'needs_store' : started.reason,
+            };
+          }),
+        )}
         {problem}
       </div>
     );

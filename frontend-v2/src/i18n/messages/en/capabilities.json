@@ -212,7 +212,8 @@
     "error": {
       "forbidden": "You don't have permission to connect systems.",
       "failed": "Shopify couldn't be opened - try again.",
-      "core_plan_required": "Connecting Shopify needs an active GOTCHA Core plan first. Nothing was connected."
+      "core_plan_required": "Connecting Shopify needs an active GOTCHA Core plan first. Nothing was connected.",
+      "not_published": "Installation starts in Shopify: add GOTCHA from your Shopify admin, and the store connects here."
     },
     "pending": {
       "replaceLead": "You approved {shop} in Shopify. Another store is connected here now - replacing it disconnects that one.",
