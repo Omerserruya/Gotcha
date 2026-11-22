@@ -15,6 +15,8 @@ export interface AuthentikIdentity {
   pk: number;
   email: string;
   username: string;
+  /** Authentik's own `uid` for the user (its token identifiers are built from it). Only where it was read. */
+  uid?: string;
 }
 
 function baseUrl(): string {
@@ -78,7 +80,11 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   let body: any;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) {
-    throw new Error(`[authentik] ${options.method || "GET"} ${path} -> ${res.status}: ${JSON.stringify(body)}`);
+    // The status rides on the error so a caller can tell "not there" (404) from "could not ask".
+    throw Object.assign(
+      new Error(`[authentik] ${options.method || "GET"} ${path} -> ${res.status}: ${JSON.stringify(body)}`),
+      { status: res.status },
+    );
   }
   return body as T;
 }
@@ -90,12 +96,18 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
  * same person. The created identity has no usable password: the user sets one
  * through Authentik's own recovery/enrolment email, so no credential ever
  * transits GOTCHA.
+ *
+ * A new identity is stored in lowercase. Authentik matches an outside sign-in
+ * (Google) to a person by the exact email, and those arrive in lowercase, so
+ * an address stored as "Dana@Acme.com" would never be matched. An identity that
+ * already exists is returned as it is, whatever its case: the same address in
+ * another case is the same person, never a second one.
  */
 export async function ensureIdentity(email: string, name: string): Promise<AuthentikIdentity> {
-  const existing = await api<{ results: any[] }>(
-    `/core/users/?email=${encodeURIComponent(email)}`,
-  );
-  const found = existing.results?.find((u) => u.email === email);
+  const typed = String(email ?? "").trim();
+  const lower = typed.toLowerCase();
+  if (!lower) throw new Error("[authentik] an identity needs an email");
+  const found = await findIdentityAnyCase(typed, lower);
   if (found) {
     return { subject: found.uuid, pk: found.pk, email: found.email, username: found.username };
   }
@@ -103,8 +115,8 @@ export async function ensureIdentity(email: string, name: string): Promise<Authe
   const created = await api<any>("/core/users/", {
     method: "POST",
     body: JSON.stringify({
-      username: email,
-      email,
+      username: lower,
+      email: lower,
       name,
       is_active: true,
       path: "users",
@@ -118,6 +130,39 @@ export async function ensureIdentity(email: string, name: string): Promise<Authe
   });
 
   return { subject: created.uuid, pk: created.pk, email: created.email, username: created.username };
+}
+
+/** How many pages of a search are read before giving up on it. */
+const IDENTITY_SEARCH_MAX_PAGES = 5;
+
+/**
+ * The Authentik user who holds this address, in any case.
+ *
+ * Authentik's `email` filter is exact, so it is asked twice (as typed, then in
+ * lowercase). Its `search` is "contains" over email, name and username, so it
+ * finds an address stored in another case, and also other people: only a row
+ * whose email is this address, compared in lowercase, is ever returned.
+ *
+ * An empty address matches nobody. Authentik ignores an empty filter and
+ * answers with everyone, its own service accounts (which have no email) first.
+ */
+async function findIdentityAnyCase(typed: string, lower: string): Promise<any | null> {
+  if (!lower) return null;
+  const same = (u: any) => typeof u?.email === "string" && u.email.trim().toLowerCase() === lower;
+  for (const exact of typed === lower ? [lower] : [typed, lower]) {
+    const res = await api<{ results?: any[] }>(`/core/users/?email=${encodeURIComponent(exact)}`);
+    const hit = res?.results?.find((u) => u?.email === exact);
+    if (hit) return hit;
+  }
+  for (let page = 1; page <= IDENTITY_SEARCH_MAX_PAGES; page++) {
+    const res = await api<{ results?: any[]; pagination?: { next?: number } }>(
+      `/core/users/?search=${encodeURIComponent(lower)}&page_size=100&page=${page}`,
+    );
+    const hit = res?.results?.find(same);
+    if (hit) return hit;
+    if (!res?.pagination?.next) break;
+  }
+  return null;
 }
 
 /**
@@ -479,12 +524,10 @@ export async function getLastLoginBySubject(subject: string): Promise<string | n
   }
 }
 
-/** Look up an identity's Authentik pk by subject (uuid). */
-/** Look an identity up by email without creating one. Exact match only. */
+/** Look an identity up by email, in any case, without creating one. */
 export async function findIdentityByEmail(email: string): Promise<AuthentikIdentity | null> {
-  const res = await api<{ results: any[] }>(`/core/users/?email=${encodeURIComponent(email)}`);
-  const want = email.toLowerCase();
-  const u = res.results?.find((x) => typeof x.email === "string" && x.email.toLowerCase() === want);
+  const typed = String(email ?? "").trim();
+  const u = await findIdentityAnyCase(typed, typed.toLowerCase());
   if (!u) return null;
   return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
 }
@@ -512,7 +555,10 @@ export async function findIdentityBySubject(subject: string): Promise<AuthentikI
   const res = await api<{ results: any[] }>(`/core/users/?uuid=${encodeURIComponent(subject)}`);
   const u = res.results?.find((x) => x.uuid === subject);
   if (!u) return null;
-  return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
+  return {
+    subject: u.uuid, pk: u.pk, email: u.email, username: u.username,
+    ...(typeof u.uid === "string" && u.uid ? { uid: u.uid } : {}),
+  };
 }
 
 export type RemovableDeviceType = "totp" | "webauthn" | "static";
@@ -615,4 +661,157 @@ export async function getMfaEnrollmentMap(subjects: string[]): Promise<Map<strin
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, wanted.length) }, worker));
   return result;
+}
+
+// ─── Sign-in connections (Sign in with Google) ───────────────────────────────
+
+/**
+ * One connection between an identity and an outside sign-in source.
+ *
+ * Authentik keeps the outside account's ID on the row and nothing else: there
+ * is no email on a connection. The link is made by an exact email match at the
+ * first sign-in, so "which address is connected" is the identity's own address.
+ */
+export interface AuthentikSourceConnection {
+  /** The connection's pk. The oauth delete route takes this same pk. */
+  id: string;
+  sourceSlug: string;
+  sourceName: string;
+  /** The source's own pk, as Authentik wrote it ("" when it did not). Compare with sameAuthentikId. */
+  sourcePk: string;
+  /** When the connection was made (ISO), or null when Authentik did not say. */
+  createdAt: string | null;
+}
+
+/**
+ * Every sign-in connection one identity holds.
+ *
+ * Throws when the IdP cannot be asked. An empty list here means "none", and a
+ * caller reads "none" as "nothing to disconnect" and "no other way in", so a
+ * failed read must never look like an empty one (the device list made that
+ * mistake once; see listUserDeviceRows).
+ *
+ * The `user` filter is Authentik's; the rows are checked again here, because a
+ * filter the server ignores answers with everybody's connections and the
+ * caller deletes by the ids this returns.
+ */
+export async function listUserSourceConnections(userPk: number): Promise<AuthentikSourceConnection[]> {
+  const rows = await listAll(`/sources/user_connections/all/?user=${encodeURIComponent(String(userPk))}`);
+  return rows
+    .filter((r) => r && r.user === userPk && r.pk != null)
+    .map((r) => ({
+      id: String(r.pk),
+      sourceSlug: String(r.source_obj?.slug ?? ""),
+      sourceName: String(r.source_obj?.name ?? ""),
+      sourcePk: String(r.source ?? r.source_obj?.pk ?? ""),
+      createdAt: typeof r.created === "string" ? r.created : null,
+    }));
+}
+
+/**
+ * Remove one OAuth sign-in connection by its pk.
+ *
+ * The caller owns the ownership check: pass only an id that
+ * listUserSourceConnections returned for that same person.
+ */
+export async function deleteOAuthSourceConnection(id: string): Promise<void> {
+  if (!/^\d+$/.test(String(id))) throw new Error("[authentik] connection id must be a number");
+  await api(`/sources/user_connections/oauth/${id}/`, { method: "DELETE" });
+}
+
+/**
+ * Can this identity sign in with a password?
+ *
+ * Authentik's user API does not say: an invited identity is created with no
+ * usable password, and no field of the user object tells the two apart
+ * (`password_change_date` is filled at creation either way). The exact answer
+ * exists only inside Authentik, so it is asked there: an unbound expression
+ * policy whose whole body is `return request.user.has_usable_password()`,
+ * run for this user through the policy test route. Its pk comes from
+ * AUTHENTIK_USABLE_PASSWORD_POLICY_PK.
+ *
+ * `null` is "could not be told": the env var is unset, the IdP failed, or the
+ * answer was not a plain yes or no. A caller that is about to remove a way to
+ * sign in must treat null as "no password".
+ */
+export async function hasUsablePassword(userPk: number): Promise<boolean | null> {
+  const policyPk = (process.env.AUTHENTIK_USABLE_PASSWORD_POLICY_PK || "").trim();
+  if (!policyPk) return null;
+  try {
+    const res = await api<any>(`/policies/all/${encodeURIComponent(policyPk)}/test/`, {
+      method: "POST",
+      body: JSON.stringify({ user: userPk }),
+    });
+    return typeof res?.passing === "boolean" ? res.passing : null;
+  } catch (err: any) {
+    console.warn(`[authentik] usable-password read failed for pk=${userPk}: ${err?.message ?? err}`);
+    return null;
+  }
+}
+
+// ─── The sign-in that just happened ──────────────────────────────────────────
+
+/**
+ * Are two Authentik ids the same thing? Authentik writes one UUID two ways: the
+ * API answers it with dashes, an event's context holds its bare hex. An empty
+ * id is never the same as anything, itself included.
+ */
+export function sameAuthentikId(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown) => String(v ?? "").replace(/-/g, "").trim().toLowerCase();
+  const x = norm(a);
+  return x !== "" && x === norm(b);
+}
+
+/** What Authentik recorded about one successful sign-in. */
+export interface AuthentikSignIn {
+  /** The login event's id: one per sign-in, so it is what a record of the sign-in is counted by. */
+  eventId: string;
+  /** When (ISO), or null when Authentik did not say. */
+  at: string | null;
+  /** The outside source the person came in through (its pk), or null for a sign-in on Authentik's own form. */
+  sourcePk: string | null;
+  /** True only when Authentik says the password stage did it. */
+  byPassword: boolean;
+}
+
+/**
+ * The newest successful sign-in of one identity, or null when there is none in
+ * its latest events.
+ *
+ * Authentik's `action` filter is "contains", so `login` brings `login_failed`
+ * too, and its `username` filter also matches a name typed on a failed form.
+ * Both are checked again here: only a `login` whose user is this pk counts.
+ * Throws when the IdP cannot be asked.
+ */
+export async function readLatestSignIn(userPk: number, username: string): Promise<AuthentikSignIn | null> {
+  const res = await api<{ results?: any[] }>(
+    `/events/events/?action=login&username=${encodeURIComponent(username)}&ordering=-created&page_size=20`,
+  );
+  const e = (res?.results ?? []).find((r) => r && r.action === "login" && r.user?.pk === userPk && r.pk != null);
+  if (!e) return null;
+  const source = e.context?.source;
+  const sourcePk = source && typeof source === "object" && source.pk != null && String(source.pk) !== "" ? String(source.pk) : null;
+  return {
+    eventId: String(e.pk),
+    at: typeof e.created === "string" ? e.created : null,
+    sourcePk,
+    byPassword: e.context?.auth_method === "password",
+  };
+}
+
+/**
+ * Remove the one-time "set a password" token Authentik holds for a person
+ * (the one createRecoveryLink mints; Authentik keeps one per person, named
+ * "<uid>-password-reset"). True when one was removed, false when there was
+ * none. Throws when the IdP cannot be asked.
+ */
+export async function deleteRecoveryToken(uid: string): Promise<boolean> {
+  if (!/^[a-f0-9]{16,128}$/.test(String(uid))) throw new Error("[authentik] uid is not a uid");
+  try {
+    await api(`/core/tokens/${uid}-password-reset/`, { method: "DELETE" });
+    return true;
+  } catch (err: any) {
+    if (err?.status === 404) return false;
+    throw err;
+  }
 }

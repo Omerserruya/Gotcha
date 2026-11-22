@@ -23,6 +23,28 @@
  *   node required-mfa.mjs rollback  removes 31, 32, the policies and the
  *                                   negated binding on 30 (back to stock skip)
  * Env: AUTHENTIK_URL, AUTHENTIK_BOOTSTRAP_TOKEN (or AUTHENTIK_API_TOKEN).
+ *
+ * ANOTHER SIGN-IN FLOW (2026-11-22). A sign-in through an outside source
+ * (Google) does not run default-authentication-flow: it runs the source's own
+ * authentication flow, which stock carries one stage, the login. So the three
+ * stages above never ran there, and a person their workspace requires two-step
+ * of was signed in with none. Name the flow as a second argument:
+ *
+ *   node required-mfa.mjs apply default-source-authentication
+ *   node required-mfa.mjs show default-source-authentication
+ *   node required-mfa.mjs rollback default-source-authentication
+ *
+ * On a flow other than the default one, apply binds the same three stages, in
+ * the same sequence and behind the same policies, on the three orders just
+ * before that flow's login stage (login at 0 gives -3, -2, -1). It is meant for
+ * a flow that carries none of these stages yet. The required stage and the two
+ * policies are the ones the default flow uses, made here when missing, so the
+ * rule is one rule on every flow. Rollback with a flow named removes that
+ * flow's three bindings and nothing else. Rollback of the default flow deletes
+ * the policies, and a binding whose only policy is deleted runs for everyone,
+ * so it refuses while another flow still uses them: roll that flow back first.
+ * A flow that is not a sign-in flow, or has no login stage, is refused before
+ * anything is written.
  */
 
 const POLICY_REQUIRED = "gotcha-mfa-required";
@@ -32,6 +54,8 @@ const SHARED_VALIDATE = "default-authentication-mfa-validation";
 const TOTP_SETUP = "default-authenticator-totp-setup";
 const STATIC_SETUP = "default-authenticator-static-setup";
 const AUTH_FLOW = "default-authentication-flow";
+/** How Authentik names the kind of a user login stage on a flow binding's stage_obj. */
+const LOGIN_STAGE_MODEL = "authentik_stages_user_login.userloginstage";
 
 // The user being logged in is the flow plan's pending_user (as the stock
 // default-authentication-flow policies read it), not request.user.
@@ -61,10 +85,20 @@ async function stageByName(api, name) {
   const r = await api(`/stages/all/?page_size=200`);
   return r.results.find((s) => s.name === name) ?? null;
 }
-async function authFlow(api) {
-  const f = (await api(`/flows/instances/?slug=${AUTH_FLOW}`)).results?.[0];
-  if (!f) throw new Error(`${AUTH_FLOW} missing`);
+async function authFlow(api, slug = AUTH_FLOW) {
+  // The slug is compared here too: a filter Authentik ignored must not hand back some other flow.
+  const f = (await api(`/flows/instances/?slug=${encodeURIComponent(slug)}`)).results?.find((x) => x.slug === slug);
+  if (!f) throw new Error(`${slug} missing`);
   return f;
+}
+/** The login stage of a sign-in flow other than the default one; refuses a flow that has none. */
+async function loginBindingOf(api, flow) {
+  if (flow.designation !== "authentication") {
+    throw new Error(`${flow.slug} is a ${flow.designation} flow, not a sign-in flow; nothing was changed`);
+  }
+  const login = (await bindings(api, flow.pk)).find((b) => b.stage_obj?.meta_model_name === LOGIN_STAGE_MODEL);
+  if (!login) throw new Error(`${flow.slug} has no login stage to put two-step before; nothing was changed`);
+  return login;
 }
 async function bindings(api, flowPk) {
   return (await api(`/flows/bindings/?target=${flowPk}&ordering=order&page_size=100`)).results;
@@ -102,8 +136,10 @@ async function ensurePolicyBinding(api, targetPk, policyPk, negate) {
     : api(`/policies/bindings/`, { method: "POST", body: JSON.stringify(body) });
 }
 
-export async function applyRequiredMfa(api, log = console.log) {
-  const flow = await authFlow(api);
+export async function applyRequiredMfa(api, log = console.log, flowSlug = AUTH_FLOW) {
+  const flow = await authFlow(api, flowSlug);
+  // Every refusal for another flow comes before the first write.
+  const login = flowSlug === AUTH_FLOW ? null : await loginBindingOf(api, flow);
   const shared = await stageByName(api, SHARED_VALIDATE);
   const totp = await stageByName(api, TOTP_SETUP);
   const stat = await stageByName(api, STATIC_SETUP);
@@ -124,6 +160,18 @@ export async function applyRequiredMfa(api, log = console.log) {
     ? await api(`/stages/authenticator/validate/${required.pk}/`, { method: "PATCH", body: JSON.stringify(stageBody) })
     : await api(`/stages/authenticator/validate/`, { method: "POST", body: JSON.stringify(stageBody) });
 
+  if (login) {
+    // Another sign-in flow: the same three stages behind the same policies, just before its login.
+    const bValidate = await ensureFlowBinding(api, flow.pk, shared.pk, login.order - 3);
+    await ensurePolicyBinding(api, pbm(bValidate), pRequired.pk, true);
+    const bRequired = await ensureFlowBinding(api, flow.pk, required.pk, login.order - 2);
+    await ensurePolicyBinding(api, pbm(bRequired), pRequired.pk, false);
+    const bRecovery = await ensureFlowBinding(api, flow.pk, stat.pk, login.order - 1);
+    await ensurePolicyBinding(api, pbm(bRecovery), pRecovery.pk, false);
+    log(`[required-mfa] applied on ${flowSlug}: ${SHARED_VALIDATE} for the not-required (skip), ${STAGE_REQUIRED} (configure) + recovery-code setup for gotcha_mfa_required users, before its login stage`);
+    return;
+  }
+
   // The shared stage stays at skip; it now serves only the not-required.
   const sharedBinding = (await bindings(api, flow.pk)).find((b) => b.stage === shared.pk);
   if (!sharedBinding) throw new Error(`${SHARED_VALIDATE} is not bound to ${AUTH_FLOW}`);
@@ -141,13 +189,57 @@ export async function applyRequiredMfa(api, log = console.log) {
   log(`[required-mfa] applied: ${SHARED_VALIDATE} for the not-required (skip), ${STAGE_REQUIRED} (configure) + recovery-code setup for gotcha_mfa_required users`);
 }
 
-export async function rollbackRequiredMfa(api, log = console.log) {
-  const flow = await authFlow(api);
+/**
+ * The other flows that still carry a stage behind one of our policies. Deleting
+ * a policy deletes its bindings, and a stage bound with no policy left runs for
+ * everyone, so the default flow's rollback must not go ahead while this is not
+ * empty. Answers flow slugs where they can be told, "another flow" otherwise.
+ */
+async function otherFlowsUsing(api, flowPk, policies, stages) {
+  const own = new Set((await bindings(api, flowPk)).map(pbm));
+  const foreign = new Set();
+  for (const p of policies) {
+    if (!p) continue;
+    for (const pb of (await api(`/policies/bindings/?policy=${p.pk}&page_size=100`)).results) {
+      if (pb.policy === p.pk && !own.has(pb.target)) foreign.add(pb.target);
+    }
+  }
+  if (!foreign.size) return [];
+  const flowPks = new Set();
+  for (const st of stages) {
+    if (!st) continue;
+    for (const b of (await api(`/flows/bindings/?stage=${st.pk}&page_size=100`)).results) {
+      if (foreign.has(pbm(b))) flowPks.add(b.target);
+    }
+  }
+  const flows = (await api(`/flows/instances/?page_size=200`)).results;
+  const names = flows.filter((f) => flowPks.has(f.pk)).map((f) => f.slug);
+  return names.length ? names : ["another flow"];
+}
+
+export async function rollbackRequiredMfa(api, log = console.log, flowSlug = AUTH_FLOW) {
+  const flow = await authFlow(api, flowSlug);
   const shared = await stageByName(api, SHARED_VALIDATE);
   const stat = await stageByName(api, STATIC_SETUP);
   const required = await stageByName(api, STAGE_REQUIRED);
   const pRequired = await policyByName(api, POLICY_REQUIRED);
   const pRecovery = await policyByName(api, POLICY_NEEDS_RECOVERY);
+  if (flowSlug !== AUTH_FLOW) {
+    // Another sign-in flow: its three bindings go. The stage and the policies are the default flow's too, and stay.
+    const ours = [shared, required, stat].filter(Boolean).map((st) => st.pk);
+    let removed = 0;
+    for (const b of await bindings(api, flow.pk)) {
+      if (!ours.includes(b.stage)) continue;
+      await api(`/flows/bindings/${b.pk}/`, { method: "DELETE" });
+      removed++;
+    }
+    log(`[required-mfa] rolled back on ${flowSlug}: ${removed} stage binding(s) removed; ${AUTH_FLOW} is untouched`);
+    return;
+  }
+  const elsewhere = await otherFlowsUsing(api, flow.pk, [pRequired, pRecovery], [shared, required, stat]);
+  if (elsewhere.length) {
+    throw new Error(`the two-step stages are still bound on ${elsewhere.join(", ")}; roll that flow back first (rollback <flow-slug>). Nothing was changed`);
+  }
   for (const b of await bindings(api, flow.pk)) {
     if ((required && b.stage === required.pk) || (stat && b.stage === stat.pk)) {
       await api(`/flows/bindings/${b.pk}/`, { method: "DELETE" });
@@ -161,8 +253,9 @@ export async function rollbackRequiredMfa(api, log = console.log) {
   log(`[required-mfa] rolled back: ${AUTH_FLOW} is stock again (${SHARED_VALIDATE} skip for everyone)`);
 }
 
-export async function showRequiredMfa(api, log = console.log) {
-  const flow = await authFlow(api);
+export async function showRequiredMfa(api, log = console.log, flowSlug = AUTH_FLOW) {
+  const flow = await authFlow(api, flowSlug);
+  log(`  FLOW ${flow.slug}`);
   for (const b of await bindings(api, flow.pk)) {
     const pols = await policyBindingsOf(api, pbm(b));
     const names = [];
@@ -179,6 +272,7 @@ if (isMain) {
   if (!base || !token) { console.error("AUTHENTIK_URL and AUTHENTIK_BOOTSTRAP_TOKEN are required"); process.exit(1); }
   const api = client(base.replace(/\/$/, ""), token);
   const mode = process.argv[2] ?? "show";
+  const flowSlug = process.argv[3] || AUTH_FLOW;
   const run = mode === "apply" ? applyRequiredMfa : mode === "rollback" ? rollbackRequiredMfa : showRequiredMfa;
-  run(api).then(() => mode !== "show" && showRequiredMfa(api)).then(() => process.exit(0)).catch((e) => { console.error("FAILED:", e.message); process.exit(1); });
+  run(api, console.log, flowSlug).then(() => mode !== "show" && showRequiredMfa(api, console.log, flowSlug)).then(() => process.exit(0)).catch((e) => { console.error("FAILED:", e.message); process.exit(1); });
 }

@@ -156,6 +156,8 @@ describe("accept with both", () => {
     const grant = H.audits.find((a) => a.action === "consent_granted");
     expect(grant).toMatchObject({ tenantId: "t1", actorType: "user", actorId: "u1", targetId: "u1" });
     expect(grant.metadata.purposes).toEqual(["terms_of_service", "privacy_policy"]);
+    // The screen it was given on: this one, never the Google first-entry screen.
+    expect(grant.metadata.source).toBe("setup");
   });
 
   it("a failed write mints nothing: 503, and the link still works", async () => {

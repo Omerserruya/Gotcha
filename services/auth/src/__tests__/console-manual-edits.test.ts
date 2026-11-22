@@ -26,6 +26,18 @@ const H = vi.hoisted(() => ({
   caller: { userId: "sa1", role: "SYSTEM_ADMIN", tenantId: "SYS" } as any,
 }));
 
+/** Authentik's side of "Sign in with Google" for the email edit (2026-11-22). */
+const G = vi.hoisted(() => ({
+  connections: [] as { id: string; userPk: number; sourceSlug: string }[],
+  /** What "has a usable password" answers: true, false, or null for "could not be told". */
+  password: null as boolean | null,
+  failList: false,
+  failDelete: false,
+  listed: 0,
+  /** Each removal, with how many Authentik email writes had happened before it. */
+  removed: [] as string[],
+}));
+
 // Checkouts are billing's table: auth asks billing, never reads it (2026-11-01).
 vi.mock("../services/billing-checkout", () => ({
   hasOpenCheckout: async (tenantId: string) => (H.checkoutUnknown ? null : H.checkouts.some((c) => c.tenantId === tenantId)),
@@ -86,6 +98,17 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       Object.assign(H.idp.users.find((u) => u.pk === pk), attrs);
       // Applied in Authentik, but the reply never arrived.
       if (H.idp.applyThenThrow) throw new Error("[authentik] PATCH -> timeout");
+    },
+    listUserSourceConnections: async (pk: number) => {
+      G.listed++;
+      if (G.failList) throw new Error("[authentik] GET -> 500");
+      return G.connections.filter((c) => c.userPk === pk).map((c) => ({ id: c.id, sourceSlug: c.sourceSlug }));
+    },
+    hasUsablePassword: async () => G.password,
+    deleteOAuthSourceConnection: async (id: string) => {
+      if (G.failDelete) throw new Error("[authentik] DELETE -> 500");
+      G.removed.push(`${id} after ${H.idp.updates.length} email writes`);
+      G.connections = G.connections.filter((c) => c.id !== id);
     },
   };
 });
@@ -152,6 +175,8 @@ beforeEach(() => {
   H.owners = true;
   H.planAccess = { state: "MISSING", label: "Missing", active: false, planKey: null, planName: null, expiresAt: null };
   H.caller = { userId: "sa1", role: "SYSTEM_ADMIN", tenantId: "SYS" };
+  G.connections = []; G.password = null; G.failList = false; G.failDelete = false; G.listed = 0; G.removed = [];
+  delete process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG;
   fetchCalls = [];
   billingReply = { status: 200, body: {} };
   vi.stubGlobal("fetch", async (url: string, init: any) => {
@@ -288,6 +313,182 @@ describe("PATCH /tenants/:id/admin-email", () => {
     H.users[0].role = "SYSTEM_ADMIN";
     expect((await send({ newEmail: "x@acme.test" })).body.code).toBe("SYSTEM_ADMIN");
     expect((await send({ userId: "ghost", newEmail: "x@acme.test" })).body.code).toBe("USER_NOT_FOUND");
+  });
+});
+
+/**
+ * The Google connection was made by matching the OLD address (2026-11-22). So
+ * an email edit removes it, before the email moves, and is refused while no
+ * usable password can be proven: removing it would lock the person out.
+ */
+describe("PATCH /tenants/:id/admin-email and the person's Google connection", () => {
+  const send = (body: any = {}) => request(app).patch("/api/system/tenants/T/admin-email").send({ userId: "u1", reason: "new owner", newEmail: "x@acme.test", ...body });
+  const google = (id = "31", userPk = 7) => ({ id, userPk, sourceSlug: "google" });
+  const unchanged = () => {
+    expect(H.users[0].email).toBe("owner@acme.test");
+    expect(H.identities[0].email).toBe("owner@acme.test");
+    expect(H.idp.users[0].email).toBe("owner@acme.test");
+    expect(H.idp.updates).toEqual([]);
+  };
+  beforeEach(() => { process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG = "google"; });
+
+  it("connected and a password: the connection goes BEFORE the email moves, and the answer says so", async () => {
+    G.connections = [google()];
+    G.password = true;
+    const r = await send();
+    expect(r.status).toBe(200);
+    expect(r.body.data.warnings).toEqual(["google_connection_removed"]);
+    expect(G.removed).toEqual(["31 after 0 email writes"]);
+    expect(H.idp.updates).toEqual([{ pk: 7, email: "x@acme.test", username: "x@acme.test" }]);
+    expect(H.users[0].email).toBe("x@acme.test");
+  });
+
+  it("two audit lines: the removal (by the operator, not the person) and the edit", async () => {
+    G.connections = [google()];
+    G.password = true;
+    await send();
+    expect(H.audits).toEqual([
+      {
+        tenantId: "T", actorType: "user", actorId: "sa1", action: "auth.sign_in_connection_removed",
+        targetType: "user", targetId: "u1", metadata: { self: false, provider: "google", reason: "email_change" },
+      },
+      {
+        tenantId: "T", actorType: "user", actorId: "sa1", action: "user.admin_email_changed", targetType: "user", targetId: "u1",
+        metadata: { before: { email: "owner@acme.test" }, after: { email: "x@acme.test" }, reason: "new owner", idpUpdated: true, googleDisconnected: true },
+      },
+    ]);
+  });
+
+  it.each([
+    ["no password", false],
+    ["a password that could not be told", null],
+  ])("connected and %s: NO_OTHER_SIGN_IN, nothing changed anywhere", async (_name, password) => {
+    G.connections = [google()];
+    G.password = password;
+    const r = await send();
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe("NO_OTHER_SIGN_IN");
+    unchanged();
+    expect(G.removed).toEqual([]);
+    expect(G.connections).toHaveLength(1);
+    expect(H.audits).toEqual([]);
+  });
+
+  it("a connection to another source is not a password: still refused", async () => {
+    G.connections = [google(), { id: "32", userPk: 7, sourceSlug: "microsoft" }];
+    G.password = false;
+    expect((await send()).body.code).toBe("NO_OTHER_SIGN_IN");
+    expect(G.connections).toHaveLength(2);
+  });
+
+  it.each([
+    ["no connection at all (an invited person whose address was mistyped)", []],
+    ["only a connection to another source", [{ id: "32", userPk: 7, sourceSlug: "microsoft" }]],
+    ["somebody else's Google connection", [{ id: "33", userPk: 8, sourceSlug: "google" }]],
+  ])("%s, no password: not touched, the edit goes through", async (_name, connections) => {
+    G.connections = connections;
+    G.password = false;
+    const r = await send();
+    expect(r.status).toBe(200);
+    expect(r.body.data.warnings).toEqual([]);
+    expect(G.removed).toEqual([]);
+    expect(G.connections).toHaveLength(connections.length);
+    expect(H.audits.map((a) => a.action)).toEqual(["user.admin_email_changed"]);
+    expect(H.audits[0].metadata).not.toHaveProperty("googleDisconnected");
+  });
+
+  it("only this person's Google connection goes", async () => {
+    G.connections = [{ id: "32", userPk: 7, sourceSlug: "microsoft" }, google(), { id: "33", userPk: 8, sourceSlug: "google" }];
+    G.password = true;
+    await send();
+    expect(G.connections.map((c) => c.id)).toEqual(["32", "33"]);
+  });
+
+  it("the connections cannot be read: IDP_STATE_UNKNOWN, nothing changed (not read as 'no connection')", async () => {
+    G.connections = [google()];
+    G.password = true;
+    G.failList = true;
+    const r = await send();
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("IDP_STATE_UNKNOWN");
+    expect(r.body).not.toHaveProperty("warnings");
+    unchanged();
+    expect(H.audits).toEqual([]);
+  });
+
+  it("the connection cannot be removed: IDP_STATE_UNKNOWN, the email does not move", async () => {
+    G.connections = [google()];
+    G.password = true;
+    G.failDelete = true;
+    const r = await send();
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("IDP_STATE_UNKNOWN");
+    expect(r.body).not.toHaveProperty("warnings");
+    unchanged();
+    expect(G.connections).toHaveLength(1);
+    expect(H.audits).toEqual([]);
+  });
+
+  it("Authentik refuses the email after the connection went: nothing moved, and the answer says the connection is gone", async () => {
+    G.connections = [google()];
+    G.password = true;
+    H.idp.failUpdate = true;
+    const r = await send();
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("IDP_SYNC_FAILED");
+    expect(r.body.warnings).toEqual(["google_connection_removed"]);
+    expect(r.body.error).toMatch(/Google connection was removed/);
+    expect(H.users[0].email).toBe("owner@acme.test");
+    expect(H.identities[0].email).toBe("owner@acme.test");
+    expect(H.audits.map((a) => a.action)).toEqual(["auth.sign_in_connection_removed"]);
+  });
+
+  it("Authentik goes dark after the connection went: IDP_STATE_UNKNOWN still says the connection is gone", async () => {
+    G.connections = [google()];
+    G.password = true;
+    // The email write throws, and from then on Authentik cannot be read back.
+    Object.defineProperty(H.idp, "failUpdate", { get() { H.idp.readThrows = true; return true; } });
+    const r = await send();
+    expect(r.status).toBe(502);
+    expect(r.body.code).toBe("IDP_STATE_UNKNOWN");
+    expect(r.body.warnings).toEqual(["google_connection_removed"]);
+    expect(H.users[0].email).toBe("owner@acme.test");
+  });
+
+  it("Authentik refuses the email and there was no connection: the answer is as it always was", async () => {
+    H.idp.failUpdate = true;
+    const r = await send();
+    expect(r.body).toEqual({ error: "Authentik did not accept the change; nothing was changed", code: "IDP_SYNC_FAILED" });
+  });
+
+  it("an address another login holds is refused before the connection is looked at", async () => {
+    H.idp.users.push({ subject: "sub2", pk: 8, email: "taken@x.test", username: "taken@x.test" });
+    G.connections = [google()];
+    G.password = true;
+    const r = await send({ newEmail: "taken@x.test" });
+    expect(r.body.code).toBe("EMAIL_TAKEN");
+    expect(G.listed).toBe(0);
+    expect(G.connections).toHaveLength(1);
+  });
+
+  it("a member with no Authentik identity: Authentik is not asked", async () => {
+    H.identities[0].authentikSubject = null;
+    G.connections = [google()];
+    const r = await send();
+    expect(r.status).toBe(200);
+    expect(r.body.data.warnings).toEqual(["no_idp_identity"]);
+    expect(G.listed).toBe(0);
+  });
+
+  it.each([[undefined], [""], ["   "]])("feature off (slug %j): the connection is not read and not removed, a Google-only person is not refused", async (slug) => {
+    if (slug === undefined) delete process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG; else process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG = slug;
+    G.connections = [google()];
+    G.password = false;
+    const r = await send();
+    expect(r.status).toBe(200);
+    expect(r.body.data.warnings).toEqual([]);
+    expect(G.listed).toBe(0);
+    expect(G.connections).toHaveLength(1);
   });
 });
 
