@@ -270,13 +270,6 @@
     "rows": {
       "hours": "Hours",
       "hoursWorkspace": "The workspace's hours",
-      "modeAsk": {
-        "AI_AUTO_REPLY": "Let GOTCHA answer on its own on this number?",
-        "HUMAN_WITH_COPILOT": "Have GOTCHA draft and a person send on this number?"
-      },
-      "modeYes": "Yes, switch",
-      "modeNo": "Not now",
-      "modeFailed": "That didn’t switch - nothing changed.",
       "whoAnswers": "Who answers here is set in <automations>Studio · Automations</automations> and the playbook"
     },
     "addNumber": "+ Add another number",
