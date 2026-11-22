@@ -4,7 +4,7 @@ import { Check, Eye, EyeOff, X } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 
-import { startFlow, submitStage } from '@/api/client/flow-executor';
+import { servesSources, startFlow, submitStage } from '@/api/client/flow-executor';
 import { acceptSetupTerms } from '@/api/client/setup-consent';
 import {
   consentBody,
@@ -403,7 +403,12 @@ export function ResetPanel({
         >
           {phase.name === 'opening' && !leaving ? t('starting') : t('continue')}
         </Button>
-        {needsTerms && google ? (
+        {/*
+          Also only on a build that can reach the provider's source paths: on
+          the proxy build (prod, one host) ?google=start would land on a
+          plain form, so the option is not offered whatever the flag says.
+        */}
+        {needsTerms && google && servesSources() ? (
           <>
             <OrRule word={tg('or')} />
             <GoogleButton
