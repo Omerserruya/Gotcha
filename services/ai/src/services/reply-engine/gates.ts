@@ -2851,9 +2851,21 @@ const FIT_VERB = /(?<![\u0590-\u05FF])[שו]?(?:מתאים|מתאימה|מתאי
 // X מתאים", "אין לנו מידע שסותר את זה: X מתאים").
 const NEG_DIRECT = /(?<![\u0590-\u05FF])ו?(?:לא|אינו|אינה|אינם|אינן)\s+(?:[\u0590-\u05FF]+\s+)?(?:מתאים|מתאימה|מתאימים|מתאימות|יתאים|יתאימו|תתאים)(?![\u0590-\u05FF])/u;
 // "לא מצוין במפורש שהוא מתאים" is a caveat too (rating of f46b5a49, NE'A: the caveat was cut, the claim kept).
-const NEG_THAT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*(?:מצוין|מצוינת|כתוב|כתובה|ידוע|ידועה|אישור|מידע|מופיע|מופיעה|בטוח|בטוחה|ברור)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*ש([^,.:;!?\n]*)/gu;
-const NEG_GOVERNS_FIT = { test: (x: string) => NEG_DIRECT.test(x) || [...String(x).matchAll(NEG_THAT)].some((m) => FIT_VERB.test(String(m[1]).split(/\s(?=ו[\u0590-\u05FF])/u)[0])) };
-const NEG_GOVERNS_FIT_EN = /\b(?:does ?n[o']t|won'?t|will not|is ?n[o']t|not)\s+(?:fit|suit|work with)|\bno (?:confirmation|information|indication|record)\b[^,.!?\n]{0,30}\bthat\b|\bnot (?:stated|listed|confirmed)\b[^,.!?\n]{0,10}\bthat\b/iu;
+// So is "לא מצוין אם מתאים מתחת לעיניים": an "if" clause in place of the "that" clause (the 41805962 replay, NE'A
+// L1122: the hedge was read as a fit claim, and the list of the very products it hedged on went out in its place).
+const NEG_THAT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*(?:מצוין|מצוינת|כתוב|כתובה|ידוע|ידועה|אישור|מידע|מופיע|מופיעה|בטוח|בטוחה|ברור)\s+(?:(?:לנו|לי|כרגע|בכלל|במפורש|בפירוש|בדיוק)\s+)*(?:ש|ה?אם\s+)([^,.:;!?\n]*)/gu;
+const FIT_NOT_STATED_HE = (x: string) => [...String(x).matchAll(NEG_THAT)].some((m) => FIT_VERB.test(String(m[1]).split(/\s(?=ו[\u0590-\u05FF])/u)[0]));
+const NEG_GOVERNS_FIT = { test: (x: string) => NEG_DIRECT.test(x) || FIT_NOT_STATED_HE(x) };
+const NEG_DIRECT_EN = /\b(?:does ?n[o']t|won'?t|will not|is ?n[o']t|not)\s+(?:fit|suit|work with)/iu;
+// "not stated whether it suits", "no confirmation if it fits": the same hedge with "whether" or "if".
+const NEG_THAT_EN = /\bno (?:confirmation|information|indication|record)\b[^,.!?\n]{0,30}\b(?:that|whether|if)\b|\bnot (?:stated|listed|confirmed)\b[^,.!?\n]{0,10}\b(?:that|whether|if)\b/iu;
+const NEG_GOVERNS_FIT_EN = { test: (x: string) => NEG_DIRECT_EN.test(x) || NEG_THAT_EN.test(x) };
+const FIT_WORD_EN = /\b(?:fits?|suits?|suitable|works? with|compatible)\b/iu;
+/**
+ * The sentence says a fit is not stated ("לא מצוין שהוא מתאים ל...", "לא מצוין אם מתאים ל...", "not stated whether it
+ * suits ..."): a hedge on the fit, never a fit claim and never a "does not fit".
+ */
+export const fitNotStated = (x: string): boolean => FIT_NOT_STATED_HE(String(x ?? "")) || (NEG_THAT_EN.test(String(x ?? "")) && FIT_WORD_EN.test(String(x ?? "")));
 export function ungroundedPositiveFit(reply: string, incoming: string, titles: string[], grounding: string, knowledge: string): string[] {
   const proofText = `${grounding ?? ""}\n${knowledge ?? ""}`;
   const lines = proofText.split(/\n|;|(?<=\.)\s+/).map((l) => l.toLowerCase()).filter(Boolean);

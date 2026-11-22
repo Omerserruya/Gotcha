@@ -36,7 +36,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -616,7 +616,7 @@ export function sharedTitleNoun(titles: string[]): string | null {
   return words(t[0]).find((w) => sharedTitleNounOk(w) && t.every((x) => words(x).some((y) => y.toLowerCase() === w.toLowerCase()))) ?? null;
 }
 /** The cut fields and markers for the internal audit row: the bot's own words only, no customer text, no tool results. */
-const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut", "styleOnlyKept", "hollowHeader", "memberCut", "statementKept"] as const;
+const CUT_MARKERS = ["listAskCards", "leadFragmentCut", "cardsAttached", "rewriteSkipped", "teamItemJoined", "fallbackRepeatAvoided", "silenceAvoided", "linkAnswerToTeam", "slashFormFixed", "waitingClaimCut", "teamItemUpdated", "cardCountFixed", "orphanAlsoCut", "closingQuestionKept", "checkedClaimCut", "selfSearchHelp", "namedFromData", "linkInsteadOfTeam", "teamPassDeduped", "addedClaimCut", "silencePromiseCut", "styleOnlyKept", "hollowHeader", "memberCut", "statementKept", "hedgeKept"] as const;
 export function cutFields(trace: any): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
   if (trace?.cutSentences != null) out.cutSentences = trace.cutSentences;
@@ -635,8 +635,9 @@ export function cutFields(trace: any): Record<string, unknown> | undefined {
   if (markers.length) out.markers = markers;
   return Object.keys(out).length ? out : undefined;
 }
-// A sentence that says the fit is not stated ("ולא מצוין שהוא מתאים ל..."): a caveat of its own.
-const NEG_THAT_FIT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*(?:מצוין|מצוינת|כתוב|ידוע|אישור|מידע|מופיע|בטוח|ברור)\s+ש[^,.:;!?\n]*(?:מתאים|מתאימה|מתאימים|יתאים)/u;
+// A sentence that says the fit is not stated ("ולא מצוין שהוא מתאים ל...", "ולא מצוין אם מתאים ל..."): a caveat of its
+// own.
+const NEG_THAT_FIT = /(?<![\u0590-\u05FF])ו?(?:לא|אין)\s+(?:(?:לנו|לי|כרגע|בכלל)\s+)*(?:מצוין|מצוינת|כתוב|ידוע|אישור|מידע|מופיע|בטוח|ברור)\s+(?:ש|ה?אם\s+)[^,.:;!?\n]*(?:מתאים|מתאימה|מתאימים|יתאים)/u;
 /**
  * The cut sentence was the answer: it holds a word of her ask (her product words, as the store query takes them) and
  * no sentence left says that word without a negation.
@@ -2375,7 +2376,20 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       // on an ask: what is left is not the answer, as the line below already holds.
       const styleOnly = first.problems.length > 0 && first.problems.every((p) => p.kind === "style");
       if (!kept && styleOnly && fromOriginal && !fromOriginal.fragment && !fromOriginal.lostPass && wordCount(fromOriginal.o.reply) >= 8 && !memberMissing(fromOriginal)) { kept = fromOriginal; (trace as any).styleOnlyKept = true; }
-      if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => x && !x.thin && !x.fragment && !(x.hollow && x.lostPass) && !memberMissing(x)) ?? null;
+      // A draft that hedged on the fit of what was found ("לא מצוין אם מתאים מתחת לעיניים") said the found products are
+      // no confirmed answer: the product list never goes out in its place (the 41805962 replay, NE'A L1122: "הנה כמה
+      // אפשרויות" with the three pencils the draft hedged on, and their cards). What the cut left of that draft is the
+      // answer when it still holds the hedge, says something (eight words, as above) and stands as the last resort below does;
+      // a cut that took another product's sentence does not stop it. With nothing of it left, the fallback below
+      // shows no products.
+      const standsAlone = (x: { thin: boolean; fragment: boolean; hollow: boolean; lostPass: boolean } | null) => !!x && !x.thin && !x.fragment && !(x.hollow && x.lostPass);
+      const sentencesOf = (t: unknown) => (String(t ?? "").match(SENTENCES_RE) ?? []).map((x) => x.trim()).filter(Boolean);
+      const hedgedDraft = [original, second].some((d) => sentencesOf(d?.reply).some(fitNotStated));
+      if (!kept && hedgedDraft) {
+        const hd = [fromOriginal, fromSecond].find((x) => standsAlone(x) && wordCount(x!.o.reply) >= 8 && sentencesOf(x!.o.reply).some(fitNotStated)) ?? null;
+        if (hd) { kept = hd; (trace as any).hedgeKept = true; }
+      }
+      if (!kept && (cutByTime || !(productAskNow(opts.incomingMessage ?? "") && groundedProductFallback(candidates as any, locale, cardChannel)))) kept = [fromOriginal, fromSecond].find((x) => standsAlone(x) && !memberMissing(x)) ?? null;
       if (kept) {
         output = kept.o; verdict = kept.v; trace.gate3 = { ...first, rewrite: kept.hollow ? "cleaned_partial" : "cleaned" };
         // The products the kept text rules out stay off the cards and the product list added below.
@@ -2499,7 +2513,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // stopper or coupon question, with the model in the results).
           && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
           output = { reply: notFoundReply(locale, String(opts.incomingMessage ?? "")), stateUpdate: {}, claims: [], handoff: null, cards: [] };
-        } else if (grounded) {
+        } else if (grounded && !hedgedDraft) {
+          // Never when a draft hedged on the fit (above): the list would offer the very products it hedged on, so the
+          // turn goes on to the lines below, which show none.
           // The fit the model claimed was cut: the products go out with that said, never as a fit (prod replay of
           // 9480dfb2, NE'A: "טוש אני רוצה" got the list with no word that the under-eye use is unconfirmed).
           const fitCut = factLeft.includes("ungrounded_positive_fit" as any) || factLeft.includes("ungrounded_negative_fit" as any);
