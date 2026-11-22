@@ -285,7 +285,15 @@ export async function deleteConversation(
   } catch (cause) {
     await signInIfSignedOut(cause);
     if (isApiError(cause)) {
-      if (cause.status === 404) return { ok: false, reason: 'not_found' };
+      /*
+       * Gone already - somebody deleted it a moment before (Backend,
+       * 2026-11-22: "treat 404 as already gone and drop the row"). What the
+       * person asked for is true, and the list reads again without it.
+       */
+      if (cause.status === 404) {
+        refresh();
+        return { ok: true };
+      }
       if (cause.status === 403) return { ok: false, reason: 'not_allowed' };
     }
     logger.warn('inbox.delete_failed', { cause });
