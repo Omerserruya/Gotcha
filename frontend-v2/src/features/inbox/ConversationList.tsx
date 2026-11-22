@@ -213,7 +213,11 @@ export async function ConversationList({
 
   const row = (conversation: ConversationRow, testid: string) => {
     const waiting = waitingMinutes(conversation, now);
-    const badgeLabel = channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel');
+    // W1: started on the website, continues on WhatsApp - said, and both plates drawn.
+    const moved = conversation.continuedFrom !== null;
+    const badgeLabel = moved
+      ? t('queue.continuedFrom')
+      : (channelName(conversation.channel, channelNames) ?? t('queue.unknownChannel'));
     /*
      * ★★ UNREAD FOR THE PERSON LOOKING, AS THE SERVER SAID - and never on the
      *   open row. Opening marks it read; a refresh that lands before that
@@ -315,7 +319,18 @@ export async function ConversationList({
               ★★ THE BRAND'S OWN MARK (Omer, 2026-10-11), labelled: the badge
               is the row's only statement of the channel.
             */}
-            <span className={styles.channelBadge} data-testid={`channel-badge-${conversation.id}`}>
+            <span
+              className={styles.channelBadge}
+              data-testid={`channel-badge-${conversation.id}`}
+              data-moved={moved ? '' : undefined}
+            >
+              {moved ? (
+                <ChannelPlate
+                  channel={conversation.continuedFrom?.channel ?? null}
+                  decorative
+                  size="xs"
+                />
+              ) : null}
               <ChannelPlate channel={conversation.channel} label={badgeLabel} size="xs" />
             </span>
           </span>

@@ -104,6 +104,7 @@ describe('★★ the WhatsApp number: connected, or typed (Omer, 2026-11-02)', (
       enabled: true,
       channelAccountId: null,
       phone: '+972541234567',
+      phoneHandoff: false,
     });
     expect(
       read({ whatsapp: { enabled: true, channelAccountId: 'wa1' } }).ux.whatsapp.phone,

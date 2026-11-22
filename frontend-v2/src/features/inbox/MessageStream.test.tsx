@@ -918,3 +918,30 @@ describe('★★ W9b: the product cards a message carried', () => {
     expect(screen.getByTestId('message-m1')).toHaveTextContent('Cloud Pro Runner - 120 ILS');
   });
 });
+
+describe('★★ W1 (2026-11-22) - a web chat that moved to WhatsApp is ONE thread, with one divider', () => {
+  const divider = message({
+    id: 'sys1',
+    messageType: 'system',
+    body: '',
+    metadata: { systemEvent: 'continued_from_website', fromConversationId: 'web1' },
+  });
+
+  it('★★ merged (web rows carry originChannel): "The conversation moved to WhatsApp", between the parts', async () => {
+    await show([
+      message({ id: 'w1', originChannel: 'WEBCHAT', body: 'Hi from the site' }),
+      divider,
+      message({ id: 'a1', body: 'Hi on WhatsApp' }),
+    ]);
+    expect(screen.getByTestId('system-sys1')).toHaveTextContent(
+      'The conversation moved to WhatsApp',
+    );
+  });
+
+  it('★ an old linked pair (no merged rows) keeps its own line', async () => {
+    await show([divider, message({ id: 'a1' })]);
+    expect(screen.getByTestId('system-sys1')).toHaveTextContent(
+      messages.stream.system.continued_from_website,
+    );
+  });
+});

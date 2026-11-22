@@ -95,9 +95,15 @@ export const webchatConfigSchema = z.object({
         enabled: z.boolean().catch(false),
         channelAccountId: z.string().nullable().catch(null),
         phone: z.string().nullable().catch(null).default(null),
+        /**
+         * "Continue on WhatsApp? Leave your number" (Backend W2, 2026-11-22):
+         * counts only with `enabled` and a CONNECTED `channelAccountId` - a
+         * typed phone can never send in the business's name.
+         */
+        phoneHandoff: z.boolean().catch(false).default(false),
       })
-      .catch({ enabled: false, channelAccountId: null, phone: null })
-      .default({ enabled: false, channelAccountId: null, phone: null }),
+      .catch({ enabled: false, channelAccountId: null, phone: null, phoneHandoff: false })
+      .default({ enabled: false, channelAccountId: null, phone: null, phoneHandoff: false }),
   }),
   /**
    * ★ W9 (Backend 7eb3810a, 2db313bb): products from the connected WooCommerce

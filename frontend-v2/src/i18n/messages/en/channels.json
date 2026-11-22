@@ -552,6 +552,10 @@
         "followup": {
           "title": "Follow-up",
           "purpose": "A reminder to a customer who didn't reply"
+        },
+        "website_handoff": {
+          "title": "Continue from the website",
+          "purpose": "A message to a customer who left their number in the website chat"
         }
       },
       "state": {
@@ -952,7 +956,17 @@
         "label": "Suggest complementary products",
         "hint": "Once a product is chosen, matching add-ons show too: the cross-sells you set in the store, or in-stock items from the same category."
       },
-      "complementaryNeedsProducts": "Turn on Recommend products first: add-ons show as product cards"
+      "complementaryNeedsProducts": "Turn on Recommend products first: add-ons show as product cards",
+      "phoneHandoff": {
+        "label": "Offer to continue on WhatsApp by number",
+        "hint": "Visitors can leave their number, and the business sends them a WhatsApp message from its connected number.",
+        "pendingTag": "Waiting for Meta's approval",
+        "pending": "Meta is reviewing the business's message template. You can turn this on once it's approved.",
+        "rejected": "Meta didn't approve the message template, so this can't be turned on.",
+        "noNumber": "To turn this on, connect a WhatsApp number first.",
+        "payment": "To turn this on, the business's WhatsApp account at Meta needs a payment method.",
+        "submit": "The message template is sent for Meta's approval in <channels>Settings · Channels</channels>."
+      }
     },
     "install": {
       "shopify": "Shopify",

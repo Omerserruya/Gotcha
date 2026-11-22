@@ -190,6 +190,16 @@ window.__gotchaShopifyChatApp = function (boot) {
       waPlaceholder: "Type a message",
       waOpening: "Continuing on WhatsApp",
       waOpenLink: "Open WhatsApp",
+      waPhoneAsk: "Continue on WhatsApp? Leave your number",
+      waPhoneLabel: "WhatsApp number",
+      waPhoneConsent: "By sending, you agree to receive a WhatsApp message from {business} about this conversation.",
+      waPhoneSend: "Send",
+      waPhoneSending: "Sending…",
+      waPhoneCancel: "Cancel",
+      waPhoneSent: "We've sent you a WhatsApp message. You can continue there.",
+      waPhoneInvalid: "That number doesn't look right. Check it and try again.",
+      waPhoneRateLimited: "Several requests were sent in a row. Try again in a few minutes.",
+      waPhoneFailed: "We couldn't send the message. Try again in a moment.",
       mute: "Mute chat sounds",
       unmute: "Unmute chat sounds",
       placeholder: "Ask us anything",
@@ -259,6 +269,16 @@ window.__gotchaShopifyChatApp = function (boot) {
       waPlaceholder: "הקלידו הודעה",
       waOpening: "ממשיכים בוואטסאפ",
       waOpenLink: "פתיחת וואטסאפ",
+      waPhoneAsk: "נמשיך בוואטסאפ? השאירו מספר",
+      waPhoneLabel: "מספר וואטסאפ",
+      waPhoneConsent: "בשליחה אתם מסכימים לקבל מ‑{business} הודעה בוואטסאפ על השיחה הזו.",
+      waPhoneSend: "שליחה",
+      waPhoneSending: "שולחים…",
+      waPhoneCancel: "ביטול",
+      waPhoneSent: "שלחנו לכם הודעה בוואטסאפ. אפשר להמשיך משם.",
+      waPhoneInvalid: "המספר לא נראה תקין. בדקו ונסו שוב.",
+      waPhoneRateLimited: "נשלחו כמה בקשות ברצף. נסו שוב בעוד כמה דקות.",
+      waPhoneFailed: "לא הצלחנו לשלוח את ההודעה. נסו שוב בעוד רגע.",
       mute: "השתקת צלילי הצ׳אט",
       unmute: "ביטול השתקה",
       placeholder: "אפשר לשאול אותנו הכל",
@@ -326,7 +346,27 @@ window.__gotchaShopifyChatApp = function (boot) {
   // ask for the link (the code snippet does; a host without it never shows
   // the button rather than showing one that cannot work).
   var LOOK = widget.ux && widget.ux.look === "whatsapp" ? "whatsapp" : "gotcha";
-  var WA_ON = !!(widget.features && widget.features.whatsappHandoff) && typeof boot.whatsappHandoff === "function";
+  //
+  // ★★ ONE MODE, THE SERVER'S (Omer, 2026-11-22): `features.waHandoffMode`
+  // "phone" - the business is ready (an approved template and a payment
+  // method at Meta): the visitor leaves a number and the BUSINESS's own
+  // number writes to them, in its name. "code" - today's wa.me link with the
+  // one-time code. "off" - nothing. No mode at all is an older server:
+  // today's behaviour from `features.whatsappHandoff`, unchanged.
+  // Phone needs the business's name for its consent line, and a host that
+  // can send the number; without either it never draws the form.
+  var WA_MODE = (function () {
+    var m = widget.features && widget.features.waHandoffMode;
+    if (m === "phone" || m === "code" || m === "off") return m;
+    return widget.features && widget.features.whatsappHandoff ? "code" : "off";
+  })();
+  var BUSINESS = String((widget.brand && widget.brand.name) || "").trim();
+  var WA_PHONE = WA_MODE === "phone" && !!BUSINESS && typeof boot.whatsappPhoneHandoff === "function";
+  // A "phone" host that cannot send a number (an older host page, the settings
+  // preview) keeps today's link rather than losing WhatsApp altogether.
+  var WA_ON =
+    WA_PHONE ||
+    ((WA_MODE === "code" || WA_MODE === "phone") && typeof boot.whatsappHandoff === "function");
   var BIDI = window.__gotchaBidi;
 
   // The merchant's explicit choice, or "auto". Passed to every per-message
@@ -376,6 +416,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     lastCursor: null,
     unread: 0,
     waLink: null, // the WhatsApp link after a handoff, kept in the chat
+    waForm: null, // leave-your-number: { text, phone, busy, error, sent }
     docked: false,
   };
 
@@ -959,6 +1000,15 @@ window.__gotchaShopifyChatApp = function (boot) {
     ".wa:focus-visible{outline:2px solid #25D366;outline-offset:3px;}",
     ".wa-note{align-self:center;margin:var(--s2) 0;font-size:12.5px;color:#475569;text-align:center;}",
     ".wa-note a{color:#008069;font-weight:600;}",
+    ".wa-form{align-self:stretch;margin:var(--s2) 0;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;display:flex;flex-direction:column;gap:8px;font-size:13px;color:#0f172a;}",
+    ".wa-form label{display:flex;flex-direction:column;gap:4px;font-weight:600;}",
+    ".wa-form input{font:inherit;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;direction:ltr;text-align:start;}",
+    ".wa-form .wa-consent{font-size:12px;color:#475569;margin:0;}",
+    ".wa-form .wa-err{font-size:12px;color:#b91c1c;margin:0;}",
+    ".wa-form .wa-acts{display:flex;gap:8px;}",
+    ".wa-form .wa-acts button{font:inherit;padding:7px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;}",
+    ".wa-form .wa-acts button[data-act=wa-send]{background:#008069;border-color:#008069;color:#fff;font-weight:600;}",
+    ".wa-form .wa-acts button:disabled{opacity:.6;cursor:default;}",
 
     // ── The WhatsApp look ──
     // A green header in every view (no hero), the beige chat surface,
@@ -1718,7 +1768,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     renderBanner();
 
     // A handoff ends the welcome screen: the WhatsApp link belongs in the chat.
-    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome" && !S.waLink;
+    var inWelcome = !S.messages.length && !S.pending.length && S.phase === "welcome" && !S.waLink && !S.waForm;
     setPanelView(inWelcome ? "welcome" : "conversation");
 
     if (S.phase === "offline_form") { setPanelView("conversation"); renderOfflineForm(); return; }
@@ -2079,6 +2129,7 @@ window.__gotchaShopifyChatApp = function (boot) {
     // After a handoff: the link stays in the chat (a blocked window, or a
     // visitor who closed WhatsApp and wants it back).
     if (S.waLink) list.appendChild(waNote(S.waLink));
+    if (S.waForm) list.appendChild(S.waForm.sent ? waSentNote() : waForm());
 
     if (S.awaitingReply && !S.ended) {
       var typing = el("div", "row");
@@ -2767,6 +2818,14 @@ window.__gotchaShopifyChatApp = function (boot) {
    * shown in the chat to tap.
    */
   function continueOnWhatsapp(text) {
+    // "phone": no window and no link - the form, carrying what was typed.
+    if (WA_PHONE) { openWaForm(text); return; }
+    openWaLink(text);
+  }
+
+  /** The code link (wa.me with the one-time code): "code" mode, and phone mode's way back. */
+  function openWaLink(text) {
+    if (typeof boot.whatsappHandoff !== "function") return;
     var w = null;
     try { w = window.open("", "_blank"); } catch (e) { w = null; }
     if (text) {
@@ -2814,10 +2873,112 @@ window.__gotchaShopifyChatApp = function (boot) {
     S.error = null;
     S.rateLimited = false;
     S.waLink = null;
+    S.waForm = null;
     S.lastCursor = null;
     S.phase = "welcome";
     shownProducts = {};
     render();
+  }
+
+  /** The leave-your-number form, in the chat where the link note sits. */
+  function openWaForm(text) {
+    if (S.waForm && !S.waForm.sent) return;
+    S.waForm = { text: text || "", phone: "", busy: false, error: null, sent: false };
+    render();
+    var input = body.querySelector(".wa-form input");
+    if (input) input.focus();
+  }
+
+  function waForm() {
+    var f = S.waForm;
+    var card = el("form", "wa-form");
+    attr(card, { "data-act": "wa-form", dir: dir, novalidate: "" });
+    card.appendChild(el("div", "", T.waPhoneAsk));
+    var label = el("label", "", T.waPhoneLabel);
+    var input = document.createElement("input");
+    attr(input, { type: "tel", inputmode: "tel", autocomplete: "tel", name: "phone", dir: "ltr" });
+    input.value = f.phone;
+    input.disabled = f.busy;
+    on(input, "input", function () { f.phone = input.value; });
+    label.appendChild(input);
+    card.appendChild(label);
+    var consent = el("p", "wa-consent", T.waPhoneConsent.replace("{business}", BUSINESS));
+    card.appendChild(consent);
+    if (f.error) {
+      var err = el("p", "wa-err", f.error);
+      attr(err, { role: "alert" });
+      card.appendChild(err);
+    }
+    var acts = el("div", "wa-acts");
+    var send = el("button", "", f.busy ? T.waPhoneSending : T.waPhoneSend);
+    attr(send, { type: "submit", "data-act": "wa-send" });
+    send.disabled = f.busy;
+    var cancel = el("button", "", T.waPhoneCancel);
+    attr(cancel, { type: "button", "data-act": "wa-cancel" });
+    cancel.disabled = f.busy;
+    on(cancel, "click", function () { S.waForm = null; render(); });
+    acts.appendChild(send);
+    acts.appendChild(cancel);
+    card.appendChild(acts);
+    on(card, "submit", function (e) { e.preventDefault(); sendWaPhone(consent.textContent || ""); });
+    return card;
+  }
+
+  /**
+   * "Sent" means queued to Meta; a later delivery failure is not reported
+   * back (Backend). So the code link stays one tap away under it.
+   */
+  function waSentNote() {
+    var note = el("div", "wa-note", T.waPhoneSent + " ");
+    attr(note, { role: "status" });
+    if (typeof boot.whatsappHandoff === "function") {
+      var a = el("a", "", T.waOpenLink);
+      attr(a, { href: "#", "data-act": "wa-link" });
+      on(a, "click", function (e) { e.preventDefault(); openWaLink(""); });
+      note.appendChild(a);
+    }
+    return note;
+  }
+
+  /**
+   * Sends the number. The server normalises it and has the business's own
+   * number write to the visitor - in the SAME conversation (W1), so nothing
+   * here opens a window or follows a link.
+   */
+  function sendWaPhone(consentText) {
+    var f = S.waForm;
+    if (!f || f.busy) return;
+    var phone = String(f.phone || "").trim();
+    if (!phone) { f.error = T.waPhoneInvalid; render(); return; }
+    f.busy = true;
+    f.error = null;
+    render();
+    ensureConversation()
+      .then(function () {
+        return boot.whatsappPhoneHandoff({ locale: lang, phone: phone, text: f.text || undefined, consentText: consentText });
+      })
+      .then(function () {
+        f.busy = false;
+        f.sent = true;
+        render();
+        track("whatsapp_phone_handoff");
+      })
+      .catch(function (e) {
+        f.busy = false;
+        var status = e && e.status;
+        var code = e && e.message;
+        // 409 not_available: no longer "phone" (or the number opted out). Its
+        // body carries the code link: shown in the chat, no second call.
+        if (status === 409 && e.data && e.data.url) {
+          S.waForm = null;
+          showWaNote(e.data.url, true);
+          return;
+        }
+        f.error = code === "invalid_phone" || status === 400 || status === 422
+          ? T.waPhoneInvalid
+          : status === 429 ? T.waPhoneRateLimited : T.waPhoneFailed;
+        render();
+      });
   }
 
   function showWaNote(url, blocked) {

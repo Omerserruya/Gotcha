@@ -375,6 +375,8 @@ window.__gotchaSiteMount = function (opts) {
         if (!res.ok) {
           var err = new Error(json.error || "request_failed");
           err.status = res.status;
+          // A refusal's own data (the phone hand-off's 409 carries the code link).
+          err.data = json.data;
           throw err;
         }
         return json;
@@ -700,6 +702,20 @@ window.__gotchaSiteMount = function (opts) {
           sessionToken: store.get("token"),
           locale: opts && opts.locale,
           text: opts && opts.text,
+        }).then(function (res) { return (res && res.data) || {}; });
+      },
+      // "phone" mode (2026-11-22): the visitor's number; the business's own
+      // number writes to them in this same conversation. Errors keep the
+      // route's code and status (`request`), so the form can say which.
+      whatsappPhoneHandoff: function (opts) {
+        return post(API_PATH + "/whatsapp-phone-handoff", {
+          sessionId: store.get("conversation"),
+          sessionToken: store.get("token"),
+          phone: opts && opts.phone,
+          locale: opts && opts.locale,
+          text: opts && opts.text,
+          consent: true,
+          consentText: opts && opts.consentText,
         }).then(function (res) { return (res && res.data) || {}; });
       },
     });

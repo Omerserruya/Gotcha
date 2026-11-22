@@ -105,6 +105,13 @@ export async function MessageStream({
     }
   }
 
+  /*
+   * W1: a web chat that moved to WhatsApp reads as ONE thread - the web rows
+   * (originChannel "WEBCHAT"), the divider, then WhatsApp. In such a thread
+   * the divider says the move; an old linked pair keeps its own line.
+   */
+  const merged = messages.some((m) => m.originChannel === 'WEBCHAT');
+
   return (
     <ol
       className={styles.stream}
@@ -147,7 +154,9 @@ export async function MessageStream({
                 data-testid={`system-${message.id}`}
                 data-event={systemEvent}
               >
-                <span className={styles.dividerText}>{systemDivider(t, message, systemEvent)}</span>
+                <span className={styles.dividerText}>
+                  {systemDivider(t, message, systemEvent, merged)}
+                </span>
               </li>
             );
           }
@@ -483,7 +492,10 @@ function systemDivider(
   t: Awaited<ReturnType<typeof getTranslations<'inbox'>>>,
   message: InboxMessage,
   event: SystemEvent | 'other',
+  merged = false,
 ): string {
+  // The one divider of a merged web-to-WhatsApp thread (Backend W1).
+  if (event === 'continued_from_website' && merged) return t('stream.system.moved_to_whatsapp');
   if (event === 'ai_bot_escalation') {
     const reason = escalationReasonOf(message);
     return reason

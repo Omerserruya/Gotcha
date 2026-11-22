@@ -61,6 +61,7 @@ export function bodyOfWidget(settings: WidgetSettings, { stageB = false } = {}) 
         enabled: settings.ux.whatsapp.enabled,
         channelAccountId: settings.ux.whatsapp.channelAccountId,
         phone: settings.ux.whatsapp.phone,
+        phoneHandoff: settings.ux.whatsapp.phoneHandoff,
       },
     },
   };
@@ -77,6 +78,22 @@ export const handoffNumberSchema = z.object({
   phone: z.string().nullable().catch(null).default(null),
   available: z.boolean(),
   reason: z.enum(['not_connected', 'number_unknown']).optional().catch(undefined),
+  /**
+   * Whether this number can send "leave your number" in the business's name
+   * (Backend W2): its template at Meta, Meta's rejection text, and a recent
+   * send refused for the account's payment method (131042, last 24h - it
+   * cannot be read in advance). `ready` = available, approved, not blocked.
+   * Absent before W2: the option is not offered.
+   */
+  phoneHandoff: z
+    .object({
+      template: z.enum(['missing', 'draft', 'pending', 'approved', 'rejected']).catch('missing'),
+      templateReason: z.string().nullable().catch(null).default(null),
+      paymentBlocked: z.boolean().catch(false).default(false),
+      ready: z.boolean().catch(false).default(false),
+    })
+    .optional()
+    .catch(undefined),
 });
 export type HandoffNumber = z.infer<typeof handoffNumberSchema>;
 

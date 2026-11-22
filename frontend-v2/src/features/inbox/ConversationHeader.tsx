@@ -114,6 +114,12 @@ export async function ConversationHeader({
             reader would otherwise hear "WhatsApp, WhatsApp".
           */}
           <span className={styles.openFactsMark}>
+            {/* W1: started on the website - its mark first, then where it continues. */}
+            {conversation.continuedFrom ? (
+              <span data-testid="conversation-continued-from">
+                <ChannelMark channel={conversation.continuedFrom.channel} size={14} decorative />
+              </span>
+            ) : null}
             <ChannelMark channel={conversation.channel} size={14} decorative />
           </span>
           {(() => {

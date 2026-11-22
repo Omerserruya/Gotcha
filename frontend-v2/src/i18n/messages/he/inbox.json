@@ -39,7 +39,8 @@
         "ai_inactive": "עובד ה‑AI לא פעיל",
         "ai_failed": "ה‑AI לא הצליח לענות",
         "message_limit": "ה‑AI הגיע למגבלת ההודעות בשיחה הזו"
-      }
+      },
+      "moved_to_whatsapp": "השיחה עברה ל‑WhatsApp"
     },
     "reaction": {
       "toMessage": "הם הגיבו {emoji} ל״{preview}״",
@@ -187,7 +188,8 @@
       "late": "חריגה מה‑SLA",
       "warningTitle": "קרוב ליעד התגובה של {minutes} דק׳.",
       "lateTitle": "ממתינה יותר מיעד התגובה של {minutes} דק׳."
-    }
+    },
+    "continuedFrom": "התחילה באתר, ממשיכה ב‑WhatsApp"
   },
   "identity": {
     "unnamed": "מישהו",
