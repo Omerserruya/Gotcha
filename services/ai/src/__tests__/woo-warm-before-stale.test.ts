@@ -11,7 +11,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
   return { ...actual, assertPublicUrl: vi.fn(async () => undefined) };
 });
 
-import Woo, { cacheCounts, localProductList, warmWooCatalog } from "../services/connectors/woocommerce.adapter";
+import Woo, { cacheCounts, localProductList, warmWooCatalog, CATALOG_OVER_LIMIT_MS } from "../services/connectors/woocommerce.adapter";
 import { warmWooCachesOnce, WARM_EVERY_MS, type WarmDeps } from "../services/woo-cache-warmer.service";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -131,4 +131,187 @@ describe("the warmer reloads a catalogue before it goes stale", () => {
     expect(pages).toBe(10);
     expect(other).toBe(0);
   });
+});
+
+/**
+ * A store over the local limit (2026-11-19). Five full pages mean nothing of the catalogue is kept, and every pass
+ * read those five pages per language again: 10 full pages every 8 minutes for no cached answer. The verdict now
+ * stands for CATALOG_OVER_LIMIT_MS.
+ */
+describe("a store over the local limit is not read again every pass", () => {
+  /**
+   * A store whose size the test sets, on a fake clock: its whole-catalogue page reads, and its own queries (it
+   * finds "item", and nothing for any other word).
+   */
+  function sizedStore(size: number) {
+    vi.useFakeTimers({ now: new Date("2026-11-19T10:00:00Z") });
+    const base = `https://warm${++n}.example.com`;
+    // byLang: a size for one catalogue language alone ("" is the list with no language asked).
+    const s = { size, byLang: {} as Record<string, number>, pages: 0, pagesOf: {} as Record<string, number>, own: 0, hold: null as Promise<void> | null };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = new URL(url);
+      let body: any = [];
+      if (u.pathname.endsWith("/products")) {
+        const page = Number(u.searchParams.get("page") ?? 1), per = Number(u.searchParams.get("per_page") ?? 10);
+        if (per === 100 && !u.searchParams.get("search")) {
+          const lang = u.searchParams.get("lang") ?? "";
+          s.pages++;
+          s.pagesOf[lang] = (s.pagesOf[lang] ?? 0) + 1;
+          if (s.hold) await s.hold;
+          // One product is told apart only by its description: only the whole catalogue finds it.
+          body = Array.from({ length: s.byLang[lang] ?? s.size }, (_, i) => (i === 41 ? { ...item(42), description: "a quiet zephyr thing" } : item(i + 1))).slice((page - 1) * per, page * per);
+        } else { s.own++; body = /item/i.test(u.searchParams.get("search") ?? "") ? [item(7)] : []; }
+      }
+      return { ok: true, status: 200, headers: new Headers({ "content-type": "application/json" }), json: async () => body, text: async () => JSON.stringify(body) } as any;
+    }));
+    const conn = { credentials: { consumerKey: "ck", consumerSecret: "cs" }, config: { storeUrl: base } };
+    // A pass, and the second its background reads take to land.
+    const pass = async () => { await warmWooCachesOnce({ tenants: async () => ["t1"], load: (async () => conn) as any }); await vi.advanceTimersByTimeAsync(1000); };
+    const search = (query: string) => Woo.execute({ toolName: "list_products", args: { query }, ...conn } as any) as Promise<any[]>;
+    const local = () => localProductList(`${base}/wp-json/wc/v3/products?per_page=20&search=item&lang=he`, Date.now()) !== null;
+    // To the next pass (a pass took one second of the eight minutes).
+    const toNextPass = () => vi.advanceTimersByTimeAsync(WARM_EVERY_MS - 1000);
+    return { s, pass, search, local, toNextPass };
+  }
+  // A search the store's own query answers, and one no title has: it goes on to the whole catalogue.
+  const FOUND = "item 7", UNFOUND = "gizmo unfindable";
+  const PASSES_IN_WINDOW = CATALOG_OVER_LIMIT_MS / WARM_EVERY_MS;
+
+  it("the window is a whole number of passes (the counts below lean on it)", () => {
+    expect(CATALOG_OVER_LIMIT_MS).toBe(6 * 60 * 60_000);
+    expect(PASSES_IN_WINDOW).toBe(45);
+  });
+
+  it("★ read once: inside the window neither a pass nor a search reads its pages again", async () => {
+    const { s, pass, search, local, toNextPass } = sizedStore(620);
+    await pass();
+    // Five full pages in each of the two languages, and nothing kept.
+    expect(s.pages).toBe(10);
+    expect(local()).toBe(false);
+    // Every pass up to the last one inside the window (minute 352), with a search between some of them.
+    for (let p = 1; p < PASSES_IN_WINDOW; p++) {
+      await toNextPass();
+      if (p % 10 === 3) {
+        const own = s.own;
+        // The store's own query answers it, as before.
+        expect((await search(FOUND)).length).toBeGreaterThan(0);
+        expect(s.own).toBeGreaterThan(own);
+        await search(UNFOUND);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      await pass();
+      expect(s.pages).toBe(10);
+    }
+    // The window is over: one more read of the five pages per language, and a new window.
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(20);
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(20);
+  });
+
+  it("a search alone, with no pass near it, reads no page inside the window", async () => {
+    const { s, pass, search } = sizedStore(620);
+    await pass();
+    expect(s.pages).toBe(10);
+    // Half an hour on: the kept verdict is long past the ten minutes a catalogue is fresh for.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    const own = s.own;
+    expect(await search(UNFOUND)).toEqual([]);
+    expect((await search(FOUND)).length).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(s.own).toBeGreaterThan(own);
+    expect(s.pages).toBe(10);
+    // The last minute of the window.
+    await vi.advanceTimersByTimeAsync(CATALOG_OVER_LIMIT_MS - 30 * 60_000 - 2000 - 1000 - 60_000);
+    await search(UNFOUND);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(s.pages).toBe(10);
+  });
+
+  it("a store that shrank under the limit is held after the window, and from then on is a store like any other", async () => {
+    const { s, pass, search, local, toNextPass } = sizedStore(620);
+    await pass();
+    expect(s.pages).toBe(10);
+    s.size = 350;
+    await toNextPass();
+    await pass();
+    // Inside the window: not read, so not known yet.
+    expect(s.pages).toBe(10);
+    expect(local()).toBe(false);
+    // To the first pass after the window.
+    await vi.advanceTimersByTimeAsync(CATALOG_OVER_LIMIT_MS - 2 * WARM_EVERY_MS);
+    await toNextPass();
+    await pass();
+    // Four pages of products and the empty fifth, per language; the catalogue is held.
+    expect(s.pages).toBe(20);
+    expect(local()).toBe(true);
+    const own = s.own;
+    expect((await search(FOUND)).length).toBeGreaterThan(0);
+    // And a search reads the held catalogue itself: a word only a description has.
+    expect((await search("zephyr")).map((p: any) => p.id)).toEqual([42]);
+    expect(s.own).toBe(own);
+    // And reloaded by every pass, as a store under the limit is.
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(30);
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(40);
+  });
+
+  it("a store that grew over the limit is read once more and then left alone", async () => {
+    const { s, pass, local, toNextPass } = sizedStore(350);
+    await pass();
+    expect(s.pages).toBe(10);
+    expect(local()).toBe(true);
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(20);
+    s.size = 620;
+    // The pass that finds it over the limit.
+    await toNextPass();
+    await pass();
+    expect(s.pages).toBe(30);
+    expect(local()).toBe(false);
+    for (let p = 0; p < 5; p++) { await toNextPass(); await pass(); }
+    expect(s.pages).toBe(30);
+  });
+
+  it("the verdict is one catalogue language's: the other, under the limit, is held and reloaded as before", async () => {
+    const { s, pass, local, toNextPass } = sizedStore(620);
+    s.byLang.he = 350;
+    await pass();
+    expect(s.pagesOf).toEqual({ "": 5, he: 5 });
+    expect(local()).toBe(true);
+    for (let p = 0; p < 4; p++) { await toNextPass(); await pass(); }
+    // The Hebrew catalogue: every pass, as at any store under the limit. The other list: once.
+    expect(s.pagesOf).toEqual({ "": 5, he: 25 });
+    expect(local()).toBe(true);
+  });
+
+  it("after the window a search never waits for the pages: the store's own query answers while they load", async () => {
+    const { s, pass, search } = sizedStore(620);
+    await pass();
+    expect(s.pages).toBe(10);
+    await vi.advanceTimersByTimeAsync(CATALOG_OVER_LIMIT_MS);
+    // The store answers its catalogue pages only when the test lets it.
+    let release!: () => void;
+    s.hold = new Promise<void>((r) => { release = r; });
+    const own = s.own;
+    // Answered (the store's own query found nothing for it) while no catalogue page has come back.
+    expect(await search(UNFOUND)).toEqual([]);
+    expect(s.own).toBeGreaterThan(own);
+    // The read began (the first two pages of one language are out) and has not landed.
+    expect(s.pages).toBe(12);
+    release();
+    s.hold = null;
+    await vi.advanceTimersByTimeAsync(1000);
+    // Five full pages of that one language, and still over the limit: a new window.
+    expect(s.pages).toBe(15);
+    await search(UNFOUND);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(s.pages).toBe(15);
+  }, 4000);
 });
