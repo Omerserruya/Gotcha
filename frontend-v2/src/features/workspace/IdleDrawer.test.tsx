@@ -284,6 +284,12 @@ describe('★★ the AI employee’s conversations: two groups, one Save, only w
     );
     expect(screen.getByTestId('idle-problem')).not.toHaveTextContent('a person handles');
     // The person-held part saved: a second Save sends only the group again.
+    /*
+     * The line is drawn before the transition settles, and a click on the
+     * still-disabled Save never fires - an intermittent test under a loaded
+     * run (release 65268aa0, 2026-11-22). Wait for Save itself.
+     */
+    await waitFor(() => expect(screen.getByTestId('drawer-save-idle')).toBeEnabled());
     fireEvent.click(screen.getByTestId('drawer-save-idle'));
     await waitFor(() => expect(saveBotIdleAutomation).toHaveBeenCalledTimes(2));
     expect(saveIdleAutomation).toHaveBeenCalledTimes(1);

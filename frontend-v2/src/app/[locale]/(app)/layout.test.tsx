@@ -22,6 +22,8 @@ vi.mock('next/navigation', () => ({ redirect }));
 const at = vi.hoisted(() => ({ path: '/en/approvals?tab=done' }));
 vi.mock('next/headers', () => ({
   headers: async () => new Headers({ 'x-gotcha-return-to': at.path }),
+  // No Shopify install waiting (b909a6fc reads its cookie on every landing): no request is made.
+  cookies: async () => ({ get: () => undefined }),
 }));
 vi.mock('@/i18n/load-messages', () => ({ loadMessages: async () => ({}) }));
 const AppProviders = vi.hoisted(() => vi.fn(() => null));
