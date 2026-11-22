@@ -1,6 +1,7 @@
 import { prisma, publishEvent, type ChannelType, withHistoricalRecords, currentRequestContext } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import { presentMessageMedia } from "../lib/message-media";
+import { continuedFromFor } from "../lib/merged-thread";
 
 interface CreateMessageData {
   tenantId: string;
@@ -43,14 +44,30 @@ interface CreateMessageData {
  * inbox, unread counts, routing - not to blank the thread after somebody
  * opens it from the History panel. Without this, an imported conversation
  * opened cleanly and showed zero messages, which reads as data loss.
+ *
+ * One thread across channels (2026-11-22, lib/merged-thread.ts): when this
+ * conversation continued a website chat, that chat's messages are part of the
+ * same list, in time order, the same paging and one total. Those rows carry
+ * `originChannel: "WEBCHAT"` and keep their own conversationId. The website
+ * chat's system rows stay out: this thread has its own divider. If the link
+ * cannot be read, the conversation's own messages are served as before.
  */
 export async function listByConversation(tenantId: string, conversationId: string, options: { page?: number; limit?: number } = {}) {
   const page = Math.max(options.page ?? 1, 1);
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const skip = (page - 1) * limit;
+  const webChatIds = await continuedFromFor(tenantId, [conversationId])
+    .then((links) => (links.get(conversationId) ?? []).map((l) => l.conversationId))
+    .catch((err) => {
+      console.warn("[messages] the website chat link was not read, the thread is served unmerged:", (err as Error)?.message);
+      return [] as string[];
+    });
+  const where = webChatIds.length
+    ? { tenantId, OR: [{ conversationId }, { conversationId: { in: webChatIds }, messageType: { not: "system" } }] }
+    : { tenantId, conversationId };
   const [messages, total] = await withHistoricalRecords(() => Promise.all([
     prisma.message.findMany({
-      where: { tenantId, conversationId },
+      where,
       orderBy: { createdAt: "asc" },
       skip,
       take: limit,
@@ -76,9 +93,13 @@ export async function listByConversation(tenantId: string, conversationId: strin
         },
       },
     }),
-    prisma.message.count({ where: { tenantId, conversationId } }),
+    prisma.message.count({ where }),
   ]));
-  return { data: messages.map((m) => presentMessageMedia(m)), meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  const data = messages.map((m) => {
+    const shown = presentMessageMedia(m);
+    return m.conversationId === conversationId ? shown : { ...shown, originChannel: "WEBCHAT" as const };
+  });
+  return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 export async function create(data: CreateMessageData) {

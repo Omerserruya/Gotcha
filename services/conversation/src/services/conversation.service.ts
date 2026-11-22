@@ -8,6 +8,7 @@ import { visibilityClause } from "../lib/conversation-visibility";
 import { contactIdsFor, contactIdOf } from "../lib/conversation-contact";
 import { unreadStates } from "../lib/unread-state";
 import { waitingSinceFor } from "../lib/waiting-since";
+import { continuedFromFor, mergedAwayWhere, type ContinuedFrom } from "../lib/merged-thread";
 import * as messageService from "./message.service";
 import { presentMessageMedia } from "../lib/message-media";
 import { channelWhere } from "../lib/channel-filter";
@@ -254,6 +255,9 @@ export async function listWhere(tenantId: string, filters: ConversationFilters):
    */
   where.AND = where.AND || [];
   (where.AND as unknown[]).push({ NOT: { customerExternalId: { startsWith: "sandbox:" } } });
+  // A website chat that continued on WhatsApp is read inside that WhatsApp
+  // conversation (lib/merged-thread.ts): one customer, one row in the inbox.
+  (where.AND as unknown[]).push({ NOT: mergedAwayWhere() });
 
   const visibility = visibilityClause({ userId: userId!, role: userRole, departmentId: userDepartmentId });
   if (visibility) where.OR = visibility;
@@ -431,7 +435,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   // Flatten last message info, and the contact behind each row (one batched,
   // read-only lookup for the page - see lib/conversation-contact.ts).
   const rows = keyset ? pageRows : conversations;
-  const [contactMap, unread, waiting, windows, accountCounts] = await Promise.all([
+  const [contactMap, unread, waiting, windows, accountCounts, continued] = await Promise.all([
     contactIdsFor(tenantId, rows as any[]),
     // The VIEWER's read state, one query for the page (lib/unread-state.ts).
     // Decoration: if it fails the inbox still loads, its rows served as read.
@@ -454,6 +458,8 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       return new Map<string, ReplyWindow>();
     }),
     activeAccountCounts(tenantId),
+    // The website chat a WhatsApp row continued from, for its badge. Decoration.
+    continuedFromOf(tenantId, rows as any[]),
   ]);
   const data = rows.map((c) => {
     const lastMsg = c.messages[0] || null;
@@ -471,6 +477,7 @@ export async function list(tenantId: string, filters: ConversationFilters) {
       lastReadAt: state?.lastReadAt ?? null,
       waitingSince: waiting.get(c.id) ?? null,
       replyWindow: windows.get(c.id) ?? null,
+      continuedFrom: continued.get(c.id) ?? null,
     };
   });
 
@@ -550,6 +557,23 @@ export async function unreadCounts(
   return { unread, totals };
 }
 
+/**
+ * Where each WhatsApp conversation continued from (its most recent website
+ * chat), for the list's badge and the detail. Only WhatsApp rows are asked
+ * about. Decoration: unreadable means no badge, never a failed inbox.
+ */
+async function continuedFromOf(tenantId: string, rows: Array<{ id: string; channel?: string | null }>): Promise<Map<string, ContinuedFrom>> {
+  const out = new Map<string, ContinuedFrom>();
+  const ids = rows.filter((r) => r.channel === "WHATSAPP").map((r) => r.id);
+  if (!ids.length) return out;
+  try {
+    for (const [id, links] of await continuedFromFor(tenantId, ids)) if (links[0]) out.set(id, links[0]);
+  } catch (err) {
+    console.warn("[conversations] continuedFrom unavailable:", (err as Error)?.message);
+  }
+  return out;
+}
+
 export async function getById(tenantId: string, id: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id, tenantId },
@@ -561,7 +585,11 @@ export async function getById(tenantId: string, id: string) {
     },
   });
   if (!conversation) return null;
-  const [contactMap, accountCounts] = await Promise.all([contactIdsFor(tenantId, [conversation as any]), activeAccountCounts(tenantId)]);
+  const [contactMap, accountCounts, continued] = await Promise.all([
+    contactIdsFor(tenantId, [conversation as any]),
+    activeAccountCounts(tenantId),
+    continuedFromOf(tenantId, [conversation as any]),
+  ]);
   const account = conversation.channelAccount as any;
   return {
     ...withRelevance(conversation),
@@ -569,6 +597,8 @@ export async function getById(tenantId: string, id: string) {
     // Stored uploads go out as the logged-in media route (2026-10-10).
     ...(Array.isArray(conversation.messages) ? { messages: conversation.messages.map((m) => presentMessageMedia(m)) } : {}),
     contactId: contactIdOf(contactMap, conversation as any),
+    // The thread itself, website chat included, is GET /:id/messages.
+    continuedFrom: continued.get(conversation.id) ?? null,
   };
 }
 
