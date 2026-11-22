@@ -199,6 +199,20 @@ http {
         "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
     }
 
+    # ★ The flow that follows "Sign in with Google" runs on the APP's own
+    # sign-in screen (2026-11-22). After Google's callback Authentik sends the
+    # browser to <auth host>/if/flow/default-source-authentication/?<args> and
+    # has no setting to point it elsewhere. That one address goes to the app's
+    # /sign-in screen, which drives the flow through /auth-api/ (two-step, a
+    # refusal). The query string passes as it came, byte for byte: it is taken
+    # from $args, which nginx never decodes. ONLY this slug: every other
+    # /if/flow/ stays Authentik's. Used on the auth host alone.
+    map "$uri|$args" $source_flow_go {
+        default "";
+        "~^/if/flow/default-source-authentication/\|$" "/sign-in?flow=default-source-authentication";
+        "~^/if/flow/default-source-authentication/\|(?<sfargs>.+)$" "/sign-in?flow=default-source-authentication&$sfargs";
+    }
+
     # ★ A sign-out that finds no Authentik session goes back to the app (2026-10-23).
     # The login stage's session lasts until the browser closes unless "remember
     # me" was ticked, so the app session can outlive it. RP-initiated logout then
@@ -2787,6 +2801,12 @@ http {
         # $signout_lost_go). The app session is already gone by then.
         if ($signout_lost_go) {
             return 302 https://app.gotcha.co.il/sign-in;
+        }
+
+        # After "Sign in with Google" -> the app's sign-in screen, the query
+        # string untouched (see $source_flow_go).
+        if ($source_flow_go != "") {
+            return 302 https://app.gotcha.co.il$source_flow_go;
         }
 
         # Authentik serves its own static assets and accepts branding/icon
