@@ -265,6 +265,13 @@ services:
     logging: *default-logging
     ports:
       - "${GATEWAY_PORT:-80}:80"
+    volumes:
+      # Demo pages (gotcha.co.il/demo/<id>): folders of files dropped on the
+      # host, read-only here. The template's /demo/ location serves them. The
+      # host folder must exist before the gateway starts (docker would create
+      # a missing one owned by root), and its files must be readable by others:
+      # the nginx worker is not their owner.
+      - ${DEMO_PAGES_DIR:-/opt/chatcenter/demo-pages}:/srv/demo-pages:ro
     environment:
       AUTH_PORT: ${AUTH_PORT:-4001}
       CONVERSATION_PORT: ${CONVERSATION_PORT:-4002}

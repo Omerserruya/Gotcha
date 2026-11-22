@@ -2600,6 +2600,57 @@ http {
             try_files $uri $uri/index.html $uri.html /404.html;
         }
 
+        # ─── Demo pages: /demo/<id> (2026-11-22) ─────────────────
+        # A demo page is a folder of files on the host, mounted read-only at
+        # /srv/demo-pages (the compose file names the host folder). No service
+        # and no database: nginx serves the file or answers 404.
+        #
+        # The id is exactly 10 characters of [a-z0-9]. Under an id only two
+        # things exist: the page itself (/demo/<id>, /demo/<id>/ or
+        # /demo/<id>/index.html) and files under /demo/<id>/assets/. Everything
+        # else under /demo is 404 here. `^~` keeps this server's regex locations
+        # out, and nothing falls through to the catch-all below.
+        # A 404 is this site's own 404 page (error_page above).
+        #
+        # A raw address with a dot segment ("/demo/x/../../y", also written
+        # %2e or %2f) is refused before nginx resolves it, so it cannot leave
+        # /demo and land on the catch-all. It runs before any location, also on
+        # the way to the 404 page, so this one answer is nginx's bare 404.
+        if ($request_uri ~* "^/demo/(?:.*(?:/|%2f))?(?:\.|%2e)(?:\.|%2e)(?:/|%2f|\?|$)") {
+            return 404;
+        }
+        location = /demo {
+            return 404;
+        }
+        location ^~ /demo/ {
+            root /srv/demo-pages;
+            # A link in the drop folder never reaches a file outside it.
+            disable_symlinks on from=$document_root;
+
+            # A location with its own add_header inherits none, so this
+            # server's headers are repeated word for word, then the two a demo
+            # page adds: never indexed, never cached.
+            # scripts/gateway/check-demo-pages.sh fails when they drift apart.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.gotcha.co.il https://static.cloudflareinsights.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header X-Robots-Tag "noindex, nofollow" always;
+            add_header Cache-Control "no-store" always;
+
+            location ~ "^/demo/(?<demo_id>[a-z0-9]{10})(?:/(?:index\.html)?)?$" {
+                try_files /$demo_id/index.html =404;
+            }
+            # No segment starts with a dot (no hidden file), and the address
+            # never ends in a slash (no directory, so no listing).
+            location ~ "^/demo/(?<demo_id>[a-z0-9]{10})/assets/(?<demo_asset>[^/.][^/]*(?:/[^/.][^/]*)*)$" {
+                try_files /$demo_id/assets/$demo_asset =404;
+            }
+            return 404;
+        }
+
         # Everything else is the application: send it to the application host.
         location / {
             return 301 https://app.gotcha.co.il$request_uri;
