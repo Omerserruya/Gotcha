@@ -1077,6 +1077,7 @@ export { requirePermission, requirePermissionOrRole } from "./middleware/permiss
 export { visibilityClause, canViewConversation, requireVisibleConversation, visibleConversationFrom, viewerOf, type Viewer } from "./lib/conversation-visibility";
 export { waitingForPersonWhere, waitingForPersonClause, WAITING_STATUSES } from "./lib/conversation-queue";
 export { RELEVANCE_CHANNELS, relevanceChannel, RELEVANCE_CATEGORY_VALUES, IRRELEVANT_CATEGORIES, RELEVANCE_OVERRIDES, irrelevantWhere, notIrrelevantWhere, presentRelevance, withRelevance, type ConversationRelevanceCategory, type ConversationRelevanceView } from "./lib/conversation-relevance";
+export { relevanceHidden, notHiddenWhere, isConversationHidden, logHiddenSkip, HIDDEN_CONFIDENCE, AUTOMATION_HIDDEN_CATEGORIES, type RelevanceRow } from "./lib/relevance-hidden";
 export { soleHumanMember, assignSoleMemberOnHandoff } from "./lib/sole-member";
 export { activityLabelKey, bareToolName, ACTIVITY_LABEL_RULES, ACTIVITY_LABEL_KEYS } from "./lib/ai-activity-labels";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";

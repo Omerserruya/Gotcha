@@ -20,6 +20,7 @@ import { getExtractionFieldSpecs } from "../../services/post-conversation-config
 import { extractFieldsLive, type ExtractionFieldSpec } from "../../services/intelligence-live-extract.service";
 import { ingestConversationFacts } from "../../services/intelligence-ingest.service";
 import { requiredKnowledgeFor } from "../../services/skills";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 
 const DEBOUNCE_MS = Number(process.env.INTELLIGENCE_LIVE_DEBOUNCE_MS || 20_000);
 const MIN_NEW_INBOUND = Number(process.env.INTELLIGENCE_LIVE_MIN_INBOUND || 2);
@@ -38,7 +39,8 @@ function enabled(): boolean {
   return (process.env.INTELLIGENCE_LIVE_EXTRACT || "on").toLowerCase() !== "off";
 }
 
-async function runExtraction(conversationId: string, tenantId: string): Promise<void> {
+/** Exported for its test. */
+export async function runExtraction(conversationId: string, tenantId: string): Promise<void> {
   // Re-check the conversation is still an open text channel before spending an
   // LLM call. (It may have closed during the debounce window.)
   const conv = await prisma.conversation.findUnique({
@@ -48,6 +50,11 @@ async function runExtraction(conversationId: string, tenantId: string): Promise<
   if (!conv) return;
   if ((conv.channel as unknown as string) === "VOICE") return;
   if (String(conv.status) === "CLOSED" || String(conv.status) === "RESOLVED") return;
+  // A hidden conversation (relevance-hidden.ts, 2026-11-22): no extraction, no facts about this person.
+  if (await isConversationHidden(tenantId, conversationId, prisma)) {
+    logHiddenSkip("intelligence_live", conversationId);
+    return;
+  }
 
   // Tenant-configured extraction specs PLUS the assigned agent's skill
   // required-knowledge keys (business_type, pain_points, current_tools, …).

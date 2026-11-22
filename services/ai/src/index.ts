@@ -1,6 +1,7 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
 import internalVoiceSampleRoutes from "./routes/internal-voice-sample";
 import internalVoiceLearnRoutes from "./routes/internal-voice-learn";
+import internalRelevanceRoutes from "./routes/internal-relevance";
 import aiAssistRoutes from "./routes/ai-assist";
 import knowledgeRoutes from "./routes/knowledge";
 import knowledgeIngestRoutes from "./routes/knowledge-ingest";
@@ -118,6 +119,7 @@ const app = createServiceApp(config);
 
 app.use("/api", internalVoiceSampleRoutes);
 app.use("/api", internalVoiceLearnRoutes);
+app.use("/api", internalRelevanceRoutes);
 app.use("/api/ai-assist", aiAssistRoutes);
 app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api", knowledgeIngestRoutes);

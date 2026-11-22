@@ -1,5 +1,6 @@
 import { prisma, outgoingMessageQueue, createWorker, scheduledMessageQueue, flowResumeQueue } from "@chatcenter/shared";
 import { isOptedOutOn } from "@chatcenter/shared/src/lib/marketing-optout";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 
 /** Walk the template body in placeholder order. Mirrors the broadcast
  *  worker's helper so scheduled template sends honor named + numeric
@@ -74,7 +75,18 @@ function buildScheduledTemplateComponents(
   return components;
 }
 
-async function processScheduledMessages(): Promise<void> {
+/** What a scheduled message the AI or an automation made says when its conversation is hidden. */
+export const HIDDEN_CANCEL_REASON = "Conversation hidden (not relevant)";
+
+/** createdBy names one of the workspace's people (not "ai_agent", "ai", an agent or an automation). */
+export async function writtenByPerson(tenantId: string, createdBy: string | null | undefined): Promise<boolean> {
+  if (!createdBy) return false;
+  const user = await prisma.user.findFirst({ where: { id: createdBy, tenantId }, select: { id: true } }).catch(() => null);
+  return !!user;
+}
+
+/** Exported for its test. */
+export async function processScheduledMessages(): Promise<void> {
   const now = new Date();
 
   const dueMessages = await prisma.scheduledMessage.findMany({
@@ -104,6 +116,19 @@ async function processScheduledMessages(): Promise<void> {
             where: { id: scheduledMessage.id },
             data: { status: "CANCELLED", error: "Recipient opted out" },
           });
+          continue;
+        }
+      }
+
+      // A hidden conversation (relevance-hidden.ts, 2026-11-22): what the AI or an automation scheduled
+      // there is not sent. A person's own scheduled message still goes: they chose to write to them.
+      if (scheduledMessage.conversationId && (await isConversationHidden(scheduledMessage.tenantId, scheduledMessage.conversationId, prisma))) {
+        if (!(await writtenByPerson(scheduledMessage.tenantId, scheduledMessage.createdBy))) {
+          await prisma.scheduledMessage.update({
+            where: { id: scheduledMessage.id },
+            data: { status: "CANCELLED", error: HIDDEN_CANCEL_REASON },
+          });
+          logHiddenSkip("scheduled_message", scheduledMessage.conversationId);
           continue;
         }
       }

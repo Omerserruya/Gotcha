@@ -92,6 +92,8 @@ export async function relevanceForTurn(args: {
   mode: RelevanceGateMode;
   /** The async job labels this tenant's conversations: a stored label is used as it is (no second call). */
   preferStored?: boolean;
+  /** The 2-minute job refining the label the first inbound got inline: classify again, the override still first. */
+  fresh?: boolean;
 }, deps: RelevanceGateDeps = {}): Promise<RelevanceGateResult> {
   const { tenantId, conversation, history, profile, mode } = args;
   const off: RelevanceGateResult = { mode, category: null, confidence: null, source: null, hold: false };
@@ -109,7 +111,7 @@ export async function relevanceForTurn(args: {
   const now = deps.now?.() ?? new Date();
   const lastIn = [...(history ?? [])].reverse().find((m: any) => m?.direction === "INBOUND");
   const lastInAt = lastIn?.createdAt ? new Date(lastIn.createdAt) : now;
-  if ((args.preferStored && stored.category) || !shouldReclassify(stored, lastInAt, now)) {
+  if (!args.fresh && ((args.preferStored && stored.category) || !shouldReclassify(stored, lastInAt, now))) {
     return { mode, category: stored.category, confidence: stored.confidence, source: "stored", hold: holdsBack(stored.category, stored.confidence, false) };
   }
   // This client adds origin LIVE to every conversation read, the sender rule's read of hand marks included: a mark

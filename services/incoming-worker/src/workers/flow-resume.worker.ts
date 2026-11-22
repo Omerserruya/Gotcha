@@ -13,6 +13,7 @@ import type { FlowResumeJob } from "@chatcenter/shared";
 import { createWorker, prisma } from "@chatcenter/shared";
 import { executeMainFlow, executeSubFlow } from "../services/flow-executor.service";
 import { resumeAutomationRun } from "../services/automation-runner.service";
+import { isConversationHidden, logHiddenSkip } from "@chatcenter/shared/src/lib/relevance-hidden";
 
 /**
  * Is the conversation still parked where this timer was set? A timer whose
@@ -49,6 +50,13 @@ async function processFlowResume(job: Job<FlowResumeJob>): Promise<void> {
       console.log(`[flow-resume] stale timer for node ${resumeNodeId}; the conversation moved on`);
       return;
     }
+  }
+
+  // A hidden conversation (relevance-hidden.ts, 2026-11-22): a timer that fires after the label came in
+  // does not resume anything on it. Read now, not when the timer was set.
+  if (conversationId && (await isConversationHidden(tenantId, conversationId, prisma))) {
+    logHiddenSkip("flow_resume", conversationId);
+    return;
   }
 
   if (automationRunId) {
