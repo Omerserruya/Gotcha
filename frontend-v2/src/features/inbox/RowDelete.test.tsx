@@ -67,7 +67,9 @@ describe('★★ swipe right to delete (2026-11-22)', () => {
     swipe(SWIPE_THRESHOLD + 10);
     const dialog = screen.getByTestId('row-delete-confirm-c1');
     expect(dialog).toHaveTextContent('למחוק את השיחה?');
-    expect(dialog).toHaveTextContent('השיחה וכל ההודעות בה יימחקו לצמיתות. אי אפשר לבטל את זה.');
+    expect(dialog).toHaveTextContent(
+      'השיחה, כל ההודעות והקבצים בה יימחקו לצמיתות. אי אפשר לבטל את זה.',
+    );
     expect(screen.getByTestId('row-delete-go')).toHaveTextContent('מחיקה');
     expect(screen.getByTestId('row-delete-cancel')).toHaveTextContent('ביטול');
     expect(deleteConversation).not.toHaveBeenCalled();
