@@ -44,6 +44,11 @@ const matches = (row: any, where: any): boolean => {
       if ((v as any).not !== undefined && row.status === (v as any).not) return false;
       continue;
     }
+    // A parked install (App Review 132211) is never the shop's row: `appIdentity: { not: ... }`.
+    if (k === "appIdentity" && v && typeof v === "object") {
+      if (row.appIdentity === (v as any).not) return false;
+      continue;
+    }
     if (k === "verifiedDomains") {
       if (!(row.verifiedDomains ?? []).includes((v as any).array_contains)) return false;
       continue;

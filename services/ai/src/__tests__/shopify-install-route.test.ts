@@ -57,6 +57,9 @@ const H = vi.hoisted(() => {
     /** Billing's answer to the link: an outcome, null (unreachable), or "taken" (409). */
     billing: { current: { connectionId: "cc-1", state: "PLAN_SELECTION_REQUIRED", grandfathered: false, requiresPlanSelection: false, planSelectionUrl: null } as any },
     billingCalls: [] as any[],
+    /** The workspace's own Shopify store as the claim prompt describes it (App Review 132211). */
+    current: { current: null as { shopDomain: string; status: "CONNECTED" | "DISCONNECTED" } | null },
+    dismissed: [] as any[],
   };
 });
 
@@ -78,6 +81,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
     readDurableSetting: async (t: string, k: string) => H.settings.get(`${t}|${k}`) ?? null,
     writeDurableSetting: async (t: string, k: string, v: string | null) => { H.settings.set(`${t}|${k}`, v); },
+    coreAllowsShopifyConnect: async () => ({ allowed: H.corePaid.yes }),
   };
 });
 
@@ -120,6 +124,8 @@ vi.mock("../services/shopify-install-intent.service", () => ({
     return v;
   }),
   peekPendingAccessToken: vi.fn(async (h: any) => H.pendings.get(h)?.credentials?.accessToken ?? null),
+  discardPendingConnection: vi.fn(async (h: any) => { H.dismissed.push(h); H.pendings.delete(h); }),
+  PENDING_CONNECTION_TTL_SECONDS: 7200,
 }));
 
 // Billing's link, as the bridge reports it. The real class, so the route's
@@ -149,6 +155,7 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => H.owner.current),
   shopHeldElsewhere: (owner: any, tenantId: string) => !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED",
+  currentStoreOf: vi.fn(async () => H.current.current),
 }));
 
 import router from "../routes/shopify-install";
@@ -187,6 +194,8 @@ function entryQuery(over: Record<string, string> = {}, atMs = Date.now()): strin
 
 beforeEach(() => {
   vi.clearAllMocks();
+  H.current.current = null;
+  H.dismissed = [];
   H.corePaid.yes = true;
   H.permission.granted = true;
   H.tenantId.current = "tenant-A";
@@ -759,7 +768,9 @@ describe("shopify install claim", () => {
     // An explicit key allow-list rather than a shape snapshot: the point is
     // that nothing SENSITIVE creeps in, and a new presentational field should
     // not have to weaken the guard to be added.
-    expect(Object.keys(res.body.data).sort()).toEqual(["recovered", "shopDomain"]);
+    // App Review 132211 (2026-11-22) added what the prompt may offer: the action, the workspace's own
+    // current store and when this approval lapses. Still no token and no handle.
+    expect(Object.keys(res.body.data).sort()).toEqual(["action", "current", "expiresAt", "recovered", "shopDomain"]);
     expect(res.body.data.shopDomain).toBe(SHOP);
     expect(JSON.stringify(res.body)).not.toContain("shpat_secret");
     // The HANDLE is the key to the stored access token, so it must not be
@@ -943,5 +954,72 @@ describe("a store connects only after GOTCHA Core is paid (split billing 2026-10
     const src = readFileSync(join(__dirname, "../routes/shopify-install.ts"), "utf8");
     expect(src.match(/requireCoreForShopifyConnect\(\),/g)?.length).toBe(2);
     expect(src).not.toContain("requireActiveTenant()");
+  });
+});
+
+describe("App Review 132211: the claim prompt from any page, and Not now (2026-11-22)", () => {
+  const P = "p".repeat(64);
+  const C = "gotcha_shopify_pending";
+  const NEW = "random-randomizer.myshopify.com";
+  const pending = () => request(app()).get("/api/connectors/shopify/install/pending").set("Cookie", `${C}=${P}`);
+  beforeEach(() => {
+    H.owner.current = null;
+    H.pendings.set(P, { shopDomain: NEW, credentials: { accessToken: "shpat_new" } });
+  });
+
+  it("★ an empty workspace: attach, with when it lapses, nothing about another store", async () => {
+    const r = await pending();
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ shopDomain: NEW, action: "attach", current: null });
+    expect(r.body.data.blockedReason).toBeUndefined();
+    expect(Date.parse(r.body.data.expiresAt) - Date.now()).toBeGreaterThan(7190_000);
+    expect(JSON.stringify(r.body)).not.toMatch(/shpat_|pppp/);
+  });
+
+  it("★ the old store uninstalled (DISCONNECTED): attach directly, the old one named", async () => {
+    H.current.current = { shopDomain: "app-review-old.myshopify.com", status: "DISCONNECTED" };
+    const r = await pending();
+    expect(r.body.data).toMatchObject({ action: "attach", current: { shopDomain: "app-review-old.myshopify.com", status: "DISCONNECTED" } });
+  });
+
+  it("★ another store connected: replace, the current one named", async () => {
+    H.current.current = { shopDomain: "app-review-old.myshopify.com", status: "CONNECTED" };
+    const r = await pending();
+    expect(r.body.data).toMatchObject({ action: "replace", current: { shopDomain: "app-review-old.myshopify.com", status: "CONNECTED" } });
+  });
+
+  it("the same store coming back: attach, no current", async () => {
+    H.current.current = { shopDomain: NEW, status: "CONNECTED" };
+    const r = await pending();
+    expect(r.body.data).toMatchObject({ action: "attach", current: null });
+  });
+
+  it("blocked before a claim would refuse: Core unpaid, or the store held by another workspace", async () => {
+    H.corePaid.yes = false;
+    expect((await pending()).body.data).toMatchObject({ action: "blocked", blockedReason: "core_plan_required" });
+    H.corePaid.yes = true;
+    H.owner.current = { tenantId: "tenant-B", connectionId: "c9", status: "CONNECTED" };
+    expect((await pending()).body.data).toMatchObject({ action: "blocked", blockedReason: "held_by_other_workspace" });
+    H.owner.current = { tenantId: "tenant-B", connectionId: "c9", status: "DISCONNECTED" };
+    expect((await pending()).body.data).toMatchObject({ action: "attach" });
+  });
+
+  it("★ Not now: the parked install is dropped and the cookie cleared; nothing else is called", async () => {
+    const r = await request(app()).post("/api/connectors/shopify/install/pending/dismiss").set("Cookie", `${C}=${P}`).send({});
+    expect(r.status).toBe(204);
+    expect(H.dismissed).toEqual([P]);
+    expect(String(r.headers["set-cookie"] ?? "")).toMatch(/gotcha_shopify_pending=;.*(Expires=Thu, 01 Jan 1970|Max-Age=0)/);
+    expect(H.linkCalls).toEqual([]);
+    expect(H.billingCalls).toEqual([]);
+    expect((await pending()).status).toBe(404);
+  });
+
+  it("Not now needs the same sign-in and permission as the claim", async () => {
+    H.permission.granted = false;
+    expect((await request(app()).post("/api/connectors/shopify/install/pending/dismiss").set("Cookie", `${C}=${P}`)).status).toBe(403);
+    H.permission.granted = true;
+    H.authed.yes = false;
+    expect((await request(app()).post("/api/connectors/shopify/install/pending/dismiss").set("Cookie", `${C}=${P}`)).status).toBe(401);
+    expect(H.dismissed).toEqual([]);
   });
 });

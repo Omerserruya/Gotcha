@@ -45,6 +45,7 @@ import { SHOPIFY_LIVE_CHAT, loadChannel, saveChannelConfig, type ShopifyLiveChat
 import { resolveShopifyStore } from "./shopify-catalog.service";
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
 import { withErrorCode, ERROR_CODES_KNOWN } from "../lib/error-code";
+import { PENDING_CLAIM_IDENTITY } from "./shopify-install-intent.service";
 
 export type InstallStatus = "PENDING" | "ACTIVE" | "UNINSTALLED";
 
@@ -78,13 +79,19 @@ function toInstallation(row: any): ChatInstallation {
 
 // ─── Lookup ──────────────────────────────────────────────────
 
+/**
+ * Never a parked install (shopify-install-intent.service PENDING_CLAIM_IDENTITY, 2026-11-22): that row
+ * only holds an authorized store until someone signs in and claims it; it is not the shop's installation.
+ */
+const NOT_PARKED = { appIdentity: { not: PENDING_CLAIM_IDENTITY } };
+
 /** The one installation that may currently serve this shop, if any. */
 export async function findLiveInstallation(shopDomain: string): Promise<ChatInstallation | null> {
   const shop = normalizeShopifyShopDomain(shopDomain);
   if (!shop) return null;
   const row = await withCrossTenantAccess(async () =>
     (prisma as any).shopifyChatInstallation.findFirst({
-      where: { shopDomain: shop, status: { not: "UNINSTALLED" } },
+      where: { shopDomain: shop, status: { not: "UNINSTALLED" }, ...NOT_PARKED },
     }),
   );
   return row ? toInstallation(row) : null;
@@ -96,7 +103,7 @@ export async function findLatestInstallation(shopDomain: string): Promise<ChatIn
   if (!shop) return null;
   const row = await withCrossTenantAccess(async () =>
     (prisma as any).shopifyChatInstallation.findFirst({
-      where: { shopDomain: shop },
+      where: { shopDomain: shop, ...NOT_PARKED },
       orderBy: [{ status: "asc" }, { installedAt: "desc" }],
     }),
   );
@@ -146,7 +153,7 @@ export async function recordAuthorizedInstall(input: {
 
   return withCrossTenantAccess(async () => {
     const existing = await (prisma as any).shopifyChatInstallation.findFirst({
-      where: { shopDomain: shop, status: { not: "UNINSTALLED" } },
+      where: { shopDomain: shop, status: { not: "UNINSTALLED" }, ...NOT_PARKED },
     });
 
     if (existing) {
@@ -164,7 +171,7 @@ export async function recordAuthorizedInstall(input: {
     // Reinstall: revive the most recent retired row so the merchant keeps
     // their channel, conversations and configuration.
     const retired = await (prisma as any).shopifyChatInstallation.findFirst({
-      where: { shopDomain: shop, status: "UNINSTALLED" },
+      where: { shopDomain: shop, status: "UNINSTALLED", ...NOT_PARKED },
       orderBy: { uninstalledAt: "desc" },
     });
     if (retired) {

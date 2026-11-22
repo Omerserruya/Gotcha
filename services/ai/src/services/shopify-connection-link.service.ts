@@ -225,6 +225,23 @@ export async function pendingStoreReplacement(
 }
 
 /**
+ * The workspace's Shopify store as the claim prompt describes it (App Review 132211, 2026-11-22):
+ * its domain and whether it is still connected (DISCONNECTED: uninstalled, attaching replaces nothing
+ * live). Null when the workspace never had one. One tenant's own row.
+ */
+export async function currentStoreOf(tenantId: string): Promise<{ shopDomain: string; status: "CONNECTED" | "DISCONNECTED" } | null> {
+  const cat = await findCatalog("shopify");
+  if (!cat) return null;
+  const row = await (prisma as any).tenantIntegration.findUnique({
+    where: { tenantId_integrationId: { tenantId, integrationId: cat.id } },
+    select: { status: true, config: true },
+  });
+  const shopDomain = normalizeShopifyShopDomain((row?.config as any)?.shopDomain);
+  if (!row || !shopDomain) return null;
+  return { shopDomain, status: String(row.status) === "DISCONNECTED" ? "DISCONNECTED" : "CONNECTED" };
+}
+
+/**
  * Write the verified installation into a workspace.
  *
  * `tenantId` must come from a validated session or a server-side intent.

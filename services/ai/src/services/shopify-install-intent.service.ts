@@ -50,7 +50,7 @@
  */
 
 import crypto from "crypto";
-import { getRedis, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { getRedis, encryptCredentials, decryptCredentials, prisma, withCrossTenantAccess } from "@chatcenter/shared";
 
 /**
  * How long the merchant has to finish on Shopify after clicking Connect.
@@ -275,6 +275,127 @@ export interface PendingConnectionSummary {
   createdAt: number;
 }
 
+// ─── The durable copy (Shopify App Review 132211, 2026-11-22) ──
+//
+// Redis alone was the only record of an authorized store: a flush, an eviction or an expiry lost it with
+// nothing to recover, and the reviewer's store had zero rows anywhere. The pending install is now ALSO a
+// row, written before any GOTCHA auth: a shopify_chat_installations row (no migration) that every
+// by-shop reader skips by its appIdentity, so it never counts as the shop's installation.
+//   appIdentity  PENDING_CLAIM_IDENTITY
+//   status       PENDING, tenantId null
+//   tokenScopes  "pending:" + sha256(handle), the only way to it (the handle itself is never stored)
+//   accessToken  the same JSON the Redis record holds (its credentials already encrypted)
+//   installedAt  when it was parked; it lapses after PENDING_CONNECTION_TTL_SECONDS
+// The claim spends it exactly once: the row's delete is the one-shot when Redis has nothing.
+
+/** The appIdentity of a parked, unclaimed install. Readers of a shop's installation skip it. */
+export const PENDING_CLAIM_IDENTITY = "pending-claim";
+const handleRef = (handle: string) => `pending:${crypto.createHash("sha256").update(handle).digest("hex")}`;
+
+async function writeDurablePending(handle: string, payload: PendingConnection): Promise<void> {
+  try {
+    await withCrossTenantAccess(() => (prisma as any).shopifyChatInstallation.create({
+      data: {
+        shopDomain: payload.shopDomain,
+        status: "PENDING",
+        appIdentity: PENDING_CLAIM_IDENTITY,
+        tokenScopes: handleRef(handle),
+        accessToken: JSON.stringify(payload),
+        verifiedDomains: [],
+      },
+    }));
+  } catch (err: any) {
+    // Redis still holds it: the install is not lost, only less durable.
+    console.warn("[shopify-install] durable pending not written:", err?.message);
+  }
+}
+
+/**
+ * Lapsed parked installs hold a token nobody can claim any more: deleted. Run on every new park (installs
+ * are rare, so this is cheap) and exported for any sweep that wants it.
+ */
+export async function sweepLapsedPending(now = Date.now()): Promise<number> {
+  try {
+    const r: any = await withCrossTenantAccess(() => (prisma as any).shopifyChatInstallation.deleteMany({
+      where: { appIdentity: PENDING_CLAIM_IDENTITY, installedAt: { lt: new Date(now - PENDING_CONNECTION_TTL_SECONDS * 1000) } },
+    }));
+    return r?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function fresh(row: { installedAt?: Date | string | null } | null, now = Date.now()): boolean {
+  const at = row?.installedAt ? new Date(row.installedAt).getTime() : NaN;
+  return Number.isFinite(at) && now - at < PENDING_CONNECTION_TTL_SECONDS * 1000;
+}
+
+/** The parked record by handle: Redis first, else the durable row while it is fresh. Never spends it. */
+async function readPendingRaw(handle: string): Promise<string | null> {
+  try {
+    const raw = await getRedis().get(pendingKey(handle));
+    if (raw) return raw;
+  } catch {
+    /* the row below */
+  }
+  try {
+    const row: any = await withCrossTenantAccess(() => (prisma as any).shopifyChatInstallation.findFirst({
+      where: { appIdentity: PENDING_CLAIM_IDENTITY, tokenScopes: handleRef(handle), tenantId: null },
+      select: { accessToken: true, installedAt: true },
+    }));
+    return row && fresh(row) ? row.accessToken ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Spend the parked record. Exactly once across Redis and the row; null when neither had it (or it lapsed). */
+async function takePendingRaw(handle: string): Promise<string | null> {
+  let fromRedis: string | null = null;
+  let redisDown = false;
+  try {
+    const redis: any = getRedis();
+    fromRedis =
+      typeof redis.getdel === "function"
+        ? await redis.getdel(pendingKey(handle))
+        : await (async () => {
+            const v = await redis.get(pendingKey(handle));
+            if (v) await redis.del(pendingKey(handle));
+            return v;
+          })();
+  } catch (err: any) {
+    redisDown = true;
+    console.error("[shopify-install] pending store unavailable, the durable row decides:", err?.message);
+  }
+  let row: { id: string; accessToken: string | null; installedAt: Date } | null = null;
+  let spent = 0;
+  try {
+    row = await withCrossTenantAccess<any>(() => (prisma as any).shopifyChatInstallation.findFirst({
+      where: { appIdentity: PENDING_CLAIM_IDENTITY, tokenScopes: handleRef(handle), tenantId: null },
+      select: { id: true, accessToken: true, installedAt: true },
+    }));
+    if (row) {
+      const gone: any = await withCrossTenantAccess(() => (prisma as any).shopifyChatInstallation.deleteMany({
+        where: { id: row!.id, appIdentity: PENDING_CLAIM_IDENTITY },
+      }));
+      spent = Number(gone?.count ?? 0);
+    }
+  } catch (err: any) {
+    // FAIL CLOSED: an unreadable row is no claim from it (spent stays 0 below), and with Redis down too
+    // nothing is returned at all, since a first claim cannot be told from a second.
+    console.warn(`[shopify-install] durable pending unreadable${redisDown ? " and Redis down: nothing claimed" : ""}:`, err?.message);
+  }
+  if (fromRedis) return fromRedis;
+  // Redis had nothing: the row's delete is the one-shot. Two claims racing: only one deleted it.
+  return row && spent === 1 && fresh(row) ? row.accessToken : null;
+}
+
+/** Drop a parked install without claiming it (the merchant said no). Touches no store at Shopify. */
+export async function discardPendingConnection(handle: unknown): Promise<void> {
+  if (!isHandle(handle)) return;
+  await takePendingRaw(handle).catch(() => null);
+}
+
 /**
  * Park a verified installation that has no workspace yet.
  *
@@ -296,12 +417,14 @@ export async function createPendingConnection(input: {
     flow: input.flow,
     createdAt: Date.now(),
   };
-  await getRedis().set(
-    pendingKey(handle),
-    JSON.stringify(payload),
-    "EX",
-    PENDING_CONNECTION_TTL_SECONDS,
-  );
+  // The row first: it is the copy that survives. Then the cache.
+  await sweepLapsedPending();
+  await writeDurablePending(handle, payload);
+  try {
+    await getRedis().set(pendingKey(handle), JSON.stringify(payload), "EX", PENDING_CONNECTION_TTL_SECONDS);
+  } catch (err: any) {
+    console.warn("[shopify-install] pending cache not written, the row holds it:", err?.message);
+  }
   return handle;
 }
 
@@ -317,7 +440,7 @@ export async function peekPendingConnection(
 ): Promise<PendingConnectionSummary | null> {
   if (!isHandle(handle)) return null;
   try {
-    const raw = await getRedis().get(pendingKey(handle));
+    const raw = await readPendingRaw(handle);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingConnection;
     if (typeof parsed?.shopDomain !== "string") return null;
@@ -339,7 +462,7 @@ export async function peekPendingConnection(
 export async function peekPendingAccessToken(handle: unknown): Promise<string | null> {
   if (!isHandle(handle)) return null;
   try {
-    const raw = await getRedis().get(pendingKey(handle));
+    const raw = await readPendingRaw(handle);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingConnection;
     if (!parsed?.credentialsBlob) return null;
@@ -364,24 +487,8 @@ export async function consumePendingConnection(handle: unknown): Promise<{
   flow?: string;
 } | null> {
   if (!isHandle(handle)) return null;
-  let raw: string | null = null;
-  try {
-    const redis: any = getRedis();
-    raw =
-      typeof redis.getdel === "function"
-        ? await redis.getdel(pendingKey(handle))
-        : await (async () => {
-            const v = await redis.get(pendingKey(handle));
-            if (v) await redis.del(pendingKey(handle));
-            return v;
-          })();
-  } catch (err: any) {
-    // FAIL CLOSED. Without the store we cannot tell a first claim from a
-    // second, and a token that gets written twice is a token that can be
-    // written into two different workspaces.
-    console.error("[shopify-install] pending store unavailable:", err?.message);
-    return null;
-  }
+  // FAIL CLOSED: a token written twice is a token that can land in two workspaces (takePendingRaw).
+  const raw = await takePendingRaw(handle);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as PendingConnection;

@@ -52,6 +52,7 @@ import {
   readDurableSetting,
   writeDurableSetting,
   normalizeShopifyShopDomain,
+  coreAllowsShopifyConnect,
 } from "@chatcenter/shared";
 import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import {
@@ -62,6 +63,8 @@ import {
   peekPendingAccessToken,
   consumePendingConnection,
   clearPendingInstallCookie,
+  discardPendingConnection,
+  PENDING_CONNECTION_TTL_SECONDS,
   INSTALL_INTENT_COOKIE,
   INSTALL_INTENT_TTL_SECONDS,
   PENDING_INSTALL_COOKIE,
@@ -72,6 +75,7 @@ import {
   pendingStoreReplacement,
   findShopOwner,
   shopHeldElsewhere,
+  currentStoreOf,
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
 
@@ -419,14 +423,45 @@ router.get(
     // back in a response body would place it where a script, a referrer header
     // or a URL could carry it. The claim reads the same cookie instead, so the
     // browser never needs to hold the value at all.
+    // What the person can do with it, from any page (App Review 132211, 2026-11-22): attach it,
+    // replace the store this workspace holds (CONNECTED: their explicit answer), or nothing until a
+    // refusal is resolved. Asked here so the prompt never offers a claim the claim would refuse.
+    const current = await currentStoreOf(req.tenantId!).catch(() => null);
+    const sameStore = current?.shopDomain === summary.shopDomain;
+    const core = (req.user as any)?.role === "SYSTEM_ADMIN" ? { allowed: true } : await coreAllowsShopifyConnect(req.tenantId!).catch(() => ({ allowed: true }));
+    const elsewhere = shopHeldElsewhere(await findShopOwner(summary.shopDomain).catch(() => null), req.tenantId!);
+    const blockedReason = !core.allowed ? "core_plan_required" : elsewhere ? "held_by_other_workspace" : null;
+    const action = blockedReason ? "blocked" : current?.status === "CONNECTED" && !sameStore ? "replace" : "attach";
     res.json({
       data: {
         shopDomain: summary.shopDomain,
         // Lets the UI say "we found the store you just authorized" rather than
         // implying the merchant navigated here on purpose.
         recovered: !singleValue(req.query.handle),
+        expiresAt: new Date(summary.createdAt + PENDING_CONNECTION_TTL_SECONDS * 1000).toISOString(),
+        current: current && !sameStore ? current : null,
+        action,
+        ...(blockedReason ? { blockedReason } : {}),
       },
     });
+  },
+);
+
+/**
+ * "Not now" on the claim prompt (App Review 132211, 2026-11-22): the parked install is dropped and the
+ * cookie cleared. Nothing at Shopify is touched: the store the merchant just authorized is never
+ * uninstalled from here, and installing again from Shopify parks it again.
+ */
+router.post(
+  "/connectors/shopify/install/pending/dismiss",
+  authenticate,
+  resolveTenant,
+  requireOnboardingOrActiveTenant(),
+  canConnectSystems,
+  async (req: Request, res: Response) => {
+    await discardPendingConnection(readPendingCookie(req));
+    clearPendingInstallCookie(res);
+    res.status(204).end();
   },
 );
 
