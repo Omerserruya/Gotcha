@@ -897,6 +897,17 @@ export function storeSellsBySize(storeUrl: string): boolean {
 }
 
 /**
+ * A store over the local limit (five full pages) keeps that verdict for CATALOG_OVER_LIMIT_MS (2026-11-19).
+ * Nothing of such a catalogue is kept, and every warm pass read its five pages per language again for no cached
+ * answer (one store on prod: about 1,800 full pages a day). Inside the window neither a warm pass nor a search
+ * reads the catalogue; a search is answered by the store's own query, as before. After the window the next
+ * caller starts the read again in the background and never waits for it: a store that shrank under the limit is
+ * held from then on, and one still over it gets a new window. Late by the window at most, and only in speed: the
+ * store's own query answered meanwhile.
+ */
+export const CATALOG_OVER_LIMIT_MS = 6 * 60 * 60_000;
+const overLimit = new Map<string, number>();
+/**
  * The store's whole published catalogue, at most two pages of 100, ten
  * minutes per store and language; null when it is bigger (a full second page).
  * A Hebrew ask reads lang=he: on a WPML / Polylang store that is the Hebrew
@@ -905,6 +916,16 @@ export function storeSellsBySize(storeUrl: string): boolean {
  */
 async function wholeCatalog(auth: string, base: string, lang: string | null, freshMs = CATALOG_FRESH_MS): Promise<any[] | null> {
   const key = `catalog|${base}|${lang ?? ""}`;
+  // Known to be over the limit: inside the window nothing reads it, and after it the pages are read again off
+  // the caller's wait.
+  const over = overLimit.get(key);
+  if (over !== undefined) {
+    if (Date.now() - over >= CATALOG_OVER_LIMIT_MS) void loadCatalog(auth, base, lang, key, freshMs).catch(() => {});
+    return null;
+  }
+  return loadCatalog(auth, base, lang, key, freshMs);
+}
+function loadCatalog(auth: string, base: string, lang: string | null, key: string, freshMs: number): Promise<any[] | null> {
   return swrCached(catalogCache, key, freshMs, CATALOG_STALE_MS, async () => {
     // The loader always reads the store itself, never the local answers below (a
     // background refresh started inside a search must reach the store).
@@ -923,7 +944,7 @@ async function wholeCatalog(auth: string, base: string, lang: string | null, fre
       const end = pages.findIndex((l) => l.length < 100);
       list = end < 0 ? null : pages.slice(0, end + 1).flat();
     }
-    if (list) rememberSizedStore(base, list);
+    if (list) { overLimit.delete(key); rememberSizedStore(base, list); } else overLimit.set(key, Date.now());
     return list;
   }, undefined, CATALOG_FRESH_MS);
 }
