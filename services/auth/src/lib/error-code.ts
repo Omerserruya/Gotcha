@@ -21,6 +21,9 @@ export const ERROR_CODES_KNOWN = {
   WATCH_FAILED: "Connected, but Gmail push notifications could not be set up, so new mail will not arrive.",
   OUTLOOK_SUBSCRIPTION_FAILED: "Connected, but the Microsoft Graph mail subscription could not be created, so new mail will not arrive.",
   NOT_CONFIGURED: "This platform's app credentials are not set on this server.",
+  // WhatsApp access lost (2026-11-22), written by the channel health worker (incoming-worker).
+  WHATSAPP_ACCESS_REMOVED: "GOTCHA's access to this WhatsApp Business account was removed at Meta. Connect the number again.",
+  WHATSAPP_NUMBER_UNREADABLE: "Meta refused two checks of this number in a row: it does not exist there or GOTCHA may not read it. Connect the number again.",
 } as const;
 export type KnownErrorCode = keyof typeof ERROR_CODES_KNOWN;
 

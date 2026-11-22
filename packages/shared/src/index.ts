@@ -929,7 +929,8 @@ export { signMediaUrl, verifyMediaSignature, mediaSignatureShapeOk, presentMedia
 
 // A WhatsApp number's own details from Meta (the channel check and the
 // on-demand refresh read it the same way).
-export { whatsappNumberDetails, withWhatsAppNumberDetails, type WhatsAppNumberDetails } from "./lib/whatsapp-number-details";
+export { whatsappAccessRemoval, WHATSAPP_ACCESS_REMOVAL_EVENTS, type WhatsAppAccessRemoval, type WhatsAppAccessRemovalEvent } from "./whatsapp/access-removal";
+export { whatsappNumberDetails, readWhatsAppNumber, withWhatsAppNumberDetails, type WhatsAppNumberDetails, type WhatsAppNumberRead } from "./lib/whatsapp-number-details";
 
 export {
   metaGraphVersion,

@@ -22,6 +22,8 @@ import {
   metaTemplateStatus,
   applyPlatformTemplateStatus,
   notePlatformPhoneQuality,
+  channelHealthQueue,
+  whatsappAccessRemoval,
 } from "@chatcenter/shared";
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -231,6 +233,19 @@ router.post("/", async (req: Request, res: Response) => {
           if (await isPlatformWaba(String(entry.id || ""))) {
             await notePlatformPhoneQuality(c.value || {}).catch((e: any) => console.warn("[WEBHOOK] platform quality update failed:", e?.message));
           }
+        }
+        // Meta removed our app from a business's WhatsApp account
+        // (PARTNER_REMOVED, PARTNER_APP_UNINSTALLED; 2026-11-22). Nothing read
+        // this before, so the channel went on saying CONNECTED. The webhook only
+        // forwards it: the channel health worker owns the channel's status. The
+        // WABA is the one named inside the value, never entry.id.
+        for (const c of (entry.changes || []).filter((x: any) => x.field === "account_update")) {
+          const removal = whatsappAccessRemoval(c.value);
+          if (!removal) continue;
+          console.warn(`[WEBHOOK] WhatsApp ${removal.event} for WABA ${removal.wabaId}: forwarded to the channel health worker`);
+          await channelHealthQueue
+            .add("whatsapp-access-removed", { type: "whatsapp_access_removed", ...removal }, { attempts: 5, backoff: { type: "exponential", delay: 5_000 }, removeOnComplete: { count: 50 }, removeOnFail: { count: 50 } })
+            .catch((e: any) => console.error(`[WEBHOOK] could not forward WhatsApp ${removal.event} for WABA ${removal.wabaId}:`, e?.message));
         }
         const templateChanges = (entry.changes || []).filter((c: any) => TEMPLATE_FIELDS.has(c.field));
         if (templateChanges.length === 0) continue;
