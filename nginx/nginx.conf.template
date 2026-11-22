@@ -2420,7 +2420,9 @@ http {
         #   its own test if a screen exists that its list does not permit;
         #   nginx cannot read that directory, so this line is the copy that
         #   drifts. Measured before this change: app=200, edge=404.
-        location ~ ^/(en|he)/(sign-in|recover)(/|$) {
+        #
+        # 2026-11-22: sign-up joins the list (the public sign-up screen).
+        location ~ ^/(en|he)/(sign-in|recover|sign-up)(/|$) {
             proxy_pass http://frontend_auth;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
@@ -2443,6 +2445,16 @@ http {
         }
 
         location ^~ /recover {
+            proxy_pass http://frontend_auth;
+            proxy_http_version 1.1;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key    "";
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ^~ /sign-up {
             proxy_pass http://frontend_auth;
             proxy_http_version 1.1;
             proxy_set_header Host              $host;
@@ -2544,6 +2556,21 @@ http {
         # invited user's setup on auth-dev posted here and got a 404 page (2026-11-18). Only this one
         # path of the auth service is opened here: nothing else of /api/auth.
         location ~ ^/api/auth/setup/[^/]+/accept$ {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # The public sign-up form's submit (2026-11-22). The browser posts it
+        # same-origin, so the auth service sees each visitor's own address and
+        # its per-address limit counts visitors, not the page's server. Only
+        # this exact path: /api/auth/signup/config is read server-side and
+        # nothing else of /api/auth is opened here.
+        location = /api/auth/signup {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
