@@ -945,3 +945,14 @@ describe('★★ W1 (2026-11-22) - a web chat that moved to WhatsApp is ONE thre
     );
   });
 });
+
+describe('★ W1 - a merged website row cannot be quoted (the send route refuses it)', () => {
+  it('no Reply on a row with originChannel; Reply stays on the thread’s own rows', async () => {
+    await show([
+      message({ id: 'w1', originChannel: 'WEBCHAT', body: 'From the site' }),
+      message({ id: 'a1', body: 'On WhatsApp' }),
+    ]);
+    const replies = screen.queryAllByRole('button', { name: messages.stream.replyTo });
+    expect(replies).toHaveLength(1);
+  });
+});
