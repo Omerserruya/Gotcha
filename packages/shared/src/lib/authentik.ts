@@ -96,12 +96,18 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
  * same person. The created identity has no usable password: the user sets one
  * through Authentik's own recovery/enrolment email, so no credential ever
  * transits GOTCHA.
+ *
+ * A new identity is stored in lowercase. Authentik matches an outside sign-in
+ * (Google) to a person by the exact email, and those arrive in lowercase, so
+ * an address stored as "Dana@Acme.com" would never be matched. An identity that
+ * already exists is returned as it is, whatever its case: the same address in
+ * another case is the same person, never a second one.
  */
 export async function ensureIdentity(email: string, name: string): Promise<AuthentikIdentity> {
-  const existing = await api<{ results: any[] }>(
-    `/core/users/?email=${encodeURIComponent(email)}`,
-  );
-  const found = existing.results?.find((u) => u.email === email);
+  const typed = String(email ?? "").trim();
+  const lower = typed.toLowerCase();
+  if (!lower) throw new Error("[authentik] an identity needs an email");
+  const found = await findIdentityAnyCase(typed, lower);
   if (found) {
     return { subject: found.uuid, pk: found.pk, email: found.email, username: found.username };
   }
@@ -109,8 +115,8 @@ export async function ensureIdentity(email: string, name: string): Promise<Authe
   const created = await api<any>("/core/users/", {
     method: "POST",
     body: JSON.stringify({
-      username: email,
-      email,
+      username: lower,
+      email: lower,
       name,
       is_active: true,
       path: "users",
@@ -124,6 +130,39 @@ export async function ensureIdentity(email: string, name: string): Promise<Authe
   });
 
   return { subject: created.uuid, pk: created.pk, email: created.email, username: created.username };
+}
+
+/** How many pages of a search are read before giving up on it. */
+const IDENTITY_SEARCH_MAX_PAGES = 5;
+
+/**
+ * The Authentik user who holds this address, in any case.
+ *
+ * Authentik's `email` filter is exact, so it is asked twice (as typed, then in
+ * lowercase). Its `search` is "contains" over email, name and username, so it
+ * finds an address stored in another case, and also other people: only a row
+ * whose email is this address, compared in lowercase, is ever returned.
+ *
+ * An empty address matches nobody. Authentik ignores an empty filter and
+ * answers with everyone, its own service accounts (which have no email) first.
+ */
+async function findIdentityAnyCase(typed: string, lower: string): Promise<any | null> {
+  if (!lower) return null;
+  const same = (u: any) => typeof u?.email === "string" && u.email.trim().toLowerCase() === lower;
+  for (const exact of typed === lower ? [lower] : [typed, lower]) {
+    const res = await api<{ results?: any[] }>(`/core/users/?email=${encodeURIComponent(exact)}`);
+    const hit = res?.results?.find((u) => u?.email === exact);
+    if (hit) return hit;
+  }
+  for (let page = 1; page <= IDENTITY_SEARCH_MAX_PAGES; page++) {
+    const res = await api<{ results?: any[]; pagination?: { next?: number } }>(
+      `/core/users/?search=${encodeURIComponent(lower)}&page_size=100&page=${page}`,
+    );
+    const hit = res?.results?.find(same);
+    if (hit) return hit;
+    if (!res?.pagination?.next) break;
+  }
+  return null;
 }
 
 /**
@@ -485,12 +524,10 @@ export async function getLastLoginBySubject(subject: string): Promise<string | n
   }
 }
 
-/** Look up an identity's Authentik pk by subject (uuid). */
-/** Look an identity up by email without creating one. Exact match only. */
+/** Look an identity up by email, in any case, without creating one. */
 export async function findIdentityByEmail(email: string): Promise<AuthentikIdentity | null> {
-  const res = await api<{ results: any[] }>(`/core/users/?email=${encodeURIComponent(email)}`);
-  const want = email.toLowerCase();
-  const u = res.results?.find((x) => typeof x.email === "string" && x.email.toLowerCase() === want);
+  const typed = String(email ?? "").trim();
+  const u = await findIdentityAnyCase(typed, typed.toLowerCase());
   if (!u) return null;
   return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
 }

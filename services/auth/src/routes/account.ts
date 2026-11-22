@@ -30,7 +30,6 @@ import {
   deleteUserDevice,
   listUserSourceConnections,
   deleteOAuthSourceConnection,
-  hasUsablePassword,
   readLatestSignIn,
   sameAuthentikId,
   deleteRecoveryToken,
@@ -42,6 +41,7 @@ import {
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { sendEmailChangeVerification } from "../services/notification.service";
+import { googleSourceSlug, hasAnotherWayIn, emailChangeGoogleStep } from "../lib/google-sign-in";
 
 const router = Router();
 router.use(authenticate);
@@ -391,17 +391,7 @@ router.get("/login-history", async (req: Request, res: Response): Promise<void> 
 // When the password question cannot be answered (the IdP failed, or the policy
 // that answers it is not set up) the answer is treated as "no password", so the
 // doubt always falls on the side of keeping the person able to sign in.
-
-/** The Authentik source that is Google. Unset = the feature is off everywhere. */
-function googleSourceSlug(): string {
-  return (process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG || "").trim();
-}
-
-/** Whether the Google connection can go, given everything else the person holds. */
-async function hasAnotherWayIn(pk: number, otherConnections: number): Promise<boolean> {
-  if (otherConnections > 0) return true;
-  return (await hasUsablePassword(pk)) === true;
-}
+// The rule itself lives in lib/google-sign-in, shared with the email change.
 
 const GOOGLE_OFF = { available: false, connected: false, email: null, connectedAt: null, canDisconnect: false, reason: null };
 
@@ -670,6 +660,16 @@ router.post("/email-change", async (req: Request, res: Response): Promise<void> 
     });
     if (clash) { res.status(409).json({ error: "email_taken" }); return; }
 
+    // A changed email removes the Google connection (see verify). When that
+    // would leave the person no way in, say so now, before a link is mailed.
+    // Verify asks again and is the authority, so an identity that cannot be
+    // read here is not a refusal.
+    if (googleSourceSlug()) {
+      const idp = await callerIdentity(req).catch(() => null);
+      const step = idp ? await emailChangeGoogleStep(idp.pk).catch(() => null) : null;
+      if (step?.state === "blocked") { res.status(409).json({ error: "no_other_sign_in" }); return; }
+    }
+
     const token = signEmailChange({ userId: req.user!.userId, newEmail: raw, exp: Date.now() + EMAIL_CHANGE_TTL_MS });
     const base = resolveAppPublicUrl(process.env);
     const verifyUrl = `${base}/account/verify-email?token=${encodeURIComponent(token)}`;
@@ -722,6 +722,34 @@ router.post("/email-change/verify", async (req: Request, res: Response): Promise
   });
   if (clash) { res.status(409).json({ error: "email_taken" }); return; }
 
+  // The Google connection was made by matching the OLD address, so it goes when
+  // the address changes, and the change is refused while it is the person's
+  // only way in (lib/google-sign-in). It goes FIRST: if the change then fails,
+  // the person still has their other way in and can connect again. The other
+  // order could leave the old Google account opening an account that now
+  // carries a new address.
+  let googleDisconnected = false;
+  if (googleSourceSlug() && me.identity.authentikSubject) {
+    try {
+      const idp = await findIdentityBySubject(me.identity.authentikSubject);
+      const step = idp ? await emailChangeGoogleStep(idp.pk) : null;
+      if (step?.state === "blocked") { res.status(409).json({ error: "no_other_sign_in" }); return; }
+      if (step?.state === "remove") {
+        await deleteOAuthSourceConnection(step.connectionId);
+        googleDisconnected = true;
+        void writeAudit({
+          tenantId: me.tenantId, actorType: "user", actorId: payload.userId,
+          action: AuditAction.SIGN_IN_CONNECTION_REMOVED, targetType: "user", targetId: payload.userId,
+          metadata: { self: true, provider: "google", reason: "email_change" },
+        });
+      }
+    } catch (err: any) {
+      console.error("[account] email-change: the Google connection could not be read or removed, nothing changed:", err?.message);
+      res.status(502).json({ error: "idp_sync_failed" });
+      return;
+    }
+  }
+
   const previousIdentityEmail = me.identity.email;
   // Identity master + every membership display mirror move together.
   await withCrossTenantAccess(() => prisma.$transaction([
@@ -742,16 +770,17 @@ router.post("/email-change/verify", async (req: Request, res: Response): Promise
       prisma.user.updateMany({ where: { identityId: me.identityId }, data: { email: me.email } }),
     ]));
     console.error("[account] email-change IdP sync failed, rolled back:", err?.message);
-    res.status(502).json({ error: "idp_sync_failed" });
+    // The email is back as it was; a Google connection that was removed is not.
+    res.status(502).json({ error: "idp_sync_failed", ...(googleDisconnected ? { googleDisconnected: true } : {}) });
     return;
   }
 
   void writeAudit({
     tenantId: me.tenantId, actorType: "user", actorId: payload.userId,
     action: AuditAction.EMAIL_CHANGE_CONFIRMED, targetType: "user", targetId: payload.userId,
-    metadata: { self: true, from: me.email, to: payload.newEmail },
+    metadata: { self: true, from: me.email, to: payload.newEmail, ...(googleDisconnected ? { googleDisconnected: true } : {}) },
   });
-  res.json({ ok: true, email: payload.newEmail });
+  res.json({ ok: true, email: payload.newEmail, googleDisconnected });
 });
 
 export default router;

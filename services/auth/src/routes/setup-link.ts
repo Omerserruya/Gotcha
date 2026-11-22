@@ -33,6 +33,7 @@ import {
   ownerOfSetupToken,
 } from "../services/setup-link.service";
 import { sendSetupLinkEmail } from "../services/notification.service";
+import { googleSourceSlug } from "../lib/google-sign-in";
 
 const router = Router();
 
@@ -81,6 +82,13 @@ function expiredPage(reason: string, token?: string): string {
  * addresses are registered - the same reasoning the resend path already
  * follows.
  */
+/**
+ * Whether "Sign in with Google" is switched on. It says nothing about the link
+ * or the person, which is why every answer carries it, a dead link's too: the
+ * page must not start a sign-in flow just to learn it.
+ */
+const googleSignInOn = (): boolean => googleSourceSlug() !== "";
+
 router.get("/:token/state", redeemLimiter, async (req: Request, res: Response): Promise<void> => {
   const resolution = await resolveSetupLink(String(req.params.token ?? ""));
 
@@ -93,6 +101,7 @@ router.get("/:token/state", redeemLimiter, async (req: Request, res: Response): 
         name: null,
         workspace: null,
         expiresAt: null,
+        google: googleSignInOn(),
       },
     });
     return;
@@ -117,6 +126,7 @@ router.get("/:token/state", redeemLimiter, async (req: Request, res: Response): 
       name: link.name,
       workspace: tenant?.name ?? null,
       expiresAt: alreadyUsed?.expiresAt?.toISOString() ?? null,
+      google: googleSignInOn(),
     },
   });
 });

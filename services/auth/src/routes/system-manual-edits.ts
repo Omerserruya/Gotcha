@@ -13,7 +13,9 @@ import {
   findIdentityBySubject,
   findIdentityByEmail,
   updateIdentity,
+  deleteOAuthSourceConnection,
 } from "@chatcenter/shared";
+import { emailChangeGoogleStep } from "../lib/google-sign-in";
 
 /**
  * SYSTEM_ADMIN console: manual edits to one organization (Omer, 2026-10-23).
@@ -142,6 +144,10 @@ const emailSchema = z.object({
  * is one login across every tenant, and an operator editing this tenant must
  * not move a person's login everywhere else. The console offers the other
  * route instead - invite the new address, then remove the old member.
+ *
+ * A Google connection goes with the old address (it was made by matching it),
+ * and the answer's warnings say so. While that connection is the person's only
+ * way in, the change is refused: NO_OTHER_SIGN_IN, nothing changed.
  */
 router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), validate(emailSchema), async (req: Request, res: Response): Promise<void> => {
   try {
@@ -198,6 +204,10 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
     // Authentik first. Without a subject there is no IdP user to move, and the
     // local rows are all there is.
     let idp: { pk: number; email: string; username: string } | null = null;
+    // Set once the person's Google connection has been removed, so every answer
+    // after that point says so, a failure's too.
+    let googleRemoved = false;
+    const removedNote = () => (googleRemoved ? { warnings: ["google_connection_removed"] } : {});
     if (identity?.authentikSubject) {
       try {
         const found = await findIdentityBySubject(identity.authentikSubject);
@@ -209,6 +219,29 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
         if (owner && owner.subject !== identity.authentikSubject) {
           res.status(409).json({ error: "Another login already uses that email", code: "EMAIL_TAKEN" });
           return;
+        }
+        // The Google connection was made by matching the old address, so it
+        // goes with it, and the change is refused while it is the person's
+        // only way in (lib/google-sign-in). It goes before the email moves: a
+        // failure after this point leaves the person their password, where the
+        // other order could leave the old Google account opening a login that
+        // now carries a new address.
+        const google = await emailChangeGoogleStep(found.pk);
+        if (google.state === "blocked") {
+          res.status(409).json({
+            error: "This person signs in with Google only; changing the email would remove that and leave them no way in. They need a password first",
+            code: "NO_OTHER_SIGN_IN",
+          });
+          return;
+        }
+        if (google.state === "remove") {
+          await deleteOAuthSourceConnection(google.connectionId);
+          googleRemoved = true;
+          void writeAudit({
+            tenantId, actorType: "user", actorId: actorOf(req),
+            action: AuditAction.SIGN_IN_CONNECTION_REMOVED, targetType: "user", targetId: user.id,
+            metadata: { self: false, provider: "google", reason: "email_change" },
+          });
         }
         idp = { pk: found.pk, email: found.email, username: found.username };
         // Usernames were created as the email; one that was changed on purpose
@@ -223,7 +256,13 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
           console.error("Admin email: Authentik update threw:", err?.message ?? err);
           const now = await findIdentityBySubject(identity.authentikSubject);
           if ((now?.email ?? "").toLowerCase() !== newEmail) {
-            res.status(502).json({ error: "Authentik did not accept the change; nothing was changed", code: "IDP_SYNC_FAILED" });
+            res.status(502).json({
+              error: googleRemoved
+                ? "Authentik did not accept the change; the email was not changed, and the Google connection was removed"
+                : "Authentik did not accept the change; nothing was changed",
+              code: "IDP_SYNC_FAILED",
+              ...removedNote(),
+            });
             return;
           }
         }
@@ -232,7 +271,7 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
         // holds is unknown, so nothing local is written. Retrying is safe -
         // the new email resolving to this same login is not a clash.
         console.error("Admin email: Authentik state unknown:", err?.message ?? err);
-        res.status(502).json({ error: "Could not confirm the change in Authentik; nothing was changed here, try again", code: "IDP_STATE_UNKNOWN" });
+        res.status(502).json({ error: "Could not confirm the change in Authentik; nothing was changed here, try again", code: "IDP_STATE_UNKNOWN", ...removedNote() });
         return;
       }
     }
@@ -257,7 +296,7 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
     void writeAudit({
       tenantId, actorType: "user", actorId: actorOf(req),
       action: AuditAction.ADMIN_EMAIL_CHANGED, targetType: "user", targetId: user.id,
-      metadata: { before, after, reason: req.body.reason, idpUpdated: !!idp },
+      metadata: { before, after, reason: req.body.reason, idpUpdated: !!idp, ...(googleRemoved ? { googleDisconnected: true } : {}) },
     });
 
     res.json({
@@ -265,7 +304,7 @@ router.patch("/tenants/:id/admin-email", authenticate, requireSystemAdmin(), val
         before,
         after,
         planAccess: await planAccessView(tenantId),
-        warnings: idp ? [] : ["no_idp_identity"],
+        warnings: [...(idp ? [] : ["no_idp_identity"]), ...(googleRemoved ? ["google_connection_removed"] : [])],
       },
     });
   } catch (err) {
