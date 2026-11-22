@@ -1,4 +1,4 @@
-import { loadShopifyPending } from '@/features/capabilities/load-capabilities';
+import { loadShopifyClaim } from '@/features/capabilities/load-capabilities';
 import { loadDiscovery, loadSystems } from '@/features/onboarding/load-onboarding';
 import { OnboardingShell } from '@/features/onboarding/OnboardingShell';
 import { isPreview } from '@/features/onboarding/preview';
@@ -19,11 +19,12 @@ export default async function Page({
   const params = await searchParams;
   const preview = isPreview(params);
   const returned = systemsReturn(params);
-  const [read, discovery, shopifyPending] = await Promise.all([
+  const [read, discovery, shopifyClaim] = await Promise.all([
     loadSystems(),
     // The site the scan read: WooCommerce's store address, so connecting is one click.
     loadDiscovery(),
-    returned?.kind === 'pending' ? loadShopifyPending() : null,
+    // Any pending install is offered here too, `pending=1` or not (App Review 132211).
+    loadShopifyClaim(),
   ]);
   return (
     <OnboardingShell step="systems" screen="systems" preview={preview}>
@@ -33,7 +34,7 @@ export default async function Page({
         shopify={read.shopify}
         site={discovery?.websiteDomain ?? null}
         returned={returned}
-        shopifyPending={shopifyPending}
+        shopifyClaim={shopifyClaim}
         preview={preview}
       />
     </OnboardingShell>

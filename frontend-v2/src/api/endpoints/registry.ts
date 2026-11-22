@@ -983,6 +983,8 @@ export const integrationEndpoints = {
     endpoint('/api/connectors/shopify/install/start?flow={flow}', { flow }),
   shopifyPending: () => endpoint('/api/connectors/shopify/install/pending'),
   shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
+  /** "Not now" / Cancel on a pending install: forgets it, touches no store (204). */
+  shopifyPendingDismiss: () => endpoint('/api/connectors/shopify/install/pending/dismiss'),
   /**
    * Back from Shopify's plan page (backend bb4acc12 lands it on 10 with
    * `?billing=verify&shop=`). Re-reads the subscription from Shopify; `shop`

@@ -49,12 +49,14 @@ vi.mock('@/features/capabilities/ShopifyConnect', () => ({
       data-reconnect={String(needsReconnect)}
     />
   ),
-  // One banner for all three reads (a store, gone, unread): it keeps a claim that worked.
-  ShopifyPending: ({ pending, replace }: { pending: string | null; replace: boolean }) => (
+  ShopifyPendingGone: () => <span data-testid="shopify-pending-gone" />,
+}));
+vi.mock('@/features/capabilities/ShopifyClaimPrompt', () => ({
+  ShopifyClaimPrompt: ({ pending }: { pending: { shopDomain: string; action: string } }) => (
     <span
-      data-testid="shopify-pending"
-      data-pending={pending ?? 'unread'}
-      data-replace={String(replace)}
+      data-testid="shopify-claim-prompt"
+      data-shop={pending.shopDomain}
+      data-action={pending.action}
     />
   ),
 }));
@@ -396,21 +398,32 @@ describe('★★ the way back to step 2 (flow=onboarding_systems): each return q
     );
   });
 
-  it('★★ system=shopify&pending=1&reason=replace_store: Studio’s claim, as a replace', () => {
-    back('system=shopify&pending=1&reason=replace_store', {
-      shopifyPending: 'avivco.myshopify.com',
-    });
-    const pending = screen.getByTestId('shopify-pending');
-    expect(pending).toHaveAttribute('data-pending', 'avivco.myshopify.com');
-    expect(pending).toHaveAttribute('data-replace', 'true');
+  const claim = (action: 'attach' | 'replace') => ({
+    shopDomain: 'avivco.myshopify.com',
+    expiresAt: null,
+    current: action === 'replace' ? { shopDomain: 'old.myshopify.com', status: 'CONNECTED' } : null,
+    action,
+    blockedReason: null,
+  });
+
+  it('★★ pending=1&reason=replace_store: the server’s action decides - the claim prompt, as a replace', () => {
+    back('system=shopify&pending=1&reason=replace_store', { shopifyClaim: claim('replace') });
+    const prompt = screen.getByTestId('shopify-claim-prompt');
+    expect(prompt).toHaveAttribute('data-shop', 'avivco.myshopify.com');
+    expect(prompt).toHaveAttribute('data-action', 'replace');
     expect(screen.queryByTestId('systems-landing-shopify')).toBeNull();
     expect(window.location.search).toBe('');
   });
 
+  it('★★ App Review 132211: a pending install is offered without pending=1 too', () => {
+    back('', { shopifyClaim: claim('attach') });
+    expect(screen.getByTestId('shopify-claim-prompt')).toHaveAttribute('data-action', 'attach');
+  });
+
   it('★ pending with nothing to claim: said, never silence', () => {
-    back('system=shopify&pending=1', { shopifyPending: 'gone' });
-    // The banner draws "gone" itself (ShopifyConnect's own tests); here, the read reaches it.
-    expect(screen.getByTestId('shopify-pending')).toHaveAttribute('data-pending', 'gone');
+    back('system=shopify&pending=1', { shopifyClaim: null });
+    expect(screen.getByTestId('shopify-pending-gone')).toBeInTheDocument();
+    expect(screen.queryByTestId('shopify-claim-prompt')).toBeNull();
   });
 
   it('★★ system=shopify&billing=verify&shop=: the server is asked (POST /api/billing/shopify/complete), the shop passed on', () => {

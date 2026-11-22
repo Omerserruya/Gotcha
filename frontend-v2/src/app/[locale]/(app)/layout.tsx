@@ -14,6 +14,8 @@ import { inboxRelevanceOn } from '@/api/client/inbox-relevance';
 import { AppShell } from '@/shell/AppShell';
 import { paymentPath, readWorkspaceGate } from '@/shell/load-workspace-gate';
 import { WorkspaceGate } from '@/shell/WorkspaceGate';
+import { loadShopifyClaim } from '@/features/capabilities/load-capabilities';
+import { ShopifyClaimPrompt } from '@/features/capabilities/ShopifyClaimPrompt';
 import { WithSupportBanner } from '@/features/support/SupportBanner';
 import { loadSupport } from '@/support/load-support';
 import { SupportProvider } from '@/support/support-context';
@@ -115,6 +117,13 @@ export default async function AuthenticatedLayout({
   if (status === 'signed_out') redirect(await signInHere());
 
   /*
+    ★★ A STORE INSTALLED FROM SHOPIFY IS CLAIMED ON WHATEVER PAGE THE PERSON
+    LANDS ON (App Review 132211, 2.1.1) - not only the Systems page with
+    `pending=1`, and right after onboarding too. No pending cookie: no request.
+  */
+  const shopifyClaim = consoleOnly ? null : await loadShopifyClaim();
+
+  /*
    * ★★ THE FULL CATALOGUE, AND ONLY BEHIND THE SESSION CHECK ABOVE.
    * The locale layout now provides only what the error boundary needs, so the
    * product's vocabulary is attached here - inside the authenticated area -
@@ -135,7 +144,10 @@ export default async function AuthenticatedLayout({
         <WithSupportBanner>
           <RscLoopGuard>
             <MfaWatch />
-            <AppShell consoleOnly={consoleOnly}>{children}</AppShell>
+            <AppShell consoleOnly={consoleOnly}>
+              {shopifyClaim ? <ShopifyClaimPrompt pending={shopifyClaim} /> : null}
+              {children}
+            </AppShell>
           </RscLoopGuard>
         </WithSupportBanner>
       </AppProviders>

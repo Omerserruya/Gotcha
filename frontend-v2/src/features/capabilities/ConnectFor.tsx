@@ -53,11 +53,13 @@ export function ConnectFor({
   const { oauth, fields } = integration.authSchema;
   return (
     <>
-      {integration.slug === 'shopify' && !reconnect ? (
+      {integration.slug === 'shopify' ? (
+        // Connect and Reconnect alike start on Shopify's page (App Review 132211).
         <ShopifyConnect
           mode={shopify?.mode ?? null}
           helpUrl={shopify?.helpUrl ?? null}
           connectAllowed={shopify?.connectAllowed ?? null}
+          reconnect={reconnect}
         />
       ) : integration.slug === 'woocommerce' ? (
         // B: the store's own approval replaces the key form.
@@ -97,7 +99,7 @@ export function ConnectFor({
 /** Does `ConnectFor` draw a working control for this system (not the drawn, disabled one)? */
 export function isLaunchable(integration: Integration, reconnect: boolean): boolean {
   const { oauth, fields } = integration.authSchema;
-  if (integration.slug === 'shopify' && !reconnect) return true;
+  if (integration.slug === 'shopify') return true;
   if (integration.slug === 'woocommerce') return true;
   if (!oauth && fields.length > 0) return true;
   return (oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect);

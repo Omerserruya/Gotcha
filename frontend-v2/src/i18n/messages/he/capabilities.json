@@ -234,7 +234,8 @@
       "replaceIt": "להחליף",
       "gone": "האישור הזה פג או שכבר נעשה בו שימוש - התקינו את GOTCHA שוב מ‑Shopify.",
       "unread": "לא הצלחנו לבדוק את האישור מ‑Shopify - פתחו את GOTCHA מ‑Shopify שוב.",
-      "listing": "GOTCHA בחנות האפליקציות של Shopify"
+      "listing": "GOTCHA בחנות האפליקציות של Shopify",
+      "connectAgain": "חיבור מחדש"
     },
     "billing": {
       "checking": "בודקים מול Shopify…",
@@ -257,6 +258,35 @@
         "forbidden": "אין לכם הרשאה לנהל חיוב.",
         "failed": "לא הצלחנו לאשר את התוכנית - נסו שוב.",
         "reconnect": "צריך לחבר מחדש את Shopify לפני שאפשר לבדוק את התוכנית."
+      }
+    },
+    "reconnect": "חיבור מחדש של Shopify",
+    "claim": {
+      "attachLead": "אישרתם את {shop} ב‑Shopify. לחבר אותה לסביבת העבודה הזו?",
+      "attachLeadUninstalled": "אישרתם את {shop} ב‑Shopify. לחבר אותה לסביבת העבודה הזו? (היא מחליפה את {current}, שהוסרה.)",
+      "connect": "חיבור {shop}",
+      "notNow": "לא עכשיו",
+      "replaceLead": "אישרתם את {shop} ב‑Shopify. כרגע מחוברת כאן {current}.",
+      "replaceLeadUnnamed": "אישרתם את {shop} ב‑Shopify. כרגע מחוברת כאן חנות אחרת.",
+      "replaceOpen": "החלפת החנות",
+      "replaceQuestion": "הארגון הזה תומך בחנות Shopify אחת. להחליף את {current} ב‑{shop}?",
+      "replaceQuestionUnnamed": "הארגון הזה תומך בחנות Shopify אחת. להחליף את החנות המחוברת ב‑{shop}?",
+      "replaceGo": "החלפה",
+      "replaceCancel": "ביטול",
+      "done": "החנות {shop} מחוברת.",
+      "choosePlan": "בחירת תוכנית",
+      "connectAgain": "חיבור מחדש",
+      "retry": "ניסיון נוסף",
+      "close": "סגירה",
+      "error": {
+        "core_plan_required": "כדי לחבר את {shop} צריך קודם תוכנית GOTCHA Core פעילה. שום דבר לא חובר.",
+        "held_by_other_workspace": "החנות {shop} מחוברת לסביבת עבודה אחרת ב‑GOTCHA. נתקו אותה שם קודם.",
+        "expired": "האישור של {shop} מ‑Shopify פג. אפשר לחבר מחדש ולהתחיל שוב.",
+        "billing_unavailable": "שום דבר לא השתנה. נסו שוב.",
+        "forbidden": "אין לכם הרשאה לחבר מערכות.",
+        "failed": "החנות {shop} לא חוברה. נסו שוב.",
+        "replace_required": "חנות אחרת מחוברת כאן. כדי לחבר את {shop} צריך להחליף אותה.",
+        "blocked": "אי אפשר לחבר עכשיו את {shop} לסביבת העבודה הזו."
       }
     }
   },

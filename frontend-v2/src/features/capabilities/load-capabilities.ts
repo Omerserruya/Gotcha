@@ -1,7 +1,10 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { z } from 'zod';
+
+import { pendingInstallSchema, type PendingInstall } from '@/api/contracts/shopify-install';
 
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
@@ -126,20 +129,26 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
  * its domain; `'gone'` when there is no approval to claim (no cookie, or the
  * route has none - expired or used); `null` when the read itself failed.
  */
-export async function loadShopifyPending(): Promise<string | 'gone' | null> {
+/**
+ * The pending install for the claim prompt on every app page (App Review
+ * 132211): `null` with no cookie at all - no request is made - or when there is
+ * nothing to claim (404/410) or the read failed. Never throws.
+ */
+export const loadShopifyClaim = cache(async (): Promise<PendingInstall | null> => {
   const pending = (await cookies()).get(PENDING_COOKIE)?.value;
-  if (!pending) return 'gone';
-  return serverApi()
-    .get({
+  if (!pending) return null;
+  try {
+    return await serverApi().get({
       endpoint: integrationEndpoints.shopifyPending(),
-      payload: z.object({ shopDomain: z.string() }),
+      // `{ data: {...} }`, unwrapped by the client (ca1156f9).
+      payload: pendingInstallSchema,
       headers: { cookie: `${PENDING_COOKIE}=${encodeURIComponent(pending)}` },
-    })
-    .then((p) => p.shopDomain)
-    .catch((cause: unknown) => {
-      if (isApiError(cause) && (cause.status === 404 || cause.status === 410))
-        return 'gone' as const;
-      logger.warn('capabilities.shopify_pending_failed', { cause });
-      return null;
     });
-}
+  } catch (cause) {
+    // 404 (nothing to claim) and 401/403 (show nothing) are answers, not failures.
+    if (!(isApiError(cause) && [401, 403, 404, 410].includes(cause.status ?? 0))) {
+      logger.warn('capabilities.shopify_claim_read_failed', { cause });
+    }
+    return null;
+  }
+});

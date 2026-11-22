@@ -301,8 +301,9 @@ describe('★★ 10 for a system that is not connected - its own screen', () => 
     );
     expect(screen.queryByTestId('oauth-start')).toBeNull();
     expect(screen.queryByTestId('connect-form')).toBeNull();
-    // 98676242: Shopify's own block - the listing isn't public, so a sentence.
-    expect(screen.getByTestId('shopify-not-published')).toBeInTheDocument();
+    // App Review 132211: whatever the listing, Connect is a real button to /install/start.
+    expect(screen.queryByTestId('shopify-not-published')).toBeNull();
+    expect(screen.getByTestId('shopify-start')).toHaveTextContent('Connect Shopify');
     two.unmount();
     inIntl(await AvailableSystem({ integration: custom }));
     expect(screen.getByTestId('connect-drawn').getAttribute('title')).toMatch(/set up with GOTCHA/);

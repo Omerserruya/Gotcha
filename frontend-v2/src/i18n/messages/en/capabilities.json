@@ -234,7 +234,8 @@
       "replaceIt": "Replace it",
       "gone": "That approval has expired or was already used - install GOTCHA again from Shopify.",
       "unread": "We couldn’t check the approval from Shopify - open GOTCHA from Shopify again.",
-      "listing": "GOTCHA in the Shopify App Store"
+      "listing": "GOTCHA in the Shopify App Store",
+      "connectAgain": "Connect again"
     },
     "billing": {
       "checking": "Checking with Shopify…",
@@ -257,6 +258,35 @@
         "forbidden": "You don’t have permission to manage billing.",
         "failed": "We couldn’t confirm the plan - try again.",
         "reconnect": "Shopify needs reconnecting before its plan can be checked."
+      }
+    },
+    "reconnect": "Reconnect Shopify",
+    "claim": {
+      "attachLead": "You approved {shop} in Shopify. Connect it to this workspace?",
+      "attachLeadUninstalled": "You approved {shop} in Shopify. Connect it to this workspace? (It replaces the uninstalled {current}.)",
+      "connect": "Connect {shop}",
+      "notNow": "Not now",
+      "replaceLead": "You approved {shop} in Shopify. {current} is connected here now.",
+      "replaceLeadUnnamed": "You approved {shop} in Shopify. Another store is connected here now.",
+      "replaceOpen": "Replace store",
+      "replaceQuestion": "This workspace supports one Shopify store. Replace {current} with {shop}?",
+      "replaceQuestionUnnamed": "This workspace supports one Shopify store. Replace the connected store with {shop}?",
+      "replaceGo": "Replace",
+      "replaceCancel": "Cancel",
+      "done": "{shop} is connected.",
+      "choosePlan": "Choose a plan",
+      "connectAgain": "Connect again",
+      "retry": "Try again",
+      "close": "Close",
+      "error": {
+        "core_plan_required": "Connecting {shop} needs an active GOTCHA Core plan first. Nothing was connected.",
+        "held_by_other_workspace": "{shop} is connected to another GOTCHA workspace. Disconnect it there first.",
+        "expired": "The approval for {shop} from Shopify has expired. Connect again to start over.",
+        "billing_unavailable": "Nothing changed. Try again.",
+        "forbidden": "You don’t have permission to connect systems.",
+        "failed": "{shop} wasn’t connected. Try again.",
+        "replace_required": "Another store is connected here. Replace it to connect {shop}.",
+        "blocked": "{shop} can’t be connected to this workspace right now."
       }
     }
   },

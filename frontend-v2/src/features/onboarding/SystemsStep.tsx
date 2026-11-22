@@ -7,7 +7,9 @@ import { UnavailableAction } from '@/design-system/primitives/unavailable/Unavai
 import { isLaunchable } from '@/features/capabilities/ConnectFor';
 import { IntegrationLogo } from '@/features/capabilities/IntegrationLogo';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
-import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
+import type { PendingInstall } from '@/api/contracts/shopify-install';
+import { ShopifyClaimPrompt } from '@/features/capabilities/ShopifyClaimPrompt';
+import { ShopifyBillingVerify, ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
 
 import { connectKind, STORE_SYSTEMS } from './connect-kind';
 import shell from './Onboarding.module.css';
@@ -64,7 +66,7 @@ export function SystemsStep({
   shopify,
   site = null,
   returned = null,
-  shopifyPending = null,
+  shopifyClaim = null,
   preview = false,
 }: {
   /** `null`: unread. */
@@ -75,8 +77,8 @@ export function SystemsStep({
   readonly site?: string | null;
   /** The way back from a provider, read off the query. */
   readonly returned?: SystemsReturn | null;
-  /** Shopify's store waiting to be claimed (`pending=1`): its domain, `gone`, or `null` unread. */
-  readonly shopifyPending?: string | 'gone' | null;
+  /** A store installed from Shopify, waiting to be claimed; `null` when there is none. */
+  readonly shopifyClaim?: PendingInstall | null;
   /** Read-only: connecting is a write, drawn as a status. */
   readonly preview?: boolean;
 }) {
@@ -290,12 +292,10 @@ export function SystemsStep({
             needsReconnect={shopifyRow !== null && isConnected(shopifyRow)}
           />
         ) : null}
-        {returned?.kind === 'pending' ? (
-          <ShopifyPending
-            pending={shopifyPending}
-            replace={returned.replace}
-            helpUrl={shopify?.helpUrl ?? null}
-          />
+        {shopifyClaim ? (
+          <ShopifyClaimPrompt pending={shopifyClaim} />
+        ) : returned?.kind === 'pending' ? (
+          <ShopifyPendingGone read helpUrl={shopify?.helpUrl ?? null} />
         ) : null}
         {returned && !landingShownBelow ? landingFor(returned.slug) : null}
       </div>
