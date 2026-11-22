@@ -429,6 +429,77 @@ function Toggle({
   );
 }
 
+/**
+ * "Offer to continue on WhatsApp by number" (Omer, 2026-11-22; Backend W2):
+ * the visitor leaves a number and the BUSINESS's own number writes to them.
+ *
+ * ★ Only on a CONNECTED number Backend reports readiness for (absent before
+ *   W2: not offered at all). Each state that stops it is said, the switch
+ *   disabled: no connected number, a payment method Meta refused, the
+ *   template pending at Meta ("ממתין לאישור של Meta") or rejected.
+ * ★ Switching on comes FIRST: the template is listed for submission only
+ *   while the option is on (Backend). Its text is sent from the existing
+ *   required-templates card, Settings › Channels › WhatsApp - linked here
+ *   until it is approved.
+ */
+function PhoneHandoffRow({
+  number,
+  on,
+  onChange,
+}: {
+  readonly number: HandoffNumber | null;
+  readonly on: boolean;
+  readonly onChange: (on: boolean) => void;
+}) {
+  const t = useTranslations('channels.webchat.behaviour.phoneHandoff');
+  const tw = useTranslations('channels.webchat');
+  const readiness = number?.phoneHandoff;
+  if (number !== null && !readiness) return null;
+  const channelsLink = (chunks: ReactNode) => <Link href="/settings/channels">{chunks}</Link>;
+  const stop =
+    !number || !number.available
+      ? { tag: tw('notYet'), why: t('noNumber') }
+      : readiness?.paymentBlocked
+        ? { tag: tw('notYet'), why: t('payment') }
+        : readiness?.template === 'pending'
+          ? { tag: t('pendingTag'), why: t('pending') }
+          : readiness?.template === 'rejected'
+            ? {
+                tag: tw('notYet'),
+                why: readiness.templateReason
+                  ? `${t('rejected')} ${readiness.templateReason}`
+                  : t('rejected'),
+              }
+            : null;
+  if (stop) {
+    return (
+      <div className={styles.toggleRow} data-testid="webchat-wa-phone">
+        <UnavailableItem
+          title={t('label')}
+          tag={stop.tag}
+          why={stop.why}
+          testid="webchat-wa-phone-unavailable"
+        />
+      </div>
+    );
+  }
+  return (
+    <Toggle
+      label={t('label')}
+      hint={t('hint')}
+      on={on}
+      onChange={onChange}
+      testid="webchat-wa-phone"
+    >
+      {on && !readiness?.ready ? (
+        <p className={styles.rowHint} data-testid="webchat-wa-phone-submit">
+          {t.rich('submit', { channels: channelsLink })}
+        </p>
+      ) : null}
+    </Toggle>
+  );
+}
+
 function Appearance({ config, set }: { readonly config: WebchatConfig; readonly set: Setters }) {
   const t = useTranslations('channels.webchat.appearance');
   const tw = useTranslations('channels.webchat');
@@ -1144,6 +1215,11 @@ function Behaviour({
                     {t('whatsappHidden')}
                   </p>
                 )}
+                <PhoneHandoffRow
+                  number={chosen}
+                  on={wa.phoneHandoff}
+                  onChange={(phoneHandoff) => set.whatsapp({ phoneHandoff })}
+                />
               </>
             )
           ) : null}
@@ -1968,7 +2044,12 @@ function KindChoice({
     setTyping(false);
     setAsking({
       kind: 'whatsapp',
-      whatsapp: { enabled: true, channelAccountId, phone: config.ux.whatsapp.phone },
+      whatsapp: {
+        enabled: true,
+        channelAccountId,
+        phone: config.ux.whatsapp.phone,
+        phoneHandoff: config.ux.whatsapp.phoneHandoff,
+      },
     });
   };
   const toTyped = () => {
@@ -1980,7 +2061,8 @@ function KindChoice({
     setTyping(false);
     setAsking({
       kind: 'whatsapp',
-      whatsapp: { enabled: true, channelAccountId: null, phone: typed.trim() },
+      // A typed phone can never send in the business's name (Backend W2).
+      whatsapp: { enabled: true, channelAccountId: null, phone: typed.trim(), phoneHandoff: false },
     });
   };
   const choose = (kind: WidgetKind) => {
@@ -1989,7 +2071,12 @@ function KindChoice({
       if (config.ux.kind === 'chat') return;
       setAsking({
         kind: 'chat',
-        whatsapp: before ?? { enabled: false, channelAccountId: null, phone: null },
+        whatsapp: before ?? {
+          enabled: false,
+          channelAccountId: null,
+          phone: null,
+          phoneHandoff: false,
+        },
       });
       return;
     }

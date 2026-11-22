@@ -249,16 +249,47 @@ describe('★★ Wave 3 geometry, read from the stylesheet', () => {
 
 describe('★★ which number, when the workspace has two (Omer, 2026-11-16)', () => {
   it('★★ "WhatsApp · Gotcha", the account isolated as the workspace’s own text', async () => {
-    await show({ channelAccount: { id: 'ch1', channel: 'WHATSAPP', displayName: 'Gotcha', multipleOfChannel: true } });
+    await show({
+      channelAccount: {
+        id: 'ch1',
+        channel: 'WHATSAPP',
+        displayName: 'Gotcha',
+        multipleOfChannel: true,
+      },
+    });
     const facts = screen.getByTestId('conversation-facts');
     expect(facts).toHaveTextContent(/^WhatsApp · Gotcha · /);
     expect(screen.getByTestId('conversation-account').tagName).toBe('BDI');
   });
 
   it('★ one number: the subline exactly as before', async () => {
-    await show({ channelAccount: { id: 'ch9', channel: 'WHATSAPP', displayName: 'Only', multipleOfChannel: false } });
+    await show({
+      channelAccount: {
+        id: 'ch9',
+        channel: 'WHATSAPP',
+        displayName: 'Only',
+        multipleOfChannel: false,
+      },
+    });
     expect(screen.queryByTestId('conversation-account')).toBeNull();
     expect(screen.getByTestId('conversation-facts')).toHaveTextContent(/^WhatsApp · /);
-    expect(screen.getByTestId('conversation-facts').textContent!.replace(/\s+/g, ' ')).not.toMatch(/· ·/);
+    expect(screen.getByTestId('conversation-facts').textContent!.replace(/\s+/g, ' ')).not.toMatch(
+      /· ·/,
+    );
+  });
+});
+
+describe('★ W1 (2026-11-22) - the header shows where a moved conversation started', () => {
+  it('the website mark before WhatsApp’s, only when it moved', async () => {
+    await show({
+      channel: 'WHATSAPP',
+      continuedFrom: { channel: 'WEBCHAT', conversationId: 'web1', at: null },
+    });
+    expect(screen.getByTestId('conversation-continued-from')).toBeInTheDocument();
+  });
+
+  it('not when it did not', async () => {
+    await show({ channel: 'WHATSAPP' });
+    expect(screen.queryByTestId('conversation-continued-from')).toBeNull();
   });
 });

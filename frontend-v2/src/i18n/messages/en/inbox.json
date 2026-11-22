@@ -39,7 +39,8 @@
         "ai_inactive": "the AI employee is not active",
         "ai_failed": "the AI could not produce a reply",
         "message_limit": "the AI reached its message limit for this conversation"
-      }
+      },
+      "moved_to_whatsapp": "The conversation moved to WhatsApp"
     },
     "reaction": {
       "toMessage": "They reacted {emoji} to “{preview}”",
@@ -187,7 +188,8 @@
       "late": "Past SLA",
       "warningTitle": "Close to the {minutes} min response target.",
       "lateTitle": "Waiting longer than the {minutes} min response target."
-    }
+    },
+    "continuedFrom": "Started on the website, continues on WhatsApp"
   },
   "identity": {
     "unnamed": "Someone",

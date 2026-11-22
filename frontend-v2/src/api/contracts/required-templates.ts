@@ -19,7 +19,8 @@ import { z } from 'zod';
  */
 
 /** The roles the server defines (`REQUIRED_ROLES`); the screen words only these. */
-export const REQUIRED_ROLES = ['reopen', 'followup'] as const;
+/** `website_handoff` (Backend W2, 2026-11-22): listed only while the widget's leave-your-number option is on. */
+export const REQUIRED_ROLES = ['reopen', 'followup', 'website_handoff'] as const;
 export type RequiredRole = (typeof REQUIRED_ROLES)[number];
 
 /** `stateOf()` on the server: what this number's row is, or `missing`. */

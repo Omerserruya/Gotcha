@@ -1937,3 +1937,29 @@ describe('★★ not relevant, and which kind (INBOX_RELEVANCE, Omer 2026-11-17)
     expect(screen.queryByTestId('tag-relevance-c1')).toBeNull();
   });
 });
+
+describe('★★ W1 (2026-11-22) - started on the website, continues on WhatsApp', () => {
+  it('★★ the badge draws both channels and says so', async () => {
+    await show([
+      row({
+        id: 'c9',
+        channel: 'WHATSAPP',
+        continuedFrom: { channel: 'WEBCHAT', conversationId: 'web1', at: '2026-11-22T10:00:00Z' },
+      }),
+    ]);
+    const badge = screen.getByTestId('channel-badge-c9');
+    expect(badge).toHaveAttribute('data-moved', '');
+    expect(badge.children).toHaveLength(2);
+    expect(badge.closest('[title]')).toHaveAttribute(
+      'title',
+      'Started on the website, continues on WhatsApp',
+    );
+  });
+
+  it('★ a conversation that did not move: one plate, its own channel', async () => {
+    await show([row({ id: 'c8', channel: 'WHATSAPP' })]);
+    const badge = screen.getByTestId('channel-badge-c8');
+    expect(badge).not.toHaveAttribute('data-moved');
+    expect(badge.children).toHaveLength(1);
+  });
+});

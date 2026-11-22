@@ -99,6 +99,20 @@ export const conversationRowSchema = z.object({
   id: z.string(),
   status: z.enum(CONVERSATION_STATUSES),
   channel: z.string().nullable().default(null),
+  /**
+   * Backend W1 (2026-11-22): a web chat that moved to WhatsApp is ONE thread,
+   * the WhatsApp conversation (`channel` stays "WHATSAPP"); this says where
+   * it started. Non-null: the badge shows both channels. Absent before W1.
+   */
+  continuedFrom: z
+    .object({
+      channel: z.string(),
+      conversationId: z.string(),
+      at: z.string().nullable().catch(null).default(null),
+    })
+    .nullable()
+    .catch(null)
+    .default(null),
   handledBy: z.enum(HANDLED_BY).nullable().catch(null).default(null),
   assignedAgentId: z.string().nullable().default(null),
   assignedAiAgentId: z.string().nullable().default(null),
@@ -263,7 +277,11 @@ export const conversationRowSchema = z.object({
       overriddenBy: z.string().nullish().catch(null),
       overriddenAt: z.string().nullish().catch(null),
       classifiedAt: z.string().nullish().catch(null),
-      /** 'fast' | 'model' | 'override' - free here, read by nothing yet. */
+      /**
+       * 'fast' | 'model' | 'override' | 'sender' (prod 14965bf4: a new
+       * conversation from a sender hand-marked personal) - free here, read by
+       * nothing yet.
+       */
       source: z.string().nullish().catch(null),
     })
     .nullish()
@@ -713,6 +731,11 @@ export const messageSchema = z.object({
   body: z.string().default(''),
   /** Free string. Use `renderableType`, never a bare switch. */
   messageType: z.string().default('text'),
+  /**
+   * Backend W1: "WEBCHAT" on the web chat's rows merged (at read time) into
+   * the WhatsApp thread; absent on the thread's own rows.
+   */
+  originChannel: z.string().nullish().catch(null).default(null),
   mediaUrl: z.string().nullable().default(null),
   /** The sender's own name for a file - the download's label. */
   fileName: z.string().nullish().catch(null).default(null),

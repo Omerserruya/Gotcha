@@ -853,7 +853,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       kind: 'whatsapp',
       look: 'whatsapp',
       // The only number that can take it: chosen with the kind.
-      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null, phoneHandoff: false },
     });
     expect(screen.getByTestId('webchat-kind-number')).toHaveTextContent('Lumière');
   });
@@ -877,7 +877,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'whatsapp',
-      whatsapp: { enabled: true, channelAccountId: 'wa4', phone: null },
+      whatsapp: { enabled: true, channelAccountId: 'wa4', phone: null, phoneHandoff: false },
     });
   });
 
@@ -909,6 +909,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       enabled: true,
       channelAccountId: null,
       phone: '054-123 4567',
+      phoneHandoff: false,
     });
   });
 
@@ -944,7 +945,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId, phone: '+972541234567' },
+        whatsapp: { enabled: true, channelAccountId, phone: '+972541234567', phoneHandoff: false },
       },
     });
     const { unmount } = show('appearance', { numbers: NUMBERS, initial: typed(null) });
@@ -964,7 +965,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null, phoneHandoff: false },
       },
     };
     show('appearance', { numbers: NUMBERS, initial: wa });
@@ -980,6 +981,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       enabled: true,
       channelAccountId: null,
       phone: '052-123 4567',
+      phoneHandoff: false,
     });
   });
 
@@ -989,7 +991,12 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       ux: {
         ...config.ux,
         kind: 'chat' as const,
-        whatsapp: { enabled: true, channelAccountId: null, phone: '+972541234567' },
+        whatsapp: {
+          enabled: true,
+          channelAccountId: null,
+          phone: '+972541234567',
+          phoneHandoff: false,
+        },
       },
     };
     show('appearance', { numbers: [], initial: chat });
@@ -1020,7 +1027,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null, phoneHandoff: false },
       },
     };
     const appearance = show('appearance', { numbers: NUMBERS, initial: wa });
@@ -1093,9 +1100,14 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     show('behaviour', { numbers: NUMBERS });
     fireEvent.click(screen.getByTestId('webchat-whatsapp-switch'));
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: 'wa1', phone: null });
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: 'wa1',
+      phone: null,
+      phoneHandoff: false,
+    });
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
-      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+      whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null, phoneHandoff: false },
     });
     const one = within(screen.getByTestId('webchat-wa-wa1')).getByRole('radio');
     expect(one).toBeChecked();
@@ -1127,7 +1139,12 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       "The button won't show on your site until a number that can take it is chosen.",
     );
     await pause();
-    expect(sentAt().ux.whatsapp).toEqual({ enabled: true, channelAccountId: null, phone: null });
+    expect(sentAt().ux.whatsapp).toEqual({
+      enabled: true,
+      channelAccountId: null,
+      phone: null,
+      phoneHandoff: false,
+    });
   });
 
   it('the preview shows the WhatsApp action only when the button will show', () => {
@@ -1145,7 +1162,10 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
       numbers: NUMBERS,
       initial: {
         ...config,
-        ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: 'wa2', phone: null } },
+        ux: {
+          ...config.ux,
+          whatsapp: { enabled: true, channelAccountId: 'wa2', phone: null, phoneHandoff: false },
+        },
       },
     });
     expect(screen.queryByTestId('webchat-preview-wa-button')).toBeNull();
@@ -1179,7 +1199,7 @@ describe('★★ stage B - the look and "Continue on WhatsApp" (website-widget-v
     const { look: _l, whatsapp: _w, ...stageA } = config.ux;
     expect(webchatSettingsSchema.parse({ data: { ...config, ux: stageA } }).data.ux).toMatchObject({
       look: 'gotcha',
-      whatsapp: { enabled: false, channelAccountId: null, phone: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null, phoneHandoff: false },
     });
   });
 });
@@ -1301,7 +1321,10 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
   it('★★ back to chat is asked too, and puts back the hand-off as it was before - never the widget’s number', async () => {
     const off = {
       ...config,
-      ux: { ...config.ux, whatsapp: { enabled: true, channelAccountId: null, phone: null } },
+      ux: {
+        ...config.ux,
+        whatsapp: { enabled: true, channelAccountId: null, phone: null, phoneHandoff: false },
+      },
     };
     show('appearance', { numbers: NUMS, initial: off });
     fireEvent.click(screen.getByTestId('webchat-kind-whatsapp'));
@@ -1317,7 +1340,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     expect(bodyOfWidget(last, { stageB: true }).ux).toMatchObject({
       kind: 'chat',
       look: 'gotcha',
-      whatsapp: { enabled: true, channelAccountId: null, phone: null },
+      whatsapp: { enabled: true, channelAccountId: null, phone: null, phoneHandoff: false },
     });
   });
 
@@ -1328,7 +1351,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
         ...config.ux,
         kind: 'whatsapp' as const,
         look: 'whatsapp' as const,
-        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null },
+        whatsapp: { enabled: true, channelAccountId: 'wa1', phone: null, phoneHandoff: false },
       },
     };
     show('appearance', { numbers: NUMS, initial: wa });
@@ -1337,7 +1360,7 @@ describe('★★ W1, measured on dev - asked first both ways, and "Continue on W
     await pause();
     expect(bodyOfWidget(sentAt(), { stageB: true }).ux).toMatchObject({
       kind: 'chat',
-      whatsapp: { enabled: false, channelAccountId: null, phone: null },
+      whatsapp: { enabled: false, channelAccountId: null, phone: null, phoneHandoff: false },
     });
   });
 
@@ -1924,5 +1947,105 @@ describe('★★ W9: products, cart and deals from a WooCommerce store connected
     expect(screen.queryByTestId('webchat-products-switch')).toBeNull();
     expect(screen.queryByTestId('webchat-deals-choose')).toBeNull();
     expect(screen.getByTestId('webchat-deals-unavailable')).toBeInTheDocument();
+  });
+});
+
+describe('★★ W2 (2026-11-22) - "Offer to continue on WhatsApp by number"', () => {
+  const ready = {
+    template: 'approved' as const,
+    templateReason: null,
+    paymentBlocked: false,
+    ready: true,
+  };
+  const number = (
+    phoneHandoff: HandoffNumber['phoneHandoff'],
+    over: Partial<HandoffNumber> = {},
+  ): HandoffNumber => ({
+    channelId: 'wa1',
+    name: 'Lumière',
+    phone: '+972 54 000 0000',
+    available: true,
+    phoneHandoff,
+    ...over,
+  });
+  const on = (n: HandoffNumber, phoneHandoff = false) => {
+    show('behaviour', {
+      numbers: [n],
+      initial: {
+        ...config,
+        ux: {
+          ...config.ux,
+          whatsapp: { enabled: true, channelAccountId: n.channelId, phone: null, phoneHandoff },
+        },
+      },
+    });
+  };
+
+  it('★ before W2 (no readiness on the number): not offered at all', () => {
+    on(number(undefined));
+    expect(screen.queryByTestId('webchat-wa-phone')).toBeNull();
+  });
+
+  it('★★ ready: a switch, saved beside the number', async () => {
+    on(number(ready));
+    fireEvent.click(screen.getByTestId('webchat-wa-phone-switch'));
+    await pause();
+    expect(sentAt().ux.whatsapp).toMatchObject({
+      enabled: true,
+      channelAccountId: 'wa1',
+      phoneHandoff: true,
+    });
+  });
+
+  it('★★ switching on comes first; until approved, where the template is sent is linked', async () => {
+    on(number({ ...ready, template: 'missing', ready: false }), true);
+    const submit = screen.getByTestId('webchat-wa-phone-submit');
+    expect(submit).toHaveTextContent(
+      "The message template is sent for Meta's approval in Settings · Channels.",
+    );
+    expect(submit.querySelector('a')).toHaveAttribute(
+      'href',
+      expect.stringContaining('/settings/channels'),
+    );
+  });
+
+  it.each([
+    [
+      'pending at Meta',
+      { ...ready, template: 'pending' as const, ready: false },
+      "Waiting for Meta's approval",
+      "Meta is reviewing the business's message template.",
+    ],
+    [
+      'rejected, with Meta’s reason',
+      {
+        ...ready,
+        template: 'rejected' as const,
+        templateReason: 'Promotional content.',
+        ready: false,
+      },
+      'Not available yet',
+      "Meta didn't approve the message template, so this can't be turned on. Promotional content.",
+    ],
+    [
+      'a payment method Meta refused',
+      { ...ready, paymentBlocked: true, ready: false },
+      'Not available yet',
+      "the business's WhatsApp account at Meta needs a payment method",
+    ],
+  ])('⚠⚠ %s: no switch, and why', (_case, phoneHandoff, tag, why) => {
+    on(number(phoneHandoff), true);
+    expect(screen.queryByTestId('webchat-wa-phone-switch')).toBeNull();
+    const row = screen.getByTestId('webchat-wa-phone');
+    expect(row).toHaveTextContent(tag);
+    expect(row).toHaveTextContent(why);
+  });
+
+  it('⚠⚠ the chosen number is not connected: no switch, "connect a WhatsApp number first"', () => {
+    on(number(ready, { available: false, reason: 'not_connected' }), true);
+    expect(screen.queryByTestId('webchat-wa-phone-switch')).toBeNull();
+    expect(screen.getByTestId('webchat-wa-phone')).toHaveTextContent(
+      'To turn this on, connect a WhatsApp number first.',
+    );
   });
 });

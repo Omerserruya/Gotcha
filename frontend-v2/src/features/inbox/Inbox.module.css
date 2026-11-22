@@ -468,6 +468,12 @@
     background-color: var(--panel-base);
   }
 
+  /* W1: started on the website, continues on WhatsApp - the two plates overlap. */
+  .channelBadge[data-moved] > :first-child {
+    margin-inline-end: -6px;
+    opacity: 0.85;
+  }
+
   /* On the white open row the badge's cut follows the row, as 02 draws it. */
   .queueRow[data-open] .channelBadge {
     background-color: var(--panel-field);
