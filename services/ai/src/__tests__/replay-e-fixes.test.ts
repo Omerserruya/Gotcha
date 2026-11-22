@@ -2324,3 +2324,26 @@ describe("a store product is in the turn's results once, under one key", () => {
     expect(keyLines(mergeEnvelope(turn, search([GEFEN]), "he", true))).toEqual([`PRODUCT_3: "${GEFEN.name}"`]);
   });
 });
+
+describe("\"not stated whether it fits\" is a hedge, never a fit claim (the 41805962 replay, NE'A L1122)", () => {
+  const titles = ["סמובי אסף", "סמובי אליס"];
+  const ask = "מה מתאים לנינג'ה קריספי?";
+  it("★ the L1122 sentence, and the forms with \"אם\" and \"האם\", stay unflagged", () => {
+    const pencils = ["עיפרון עיניים ושפתיים LiLu", "עיפרון עיניים ושפתיים first coffee"];
+    expect(ungroundedPositiveFit("מצאתי עיפרון בגוון חום שוקולדי, אבל בתיאור מצוין שהוא מיועד לתחימת שפתיים ולא מצוין אם מתאים מתחת לעיניים.", "אני רוצה גוון חום למתחת לעיינים", pencils, "", "")).toEqual([]);
+    for (const r of ["לא מצוין אם סמובי אסף מתאים לנינג'ה קריספי.", "לא ברור האם סמובי אסף מתאים לנינג'ה קריספי.", "אין לנו מידע אם סמובי אסף יתאים לנינג'ה קריספי.", "סמובי אסף מיועד למכונות קפה, ולא כתוב במפורש אם הוא מתאים לנינג'ה קריספי.", "It is not stated whether Smoovee Asaf fits the Ninja Crispi.", "There is no confirmation if Smoovee Asaf fits the Ninja Crispi."]) {
+      expect(ungroundedPositiveFit(r, ask, titles, "", ""), r).toEqual([]);
+    }
+  });
+  it("★ the \"אם\" must open the clause that holds the fit verb: a fit said after it is still a claim", () => {
+    for (const r of ["לא ידוע אם תרצי לחכות, אבל סמובי אסף מתאים לנינג'ה קריספי.", "לא כתוב אם יש אחריות וסמובי אסף מתאים לנינג'ה קריספי.", "אם לא מצוין אחרת, סמובי אסף מתאים לנינג'ה קריספי.", "אם תרצי, סמובי אסף מתאים לנינג'ה קריספי."]) {
+      expect(ungroundedPositiveFit(r, ask, titles, "", ""), r).toHaveLength(1);
+    }
+  });
+  it("★ fitNotStated: the hedge on a fit, and nothing else", async () => {
+    const { fitNotStated } = await import("../services/reply-engine/gates");
+    for (const x of ["מיועד לתחימת שפתיים ולא מצוין אם מתאים מתחת לעיניים.", "לא מצוין שהוא מתאים למתחת לעיניים.", "אין לנו אישור שסמובי אסף מתאים לנינג'ה קריספי.", "לא ברור האם הוא יתאים.", "It is not stated whether it suits under-eye use.", "There is no confirmation that it fits.", "It is not confirmed if it works with sensitive skin.", "There is no information whether it fits under the eyes.", "We have no confirmation if it suits sensitive skin."]) expect([x, fitNotStated(x)]).toEqual([x, true]);
+    // A plain "does not fit", a fit claim, a hedge on something else, a condition, and a fit said past the hedged clause.
+    for (const x of ["הטוש לא מתאים לאזור העיניים.", "סמובי אסף מתאים לנינג'ה קריספי.", "הגוון שלו לא מצוין בתיאור.", "לא מצוין אם יש אחריות.", "אם הגוון לא מתאים אפשר להחליף.", "לא כתוב אם יש אחריות וסמובי אסף מתאים לנינג'ה קריספי.", "It does not fit.", "It is not stated whether there is a warranty.", ""]) expect([x, fitNotStated(x)]).toEqual([x, false]);
+  });
+});

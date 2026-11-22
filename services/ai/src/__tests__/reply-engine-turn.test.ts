@@ -5065,3 +5065,121 @@ describe("rule T: a cut on a product turn never leaves a wrong answer or a list 
     expect([...namedMembers("המוצר הזה מתאים.", [coats[0]], "words")]).toEqual([]);
   });
 });
+
+describe("a draft that hedges on the fit of what was found never gets the product list (the 41805962 replay, NE'A L1122)", () => {
+  // The turn as the replay prints it: her message, the search, the first three titles, the draft. The fourth product and
+  // the stock states stand in for what the file does not print (the cards were products 2, 3 and 5).
+  const PENCILS = [{ title: "עיפרון עיניים ושפתיים Drama qween", price: 59, inventoryState: "out_of_stock" }, { title: "עיפרון עיניים ושפתיים LiLu", price: 59 }, { title: "עיפרון עיניים ושפתיים first coffee", price: 59 }, { title: "שמן שפתיים פנומנל", price: 69, inventoryState: "out_of_stock" }, { title: "קיט בייסיק לשפתיים שמן שפתיים פנומנל ועיפרון פירסט קופי", price: 119 }];
+  const L1122 = "מצאתי עיפרון בגוון חום שוקולדי, אבל בתיאור מצוין שהוא מיועד לתחימת שפתיים ולא מצוין אם מתאים מתחת לעיניים. אפשר לראות גם עיפרון עיניים חום, אבל הגוון שלו לא מצוין בתיאור.";
+  const PENS = [{ title: "טוש גבות חום", price: 79 }, { title: "טוש גבות שחור", price: 149 }, { title: "קונסילר לעיניים", price: 99 }];
+  const PEN_DATA = [{ content: "טוש גבות: מיועד לגבות.", score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "f" }];
+  const LIST = /הנה כמה אפשרויות|אין לנו אישור שהם מתאימים/;
+  const TEAM = "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+  const turn = async (incoming: string, query: string, list: any[], ...drafts: string[]) => {
+    h.groundList = list;
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`d${i}`, { reply: d })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+    return { r, t: r.trace as any, cards: h.staged.flatMap((x: any) => (x.products ?? []).map((p: any) => String(p.productId))) };
+  };
+  const again = () => { h.responses.length = 0; h.staged.length = 0; h.audits.length = 0; };
+
+  it("★ L1122: the hedge is no fit claim, and the draft goes out as the answer", async () => {
+    const { r, t, cards } = await turn("אני רוצה גוון חום למתחת לעיינים", "עיפרון חום עיניים", PENCILS, L1122, L1122, L1122);
+    // Only the wording ("מצאתי") is left to fix.
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toEqual(["style"]);
+    expect(r.reply).toBe("יש עיפרון בגוון חום שוקולדי, אבל בתיאור מצוין שהוא מיועד לתחימת שפתיים ולא מצוין אם מתאים מתחת לעיניים. אפשר לראות גם עיפרון עיניים חום, אבל הגוון שלו לא מצוין בתיאור.");
+    expect(r.reply).not.toMatch(LIST);
+    expect(t.fallbackKinds).toBeUndefined();
+    // It names no product, so a rewrite is asked; the rewrite says the same, and the draft stands as a statement,
+    // with the in-stock products of her ask under it.
+    expect(t.statementKept).toBe(true);
+    expect(cards).toEqual(["202", "203", "205"]);
+  });
+
+  it("★ what a cut leaves of a hedged draft is the answer, also when the cut took another product's sentence", async () => {
+    h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+    const hedge = "טוש גבות חום מיועד לגבות, ולא מצוין אם הוא מתאים לעיניים.";
+    // The owner's list cuts the second sentence, and it named a found product the hedge does not.
+    const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, ...[0, 1, 2].map(() => `${hedge} על טוש גבות שחור יש אחריות לשנה.`));
+    expect(t.memberCut).toBe(true);
+    expect(t.hedgeKept).toBe(true);
+    expect(r.reply).toBe(hedge);
+    // Only the product it names goes under it.
+    expect(cards).toEqual(["201"]);
+  });
+
+  it("★ with nothing left of the hedged draft, the turn goes to the team with no products, never to the list", async () => {
+    h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+    // The owner's list cuts the whole sentence, the hedge with it.
+    const gone = "לא מצוין שהטושים מתאימים לעיניים, ויש עליהם אחריות לשנה.";
+    const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, gone, gone, gone);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(t.hedgeKept).toBeUndefined();
+    expect(r.reply).toBe(TEAM);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ a bare hedge of a few words, or one that leans on the cut sentence, is no answer: the team line, no products", async () => {
+    h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+    // Five words are left.
+    const short = "לא ידוע אם הטושים מתאימים לעיניים. על טוש גבות שחור יש אחריות לשנה.";
+    // What is left opens with "אבל".
+    const leans = "על טוש גבות שחור יש אחריות לשנה. אבל לא ידוע אם טוש גבות חום מתאים לעיניים או רק לגבות.";
+    for (const draft of [short, leans]) {
+      const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, draft, draft, draft);
+      expect(r.trace.gate3.rewrite).toBe("fallback");
+      expect(t.hedgeKept).toBeUndefined();
+      expect(r.reply).toBe(TEAM);
+      expect(cards).toEqual([]);
+      again();
+    }
+  });
+
+  it("★ a remnant that lost the hedge is not the hedged answer: the team line, no products", async () => {
+    h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+    // The owner's list cuts the hedge sentence, which named the black pen; the brown pen's sentence is left, and alone
+    // it would read as an offer.
+    const draft = "לא מצוין אם טוש גבות שחור מתאים לעיניים, ויש עליו אחריות לשנה. טוש גבות חום עולה 79 ₪ והוא נמצא במלאי אצלנו עכשיו.";
+    const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, draft, draft, draft);
+    expect(r.trace.gate3.rewrite).toBe("fallback");
+    expect(t.hedgeKept).toBeUndefined();
+    expect(r.reply).toBe(TEAM);
+    expect(cards).toEqual([]);
+  });
+
+  it("★ a hedge in either draft: the list never goes out for the other draft's cut fit claim", async () => {
+    h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
+    const gone = "לא מצוין אם הטושים מתאימים לעיניים, ויש עליהם אחריות לשנה.";
+    const fits = "הטושים שמצאנו מתאימים גם לאזור שמתחת לעיניים.";
+    // Without a hedge the cut fit claim gets the list, with the word that the fit is not confirmed.
+    const none = await turn("יש טוש לעיניים?", "טוש", PENS, fits, fits, fits);
+    expect(none.r.reply).toMatch(LIST);
+    expect(none.cards.length).toBeGreaterThan(0);
+    again();
+    // The first draft hedged and the rewrite claimed the fit.
+    const first = await turn("יש טוש לעיניים?", "טוש", PENS, gone, fits, fits);
+    expect(first.r.trace.gate3.rewrite).toBe("fallback");
+    expect(first.r.reply).toBe(TEAM);
+    expect(first.cards).toEqual([]);
+    again();
+    // Only the rewrite hedged.
+    const second = await turn("יש טוש לעיניים?", "טוש", PENS, fits, gone, gone);
+    expect(second.r.trace.gate3.rewrite).toBe("fallback");
+    expect(second.r.reply).toBe(TEAM);
+    expect(second.cards).toEqual([]);
+  });
+
+  it("★ the helpers: \"not stated whether it fits\" rules no product out and marks none as fitting", async () => {
+    const { unfitProducts } = await import("../services/reply-engine/engine");
+    const on = (text: string) => [...unfitProducts(text, PENS as any[], "טוש", "יש טוש לעיניים?")].sort();
+    expect(on("לא מצוין אם טוש גבות חום מתאים לאזור העיניים.")).toEqual([]);
+    expect(on("טוש גבות חום מיועד לגבות, ולא מצוין אם הוא מתאים לאזור העיניים.")).toEqual([]);
+    // What the sentence says past the hedge still counts, with "אם" as with "ש".
+    expect(on("לא מצוין שהוא מתאים לעיניים, ולכן הטוש לא מתאים לשימוש שם.")).toEqual([0, 1]);
+    expect(on("לא מצוין אם הוא מתאים לעיניים, ולכן הטוש לא מתאים לשימוש שם.")).toEqual([0, 1]);
+    // The hedge is no "it fits" either: the product it names is still ruled out by the sentence that says so.
+    expect(on("לא מצוין אם טוש גבות חום מתאים לעיניים. טוש גבות חום לא מתאים לעור רגיש.")).toEqual([0]);
+    // A condition is no hedge: the product it names is one the text says fits.
+    expect(on("אם טוש גבות חום מתאים לך, הוא במלאי. הטושים האחרים לא מתאימים לאזור העיניים.")).toEqual([1]);
+  });
+});
