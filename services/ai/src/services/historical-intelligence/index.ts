@@ -8,6 +8,7 @@ import {
 } from "@chatcenter/shared";
 import { runIdentityStage } from "./identity.stage";
 import { runCustomerLearningStage } from "./customer-learning.stage";
+import { runRelevanceStage } from "./relevance.stage";
 import { runKnowledgeExtractionStage } from "./knowledge-extraction.stage";
 import { runKnowledgeClusteringStage } from "./knowledge-clustering.stage";
 import { runKnowledgeDedupeStage } from "./knowledge-dedupe.stage";
@@ -54,7 +55,8 @@ import { dropImportClusters } from "./candidate-index";
  * `stage` to re-enqueue itself. Inserting a stage is a one-line change here.
  */
 const NEXT_STAGE: Record<HistoricalIntelligenceJob["stage"], HistoricalIntelligenceJob["stage"] | null> = {
-  identity: "customer-learning",
+  identity: "relevance",
+  relevance: "customer-learning",
   "customer-learning": "knowledge-extraction",
   "knowledge-extraction": "knowledge-clustering",
   "knowledge-clustering": "knowledge-dedupe",
@@ -67,6 +69,8 @@ const NEXT_STAGE: Record<HistoricalIntelligenceJob["stage"], HistoricalIntellige
 
 const STAGE_STATUS: Record<HistoricalIntelligenceJob["stage"], string> = {
   identity: "IDENTITY_RESOLUTION",
+  // No status of its own (no enum, no migration): part of getting to know who each contact is.
+  relevance: "IDENTITY_RESOLUTION",
   "customer-learning": "CUSTOMER_LEARNING",
   "knowledge-extraction": "KNOWLEDGE_EXTRACTION",
   "knowledge-clustering": "KNOWLEDGE_CLUSTERING",
@@ -114,6 +118,12 @@ async function runStage(job: Job<HistoricalIntelligenceJob>): Promise<void> {
       case "identity": {
         await runIdentityStage({ tenantId, importId });
         await enqueue(tenantId, importId, NEXT_STAGE[stage]);
+        return;
+      }
+      case "relevance": {
+        const result = await runRelevanceStage({ tenantId, importId });
+        // Self-paced: re-enqueue while contacts remain, otherwise move on.
+        await enqueue(tenantId, importId, result.done ? NEXT_STAGE[stage] : stage);
         return;
       }
       case "customer-learning": {
@@ -259,6 +269,7 @@ export function aiDeniedCopy(reason: string): string {
 function failureCopy(stage: HistoricalIntelligenceJob["stage"]): string {
   switch (stage) {
     case "identity":
+    case "relevance":
       return "We imported your conversations but could not finish matching them to your customers.";
     case "customer-learning":
       return "We imported your conversations but could not finish learning from them.";

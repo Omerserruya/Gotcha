@@ -25,6 +25,7 @@ vi.mock("@chatcenter/shared", () => ({
   historicalIntelligenceQueue: { add: vi.fn(async (_n: string, d: any) => { H.enqueued.push(d.stage); }) },
 }));
 vi.mock("../services/historical-intelligence/identity.stage", () => stage("runIdentityStage"));
+vi.mock("../services/historical-intelligence/relevance.stage", () => stage("runRelevanceStage"));
 vi.mock("../services/historical-intelligence/customer-learning.stage", () => stage("runCustomerLearningStage"));
 vi.mock("../services/historical-intelligence/knowledge-extraction.stage", () => stage("runKnowledgeExtractionStage"));
 vi.mock("../services/historical-intelligence/knowledge-clustering.stage", () => stage("runKnowledgeClusteringStage"));
@@ -46,6 +47,12 @@ const job = (s: string, attemptsMade = 0) => ({ data: { tenantId: "t1", importId
 beforeEach(() => { H.updates = []; H.events = []; H.enqueued = []; H.stageErr = null; });
 
 describe("the stage machine", () => {
+  it("★ the contact marks run between identity and customer learning (2026-11-22)", async () => {
+    await processHistoricalIntelligence(job("identity"));
+    await processHistoricalIntelligence(job("relevance"));
+    expect(H.enqueued).toEqual(["relevance", "customer-learning"]);
+  });
+
   it("★ units exhausted: FAILED at once with ai-units:<stage>, the units copy, no retry, nothing enqueued", async () => {
     H.stageErr = new AiUnitsExhaustedError("units_exhausted");
     await expect(processHistoricalIntelligence(job("customer-learning"))).resolves.toBeUndefined();

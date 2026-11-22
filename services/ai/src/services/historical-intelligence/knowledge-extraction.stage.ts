@@ -353,6 +353,8 @@ export async function runKnowledgeExtractionStage(args: {
       tenantId,
       conversationId: { not: null },
       messageCount: { gte: MIN_MESSAGES },
+      // Not a contact the import marked personal (relevance.stage): their chat is no business knowledge.
+      NOT: { conversation: { is: { relevanceSource: "import", relevanceCategory: "personal" } } },
     },
   });
   const customers = await prisma.historicalCustomer.findMany({
@@ -361,6 +363,8 @@ export async function runKnowledgeExtractionStage(args: {
       tenantId,
       conversationId: { not: null },
       messageCount: { gte: MIN_MESSAGES },
+      // Not a contact the import marked personal (relevance.stage): their chat is no business knowledge.
+      NOT: { conversation: { is: { relevanceSource: "import", relevanceCategory: "personal" } } },
     },
     select: {
       conversationId: true,

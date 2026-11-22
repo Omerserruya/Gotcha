@@ -277,6 +277,9 @@ export interface HistoricalIntelligenceJob {
   importId: string;
   stage:
     | "identity"
+    // Each contact personal or business, from their own history (2026-11-22): before learning, so a
+    // personal contact's history never becomes customer memory, knowledge or the brand voice.
+    | "relevance"
     | "customer-learning"
     | "knowledge-extraction"
     | "knowledge-clustering"
