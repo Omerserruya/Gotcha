@@ -127,6 +127,10 @@ export const AuditAction = {
   ALL_SESSIONS_TERMINATED: "auth.all_sessions_terminated",
   EMAIL_CHANGE_REQUESTED: "auth.email_change_requested",
   EMAIL_CHANGE_CONFIRMED: "auth.email_change_confirmed",
+  // A way to sign in other than the password (Google) was connected to, or
+  // removed from, an identity. metadata.provider says which.
+  SIGN_IN_CONNECTION_ADDED: "auth.sign_in_connection_added",
+  SIGN_IN_CONNECTION_REMOVED: "auth.sign_in_connection_removed",
   // ── Business recommendations lifecycle ──
   RECOMMENDATION_COMPLETED: "recommendation.completed",
   RECOMMENDATION_DISMISSED: "recommendation.dismissed",

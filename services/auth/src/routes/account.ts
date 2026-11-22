@@ -28,6 +28,9 @@ import {
   listUserLoginEvents,
   listUserDevices,
   deleteUserDevice,
+  listUserSourceConnections,
+  deleteOAuthSourceConnection,
+  hasUsablePassword,
   mfaRequirementFor,
   isEnrolledWithRecovery,
   isSupportedLocale,
@@ -41,7 +44,7 @@ const router = Router();
 router.use(authenticate);
 
 /** Resolve the caller's Authentik pk (or null) from their identity's subject. */
-async function callerIdentity(req: Request): Promise<{ pk: number; username: string } | null> {
+async function callerIdentity(req: Request): Promise<{ pk: number; username: string; email: string } | null> {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
     select: { identity: { select: { authentikSubject: true } } },
@@ -49,7 +52,7 @@ async function callerIdentity(req: Request): Promise<{ pk: number; username: str
   const subject = user?.identity?.authentikSubject;
   if (!subject) return null;
   const identity = await findIdentityBySubject(subject);
-  return identity ? { pk: identity.pk, username: identity.username } : null;
+  return identity ? { pk: identity.pk, username: identity.username, email: identity.email } : null;
 }
 
 // ─── Profile ───────────────────────────────────────────────────────────────
@@ -368,6 +371,89 @@ router.get("/login-history", async (req: Request, res: Response): Promise<void> 
     res.json({ available: true, events });
   } catch {
     res.json({ available: false, events: [] });
+  }
+});
+
+// ─── Sign-in connections (Sign in with Google) ──────────────────────────────
+//
+// Authentik owns the connection: it makes one the first time a person signs in
+// with Google, by an exact match on the email. Nothing here creates one, and
+// nothing here signs anything. These two routes only show the caller their own
+// connection and let them remove it.
+//
+// The one rule: a connection is never removed when it is the person's only way
+// in. "Another way in" is a usable password or a connection to another source.
+// When the password question cannot be answered (the IdP failed, or the policy
+// that answers it is not set up) the answer is treated as "no password", so the
+// doubt always falls on the side of keeping the person able to sign in.
+
+/** The Authentik source that is Google. Unset = the feature is off everywhere. */
+function googleSourceSlug(): string {
+  return (process.env.AUTHENTIK_GOOGLE_SOURCE_SLUG || "").trim();
+}
+
+/** Whether the Google connection can go, given everything else the person holds. */
+async function hasAnotherWayIn(pk: number, otherConnections: number): Promise<boolean> {
+  if (otherConnections > 0) return true;
+  return (await hasUsablePassword(pk)) === true;
+}
+
+const GOOGLE_OFF = { available: false, connected: false, email: null, connectedAt: null, canDisconnect: false, reason: null };
+
+router.get("/sign-in-connections", async (req: Request, res: Response): Promise<void> => {
+  const slug = googleSourceSlug();
+  if (!slug) { res.json({ google: GOOGLE_OFF }); return; }
+  const identity = await callerIdentity(req);
+  if (!identity) { res.status(409).json({ error: "no_identity" }); return; }
+  try {
+    const connections = await listUserSourceConnections(identity.pk);
+    const google = connections.find((c) => c.sourceSlug === slug);
+    if (!google) {
+      res.json({ google: { ...GOOGLE_OFF, available: true } });
+      return;
+    }
+    const canDisconnect = await hasAnotherWayIn(identity.pk, connections.length - 1);
+    res.json({
+      google: {
+        available: true,
+        connected: true,
+        // A connection carries no address of its own. It was made by matching
+        // this one, so this is the address the Google account answers to.
+        email: identity.email,
+        connectedAt: google.createdAt,
+        canDisconnect,
+        reason: canDisconnect ? null : "no_other_sign_in",
+      },
+    });
+  } catch {
+    res.status(502).json({ error: "idp_unavailable" });
+  }
+});
+
+router.delete("/sign-in-connections/google", async (req: Request, res: Response): Promise<void> => {
+  const slug = googleSourceSlug();
+  if (!slug) { res.status(404).json({ error: "not_available" }); return; }
+  const identity = await callerIdentity(req);
+  if (!identity) { res.status(409).json({ error: "no_identity" }); return; }
+  try {
+    // The id that gets deleted is read from the caller's own list, never from
+    // the request: there is nothing in the URL to point at someone else's.
+    const connections = await listUserSourceConnections(identity.pk);
+    const google = connections.find((c) => c.sourceSlug === slug);
+    if (!google) { res.status(404).json({ error: "not_connected" }); return; }
+    if (!(await hasAnotherWayIn(identity.pk, connections.length - 1))) {
+      res.status(409).json({ error: "no_other_sign_in" });
+      return;
+    }
+    await deleteOAuthSourceConnection(google.id);
+    void writeAudit({
+      tenantId: req.user!.tenantId, actorType: "user", actorId: req.user!.userId,
+      action: AuditAction.SIGN_IN_CONNECTION_REMOVED, targetType: "user", targetId: req.user!.userId,
+      metadata: { self: true, provider: "google" },
+    });
+    res.json({ ok: true });
+  } catch {
+    res.status(502).json({ error: "idp_unavailable" });
   }
 });
 

@@ -13,6 +13,7 @@
  *   support_denied:ownership  removing a user, changing a role, inviting an admin;
  *                             signing a member out (one session or all others),
  *                             removing an MFA device, changing the MFA policy;
+ *                             removing a member's sign-in connection (Google);
  *                             any change to roles, role assignments or grants
  *                             (an invite into a role id is refused at the
  *                             resolved role, auth lib/grant-ceiling);
@@ -62,6 +63,8 @@ const RULES: Rule[] = [
   { methods: ["POST"], path: /^\/api\/agents\/?$/, code: "support_denied:ownership", when: (b) => ["ADMIN", "OWNER", "SYSTEM_ADMIN"].includes(String(b?.role ?? "").toUpperCase()) },
   { methods: ["DELETE"], path: new RegExp(`^/api/account/sessions(/${ID})?$`), code: "support_denied:ownership" },
   { methods: ["DELETE"], path: new RegExp(`^/api/account/security/device/${ID}/${ID}$`), code: "support_denied:ownership" },
+  // A person's own way to sign in (the Google connection): theirs to remove, not support's (2026-11-22).
+  { methods: ["DELETE"], path: new RegExp(`^/api/account/sign-in-connections/${ID}$`), code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/tenant\/security$/, code: "support_denied:ownership" },
   { methods: "WRITE", path: /^\/api\/permissions\/(users|roles)(\/|$)/, code: "support_denied:ownership" },
   // A person's own notification settings (and their WhatsApp number): theirs, not support's (2026-11-02).

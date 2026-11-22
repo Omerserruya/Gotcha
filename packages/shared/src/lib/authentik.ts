@@ -616,3 +616,86 @@ export async function getMfaEnrollmentMap(subjects: string[]): Promise<Map<strin
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, wanted.length) }, worker));
   return result;
 }
+
+// ─── Sign-in connections (Sign in with Google) ───────────────────────────────
+
+/**
+ * One connection between an identity and an outside sign-in source.
+ *
+ * Authentik keeps the outside account's ID on the row and nothing else: there
+ * is no email on a connection. The link is made by an exact email match at the
+ * first sign-in, so "which address is connected" is the identity's own address.
+ */
+export interface AuthentikSourceConnection {
+  /** The connection's pk. The oauth delete route takes this same pk. */
+  id: string;
+  sourceSlug: string;
+  sourceName: string;
+  /** When the connection was made (ISO), or null when Authentik did not say. */
+  createdAt: string | null;
+}
+
+/**
+ * Every sign-in connection one identity holds.
+ *
+ * Throws when the IdP cannot be asked. An empty list here means "none", and a
+ * caller reads "none" as "nothing to disconnect" and "no other way in", so a
+ * failed read must never look like an empty one (the device list made that
+ * mistake once; see listUserDeviceRows).
+ *
+ * The `user` filter is Authentik's; the rows are checked again here, because a
+ * filter the server ignores answers with everybody's connections and the
+ * caller deletes by the ids this returns.
+ */
+export async function listUserSourceConnections(userPk: number): Promise<AuthentikSourceConnection[]> {
+  const rows = await listAll(`/sources/user_connections/all/?user=${encodeURIComponent(String(userPk))}`);
+  return rows
+    .filter((r) => r && r.user === userPk && r.pk != null)
+    .map((r) => ({
+      id: String(r.pk),
+      sourceSlug: String(r.source_obj?.slug ?? ""),
+      sourceName: String(r.source_obj?.name ?? ""),
+      createdAt: typeof r.created === "string" ? r.created : null,
+    }));
+}
+
+/**
+ * Remove one OAuth sign-in connection by its pk.
+ *
+ * The caller owns the ownership check: pass only an id that
+ * listUserSourceConnections returned for that same person.
+ */
+export async function deleteOAuthSourceConnection(id: string): Promise<void> {
+  if (!/^\d+$/.test(String(id))) throw new Error("[authentik] connection id must be a number");
+  await api(`/sources/user_connections/oauth/${id}/`, { method: "DELETE" });
+}
+
+/**
+ * Can this identity sign in with a password?
+ *
+ * Authentik's user API does not say: an invited identity is created with no
+ * usable password, and no field of the user object tells the two apart
+ * (`password_change_date` is filled at creation either way). The exact answer
+ * exists only inside Authentik, so it is asked there: an unbound expression
+ * policy whose whole body is `return request.user.has_usable_password()`,
+ * run for this user through the policy test route. Its pk comes from
+ * AUTHENTIK_USABLE_PASSWORD_POLICY_PK.
+ *
+ * `null` is "could not be told": the env var is unset, the IdP failed, or the
+ * answer was not a plain yes or no. A caller that is about to remove a way to
+ * sign in must treat null as "no password".
+ */
+export async function hasUsablePassword(userPk: number): Promise<boolean | null> {
+  const policyPk = (process.env.AUTHENTIK_USABLE_PASSWORD_POLICY_PK || "").trim();
+  if (!policyPk) return null;
+  try {
+    const res = await api<any>(`/policies/all/${encodeURIComponent(policyPk)}/test/`, {
+      method: "POST",
+      body: JSON.stringify({ user: userPk }),
+    });
+    return typeof res?.passing === "boolean" ? res.passing : null;
+  } catch (err: any) {
+    console.warn(`[authentik] usable-password read failed for pk=${userPk}: ${err?.message ?? err}`);
+    return null;
+  }
+}
