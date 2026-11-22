@@ -154,3 +154,73 @@ describe("★ started from the WhatsApp kind of widget (no website conversation)
     expect(H.messages).toEqual([]);
   });
 });
+
+/**
+ * One thread (2026-11-22): the inbox reads the website chat inside the
+ * WhatsApp conversation, in time order, from the two events written here.
+ * What this side owes that read: the WhatsApp event dated just before the
+ * customer's WhatsApp message, and the website chat archived as well as closed.
+ */
+describe("★ one thread: the divider's time, and the website chat archived", () => {
+  const SAVED = new Date("2026-11-22T10:05:00.200Z");
+
+  it("the WhatsApp event is dated one millisecond before the customer's WhatsApp message", async () => {
+    await arrive({ whatsappMessageAt: SAVED });
+    const [divider, onWebsite] = H.messages;
+    expect(divider.metadata.systemEvent).toBe("continued_from_website");
+    expect(divider.createdAt.toISOString()).toBe("2026-11-22T10:05:00.199Z");
+    // Before, never at or after: at the same instant the order is anybody's.
+    expect(divider.createdAt.getTime()).toBeLessThan(SAVED.getTime());
+    // The website side keeps the database's own time.
+    expect(onWebsite.metadata.systemEvent).toBe("continued_on_whatsapp");
+    expect(onWebsite.createdAt).toBeUndefined();
+  });
+
+  it("without the message's time, or with an unreadable one, the event is dated now", async () => {
+    const before = Date.now();
+    await arrive();
+    expect(H.messages[0].createdAt).toBeInstanceOf(Date);
+    expect(H.messages[0].createdAt.getTime()).toBeGreaterThanOrEqual(before);
+
+    beforeEachReset();
+    await arrive({ whatsappMessageAt: new Date("not a date") });
+    expect(Number.isNaN(H.messages[0].createdAt.getTime())).toBe(false);
+    expect(H.messages[0].createdAt.getTime()).toBeGreaterThanOrEqual(before);
+
+    beforeEachReset();
+    await arrive({ whatsappMessageAt: null });
+    expect(H.messages[0].createdAt.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("the website chat is archived in the same write that closes it", async () => {
+    await arrive({ whatsappMessageAt: SAVED });
+    const web = H.conversations[0];
+    expect(web.status).toBe("CLOSED");
+    expect(web.archivedAt).toBeInstanceOf(Date);
+    // Archived when the link was made, not at the divider's time.
+    expect(web.archivedAt.getTime()).toBe(web.closedAt.getTime());
+    expect(web.archivedAt.getTime()).toBeGreaterThan(SAVED.getTime());
+  });
+
+  it("a website chat that was already closed is archived too", async () => {
+    H.conversations[0].status = "CLOSED";
+    H.conversations[0].closedAt = new Date("2026-11-22T09:00:00Z");
+    await arrive({ whatsappMessageAt: SAVED });
+    expect(H.conversations[0].archivedAt).toBeInstanceOf(Date);
+  });
+
+  it("nothing linked, nothing archived", async () => {
+    await arrive({ channelAccountId: "wa_other", whatsappMessageAt: SAVED });
+    expect(H.conversations[0].archivedAt).toBeUndefined();
+    expect(H.conversations[0].status).toBe("OPEN");
+    expect(H.messages).toEqual([]);
+  });
+
+  it("the page-only event (no website chat) keeps the database's own time", async () => {
+    H.kv = new Map([[`wahandoff:ref:${REF}`, record({ conversationId: null, context: { pageType: "product", productHandle: "h", path: "/p" } })]]);
+    await arrive({ whatsappMessageAt: SAVED });
+    expect(H.messages).toHaveLength(1);
+    expect(H.messages[0].metadata).toMatchObject({ systemEvent: "continued_from_website", fromConversationId: null });
+    expect(H.messages[0].createdAt).toBeUndefined();
+  });
+});

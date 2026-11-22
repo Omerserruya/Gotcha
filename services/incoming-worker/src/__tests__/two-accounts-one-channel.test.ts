@@ -306,3 +306,25 @@ describe("controls: one number per channel behaves exactly as before", () => {
     expect(msgsIn(sales.id)).toHaveLength(1);
   });
 });
+
+/**
+ * One thread (2026-11-22): the website-handoff link dates its divider just
+ * before the customer's WhatsApp message, so it must be handed the time of the
+ * row that was actually saved, not a clock read later.
+ */
+describe("the website-handoff link is told when the WhatsApp message was saved", () => {
+  beforeEach(() => { H.accounts.push({ id: SALES, tenantId: "t1", channel: "WHATSAPP", isActive: true }); });
+
+  it("★ whatsappMessageAt is the saved inbound row's own time", async () => {
+    const { linkWebsiteHandoff } = await import("../services/whatsapp-handoff-link.service");
+    const sales = openOn(SALES);
+    await dispatch(wa("wamid.T1", SALES));
+    await settle();
+    const [saved] = msgsIn(sales.id);
+    expect(saved.createdAt).toBeInstanceOf(Date);
+    expect(linkWebsiteHandoff).toHaveBeenCalledTimes(1);
+    const args = (linkWebsiteHandoff as any).mock.calls[0][0];
+    expect(args.whatsappConversationId).toBe(sales.id);
+    expect(args.whatsappMessageAt).toBe(saved.createdAt);
+  });
+});

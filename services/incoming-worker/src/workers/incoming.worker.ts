@@ -756,6 +756,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         whatsappConversationId: conversation.id,
         whatsappContact: savedContact ? { id: savedContact.id, personId: (savedContact as any).personId ?? null } : null,
         body,
+        // The divider is dated just before this message (one thread, 2026-11-22).
+        whatsappMessageAt: message.createdAt,
       });
       if (linked.linked) console.log(linked.websiteConversationId
         ? `[incoming] website chat ${linked.websiteConversationId} continued on WhatsApp ${conversation.id} (identity ${linked.identity})`

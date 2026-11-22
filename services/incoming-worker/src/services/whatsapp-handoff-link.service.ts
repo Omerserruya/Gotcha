@@ -10,6 +10,13 @@
  *     (system events, the inbox's own convention: messageType "system")
  *   - the bot reads the website chat as context from that event, so the
  *     customer is not asked to repeat themselves
+ *   - the team works ONE thread (2026-11-22): the inbox reads the website
+ *     chat's messages inside the WhatsApp conversation, from these two events
+ *     (conversation service, lib/merged-thread.ts). So the event here is
+ *     dated just before the customer's WhatsApp message (website messages,
+ *     the divider, then WhatsApp), and the website chat is archived as well
+ *     as closed: closed + archived + its event is what takes it off the
+ *     inbox list. Nothing is moved and nothing is deleted.
  *
  * Best effort: a failure here never costs the inbound message.
  */
@@ -36,6 +43,8 @@ export async function linkWebsiteHandoff(args: {
   whatsappConversationId: string;
   whatsappContact: { id: string; personId: string | null } | null;
   body: string | null | undefined;
+  /** When the customer's WhatsApp message (the one carrying the code) was saved. */
+  whatsappMessageAt?: Date | null;
 }): Promise<HandoffLinkResult> {
   const ref = findHandoffRef(args.body);
   if (!ref) return { linked: false, reason: "no_code" };
@@ -90,12 +99,18 @@ export async function linkWebsiteHandoff(args: {
   }
 
   const now = new Date();
+  // The divider stands between the website messages and the WhatsApp ones:
+  // one millisecond before the message that carried the code.
+  const arrivedAt = args.whatsappMessageAt instanceof Date && !Number.isNaN(args.whatsappMessageAt.getTime())
+    ? new Date(args.whatsappMessageAt.getTime() - 1)
+    : now;
   const [toWhatsapp, toWebsite] = await prisma.$transaction([
     prisma.message.create({
       data: {
         tenantId: args.tenantId, conversationId: args.whatsappConversationId, channel: "WHATSAPP" as any,
         direction: "INBOUND", body: "", messageType: "system", status: "DELIVERED",
         metadata: { systemEvent: "continued_from_website", fromConversationId: web.id, ref, identity },
+        createdAt: arrivedAt,
       },
     }),
     prisma.message.create({
@@ -107,7 +122,7 @@ export async function linkWebsiteHandoff(args: {
     }),
     prisma.conversation.update({
       where: { id: web.id },
-      data: { status: "CLOSED", closedAt: web.status === "CLOSED" ? undefined : now },
+      data: { status: "CLOSED", closedAt: web.status === "CLOSED" ? undefined : now, archivedAt: now },
     }),
   ]);
   await getRedis().del(handoffConversationKey(web.id)).catch(() => undefined);
