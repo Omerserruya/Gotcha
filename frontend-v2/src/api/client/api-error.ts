@@ -128,6 +128,8 @@ export interface ApiErrorInit {
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   /** An email change's 502: the Google connection was removed before it failed. */
   readonly googleDisconnected?: boolean;
+  /** A validator's per-field reasons: `{ email: 'invalid' }`. */
+  readonly fields?: Readonly<Record<string, unknown>>;
   readonly cause?: unknown;
 }
 
@@ -182,6 +184,8 @@ export class ApiError extends Error {
   readonly issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   /** An email change's 502: the Google connection was removed before it failed. */
   readonly googleDisconnected?: boolean;
+  /** A validator's per-field reasons: `{ email: 'invalid' }`. */
+  readonly fields?: Readonly<Record<string, unknown>>;
 
   constructor(init: ApiErrorInit) {
     super(init.developerMessage ?? init.kind, { cause: init.cause });
@@ -222,6 +226,7 @@ export class ApiError extends Error {
     this.height = init.height;
     this.issues = init.issues;
     this.googleDisconnected = init.googleDisconnected;
+    this.fields = init.fields;
   }
 
   /**

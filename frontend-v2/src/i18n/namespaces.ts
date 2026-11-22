@@ -157,6 +157,14 @@ export const CREDENTIAL_SURFACE_NAMESPACES = [
  * error boundary's. They are reached signed out from an emailed link, so -
  * like sign-in - they carry none of the product's vocabulary.
  */
-export const CHECKOUT_NAMESPACES = ['checkout', 'errors'] as const satisfies readonly Namespace[];
+/**
+ * `billing` since 2026-11-22: the payment page's "add card" for an organization
+ * the trial blocked uses the billing card session and its return, word for word.
+ */
+export const CHECKOUT_NAMESPACES = [
+  'checkout',
+  'errors',
+  'billing',
+] as const satisfies readonly Namespace[];
 
 export const SHELL_NAMESPACES = ['errors'] as const satisfies readonly Namespace[];

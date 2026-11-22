@@ -100,6 +100,11 @@ export const errorEnvelopeSchema = z.object({
    */
   googleDisconnected: z.boolean().optional().catch(undefined),
   /**
+   * A validator's per-field reasons (`400 { error: 'validation', fields:
+   * { email: 'invalid' } }` - self sign-up). Declared, or `z.object` strips it.
+   */
+  fields: z.record(z.string(), z.unknown()).optional().catch(undefined),
+  /**
    * The billing services' machine-readable reason, which is **not** `code`.
    *
    * `purchase.service.ts` returns `failureCode` on every refusal -

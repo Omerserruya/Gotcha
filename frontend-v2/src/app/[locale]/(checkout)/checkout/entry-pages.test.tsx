@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CheckoutSummary } from '@/api/contracts/checkout';
+import billingMessages from '@/i18n/messages/en/billing.json';
 import messages from '@/i18n/messages/en/checkout.json';
 
 /**
@@ -22,7 +23,7 @@ vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: string) =>
     createTranslator({
       locale: 'en',
-      messages: { checkout: messages },
+      messages: { checkout: messages, billing: billingMessages },
       namespace: namespace as 'checkout',
     }),
 }));
@@ -44,6 +45,18 @@ vi.mock('@/features/checkout/PayButton', () => ({
     <p data-testid="pay" data-live={String(p.live)} data-reference={p.reference}>
       {p.label}
     </p>
+  ),
+}));
+vi.mock('@/features/billing/CardSession', () => ({
+  CardSession: (p: { label: string; live: boolean; returnTo?: string }) => (
+    <p data-testid="add-card" data-live={String(p.live)} data-return={p.returnTo ?? 'v2'}>
+      {p.label}
+    </p>
+  ),
+}));
+vi.mock('@/features/billing/CardReturn', () => ({
+  CardReturn: (p: { cancelled: boolean }) => (
+    <p data-testid="card-return" data-cancelled={String(p.cancelled)} />
   ),
 }));
 vi.mock('@/features/checkout/CheckoutOpen', () => ({
@@ -202,5 +215,36 @@ describe('★★ /checkout/payment-required', () => {
     loadCheckout.mockResolvedValue({ kind: 'unavailable' });
     await open(PaymentRequired as Page, { ref: 'chk_1' });
     expect(screen.getByTestId('checkout-unavailable')).toBeInTheDocument();
+  });
+});
+
+describe('★★ held until a card is stored: the self sign-up trial’s card day (2026-11-22)', () => {
+  it('★★ no checkout, reason card_required: the approved lines and the billing card session, back to this page', async () => {
+    loadMine.mockResolvedValue({ kind: 'cardRequired' });
+    await open(PaymentRequired as Page);
+    const page = screen.getByTestId('checkout-card-required');
+    expect(page).toHaveTextContent(messages.paymentRequired.cardRequired.title);
+    expect(page).toHaveTextContent(messages.paymentRequired.cardRequired.lead);
+    const add = screen.getByTestId('add-card');
+    expect(add).toHaveTextContent(billingMessages.profile.addCard);
+    expect(add).toHaveAttribute('data-return', 'payment-required');
+    expect(screen.queryByTestId('card-return')).toBeNull();
+  });
+
+  it('⚠⚠ behind BILLING_WRITES like every card session: held where writes are off', async () => {
+    loadMine.mockResolvedValue({ kind: 'cardRequired' });
+    writes.on = false;
+    try {
+      await open(PaymentRequired as Page);
+      expect(screen.getByTestId('add-card')).toHaveAttribute('data-live', 'false');
+    } finally {
+      writes.on = true;
+    }
+  });
+
+  it('★ back from the provider (?card=1): the return confirms; a cancel says so', async () => {
+    loadMine.mockResolvedValue({ kind: 'cardRequired' });
+    await open(PaymentRequired as Page, { card: '1', cancelled: '1' });
+    expect(screen.getByTestId('card-return')).toHaveAttribute('data-cancelled', 'true');
   });
 });

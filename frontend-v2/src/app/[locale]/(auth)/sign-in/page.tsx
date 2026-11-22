@@ -4,6 +4,7 @@ import { SignInScreen } from './SignInScreen';
 import { FinishSignIn } from './FinishSignIn';
 import { checkedFlowSlug, isProviderEndpoint } from '@/api/contracts/auth-flow';
 import { markerOf, SIGN_IN_GOOGLE_MARKERS } from '@/api/contracts/google-sign-in';
+import { loadSignUpConfig } from '@/features/signup/load-signup-config';
 import { oidcConfiguration, productCallbackUrl } from '@/auth/oidc';
 import { appUrl } from '@/lib/base-path';
 import { Logo } from '@/design-system/brand/Logo';
@@ -122,6 +123,8 @@ export default async function SignInPage({
   const flow = checkedFlowSlug(params.flow) ?? undefined;
   const flowQuery = flow ? flowQueryOf(params) : undefined;
   const connecting = params.connect === 'google';
+  // Self sign-up (2026-11-22): the link under the form only while the server's switch is on.
+  const signUpOpen = (await loadSignUpConfig()).enabled;
   const locale = await getLocale();
   const t = await getTranslations('auth');
   /*
@@ -344,7 +347,15 @@ export default async function SignInPage({
         wrong line but an actively wrong statement: the person reading it has
         already answered that question and is halfway in.
       */
-      footnote={<p className={styles.footnote}>{t('signIn.footnote')}</p>}
+      footnote={
+        signUpOpen ? (
+          <p className={styles.footnote} data-testid="sign-up-link">
+            {t('signUp.noAccount')} <a href={appPath(`/${locale}/sign-up`)}>{t('signUp.signUp')}</a>
+          </p>
+        ) : (
+          <p className={styles.footnote}>{t('signIn.footnote')}</p>
+        )
+      }
     />
   );
 }

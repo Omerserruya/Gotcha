@@ -36,6 +36,10 @@
     "held": {
       "tag": "Not available here",
       "why": "Billing in this environment uses the live payment account, so no payment is started from here."
+    },
+    "cardRequired": {
+      "title": "Your trial has ended",
+      "lead": "To keep working with GOTCHA, set up payment."
     }
   },
   "processing": {

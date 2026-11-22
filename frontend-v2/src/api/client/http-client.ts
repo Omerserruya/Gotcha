@@ -121,6 +121,7 @@ async function readErrorBody(response: Response): Promise<{
   height?: number;
   issues?: { readonly errors: readonly unknown[]; readonly warnings: readonly unknown[] };
   googleDisconnected?: boolean;
+  fields?: Readonly<Record<string, unknown>>;
 }> {
   let raw: unknown;
   try {
@@ -171,6 +172,7 @@ async function readErrorBody(response: Response): Promise<{
     width: parsed.data.width,
     height: parsed.data.height,
     googleDisconnected: parsed.data.googleDisconnected,
+    fields: parsed.data.fields,
   };
 }
 
@@ -263,6 +265,7 @@ export class HttpClient {
         issues,
         detailText,
         googleDisconnected,
+        fields,
       } = await readErrorBody(response);
       const error = fail({
         /*
@@ -306,6 +309,7 @@ export class HttpClient {
         issues,
         detailText,
         googleDisconnected,
+        fields,
         requestId: effectiveRequestId,
       });
       if (error.kind === 'authentication') {

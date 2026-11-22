@@ -46,6 +46,12 @@ describe('★ start: the provider’s secure page, and only a secure one', () =>
     expect(post.mock.calls[0]![0]).toMatchObject({ body: { returnTo: 'v2' } });
   });
 
+  it('★ the payment page’s card asks to come back there (returnTo "payment-required", 2026-11-22)', async () => {
+    post.mockImplementation(answering({ redirectUrl: 'https://pay.example/p/1', sessionId: 's1' }));
+    await startCardSession('payment-required');
+    expect(post.mock.calls[0]![0]).toMatchObject({ body: { returnTo: 'payment-required' } });
+  });
+
   it('a page that is not https is never handed to the browser', async () => {
     post.mockImplementation(answering({ redirectUrl: 'http://pay.example/p/1', sessionId: 's1' }));
     expect(await startCardSession()).toEqual({ ok: false, reason: 'failed' });

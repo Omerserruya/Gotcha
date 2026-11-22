@@ -7,6 +7,8 @@ import { checkoutFor, type CheckoutQuery } from '@/features/checkout/checkout-fo
 import { checkoutPagePath, referenceFrom } from '@/features/checkout/checkout-pages';
 import { loadMine } from '@/features/checkout/load-checkout';
 import { PayButton } from '@/features/checkout/PayButton';
+import { CardReturn } from '@/features/billing/CardReturn';
+import { CardSession } from '@/features/billing/CardSession';
 import { SummaryCard } from '@/features/checkout/SummaryCard';
 import styles from '@/features/checkout/Checkout.module.css';
 import { redirect } from '@/i18n/navigation';
@@ -40,6 +42,7 @@ export default async function Page({
       });
     }
     if (mine.kind === 'expired') redirect({ href: checkoutPagePath('expired'), locale });
+    if (mine.kind === 'cardRequired') return await cardRequiredScreen(q);
     return <CheckoutUnavailable />;
   }
 
@@ -75,6 +78,46 @@ export default async function Page({
           {t('notYet')}
         </p>
       )}
+    </CheckoutFrame>
+  );
+}
+
+/**
+ * ★★ HELD UNTIL A CARD IS STORED (self sign-up, 2026-11-22). The trial's card
+ * day blocked this organization; there is no checkout to pay, only a card to
+ * store - and a confirmed card restores the organization (Backend).
+ *
+ * The billing card session and its return, word for word: nothing in the
+ * payment flow itself changes. The provider sends the person back here
+ * (`returnTo: "payment-required"`, `?card=1`, `&cancelled=1` on a cancel),
+ * and the return confirms the card from the id this tab kept.
+ *
+ * ⚠ Behind BILLING_WRITES like every card session: on dev the provider is
+ *   the live account, so "held" is what dev shows. Tested with mocks only.
+ */
+async function cardRequiredScreen(query: CheckoutQuery) {
+  const t = await getTranslations('checkout.paymentRequired');
+  const tb = await getTranslations('billing');
+  const back = query.card === '1';
+  return (
+    <CheckoutFrame
+      title={t('cardRequired.title')}
+      lead={t('cardRequired.lead')}
+      testid="checkout-card-required"
+    >
+      {back ? <CardReturn cancelled={query.cancelled === '1'} /> : null}
+      <SupportRefused kind="billing">
+        <CardSession
+          live={billingWritesEnabled()}
+          label={tb('profile.addCard')}
+          className={styles.primary}
+          sentence={tb('held.addCard')}
+          heldTag={tb('held.tag')}
+          heldWhy={tb('held.why')}
+          returnTo="payment-required"
+          testid="checkout-add-card"
+        />
+      </SupportRefused>
     </CheckoutFrame>
   );
 }

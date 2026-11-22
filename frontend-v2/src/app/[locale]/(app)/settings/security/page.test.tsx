@@ -57,6 +57,13 @@ vi.mock('@/features/security/GoogleConnection', () => ({
     </div>
   ),
 }));
+const domainJoin = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('@/features/security/load-domain-join', () => ({
+  loadDomainJoin: async () => domainJoin.value,
+}));
+vi.mock('@/features/security/DomainJoinRow', () => ({
+  DomainJoinRow: () => <div data-testid="domain-join" />,
+}));
 vi.mock('@/shell/account/ConnectGoogleButton', () => ({
   ConnectGoogleButton: () => <button type="button" data-testid="connect-go" />,
 }));
@@ -136,5 +143,31 @@ describe('★★ 16 - connected accounts (Google sign-in, 2026-11-22)', () => {
     google.card = { kind: 'unread' };
     render(await Page(props({ google: 'pwned' })));
     expect(screen.getByTestId('google-connection')).toHaveAttribute('data-marker', 'none');
+  });
+});
+
+describe('★★ 16 - joining by domain replaces 02’s Google row once the server has it', () => {
+  it('⚠⚠ unread or not there yet: 02’s row exactly as it was', async () => {
+    domainJoin.value = null;
+    render(await Page(props()));
+    expect(screen.queryByTestId('domain-join')).toBeNull();
+    expect(
+      within(screen.getByTestId('section-mfa')).getByText('Sign in with Google'),
+    ).toBeInTheDocument();
+  });
+
+  it('★ read: the domain row in its place', async () => {
+    domainJoin.value = { domain: 'aviv.co.il', joinByDomain: false, publicDomain: false };
+    try {
+      render(await Page(props()));
+      expect(
+        within(screen.getByTestId('section-mfa')).getByTestId('domain-join'),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId('section-mfa')).queryByText('Sign in with Google'),
+      ).toBeNull();
+    } finally {
+      domainJoin.value = null;
+    }
   });
 });

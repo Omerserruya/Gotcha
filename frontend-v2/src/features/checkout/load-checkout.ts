@@ -3,6 +3,8 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
+import { cardRequired } from '@/api/contracts/self-signup';
+
 import { isApiError } from '@/api/client/api-error';
 import { platformHeaders, serverApi } from '@/api/client/server-api';
 import { checkoutSummarySchema, type CheckoutSummary } from '@/api/contracts/checkout';
@@ -97,12 +99,18 @@ export type MineRead =
   | { readonly kind: 'open'; readonly reference: string }
   /** The offer ran out; it is not reissued automatically (`checkout.ts:206`). */
   | { readonly kind: 'expired' }
+  /**
+   * No checkout, and the organization is held until a card is stored - the
+   * self sign-up trial's card day (Backend, 2026-11-22: `reason: "card_required"`).
+   */
+  | { readonly kind: 'cardRequired' }
   | { readonly kind: 'none' };
 
 const mineSchema = z.object({
   data: z.looseObject({
     checkout: z.looseObject({ reference: z.string() }).nullable().catch(null),
     expired: z.boolean().catch(false).default(false),
+    reason: z.unknown().optional(),
   }),
 });
 
@@ -122,6 +130,7 @@ export async function loadMine(): Promise<MineRead> {
     });
     const reference = mine.data.checkout?.reference;
     if (reference) return { kind: 'open', reference };
+    if (cardRequired(mine.data.reason)) return { kind: 'cardRequired' };
     return mine.data.expired ? { kind: 'expired' } : { kind: 'none' };
   } catch {
     return { kind: 'none' };

@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
-import { startCardSession } from './actions';
+import { startCardSession, type CardSessionReturn } from './actions';
 import { CARD_SESSION_KEY } from './card-session';
 import styles from './Billing.module.css';
 import { HeldConfirm } from './HeldConfirm';
@@ -22,6 +22,7 @@ export function CardSession({
   heldTag,
   heldWhy,
   testid,
+  returnTo = 'v2',
 }: {
   /** BILLING_WRITES=on for this deployment - decided on the server. */
   readonly live: boolean;
@@ -31,6 +32,8 @@ export function CardSession({
   readonly heldTag: string;
   readonly heldWhy: string;
   readonly testid: string;
+  /** Where the provider sends the person back (`startCardSession`). */
+  readonly returnTo?: CardSessionReturn;
 }) {
   const t = useTranslations('billing.held');
   const tc = useTranslations('billing.card');
@@ -69,7 +72,7 @@ export function CardSession({
   const go = async () => {
     setBusy(true);
     setProblem(null);
-    const started = await startCardSession();
+    const started = await startCardSession(returnTo);
     if (!started.ok) {
       setBusy(false);
       setProblem(tc(`refused.${started.reason}`));
