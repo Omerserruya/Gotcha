@@ -94,7 +94,7 @@ describe("relevance in the inbox", () => {
   it("★ an override sticks, names the person, and moves the row live", async () => {
     S.rows = rows(); S.updates = []; S.events = [];
     const r = await setRelevanceOverride("T", "internal", "business", { userId: "u9", role: "ADMIN" });
-    expect(r).toMatchObject({ category: "business", source: "override", overriddenBy: "u9" });
+    expect(r?.relevance).toMatchObject({ category: "business", source: "override", overriddenBy: "u9" });
     expect(S.events.some((e) => e.event === "conversation:updated" && e.data.relevance?.category === "business")).toBe(true);
     await expect(setRelevanceOverride("T", "internal", "notice", { userId: "u9", role: "ADMIN" })).rejects.toMatchObject({ status: 400 });
     expect(await setRelevanceOverride("T", "nope", "business", { userId: "u9", role: "ADMIN" })).toBeNull();

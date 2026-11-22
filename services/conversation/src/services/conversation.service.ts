@@ -11,6 +11,7 @@ import { waitingSinceFor } from "../lib/waiting-since";
 import * as messageService from "./message.service";
 import { presentMessageMedia } from "../lib/message-media";
 import { channelWhere } from "../lib/channel-filter";
+import { senderIds, senderRuleReads, senderRuleEffect, type SenderRuleEffect } from "../lib/relevance-sender-rule";
 
 /**
  * Keyset pagination for the conversation list.
@@ -1116,6 +1117,13 @@ async function sendAutoGreeting(
 }
 
 
+/** A hand mark's answer: the relevance object, and what the mark did to its sender when it did something. */
+export interface RelevanceOverrideResult {
+  relevance: ConversationRelevanceView | null;
+  /** Present only when the ai's sender rule reads this mark (lib/relevance-sender-rule). */
+  senderRule?: SenderRuleEffect;
+}
+
 /**
  * A person's relevance override ("this is business" / "this is personal", 2026-11-17). Only on a
  * conversation the person can see (the list's visibility rule); the classifier never relabels it.
@@ -1126,15 +1134,32 @@ export async function setRelevanceOverride(
   conversationId: string,
   category: string,
   viewer: { userId: string; role?: string; departmentId?: string },
-): Promise<ConversationRelevanceView | null> {
+): Promise<RelevanceOverrideResult | null> {
   if (!(RELEVANCE_OVERRIDES as readonly string[]).includes(category)) {
     throw Object.assign(new Error(`invalid_category: one of ${RELEVANCE_OVERRIDES.join(", ")}`), { status: 400 });
   }
   const where: any = { id: conversationId, tenantId };
   const visibility = visibilityClause({ userId: viewer.userId, role: viewer.role, departmentId: viewer.departmentId });
   if (visibility) where.OR = visibility;
-  const found = await prisma.conversation.findFirst({ where, select: { id: true } });
+  const found: any = await prisma.conversation.findFirst({
+    where,
+    select: { id: true, channel: true, customerExternalId: true, channelAccount: { select: { relevanceFilterEnabled: true } } },
+  });
   if (!found) return null;
+  // What the mark does to its sender (2026-11-22). A business mark needs the sender's newest hand mark as it
+  // stood before this one, so it is read before the update: the same read the ai's sender rule makes (and, like
+  // it, live conversations only). A failed read is no claim.
+  const reads = senderRuleReads(found);
+  let newestBefore: string | null = null;
+  if (reads && category === "business") {
+    const newest: any = await prisma.conversation.findFirst({
+      where: { tenantId, channel: found.channel, customerExternalId: { in: senderIds(found.customerExternalId) }, relevanceSource: "override", relevanceOverriddenAt: { not: null } } as any,
+      orderBy: { relevanceOverriddenAt: "desc" } as any,
+      select: { relevanceCategory: true } as any,
+    }).catch(() => null);
+    newestBefore = newest?.relevanceCategory ?? null;
+  }
+  const senderRule = senderRuleEffect(category, reads, newestBefore);
   const now = new Date();
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
@@ -1148,7 +1173,7 @@ export async function setRelevanceOverride(
   const relevance = withRelevance(updated as any).relevance;
   // The list moves the row live; a partial payload, merged by id.
   emitToTenant(tenantId, "conversation:updated", { id: conversationId, relevance });
-  return relevance;
+  return senderRule ? { relevance, senderRule } : { relevance };
 }
 
 

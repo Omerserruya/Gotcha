@@ -93,4 +93,9 @@ it runs on a tenant until the shadow labels match a person's review, and only th
 - `unread-counts` accepts the view `irrelevant` and `hideIrrelevant=true`. The home or waiting badge route
   is still to be checked.
 - `PUT /api/conversations/:id/relevance {category: "business" | "personal"}` returns the relevance object.
+  Beside `data` the answer carries `senderRule` (2026-11-22) only when the mark changed what the sender rule
+  does: `"applied"` (a personal mark: this sender's new conversations on this channel come in as personal) or
+  `"lifted"` (a business mark while the sender's newest hand mark was personal). Absent on email, on a channel
+  with no relevance filter, on a channel account whose filter is off, and on a business mark that ends nothing.
+  Decided in `services/conversation/src/lib/relevance-sender-rule.ts`, which mirrors the ai's read of hand marks.
 - `conversation:updated` carries `relevance` when it changes.
