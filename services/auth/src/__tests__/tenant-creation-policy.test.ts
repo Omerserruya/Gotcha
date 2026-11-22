@@ -17,6 +17,9 @@ import { createTenantSchema } from "../routes/system";
 
 const SRC = join(__dirname, "..");
 const system = readFileSync(join(SRC, "routes/system.ts"), "utf8");
+// The steps of a creation live in one function that the console route and the
+// public sign-up both call (2026-11-22).
+const creation = readFileSync(join(SRC, "services/tenant-creation.service.ts"), "utf8");
 
 const WHO = { name: "Acme", slug: "acme", adminEmail: "a@acme.com", adminName: "A" };
 const FUTURE = new Date(Date.now() + 30 * 86_400_000).toISOString();
@@ -70,7 +73,7 @@ describe("the workspace's language (2026-10-24)", () => {
     expect(createTenantSchema.safeParse({ ...poc(), locale: "fr" }).success).toBe(false);
   });
   it("the route stores it on the tenant and hands it to both emails", () => {
-    const src = require("fs").readFileSync(require("path").join(__dirname, "../routes/system.ts"), "utf8");
+    const src = creation;
     expect(src).toContain('status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP", defaultLocale: locale');
     expect(src).toContain("sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id, locale)");
     expect(src).toMatch(/setupUrl: entry\?\.needsPassword \? entry\.actionUrl : null,\n\s+locale,/);
@@ -117,7 +120,17 @@ describe("POC must be fully specified", () => {
 });
 
 describe("the route's own guarantees", () => {
-  const create = system.slice(system.indexOf('router.post("/tenants"'), system.indexOf('router.post(\n  "/tenants/:id/activate-manual-contract"'));
+  const create = creation.slice(creation.indexOf("export async function createTenantWithAdmin"));
+  const route = system.slice(system.indexOf('router.post("/tenants"'), system.indexOf('router.post(\n  "/tenants/:id/activate-manual-contract"'));
+
+  it("the console route creates through the one shared function and nothing else", () => {
+    expect(route).toContain("await createTenantWithAdmin({");
+    expect(route).toContain("res.status(outcome.status).json(outcome.body)");
+    // A second copy of the steps in the route is how the two doors would drift.
+    for (const step of ["tenant.create", "ensureIdentity", "createProvisioningRequest", "sendOnboardingEmail", "seedTenantRbac"]) {
+      expect(route, step).not.toContain(step);
+    }
+  });
 
   it("validates the POC expiry and feature areas BEFORE creating anything", () => {
     const beforeTenant = create.slice(0, create.indexOf("tx.tenant.create"));
