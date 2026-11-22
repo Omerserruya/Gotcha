@@ -49,6 +49,7 @@ import {
   handoffMessage, plainHandoffMessage,
   waMeUrl,
   recordHandover, assignSoleMemberOnHandoff } from "@chatcenter/shared";
+import { customAppForShop } from "@chatcenter/shared/src/lib/shopify-custom-app";
 import { sanitizeUntrusted } from "../services/prompt-sanitizer.service";
 import {
   resolveForBootstrap,
@@ -417,8 +418,12 @@ router.get("/proxy/identity", bootstrapLimiter, async (req: Request, res: Respon
   try {
     // The unified app signs proxy requests with the CORE secret. There is no
     // second Shopify app and no second secret; see lib/shopify-app-identity.
+    // Signed by the app the store installed: its per-merchant custom app when it has one (2026-11-22),
+    // else the official app. Never a secret of an app we do not know.
     const { clientSecret } = getShopifyAppIdentity();
-    if (!verifyAppProxySignature(req.query as Record<string, string | string[] | undefined>, clientSecret)) {
+    const proxyQuery = req.query as Record<string, string | string[] | undefined>;
+    const custom = await customAppForShop(Array.isArray(proxyQuery.shop) ? proxyQuery.shop[0] : proxyQuery.shop).catch(() => null);
+    if (![custom?.clientSecret, clientSecret].filter((s): s is string => !!s).some((s) => verifyAppProxySignature(proxyQuery, s))) {
       // Uniform refusal: a bad signature, a missing secret and a replayed
       // request all look the same from the storefront.
       res.status(401).json({ error: "unavailable" });

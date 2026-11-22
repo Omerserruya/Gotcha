@@ -310,6 +310,8 @@ export async function linkShopifyShopToTenant(input: {
       expiresAt: input.credentials.expiresAt,
       scope: input.credentials.scope,
       shopDomain: shop,
+      // A per-merchant custom app's connection (2026-11-22): its token refreshes with that app's credentials.
+      ...((input.credentials as any).appClientId ? { appClientId: (input.credentials as any).appClientId } : {}),
     }),
     config: { shopDomain: shop },
     connectedBy: input.connectedBy,

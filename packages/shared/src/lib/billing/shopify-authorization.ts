@@ -43,6 +43,8 @@
  * row is absent, nobody is grandfathered.
  */
 import { prisma } from "../prisma";
+/** The billing grant's marker (lib/shopify-custom-app CUSTOM_APP_GRANT_REASON, billing's grant). */
+const CUSTOM_APP_GRANT_REASON = "shopify_custom_app";
 
 /**
  * Capabilities a Shopify subscription pays for.
@@ -81,7 +83,8 @@ export type ShopifyDenialReason =
 export interface ShopifyAuthorization {
   authorized: boolean;
   /** Which of the two funding sources granted it, for audit and for the UI. */
-  source: (typeof SHOPIFY_FUNDING_SOURCES)[number] | null;
+  /** GOTCHA_CUSTOM_APP: GOTCHA's grant for a store on a per-merchant custom app (no Shopify Billing). */
+  source: (typeof SHOPIFY_FUNDING_SOURCES)[number] | "GOTCHA_CUSTOM_APP" | null;
   /** Exactly the Shopify capabilities this workspace has paid for. */
   capabilities: ShopifyCapability[];
   reason: ShopifyDenialReason | null;
@@ -122,7 +125,12 @@ export async function getShopifyAuthorization(tenantId: string): Promise<Shopify
     where: {
       tenantId,
       entitlementKey: { in: [...SHOPIFY_FUNDED_ENTITLEMENTS] },
-      source: { in: [...SHOPIFY_FUNDING_SOURCES] as any },
+      // Shopify's own two sources, or GOTCHA's grant for a store on a per-merchant custom app (no
+      // Shopify Billing there, 2026-11-22): source ADDON with exactly that reason. No other ADDON counts.
+      OR: [
+        { source: { in: [...SHOPIFY_FUNDING_SOURCES] as any } },
+        { source: "ADDON" as any, reason: CUSTOM_APP_GRANT_REASON },
+      ],
     },
     select: { entitlementKey: true, value: true, source: true, expiresAt: true },
   });
@@ -140,7 +148,9 @@ export async function getShopifyAuthorization(tenantId: string): Promise<Shopify
   // merchant is paying, and that is the more truthful thing to report.
   const source = live.some((r) => r.source === "SHOPIFY_SUBSCRIPTION")
     ? "SHOPIFY_SUBSCRIPTION"
-    : "SHOPIFY_GRANDFATHERED";
+    : live.some((r) => r.source === "SHOPIFY_GRANDFATHERED")
+      ? "SHOPIFY_GRANDFATHERED"
+      : "GOTCHA_CUSTOM_APP";
 
   return {
     authorized: true,

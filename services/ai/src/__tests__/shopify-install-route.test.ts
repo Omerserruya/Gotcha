@@ -63,6 +63,10 @@ const H = vi.hoisted(() => {
     /** Replace retirements, in call order with the billing calls (App Review 132211). */
     order: [] as string[],
     retired: [] as any[],
+    /** The shop's per-merchant custom app (2026-11-22), when set. */
+    customApp: { current: null as any },
+    customOutcomes: [] as string[],
+    installedCustom: [] as string[],
   };
 });
 
@@ -85,8 +89,20 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
     readDurableSetting: async (t: string, k: string) => H.settings.get(`${t}|${k}`) ?? null,
     writeDurableSetting: async (t: string, k: string, v: string | null) => { H.settings.set(`${t}|${k}`, v); },
     coreAllowsShopifyConnect: async () => ({ allowed: H.corePaid.yes }),
+    verifyAppEntryForShop: async (q: any) => {
+      const r: any = await (actual as any).verifyAppEntryForShop(q);
+      return r.ok && H.customApp.current ? { ...r, app: H.customApp.current } : r;
+    },
   };
 });
+vi.mock("@chatcenter/shared/src/lib/shopify-custom-app", async (orig) => ({
+  ...(await orig<any>()),
+  customAppForShop: async () => H.customApp.current,
+}));
+vi.mock("../services/shopify-custom-app-billing.service", () => ({
+  customAppBillingOutcome: async (t: string) => { H.customOutcomes.push(t); return { state: "CUSTOM_APP_GRANTED", requiresPlanSelection: false, planSelectionUrl: null, grandfathered: false, connectionId: null }; },
+  markCustomAppInstalled: async (t: string) => { H.installedCustom.push(t); },
+}));
 
 // The intent/pending store is exercised for its CONTRACT (single use, opaque
 // handle, no token to the browser), not for its Redis wiring.
@@ -206,6 +222,9 @@ beforeEach(() => {
   H.dismissed = [];
   H.order = [];
   H.retired = [];
+  H.customApp.current = null;
+  H.customOutcomes = [];
+  H.installedCustom = [];
   H.corePaid.yes = true;
   H.permission.granted = true;
   H.tenantId.current = "tenant-A";
@@ -1173,5 +1192,43 @@ describe("App Review 132211: opening the app from Shopify for an owned store lan
     H.intents.set("i".repeat(64), { tenantId: "tenant-A" });
     const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`).set("Cookie", `gotcha_shopify_intent=${"i".repeat(64)}`);
     expect(res.headers.location).toContain("/admin/oauth/authorize");
+  });
+});
+
+describe("a per-merchant custom app (2026-11-22): the install entry and the claim", () => {
+  const CUSTOM = { kind: "custom", clientId: "custom_client_1", clientSecret: "custom-secret", tenantId: "tenant-A" };
+  const P = "p".repeat(64);
+  const C = "gotcha_shopify_pending";
+  const NEW = "random-randomizer.myshopify.com";
+
+  it("★ the launch signed by the custom app: authorize through that app's client id", async () => {
+    H.customApp.current = CUSTOM;
+    const res = await request(app()).get(`/api/connectors/shopify/install?${entryQuery()}`);
+    const loc = new URL(res.headers.location);
+    expect(loc.pathname).toBe("/admin/oauth/authorize");
+    expect(loc.searchParams.get("client_id")).toBe("custom_client_1");
+    const claims = JSON.parse(Buffer.from(String(loc.searchParams.get("state")).split(".")[1]!, "base64url").toString());
+    expect(claims).toMatchObject({ appClientId: "custom_client_1" });
+  });
+
+  it("★ the claim: no Shopify Billing, GOTCHA's grant, the record installed", async () => {
+    H.customApp.current = CUSTOM;
+    H.pendings.set(P, { shopDomain: NEW, credentials: { accessToken: "shpat_new", appClientId: "custom_client_1" } });
+    const r = await request(app()).post("/api/connectors/shopify/install/claim").set("Cookie", `${C}=${P}`).send({});
+    expect(r.status).toBe(200);
+    expect(H.billingCalls).toEqual([]);
+    expect(H.customOutcomes).toEqual(["tenant-A"]);
+    expect(H.installedCustom).toEqual(["tenant-A"]);
+    expect(r.body.data).toMatchObject({ billingState: "CUSTOM_APP_GRANTED", planSelectionUrl: null });
+  });
+
+  it("★ a custom app made for another workspace cannot be claimed here, and nothing is spent", async () => {
+    H.customApp.current = { ...CUSTOM, tenantId: "tenant-B" };
+    H.pendings.set(P, { shopDomain: NEW, credentials: { accessToken: "shpat_new" } });
+    const r = await request(app()).post("/api/connectors/shopify/install/claim").set("Cookie", `${C}=${P}`).send({});
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe("custom_app_for_another_workspace");
+    expect(H.linkCalls).toEqual([]);
+    expect(H.pendings.has(P)).toBe(true);
   });
 });

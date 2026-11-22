@@ -44,6 +44,7 @@
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 import { assertPublicUrl, shopifyApiVersion, checkShopifyResponseVersion } from "@chatcenter/shared";
+import { appForClientId } from "@chatcenter/shared/src/lib/shopify-custom-app";
 import { orderIdentifierFromArgs } from "./shopify-order-identifier";
 import { reconcile } from "./shopify-item-reconciliation";
 import { validateProfilePatch, verifyReadBack, detectDuplicate } from "./shopify-profile-update";
@@ -953,8 +954,12 @@ const ShopifyAdapter: ProviderAdapter = {
    */
   async refreshTokens(credentials) {
     const shop = credentials.shopDomain;
-    const clientId = process.env.SHOPIFY_API_KEY;
-    const clientSecret = process.env.SHOPIFY_API_SECRET;
+    // The app the token belongs to: a per-merchant custom app's connection carries its client id
+    // (2026-11-22); one we no longer know is refused rather than refreshed with the official secret.
+    const app = await appForClientId(credentials.appClientId ?? null);
+    if (!app) throw new Error("shopify_refresh_unknown_app");
+    const clientId = app.clientId;
+    const clientSecret = app.clientSecret;
     if (!shop) throw new Error("shopify_refresh_no_shop_domain");
     if (!clientId || !clientSecret) throw new Error("shopify_refresh_not_configured");
 
@@ -994,6 +999,7 @@ const ShopifyAdapter: ProviderAdapter = {
       refreshToken: j.refresh_token,
       expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000) : undefined,
       scope: j.scope,
+      ...(credentials.appClientId ? { appClientId: credentials.appClientId } : {}),
     };
   },
 

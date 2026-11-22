@@ -20,6 +20,9 @@ const prismaMock = vi.hoisted(() => ({
         if (r.tenantId !== where.tenantId) return false;
         if (where.entitlementKey?.in && !where.entitlementKey.in.includes(r.entitlementKey)) return false;
         if (where.source?.in && !where.source.in.includes(r.source)) return false;
+        // The custom-app grant (2026-11-22): the query names its sources as an OR of (source[, reason]).
+        if (Array.isArray(where.OR) && !where.OR.some((w: any) =>
+          (w.source?.in ? w.source.in.includes(r.source) : w.source === r.source) && (w.reason === undefined || w.reason === r.reason))) return false;
         return true;
       });
     }),
@@ -156,7 +159,12 @@ describe("cancellation leaves Core alone", () => {
     for (const call of prismaMock.tenantEntitlement.findMany.mock.calls) {
       const where = (call[0] as any).where;
       expect(where.entitlementKey.in).toEqual([...SHOPIFY_FUNDED_ENTITLEMENTS]);
-      expect(where.source.in).toEqual(["SHOPIFY_SUBSCRIPTION", "SHOPIFY_GRANDFATHERED"]);
+      // Shopify's two sources, and GOTCHA's per-merchant custom-app grant (ADDON with exactly that reason,
+      // 2026-11-22): still nothing a Core plan grants.
+      expect(where.OR).toEqual([
+        { source: { in: ["SHOPIFY_SUBSCRIPTION", "SHOPIFY_GRANDFATHERED"] } },
+        { source: "ADDON", reason: "shopify_custom_app" },
+      ]);
     }
   });
 });

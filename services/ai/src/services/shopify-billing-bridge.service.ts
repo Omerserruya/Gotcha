@@ -54,6 +54,10 @@ export class CrossTenantShopError extends Error {
   }
 }
 
+export async function postToBilling(path: string, body: unknown): Promise<Response> {
+  return post(path, body);
+}
+
 async function post(path: string, body: unknown): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

@@ -1291,3 +1291,92 @@ export async function sendSignInHintEmail(email: string, locale: "he" | "en", te
     throw err;
   }
 }
+
+// ─── Shopify per-merchant custom apps (2026-11-22) ──────────
+
+/**
+ * The two emails of a per-merchant Shopify custom app (ai routes/shopify-custom-app.ts):
+ *   - "request_notice": to the internal address (SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL; unset, nothing is sent)
+ *     when a workspace asks for a store link;
+ *   - "install_link": the install link to the admin who asked, in the workspace's language.
+ * Wording approved by Omer (2026-11-22). The install link is never written to the notification log.
+ */
+export async function sendShopifyCustomAppEmail(a: {
+  kind: "request_notice" | "install_link";
+  tenantId: string;
+  tenantName: string;
+  shopDomain: string;
+  to: string;
+  locale?: string;
+  installLink?: string;
+  expiresAt?: string;
+  requestedAt?: string;
+  consoleUrl?: string;
+}): Promise<void> {
+  const he = a.locale === "he";
+  let subject: string;
+  let text: string;
+  let html: string;
+  if (a.kind === "request_notice") {
+    subject = `Shopify store waiting for a custom app: ${a.shopDomain}`;
+    text = [
+      `Workspace ${a.tenantName} (${a.tenantId}) asked to connect ${a.shopDomain} on ${a.requestedAt ?? ""}.`,
+      "1. Create the app in the Shopify Dev Dashboard.",
+      "2. Run tools/shopify-custom-app/deploy-config.sh <client_id>.",
+      `3. In the Dashboard: distribution custom, the store ${a.shopDomain}, generate the install link, the IP allowlist.`,
+      `4. Paste the client id, the secret and the install link in the console: ${a.consoleUrl ?? ""}`,
+    ].join("\n");
+    html = renderBrandEmail({
+      title: subject,
+      headline: escapeHtml(subject),
+      bodyHtml: text.split("\n").map((l) => emailParagraph(escapeHtml(l))).join(""),
+      locale: "en",
+    });
+  } else {
+    const when = a.expiresAt ? new Date(a.expiresAt).toLocaleString(he ? "he-IL" : "en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jerusalem" }) : "";
+    subject = he ? `קישור להתקנת GOTCHA בחנות ${a.shopDomain}` : `Your GOTCHA install link for ${a.shopDomain}`;
+    const lines = he
+      ? [
+          "שלום,", "",
+          `הכנו עבורכם אפליקציית GOTCHA ייעודית לחנות ${a.shopDomain}. כדי לחבר את החנות, פתחו את הקישור הבא כשאתם מחוברים לחשבון ה-Shopify של החנות, ואשרו את ההתקנה:`,
+          a.installLink ?? "", "",
+          `הקישור בתוקף עד ${when}. בסיום ההתקנה תחזרו ל-GOTCHA, והחנות תחובר לסביבת העבודה ${a.tenantName}.`, "",
+          "אם הקישור פג תוקף, השיבו למייל הזה ונשלח קישור חדש.", "",
+          "צוות GOTCHA",
+        ]
+      : [
+          "Hello,", "",
+          `We have set up a dedicated GOTCHA app for your store ${a.shopDomain}. To connect it, open the link below while signed in to the store's Shopify account, and approve the installation:`,
+          a.installLink ?? "", "",
+          `The link is valid until ${when}. When the installation finishes you return to GOTCHA, and the store is connected to your workspace ${a.tenantName}.`, "",
+          "If the link has expired, reply to this email and we will send a new one.", "",
+          "The GOTCHA team",
+        ];
+    text = lines.join("\n");
+    html = renderBrandEmail({
+      title: subject,
+      headline: escapeHtml(subject),
+      bodyHtml: lines.filter((l) => l && l !== a.installLink).slice(1, -1).map((l) => emailParagraph(escapeHtml(l))).join(""),
+      cta: a.installLink ? { label: he ? "להתקנה בחנות" : "Install in your store", url: a.installLink } : undefined,
+      fallbackUrl: a.installLink,
+      locale: he ? "he" : "en",
+    });
+  }
+  const payload: NotificationPayload = {
+    tenantId: a.tenantId,
+    channel: "email",
+    type: a.kind === "request_notice" ? "shopify_custom_app_request_notice" : "shopify_custom_app_install_link",
+    recipient: a.to,
+    subject,
+    // The install link opens the store's install: not kept in the log.
+    body: withoutCredentialUrls(text, a.installLink),
+    metadata: { shopDomain: a.shopDomain },
+  };
+  try {
+    await sendHtmlEmail(a.to, subject, html, text, a.locale);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    await logNotification(payload, "failed", err?.message).catch(() => undefined);
+    throw err;
+  }
+}

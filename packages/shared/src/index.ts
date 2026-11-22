@@ -1431,3 +1431,11 @@ export { emitInboundMessage, shouldEmitInbound, inboundPreview, type InboundConv
 export { runWithRequestContext, currentRequestContext, type RequestContext } from "./lib/request-context";
 export { installSupportAuditPropagation, supportAuditContextOf, SUPPORT_AUDIT_HEADER } from "./lib/support-audit";
 export { continueWithSupportAudit } from "./lib/internal-key";
+export {
+  CUSTOM_APP_KEY, PRIVATE_APPS_KEY, CUSTOM_APP_GRANT_REASON, INSTALL_LINK_TTL_MS, PRIVATE_APPS_DEFAULTS,
+  parsePrivateAppsSettings, readPrivateAppsSettings, writePrivateAppsSettings, parseCustomAppRecord, readCustomAppRecord,
+  writeCustomAppRecord, publicCustomAppRecord, listCustomAppRecords, customAppForShop, customAppByClientId, appForShop,
+  appForClientId, signingSecretsForShop, sealClientSecret, validInstallLink,
+  candidateAppsForShop, verifyAppEntryForShop, verifyOAuthCallbackForShop, verifyWebhookForShop,
+  type CustomAppStatus, type CustomAppRecord, type PrivateAppsSettings, type ResolvedApp,
+} from "./lib/shopify-custom-app";
