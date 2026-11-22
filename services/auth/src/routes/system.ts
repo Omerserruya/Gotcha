@@ -9,7 +9,6 @@ import {
   PLATFORM_PERMISSIONS,
   validate,
   ensureIdentity,
-  publishEvent,
   crossTenantMiddleware,
   AI_MODEL_PRICING,
   resolveModelPricing,
@@ -20,8 +19,6 @@ import {
   type AiFeatureCategory,
   writeAudit,
   AuditAction,
-  seedTenantRbac,
-  ALL_LICENSE_KEYS,
   resolveTenantPlanAccess,
   resolveTenantPlanAccessBatch,
 } from "@chatcenter/shared";
@@ -32,19 +29,10 @@ import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engi
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
 import { InviteRefused, inviteUser, revokeUserAccess, syncIdentityNameByUser, syncMembershipAccess, tenantAdminEntry } from "../services/invitation.service";
 import { issueSetupLink } from "../services/setup-link.service";
+import { createTenantWithAdmin, LICENSE_DOMAINS } from "../services/tenant-creation.service";
+import { callBilling, callBillingGet } from "../lib/billing-internal";
 
 const router = Router();
-
-/**
- * The license domains a POC's feature areas are chosen from.
- *
- * Derived from the permission catalog, not listed, so a domain added to the
- * product cannot go missing here - and under default-ALLOW license semantics, a
- * missing domain is a GRANTED one.
- */
-const LICENSE_DOMAINS: string[] = Array.from(
-  new Set(ALL_LICENSE_KEYS.map((k) => k.split(":")[0] as string)),
-).sort();
 
 // System-admin routes legitimately need cross-tenant reads (list all
 // tenants, aggregate usage across tenants, create new tenant admins,
@@ -239,45 +227,6 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
   }
 });
 
-const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
-
-/** Internal GET against the billing service. Never throws. */
-async function callBillingGet(path: string): Promise<{ ok: boolean; body: any }> {
-  try {
-    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
-      headers: { "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    return { ok: res.ok, body: await res.json().catch(() => ({})) };
-  } catch (err: any) {
-    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
-  }
-}
-
-/** One internal call to the billing service. Never throws; returns a verdict. */
-async function callBilling(
-  path: string,
-  body: Record<string, unknown>,
-): Promise<{ ok: boolean; body: any }> {
-  try {
-    const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const parsed = await res.json().catch(() => ({}));
-    return { ok: res.ok, body: parsed };
-  } catch (err: any) {
-    // A billing outage must not silently produce a tenant with no billing
-    // state, so this is reported as a failure rather than swallowed.
-    return { ok: false, body: { error: "billing_unreachable", message: err?.message } };
-  }
-}
-
 // ─── Create Tenant ───────────────────────────────────────────
 
 /**
@@ -350,311 +299,13 @@ export const createTenantSchema = z.object({
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, slug, adminEmail, adminName, billing, locale } = req.body;
-    const paid = billing.mode === "PAID_PLAN";
-    const isPoc = billing.mode === "POC";
-    const actorId = (req as any).user?.userId as string | undefined;
-
-    // Validate the POC selection BEFORE anything is created, for the same
-    // reason the paid one is: a rejected expiry or an unknown feature area must
-    // fail while there is still no tenant to roll back.
-    const pocExpiresAt = isPoc ? new Date(billing.pocExpiresAt) : null;
-    if (isPoc) {
-      if (!pocExpiresAt || Number.isNaN(pocExpiresAt.getTime()) || pocExpiresAt <= new Date()) {
-        res.status(400).json({ error: "Invalid billing selection", code: "expiry_must_be_in_the_future" });
-        return;
-      }
-      const unknown = (billing.pocFeatureAreas as string[]).filter((f) => !LICENSE_DOMAINS.includes(f));
-      if (unknown.length) {
-        res.status(400).json({ error: "Invalid billing selection", code: "unknown_feature_domain", domains: unknown });
-        return;
-      }
-    }
-
-    // Validate the commercial selection BEFORE anything is created. A bad plan
-    // or volume key must fail while there is still no tenant to roll back.
-    if (paid) {
-      const check = await callBilling("validate-paid-plan", {
-        planVersionId: billing.planVersionId,
-        chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
-        voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
-        billingInterval: billing.billingInterval,
-      });
-      if (!check.ok) {
-        res.status(400).json({ error: "Invalid billing selection", code: check.body?.error });
-        return;
-      }
-      void writeAudit({
-        tenantId: null as any, actorType: "user", actorId,
-        action: AuditAction.PAID_TENANT_PROVISIONING_REQUESTED,
-        targetType: "plan_version", targetId: billing.planVersionId,
-        metadata: { slug, chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null, voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null },
-      });
-    }
-
-    // Check slug uniqueness
-    const existing = await prisma.tenant.findUnique({ where: { slug } });
-    if (existing) {
-      res.status(409).json({ error: "A tenant with this slug already exists" });
-      return;
-    }
-
-    // Provision the identity BEFORE the transaction. Authentik is a remote
-    // system and cannot participate in a database transaction; doing it first
-    // means a failure here aborts cleanly with no tenant created, rather than
-    // leaving a tenant whose admin can never log in.
-    const identity = await ensureIdentity(adminEmail, adminName);
-
-    // Create tenant + admin membership + onboarding tracker in transaction.
-    // The Identity row is upserted first (outside the tx is fine - it is
-    // keyed by the immutable subject and safe to leave behind on rollback).
-    const localIdentity = await prisma.identity.upsert({
-      where: { authentikSubject: identity.subject },
-      update: {},
-      create: {
-        authentikSubject: identity.subject,
-        email: adminEmail.toLowerCase(),
-        name: adminName,
-      },
+    // Every step lives in createTenantWithAdmin, which the public sign-up
+    // shares. This route only says who is asking.
+    const outcome = await createTenantWithAdmin({
+      ...req.body,
+      actor: { type: "user", id: ((req as any).user?.userId as string | undefined) ?? null },
     });
-
-    const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        // A paid tenant starts owing money. PENDING_PAYMENT denies the paid
-        // product at the shared access matrix while still permitting identity
-        // onboarding and payment setup.
-        data: { name, slug, status: paid ? "PENDING_PAYMENT" : "PENDING_ADMIN_SETUP", defaultLocale: locale },
-      });
-
-      const admin = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          identityId: localIdentity.id,
-          email: adminEmail,
-          name: adminName,
-          role: "ADMIN",
-        },
-      });
-
-      // Initialize onboarding tracker
-      await tx.tenantOnboarding.create({
-        data: { tenantId: tenant.id, currentStep: "BUSINESS_PROFILE" },
-      });
-
-      return { tenant, admin };
-    });
-
-    // Seed the built-in TenantRole rows + the admin's role assignment so the
-    // Users page role picker and fine-grained permissions work from day one.
-    // Degrade-soft: the boot-time sweep re-covers any tenant this misses.
-    await seedTenantRbac(result.tenant.id).catch((err) =>
-      console.error("[system] rbac seed for new tenant failed:", err?.message),
-    );
-
-    void writeAudit({
-      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
-      action: AuditAction.TENANT_CREATED, targetType: "tenant", targetId: result.tenant.id,
-      metadata: { name, slug, adminEmail },
-    });
-    void writeAudit({
-      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
-      action: AuditAction.USER_CREATED, targetType: "user", targetId: result.admin.id,
-      metadata: { email: adminEmail, role: "ADMIN" },
-    });
-
-    // Publish TenantCreated event
-    await publishEvent({
-      event: "tenant:created",
-      tenantId: result.tenant.id,
-      data: {
-        tenantName: name,
-        tenantSlug: slug,
-        adminEmail,
-        adminName,
-      },
-    });
-
-    // Billing scaffolding. The REQUEST is made durable first, so a billing
-    // failure leaves a recoverable state rather than a tenant whose requested
-    // plan is recorded nowhere. Both modes go through this: a POC that failed
-    // halfway is exactly as stuck as a paid one, and just as repairable.
-    let paidProvisioning: any = null;
-    let pocProvisioning: any = null;
-    {
-      const provRequest = await createProvisioningRequest({
-        tenantId: result.tenant.id,
-        requestedBy: actorId ?? null,
-        selection: paid
-          ? {
-              mode: "PAID_PLAN",
-              planVersionId: billing.planVersionId,
-              chatVolumeOptionKey: billing.chatVolumeOptionKey ?? null,
-              voiceVolumeOptionKey: billing.voiceVolumeOptionKey ?? null,
-              billingInterval: billing.billingInterval ?? null,
-              commercialNote: billing.commercialNote ?? null,
-            }
-          : {
-              mode: "POC",
-              planVersionId: null,
-              commercialNote: billing.commercialNote ?? null,
-              pocCredits: billing.pocCredits,
-              pocExpiresAt,
-              pocFeatureAreas: billing.pocFeatureAreas ?? [],
-            },
-      });
-
-      const outcome = await runProvisioning(provRequest.id);
-      const prov = { ok: outcome.ok, body: outcome.body ?? { error: outcome.failureCode } };
-
-      if (!prov.ok) {
-        // The tenant exists but plan setup did not complete. It is inert: a
-        // PENDING_PAYMENT tenant is denied the paid product by the access
-        // matrix, and a POC tenant that never got its subscription has no
-        // access source, which the same matrix now also denies. The durable
-        // provisioning request holds exactly what was requested, so REPAIR can
-        // finish the job without the operator re-entering anything. No email is
-        // sent, because there is nothing yet to send anyone to.
-        void writeAudit({
-          tenantId: result.tenant.id, actorType: "user", actorId,
-          action: AuditAction.PAID_TENANT_PROVISIONING_FAILED,
-          targetType: "tenant", targetId: result.tenant.id,
-          metadata: { mode: billing.mode, failureCode: prov.body?.error ?? "unknown" },
-        });
-        res.status(502).json({
-          error: "Tenant created but plan setup did not complete",
-          code: outcome.failureCode ?? "provisioning_failed",
-          data: {
-            tenant: { id: result.tenant.id, name, slug, status: result.tenant.status },
-            admin: { id: result.admin.id, email: adminEmail, name: adminName },
-            billing: {
-              mode: billing.mode,
-              provisioningState: outcome.state,
-              // Repair, not "create the tenant again".
-              canRepair: outcome.state === "FAILED_RETRYABLE" || outcome.state === "PENDING",
-              paidAccessGranted: false,
-              emailSent: false,
-            },
-          },
-        });
-        return;
-      }
-
-      if (isPoc) {
-        pocProvisioning = prov.body;
-        void writeAudit({
-          tenantId: result.tenant.id, actorType: "user", actorId,
-          action: AuditAction.POC_PROVISIONED,
-          targetType: "tenant", targetId: result.tenant.id,
-          metadata: {
-            credits: billing.pocCredits,
-            expiresAt: pocExpiresAt?.toISOString() ?? null,
-            featuresEnabled: pocProvisioning?.featuresEnabled ?? billing.pocFeatureAreas,
-            note: billing.commercialNote ?? null,
-          },
-        });
-      } else {
-        paidProvisioning = prov.body;
-      }
-    }
-
-    if (paid) {
-      void writeAudit({
-        tenantId: result.tenant.id, actorType: "user", actorId,
-        action: AuditAction.PAID_TENANT_CREATED,
-        targetType: "tenant", targetId: result.tenant.id,
-        metadata: { planKey: paidProvisioning.summary?.planKey, planVersion: paidProvisioning.summary?.planVersion },
-      });
-      void writeAudit({
-        tenantId: result.tenant.id, actorType: "user", actorId,
-        action: AuditAction.PENDING_CHECKOUT_CREATED,
-        targetType: "checkout", targetId: paidProvisioning.checkoutReference,
-        metadata: { amount: paidProvisioning.summary?.amount, currency: paidProvisioning.summary?.currency },
-      });
-      // The link id is audited; the raw token never is.
-      void writeAudit({
-        tenantId: result.tenant.id, actorType: "user", actorId,
-        action: AuditAction.PAYMENT_CONTINUATION_LINK_CREATED,
-        targetType: "continuation_link", targetId: paidProvisioning.link?.id,
-        metadata: { expiresAt: paidProvisioning.link?.expiresAt },
-      });
-    }
-
-    // Send onboarding email with magic link (non-blocking).
-    if (paid && paidProvisioning) {
-      // Password FIRST, payment second. Without this the email carried only a
-      // checkout link, which authorizes a checkout and not a person - so the
-      // customer bought the product without ever authenticating and then hit a
-      // sign-in wall for a password nobody had set, with the repair route
-      // gated behind permissions they could not yet hold.
-      const entry = await tenantAdminEntry(result.tenant.id).catch(() => null);
-      sendPaidOnboardingEmail({
-        tenantId: result.tenant.id,
-        adminEmail,
-        adminName,
-        tenantName: name,
-        adminUserId: result.admin.id,
-        continuationToken: paidProvisioning.link.token,
-        checkoutReference: paidProvisioning.checkoutReference,
-        linkExpiresAt: new Date(paidProvisioning.link.expiresAt),
-        // Rendered from the IMMUTABLE snapshot, never the live plan row.
-        planName: paidProvisioning.summary.planName,
-        amount: paidProvisioning.summary.amount,
-        currency: paidProvisioning.summary.currency,
-        includedCredits: paidProvisioning.summary.includedCredits,
-        setupUrl: entry?.needsPassword ? entry.actionUrl : null,
-        locale,
-      }).catch((err) => {
-        // Delivery failure must not activate anything. Resend is the repair.
-        console.error("Failed to send paid onboarding email:", err?.message ?? err);
-      });
-    } else {
-      sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id, locale).catch((err) => {
-        console.error("Failed to send onboarding email:", err);
-      });
-    }
-
-    // Arm the onboarding nudge so a tenant that never starts gets a follow-up.
-    scheduleOnboardingNudge(result.tenant.id, "1d").catch(() => {});
-
-    res.status(201).json({
-      data: {
-        tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, status: result.tenant.status },
-        admin: { id: result.admin.id, email: result.admin.email, name: result.admin.name },
-        // Safe summary only. The raw continuation token is never returned by
-        // any API - it exists solely for the one email that carries it.
-        ...(pocProvisioning
-          ? {
-              billing: {
-                mode: "POC",
-                credits: pocProvisioning.credits,
-                expiresAt: pocProvisioning.expiresAt,
-                featuresEnabled: pocProvisioning.featuresEnabled,
-                featuresDenied: pocProvisioning.featuresDenied,
-                // Said plainly, because the operator is giving product away and
-                // should be certain nothing will ever be charged for it.
-                charges: "none",
-                renewal: "none",
-                paidAccessGranted: true,
-              },
-            }
-          : {}),
-        ...(paidProvisioning
-          ? {
-              billing: {
-                mode: "PAID_PLAN",
-                checkoutReference: paidProvisioning.checkoutReference,
-                planName: paidProvisioning.summary.planName,
-                amount: paidProvisioning.summary.amount,
-                currency: paidProvisioning.summary.currency,
-                includedCredits: paidProvisioning.summary.includedCredits,
-                billingInterval: paidProvisioning.summary.billingInterval,
-                linkExpiresAt: paidProvisioning.link.expiresAt,
-                paidAccessGranted: false,
-              },
-            }
-          : {}),
-      },
-    });
+    res.status(outcome.status).json(outcome.body);
   } catch (err) {
     console.error("Create tenant error:", err);
     res.status(500).json({ error: "Failed to create tenant" });

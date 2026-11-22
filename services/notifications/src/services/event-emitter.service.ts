@@ -74,7 +74,11 @@ export type SystemEventType =
   // Emitted by services/incoming-worker for EVERY inbound customer message in
   // a conversation a person is assigned to and the bot is not handling. Push
   // only, to the assignee only (notification-engine ASSIGNEE_PUSH_ONLY).
-  | "message.inbound";
+  | "message.inbound"
+  // Emitted by services/auth when a person who filled the public sign-up form
+  // joined an organization by their email domain. Once per person, to the
+  // organization's admins, in the app only.
+  | "member.joined_by_domain";
 
 export interface SystemEventMetadata {
   conversationId?: string;

@@ -77,6 +77,19 @@ export const AuditAction = {
   // A POC is product given away: who authorised it, how much, until when and
   // with which feature areas is exactly the thing to be able to answer later.
   POC_PROVISIONED: "billing.poc_provisioned",
+  // ── Self sign-up ──
+  // An operator changed the platform's sign-up settings (metadata: before, after).
+  SELF_SIGNUP_SETTINGS_CHANGED: "platform.self_signup_settings_changed",
+  // An admin switched "join by email domain" on or off (metadata: domain, on).
+  JOIN_BY_DOMAIN_CHANGED: "tenant.join_by_domain_changed",
+  // A person who signed up joined an organization by their email domain
+  // (metadata: email, domain, role).
+  MEMBER_JOINED_BY_DOMAIN: "member.joined_by_domain",
+  // The sweep closed a self-signed-up organization that reached its card day
+  // with no card (metadata: before, after, signedUpAt, cardRequiredAfterDays).
+  CARD_REQUIRED_BLOCKED: "billing.card_required_blocked",
+  // A stored card opened it again (metadata: before, after, closedAt).
+  CARD_REQUIRED_RESTORED: "billing.card_required_restored",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

@@ -421,6 +421,25 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       link: "/settings/billing/credits",
     };
   },
+
+  // The body's wording is fixed (Omer, 2026-11-22) and is said whole; the
+  // title is its opening words. The name and the address are the person's own.
+  "member.joined_by_domain": (e) => {
+    const name = safe(e.data.name, "");
+    const email = safe(e.data.email, "");
+    const who = name && email ? `${name} (${email})` : name || email;
+    return {
+      en: {
+        title: "A new user joined your organization",
+        body: `A new user joined your organization through your email domain${who ? `: ${who}` : ""}`,
+      },
+      he: {
+        title: "משתמש חדש הצטרף לארגון",
+        body: `משתמש חדש הצטרף לארגון דרך דומיין האימייל שלכם${who ? `: ${who}` : ""}`,
+      },
+      link: "/settings/people",
+    };
+  },
 };
 
 /** One language: the recipient's. English when the locale is anything else. */

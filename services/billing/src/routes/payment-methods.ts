@@ -12,8 +12,8 @@
  *
  * Storing a card is NOT a purchase and provisions nothing on its own.
  */
-import { Router } from "express";
-import { authenticate, resolveTenant, requirePermission, prisma } from "@chatcenter/shared";
+import { Router, type RequestHandler } from "express";
+import { authenticate, resolveTenant, requirePermission, requirePermissionOrRole, prisma } from "@chatcenter/shared";
 import { ensureBillableEntity } from "../services/billable-entity.service";
 import {
   startTokenizationSession,
@@ -24,6 +24,7 @@ import { checkoutEnabled } from "../providers/capabilities";
 import { getCapabilities } from "../providers";
 import { buildReturnUrl } from "../lib/public-url";
 import { contractedPrice } from "../services/subscription.service";
+import { closedForCard, restoreAfterCard } from "../services/card-required.service";
 
 /**
  * The billing identity a document is issued against, AND which of three facts
@@ -150,6 +151,19 @@ const RETURN_TARGETS: Record<string, () => { successUrl?: string; failureUrl?: s
       return {};
     }
   },
+  // The page an organization closed for want of a card is held on. It learns
+  // it is back from a card page by `card=1`, and that the person gave up by
+  // `cancelled=1` next to it.
+  "payment-required": () => {
+    try {
+      const path = `${v2BasePath()}/checkout/payment-required`;
+      const gaveUp = buildReturnUrl(path, { card: "1", cancelled: "1" });
+      return { successUrl: buildReturnUrl(path, { card: "1" }), failureUrl: gaveUp, cancelUrl: gaveUp };
+    } catch (err) {
+      console.error("[billing] cannot build the payment-required card return URL:", (err as Error).message);
+      return {};
+    }
+  },
 };
 
 /** The return URLs for this request, or null when the target is not one we know. */
@@ -193,6 +207,29 @@ router.get("/billing/payment-methods", authenticate, resolveTenant, requirePermi
 });
 
 /**
+ * Who may start and confirm a card: the billing permission, as on every route
+ * in this file, with one exception.
+ *
+ * An organization the card sweep closed has usually seen its evaluation end by
+ * then, and the evaluation's licences with it. The billing permission hangs on
+ * the `settings` licence, so its admin would be asked for a card and refused
+ * the only page that takes one. For that organization alone, and only while it
+ * is closed, the admin role is enough.
+ */
+const billingManager = requirePermission("settings:billing:manage");
+const billingManagerOrAdmin = requirePermissionOrRole("settings:billing:manage", "ADMIN");
+const cardGate: RequestHandler = async (req, res, next) => {
+  let closed = false;
+  try {
+    closed = !!req.tenantId && (await closedForCard(req.tenantId));
+  } catch (err) {
+    // Not known to be closed: the ordinary gate decides.
+    console.error("[billing] could not read whether the organization is closed for a card:", (err as Error)?.message ?? err);
+  }
+  return (closed ? billingManagerOrAdmin : billingManager)(req, res, next);
+};
+
+/**
  * Start adding (or replacing) a card.
  *
  * Returns where to send the person. Their browser then comes back and calls
@@ -202,7 +239,7 @@ router.post(
   "/billing/payment-methods/session",
   authenticate,
   resolveTenant,
-  requirePermission("settings:billing:manage"),
+  cardGate,
   async (req, res) => {
     if (!checkoutEnabled(getCapabilities("ICOUNT"))) {
       return res.status(409).json({ error: "payment_setup_unavailable" });
@@ -246,7 +283,7 @@ router.post(
   "/billing/payment-methods/confirm",
   authenticate,
   resolveTenant,
-  requirePermission("settings:billing:manage"),
+  cardGate,
   async (req, res) => {
     const sessionId = String(req.body?.sessionId ?? "");
     if (!sessionId) return res.status(400).json({ error: "session_required" });
@@ -276,6 +313,14 @@ router.post(
         },
         data: { status: "REMOVED", isDefault: false },
       });
+
+      // A card is what an organization closed for want of one was missing, so
+      // it opens here (and only such an organization: see restoreAfterCard).
+      // A failure must not turn a stored card into an error; the hourly sweep
+      // opens what this did not.
+      await restoreAfterCard(req.tenantId!).catch((err: unknown) =>
+        console.error("[billing] a stored card did not open its organization:", (err as Error)?.message ?? err),
+      );
 
       // Storing a card provisions NOTHING. It used to auto-start a trial on a
       // default plan key, handing the customer a subscription they never chose.
