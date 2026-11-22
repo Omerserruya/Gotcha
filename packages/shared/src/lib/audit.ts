@@ -85,6 +85,11 @@ export const AuditAction = {
   // A person who signed up joined an organization by their email domain
   // (metadata: email, domain, role).
   MEMBER_JOINED_BY_DOMAIN: "member.joined_by_domain",
+  // The sweep closed a self-signed-up organization that reached its card day
+  // with no card (metadata: before, after, signedUpAt, cardRequiredAfterDays).
+  CARD_REQUIRED_BLOCKED: "billing.card_required_blocked",
+  // A stored card opened it again (metadata: before, after, closedAt).
+  CARD_REQUIRED_RESTORED: "billing.card_required_restored",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

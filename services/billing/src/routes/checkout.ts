@@ -23,6 +23,7 @@ import { quoteDisplay } from "../services/payment-quote.service";
 // Shared with the mutating session routes, so the two cannot drift apart about
 // who is allowed to act on a checkout.
 import { authorizeCheckout as authorize, checkoutNotFound as notFound, optionalAuth } from "../lib/checkout-auth";
+import { closedForCard } from "../services/card-required.service";
 
 const router = Router();
 
@@ -202,7 +203,16 @@ router.get(
 
     // No outstanding checkout is a normal answer, not an error: a tenant on
     // no billing, or one already paid, simply has nothing to settle.
-    if (!checkout) return res.json({ data: { checkout: null } });
+    if (!checkout) {
+      // Nothing to pay, and still closed: the card sweep closed it. The page
+      // then offers "add a card" (the existing card session) instead of a
+      // payment. Unreadable is answered as the plain "nothing to settle".
+      const cardRequired = await closedForCard(tenantId).catch((err: unknown) => {
+        console.error("[billing] could not read whether the organization is closed for a card:", (err as Error)?.message ?? err);
+        return false;
+      });
+      return res.json({ data: cardRequired ? { checkout: null, reason: "card_required" } : { checkout: null } });
+    }
     if (checkout.expiresAt.getTime() <= Date.now()) {
       // Deliberately not auto-reissued: a new expiry is a new commercial
       // offer, and that is an operator's decision.

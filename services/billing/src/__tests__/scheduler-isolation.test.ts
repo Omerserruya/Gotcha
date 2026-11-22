@@ -28,6 +28,8 @@ const payg = vi.fn();
 const fx = vi.fn();
 const shopify = vi.fn();
 const usageDispatch = vi.fn();
+// The card sweep (self sign-up): database only, right after dunning.
+const cardRequired = vi.fn();
 
 vi.mock("../services/subscription.service", () => ({ runBillingCycle: () => cycle() }));
 vi.mock("../services/dunning.service", () => ({ runDunning: () => dunning() }));
@@ -40,6 +42,7 @@ vi.mock("../services/payg.service", () => ({ settleDuePaygAccruals: () => payg()
 vi.mock("../services/exchange-rate.service", () => ({ refreshOfficialRateIfDue: () => fx() }));
 vi.mock("../services/provider-subscription.service", () => ({ reconcileProviderSubscriptions: () => shopify() }));
 vi.mock("../services/usage-ledger.service", () => ({ dispatchPendingUsage: () => usageDispatch() }));
+vi.mock("../services/card-required.service", () => ({ sweepCardRequired: () => cardRequired() }));
 vi.mock("@chatcenter/shared", async () => {
   const actual = await vi.importActual<any>("@chatcenter/shared");
   return { ...actual, settleDueConversations: () => usage() };
@@ -70,12 +73,13 @@ beforeEach(() => {
   fx.mockResolvedValue(undefined);
   shopify.mockResolvedValue({ checked: 0, changed: 0, failed: 0 });
   usageDispatch.mockResolvedValue({ considered: 0, dispatched: 0, skipped: 0, failed: 0, deadLettered: 0 });
+  cardRequired.mockResolvedValue({ examined: 0, blocked: 0, restored: 0, failed: 0 });
 });
 
 describe("a clean tick runs everything", () => {
   it("calls every stage once and reports their results", async () => {
     const r = await runSchedulerTick();
-    for (const fn of [fx, cycle, dunning, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
+    for (const fn of [fx, cycle, dunning, cardRequired, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
       expect(fn).toHaveBeenCalledTimes(1);
     }
     expect(r.failed).toEqual([]);
@@ -117,7 +121,7 @@ describe("a failing stage is contained", () => {
   });
 
   it("survives every stage failing at once", async () => {
-    for (const fn of [fx, cycle, dunning, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
+    for (const fn of [fx, cycle, dunning, cardRequired, usage, payg, reconcile, shopify, usageDispatch, leases, quotes, sessions, retention]) {
       fn.mockRejectedValue(new Error("everything is down"));
     }
     const r = await runSchedulerTick();
@@ -125,8 +129,25 @@ describe("a failing stage is contained", () => {
     // The tick itself must not throw - it is called from a setInterval with
     // nobody to catch it, and a rejected timer callback is how a scheduler dies
     // quietly.
-    expect(r.failed).toEqual(["fx", "cycle", "dunning", "usage", "payg", "reconcile", "shopify", "usage-dispatch", "leases", "quotes", "sessions", "retention"]);
+    expect(r.failed).toEqual(["fx", "cycle", "dunning", "card-required", "usage", "payg", "reconcile", "shopify", "usage-dispatch", "leases", "quotes", "sessions", "retention"]);
     expect(r.reconciled.examined).toBe(0);
+  });
+
+  it("the card sweep failing does not stop usage settlement or reconciliation, and reports nothing closed", async () => {
+    cardRequired.mockRejectedValue(new Error("one bad mark"));
+    const r = await runSchedulerTick();
+    expect(usage).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(r.failed).toEqual(["card-required"]);
+    expect(r.cardRequired).toEqual({ examined: 0, blocked: 0, restored: 0, failed: 0 });
+  });
+
+  it("dunning failing does not stop the card sweep, and its counts are reported", async () => {
+    dunning.mockRejectedValue(new Error("boom"));
+    cardRequired.mockResolvedValue({ examined: 9, blocked: 2, restored: 1, failed: 0 });
+    const r = await runSchedulerTick();
+    expect(cardRequired).toHaveBeenCalledTimes(1);
+    expect(r.cardRequired).toEqual({ examined: 9, blocked: 2, restored: 1, failed: 0 });
   });
 
   it("names which stages failed, not just that the cycle did", async () => {
@@ -149,6 +170,23 @@ describe("the log line appears when it should", () => {
     payg.mockResolvedValue({ settled: 0, amount: 0 });
     // Hourly noise trains people to ignore the channel the failures arrive on.
     expect(tickWasEventful(await runSchedulerTick())).toBe(false);
+  });
+
+  it.each([
+    [{ examined: 3, blocked: 1, restored: 0, failed: 0 }, true],
+    [{ examined: 3, blocked: 0, restored: 1, failed: 0 }, true],
+    [{ examined: 3, blocked: 0, restored: 0, failed: 1 }, true],
+    // Marks that were only looked at are every hour's news, so no line.
+    [{ examined: 3, blocked: 0, restored: 0, failed: 0 }, false],
+  ])("the card sweep reporting %j on an otherwise idle tick: eventful %s", async (counts, eventful) => {
+    cycle.mockResolvedValue({ trials: 0, renewals: 0, pending: 0, pocsExpired: 0, lotsExpired: 0 });
+    dunning.mockResolvedValue({ retried: 0, suspended: 0 });
+    usage.mockResolvedValue({ settled: 0, discovered: 0 });
+    reconcile.mockResolvedValue({ examined: 0, resolvedPaid: 0, resolvedUnpaid: 0, escalated: 0 });
+    retention.mockResolvedValue({ tokenizationSessions: 0, continuationLinks: 0, unusedQuotes: 0 });
+    payg.mockResolvedValue({ settled: 0, amount: 0 });
+    cardRequired.mockResolvedValue(counts);
+    expect(tickWasEventful(await runSchedulerTick())).toBe(eventful);
   });
 
   it("speaks up on an idle tick that had a failure", async () => {

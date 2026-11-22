@@ -33,10 +33,16 @@ import { settleDuePaygAccruals } from "./payg.service";
 
 import { reconcileProviderSubscriptions } from "./provider-subscription.service";
 import { dispatchPendingUsage } from "./usage-ledger.service";
+import { sweepCardRequired, type CardSweepResult } from "./card-required.service";
 
 export interface TickResult {
   cycle: Awaited<ReturnType<typeof runBillingCycle>>;
   dunning: { retried: number; suspended: number };
+  /**
+   * Self-signed-up organizations past their card day: closed for want of a
+   * card, or opened again by one. Database only, no provider call.
+   */
+  cardRequired: CardSweepResult;
   usage: { settled: number; discovered: number };
   payg: { settled: number; amount: number };
   reconciled: { examined: number; resolvedPaid: number; resolvedUnpaid: number; escalated: number };
@@ -86,6 +92,15 @@ export async function runSchedulerTick(): Promise<TickResult> {
     failed,
   );
   const dunning = await stage("dunning", () => runDunning(), { retried: 0, suspended: 0 }, failed);
+
+  // The card a self-signed-up organization owes from its Nth day. After the
+  // cycle on purpose: the evaluation that ends this hour has ended by now.
+  const cardRequired = await stage(
+    "card-required",
+    () => sweepCardRequired(),
+    { examined: 0, blocked: 0, restored: 0, failed: 0 },
+    failed,
+  );
 
   // Sysadmin cost analytics: discover conversations that closed since the last
   // tick and settle the ones whose late-job window has elapsed. Runs here rather
@@ -143,7 +158,7 @@ export async function runSchedulerTick(): Promise<TickResult> {
     failed,
   );
 
-  return { cycle, dunning, usage, payg, reconciled, shopify, usageDispatch, purged, failed };
+  return { cycle, dunning, cardRequired, usage, payg, reconciled, shopify, usageDispatch, purged, failed };
 }
 
 /** True when the tick did anything worth a log line. */
@@ -151,6 +166,7 @@ export function tickWasEventful(r: TickResult): boolean {
   return Boolean(
     r.cycle.trials || r.cycle.renewals || r.cycle.pending ||
     r.dunning.retried || r.dunning.suspended ||
+    r.cardRequired.blocked || r.cardRequired.restored || r.cardRequired.failed ||
     r.usage.settled || r.usage.discovered ||
     r.payg.settled ||
     r.reconciled.examined ||
