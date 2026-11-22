@@ -579,6 +579,8 @@ export function generalPolicyAsk(incoming: string, knowledge: string): boolean {
 export const SALE_SAID = /(?<![\u0590-\u05FF])(?:מבצע|במבצע|במקום|הנחה|בהנחה|מוזל|מוזלת|ירד\s+מ|ירדה\s+מ|לפני\s+ההנחה)(?![\u0590-\u05FF])|\b(?:sale|instead of|reduced|down from|marked down|discount(?:ed)?|off the)\b|\bwas\s+[₪$€]?\s?\d|\d+%\s+off\b/iu;
 /** A bare pronoun as the subject within the first words: it leaned on a sentence that was cut. */
 export const PRONOUN_LEAN = /^\s*(?:[^\s.!?,]+\s+){0,3}(?:אם\s+)?(?:היא|הוא|הן|הם)\s+(?:מתאים|מתאימה|מתאימים|מתאימות|עשוי|עשויה|מגיע|מגיעה|יתאים|תתאים)(?![\u0590-\u05FF])/u;
+/** A sentence that opens with a bare pronoun as its subject ("הוא במבצע עכשיו"): it speaks of the sentence before it. */
+export const LEANS_ON_BEFORE = /^\s*ו?(?:הוא|היא|הם|הן)(?![\u0590-\u05FF])|^\s*(?:it|they)\b/iu;
 /** The reply is only questions, and one of the options it asks between is what her message already says. */
 export function asksWhatSheSaid(reply: string, incoming: string): boolean {
   const sentences = (String(reply ?? "").match(/[^.!?\n]+[.!?]*/g) ?? []).map((x) => x.trim()).filter(Boolean);
@@ -2651,7 +2653,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         // An item is answered only by a sentence that names it (or its size) AND a pad (C pinned rating, B: the
         // mixer named without a pad counted as answered and got no line).
         const padKeys = [...new Set(padTitles.map((p) => padLabel(p).toLowerCase()).filter((k) => k.length >= 3))];
-        const sentencesNow = () => text.match(/[^.!?\n]+[.!?]*/g) ?? [];
+        // Never split inside a decimal or a link (the 41805962 replay, L1929: "16.4×23 ס"מ, ב-69 ₪" was split at
+        // "16.", the first half was cut with its fit claim, and the reply opened "4×23 ס"מ, ב-69 ₪.").
+        const sentencesNow = () => text.match(SENTENCES_RE) ?? [];
         // The computed match is the truth (replay d, Smoovee B: "גם בסיס המיקסר, הטוסטר והנינג'ה בלנדר מתאימים
         // למשטח הזה" above "למידה 32×22: משטח הזזה 23*40"). Each item's pad first; a sentence claiming a fit for an
         // item without naming THAT pad goes.
@@ -2661,10 +2665,17 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         const namesOf = (pad: string | null) => (pad ? [padName(pad, pool, kbPads)].map((x) => x.toLowerCase()).filter((x) => x.length >= 3) : []);
         const itemIn = (s: string, it: (typeof items)[number]) => [`${it.size[0]}x${it.size[1]}`, `${it.size[0]}×${it.size[1]}`, `${it.size[0]}*${it.size[1]}`].some((k) => s.includes(k)) || namesItem(s, it.name, items.filter((o) => o !== it).map((o) => o.name));
         {
-          const wrong = sentencesNow().filter((s) => FIT_WORD.test(s) && items.some((it) => itemIn(s, it) && padOf.get(it) && !namesOf(padOf.get(it)!).some((n) => s.toLowerCase().includes(n))));
+          const all = sentencesNow();
+          const wrong = all.filter((s) => FIT_WORD.test(s) && items.some((it) => itemIn(s, it) && padOf.get(it) && !namesOf(padOf.get(it)!).some((n) => s.toLowerCase().includes(n))));
           if (wrong.length) {
-            text = sentencesNow().filter((s) => !wrong.includes(s)).join("").replace(/[ \t]{2,}/g, " ").trim();
+            // The sentence right after a cut one goes with it when it leans on it: a bare pronoun as its subject, or
+            // a measure or a price with nothing named (the same replay, L511: "הוא במבצע עכשיו ב-₪129.15." opened
+            // the reply after the pad's own sentence was cut).
+            const gone = new Set<number>();
+            all.forEach((s, i) => { if (wrong.includes(s) || (gone.has(i - 1) && (LEANS_ON_BEFORE.test(s) || cutFragment(s)))) gone.add(i); });
+            text = all.filter((_s, i) => !gone.has(i)).join("").replace(/[ \t]{2,}/g, " ").trim();
             (trace as any).fitClaimCut = wrong.length;
+            if (gone.size > wrong.length) (trace as any).leaningCut = gone.size - wrong.length;
           }
         }
         const lines: string[] = [];

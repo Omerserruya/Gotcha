@@ -5183,3 +5183,52 @@ describe("a draft that hedges on the fit of what was found never gets the produc
     expect(on("אם טוש גבות חום מתאים לך, הוא במלאי. הטושים האחרים לא מתאימים לאזור העיניים.")).toEqual([1]);
   });
 });
+
+describe("the size table's fit cut leaves no orphan opening (the 41805962 replay, Smoovee L511 and L1929)", () => {
+  const ASK = "נינג׳ה קרמה 28x18 סודה 18x14";
+  async function sized(...drafts: string[]) {
+    h.groundTitle = "משטח הזזה 20*30"; h.extraTitle = "משטח הזזה 16.4*23";
+    h.responses.push({ toolCalls: [tc("z0", "woocommerce.list_products", { query: "משטח" })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`z${i + 1}`, { reply: d })] })));
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: ASK }, "autonomous");
+    return { r, t: r.trace as any, reply: String(r.reply ?? "") };
+  }
+
+  it("★ L1929: a size with a decimal is never split: the whole sentence goes, and no \"4×23 ס\"מ, ב-89 ₪.\" is left", async () => {
+    const d = "לנינג'ה קרמה מתאים משטח הזזה 20*30. לסודה מתאים משטח בגודל 16.4×23 ס\"מ, ב-89 ₪.";
+    const { t, reply } = await sized(d, d, d);
+    expect(t.fitClaimCut).toBe(1);
+    expect(reply).not.toMatch(/(?:^|\n|\.\s)\s*4×23/);
+    expect(reply).not.toMatch(/ב-89 ₪/);
+    // Cut as ONE sentence: split at "16." its second half would only have gone as a leaning fragment.
+    expect(t.leaningCut).toBeUndefined();
+    expect(reply).toBe("לנינג'ה קרמה מתאים משטח הזזה 20*30.\nלמידה 18×14: משטח הזזה 16.4*23.");
+  });
+
+  it("★ a measure or a price alone right after a cut sentence goes with it", async () => {
+    const d = "לסודה מתאים המשטח הגדול. 20×30 ס\"מ, ב-₪79. המשטחים עשויים במבוק.";
+    const { t, reply } = await sized(d, d, d);
+    expect(t.fitClaimCut).toBe(1);
+    expect(t.leaningCut).toBe(1);
+    expect(reply).toBe("המשטחים עשויים במבוק.\nלמידה 28×18: משטח הזזה 20*30.\nלמידה 18×14: משטח הזזה 16.4*23.");
+  });
+
+  it("★ L511: the sentence after a cut one that opens with a bare pronoun goes with it", async () => {
+    const d = "לנינג'ה קרמה ולסודה מתאים משטח הזזה 20*30. הוא במבצע עכשיו ב-₪79. המשלוח מגיע תוך שלושה ימי עסקים.";
+    const { t, reply } = await sized(d, d, d);
+    expect(t.fitClaimCut).toBe(1);
+    expect(t.leaningCut).toBe(1);
+    expect(reply).not.toMatch(/הוא במבצע/);
+    expect(reply).toMatch(/למידה 28×18: משטח הזזה 20\*30\./);
+    expect(reply).toMatch(/למידה 18×14: משטח הזזה 16\.4\*23\./);
+  });
+
+  it("★ a pronoun sentence after a sentence that stays is kept, and so is a full sentence after a cut one", async () => {
+    const d = "לנינג'ה קרמה מתאים משטח הזזה 20*30. הוא במבצע עכשיו ב-₪79. לסודה מתאים המשטח הגדול. המשטחים עשויים במבוק.";
+    const { t, reply } = await sized(d, d, d);
+    expect(t.fitClaimCut).toBe(1);
+    expect(t.leaningCut).toBeUndefined();
+    expect(reply).toMatch(/^לנינג'ה קרמה מתאים משטח הזזה 20\*30\. הוא במבצע עכשיו ב-₪79\. המשטחים עשויים במבוק\./);
+    expect(reply).not.toMatch(/המשטח הגדול/);
+    expect(reply).toMatch(/למידה 18×14: משטח הזזה 16\.4\*23\./);
+  });
+});
