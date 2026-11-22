@@ -78,6 +78,7 @@ import {
   currentStoreOf,
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
+import { retireReplacedStore } from "../services/shopify-store-replace.service";
 
 const router = Router();
 
@@ -554,6 +555,18 @@ router.post(
     if (shopHeldElsewhere(await findShopOwner(summary.shopDomain), req.tenantId!)) {
       taken();
       return;
+    }
+
+    // ── The old store goes first (App Review 132211, 2026-11-22) ──
+    //
+    // Confirmed Replace of a CONNECTED store, or a DISCONNECTED one left behind: the old store is retired
+    // completely (uninstalled at Shopify with its own token while connected, billing and entitlements,
+    // the grandfather grant, tools, chat) BEFORE the new one is billed and attached, so the new store's
+    // access comes only from its own Shopify Billing. A billing failure after this leaves the old store
+    // retired and the approval unspent: the next claim is a plain attach.
+    const before = await currentStoreOf(req.tenantId!).catch(() => null);
+    if (before && before.shopDomain !== summary.shopDomain && (before.status === "DISCONNECTED" || allowReplace)) {
+      await retireReplacedStore({ tenantId: req.tenantId!, shopDomain: before.shopDomain, connected: before.status === "CONNECTED" });
     }
 
     const accessToken = await peekPendingAccessToken(handle);

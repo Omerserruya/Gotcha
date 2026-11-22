@@ -601,7 +601,13 @@ export async function handleCommerceUninstall(input: {
   platform: CommercePlatform;
   externalShopId: string;
   at?: Date;
-}): Promise<{ tenantId: string | null; revoked: number }> {
+  /**
+   * The workspace replaced this store with another (App Review 132211, 2026-11-22). The grandfather
+   * grant is spent too: a newly attached store goes through Shopify Billing (Omer's default until he
+   * says otherwise).
+   */
+  replaced?: boolean;
+}): Promise<{ tenantId: string | null; revoked: number; grantRevoked?: boolean }> {
   const now = input.at ?? new Date();
   const conn = await prisma.commerceConnection.findUnique({
     where: {
@@ -637,17 +643,38 @@ export async function handleCommerceUninstall(input: {
     });
   }
 
+  // Another store of this workspace is live (App Review 132211): this is an OLD store's late
+  // uninstall, after a Replace. The Shopify-funded access is the new store's now, so it stays.
+  const liveOther = await prisma.commerceConnection.findFirst({
+    where: { tenantId: conn.tenantId, platform: input.platform, id: { not: conn.id }, status: { not: "DISCONNECTED" } },
+    select: { id: true },
+  });
+
   // Every Shopify-funded row, the grandfather exemption's included: a removed
   // store holds no Shopify access by any route (split billing 2026-10-28). A
-  // reinstall re-grants what is still owed. The grant itself is kept.
-  const revoked = await revokeShopifyEntitlements(conn.tenantId)
-    + (await prisma.tenantEntitlement.deleteMany({ where: { tenantId: conn.tenantId, source: "SHOPIFY_GRANDFATHERED" } })).count;
+  // reinstall re-grants what is still owed. The grant itself is kept, unless
+  // the store was replaced.
+  const revoked = liveOther
+    ? 0
+    : await revokeShopifyEntitlements(conn.tenantId)
+      + (await prisma.tenantEntitlement.deleteMany({ where: { tenantId: conn.tenantId, source: "SHOPIFY_GRANDFATHERED" } })).count;
+  let grantRevoked = false;
+  if (input.replaced) {
+    const r = await prisma.shopifyGrandfatherGrant.updateMany({
+      where: { tenantId: conn.tenantId, status: "ACTIVE" },
+      data: { status: "REVOKED", revokedAt: now, revokedBy: "system:store-replaced", revokedReason: "store_replaced" },
+    });
+    grantRevoked = r.count > 0;
+  }
+  if (liveOther) {
+    console.log(`[billing][uninstall] connection=${conn.id} tenant=${conn.tenantId}: another store is live, its access is kept`);
+  }
 
   console.log(
     `[billing][uninstall] platform=${input.platform} connection=${conn.id} tenant=${conn.tenantId} ` +
-      `entitlements_revoked=${revoked}`,
+      `entitlements_revoked=${revoked}${input.replaced ? ` replaced grant_revoked=${grantRevoked}` : ""}`,
   );
-  return { tenantId: conn.tenantId, revoked };
+  return { tenantId: conn.tenantId, revoked, ...(input.replaced ? { grantRevoked } : {}) };
 }
 
 /**

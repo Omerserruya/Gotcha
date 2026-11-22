@@ -353,7 +353,15 @@ core.post("/app-uninstalled", async (req: Request, res: Response) => {
  *   - the storefront chat switched off.
  * Core, conversations and every other integration are untouched.
  */
-export async function completeShopifyUninstall(hook: { shopDomain: string | null; body: unknown }): Promise<{ tenantId: string | null; outcome: string }> {
+export async function completeShopifyUninstall(hook: {
+  shopDomain: string | null;
+  body: unknown;
+  /**
+   * A Replace (App Review 132211, 2026-11-22): this workspace retires its own store before attaching
+   * another. Only its own row is touched, and billing also spends the grandfather grant.
+   */
+  replacedBy?: { tenantId: string };
+}): Promise<{ tenantId: string | null; outcome: string }> {
   const shop = hook.shopDomain;
   if (!shop) return { tenantId: null, outcome: "no_shop" };
 
@@ -364,6 +372,7 @@ export async function completeShopifyUninstall(hook: { shopDomain: string | null
   await notifyShopifyUninstalled({
     externalShopId: (hook.body as any)?.id ? String((hook.body as any).id) : null,
     shopDomain: shop,
+    ...(hook.replacedBy ? { replaced: true, tenantId: hook.replacedBy.tenantId } : {}),
   });
 
   // Any status: a redelivery after a partial run finds the row this handler
@@ -375,7 +384,8 @@ export async function completeShopifyUninstall(hook: { shopDomain: string | null
     }),
   );
   const forShop = connections.filter(
-    (c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop,
+    (c: any) => normalizeShopifyShopDomain((c.config as any)?.shopDomain) === shop
+      && (!hook.replacedBy || c.tenantId === hook.replacedBy.tenantId),
   );
   const match = forShop.find((c: any) => c.status !== "DISCONNECTED") ?? forShop[0];
 

@@ -531,7 +531,9 @@ router.post("/internal/billing/shopify/connected", async (req, res) => {
  * `revoked: 0`. Shopify retries webhooks, and a retry must not be an error.
  */
 router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
-  const { externalShopId, shopDomain } = req.body ?? {};
+  // `tenantId` + `replaced` (App Review 132211): the workspace replaced this store; the lookup is
+  // then that workspace's own connection only, never another workspace's row for the same domain.
+  const { externalShopId, shopDomain, replaced, tenantId } = req.body ?? {};
   if (!externalShopId && !shopDomain) {
     return res.status(400).json({ error: "externalShopId or shopDomain required" });
   }
@@ -544,7 +546,7 @@ router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
   let shopId: string | null = externalShopId ? String(externalShopId) : null;
   if (!shopId && shopDomain) {
     const conn = await prisma.commerceConnection.findFirst({
-      where: { platform: "SHOPIFY", shopDomain: String(shopDomain) },
+      where: { platform: "SHOPIFY", shopDomain: String(shopDomain), ...(typeof tenantId === "string" && tenantId ? { tenantId } : {}) },
       orderBy: { installedAt: "desc" },
       select: { externalShopId: true },
     });
@@ -558,7 +560,7 @@ router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
   }
 
   try {
-    const result = await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shopId });
+    const result = await handleCommerceUninstall({ platform: "SHOPIFY", externalShopId: shopId, replaced: replaced === true });
     return res.json({ data: result });
   } catch (err: any) {
     // A 500 reaches the ai webhook, which answers Shopify 500 so the
