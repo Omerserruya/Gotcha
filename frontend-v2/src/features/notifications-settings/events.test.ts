@@ -9,9 +9,16 @@ import { EVENT_FAMILIES, NOTIFIABLE_EVENTS, UNFIRING_EVENTS, eventsInFamily } fr
  * reintroduces a dead type fails here rather than on someone's screen.
  */
 describe('notifiable events', () => {
-  it('offers exactly the 23 that are both templated and emitted', () => {
-    // 23 since conversation.waiting (Backend 2ac65631).
-    expect(NOTIFIABLE_EVENTS).toHaveLength(23);
+  it('offers exactly the 24 that are both templated and emitted', () => {
+    // 23 since conversation.waiting (Backend 2ac65631); 24 with
+    // member.joined_by_domain (self sign-up's domain join, 2026-11-22).
+    expect(NOTIFIABLE_EVENTS).toHaveLength(24);
+  });
+
+  it('★ a domain join is work, named in the approved words', () => {
+    expect(NOTIFIABLE_EVENTS.find((e) => e.type === 'member.joined_by_domain')?.family).toBe(
+      'work',
+    );
   });
 
   it('never offers an event nothing emits', () => {

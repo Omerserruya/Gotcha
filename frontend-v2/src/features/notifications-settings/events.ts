@@ -61,6 +61,11 @@ export const NOTIFIABLE_EVENTS: readonly NotifiableEvent[] = [
    * that target is on - its catalogue entry says so, and so does the row.
    */
   { type: 'conversation.waiting', family: 'work', hasSourceCaveat: true },
+  /*
+   * Backend, self sign-up's domain join (2026-11-22): someone signed up with
+   * the organization's email domain and joined as an agent. In-app, to admins.
+   */
+  { type: 'member.joined_by_domain', family: 'work' },
 
   // ── Systems ───────────────────────────────────────────────────────
   /*

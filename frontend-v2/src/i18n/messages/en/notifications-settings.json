@@ -75,6 +75,9 @@
       "suspended": "The subscription is suspended",
       "resumed": "The subscription resumes",
       "canceled": "The subscription is cancelled"
+    },
+    "member": {
+      "joined_by_domain": "A new user joined your organization through your email domain"
     }
   },
   "caveat": {
