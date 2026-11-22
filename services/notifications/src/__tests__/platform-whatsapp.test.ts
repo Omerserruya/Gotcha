@@ -28,7 +28,10 @@ import {
   getPlatformWhatsAppSender,
   whatsAppReadiness,
   buildComponents,
+  templateParams,
 } from "../services/platform-whatsapp";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const ENV = { id: process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID, token: process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN };
 
@@ -178,5 +181,42 @@ describe("components are built or refused, never sent wrong", () => {
     // "WhatsApp failed". The count is knowable here, before the request.
     expect(() => buildComponents(template, [])).toThrow(/takes 1 parameter\(s\), received 0/);
     expect(() => buildComponents(template, ["90", "extra"])).toThrow(/received 2/);
+  });
+});
+
+describe("the usage alert says the real number (2026-11-22)", () => {
+  // Billing sends `pct`. This read `percent` and `threshold`, which nothing
+  // sends, so the alert said 80 at 90 and at 95 as well.
+  it.each([[80, "80"], [90, "90"], [95, "95"], [94.6, "95"], ["90", "90"]])("pct %j goes out as %j", (pct, text) => {
+    expect(templateParams("credit.threshold", { pct }, "en")).toEqual([text]);
+    expect(templateParams("credit.threshold", { pct }, "he")).toEqual([text]);
+  });
+
+  it("the parameter fits the template it is sent with", () => {
+    const template = PLATFORM_TEMPLATES["credit.threshold"]!;
+    expect(buildComponents(template, templateParams("credit.threshold", { pct: 95 }, "he"))).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "95" }] },
+    ]);
+  });
+
+  it.each([
+    ["no number at all", {}],
+    ["a number that is not one", { pct: "soon" }],
+    ["zero", { pct: 0 }],
+    ["null", { pct: null }],
+  ])("%s: the lowest threshold, never NaN or an empty parameter", (_name, data) => {
+    expect(templateParams("credit.threshold", data, "en")).toEqual(["80"]);
+  });
+
+  it("the exhausted alert takes no number", () => {
+    expect(templateParams("credit.exhausted", { pct: 100 }, "en")).toEqual([]);
+  });
+
+  it("★ the key this reads is the key billing writes", () => {
+    // The writer lives in another service, so the pair is pinned on its source:
+    // a rename there without one here is the bug this fixes.
+    const billing = readFileSync(join(__dirname, "../../../billing/src/routes/internal.ts"), "utf8");
+    expect(billing).toMatch(/type: "credit\.threshold", tenantId, data: \{ pct: t \}/);
+    expect(billing).not.toMatch(/type: "credit\.threshold"[^\n]*\b(percent|threshold):/);
   });
 });

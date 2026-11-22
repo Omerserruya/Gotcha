@@ -250,6 +250,8 @@ function teamQueueRoutes(event: SystemEvent): any[] {
  * events below (Omer, 2026-10-12): the ones that need someone to act. Same
  * recipients as in-app, and each person's own switches and quiet hours still
  * decide (personalAllows). A workspace rule for the event replaces all of it.
+ * The two usage alerts joined on 2026-11-22 (Omer): AI Units running low and
+ * AI Units used up reach the admins by email too, without anyone setting it.
  */
 export const EMAIL_BY_DEFAULT: ReadonlySet<string> = new Set([
   "conversation.waiting",
@@ -258,6 +260,8 @@ export const EMAIL_BY_DEFAULT: ReadonlySet<string> = new Set([
   "integration.check_failed",
   "conversation.escalated",
   "conversation.assigned",
+  "credit.threshold",
+  "credit.exhausted",
 ]);
 /**
  * Push (mobile app, 2026-11-03), a PERSONAL channel like WhatsApp: not a

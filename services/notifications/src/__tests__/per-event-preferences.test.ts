@@ -72,7 +72,7 @@ vi.mock("../services/queues", async () => {
   };
 });
 
-import { processEvent, deliverAutomationNotice } from "../services/notification-engine.service";
+import { processEvent, deliverAutomationNotice, EMAIL_BY_DEFAULT } from "../services/notification-engine.service";
 import type { SystemEvent } from "../services/event-emitter.service";
 
 let seq = 0;
@@ -152,6 +152,43 @@ describe("★ D2 (Omer, 2026-10-12): five events also email by default, to the s
       expect(who(H.inApp), type).toEqual(["dana", "noa"]);
       expect(H.emails.map((e) => e.to).sort(), type).toEqual(["dana@x.test", "noa@x.test"]);
     }
+  });
+
+  it("the two usage alerts (2026-11-22): in-app AND email to the admins, with the real number in the text", async () => {
+    await processEvent(ev("credit.threshold", { pct: 90 }));
+    expect(who(H.inApp)).toEqual(["dana", "noa"]);
+    expect(H.emails.map((e) => e.to).sort()).toEqual(["dana@x.test", "noa@x.test"]);
+    expect(JSON.stringify(H.emails[0])).toContain("90%");
+    expect(JSON.stringify(H.emails[0])).not.toContain("80%");
+
+    H.inApp = []; H.emails = [];
+    await processEvent(ev("credit.exhausted", { pct: 100 }));
+    expect(who(H.inApp)).toEqual(["dana", "noa"]);
+    expect(H.emails.map((e) => e.to).sort()).toEqual(["dana@x.test", "noa@x.test"]);
+  });
+
+  it("a usage alert respects a person's own email switch and a workspace rule, like the others", async () => {
+    H.overrides = [off("dana", { "credit.threshold": { email: false } })];
+    await processEvent(ev("credit.threshold", { pct: 80 }));
+    expect(H.emails.map((e) => e.to)).toEqual(["noa@x.test"]);
+    expect(who(H.inApp)).toEqual(["dana", "noa"]);
+
+    H.overrides = []; H.inApp = []; H.emails = [];
+    H.rules = [rule("credit.exhausted", ["in_app"])];
+    await processEvent(ev("credit.exhausted", { pct: 100 }));
+    expect(H.emails).toHaveLength(0);
+  });
+
+  it("the other billing notices stay in-app only: the default email list grew by exactly these two", async () => {
+    for (const type of ["credit.auto_purchase_succeeded", "payment_method.expiring", "subscription.past_due", "invoice.paid"]) {
+      H.inApp = []; H.emails = [];
+      await processEvent(ev(type));
+      expect(H.emails, type).toHaveLength(0);
+    }
+    expect([...EMAIL_BY_DEFAULT].sort()).toEqual([
+      "conversation.assigned", "conversation.escalated", "conversation.waiting", "credit.exhausted", "credit.threshold",
+      "integration.check_failed", "tool.action_failed", "tool.approval_required",
+    ]);
   });
 
   it("an assignment emails the assignee only", async () => {
