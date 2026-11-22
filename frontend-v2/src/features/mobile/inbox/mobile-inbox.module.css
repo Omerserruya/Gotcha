@@ -745,4 +745,12 @@
   .relevanceNote {
     color: var(--text-muted);
   }
+
+  /* The notice after a swipe-to-delete (2026-11-22). */
+  .deleteNotice {
+    margin: 0;
+    padding: var(--space-8) var(--space-16);
+    font-size: var(--font-size-meta);
+    color: var(--text-secondary);
+  }
 }

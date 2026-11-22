@@ -1963,3 +1963,25 @@ describe('★★ W1 (2026-11-22) - started on the website, continues on WhatsApp
     expect(badge.children).toHaveLength(1);
   });
 });
+
+describe('★★ swipe to delete on the list (2026-11-22): the route’s admins, never a thread from the website', () => {
+  const rows = () => [
+    row({ id: 'ordinary' }),
+    row({ id: 'moved', continuedFrom: { channel: 'WEBCHAT', conversationId: 'web1', at: null } }),
+  ];
+
+  it('★ an admin gets it on an ordinary row, never on a thread that moved from the website', async () => {
+    render(
+      await ConversationList({ rows: rows(), cap: 50, now: NOW, hasMore: false, role: 'ADMIN' }),
+    );
+    expect(screen.getByTestId('row-delete-ordinary')).toBeInTheDocument();
+    expect(screen.queryByTestId('row-delete-moved')).toBeNull();
+  });
+
+  it('⚠⚠ an agent (or an unread role) never gets it: the route would refuse', async () => {
+    render(
+      await ConversationList({ rows: rows(), cap: 50, now: NOW, hasMore: false, role: 'AGENT' }),
+    );
+    expect(screen.queryByTestId('row-delete-ordinary')).toBeNull();
+  });
+});

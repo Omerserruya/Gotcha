@@ -189,7 +189,14 @@
       "warningTitle": "קרוב ליעד התגובה של {minutes} דק׳.",
       "lateTitle": "ממתינה יותר מיעד התגובה של {minutes} דק׳."
     },
-    "continuedFrom": "התחילה באתר, ממשיכה ב‑WhatsApp"
+    "continuedFrom": "התחילה באתר, ממשיכה ב‑WhatsApp",
+    "swipeDelete": {
+      "title": "למחוק את השיחה?",
+      "body": "השיחה וכל ההודעות בה יימחקו לצמיתות. אי אפשר לבטל את זה.",
+      "confirm": "מחיקה",
+      "cancel": "ביטול",
+      "deleted": "השיחה נמחקה."
+    }
   },
   "identity": {
     "unnamed": "מישהו",

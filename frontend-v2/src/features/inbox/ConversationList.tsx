@@ -21,6 +21,8 @@ import { slaTargetFor, type SlaClock } from './sla-clock';
 import { SlaMark } from './SlaMark';
 import styles from './Inbox.module.css';
 import { ChannelPlate } from '@/design-system/brand/channel-plate';
+import { isAdmin } from './queue-menu-rules';
+import { RowDelete, RowDeleteNotices } from './RowDelete';
 import { UserText } from '@/design-system/primitives/text/UserText';
 
 import { Link } from '@/i18n/navigation';
@@ -249,329 +251,346 @@ export async function ConversationList({
             `inbox/page.tsx`, which destructures `c`. A walk URL quoted
             `?conversation=` and it was the harness's, not ours.
         */}
-        <QueueRowLink
-          href={{
-            pathname: '/inbox',
-            query: inboxQuery({ view, channel, period, c: conversation.id }),
-          }}
-          className={styles.queueRow}
-          data-testid={testid}
-          /*
-            ★★ MARKED ON CLICK, NOT ON THE SERVER'S ANSWER. `open` is what the
-            server rendered; the link follows a pending click until the new
-            page lands - see `QueueRowLink`. What the pane shows meanwhile
-            comes from this row, which is already loaded.
-          */
-          open={conversation.id === openId}
-          pending={{
-            id: conversation.id,
-            name: conversation.customerName,
-            channelLabel: channelName(conversation.channel, channelNames),
-            channel: conversation.channel,
-          }}
-          /*
-            ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS - name
-            weight, name colour, preview colour, avatar tint and time colour.
-            We drew every row identically, which is why the column read flat.
-
-            ⚠ `CLOSED` is the only one of the three statuses that means
-              settled. `OPEN` and `WAITING` are both live and are NOT
-              distinguished here. The design's third state, "unread", is
-              `data-unread` - from the server's per-person read state only.
-          */
-          data-settled={conversation.status === 'CLOSED' ? '' : undefined}
-          data-unread={mark ? '' : undefined}
+        {/*
+          Swipe right to delete (2026-11-22): admins only (the route's rule),
+          never on a thread that continued from the website (W1).
+        */}
+        <RowDelete
+          id={conversation.id}
+          open={conversation.status !== 'CLOSED'}
+          enabled={isAdmin(role) && conversation.continuedFrom === null}
         >
-          {/*
-            ════════════════════════════════════════════════════════════════
-            ★★ THE DESIGN'S ROW IS THREE LINES BESIDE AN AVATAR
-            ════════════════════════════════════════════════════════════════
-            02's template, verbatim: a 40×40 initials circle, then
-            `flex-direction:column; gap:4px` carrying name+time, preview+
-            unread, and a tag row.
-
-            We drew name · channel · waiting-age on one baseline - three
-            facts, none of them the message.
-          */}
-          {/*
-            ★★ THE AVATAR IS A STACK, NOT A CIRCLE. 02: a 42×42 disc with an
-            18×18 channel badge at `right:-2 bottom:-2`, bordered `2px solid`
-            in the CARD's own colour so it punches out of the disc rather
-            than sitting on it.
-          */}
-          <span
-            className={styles.avatarStack}
+          <QueueRowLink
+            href={{
+              pathname: '/inbox',
+              query: inboxQuery({ view, channel, period, c: conversation.id }),
+            }}
+            className={styles.queueRow}
+            data-testid={testid}
             /*
-              ⚠ NOT `aria-hidden` ANY MORE. The initials are decorative, but
-                the badge is now the only thing saying which channel this is -
-                it was a visible word a moment ago. Hiding the stack would
-                remove that fact from anybody using a screen reader.
+              ★★ MARKED ON CLICK, NOT ON THE SERVER'S ANSWER. `open` is what the
+              server rendered; the link follows a pending click until the new
+              page lands - see `QueueRowLink`. What the pane shows meanwhile
+              comes from this row, which is already loaded.
             */
-            title={badgeLabel}
+            open={conversation.id === openId}
+            pending={{
+              id: conversation.id,
+              name: conversation.customerName,
+              channelLabel: channelName(conversation.channel, channelNames),
+              channel: conversation.channel,
+            }}
+            /*
+              ★★ 02 DRAWS A SETTLED ROW QUIETER IN FIVE SEPARATE WAYS - name
+              weight, name colour, preview colour, avatar tint and time colour.
+              We drew every row identically, which is why the column read flat.
+
+              ⚠ `CLOSED` is the only one of the three statuses that means
+                settled. `OPEN` and `WAITING` are both live and are NOT
+                distinguished here. The design's third state, "unread", is
+                `data-unread` - from the server's per-person read state only.
+            */
+            data-settled={conversation.status === 'CLOSED' ? '' : undefined}
+            data-unread={mark ? '' : undefined}
           >
-            <span
-              className={styles.avatar}
-              data-settled={conversation.status === 'CLOSED' ? '' : undefined}
-            >
-              {initials(conversation.customerName)}
-            </span>
             {/*
-              ★★ THE BRAND'S OWN MARK (Omer, 2026-10-11), labelled: the badge
-              is the row's only statement of the channel.
+              ════════════════════════════════════════════════════════════════
+              ★★ THE DESIGN'S ROW IS THREE LINES BESIDE AN AVATAR
+              ════════════════════════════════════════════════════════════════
+              02's template, verbatim: a 40×40 initials circle, then
+              `flex-direction:column; gap:4px` carrying name+time, preview+
+              unread, and a tag row.
+
+              We drew name · channel · waiting-age on one baseline - three
+              facts, none of them the message.
+            */}
+            {/*
+              ★★ THE AVATAR IS A STACK, NOT A CIRCLE. 02: a 42×42 disc with an
+              18×18 channel badge at `right:-2 bottom:-2`, bordered `2px solid`
+              in the CARD's own colour so it punches out of the disc rather
+              than sitting on it.
             */}
             <span
-              className={styles.channelBadge}
-              data-testid={`channel-badge-${conversation.id}`}
-              data-moved={moved ? '' : undefined}
+              className={styles.avatarStack}
+              /*
+                ⚠ NOT `aria-hidden` ANY MORE. The initials are decorative, but
+                  the badge is now the only thing saying which channel this is -
+                  it was a visible word a moment ago. Hiding the stack would
+                  remove that fact from anybody using a screen reader.
+              */
+              title={badgeLabel}
             >
-              {moved ? (
-                <ChannelPlate
-                  channel={conversation.continuedFrom?.channel ?? null}
-                  decorative
-                  size="xs"
-                />
-              ) : null}
-              <ChannelPlate channel={conversation.channel} label={badgeLabel} size="xs" />
-            </span>
-          </span>
-
-          <span className={styles.rowBody}>
-            <span className={styles.rowTop}>
+              <span
+                className={styles.avatar}
+                data-settled={conversation.status === 'CLOSED' ? '' : undefined}
+              >
+                {initials(conversation.customerName)}
+              </span>
               {/*
-                ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
-                The contract named a field the platform does not send, so the
-                real `customerName` was stripped and the invented one
-                defaulted to null.
+                ★★ THE BRAND'S OWN MARK (Omer, 2026-10-11), labelled: the badge
+                is the row's only statement of the channel.
               */}
-              <span className={styles.who}>
-                {/* The name, else the handle, else "Someone" (customer-label.ts). */}
-                <CustomerWho row={conversation} unnamed={t('queue.unnamed')} />
+              <span
+                className={styles.channelBadge}
+                data-testid={`channel-badge-${conversation.id}`}
+                data-moved={moved ? '' : undefined}
+              >
+                {moved ? (
+                  <ChannelPlate
+                    channel={conversation.continuedFrom?.channel ?? null}
+                    decorative
+                    size="xs"
+                  />
+                ) : null}
+                <ChannelPlate channel={conversation.channel} label={badgeLabel} size="xs" />
+              </span>
+            </span>
+
+            <span className={styles.rowBody}>
+              <span className={styles.rowTop}>
+                {/*
+                  ★★ THE CUSTOMER'S NAME, WHICH WAS "Someone" ON EVERY ROW.
+                  The contract named a field the platform does not send, so the
+                  real `customerName` was stripped and the invented one
+                  defaulted to null.
+                */}
+                <span className={styles.who}>
+                  {/* The name, else the handle, else "Someone" (customer-label.ts). */}
+                  <CustomerWho row={conversation} unnamed={t('queue.unnamed')} />
+                </span>
+
+                {/*
+                  ★ THE TIME OF THE LAST MESSAGE, which is what the design puts
+                    here - and waiting-age has moved to the tag row, which is
+                    where the design puts THAT. Both facts kept, each in its
+                    own slot, rather than one standing in for the other.
+
+                  ⚠ Through `next-intl`'s formatter, so it renders in the
+                    configured `Asia/Jerusalem` rather than the server's zone.
+                    A time formatted on the server in UTC is wrong for every
+                    reader and looks right to whoever deployed it.
+                */}
+                {conversation.lastMessageAt === null ? null : (
+                  <span className={styles.rowTime} data-testid={`time-${conversation.id}`}>
+                    {/*
+                      ★ BY AGE (Omer, 2026-10-13, I4; 2026-11-09, F1): the
+                        time within 24 hours (24-hour, as before), then days
+                        ago ("אתמול", "לפני 3 ימים") up to 6, the date after -
+                        `listTime`. A bare "09:12" on a row from last month
+                        read as today.
+                    */}
+                    {listTime(conversation.lastMessageAt, now, format, (days) =>
+                      t('queue.daysAgo', { days }),
+                    )}
+                  </span>
+                )}
               </span>
 
               {/*
-                ★ THE TIME OF THE LAST MESSAGE, which is what the design puts
-                  here - and waiting-age has moved to the tag row, which is
-                  where the design puts THAT. Both facts kept, each in its
-                  own slot, rather than one standing in for the other.
+                ════════════════════════════════════════════════════════════════
+                ⚠⚠ THE MESSAGE PREVIEW - IN THE CONTRACT ALL ALONG, NEVER DRAWN
+                ════════════════════════════════════════════════════════════════
+                `lastMessageBody` is parsed by `conversationRowSchema` and
+                appeared NOWHERE outside it. The row's whole purpose - what the
+                person actually said - was being fetched on every page load and
+                discarded.
 
-                ⚠ Through `next-intl`'s formatter, so it renders in the
-                  configured `Asia/Jerusalem` rather than the server's zone.
-                  A time formatted on the server in UTC is wrong for every
-                  reader and looks right to whoever deployed it.
+                ★ The fourth value today that existed and had no reader.
               */}
-              {conversation.lastMessageAt === null ? null : (
-                <span className={styles.rowTime} data-testid={`time-${conversation.id}`}>
-                  {/*
-                    ★ BY AGE (Omer, 2026-10-13, I4; 2026-11-09, F1): the
-                      time within 24 hours (24-hour, as before), then days
-                      ago ("אתמול", "לפני 3 ימים") up to 6, the date after -
-                      `listTime`. A bare "09:12" on a row from last month
-                      read as today.
-                  */}
-                  {listTime(conversation.lastMessageAt, now, format, (days) =>
-                    t('queue.daysAgo', { days }),
-                  )}
-                </span>
-              )}
-            </span>
+              {/*
+                ★ BY TYPE, NEVER THE FILLER. The body of a photo is the
+                  adapter's "[Image]", of a voice note "[Voice message]", of a
+                  location "[Shared location: …]". `quoteOf` is what the reply
+                  quote already reads, so the row and the quote say one word for
+                  one kind: a caption is shown as the caption, filler as the
+                  kind, and a body that is only "[Image]" still reads as a photo
+                  from an older service that sends no `lastMessageType`.
 
-            {/*
-              ════════════════════════════════════════════════════════════════
-              ⚠⚠ THE MESSAGE PREVIEW - IN THE CONTRACT ALL ALONG, NEVER DRAWN
-              ════════════════════════════════════════════════════════════════
-              `lastMessageBody` is parsed by `conversationRowSchema` and
-              appeared NOWHERE outside it. The row's whole purpose - what the
-              person actually said - was being fetched on every page load and
-              discarded.
-
-              ★ The fourth value today that existed and had no reader.
-            */}
-            {/*
-              ★ BY TYPE, NEVER THE FILLER. The body of a photo is the
-                adapter's "[Image]", of a voice note "[Voice message]", of a
-                location "[Shared location: …]". `quoteOf` is what the reply
-                quote already reads, so the row and the quote say one word for
-                one kind: a caption is shown as the caption, filler as the
-                kind, and a body that is only "[Image]" still reads as a photo
-                from an older service that sends no `lastMessageType`.
-
-              ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. With no text and no known
-                kind there is nothing true to write - but dropping the line
-                made those rows 69 tall in a column of 82s. The line stays,
-                empty; no text is invented.
-            */}
-            {/*
-              ★★ 02's SECOND LINE IS THE PREVIEW AND THE UNREAD MARK, `flex`
-                with the mark at the end: the count when the server counted
-                (WhatsApp Web's badge, "99+" past 99), else a dot.
-            */}
-            <span className={styles.previewLine}>
-              {(() => {
-                const said = quoteOf({
-                  body: conversation.lastMessageBody ?? '',
-                  messageType: conversation.lastMessageType,
-                });
-                return (
+                ⚠ AN EMPTY PREVIEW KEEPS ITS LINE. With no text and no known
+                  kind there is nothing true to write - but dropping the line
+                  made those rows 69 tall in a column of 82s. The line stays,
+                  empty; no text is invented.
+              */}
+              {/*
+                ★★ 02's SECOND LINE IS THE PREVIEW AND THE UNREAD MARK, `flex`
+                  with the mark at the end: the count when the server counted
+                  (WhatsApp Web's badge, "99+" past 99), else a dot.
+              */}
+              <span className={styles.previewLine}>
+                {(() => {
+                  const said = quoteOf({
+                    body: conversation.lastMessageBody ?? '',
+                    messageType: conversation.lastMessageType,
+                  });
+                  return (
+                    <span
+                      className={styles.preview}
+                      data-testid={`preview-${conversation.id}`}
+                      data-empty={said === null ? '' : undefined}
+                      data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                    >
+                      {said === null ? null : 'text' in said ? (
+                        /* Somebody else's words: their direction, not the layout's. */
+                        <UserText>{said.text}</UserText>
+                      ) : (
+                        t(`stream.quote.kind.${said.kind}`)
+                      )}
+                    </span>
+                  );
+                })()}
+                {mark === null ? null : mark.kind === 'count' ? (
                   <span
-                    className={styles.preview}
-                    data-testid={`preview-${conversation.id}`}
-                    data-empty={said === null ? '' : undefined}
-                    data-kind={said !== null && 'kind' in said ? said.kind : undefined}
+                    className={styles.unreadBadge}
+                    data-testid={`unread-count-${conversation.id}`}
                   >
-                    {said === null ? null : 'text' in said ? (
-                      /* Somebody else's words: their direction, not the layout's. */
-                      <UserText>{said.text}</UserText>
-                    ) : (
-                      t(`stream.quote.kind.${said.kind}`)
-                    )}
+                    {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
+                    <span aria-hidden="true" dir="ltr">
+                      {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
+                    </span>
+                    <span className="srOnly">
+                      {t('queue.unreadMessages', { count: mark.count })}
+                    </span>
                   </span>
-                );
-              })()}
-              {mark === null ? null : mark.kind === 'count' ? (
-                <span
-                  className={styles.unreadBadge}
-                  data-testid={`unread-count-${conversation.id}`}
-                >
-                  {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
-                  <span aria-hidden="true" dir="ltr">
-                    {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
+                ) : (
+                  <span className={styles.unreadDot} data-testid={`unread-dot-${conversation.id}`}>
+                    <span className="srOnly">{t('queue.unread')}</span>
                   </span>
-                  <span className="srOnly">{t('queue.unreadMessages', { count: mark.count })}</span>
-                </span>
-              ) : (
-                <span className={styles.unreadDot} data-testid={`unread-dot-${conversation.id}`}>
-                  <span className="srOnly">{t('queue.unread')}</span>
-                </span>
-              )}
-            </span>
+                )}
+              </span>
 
-            <span className={styles.rowTags}>
-              {(() => {
-                const target = slaTargetFor(conversation, sla);
-                return target ? (
-                  <SlaMark
-                    target={target}
-                    renderedAt={now.toISOString()}
-                    testId={`sla-${conversation.id}`}
-                  />
-                ) : null;
-              })()}
-              {/*
-                ★ NULL IS NOT ZERO. A row we cannot age says nothing rather
-                  than claiming it has been waiting no time at all, which
-                  would sort it alongside the freshest thing in the queue.
-              */}
-              {waiting === null ? null : (
-                <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
-                  {/*
-                    ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes,
-                    so the capture showed `47061m` - thirty-two days, on the
-                    column an agent triages on.
-                  */}
-                  {(() => {
-                    const { scale, value } = waitingScale(waiting);
-                    return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', { value });
-                  })()}
-                </span>
-              )}
-
-              {/*
-                ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was
-                on screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify
-                live chat" in both languages all along.
-
-                ⚠ THE DESIGN DRAWS A LOGO BADGE HERE AND WE DRAW THE NAME.
-                  Its template is `background: url({{ c.chIcon }})` - a brand
-                  image per channel, and this product has no such assets. A
-                  lucide glyph would be a different mark, not that one, so the
-                  name stays until the logos exist.
-              */}
-              {/*
-                ⚠⚠ THE CHANNEL TAG IS GONE, AND THE BADGE IS WHY. The avatar
-                   now carries a tinted channel mark, so printing the name
-                   here spent the row's ONE coloured slot on a duplicate -
-                   and 02 puts status in that slot, not provenance.
-
-                ★ `channelName` is still read for the badge's accessible
-                  name: the mark is a tint and a glyph, and neither says
-                  "WhatsApp" to somebody who cannot see it.
-              */}
-              {/*
-                ════════════════════════════════════════════════════════════
-                ★★ TWO TAGS ON REAL DATA, NOT SIX WHERE FOUR ARE FICTION
-                ════════════════════════════════════════════════════════════
-                The design renders nine tag texts across the inbox screens.
-                They split three ways:
-
-                  buildable   "You" (assignedAgentId === me), "Flow"
-                              (handledBy === 'flow' - an EXACT match for
-                              HANDLED_BY's literal word)
-                  needs a     "Support AI" / "Sales AI" - the row carries
-                  name        `assignedAiAgentId`, an id with no name
-                  no field    "Shipping issue", "High intent", "Waiting on
-                              returns", "Approval needed" - a classification
-                              nobody stores
-
-                ⚠ The last four are NOT approximations of `status`. "Waiting
-                  on returns" is not `WAITING`, and a mapping that looks
-                  right on three rows is the kind of invention that reads as
-                  working.
-              */}
-              {meId !== null && conversation.assignedAgentId === meId ? (
-                <span className={styles.tagMine} data-testid={`tag-you-${conversation.id}`}>
-                  {t('queue.tag.you')}
-                </span>
-              ) : null}
-
-              {conversation.handledBy === 'flow' ? (
-                <span className={styles.tagNeutral} data-testid={`tag-flow-${conversation.id}`}>
-                  {t('queue.tag.flow')}
-                </span>
-              ) : null}
-
-              {/*
-                ★★ WHICH NUMBER (Omer, 2026-11-16): with two WhatsApp numbers
-                the row says which one the customer wrote to, by the name the
-                workspace gave it. One account: no tag, the row as before.
-              */}
-              {(() => {
-                const account = channelAccountName(conversation);
-                return account === null ? null : (
-                  <span
-                    className={styles.tagNeutral}
-                    data-testid={`tag-account-${conversation.id}`}
-                  >
-                    {badgeLabel} · <bdi dir="auto">{account}</bdi>
+              <span className={styles.rowTags}>
+                {(() => {
+                  const target = slaTargetFor(conversation, sla);
+                  return target ? (
+                    <SlaMark
+                      target={target}
+                      renderedAt={now.toISOString()}
+                      testId={`sla-${conversation.id}`}
+                    />
+                  ) : null;
+                })()}
+                {/*
+                  ★ NULL IS NOT ZERO. A row we cannot age says nothing rather
+                    than claiming it has been waiting no time at all, which
+                    would sort it alongside the freshest thing in the queue.
+                */}
+                {waiting === null ? null : (
+                  <span className={styles.waiting} data-testid={`waiting-${conversation.id}`}>
+                    {/*
+                      ★★ AT A SCALE SOMEBODY CAN READ. This printed raw minutes,
+                      so the capture showed `47061m` - thirty-two days, on the
+                      column an agent triages on.
+                    */}
+                    {(() => {
+                      const { scale, value } = waitingScale(waiting);
+                      return t(`queue.waitingFor.${scale}` as 'queue.waitingFor.minutes', {
+                        value,
+                      });
+                    })()}
                   </span>
-                );
-              })()}
+                )}
 
-              {/*
-                ★ NOT RELEVANT, AND WHICH KIND (`INBOX_RELEVANCE`): personal,
-                a notice or marketing. A normal conversation - a reply to our
-                own message most of all - wears nothing.
-              */}
-              {(() => {
-                const kind = relevance ? relevanceTag(conversation) : null;
-                return kind === null ? null : (
+                {/*
+                  ★★ THE CHANNEL'S NAME, NOT ITS ENUM. `SHOPIFY_LIVE_CHAT` was
+                  on screen; `channels.name.SHOPIFY_LIVE_CHAT` has said "Shopify
+                  live chat" in both languages all along.
+
+                  ⚠ THE DESIGN DRAWS A LOGO BADGE HERE AND WE DRAW THE NAME.
+                    Its template is `background: url({{ c.chIcon }})` - a brand
+                    image per channel, and this product has no such assets. A
+                    lucide glyph would be a different mark, not that one, so the
+                    name stays until the logos exist.
+                */}
+                {/*
+                  ⚠⚠ THE CHANNEL TAG IS GONE, AND THE BADGE IS WHY. The avatar
+                     now carries a tinted channel mark, so printing the name
+                     here spent the row's ONE coloured slot on a duplicate -
+                     and 02 puts status in that slot, not provenance.
+
+                  ★ `channelName` is still read for the badge's accessible
+                    name: the mark is a tint and a glyph, and neither says
+                    "WhatsApp" to somebody who cannot see it.
+                */}
+                {/*
+                  ════════════════════════════════════════════════════════════
+                  ★★ TWO TAGS ON REAL DATA, NOT SIX WHERE FOUR ARE FICTION
+                  ════════════════════════════════════════════════════════════
+                  The design renders nine tag texts across the inbox screens.
+                  They split three ways:
+
+                    buildable   "You" (assignedAgentId === me), "Flow"
+                                (handledBy === 'flow' - an EXACT match for
+                                HANDLED_BY's literal word)
+                    needs a     "Support AI" / "Sales AI" - the row carries
+                    name        `assignedAiAgentId`, an id with no name
+                    no field    "Shipping issue", "High intent", "Waiting on
+                                returns", "Approval needed" - a classification
+                                nobody stores
+
+                  ⚠ The last four are NOT approximations of `status`. "Waiting
+                    on returns" is not `WAITING`, and a mapping that looks
+                    right on three rows is the kind of invention that reads as
+                    working.
+                */}
+                {meId !== null && conversation.assignedAgentId === meId ? (
+                  <span className={styles.tagMine} data-testid={`tag-you-${conversation.id}`}>
+                    {t('queue.tag.you')}
+                  </span>
+                ) : null}
+
+                {conversation.handledBy === 'flow' ? (
+                  <span className={styles.tagNeutral} data-testid={`tag-flow-${conversation.id}`}>
+                    {t('queue.tag.flow')}
+                  </span>
+                ) : null}
+
+                {/*
+                  ★★ WHICH NUMBER (Omer, 2026-11-16): with two WhatsApp numbers
+                  the row says which one the customer wrote to, by the name the
+                  workspace gave it. One account: no tag, the row as before.
+                */}
+                {(() => {
+                  const account = channelAccountName(conversation);
+                  return account === null ? null : (
+                    <span
+                      className={styles.tagNeutral}
+                      data-testid={`tag-account-${conversation.id}`}
+                    >
+                      {badgeLabel} · <bdi dir="auto">{account}</bdi>
+                    </span>
+                  );
+                })()}
+
+                {/*
+                  ★ NOT RELEVANT, AND WHICH KIND (`INBOX_RELEVANCE`): personal,
+                  a notice or marketing. A normal conversation - a reply to our
+                  own message most of all - wears nothing.
+                */}
+                {(() => {
+                  const kind = relevance ? relevanceTag(conversation) : null;
+                  return kind === null ? null : (
+                    <span
+                      className={styles.tagNeutral}
+                      data-testid={`tag-relevance-${conversation.id}`}
+                    >
+                      {t(`relevance.tag.${kind}`)}
+                    </span>
+                  );
+                })()}
+
+                {/* The AI paused on an approval: somebody has to give it (prod, 2026-11-16). */}
+                {conversation.handledBy === 'awaiting_approval' ? (
                   <span
                     className={styles.tagNeutral}
-                    data-testid={`tag-relevance-${conversation.id}`}
+                    data-testid={`tag-approval-${conversation.id}`}
                   >
-                    {t(`relevance.tag.${kind}`)}
+                    {t('queue.tag.approval')}
                   </span>
-                );
-              })()}
-
-              {/* The AI paused on an approval: somebody has to give it (prod, 2026-11-16). */}
-              {conversation.handledBy === 'awaiting_approval' ? (
-                <span className={styles.tagNeutral} data-testid={`tag-approval-${conversation.id}`}>
-                  {t('queue.tag.approval')}
-                </span>
-              ) : null}
+                ) : null}
+              </span>
             </span>
-          </span>
-        </QueueRowLink>
+          </QueueRowLink>
+        </RowDelete>
       </li>
     );
   };
@@ -721,74 +740,77 @@ export async function ConversationList({
           colleagues={colleagues}
           greeting={greeting}
         >
-          {/*
+          <RowDeleteNotices className={styles.queueNotice}>
+            {/*
           ★★ THE CAP IS STATED, NOT IMPLIED. A list that stops at N and says
           nothing teaches an agent that N is all there is.
         */}
 
-          {dated.length === 0 && undated.length === 0 && clear ? (
-            clear
-          ) : dated.length === 0 && undated.length === 0 && (channel !== null || period) ? (
-            /*
+            {dated.length === 0 && undated.length === 0 && clear ? (
+              clear
+            ) : dated.length === 0 && undated.length === 0 && (channel !== null || period) ? (
+              /*
               ★★ A FILTER WITH NOTHING IN IT IS DRAWN, NOT LEFT BLANK (Omer,
               2026-10-12, I3): 02b's head - a tile, what is narrowed, and the
               way out of it, keeping the view (and the other filter).
             */
-            <div className={styles.clearHead} data-testid="queue-empty-filtered">
-              <span className={`${styles.clearTile} ${styles.emptyTile}`} aria-hidden="true">
-                {channel !== null ? (
-                  <ChannelPlate
-                    channel={chips.find((chip) => chip.channel === channel)?.mark ?? channel}
-                    size="lg"
-                    decorative
-                  />
-                ) : (
-                  <CalendarX size={20} />
-                )}
-              </span>
-              <p className={styles.clearTitle}>
-                {channel !== null
-                  ? t('queue.filter.emptyChannel.title', {
-                      channel:
-                        chips.find((chip) => chip.channel === channel)?.mark === 'WOOCOMMERCE'
-                          ? t('queue.filter.wooChat')
-                          : (channelName(channel, channelNames) ?? channel),
-                    })
-                  : t('queue.filter.emptyPeriod.title')}
+              <div className={styles.clearHead} data-testid="queue-empty-filtered">
+                <span className={`${styles.clearTile} ${styles.emptyTile}`} aria-hidden="true">
+                  {channel !== null ? (
+                    <ChannelPlate
+                      channel={chips.find((chip) => chip.channel === channel)?.mark ?? channel}
+                      size="lg"
+                      decorative
+                    />
+                  ) : (
+                    <CalendarX size={20} />
+                  )}
+                </span>
+                <p className={styles.clearTitle}>
+                  {channel !== null
+                    ? t('queue.filter.emptyChannel.title', {
+                        channel:
+                          chips.find((chip) => chip.channel === channel)?.mark === 'WOOCOMMERCE'
+                            ? t('queue.filter.wooChat')
+                            : (channelName(channel, channelNames) ?? channel),
+                      })
+                    : t('queue.filter.emptyPeriod.title')}
+                </p>
+                <p className={styles.clearLine}>
+                  {channel !== null
+                    ? t('queue.filter.emptyChannel.line')
+                    : period
+                      ? periodWords(period)
+                      : null}
+                </p>
+                <Link
+                  href={{
+                    pathname: '/inbox',
+                    query:
+                      channel !== null
+                        ? inboxQuery({ view, channel: null, period })
+                        : inboxQuery({ view, channel, period: null }),
+                  }}
+                  prefetch={false}
+                  className={styles.emptyWayOut}
+                  data-testid="queue-empty-way-out"
+                >
+                  {channel !== null
+                    ? t('queue.filter.emptyChannel.all')
+                    : t('queue.filter.emptyPeriod.all')}
+                </Link>
+              </div>
+            ) : dated.length === 0 && undated.length === 0 ? (
+              <p className={`${styles.note} ${styles.listNote}`} data-testid="queue-empty">
+                {t('queue.empty')}
               </p>
-              <p className={styles.clearLine}>
-                {channel !== null
-                  ? t('queue.filter.emptyChannel.line')
-                  : period
-                    ? periodWords(period)
-                    : null}
-              </p>
-              <Link
-                href={{
-                  pathname: '/inbox',
-                  query:
-                    channel !== null
-                      ? inboxQuery({ view, channel: null, period })
-                      : inboxQuery({ view, channel, period: null }),
-                }}
-                prefetch={false}
-                className={styles.emptyWayOut}
-                data-testid="queue-empty-way-out"
-              >
-                {channel !== null
-                  ? t('queue.filter.emptyChannel.all')
-                  : t('queue.filter.emptyPeriod.all')}
-              </Link>
-            </div>
-          ) : dated.length === 0 && undated.length === 0 ? (
-            <p className={`${styles.note} ${styles.listNote}`} data-testid="queue-empty">
-              {t('queue.empty')}
-            </p>
-          ) : (
-            <ol className={styles.queueList}>{dated.map((c) => row(c, `conversation-${c.id}`))}</ol>
-          )}
+            ) : (
+              <ol className={styles.queueList}>
+                {dated.map((c) => row(c, `conversation-${c.id}`))}
+              </ol>
+            )}
 
-          {/*
+            {/*
           ════════════════════════════════════════════════════════════════════
           ★★ THE ROWS THE ORDERING CANNOT PLACE, SHOWN RATHER THAN SUNK
           ════════════════════════════════════════════════════════════════════
@@ -838,9 +860,9 @@ export async function ConversationList({
           So the caption says which it is. A whole-queue count needs an
           endpoint nobody offers yet.
         */}
-          {showUndated ? (
-            <section data-testid="queue-undated">
-              {/*
+            {showUndated ? (
+              <section data-testid="queue-undated">
+                {/*
               ★★ THE VIEW-WIDE COUNT SUPERSEDES THE PER-PAGE ONE.
 
               `undatedCount` is scoped to this view's filters and is
@@ -849,16 +871,19 @@ export async function ConversationList({
               failed read - the caption falls back to what this page can see
               and says that is what it is.
             */}
-              <p className={`${styles.note} ${styles.listNote}`}>
-                {undatedCount !== undefined
-                  ? t('queue.undatedInView', { count: undatedCount })
-                  : hasMore
-                    ? t('queue.undatedThisPage', { count: undated.length })
-                    : t('queue.undated', { count: undated.length })}
-              </p>
-              <ol className={styles.queueList}>{undated.map((c) => row(c, `undated-${c.id}`))}</ol>
-            </section>
-          ) : null}
+                <p className={`${styles.note} ${styles.listNote}`}>
+                  {undatedCount !== undefined
+                    ? t('queue.undatedInView', { count: undatedCount })
+                    : hasMore
+                      ? t('queue.undatedThisPage', { count: undated.length })
+                      : t('queue.undated', { count: undated.length })}
+                </p>
+                <ol className={styles.queueList}>
+                  {undated.map((c) => row(c, `undated-${c.id}`))}
+                </ol>
+              </section>
+            ) : null}
+          </RowDeleteNotices>
         </QueueMenu>
       </div>
 
