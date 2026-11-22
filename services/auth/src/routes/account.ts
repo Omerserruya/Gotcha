@@ -37,11 +37,13 @@ import {
   isEnrolledWithRecovery,
   isSupportedLocale,
   getOAuthStateSecret,
+  LEGAL_VERSIONS,
   type RemovableDeviceType,
   resolveAppPublicUrl,
 } from "@chatcenter/shared";
 import { sendEmailChangeVerification } from "../services/notification.service";
 import { googleSourceSlug, hasAnotherWayIn, emailChangeGoogleStep } from "../lib/google-sign-in";
+import { acceptanceOf, termsConsentRows, TERMS_PURPOSE } from "../lib/terms-consent";
 
 const router = Router();
 router.use(authenticate);
@@ -470,6 +472,8 @@ router.delete("/sign-in-connections/google", async (req: Request, res: Response)
 //   4. After a new Google sign-in, removes the one-time "set a password" token
 //      Authentik may still hold for them from the setup screen.
 //   5. Answers the "connect Google" question when the callback carries one.
+//   6. Says whether the Terms screen stands before the app (`termsRequired`,
+//      the section below).
 
 type SignInMethod = "google" | "password" | "unknown";
 type ConnectVerdict = "connected" | "other_account" | null;
@@ -516,31 +520,81 @@ function connectVerdict(method: SignInMethod, callerSubject: string, connectSubj
   return sameAuthentikId(connectSubject, callerSubject) ? "connected" : "other_account";
 }
 
+/**
+ * The caller's newest sign-in, as Authentik has it. Lenient by default: a read
+ * that fails is "unknown", because the sign-in record never stands in a
+ * person's way. `strict` lets the failure through, for the one caller that
+ * must tell "could not ask" from "not Google".
+ */
+async function latestSignInOf(req: Request, strict = false) {
+  const slug = googleSourceSlug();
+  const read = <T>(p: Promise<T>, fallback: T): Promise<T> => (strict ? p : p.catch(() => fallback));
+  const identity = await read(callerIdentity(req), null);
+  const [connections, signIn] = identity
+    ? await Promise.all([
+        slug ? read(listUserSourceConnections(identity.pk), []) : Promise.resolve([]),
+        read(readLatestSignIn(identity.pk, identity.username), null),
+      ])
+    : [[], null];
+  const google = slug ? connections.find((c) => c.sourceSlug === slug) : undefined;
+  return { identity, google, signIn, method: signInMethod(signIn, google) };
+}
+
+/**
+ * Every membership row of the caller. One person can hold one in several
+ * workspaces; what is written under any of them is theirs. The caller's own
+ * row is always in the list, also when the others cannot be read.
+ */
+async function callerMemberships(req: Request): Promise<{ id: string; tenantId: string }[]> {
+  const { userId, tenantId, identityId } = req.user!;
+  const rows = identityId
+    ? await withCrossTenantAccess(() => prisma.user.findMany({ where: { identityId }, select: { id: true, tenantId: true } })).catch(() => [])
+    : [];
+  return [{ id: userId, tenantId }, ...rows.filter((r) => r.id !== userId)];
+}
+
+/**
+ * Whether an acceptance of the Terms is on file for this person, under any of
+ * their memberships. Throws when the ledger cannot be read: a failed read is
+ * never "accepted" and never "not accepted".
+ */
+async function termsAccepted(memberships: { id: string; tenantId: string }[]): Promise<boolean> {
+  const row = await withCrossTenantAccess(() => prisma.consentRecord.findFirst({
+    where: {
+      subjectType: "user",
+      purpose: TERMS_PURPOSE,
+      granted: true,
+      OR: memberships.map((m) => ({ tenantId: m.tenantId, subjectId: m.id })),
+    },
+    select: { id: true },
+  }));
+  return !!row;
+}
+
 router.post("/security/sign-in", async (req: Request, res: Response): Promise<void> => {
-  const answer: { method: SignInMethod; google: ConnectVerdict } = { method: "unknown", google: null };
+  const answer: { method: SignInMethod; google: ConnectVerdict; termsRequired: boolean } = { method: "unknown", google: null, termsRequired: false };
   if ((req.user as any)?.isInternal) { res.json(answer); return; }
   const { userId, tenantId } = req.user!;
   try {
-    const slug = googleSourceSlug();
-    const identity = await callerIdentity(req).catch(() => null);
-    const [connections, signIn] = identity
-      ? await Promise.all([
-          slug ? listUserSourceConnections(identity.pk).catch(() => []) : Promise.resolve([]),
-          readLatestSignIn(identity.pk, identity.username).catch(() => null),
-        ])
-      : [[], null];
-    const google = slug ? connections.find((c) => c.sourceSlug === slug) : undefined;
-    answer.method = signInMethod(signIn, google);
+    const { identity, google, signIn, method } = await latestSignInOf(req);
+    answer.method = method;
     if (identity) answer.google = connectVerdict(answer.method, identity.subject, req.body?.connectSubject);
 
-    // One person can hold a membership row in several workspaces; a line written
-    // under any of them counts as written, and a link issued for any of them is theirs.
-    const identityId = req.user!.identityId;
-    const rows = identityId
-      ? await withCrossTenantAccess(() => prisma.user.findMany({ where: { identityId }, select: { id: true } })).catch(() => [])
-      : [];
-    const userIds = Array.from(new Set([userId, ...rows.map((r) => r.id)]));
+    // A line written under any of the person's memberships counts as written,
+    // and a link issued for any of them is theirs.
+    const memberships = await callerMemberships(req);
+    const userIds = memberships.map((m) => m.id);
     const now = new Date();
+
+    // Only a sign-in KNOWN to be Google asks for the Terms. Once it is, a ledger
+    // that cannot be read asks too: the screen's own endpoints read it again, and
+    // an acceptance already on file is never written twice.
+    if (answer.method === "google") {
+      answer.termsRequired = await termsAccepted(memberships).then((on) => !on, (err: any) => {
+        console.warn(`[sign-in] terms read failed: ${err?.message ?? err}`);
+        return true;
+      });
+    }
 
     // Counted first: whether this sign-in is NEW decides the token step below. A
     // callback can also arrive with no new sign-in behind it (the app session
@@ -601,6 +655,90 @@ router.post("/security/sign-in", async (req: Request, res: Response): Promise<vo
     console.warn(`[sign-in] record failed: ${err?.message ?? err}`);
   }
   res.json(answer);
+});
+
+// ─── The Terms, before first entry with Google ───────────────────────────────
+//
+// A person who sets a first password accepts the Terms on that screen (the
+// setup link). A person who comes in with Google never sees that screen, so
+// the app shows them the Terms before anything else (Omer, 2026-11-22).
+//
+// The rule, in one line: the newest sign-in is a Google one AND no acceptance
+// of the Terms is on file for the person, under any of their memberships.
+// Nobody who signs in with a password is ever asked here, whenever their
+// password was set.
+//
+// The app's shell obeys `termsRequired`; no other route refuses on it.
+//   POST /security/sign-in   carries the flag at sign-in
+//   GET  /terms              the same flag again, for a reload
+//   POST /terms/accept       records the acceptance: the two rows the setup
+//                            screen writes, with source "google_first_sign_in"
+
+/** A service call or a support session is never the person's own entry. */
+function notThePersonThemself(req: Request): boolean {
+  return !!(req.user as any)?.isInternal || !!(req.user as any)?.support;
+}
+
+/**
+ * GET /terms -> 200 { termsRequired } | 503 { error: "unavailable" }.
+ * The ledger is read first: with an acceptance on file nothing is asked of
+ * Authentik. 503 means the question could not be answered, never "no".
+ */
+router.get("/terms", async (req: Request, res: Response): Promise<void> => {
+  if (notThePersonThemself(req) || !googleSourceSlug()) { res.json({ termsRequired: false }); return; }
+  try {
+    if (await termsAccepted(await callerMemberships(req))) { res.json({ termsRequired: false }); return; }
+    const { method } = await latestSignInOf(req, true);
+    res.json({ termsRequired: method === "google" });
+  } catch (err: any) {
+    console.warn(`[terms] read failed: ${err?.message ?? err}`);
+    res.status(503).json({ error: "unavailable" });
+  }
+});
+
+/**
+ * POST /terms/accept, body { terms: true, privacy: true, locale, capturedText }.
+ *   200 { termsRequired: false }      recorded now, or already on file (nothing written again)
+ *   400 { error: "consent_required" } either box not exactly true; nothing written
+ *   403 { error: "forbidden" }        not the person themself
+ *   503 { error: "unavailable" }      the ledger could not be read or written; nothing is claimed
+ *
+ * Both rows go in one transaction, under the membership the person is in now.
+ * How they signed in is kept in the evidence as it was read, not assumed.
+ */
+router.post("/terms/accept", async (req: Request, res: Response): Promise<void> => {
+  if (notThePersonThemself(req)) { res.status(403).json({ error: "forbidden" }); return; }
+  const accepted = acceptanceOf(req.body);
+  if (!accepted) { res.status(400).json({ error: "consent_required" }); return; }
+  const { userId, tenantId } = req.user!;
+  const source = "google_first_sign_in" as const;
+  try {
+    if (await termsAccepted(await callerMemberships(req))) { res.json({ termsRequired: false }); return; }
+    const { method } = await latestSignInOf(req);
+    const fwd = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+    const rows = termsConsentRows({
+      tenantId, userId, source, locale: accepted.locale,
+      evidence: {
+        ip: fwd || req.ip || null,
+        userAgent: (req.headers["user-agent"] as string | undefined)?.slice(0, 500) ?? null,
+        capturedText: accepted.capturedText,
+        locale: accepted.locale,
+        channel: "sign_in",
+        signInMethod: method,
+        acceptedAt: new Date().toISOString(),
+      },
+    });
+    await prisma.$transaction(rows.map((data) => prisma.consentRecord.create({ data })));
+    void writeAudit({
+      tenantId, actorType: "user", actorId: userId,
+      action: AuditAction.CONSENT_GRANTED, targetType: "user", targetId: userId,
+      metadata: { purposes: rows.map((r) => r.purpose), versions: LEGAL_VERSIONS, source, locale: accepted.locale },
+    });
+    res.json({ termsRequired: false });
+  } catch (err: any) {
+    console.error("[terms] accept failed:", err?.message ?? err);
+    res.status(503).json({ error: "unavailable" });
+  }
 });
 
 // ─── Email change (verified, self-service) ───────────────────────────────────

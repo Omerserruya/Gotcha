@@ -22,7 +22,6 @@ import {
   prisma,
   withCrossTenantAccess,
   createRecoveryLink,
-  legalUrls,
   LEGAL_VERSIONS,
 } from "@chatcenter/shared";
 import {
@@ -34,6 +33,7 @@ import {
 } from "../services/setup-link.service";
 import { sendSetupLinkEmail } from "../services/notification.service";
 import { googleSourceSlug } from "../lib/google-sign-in";
+import { acceptanceOf, termsConsentRows } from "../lib/terms-consent";
 
 const router = Router();
 
@@ -188,13 +188,12 @@ function clientIp(req: Request): string | null {
  *   retry writes fresh rows (the ledger is append-only by design).
  */
 router.post("/:token/accept", acceptLimiter, async (req: Request, res: Response): Promise<void> => {
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  if (body.terms !== true || body.privacy !== true) {
+  const accepted = acceptanceOf(req.body);
+  if (!accepted) {
     res.status(400).json({ error: "consent_required" });
     return;
   }
-  const locale = typeof body.locale === "string" && body.locale.toLowerCase().startsWith("he") ? "he" : "en";
-  const capturedText = typeof body.capturedText === "string" ? body.capturedText.trim().slice(0, 1000) : null;
+  const { locale, capturedText } = accepted;
 
   const raw = String(req.params.token ?? "");
   const resolution = await resolveSetupLink(raw);
@@ -220,7 +219,6 @@ router.post("/:token/accept", acceptLimiter, async (req: Request, res: Response)
       return;
     }
 
-    const urls = legalUrls(locale);
     const evidence = {
       ip: clientIp(req),
       userAgent: (req.headers["user-agent"] as string | undefined)?.slice(0, 500) ?? null,
@@ -230,26 +228,9 @@ router.post("/:token/accept", acceptLimiter, async (req: Request, res: Response)
       setupLinkId: link.id,
       acceptedAt: new Date().toISOString(),
     };
-    const rows = [
-      { purpose: "terms_of_service", document: { url: urls.terms, version: LEGAL_VERSIONS.terms } },
-      { purpose: "privacy_policy", document: { url: urls.privacy, version: LEGAL_VERSIONS.privacy } },
-    ];
+    const rows = termsConsentRows({ tenantId: link.tenantId, userId: link.userId, source: "setup", locale, evidence });
     await withCrossTenantAccess(() =>
-      prisma.$transaction(
-        rows.map((r) =>
-          prisma.consentRecord.create({
-            data: {
-              tenantId: link.tenantId,
-              subjectType: "user",
-              subjectId: link.userId,
-              purpose: r.purpose,
-              granted: true,
-              source: "setup",
-              evidence: { ...evidence, document: r.document },
-            },
-          }),
-        ),
-      ),
+      prisma.$transaction(rows.map((data) => prisma.consentRecord.create({ data }))),
     );
     void writeAudit({
       tenantId: link.tenantId,
