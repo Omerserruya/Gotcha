@@ -200,6 +200,30 @@ describe("relayConversationState", () => {
     } as any);
     expect(H.emit).not.toHaveBeenCalled();
   });
+
+  // 2026-11-19: the bot closes its own quiet conversations; the visitor's next message reopens them.
+  it("★ the bot's own close (silence, or the visitor ended it) does not end the visitor's chat", () => {
+    for (const closeReason of ["bot_idle", "customer_ended"]) {
+      relayConversationState({
+        event: "conversation:closed",
+        tenantId: "t1",
+        data: { id: "conv1", channel: "SHOPIFY_LIVE_CHAT", status: "CLOSED", closeReason },
+      } as any);
+    }
+    expect(H.emit).not.toHaveBeenCalled();
+  });
+
+  it("★ a person's Resolve (no reason, or any other one) still ends it in the widget", () => {
+    relayConversationState({ event: "conversation:closed", tenantId: "t1", data: { id: "conv1", channel: "SHOPIFY_LIVE_CHAT", status: "CLOSED" } } as any);
+    relayConversationState({ event: "conversation:closed", tenantId: "t1", data: { id: "conv2", channel: "SHOPIFY_LIVE_CHAT", status: "CLOSED", closeReason: "idle" } } as any);
+    expect(H.emit).toHaveBeenCalledTimes(2);
+    expect(H.emit).toHaveBeenCalledWith("visitor:conversation", expect.objectContaining({ conversationId: "conv1", status: "CLOSED" }));
+  });
+
+  it("a bot close reason on an update is not a close: it is relayed", () => {
+    relayConversationState({ event: "conversation:updated", tenantId: "t1", data: { id: "conv1", channel: "SHOPIFY_LIVE_CHAT", status: "OPEN", closeReason: "bot_idle" } } as any);
+    expect(H.emit).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("★ web chat: WooCommerce cards ride the push exactly as the poll projects them (W9)", () => {

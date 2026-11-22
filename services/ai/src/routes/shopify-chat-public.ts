@@ -61,6 +61,7 @@ import { handoffTarget, mintHandoffRef, brandOf } from "../services/website-widg
 import { translateWidgetTexts } from "../services/widget-text-translation.service";
 import { tryEmit } from "../services/notifications-emit";
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
+import { BOT_CLOSE_REOPEN_DAYS, reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
 import {
   findLiveInstallation,
   recordInstallationHeartbeat,
@@ -516,21 +517,34 @@ function conversationKey(session: VisitorSessionPayload): string {
   return session.customerId ? verifiedCustomerExternalId(session.customerId) : session.visitorId;
 }
 
+/**
+ * `forMessage`: the visitor is writing. A conversation the bot closed (silence, or the visitor ended it) is
+ * reopened and carried on, inside BOT_CLOSE_REOPEN_DAYS: the widget was not told of that close and still
+ * shows this conversation, and the close message said "write here again any time" (shared lib/bot-idle).
+ * Only for a message: opening the widget alone never reopens anything.
+ */
 async function findOrCreateConversation(
   session: VisitorSessionPayload,
   channel: ShopifyLiveChatChannel,
+  forMessage = false,
 ) {
   const externalId = conversationKey(session);
+  const mine = { tenantId: session.tenantId, channel: "SHOPIFY_LIVE_CHAT" as any, customerExternalId: externalId };
   const existing = await prisma.conversation.findFirst({
-    where: {
-      tenantId: session.tenantId,
-      channel: "SHOPIFY_LIVE_CHAT" as any,
-      customerExternalId: externalId,
-      status: { not: "CLOSED" },
-    },
+    where: { ...mine, status: { not: "CLOSED" } },
     orderBy: { createdAt: "desc" },
   });
   if (existing) return existing;
+  if (forMessage) {
+    const newest = await prisma.conversation.findFirst({ where: mine, orderBy: { createdAt: "desc" }, select: { id: true } });
+    if (newest && (await reopenBotClosed(prisma, { tenantId: session.tenantId, conversationId: newest.id, maxDays: BOT_CLOSE_REOPEN_DAYS }))) {
+      const reopened = await prisma.conversation.findFirst({ where: { id: newest.id, tenantId: session.tenantId } });
+      if (reopened) {
+        console.log(`[shopify-chat] reopened after a bot close conv=${reopened.id}`);
+        return reopened;
+      }
+    }
+  }
   return createConversation(session, channel);
 }
 
@@ -585,7 +599,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    const conversation = await findOrCreateConversation(session, channel);
+    const conversation = await findOrCreateConversation(session, channel, true);
     const context = normalizeStorefrontContext((req.body as any)?.context);
 
     // Client-supplied id makes the send idempotent: a retry after a flaky

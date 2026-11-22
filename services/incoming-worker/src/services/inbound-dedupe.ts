@@ -1,4 +1,5 @@
 import { prisma, getRedis } from "@chatcenter/shared";
+import { reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
 
 /**
  * One inbound message, one conversation, one AI turn - even when the provider
@@ -86,7 +87,12 @@ export async function findOrCreateOpenConversation<T extends { id: string }>(arg
   /** conversationAccountScope(): with two numbers on the channel, only this number's conversations. */
   accountScope?: { channelAccountId?: string };
   create: Record<string, unknown>;
-}): Promise<{ conversation: T; created: boolean }> {
+  /**
+   * The customer's newest conversation here was closed by the bot (idle, or the customer ended it) inside
+   * this many days: it is reopened and used, instead of a new one. Never one a person closed (shared lib/bot-idle).
+   */
+  reopenBotClosedDays?: number | null;
+}): Promise<{ conversation: T; created: boolean; reopened?: boolean }> {
   const scope = args.accountScope ?? {};
   const lockKey = `conv:${args.tenantId}:${args.channel}:${scope.channelAccountId ?? ""}:${args.customerExternalId}`;
   return (prisma as any).$transaction(async (tx: any) => {
@@ -102,6 +108,14 @@ export async function findOrCreateOpenConversation<T extends { id: string }>(arg
       orderBy: { createdAt: "desc" },
     });
     if (existing) return { conversation: existing as T, created: false };
+    if (args.reopenBotClosedDays) {
+      const where = { tenantId: args.tenantId, channel: args.channel, customerExternalId: args.customerExternalId, ...scope };
+      const newest = await tx.conversation.findFirst({ where, orderBy: { createdAt: "desc" }, select: { id: true } });
+      if (newest && (await reopenBotClosed(tx, { tenantId: args.tenantId, conversationId: newest.id, maxDays: args.reopenBotClosedDays }))) {
+        const reopened = await tx.conversation.findFirst({ where: { id: newest.id, tenantId: args.tenantId } });
+        if (reopened) return { conversation: reopened as T, created: false, reopened: true };
+      }
+    }
     const conversation = await tx.conversation.create({ data: args.create });
     return { conversation: conversation as T, created: true };
   });

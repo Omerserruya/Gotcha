@@ -5232,3 +5232,44 @@ describe("the size table's fit cut leaves no orphan opening (the 41805962 replay
     expect(reply).toMatch(/למידה 18×14: משטח הזזה 16\.4\*23\./);
   });
 });
+
+describe("the customer ended it: the turn is marked for the quiet close (2026-11-19), through a whole turn", () => {
+  const at = new Date("2026-11-19T09:00:00.000Z");
+  const thanks = (bot: string) => [
+    { direction: "INBOUND", body: "יש לכם תיק בד?", metadata: null, createdAt: new Date(at.getTime() - 120_000) },
+    { direction: "OUTBOUND", body: bot, senderName: "AI Bot", metadata: { source: "ai_bot" }, createdAt: new Date(at.getTime() - 60_000) },
+    { direction: "INBOUND", body: "תודה רבה", metadata: null, createdAt: at },
+  ];
+  const end = { ...opts, incomingMessage: "תודה רבה" };
+
+  it("★ \"תודה רבה\" after an answer, the reply asks nothing: the live state carries the mark, with the message's own time", async () => {
+    h.history = thanks("כן, יש תיק בד ב-₪79.");
+    h.responses.push({ toolCalls: [respond("e1", { reply: "בשמחה, יום נעים." })] });
+    await runReplyEngineTurn(end, "autonomous");
+    expect(h.upserts[0].where.conversationId_lane.lane).toBe("live");
+    expect(h.upserts[0].create.facts._endedAt).toBe(at.toISOString());
+  });
+
+  it("★ not an end: the bot had asked, the reply asks, or the customer asks for more", async () => {
+    const cases: Array<[any[], string, string]> = [
+      [thanks("יש תיק בד ב-₪79. לשלוח קישור?"), "תודה רבה", "בשמחה, יום נעים."],
+      [thanks("כן, יש תיק בד ב-₪79."), "תודה רבה", "בשמחה! יש עוד משהו שאפשר לעזור בו?"],
+      [thanks("כן, יש תיק בד ב-₪79.").map((m, i) => (i === 2 ? { ...m, body: "תודה, ומה לגבי משלוח?" } : m)), "תודה, ומה לגבי משלוח?", "המשלוח מגיע תוך כמה ימים."],
+    ];
+    for (const [history, incoming, reply] of cases) {
+      h.upserts.length = 0;
+      h.history = history;
+      h.responses.push({ toolCalls: [respond("e2", { reply })] });
+      await runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
+      expect([incoming, reply, h.upserts[0].create.facts._endedAt]).toEqual([incoming, reply, undefined]);
+    }
+  });
+
+  it("★ the shadow lane never carries the mark", async () => {
+    h.history = thanks("כן, יש תיק בד ב-₪79.");
+    h.responses.push({ toolCalls: [respond("e3", { reply: "בשמחה, יום נעים." })] });
+    await runReplyEngineTurn(end, "shadow");
+    expect(h.upserts[0].where.conversationId_lane.lane).toBe("shadow");
+    expect(h.upserts[0].create.facts._endedAt).toBeUndefined();
+  });
+});

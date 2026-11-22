@@ -32,8 +32,9 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       conversation: {
         findUnique: async (a: any) => H.conversations.find((c) => c.id === a.where.id) ?? null,
         findFirst: async (a: any) => H.conversations.find((c) =>
-          c.tenantId === a.where.tenantId && c.channel === a.where.channel && c.customerExternalId === a.where.customerExternalId
-          && (!a.where.status || a.where.status.in.includes(c.status))
+          c.tenantId === a.where.tenantId
+          && (a.where.id ? c.id === a.where.id : c.channel === a.where.channel && c.customerExternalId === a.where.customerExternalId)
+          && (!a.where.status || (typeof a.where.status === "string" ? c.status === a.where.status : a.where.status.in.includes(c.status)))
           && (a.where.channelAccountId === undefined || c.channelAccountId === a.where.channelAccountId)) ?? null,
         updateMany: async (a: any) => {
           const r = H.conversations.filter((c) => c.id === a.where.id && c.tenantId === a.where.tenantId && c.status === a.where.status);
@@ -125,20 +126,34 @@ describe("the first message creates it, under the draft's id", () => {
 });
 
 
-describe("closed for silence by the bot-idle rule: the visitor's next message reopens it (B3)", () => {
-  it("auto_closed / bot_idle: OPEN again, same id, the message queued into it; closed any other way: left closed", async () => {
-    H.conversations.push(
-      { id: "conv_idle", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_idle_abc", status: "CLOSED", closedAt: new Date(), reminderSentAt: new Date() },
-      { id: "conv_agent", tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: "sess_agent_abc", status: "CLOSED", closedAt: new Date() },
-    );
-    H.events.push(
-      { conversationId: "conv_idle", metadata: { systemEvent: "auto_closed", reason: "bot_idle" } },
-      { conversationId: "conv_agent", metadata: { systemEvent: "closed" } },
-    );
-    expect((await send("conv_idle", "sess_idle_abc")).status).toBe(200);
-    expect(H.conversations.find((c) => c.id === "conv_idle")).toMatchObject({ status: "OPEN", closedAt: null, reminderSentAt: null });
-    expect((await send("conv_agent", "sess_agent_abc")).status).toBe(200);
-    expect(H.conversations.find((c) => c.id === "conv_agent")!.status).toBe("CLOSED");
+describe("closed by the bot: the visitor's next message reopens it (B3; the customer's own end too, 2026-11-19)", () => {
+  const closed = (id: string, over: any = {}) => ({ id, tenantId: "T", channel: "WEBCHAT", channelAccountId: "ca_web", customerExternalId: `sess_${id}_abc`, status: "CLOSED", closedAt: new Date(), reminderSentAt: new Date(), ...over });
+  const botEvent = (conversationId: string, reason: string, createdAt = new Date()) => ({ conversationId, createdAt, metadata: { systemEvent: "auto_closed", reason } });
+  const statusOf = (id: string) => H.conversations.find((c) => c.id === id)!.status;
+
+  it("★ closed for silence, or because the visitor said thanks: OPEN again, same id, the message queued into it", async () => {
+    H.conversations.push(closed("idle"), closed("ended"));
+    H.events.push(botEvent("idle", "bot_idle"), botEvent("ended", "customer_ended"));
+    expect((await send("idle", "sess_idle_abc")).status).toBe(200);
+    expect(H.conversations.find((c) => c.id === "idle")).toMatchObject({ status: "OPEN", closedAt: null, reminderSentAt: null });
+    expect((await send("ended", "sess_ended_abc")).status).toBe(200);
+    expect(statusOf("ended")).toBe("OPEN");
     expect(H.created).toHaveLength(0);
+    expect(H.queued.map((q) => q.conversationId ?? q.normalizedMessage?.conversationId)).toHaveLength(2);
+  });
+
+  it("★ closed by a person, or for any other reason: left closed", async () => {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+    H.conversations.push(closed("agent"), closed("person_idle"), closed("later_person"));
+    H.events.push(
+      { conversationId: "agent", createdAt: new Date(), metadata: { systemEvent: "closed" } },
+      botEvent("person_idle", "idle"),
+      // The bot closed it a week ago, it was reopened, and a person resolved it today (no event of its own).
+      botEvent("later_person", "bot_idle", weekAgo),
+    );
+    for (const id of ["agent", "person_idle", "later_person"]) {
+      expect((await send(id, `sess_${id}_abc`)).status).toBe(200);
+      expect([id, statusOf(id)]).toEqual([id, "CLOSED"]);
+    }
   });
 });

@@ -11,6 +11,7 @@ import { processCommentTrigger } from "../services/comment-trigger.service";
 import { claimInboundMessage, releaseInboundClaim, findOrCreateOpenConversation } from "../services/inbound-dedupe";
 // A subpath, not the package root: this worker's tests mock "@chatcenter/shared" whole.
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
+import { BOT_CLOSE_REOPEN_DAYS } from "@chatcenter/shared/src/lib/bot-idle";
 
 const FB_API_URL = metaGraphBaseUrl(process.env.FACEBOOK_API_URL);
 // Intentionally OUTSIDE central Meta versioning: graph.instagram.com
@@ -433,6 +434,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // (assignment, handoff, chatbot flow, escalation clock) and causes the
   // customer to hit whatever the previous session's terminal state was
   // instead of being routed fresh.
+  // One exception (2026-11-19): a conversation the BOT closed (idle, or the
+  // customer ended it) is reopened by the customer's next message inside
+  // BOT_CLOSE_REOPEN_DAYS. It carried none of that state when it closed (the
+  // bot closes only what nobody holds), and its close message says "write here
+  // again any time". A conversation a person closed stays closed, as before.
   //
   // With two numbers of one channel on the tenant, the number is part of the
   // key: a customer writing to number B gets B's conversation, and the inbox
@@ -529,6 +535,8 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       channel,
       customerExternalId: senderId,
       accountScope,
+      // The owner's own conversation starts new; otherwise the one the bot closed is carried on.
+      reopenBotClosedDays: ownerOwns ? null : BOT_CLOSE_REOPEN_DAYS,
       create: {
         tenantId,
         channel,
@@ -547,6 +555,10 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     // Inside this branch TypeScript has narrowed `conversation` to null, so
     // NonNullable<typeof conversation> is never: the id is read through the row shape.
     const openedId = (opened.conversation as { id: string }).id;
+    if (opened.reopened) {
+      console.log(`[incoming-worker] conv=${openedId} reopened: the bot had closed it and the customer wrote again`);
+      publishEvent({ event: "conversation:updated", tenantId, data: { id: openedId, status: "OPEN" } }).catch(() => {});
+    }
     if (opened.created && ownerOwns) {
       console.log(`[incoming-worker] owner wrote from the phone within 24h: conv=${openedId} starts human-owned`);
       // In a workspace of one, the owner's (sole-member.ts).

@@ -266,6 +266,9 @@ services:
       context: .
       dockerfile: services/auth/Dockerfile
     environment:
+      # Bot idle default: the settings GET shows a business with no row as on only when this is on.
+      # Same value as `incoming-worker`, which is the service that acts on it.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       # ── Data retention (GDPR Art. 5(1)(e)) ──
       #
       # DELETE SCHEDULES. Every one of these is empty, and that is the
@@ -1057,6 +1060,10 @@ services:
       context: .
       dockerfile: services/incoming-worker/Dockerfile
     environment:
+      # Bot idle default (packages/shared/src/lib/bot-idle.ts). Unset or off: only a business with its own
+      # botIdleAutomation row gets the reminder and the close, as before. on: every business with no row gets
+      # the defaults, and a conversation the customer ended is closed quietly. Same value on `auth`.
+      BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
       # Paid-access gate - see the `ai` service for the full note. Present here
       # because this service can produce billable work on its own, and a service

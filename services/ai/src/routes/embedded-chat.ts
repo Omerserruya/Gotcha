@@ -25,6 +25,7 @@ import { listActivePromotions } from "../services/widget-promotions.service";
 import { resolveWooCurrency } from "../services/discovery-integration.service";
 import { tryEmit } from "../services/notifications-emit";
 import { emitInboundMessage } from "@chatcenter/shared/src/lib/notifications/inbound-push";
+import { reopenBotClosed } from "@chatcenter/shared/src/lib/bot-idle";
 import { offerCrossSellAfterCart } from "../services/woo-chat-turn.service";
 import { mintWebchatDraft, draftChannelAccount, createDraftConversation, visitorNameFromOrigin } from "../services/webchat-draft.service";
 
@@ -313,21 +314,11 @@ async function visitorConversation(conversationId: string, token: unknown) {
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? c : null;
 }
 
-/** Reopen a conversation the bot-idle rule closed (its newest system event says so). */
+/** Reopen a conversation the bot closed, for silence or because the customer ended it (shared lib/bot-idle). */
 async function reopenAfterBotIdle(conversationId: string, tenantId: string): Promise<boolean> {
-  const event = await prisma.message.findFirst({
-    where: { tenantId, conversationId, messageType: "system" },
-    orderBy: { createdAt: "desc" },
-    select: { metadata: true },
-  });
-  const meta: any = event?.metadata ?? {};
-  if (meta.systemEvent !== "auto_closed" || meta.reason !== "bot_idle") return false;
-  const r = await prisma.conversation.updateMany({
-    where: { id: conversationId, tenantId, status: "CLOSED" },
-    data: { status: "OPEN", closedAt: null, reminderSentAt: null },
-  });
-  if (r.count) console.log(`[embedded-chat] reopened after bot idle conv=${conversationId}`);
-  return r.count > 0;
+  const reopened = await reopenBotClosed(prisma, { tenantId, conversationId });
+  if (reopened) console.log(`[embedded-chat] reopened after a bot close conv=${conversationId}`);
+  return reopened;
 }
 
 /**
