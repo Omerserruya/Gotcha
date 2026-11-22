@@ -1222,3 +1222,72 @@ export async function sendAccountDeletionNoticeEmail(email: string, name: string
   } as any);
   await sendHtmlEmail(email, subject, html, text);
 }
+
+// ─── Sign-up by someone who already has an account ──────────
+
+/**
+ * The email a sign-up gets when its address already has an account.
+ *
+ * The sign-up form answers the same "check your email" to everyone, so this is
+ * the only place the person learns they already have an account - in their own
+ * inbox, where a stranger who typed their address cannot read it. It carries
+ * nothing the form sent (no name, no business name): the form is public, and
+ * this must not become a way to mail someone else's words to an address.
+ *
+ * The link is the ordinary way in. It is not a credential.
+ */
+export function signInHintEmail(link: string, locale?: string): { subject: string; html: string; text: string } {
+  if (emailLocale(locale) === "he") {
+    const subject = "כבר יש לך חשבון ב-GOTCHA";
+    const first = "התקבלה בקשה לפתוח חשבון GOTCHA עם כתובת האימייל הזו, וכבר יש לך חשבון.";
+    const last = "אם הבקשה לא הגיעה ממך, אפשר להתעלם מהמייל הזה.";
+    return {
+      subject,
+      html: renderBrandEmail({
+        locale: "he",
+        title: subject,
+        preheader: first,
+        headline: subject,
+        subhead: first,
+        cta: { label: "כניסה", url: link },
+        fallbackUrl: link,
+        footerNote: last,
+      }),
+      text: [first, "", `כניסה: ${link}`, "", last].join("\n"),
+    };
+  }
+  const subject = "You already have a GOTCHA account";
+  const first = "Someone asked to open a GOTCHA account with this email address, and you already have one.";
+  const last = "If the request did not come from you, you can ignore this email.";
+  return {
+    subject,
+    html: renderBrandEmail({
+      title: subject,
+      preheader: first,
+      headline: subject,
+      subhead: first,
+      cta: { label: "Sign in here", url: link },
+      fallbackUrl: link,
+      footerNote: last,
+    }),
+    text: [first, "", `Sign in here: ${link}`, "", last].join("\n"),
+  };
+}
+
+/**
+ * Send the sign-in hint. `tenantId` is one organization the person belongs to,
+ * when there is one: the notification log is kept per organization.
+ */
+export async function sendSignInHintEmail(email: string, locale: "he" | "en", tenantId?: string | null): Promise<void> {
+  const { subject, html, text } = signInHintEmail(signInUrl(), locale);
+  const payload: NotificationPayload | null = tenantId
+    ? { tenantId, channel: "email", type: "self_signup_sign_in_hint", recipient: email, subject, body: text, metadata: {} }
+    : null;
+  try {
+    await sendHtmlEmail(email, subject, html, text, locale);
+    if (payload) await logNotification(payload, "sent").catch(() => undefined);
+  } catch (err: any) {
+    if (payload) await logNotification(payload, "failed", err?.message).catch(() => undefined);
+    throw err;
+  }
+}

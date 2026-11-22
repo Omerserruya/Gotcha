@@ -17,7 +17,9 @@ export type TermsConsentSource =
   /** The first-password screen behind a setup link. */
   | "setup"
   /** The screen shown before first entry to a person who came in with Google. */
-  | "google_first_sign_in";
+  | "google_first_sign_in"
+  /** The public sign-up form, before any account exists. */
+  | "self_signup";
 
 export interface Acceptance {
   locale: "he" | "en";

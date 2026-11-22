@@ -273,6 +273,9 @@ services:
       # Bot idle default: the settings GET shows a business with no row as on only when this is on.
       # Same value as `incoming-worker`, which is the service that acts on it.
       BOT_IDLE_DEFAULT_ON: ${BOT_IDLE_DEFAULT_ON:-off}
+      # Public self sign-up (POST /api/auth/signup). Anything but "on" keeps the door shut,
+      # whatever the console setting says. Only the auth service reads it.
+      SELF_SIGNUP: ${SELF_SIGNUP:-off}
       # ── Data retention (GDPR Art. 5(1)(e)) ──
       #
       # DELETE SCHEDULES. Every one of these is empty, and that is the

@@ -11,6 +11,7 @@ import systemFeatureRoutes from "./routes/system-features";
 import systemManualEditRoutes from "./routes/system-manual-edits";
 import platformWhatsAppRoutes from "./routes/platform-whatsapp";
 import systemSelfSignupRoutes from "./routes/system-self-signup";
+import signupRoutes from "./routes/signup";
 import supportSessionRoutes from "./routes/support-sessions";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
 import widgetBrandRoutes from "./routes/widget-brand";
@@ -67,6 +68,8 @@ app.use("/api/auth/setup", setupLinkRoutes);
 // Account deletion requests (Google Play / App Store). The public pair needs
 // no session; /me is signed in. Before authRoutes, for the same reason as setup.
 app.use("/api/auth/account-deletion", accountDeletionRoutes);
+// The public sign-up. No session by definition; 404 unless SELF_SIGNUP is on.
+app.use("/api/auth/signup", signupRoutes);
 app.use("/api/auth", authRoutes);
 // BEFORE agentRoutes: that router owns "/:id", and mounting presence after it
 // would make /api/agents/presence a lookup for an agent whose id is "presence".
