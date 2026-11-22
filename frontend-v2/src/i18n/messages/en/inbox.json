@@ -160,10 +160,10 @@
       "partial": "Done for {done} of {total}. The rest didn’t go through - reload to see where things stand.",
       "failed": "That didn’t go through, and nothing changed. Try again in a moment.",
       "confirmTitle": "{count, plural, one {Delete this conversation?} other {Delete # conversations?}}",
-      "confirmBody": "{count, plural, one {It and every message in it are deleted for everyone. This can’t be undone.} other {They and every message in them are deleted for everyone. This can’t be undone.}}",
+      "confirmBody": "{count, plural, one {The conversation and all its messages will be deleted permanently. This can’t be undone.} other {The conversations and all their messages will be deleted permanently. This can’t be undone.}}",
       "confirmActive": "{count, plural, one {It is still open - deleting it ends it now.} other {# of them are still open - deleting them ends them now.}}",
       "confirm": "Delete",
-      "cancel": "Keep it",
+      "cancel": "Cancel",
       "selected": "{count} selected - right-click for actions",
       "clearSelection": "Clear the selection",
       "stopAi": "Stop AI",
@@ -192,7 +192,7 @@
     "continuedFrom": "Started on the website, continues on WhatsApp",
     "swipeDelete": {
       "title": "Delete this conversation?",
-      "body": "The conversation and all its messages will be deleted permanently. This can't be undone.",
+      "body": "The conversation and all its messages will be deleted permanently. This can’t be undone.",
       "confirm": "Delete",
       "cancel": "Cancel",
       "deleted": "The conversation was deleted."

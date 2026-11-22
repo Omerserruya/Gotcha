@@ -197,3 +197,36 @@ describe('★★ read and unread, for the person pressing it (Backend 7b69c714)'
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
+
+describe('★★ deleteConversation (Backend 2c5e57ad, 2026-11-22)', () => {
+  beforeEach(() => {
+    del.mockReset();
+    revalidatePath.mockReset();
+  });
+
+  it('★ deletes, an open one with force, and the list reads again', async () => {
+    del.mockResolvedValue({ data: { deleted: true, conversationId: 'c1' } });
+    const { deleteConversation } = await actions();
+    await expect(deleteConversation('c1', true)).resolves.toEqual({ ok: true });
+    expect(del).toHaveBeenCalledWith(expect.objectContaining({ query: { force: 'true' } }));
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  it('★★ a 404 is "already gone" - somebody deleted it a moment before: done, and the row drops', async () => {
+    del.mockRejectedValue(new ApiError({ kind: 'not_found', status: 404 }));
+    const { deleteConversation } = await actions();
+    await expect(deleteConversation('c1', false)).resolves.toEqual({ ok: true });
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  it('⚠ a 403 is not allowed; anything else failed', async () => {
+    const { deleteConversation } = await actions();
+    del.mockRejectedValue(new ApiError({ kind: 'authorization', status: 403 }));
+    await expect(deleteConversation('c1', false)).resolves.toEqual({
+      ok: false,
+      reason: 'not_allowed',
+    });
+    del.mockRejectedValue(new ApiError({ kind: 'server', status: 500 }));
+    await expect(deleteConversation('c1', false)).resolves.toEqual({ ok: false, reason: 'failed' });
+  });
+});

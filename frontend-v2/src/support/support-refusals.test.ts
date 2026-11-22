@@ -23,7 +23,11 @@ const SITES: ReadonlyArray<readonly [action: string, kind: string, files: readon
   ['buyCreditPack', 'billing', ['app/[locale]/(app)/settings/billing/page.tsx']],
   ['saveBillingProfile', 'billing', ['features/billing/BillingProfile.tsx']],
   ['startCardSession', 'billing', ['features/billing/BillingProfile.tsx']],
-  ['confirmCardSession', 'billing', ['app/[locale]/(app)/settings/billing/payment-method/page.tsx']],
+  [
+    'confirmCardSession',
+    'billing',
+    ['app/[locale]/(app)/settings/billing/payment-method/page.tsx'],
+  ],
   ['saveAutoPurchase', 'billing', ['features/billing/AutoPurchase.tsx']],
   ['previewPlanChange', 'billing', ['features/billing/PlanChoice.tsx']],
   ['changePlanTo', 'billing', ['features/billing/PlanChoice.tsx']],
@@ -51,7 +55,12 @@ const SITES: ReadonlyArray<readonly [action: string, kind: string, files: readon
   ['inviteMember', 'ownership', ['features/people/InviteForm.tsx']],
   ['revokeSession', 'ownership', ['app/[locale]/(app)/settings/security/page.tsx']],
   ['setMfaPolicy', 'ownership', ['app/[locale]/(app)/settings/security/page.tsx']],
-  ['deleteConversation', 'delete', ['features/inbox/QueueMenu.tsx']],
+  [
+    'deleteConversation',
+    'delete',
+    // Swipe-to-delete (2026-11-22) gates with refuses('delete') too.
+    ['features/inbox/QueueMenu.tsx', 'features/inbox/RowDelete.tsx'],
+  ],
   ['deleteEmployee', 'delete', ['features/employees/EmployeeDetail.tsx']],
   ['disconnectChannel', 'delete', ['features/channels/ChannelList.tsx']],
   ['disconnectNumber', 'delete', ['features/channels/PanelFoot.tsx']],
@@ -69,7 +78,10 @@ const SITES: ReadonlyArray<readonly [action: string, kind: string, files: readon
 
 /** The `.tsx` files that call each action today - the components the gates above wrap. */
 const CALLERS: Readonly<Record<string, readonly string[]>> = {
-  buyCreditPack: ['app/[locale]/(app)/settings/billing/page.tsx', 'features/billing/BuyCredits.tsx'],
+  buyCreditPack: [
+    'app/[locale]/(app)/settings/billing/page.tsx',
+    'features/billing/BuyCredits.tsx',
+  ],
   saveBillingProfile: ['features/billing/ProfileForm.tsx'],
   startCardSession: ['features/billing/CardSession.tsx'],
   confirmCardSession: ['features/billing/CardReturn.tsx'],
@@ -86,7 +98,7 @@ const CALLERS: Readonly<Record<string, readonly string[]>> = {
   inviteMember: ['features/people/InviteForm.tsx'],
   revokeSession: ['features/security/SessionList.tsx'],
   setMfaPolicy: ['features/security/MfaPolicy.tsx'],
-  deleteConversation: ['features/inbox/QueueMenu.tsx'],
+  deleteConversation: ['features/inbox/QueueMenu.tsx', 'features/inbox/RowDelete.tsx'],
   deleteEmployee: ['features/employees/DeleteEmployee.tsx'],
   disconnectChannel: ['features/channels/DisconnectChannel.tsx'],
   disconnectNumber: ['features/channels/PanelFoot.tsx'],
@@ -110,8 +122,7 @@ describe('★★ every refused control is gated where it is drawn', () => {
     (_action, kind, file) => {
       const source = read(file);
       const gated =
-        source.includes(`<SupportRefused kind="${kind}">`) ||
-        source.includes(`refuses('${kind}')`);
+        source.includes(`<SupportRefused kind="${kind}">`) || source.includes(`refuses('${kind}')`);
       expect(gated, `${file} draws a control support mode refuses, ungated`).toBe(true);
     },
   );
