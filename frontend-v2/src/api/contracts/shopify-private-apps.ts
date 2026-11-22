@@ -6,28 +6,31 @@ import { z } from 'zod';
  * admin creates a custom app for it in the Partner Dashboard, pastes its
  * client id, secret and install link, and GOTCHA emails the merchant.
  *
- * Backend's draft contract (feat/shopify-custom-app, 2026-11-22):
+ * Backend's final contract (beaecd42, 2026-11-22):
  *
  * MERCHANT
  *   GET  /api/connectors/shopify/install/availability → mode "custom_app_request"
  *        (listing not live, switch on, no store)
  *   GET  /api/connectors/shopify/custom-app/request
- *        → { data: { status, shopDomain, linkExpiresAt, installLink? } | null }
- *        installLink only while link_sent and not expired
+ *        → { data: { status, shopDomain, requestedAt, linkExpiresAt, installLink } | null, enabled }
+ *        installLink only while link_sent and not expired. `enabled` beside `data`: read raw.
  *   POST /api/connectors/shopify/custom-app/request { shopDomain }
- *        → 201 { data: { status: "requested", shopDomain } }
- *        400 invalid_shop_domain · 409 already_requested | shop_requested_elsewhere
- *        | store_connected · 403 private_apps_off
+ *        → 201 { data: { status, shopDomain, requestedAt } }
+ *        403 private_apps_off · 400 invalid_shop_domain
+ *        · 409 store_connected | already_requested | shop_requested_elsewhere
+ *   The claim, for a custom store: billingState CUSTOM_APP_GRANTED (included) or
+ *   CUSTOM_APP_AWAITING_GRANT (manual), planSelectionUrl null;
+ *   409 custom_app_for_another_workspace.
  * CONSOLE (system admin)
- *   GET  /api/system/shopify-custom-apps
- *        → { data: [{ tenantId, tenantName, status, shopDomain, requestedAt,
- *                     linkExpiresAt, installedAt, clientId }] }
- *   POST /api/system/shopify-custom-apps/:tenantId/link
- *        { clientId, clientSecret, installLink, linkExpiresAt? } → 200, merchant emailed
- *        409 wrong state · 400 the link is not https on admin.shopify.com
- *   POST …/:tenantId/new-link { installLink, linkExpiresAt? } · …/revoke · …/grant
- *        (grant only with entitlement "manual")
- *   GET/PUT /api/system/shopify-private-apps { enabled, entitlement: included | manual }
+ *   GET  /api/system/shopify-custom-apps → { data: Row[], settings } (`settings` beside: raw)
+ *   POST …/:tenantId/link { clientId, clientSecret, installLink, linkExpiresAt? }
+ *        → { data: { …row, emailed } } · 400 invalid_client_id | invalid_client_secret
+ *        | invalid_install_link · 409 not_waiting_for_a_link | client_id_in_use
+ *   POST …/:tenantId/new-link → { data: { …row, emailed } } · 409 no_link_to_replace
+ *   POST …/:tenantId/revoke → { data: { …row, entitlementsRevoked } } · 409 nothing_to_revoke
+ *   POST …/:tenantId/grant (INSTALLED rows, entitlement manual) → { data: { granted } }
+ *        · 409 not_installed
+ *   GET/PUT /api/system/shopify-private-apps → { data: { enabled, entitlement } }
  *
  * ★★ The client secret goes one way: typed, sent once, never read back,
  *   never logged, cleared from the page after the send.
@@ -75,12 +78,19 @@ const installLink = z
 export const merchantRequestSchema = z.looseObject({
   status: z.enum(REQUEST_STATES),
   shopDomain: z.string().min(1),
+  requestedAt: when,
   linkExpiresAt: when,
   installLink,
 });
 export type MerchantRequest = z.infer<typeof merchantRequestSchema>;
 
-export const merchantRequestReadSchema = merchantRequestSchema.nullable();
+/** The read, raw: `data` with `enabled` beside it. A request of a state we do not know is an error. */
+export const merchantRequestReadSchema = z
+  .looseObject({ data: merchantRequestSchema.nullable() })
+  .transform((answer) => answer.data);
+
+/** The POST's 201 answer is `{ data }` alone: the client unwraps it. */
+export const merchantRequestSentSchema = merchantRequestSchema;
 
 export type RequestRefusal =
   | 'invalid_shop_domain'
@@ -125,12 +135,21 @@ export const consoleRequestSchema = z.looseObject({
   requestedAt: when,
   linkExpiresAt: when,
   installedAt: when,
+  linkSentAt: when,
+  revokedAt: when,
   /** The app's client id once one is stored. The secret is never sent. */
   clientId: z.string().nullable().catch(null).default(null),
 });
 export type ConsoleRequest = z.infer<typeof consoleRequestSchema>;
 
-export const consoleRequestsSchema = z.array(consoleRequestSchema);
+/** The list, raw: `data` with `settings` beside it. Settings unread is `null`, not a default. */
+export const consoleListSchema = z.looseObject({
+  data: z.array(consoleRequestSchema),
+  settings: privateAppsSettingsSchema.nullable().catch(null).default(null),
+});
+
+/** link and new-link: the row, and whether the email went out. */
+export const linkSentSchema = z.looseObject({ emailed: z.boolean().catch(false).default(false) });
 
 export interface AppLink {
   readonly clientId: string;
@@ -155,10 +174,22 @@ export function expiryOf(day: string): { linkExpiresAt?: string } {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? { linkExpiresAt: `${value}T23:59:59.000Z` } : {};
 }
 
-export type ConsoleRefusal = 'invalid_link' | 'wrong_state' | 'forbidden' | 'not_found' | 'failed';
+export type ConsoleRefusal =
+  | 'invalid_client_id'
+  | 'invalid_client_secret'
+  | 'invalid_link'
+  | 'client_id_in_use'
+  | 'wrong_state'
+  | 'forbidden'
+  | 'not_found'
+  | 'failed';
 
-export function consoleRefusalOf(status: number | undefined): ConsoleRefusal {
-  if (status === 400 || status === 422) return 'invalid_link';
+/** By code first (beaecd42), then status. Each 409 that says "this moved on" is one sentence. */
+export function consoleRefusalOf(status: number | undefined, code?: string): ConsoleRefusal {
+  if (code === 'invalid_client_id') return 'invalid_client_id';
+  if (code === 'invalid_client_secret') return 'invalid_client_secret';
+  if (code === 'invalid_install_link' || status === 400 || status === 422) return 'invalid_link';
+  if (code === 'client_id_in_use') return 'client_id_in_use';
   if (status === 409) return 'wrong_state';
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';

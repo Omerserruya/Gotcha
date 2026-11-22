@@ -168,10 +168,8 @@ function RequestRow({
     ...(request.status === 'link_sent' || request.status === 'installed'
       ? (['revoke'] as const)
       : []),
-    // Grant: manual entitlement, and only before the store is installed or revoked (Supervisor).
-    ...(manual && (request.status === 'requested' || request.status === 'link_sent')
-      ? (['grant'] as const)
-      : []),
+    // Grant (beaecd42): manual entitlement, INSTALLED rows only - it enables the Shopify features.
+    ...(manual && request.status === 'installed' ? (['grant'] as const) : []),
   ];
 
   const ready =
@@ -360,6 +358,14 @@ function Outcome({
 }) {
   const t = useTranslations('console.shopifyApps');
   if (!result) return null;
+  if (result.ok && result.emailed === false) {
+    // Saved, but the email did not go out: said, never "done".
+    return (
+      <p className={styles.refused} role="alert" data-testid="shopify-apps-not-emailed">
+        {t('notEmailed')}
+      </p>
+    );
+  }
   return result.ok ? (
     <p className={styles.done} role="status" data-testid="shopify-apps-done">
       {done}

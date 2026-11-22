@@ -20,11 +20,18 @@ vi.mock('next/headers', () => ({ cookies: async () => jar }));
  * The mock parses the answer with the call's own schema, as the real client
  * does - otherwise a contract test checks the fixture, not the schema.
  */
-type Call = { payload: { parse: (v: unknown) => unknown } };
+type Call = { payload: { parse: (v: unknown) => unknown }; raw?: boolean };
+/* …and unwraps `data` unless `raw`, as http-client does: a missing `raw: true` fails here too. */
+const answer = (call: Call, body: unknown) =>
+  call.payload.parse(
+    !call.raw && typeof body === 'object' && body !== null && 'data' in body
+      ? (body as { data: unknown }).data
+      : body,
+  );
 vi.mock('@/api/client/server-api', () => ({
   serverApi: () => ({
-    get: async (call: Call) => call.payload.parse(await get(call)),
-    post: async (call: Call) => call.payload.parse(await post(call)),
+    get: async (call: Call) => answer(call, await get(call)),
+    post: async (call: Call) => answer(call, await post(call)),
   }),
 }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(search.value) }));
@@ -165,7 +172,11 @@ describe('★★ claim - the browser’s pending install, sent on', () => {
   it('replace: true with the cookie; the cookie cleared after', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     post.mockResolvedValue({ data: { shopDomain: 'new.myshopify.com', planSelectionUrl: null } });
-    expect(await claimShopifyInstall(true)).toEqual({ ok: true, planSelectionUrl: null });
+    expect(await claimShopifyInstall(true)).toEqual({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
     const call = post.mock.calls[0]![0] as { body: unknown; headers: Record<string, string> };
     expect(call.body).toStrictEqual({ replace: true });
     expect(call.headers.cookie).toBe('gotcha_shopify_pending=p1');
@@ -213,6 +224,26 @@ describe('★★ claim - the browser’s pending install, sent on', () => {
     expect(jar.delete).not.toHaveBeenCalled();
   });
 
+  it('★ beaecd42: a private store with entitlement manual is connected and awaiting the grant', async () => {
+    jar.get.mockReturnValue({ value: 'p1' });
+    post.mockResolvedValueOnce({
+      data: {
+        shopDomain: 's.myshopify.com',
+        billingState: 'CUSTOM_APP_AWAITING_GRANT',
+        planSelectionUrl: null,
+      },
+    });
+    expect(await claimShopifyInstall(false)).toEqual({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: true,
+    });
+    post.mockResolvedValueOnce({
+      data: { billingState: 'CUSTOM_APP_GRANTED', planSelectionUrl: null },
+    });
+    expect(await claimShopifyInstall(false)).toMatchObject({ awaitingGrant: false });
+  });
+
   it('ca1156f9: navigate to data.planSelectionUrl - https only', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     post.mockResolvedValueOnce({
@@ -227,9 +258,14 @@ describe('★★ claim - the browser’s pending install, sent on', () => {
     expect(await claimShopifyInstall(false)).toEqual({
       ok: true,
       planSelectionUrl: 'https://admin.shopify.com/charges/x',
+      awaitingGrant: false,
     });
     post.mockResolvedValueOnce({ data: { planSelectionUrl: 'http://evil.example/' } });
-    expect(await claimShopifyInstall(false)).toEqual({ ok: true, planSelectionUrl: null });
+    expect(await claimShopifyInstall(false)).toEqual({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
   });
 });
 
@@ -458,7 +494,10 @@ describe('★★ private apps: mode custom_app_request (2026-11-22)', () => {
 
   it('the availability read brings the request with the mode; any other mode asks nothing more', async () => {
     get.mockResolvedValueOnce({ mode: 'custom_app_request', helpUrl: null });
-    get.mockResolvedValueOnce({ status: 'requested', shopDomain: 's.myshopify.com' });
+    get.mockResolvedValueOnce({
+      data: { status: 'requested', shopDomain: 's.myshopify.com', requestedAt: null },
+      enabled: true,
+    });
     expect(await loadShopifyAvailability()).toMatchObject({
       mode: 'custom_app_request',
       customAppRequest: { status: 'requested', shopDomain: 's.myshopify.com' },
@@ -534,6 +573,7 @@ describe("★★ the claim's answers, by what they mean (App Review contract, an
     [503, 'billing_unavailable', 'billing_unavailable', false],
     [503, 'billing_link_failed', 'billing_unavailable', false],
     [403, 'forbidden', 'forbidden', false],
+    [409, 'custom_app_for_another_workspace', 'custom_app_for_another_workspace', true],
     // Not proof the approval is gone: a failure, with the button to try again.
     [409, 'something_new', 'failed', false],
   ])('%i %s -> %s (cookie dropped: %s)', async (status, code, reason, dropped) => {

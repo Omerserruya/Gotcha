@@ -28,6 +28,8 @@ const row = (over: Partial<ConsoleRequest> = {}): ConsoleRequest => ({
   requestedAt: '2026-11-22T10:00:00.000Z',
   linkExpiresAt: null,
   installedAt: null,
+  linkSentAt: null,
+  revokedAt: null,
   clientId: null,
   ...over,
 });
@@ -100,6 +102,21 @@ describe('★★ paste the app, then send the link - asked first', () => {
     expect(screen.getByTestId('shopify-app-t1-client-secret')).toHaveValue('');
   });
 
+  it('★ saved but not emailed: said as that, never "done"', async () => {
+    sendShopifyCustomAppLink.mockResolvedValue({ ok: true, emailed: false });
+    draw();
+    await userEvent.click(screen.getByTestId('shopify-app-t1-link'));
+    await userEvent.type(screen.getByTestId('shopify-app-t1-client-id'), 'cid12345');
+    await userEvent.type(screen.getByTestId('shopify-app-t1-client-secret'), 'shpss_xyz');
+    await userEvent.type(screen.getByTestId('shopify-app-t1-install-link'), LINK);
+    await userEvent.click(screen.getByTestId('shopify-app-t1-next'));
+    await userEvent.click(screen.getByTestId('shopify-app-t1-go'));
+    expect(await screen.findByTestId('shopify-apps-not-emailed')).toHaveTextContent(
+      'Use New link to send it again.',
+    );
+    expect(screen.queryByTestId('shopify-apps-done')).toBeNull();
+  });
+
   it('a link that is not Shopify’s admin: said at the field, and no way on', async () => {
     draw();
     await userEvent.click(screen.getByTestId('shopify-app-t1-link'));
@@ -120,11 +137,11 @@ describe('★★ each state offers its own steps', () => {
     ['link_sent', 'included', ['newLink', 'revoke']],
     ['installed', 'included', ['revoke']],
     ['revoked', 'included', []],
-    // Grant on requested and link_sent only - never revoked, never installed (Supervisor).
+    // Grant (beaecd42): installed rows with entitlement manual, and nowhere else.
     ['revoked', 'manual', []],
-    ['installed', 'manual', ['revoke']],
-    ['link_sent', 'manual', ['newLink', 'revoke', 'grant']],
-    ['requested', 'manual', ['link', 'grant']],
+    ['installed', 'manual', ['revoke', 'grant']],
+    ['link_sent', 'manual', ['newLink', 'revoke']],
+    ['requested', 'manual', ['link']],
   ] as const)('%s (%s): %j', (status, entitlement, steps) => {
     draw([row({ status })], { enabled: true, entitlement });
     const drawn = ['link', 'newLink', 'revoke', 'grant'].filter(

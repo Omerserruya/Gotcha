@@ -287,3 +287,21 @@ export function ShopifyPendingGone({
     </div>
   );
 }
+
+/**
+ * A private (custom) store claimed under entitlement "manual" (beaecd42): it is
+ * connected, and GOTCHA has not yet enabled its Shopify features.
+ */
+export function ShopifyAwaitingGrant() {
+  const t = useTranslations('capabilities.shopify.claim');
+  return (
+    <p
+      className={styles.landing}
+      data-outcome="ok"
+      role="status"
+      data-testid="shopify-awaiting-grant"
+    >
+      {t('awaitingGrant')}
+    </p>
+  );
+}

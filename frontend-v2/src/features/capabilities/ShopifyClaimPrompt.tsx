@@ -58,7 +58,12 @@ export function ShopifyClaimPrompt({ pending }: { readonly pending: PendingInsta
          * person goes to the store's own page, which shows it connected.
          */
         setOutcome({ kind: 'claimed' });
-        router.push('/studio/capabilities?system=shopify');
+        // Connected, the features not yet enabled: the store's page says so (a fixed marker).
+        router.push(
+          done.awaitingGrant
+            ? '/studio/capabilities?system=shopify&claimed=awaiting_grant'
+            : '/studio/capabilities?system=shopify',
+        );
         return;
       }
       if (done.reason === 'replace_required') {

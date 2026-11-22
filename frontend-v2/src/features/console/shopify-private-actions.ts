@@ -11,6 +11,7 @@ import {
   consoleRefusalOf,
   expiryOf,
   isShopifyInstallLink,
+  linkSentSchema,
   type AppLink,
   type ConsoleRefusal,
   type PrivateAppsSettings,
@@ -19,7 +20,12 @@ import { consoleEndpoints } from '@/api/endpoints/registry';
 import { logger } from '@/observability/logger';
 
 export type ConsoleWrite =
-  { readonly ok: true } | { readonly ok: false; readonly reason: ConsoleRefusal };
+  | {
+      readonly ok: true;
+      /** link and new-link: whether the email went out. Absent for the other steps. */
+      readonly emailed?: boolean;
+    }
+  | { readonly ok: false; readonly reason: ConsoleRefusal };
 
 const PAGE = '/[locale]/system/shopify-apps';
 
@@ -29,8 +35,9 @@ const PAGE = '/[locale]/system/shopify-apps';
  */
 function refused(cause: unknown, event: string): ConsoleWrite {
   const status = isApiError(cause) ? cause.status : undefined;
-  logger.warn(event, { status });
-  return { ok: false, reason: consoleRefusalOf(status) };
+  const code = isApiError(cause) ? cause.developerMessage : undefined;
+  logger.warn(event, { status, code });
+  return { ok: false, reason: consoleRefusalOf(status, code) };
 }
 
 /** The platform switch and who gets it (included in a plan, or granted by hand). */
@@ -62,14 +69,13 @@ export async function sendShopifyCustomAppLink(
     return { ok: false, reason: 'invalid_link' };
   }
   try {
-    await serverApi().post({
+    const sent = await serverApi().post({
       endpoint: consoleEndpoints.shopifyCustomAppStep(tenantId, 'link'),
-      payload: z.unknown(),
+      payload: linkSentSchema,
       body,
-      raw: true,
     });
     revalidatePath(PAGE, 'page');
-    return { ok: true };
+    return { ok: true, emailed: sent.emailed };
   } catch (cause) {
     await signInIfSignedOut(cause);
     return refused(cause, 'console.shopify_custom_app_link_failed');
@@ -84,14 +90,13 @@ export async function sendShopifyCustomAppNewLink(
 ): Promise<ConsoleWrite> {
   if (!isShopifyInstallLink(installLink)) return { ok: false, reason: 'invalid_link' };
   try {
-    await serverApi().post({
+    const sent = await serverApi().post({
       endpoint: consoleEndpoints.shopifyCustomAppStep(tenantId, 'new-link'),
-      payload: z.unknown(),
+      payload: linkSentSchema,
       body: { installLink: installLink.trim(), ...expiryOf(linkExpiresAt) },
-      raw: true,
     });
     revalidatePath(PAGE, 'page');
-    return { ok: true };
+    return { ok: true, emailed: sent.emailed };
   } catch (cause) {
     await signInIfSignedOut(cause);
     return refused(cause, 'console.shopify_custom_app_new_link_failed');

@@ -36,6 +36,14 @@ describe('★★ the link: stored and emailed in one call', () => {
     });
   });
 
+  it('★ beaecd42: the answer says whether the email went out', async () => {
+    post.mockResolvedValueOnce({ tenantId: 't1', status: 'link_sent', emailed: false });
+    expect(await actions.sendShopifyCustomAppLink('t1', FORM)).toEqual({
+      ok: true,
+      emailed: false,
+    });
+  });
+
   it('a link that is not Shopify’s admin, or a missing secret: nothing sent', async () => {
     expect(
       await actions.sendShopifyCustomAppLink('t1', {
@@ -57,7 +65,10 @@ describe('★★ the link: stored and emailed in one call', () => {
       ok: false,
       reason: 'wrong_state',
     });
-    expect(warn).toHaveBeenCalledWith('console.shopify_custom_app_link_failed', { status: 409 });
+    expect(warn).toHaveBeenCalledWith('console.shopify_custom_app_link_failed', {
+      status: 409,
+      code: 'wrong_state',
+    });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('TOPSECRET');
   });
 });

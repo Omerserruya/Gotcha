@@ -98,7 +98,11 @@ export async function startShopifyInstall(
 }
 
 export type ShopifyClaim =
-  | { readonly ok: true; readonly planSelectionUrl: string | null }
+  | {
+      readonly ok: true;
+      readonly planSelectionUrl: string | null;
+      readonly awaitingGrant: boolean;
+    }
   | {
       readonly ok: false;
       readonly reason: ClaimRefusal;
@@ -124,7 +128,11 @@ export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClai
     });
     store.delete(PENDING_COOKIE);
     revalidatePath('/[locale]', 'layout');
-    return { ok: true, planSelectionUrl: answer.planSelectionUrl };
+    return {
+      ok: true,
+      planSelectionUrl: answer.planSelectionUrl,
+      awaitingGrant: answer.awaitingGrant,
+    };
   } catch (cause) {
     await signInIfSignedOut(cause);
     logger.warn('capabilities.shopify_claim_failed', {
@@ -132,7 +140,13 @@ export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClai
     });
     if (!isApiError(cause)) return { ok: false, reason: 'failed' };
     const reason = claimRefusalOf(cause.status, cause.developerMessage);
-    if (reason === 'expired' || reason === 'held_by_other_workspace') store.delete(PENDING_COOKIE);
+    if (
+      reason === 'expired' ||
+      reason === 'held_by_other_workspace' ||
+      reason === 'custom_app_for_another_workspace'
+    ) {
+      store.delete(PENDING_COOKIE);
+    }
     if (reason === 'replace_required') {
       const named = cause.errorData?.current ?? cause.errorData?.currentShopDomain;
       const shop =

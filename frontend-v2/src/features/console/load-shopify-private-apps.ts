@@ -3,8 +3,7 @@ import 'server-only';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import {
-  consoleRequestsSchema,
-  privateAppsSettingsSchema,
+  consoleListSchema,
   type ConsoleRequest,
   type PrivateAppsSettings,
 } from '@/api/contracts/shopify-private-apps';
@@ -24,16 +23,9 @@ const unread = (event: string) => (cause: unknown) => {
 };
 
 export async function loadShopifyPrivateApps(): Promise<ShopifyPrivateAppsRead> {
-  const [settings, requests] = await Promise.all([
-    serverApi()
-      .get({
-        endpoint: consoleEndpoints.shopifyPrivateAppsSettings(),
-        payload: privateAppsSettingsSchema,
-      })
-      .catch(unread('console.shopify_private_settings_unread')),
-    serverApi()
-      .get({ endpoint: consoleEndpoints.shopifyCustomApps(), payload: consoleRequestsSchema })
-      .catch(unread('console.shopify_custom_apps_unread')),
-  ]);
-  return { settings, requests };
+  // One read: the list, with the settings beside `data` (beaecd42) - so raw.
+  const list = await serverApi()
+    .get({ endpoint: consoleEndpoints.shopifyCustomApps(), payload: consoleListSchema, raw: true })
+    .catch(unread('console.shopify_custom_apps_unread'));
+  return { settings: list?.settings ?? null, requests: list?.data ?? null };
 }

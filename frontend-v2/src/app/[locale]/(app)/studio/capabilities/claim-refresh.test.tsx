@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { integrationSchema } from '@/api/contracts/integrations';
 import type * as LoadCapabilities from '@/features/capabilities/load-capabilities';
-import { ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
+import { ShopifyAwaitingGrant, ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
 import billingMessages from '@/i18n/messages/en/billing.json';
 import messages from '@/i18n/messages/en/capabilities.json';
 
@@ -113,5 +113,17 @@ describe('★★ the real page on pending=1: the prompt is the layout’s; here 
       'That approval has expired or was already used',
     );
     expect(screen.getByTestId('shopify-pending-start')).toHaveTextContent('Connect again');
+  });
+});
+
+describe('★ beaecd42: after a private store’s claim under entitlement manual', () => {
+  it('claimed=awaiting_grant: the store’s page says it is connected and waiting - and only then', async () => {
+    jar.get.mockReturnValue(undefined);
+    const { default: Page } = await import('./page');
+    const at = async (params: Record<string, string>) =>
+      find(await Page({ searchParams: Promise.resolve(params) }), ShopifyAwaitingGrant);
+    expect(await at({ system: 'shopify', claimed: 'awaiting_grant' })).not.toBeNull();
+    expect(await at({ system: 'shopify' })).toBeNull();
+    expect(await at({ system: 'shopify', claimed: 'anything' })).toBeNull();
   });
 });
