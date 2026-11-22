@@ -77,6 +77,9 @@ export const AuditAction = {
   // A POC is product given away: who authorised it, how much, until when and
   // with which feature areas is exactly the thing to be able to answer later.
   POC_PROVISIONED: "billing.poc_provisioned",
+  // ── Self sign-up ──
+  // An operator changed the platform's sign-up settings (metadata: before, after).
+  SELF_SIGNUP_SETTINGS_CHANGED: "platform.self_signup_settings_changed",
   // ── Role changes ──
   ROLE_CHANGED: "user.role_changed",
   ROLE_CREATED: "role.created",

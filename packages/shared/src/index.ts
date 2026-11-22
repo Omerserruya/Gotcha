@@ -1085,6 +1085,13 @@ export { validate } from "./middleware/validate";
 // Admin-set tenant settings that must survive a restart. Postgres is the
 // source of truth; Redis stays in front as the cache the hot paths read.
 export { readDurableSetting, writeDurableSetting, settingCacheKey } from "./lib/durable-settings";
+export {
+  SELF_SIGNUP_SETTINGS_KEY, SELF_SIGNUP_ORIGIN_KEY, SYSTEM_TENANT_SLUG, SELF_SIGNUP_DEFAULTS, SELF_SIGNUP_BOUNDS,
+  CARD_BLOCKABLE_STATUSES, parseSelfSignupSettings, validateSelfSignupSettings, selfSignupEnvEnabled, systemTenantId,
+  readSelfSignupSettings, writeSelfSignupSettings, selfSignupState, newSelfSignupOrigin, parseSelfSignupOrigin,
+  cardDueAt, cardIsDue, emailDomain, isPublicEmailDomain,
+  type SelfSignupSettings, type SelfSignupOrigin, type SelfSignupFieldProblem, type CardBlockableStatus,
+} from "./lib/self-signup";
 export { requireEntitlement, requireCapacity, handleEntitlementError } from "./middleware/entitlement";
 // The service-level entitlement check, for code paths with no Express request:
 // background subscribers, workers and queue consumers. `requireEntitlement` is

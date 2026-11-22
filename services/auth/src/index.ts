@@ -10,6 +10,7 @@ import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
 import systemManualEditRoutes from "./routes/system-manual-edits";
 import platformWhatsAppRoutes from "./routes/platform-whatsapp";
+import systemSelfSignupRoutes from "./routes/system-self-signup";
 import supportSessionRoutes from "./routes/support-sessions";
 import knowledgeBackfillRoutes from "./routes/knowledge-backfill";
 import widgetBrandRoutes from "./routes/widget-brand";
@@ -89,6 +90,7 @@ app.use("/api/system", supportSessionRoutes);
 app.use("/api/system", widgetBrandRoutes);
 // GOTCHA's own WhatsApp alerts number (SYSTEM_ADMIN; its own guard, path-scoped).
 app.use("/api/system", platformWhatsAppRoutes);
+app.use("/api/system", systemSelfSignupRoutes);
 app.use("/api/system", accountDeletionOperatorRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
