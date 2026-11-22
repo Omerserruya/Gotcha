@@ -42,6 +42,9 @@ const H = vi.hoisted(() => {
     linkCalls: [] as any[],
     /** The store a connect would REPLACE. null = nothing to replace. */
     replacing: { current: null as string | null },
+    /** The workspace's own store (App Review 132211): currentStoreOf. */
+    current: { current: null as any },
+    retired: [] as any[],
     pendingCalls: [] as any[],
     exchange: v.fn(async () => ({ accessToken: "shpat_verysecret", scope: "read_orders" })),
     /** Which workspace holds the shop in ai. */
@@ -91,6 +94,10 @@ vi.mock("../services/tool-permission-reconcile.service", () => ({
   reconcileAgentToolPermissions: vi.fn(async () => ({ added: [] })),
 }));
 
+vi.mock("../services/shopify-store-replace.service", () => ({
+  retireReplacedStore: vi.fn(async (input: any) => { H.retired.push(input); return { shopDomain: input.shopDomain, shopify: null, outcome: "x" }; }),
+}));
+
 vi.mock("../services/shopify-connection-link.service", () => ({
   SHOPIFY_OAUTH_SCOPES: "read_orders,read_products",
   linkShopifyShopToTenant: vi.fn(async (input: any) => {
@@ -104,6 +111,7 @@ vi.mock("../services/shopify-connection-link.service", () => ({
   pendingStoreReplacement: vi.fn(async () => H.replacing.current),
   findShopOwner: vi.fn(async () => H.owner.current),
   shopHeldElsewhere: (owner: any, tenantId: string) => !!owner && owner.tenantId !== tenantId && owner.status !== "DISCONNECTED",
+  currentStoreOf: vi.fn(async () => H.current.current),
 }));
 
 vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => {
@@ -200,6 +208,8 @@ beforeEach(() => {
   H.connection.current = null;
   H.linkResult.current = { ok: true, connectionId: "c1", reconnected: false };
   H.replacing.current = null;
+  H.current.current = null;
+  H.retired.length = 0;
   H.linkCalls.length = 0;
   H.pendingCalls.length = 0;
   H.exchange.mockResolvedValue({ accessToken: "shpat_verysecret", scope: "read_orders" });
@@ -523,5 +533,47 @@ describe("an install that began on Shopify (no GOTCHA session)", () => {
     } finally {
       delete process.env.SHOPIFY_ANONYMOUS_INSTALL_LANDING;
     }
+  });
+});
+
+describe("App Review 132211: the signed-in path (Connect, Reconnect)", () => {
+  it("★ Reconnect of this workspace's own store (ERROR or connected): linked back, reconnected, nothing retired", async () => {
+    H.current.current = { shopDomain: SHOP, status: "CONNECTED" };
+    H.linkResult.current = { ok: true, connectionId: "c1", reconnected: true };
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.status).toBe(302);
+    expect(H.linkCalls[0]).toMatchObject({ tenantId: "tenant-A", shopDomain: SHOP });
+    expect(H.retired).toEqual([]);
+    expect(H.pendingCalls).toEqual([]);
+  });
+
+  it("★ a different store over an UNINSTALLED one: the old store's leftovers go first, then the new store links", async () => {
+    H.current.current = { shopDomain: "app-review-old.myshopify.com", status: "DISCONNECTED" };
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.retired).toEqual([{ tenantId: "tenant-A", shopDomain: "app-review-old.myshopify.com", connected: false }]);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: SHOP });
+  });
+
+  it("the same store coming back after an uninstall: nothing retired, it is linked back", async () => {
+    H.current.current = { shopDomain: SHOP, status: "DISCONNECTED" };
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.retired).toEqual([]);
+    expect(H.linkCalls[0]).toMatchObject({ shopDomain: SHOP });
+  });
+
+  it("a CONNECTED other store is never retired here, even if the replace question missed it", async () => {
+    H.current.current = { shopDomain: "app-review-old.myshopify.com", status: "CONNECTED" };
+    H.replacing.current = null;
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.retired).toEqual([]);
+  });
+
+  it("a different store over a CONNECTED one: parked for the person's Replace, nothing retired", async () => {
+    H.current.current = { shopDomain: "app-review-old.myshopify.com", status: "CONNECTED" };
+    H.replacing.current = "app-review-old.myshopify.com";
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.retired).toEqual([]);
+    expect(H.linkCalls).toEqual([]);
+    expect(H.pendingCalls.length).toBe(1);
   });
 });
