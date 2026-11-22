@@ -1,12 +1,12 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRef, useState, type FormEvent } from 'react';
 
+import { submitSignUp } from '@/api/client/self-signup';
 import type { SignUpConfig, SignUpField, SignUpOutcome } from '@/api/contracts/self-signup';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
-import { submitSignUp } from '@/features/signup/actions';
 import { TermsBox } from '@/shell/terms/TermsBox';
 
 import styles from '../recover/Recover.module.css';
@@ -30,6 +30,7 @@ export function SignUpPanel({
   readonly signInHref: string;
 }) {
   const t = useTranslations('auth.signUp');
+  const locale = useLocale();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -49,8 +50,10 @@ export function SignUpPanel({
     if (!event.currentTarget.reportValidity()) return;
     setBusy(true);
     setOutcome(
+      // From the browser, so the route's per-address limit sees this visitor (api/client/self-signup.ts).
       await submitSignUp(
         { name, email, businessName },
+        locale,
         termsLabel.current?.textContent?.trim() ?? '',
         website,
       ),
