@@ -15,7 +15,8 @@ export type ConnectKind = 'shopify' | 'woo' | 'oauth' | 'form' | 'none';
 
 export function connectKind(integration: Integration, reconnect: boolean): ConnectKind {
   const { oauth, fields } = integration.authSchema;
-  if (integration.slug === 'shopify' && !reconnect) return 'shopify';
+  // Connect and Reconnect alike start at /install/start (App Review 132211; 165bbe05's reconnect mode).
+  if (integration.slug === 'shopify') return 'shopify';
   if (integration.slug === 'woocommerce') return 'woo';
   if (!oauth && fields.length > 0) return 'form';
   if ((oauth || integration.slug === 'shopify') && oauthHere(integration.slug, reconnect)) {

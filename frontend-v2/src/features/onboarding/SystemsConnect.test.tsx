@@ -152,13 +152,18 @@ describe('★★ every start from step 2 asks to come back to step 2 (flow=onboa
     await waitFor(() => expect(assign).toHaveBeenCalledWith('https://admin.shopify.com/oauth/x'));
   });
 
-  it('★★ Shopify reconnect re-authorises at Shopify, with the flow', async () => {
-    startOAuth.mockResolvedValue({ ok: true, url: 'https://x.myshopify.com/admin/oauth' });
+  it('★★ Shopify reconnect is the install start too (one path everywhere), with the flow', async () => {
+    startShopifyInstall.mockResolvedValue({
+      ok: true,
+      url: 'https://x.myshopify.com/admin/oauth/authorize?client_id=c',
+    });
     show({ integration: shopify, reconnect: true });
     expect(screen.getByTestId('systems-start-shopify')).toHaveTextContent('Reconnect Shopify');
     await userEvent.click(screen.getByTestId('systems-start-shopify'));
-    await waitFor(() =>
-      expect(startOAuth).toHaveBeenCalledWith('shopify', undefined, 'onboarding_systems'),
+    await waitFor(() => expect(startShopifyInstall).toHaveBeenCalledWith('onboarding_systems'));
+    expect(startOAuth).not.toHaveBeenCalled();
+    expect(assign).toHaveBeenCalledWith(
+      'https://x.myshopify.com/admin/oauth/authorize?client_id=c',
     );
   });
 
