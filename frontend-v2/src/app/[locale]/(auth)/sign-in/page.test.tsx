@@ -111,6 +111,16 @@ vi.mock('@/features/auth/SignInPanel', () => ({
   ),
 }));
 
+/* Self sign-up's switch (2026-11-22): closed unless a test opens it. */
+const signUp = vi.hoisted(() => ({ enabled: false }));
+vi.mock('@/features/signup/load-signup-config', () => ({
+  loadSignUpConfig: async () => ({
+    enabled: signUp.enabled,
+    trialDays: null,
+    cardRequiredAfterDays: null,
+  }),
+}));
+
 const { default: SignInPage } = await import('./page');
 
 /*
@@ -509,5 +519,32 @@ describe('★★ Google sign-in on this page (2026-11-22)', () => {
     const panel = view.getByTestId('hand-over');
     expect(panel).toHaveAttribute('data-flow', '');
     expect(panel).toHaveAttribute('data-flow-query', '');
+  });
+});
+
+describe('★★ the way to self sign-up (2026-11-22)', () => {
+  const footer = async () => {
+    serverEnv.mockReturnValue({});
+    const { container } = render(await SignInPage({ searchParams: Promise.resolve({}) }));
+    return within(container);
+  };
+
+  it('⚠⚠ closed: the footnote as it was, and no link', async () => {
+    signUp.enabled = false;
+    const view = await footer();
+    expect(view.queryByTestId('sign-up-link')).toBeNull();
+    expect(view.getByText(messages.signIn.footnote)).toBeInTheDocument();
+  });
+
+  it('★★ open: "Don’t have an account? Sign up", to this locale’s /sign-up', async () => {
+    signUp.enabled = true;
+    try {
+      const view = await footer();
+      const link = view.getByTestId('sign-up-link');
+      expect(link).toHaveTextContent(`${messages.signUp.noAccount} ${messages.signUp.signUp}`);
+      expect(link.querySelector('a')).toHaveAttribute('href', '/en/sign-up');
+    } finally {
+      signUp.enabled = false;
+    }
   });
 });

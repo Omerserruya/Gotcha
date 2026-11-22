@@ -123,3 +123,18 @@ describe('★★ connected, but nothing arrives (auth 4061f669) - the subscripti
     ]);
   });
 });
+
+describe('★ a WhatsApp account’s health codes (Backend a47c3aca, 2026-11-22)', () => {
+  it.each([
+    ['WHATSAPP_ACCESS_REMOVED', 'whatsapp_access_removed'],
+    ['WHATSAPP_NUMBER_UNREADABLE', 'whatsapp_number_unreadable'],
+  ])('%s reads as %s, by code or by prefix', (code, reason) => {
+    expect(platformErrorReason('anything', code)).toBe(reason);
+    expect(platformErrorReason(`[${code}] Meta said no.`, null)).toBe(reason);
+  });
+
+  it('★ connecting again is the answer, not "connected but not receiving"', () => {
+    expect(NOT_RECEIVING_REASONS).not.toContain('whatsapp_access_removed');
+    expect(NOT_RECEIVING_REASONS).not.toContain('whatsapp_number_unreadable');
+  });
+});

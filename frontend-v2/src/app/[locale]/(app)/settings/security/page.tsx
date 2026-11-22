@@ -1,7 +1,9 @@
 import { getTranslations } from 'next-intl/server';
 
 import { ACCOUNT_GOOGLE_MARKERS, markerOf } from '@/api/contracts/google-sign-in';
+import { DomainJoinRow } from '@/features/security/DomainJoinRow';
 import { GoogleConnection } from '@/features/security/GoogleConnection';
+import { loadDomainJoin } from '@/features/security/load-domain-join';
 import { ConnectGoogleButton } from '@/shell/account/ConnectGoogleButton';
 import { loadGoogleConnection } from '@/features/security/load-google';
 import { loadSecurity } from '@/features/security/load-security';
@@ -45,7 +47,8 @@ export default async function Page({
       facetsTruncated,
     },
     google,
-  ] = await Promise.all([loadSecurity(), loadGoogleConnection()]);
+    domainJoin,
+  ] = await Promise.all([loadSecurity(), loadGoogleConnection(), loadDomainJoin()]);
 
   /*
     16, measured: sign-in on the left beside where you are signed in, then
@@ -72,13 +75,23 @@ export default async function Page({
               {t('mfa.unavailable')}
             </p>
           )}
-          {/* 02's two more rows. Nothing here reads either: "-", and why. */}
-          <div className={styles.policyRow} title={t('policy.googleNone')}>
-            <span className={styles.policyText}>
-              <span className={styles.policyName}>{t('policy.google')}</span>
-            </span>
-            <span className={styles.policyNone}>-</span>
-          </div>
+          {/*
+            02's two more rows. The first is joining by domain (Omer,
+            2026-11-22) once the server has it; until then, and when it is
+            unread, it stays 02's "-" exactly as it was.
+          */}
+          {domainJoin ? (
+            <SupportRefused kind="ownership">
+              <DomainJoinRow join={domainJoin} />
+            </SupportRefused>
+          ) : (
+            <div className={styles.policyRow} title={t('policy.googleNone')}>
+              <span className={styles.policyText}>
+                <span className={styles.policyName}>{t('policy.google')}</span>
+              </span>
+              <span className={styles.policyNone}>-</span>
+            </div>
+          )}
           <div className={styles.policyRow} title={t('policy.sessionNone')}>
             <span className={styles.policyText}>
               <span className={styles.policyName}>{t('policy.session')}</span>

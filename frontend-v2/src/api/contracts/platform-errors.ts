@@ -22,6 +22,13 @@ export const PLATFORM_ERROR_CODES = {
   SUBSCRIBE_FAILED: 'subscribe_failed',
   WATCH_FAILED: 'gmail_watch_failed',
   OUTLOOK_SUBSCRIPTION_FAILED: 'outlook_subscription_failed',
+  /*
+   * A WhatsApp account's health check (Backend a47c3aca, 2026-11-22): GOTCHA's
+   * access to the WhatsApp Business account was removed at Meta, or Meta
+   * refused two checks of the number in a row. Both: connect again.
+   */
+  WHATSAPP_ACCESS_REMOVED: 'whatsapp_access_removed',
+  WHATSAPP_NUMBER_UNREADABLE: 'whatsapp_number_unreadable',
 } as const;
 export type PlatformErrorReason =
   (typeof PLATFORM_ERROR_CODES)[keyof typeof PLATFORM_ERROR_CODES] | 'unknown';

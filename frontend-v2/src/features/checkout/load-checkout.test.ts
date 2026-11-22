@@ -92,6 +92,9 @@ describe('a member’s own outstanding checkout', () => {
     ],
     [{ data: { checkout: null, expired: true } }, { kind: 'expired' }],
     [{ data: { checkout: null } }, { kind: 'none' }],
+    // The self sign-up trial's card day (2026-11-22): held until a card is stored.
+    [{ data: { checkout: null, reason: 'card_required' } }, { kind: 'cardRequired' }],
+    [{ data: { checkout: null, reason: 'something_new' } }, { kind: 'none' }],
   ])('%j → %j', async (body, expected) => {
     session.value = { sid: 's' };
     get.mockResolvedValue(body);

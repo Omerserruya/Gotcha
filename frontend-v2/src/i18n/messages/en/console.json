@@ -15,7 +15,9 @@
     "tools": "MCP servers",
     "toolsLine": "Businesses' MCP servers waiting for our approval: approve or reject.",
     "aiFailures": "Failed AI actions",
-    "aiFailuresLine": "The AI's tool calls that failed across tenants, by tool and error."
+    "aiFailuresLine": "The AI's tool calls that failed across tenants, by tool and error.",
+    "signup": "Self sign-up",
+    "signupLine": "Who can open an account alone, how long the trial lasts and when a card is needed."
   },
   "tenants": {
     "title": "Tenants",
@@ -831,5 +833,23 @@
       "copied": "Copied",
       "refused": "The browser didn't allow copying"
     }
+  },
+  "signup": {
+    "title": "Self sign-up",
+    "pageTitle": "Self sign-up",
+    "description": "Who can open an account alone, how long the trial lasts and when a card is needed.",
+    "enabled": "Self sign-up is open",
+    "cardHint": "After this many days, an organization that signed up alone is asked to set up payment to continue.",
+    "save": "Save",
+    "saved": "Saved.",
+    "failed": "That didn't save. Try again.",
+    "range": "A whole number from {min} to {max}.",
+    "unread": "We couldn't read the settings. That doesn't mean sign-up is closed.",
+    "number": {
+      "trialDays": "Trial days",
+      "cardRequiredAfterDays": "Card required after (days)",
+      "trialCredits": "Trial credits"
+    },
+    "envOff": "Self sign-up is off for this environment in the server settings. You can save here, but it won't take effect until it is turned on there."
   }
 }

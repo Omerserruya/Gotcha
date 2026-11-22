@@ -45,7 +45,9 @@
     "outlook_subscription_failed": "Connected, but new mail won't arrive: Outlook's notifications couldn't be set up. Reconnect to try again.",
     "voice_number_not_found": "This number wasn't found on the Twilio account.",
     "voice_webhook_not_updated": "Twilio didn't accept GOTCHA's call address for this number, so calls may not reach GOTCHA.",
-    "voice_public_url_missing": "Calls can't be routed to GOTCHA yet: the server's voice address isn't set up. Nothing to fix on your side."
+    "voice_public_url_missing": "Calls can't be routed to GOTCHA yet: the server's voice address isn't set up. Nothing to fix on your side.",
+    "whatsapp_access_removed": "GOTCHA's access to the WhatsApp Business account was removed at Meta. Connect the number again.",
+    "whatsapp_number_unreadable": "Meta refused two checks of the number in a row. Connect the number again."
   },
   "retryIn": "Try again in {seconds}s",
   "loopStopped": {

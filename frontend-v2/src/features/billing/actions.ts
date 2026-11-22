@@ -258,7 +258,16 @@ export type CardSessionResult =
  * creates a client at the provider - so it refuses first when billing writes
  * are off (BILLING_WRITES, fail closed), before any request.
  */
-export async function startCardSession(): Promise<CardSessionResult> {
+/**
+ * Where the provider sends the person back: billing's own page (`v2`), or the
+ * payment page an organization the trial blocked is held on (`payment-required`,
+ * Backend 2026-11-22). The return carries no id: it is kept in the tab.
+ */
+export type CardSessionReturn = 'v2' | 'payment-required';
+
+export async function startCardSession(
+  returnTo: CardSessionReturn = 'v2',
+): Promise<CardSessionResult> {
   if (!billingWritesEnabled()) return { ok: false, reason: 'held' };
   try {
     const page = await serverApi().post({
@@ -268,7 +277,7 @@ export async function startCardSession(): Promise<CardSessionResult> {
        * payment-method, failure and cancel to the same with ?cancelled=1 - no
        * locale (v2's routing adds the reader's), no id in the URL.
        */
-      body: { returnTo: 'v2' },
+      body: { returnTo },
       payload: z.object({ redirectUrl: z.string().min(1), sessionId: z.string().min(1) }),
     });
     // Only ever a secure page: anything else is not where a card is typed.

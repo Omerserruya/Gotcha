@@ -23,7 +23,7 @@
  *   allowlist in another file from the route they just added - twice now,
  *   nobody did.
  */
-export const AUTH_SURFACE_ROUTES = ['sign-in', 'recover'] as const;
+export const AUTH_SURFACE_ROUTES = ['sign-in', 'recover', 'sign-up'] as const;
 
 /**
  * Matches `/sign-in`, `/en/sign-in`, `/he/recover/anything` - the surface's

@@ -284,5 +284,12 @@
     "otherAccount": "That Google account belongs to another GOTCHA account, so you're now signed in to that one. Google was not connected to your previous account.",
     "failed": "That didn't go through. Try again.",
     "unread": "We couldn't read which accounts are connected. That doesn't mean there are none."
+  },
+  "domainJoin": {
+    "name": "Join by domain",
+    "on": "Anyone who signs up with a <domain></domain> email joins the organization as an agent.",
+    "publicDomain": "<domain></domain> is a public email service, so nobody can join by it.",
+    "failed": "That change didn't save. Try again.",
+    "taken": "<domain></domain> already belongs to another organization, so joining by it can't be turned on here."
   }
 }

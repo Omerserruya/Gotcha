@@ -876,6 +876,10 @@ export const publicLinkEndpoints = {
   resendSetup: () => endpoint('/api/auth/setup/resend'),
   /** A setup link as data (setup-link.ts:84): read only for its `google` flag. Never redeems. */
   setupState: (token: string) => endpoint('/api/auth/setup/{token}/state', { token }),
+  /** Self sign-up (contracts/self-signup.ts): on or off, and the trial. */
+  signUpConfig: () => endpoint('/api/auth/signup/config'),
+  /** Self sign-up's submit: the same answer whether or not the address has an account. */
+  signUp: () => endpoint('/api/auth/signup'),
 } as const;
 
 /**
@@ -1081,6 +1085,8 @@ export const securityEndpoints = {
   verifyEmailChange: () => endpoint('/api/account/email-change/verify'),
   /** Google sign-in (contracts/google-sign-in.ts): the connection, and removing it. */
   signInConnections: () => endpoint('/api/account/sign-in-connections'),
+  /** Joining by the admin's email domain (contracts/self-signup.ts). */
+  domainJoin: () => endpoint('/api/tenant/security/join-domain'),
   googleConnection: () => endpoint('/api/account/sign-in-connections/google'),
   /** Posted by our OIDC callback after the code exchange, best effort. */
   signInRecord: () => endpoint('/api/account/security/sign-in'),
@@ -2255,6 +2261,8 @@ export const consoleEndpoints = {
   aiFailures: () => endpoint('/api/system/ai-actions/failures'),
   /** The console badge (system.ts:1770): `{ threshold, count, groups }` for the last hour. */
   aiAlerts: () => endpoint('/api/system/ai-actions/alerts'),
+  /** Self sign-up's switch, trial and card day (contracts/self-signup.ts). */
+  signUpSettings: () => endpoint('/api/system/self-signup'),
 } as const;
 
 /**
