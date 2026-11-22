@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 
 import { Logo } from '@/design-system/brand/Logo';
@@ -19,6 +20,14 @@ import { SignUpPanel } from './SignUpPanel';
  *   it is served from the sign-in origin with the narrowed CSP, as /recover.
  */
 export default async function SignUpPage({ params }: { params: Promise<{ locale: string }> }) {
+  /*
+   * ★★ PER REQUEST, NEVER PRERENDERED (dev, 2026-11-22). It reads only its
+   * params, so Next rendered it at BUILD time - when the config read had no
+   * way through - and served that 404 with s-maxage of a year, to Cloudflare
+   * too. The switch is the server's to flip after the build; a CSP nonce
+   * needs a request as well (a-page-that-reads-nothing-is-prerendered).
+   */
+  await connection();
   const { locale } = await params;
   const config = await loadSignUpConfig();
   if (!config.enabled) notFound();
