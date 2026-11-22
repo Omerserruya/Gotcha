@@ -84,6 +84,18 @@ const channelName = (ch: unknown, locale: TemplateLocale) =>
 const clip = (v: unknown, n = 60) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 /**
+ * The share of the AI Units used, as billing sends it: `pct` (the usage
+ * threshold route, the same key the in-app and email texts read). This read
+ * `percent` and `threshold`, which nothing sends, so every WhatsApp alert said
+ * 80 whatever the real number was (2026-11-22). 80, the lowest threshold, only
+ * when the event carries no usable number at all.
+ */
+function usedPercent(data: Record<string, unknown>): number {
+  const n = Math.round(Number(data.pct ?? data.percent ?? data.threshold));
+  return Number.isFinite(n) && n > 0 ? n : 80;
+}
+
+/**
  * The body parameters for an event, in the recipient's language. Never the
  * customer's personal data: a channel, a number, an action's name.
  */
@@ -95,7 +107,7 @@ export function templateParams(eventType: string, data: Record<string, unknown>,
       return [`${channelName(data.channel, locale)}${reason ? `, ${reason}` : ""}`];
     }
     case "tool.action_failed": return [clip(data.toolLabel ?? data.tool ?? data.action, 60) || (locale === "he" ? "פעולה" : "an action")];
-    case "credit.threshold": return [String(Math.round(Number(data.percent ?? data.threshold ?? 80)))];
+    case "credit.threshold": return [String(usedPercent(data))];
     case "credit.exhausted": return [];
     case "conversation.waiting": return [String(Math.max(1, Math.round(Number(data.minutes) || 1))), channelName(data.channel, locale)];
     default: return [];
