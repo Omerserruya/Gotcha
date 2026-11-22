@@ -7,6 +7,11 @@ import { z } from 'zod';
 import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
+import {
+  claimAnswerSchema,
+  claimRefusalOf,
+  type ClaimRefusal,
+} from '@/api/contracts/shopify-install';
 import { shopifyConnectorSchema, uninstallAnswerSchema } from '@/api/contracts/shopify-connector';
 import {
   billingEndpoints,
@@ -70,71 +75,79 @@ export async function startShopifyInstall(
 }
 
 export type ShopifyClaim =
-  /** `planSelectionUrl`: a plan is owed, and Shopify's page is where to choose it. */
   | { readonly ok: true; readonly planSelectionUrl: string | null }
   | {
       readonly ok: false;
-      readonly reason:
-        | 'another_store_connected'
-        | 'shop_connected_to_another_workspace'
-        | 'gone'
-        | 'forbidden'
-        | 'core_plan_required'
-        | 'failed';
+      readonly reason: ClaimRefusal;
+      /** On `replace_required`: the store connected here now, when the server names it. */
       readonly currentShop?: string | null;
     };
 
 /**
- * Binds the store approved in Shopify to this workspace - and, with
- * `replace`, disconnects the one connected now. The pending install is the
- * browser's cookie, sent on; nothing in the URL or the page holds it.
+ * Claims the pending install (App Review 132211). The pending cookie rides
+ * along; it is dropped once the claim is done, expired or refused for good.
  */
 export async function claimShopifyInstall(replace: boolean): Promise<ShopifyClaim> {
   const store = await cookies();
   const pending = store.get(PENDING_COOKIE)?.value;
-  if (!pending) return { ok: false, reason: 'gone' };
+  if (!pending) return { ok: false, reason: 'expired' };
   try {
     const answer = await serverApi().post({
       endpoint: integrationEndpoints.shopifyClaim(),
-      payload: claimAnswer,
+      payload: claimAnswerSchema,
       body: { replace },
       headers: { cookie: `${PENDING_COOKIE}=${encodeURIComponent(pending)}` },
       raw: true,
     });
     store.delete(PENDING_COOKIE);
-    revalidatePath('/[locale]/(app)/studio/capabilities', 'page');
-    return { ok: true, planSelectionUrl: answer.data.planSelectionUrl };
+    revalidatePath('/[locale]', 'layout');
+    return { ok: true, planSelectionUrl: answer.planSelectionUrl };
   } catch (cause) {
     await signInIfSignedOut(cause);
-    logger.warn('capabilities.shopify_claim_failed', { cause });
-    if (isApiError(cause)) {
-      const current = cause.errorData?.currentShopDomain;
-      if (cause.status === 404) return { ok: false, reason: 'gone' };
-      if (cause.status === 403) return { ok: false, reason: 'forbidden' };
-      if (cause.developerMessage === 'core_plan_required') {
-        return { ok: false, reason: 'core_plan_required' };
-      }
-      if (cause.status === 409 && cause.developerMessage === 'another_store_connected') {
-        return {
-          ok: false,
-          reason: 'another_store_connected',
-          currentShop: typeof current === 'string' ? current : null,
-        };
-      }
-      if (
-        cause.status === 409 &&
-        cause.developerMessage === 'shop_connected_to_another_workspace'
-      ) {
-        return { ok: false, reason: 'shop_connected_to_another_workspace' };
-      }
-      // Used already: there is nothing left to claim.
-      if (cause.status === 409 && cause.developerMessage === 'pending_install_already_used') {
-        return { ok: false, reason: 'gone' };
-      }
-      // An unknown 409 is not proof the approval is gone: said as a failure, not as "expired".
-      // 503 billing_link_failed lands here too - nothing was spent, so the button tries again.
+    logger.warn('capabilities.shopify_claim_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
+    if (!isApiError(cause)) return { ok: false, reason: 'failed' };
+    const reason = claimRefusalOf(cause.status, cause.developerMessage);
+    if (reason === 'expired' || reason === 'held_by_other_workspace') store.delete(PENDING_COOKIE);
+    if (reason === 'replace_required') {
+      const named = cause.errorData?.current ?? cause.errorData?.currentShopDomain;
+      const shop =
+        typeof named === 'string'
+          ? named
+          : named && typeof named === 'object' && 'shopDomain' in named
+            ? String((named as { shopDomain: unknown }).shopDomain)
+            : null;
+      return { ok: false, reason, currentShop: shop };
     }
-    return { ok: false, reason: 'failed' };
+    return { ok: false, reason };
+  }
+}
+
+/**
+ * "Not now", or Cancel on the Replace question: the pending install is
+ * forgotten and no store is touched (204). The cookie goes either way - a
+ * prompt the person dismissed must not return on the next page.
+ */
+export async function dismissShopifyPending(): Promise<void> {
+  const store = await cookies();
+  const pending = store.get(PENDING_COOKIE)?.value;
+  store.delete(PENDING_COOKIE);
+  revalidatePath('/[locale]', 'layout');
+  if (!pending) return;
+  try {
+    await serverApi().post({
+      endpoint: integrationEndpoints.shopifyPendingDismiss(),
+      payload: z.unknown(),
+      body: {},
+      headers: { cookie: `${PENDING_COOKIE}=${encodeURIComponent(pending)}` },
+      raw: true,
+    });
+  } catch (cause) {
+    await signInIfSignedOut(cause);
+    logger.warn('capabilities.shopify_dismiss_failed', {
+      status: isApiError(cause) ? cause.status : undefined,
+    });
   }
 }
 
@@ -145,12 +158,6 @@ const shopifyPage = z
   .refine((url) => new URL(url).protocol === 'https:')
   .nullable()
   .catch(null);
-
-const claimAnswer = z.object({
-  data: z.object({ planSelectionUrl: shopifyPage.optional().default(null) }).catch({
-    planSelectionUrl: null,
-  }),
-});
 
 const accessSnapshot = z.object({
   grantsAccess: z.boolean().catch(false),

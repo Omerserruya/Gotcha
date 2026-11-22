@@ -1,12 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { integrationSchema } from '@/api/contracts/integrations';
 import type * as LoadCapabilities from '@/features/capabilities/load-capabilities';
-import { ShopifyPending } from '@/features/capabilities/ShopifyConnect';
+import { ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
 import billingMessages from '@/i18n/messages/en/billing.json';
 import messages from '@/i18n/messages/en/capabilities.json';
 
@@ -42,7 +41,7 @@ vi.mock('@/i18n/navigation', () => ({
 const loadCapabilities = vi.hoisted(() => vi.fn());
 vi.mock('@/features/capabilities/load-capabilities', async (real) => ({
   // The pending read is the real one: it reads the cookie jar above.
-  loadShopifyPending: (await real<typeof LoadCapabilities>()).loadShopifyPending,
+  loadShopifyClaim: (await real<typeof LoadCapabilities>()).loadShopifyClaim,
   loadCapabilities,
   loadShopifyAvailability: async () => ({ mode: 'listing', helpUrl: null }),
 }));
@@ -66,12 +65,10 @@ const find = <T,>(tree: ReactNode, type: unknown): ReactElement<T> | null => {
 };
 
 const PARAMS = { system: 'shopify', pending: '1', reason: 'claim' };
-const banner = async () => {
+const gone = async () => {
   const { default: Page } = await import('./page');
   const tree = await Page({ searchParams: Promise.resolve(PARAMS) });
-  const element = find<{ pending: string | 'gone' | null }>(tree, ShopifyPending);
-  expect(element, 'the page drew no Shopify banner on pending=1').not.toBeNull();
-  return element!;
+  return find<{ read: boolean }>(tree, ShopifyPendingGone);
 };
 const intl = (node: ReactNode) => (
   <NextIntlClientProvider
@@ -95,38 +92,26 @@ beforeEach(() => {
   });
 });
 
-describe('★★ the real page: a claim that worked, then the page read again without the cookie', () => {
-  it('no plan page: "connected", the URL leaves pending - never "expired or already used"', async () => {
-    // Arrival: the cookie is there, and the pending route names the store.
+/*
+ * ★★ App Review 132211: the claim is the layout's prompt, on every page. The
+ * Systems page says only "nothing to claim" on `pending=1` - so a claim that
+ * worked, re-read without the cookie, is never drawn as "expired" twice.
+ */
+describe('★★ the real page on pending=1: the prompt is the layout’s; here only "nothing to claim"', () => {
+  it('a pending install the server answers: the page draws no banner of its own', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
-    get.mockResolvedValue({ shopDomain: 'new.myshopify.com' });
-    const before = await banner();
-    expect(before.props.pending).toBe('new.myshopify.com');
-    const { rerender } = render(intl(before));
-
-    post.mockResolvedValue({ data: { planSelectionUrl: null } });
-    await userEvent.click(screen.getByTestId('shopify-claim'));
-    expect(jar.delete).toHaveBeenCalledWith('gotcha_shopify_pending');
-    expect(replace).toHaveBeenCalledWith('/studio/capabilities?system=shopify');
-
-    // The revalidated page: the cookie is spent, so it reads "gone" - in place of the first.
-    jar.get.mockReturnValue(undefined);
-    const after = await banner();
-    expect(after.props.pending).toBe('gone');
-    rerender(intl(after));
-
-    expect(screen.getByTestId('shopify-claimed')).toHaveTextContent(
-      'new.myshopify.com is connected.',
-    );
-    expect(screen.queryByTestId('shopify-pending-gone')).toBeNull();
-    expect(document.body).not.toHaveTextContent('expired or was already used');
+    get.mockResolvedValue({ shopDomain: 'new.myshopify.com', action: 'attach' });
+    expect(await gone()).toBeNull();
   });
 
-  it('a page that arrives with no cookie still says "gone"', async () => {
+  it('no cookie: "expired", with Connect again - never words alone', async () => {
     jar.get.mockReturnValue(undefined);
-    render(intl(await banner()));
+    const element = await gone();
+    expect(element, 'the page drew nothing on pending=1 with nothing to claim').not.toBeNull();
+    render(intl(element!));
     expect(screen.getByTestId('shopify-pending-gone')).toHaveTextContent(
       'That approval has expired or was already used',
     );
+    expect(screen.getByTestId('shopify-pending-start')).toHaveTextContent('Connect again');
   });
 });

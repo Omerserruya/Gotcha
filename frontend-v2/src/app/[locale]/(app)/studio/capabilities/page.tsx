@@ -6,7 +6,7 @@ import { oauthFailure } from '@/features/capabilities/oauth';
 import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
-import { ShopifyBillingVerify, ShopifyPending } from '@/features/capabilities/ShopifyConnect';
+import { ShopifyBillingVerify, ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -18,7 +18,7 @@ import styles from '@/features/capabilities/Capabilities.module.css';
 import {
   loadCapabilities,
   loadShopifyAvailability,
-  loadShopifyPending,
+  loadShopifyClaim,
 } from '@/features/capabilities/load-capabilities';
 import { StudioSplit } from '@/features/studio/StudioSplit';
 import { PageContainer } from '@/shell/PageContainer';
@@ -112,7 +112,8 @@ export default async function Page({
     onShopify && (!isConnected(integration) || params.pending === '1')
       ? loadShopifyAvailability()
       : null,
-    onShopify && params.pending === '1' ? loadShopifyPending() : null,
+    // The claim itself is the layout's prompt; here only "nothing to claim" is said.
+    onShopify && params.pending === '1' ? loadShopifyClaim() : null,
     wantsConnector ? loadShopifyConnector() : null,
   ]);
   const shopifyVerdict = wantsConnector ? connectorVerdict(connectorSnapshot) : null;
@@ -167,101 +168,104 @@ export default async function Page({
               </p>
             )
           ) : (
-          <>
-            {/* Always rendered, keyed by system: it holds the sentence after the URL is tidied. */}
-            {integration ? (
-              <OAuthLanding
-                key={integration.slug}
-                slug={integration.slug}
-                name={integration.name}
-                outcome={
-                  params.disconnected === '1'
-                    ? params.chat === 'off'
-                      ? 'disconnected_chat_off'
-                      : 'disconnected'
-                    : params.connected === '1'
-                      ? 'connected'
-                      : oauthFailure(params.error)
-                }
-              />
-            ) : null}
-            {onShopify && params.billing === 'verify' ? (
-              <ShopifyBillingVerify
-                shop={params.shop ?? null}
-                // Connected but not working (ERROR): the plan can't be checked until it is fixed.
-                needsReconnect={isConnected(integration)}
-              />
-            ) : null}
-            {/* Back with `pending=1`, a banner whatever came of it - one banner, which keeps a claim that worked. */}
-            {onShopify && params.pending === '1' ? (
-              <ShopifyPending
-                pending={shopifyPending}
-                replace={params.reason === 'replace_store'}
-                helpUrl={shopifyAvailability?.helpUrl ?? null}
-              />
-            ) : null}
-            {/* Connected and broken (ERROR): what that means, and the way back. */}
-            {integration !== null && needsReconnect(integration) ? (
-              <ReconnectSystem
-                integration={integration}
-                // The header carries the reason; without it, the card does.
-                showReason={capabilities === null || capabilities.length === 0}
-              />
-            ) : null}
-            {integration !== null && !isConnected(integration) ? (
-              <AvailableSystem
-                integration={integration}
-                connector={onShopify ? shopifyVerdict : null}
-                shopify={
-                  shopifyAvailability
-                    ? {
-                        ...shopifyAvailability,
-                        connectAllowed: shopifyVerdict?.connectAllowed ?? null,
-                      }
-                    : null
-                }
-              />
-            ) : capabilities === null ? (
-              <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
-            ) : capabilities.length === 0 ? (
-              <div className={styles.empty} data-testid="capabilities-empty">
-                <p className={styles.emptyLead}>{t('none')}</p>
-                <p className={styles.emptyBody}>{t('noneBody')}</p>
-              </div>
-            ) : (
-              <>
-                <SystemHead
-                  integration={integration}
-                  capabilities={actions}
-                  usage={usage}
-                  // In the head, in view on arrival; a broken system has it on its Reconnect card.
-                  disconnect={integration !== null && !needsReconnect(integration)}
-                  connector={onShopify ? shopifyVerdict : null}
+            <>
+              {/* Always rendered, keyed by system: it holds the sentence after the URL is tidied. */}
+              {integration ? (
+                <OAuthLanding
+                  key={integration.slug}
+                  slug={integration.slug}
+                  name={integration.name}
+                  outcome={
+                    params.disconnected === '1'
+                      ? params.chat === 'off'
+                        ? 'disconnected_chat_off'
+                        : 'disconnected'
+                      : params.connected === '1'
+                        ? 'connected'
+                        : oauthFailure(params.error)
+                  }
                 />
-                {onShopify && shopifyVerdict ? (
-                  <ShopifyConnectorNote verdict={shopifyVerdict} />
-                ) : null}
-                <CapabilityScreen capabilities={actions} usage={usage} integration={integration} />
-              </>
-            )}
-            {/*
+              ) : null}
+              {onShopify && params.billing === 'verify' ? (
+                <ShopifyBillingVerify
+                  shop={params.shop ?? null}
+                  // Connected but not working (ERROR): the plan can't be checked until it is fixed.
+                  needsReconnect={isConnected(integration)}
+                />
+              ) : null}
+              {/*
+              Back with `pending=1` and nothing to claim: said, with Connect again.
+              A pending install is the layout's prompt (on every page, App Review 132211).
+            */}
+              {onShopify && params.pending === '1' && shopifyPending === null ? (
+                <ShopifyPendingGone read helpUrl={shopifyAvailability?.helpUrl ?? null} />
+              ) : null}
+              {/* Connected and broken (ERROR): what that means, and the way back. */}
+              {integration !== null && needsReconnect(integration) ? (
+                <ReconnectSystem
+                  integration={integration}
+                  // The header carries the reason; without it, the card does.
+                  showReason={capabilities === null || capabilities.length === 0}
+                />
+              ) : null}
+              {integration !== null && !isConnected(integration) ? (
+                <AvailableSystem
+                  integration={integration}
+                  connector={onShopify ? shopifyVerdict : null}
+                  shopify={
+                    shopifyAvailability
+                      ? {
+                          ...shopifyAvailability,
+                          connectAllowed: shopifyVerdict?.connectAllowed ?? null,
+                        }
+                      : null
+                  }
+                />
+              ) : capabilities === null ? (
+                <p data-testid="capabilities-unavailable">{t('unavailable')}</p>
+              ) : capabilities.length === 0 ? (
+                <div className={styles.empty} data-testid="capabilities-empty">
+                  <p className={styles.emptyLead}>{t('none')}</p>
+                  <p className={styles.emptyBody}>{t('noneBody')}</p>
+                </div>
+              ) : (
+                <>
+                  <SystemHead
+                    integration={integration}
+                    capabilities={actions}
+                    usage={usage}
+                    // In the head, in view on arrival; a broken system has it on its Reconnect card.
+                    disconnect={integration !== null && !needsReconnect(integration)}
+                    connector={onShopify ? shopifyVerdict : null}
+                  />
+                  {onShopify && shopifyVerdict ? (
+                    <ShopifyConnectorNote verdict={shopifyVerdict} />
+                  ) : null}
+                  <CapabilityScreen
+                    capabilities={actions}
+                    usage={usage}
+                    integration={integration}
+                  />
+                </>
+              )}
+              {/*
               Connected, not broken, and no head drawn (no actions to list):
               here, which is near the top when nothing is listed. Otherwise
               the head or the Reconnect card carries it - never twice.
             */}
-            {integration !== null &&
-            isConnected(integration) &&
-            !needsReconnect(integration) &&
-            (capabilities === null || capabilities.length === 0) ? (
-              <SupportRefused kind="delete">
-                <DisconnectSystem
-                  slug={integration.slug}
-                  name={integration.name}
-                  pending={onShopify && shopifyVerdict?.kind === 'uninstall_pending'}
-                />
-              </SupportRefused>
-            ) : null}
-          </>
+              {integration !== null &&
+              isConnected(integration) &&
+              !needsReconnect(integration) &&
+              (capabilities === null || capabilities.length === 0) ? (
+                <SupportRefused kind="delete">
+                  <DisconnectSystem
+                    slug={integration.slug}
+                    name={integration.name}
+                    pending={onShopify && shopifyVerdict?.kind === 'uninstall_pending'}
+                  />
+                </SupportRefused>
+              ) : null}
+            </>
           )
         }
       />

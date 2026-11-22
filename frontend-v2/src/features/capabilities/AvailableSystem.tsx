@@ -110,6 +110,8 @@ export async function AvailableSystem({
         <ConnectFor
           integration={integration}
           shopify={shopify}
+          // A Shopify store that left (DISCONNECTED) is reconnected, by a real button.
+          reconnect={left && integration.slug === 'shopify'}
           drawn={{
             connect: t('available.connect'),
             oauthNotHere: t('available.oauthNotHere', { name: integration.name }),

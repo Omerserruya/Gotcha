@@ -731,6 +731,44 @@
     color: var(--signal-done-text);
   }
 
+  /* A store installed from Shopify, waiting to be claimed (App Review 132211): every page. */
+  .claimPrompt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    margin: 0 0 var(--space-12);
+    padding: var(--space-10) var(--space-14);
+    border-radius: var(--radius-item);
+    background-color: var(--panel-inset);
+    border: var(--border-width-thin) solid var(--border-subtle);
+    font-size: var(--font-size-label);
+  }
+
+  .claimActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8);
+  }
+
+  .claimSecondary {
+    padding: var(--space-8) var(--space-12);
+    border: none;
+    border-radius: var(--radius-item);
+    background: none;
+    font: inherit;
+    font-size: var(--font-size-label);
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .claimSecondary:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
   .landing[data-outcome='problem'] {
     background-color: var(--intent-urgent-surface);
     color: var(--intent-urgent-text);

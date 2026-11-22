@@ -20,7 +20,7 @@ const loadCapabilities = vi.hoisted(() => vi.fn());
 vi.mock('@/features/capabilities/load-capabilities', () => ({
   loadCapabilities,
   loadShopifyAvailability: async () => ({ mode: 'listing', helpUrl: null }),
-  loadShopifyPending: async () => 'gone',
+  loadShopifyClaim: async () => null,
 }));
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 vi.mock('server-only', () => ({}));
@@ -307,14 +307,21 @@ describe("★★ split billing (132211) - Shopify reads its Connector, the Billi
   });
 });
 
-describe('★★ the business\'s own tools (MCP servers, Custom API)', () => {
+describe("★★ the business's own tools (MCP servers, Custom API)", () => {
   const customApi = integrationSchema.parse({ id: 'i3', slug: 'custom_api', name: 'Custom API' });
 
   it('★ custom_api leaves the catalogue for its own rail row; the rail carries the own tools', async () => {
-    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [shopify, woo, customApi] });
+    loadCapabilities.mockResolvedValue({
+      capabilities: [],
+      usage: null,
+      integrations: [shopify, woo, customApi],
+    });
     own.loadMcpServers.mockResolvedValue([server()]);
     const tree = await page();
-    const rail = find<{ integrations: { slug: string }[]; ownTools: ReactNode }>(tree, IntegrationRail);
+    const rail = find<{ integrations: { slug: string }[]; ownTools: ReactNode }>(
+      tree,
+      IntegrationRail,
+    );
     expect(rail?.integrations.map((entry) => entry.slug)).toEqual(['shopify', 'woocommerce']);
     expect(find<{ servers: unknown[] }>(rail?.ownTools, OwnToolsRail)?.servers).toHaveLength(1);
   });
@@ -341,7 +348,11 @@ describe('★★ the business\'s own tools (MCP servers, Custom API)', () => {
   });
 
   it('?system=custom_api is the custom API tools, not the catalogue tile', async () => {
-    loadCapabilities.mockResolvedValue({ capabilities: [], usage: null, integrations: [customApi] });
+    loadCapabilities.mockResolvedValue({
+      capabilities: [],
+      usage: null,
+      integrations: [customApi],
+    });
     own.loadCustomApiTools.mockResolvedValue([customTool()]);
     const tree = await page({ system: 'custom_api' });
     expect(find<{ tools: unknown[] }>(tree, CustomApiTools)?.tools).toHaveLength(1);

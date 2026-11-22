@@ -148,7 +148,7 @@ describe('★★ a broken system has a way back - Reconnect, by the flow it conn
     expect(screen.getByTestId('oauth-start')).toHaveTextContent('Reconnect HubSpot');
   });
 
-  it('★ Shopify re-authorises the store it has - never a new install', async () => {
+  it('★★ App Review 132211 (Backend ca1156f9): Shopify’s Reconnect is the install start too', async () => {
     await show(
       ReconnectSystem({
         integration: system(
@@ -158,8 +158,9 @@ describe('★★ a broken system has a way back - Reconnect, by the flow it conn
         showReason: true,
       }),
     );
-    expect(screen.getByTestId('oauth-start')).toHaveTextContent('Reconnect Shopify');
-    expect(screen.queryByTestId('shopify-start')).toBeNull();
+    // The start ends on Shopify's page; the claim answers `reconnected` for the store it has.
+    expect(screen.getByTestId('shopify-start')).toHaveTextContent('Reconnect Shopify');
+    expect(screen.queryByTestId('oauth-start')).toBeNull();
     expect(screen.queryByTestId('shopify-not-published')).toBeNull();
   });
 });

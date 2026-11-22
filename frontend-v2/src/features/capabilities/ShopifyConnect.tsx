@@ -1,18 +1,15 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 
 import type { ConnectFlow } from '@/api/endpoints/registry';
-import { Link, usePathname, useRouter } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 
 import {
-  claimShopifyInstall,
   startShopifyInstall,
   verifyShopifyBilling,
   type ShopifyBillingCheck,
-  type ShopifyClaim,
 } from './shopify-actions';
 import styles from './Capabilities.module.css';
 
@@ -27,23 +24,20 @@ import styles from './Capabilities.module.css';
  * read, the button stays and the server's 402 `core_plan_required` is said.
  */
 export function ShopifyConnect({
-  mode,
-  helpUrl,
   connectAllowed = null,
   flow = 'redesign_studio',
+  reconnect = false,
 }: {
-  /** `null`: availability was not read. */
-  readonly mode: string | null;
-  readonly helpUrl: string | null;
-  /** `false`: the server says GOTCHA Core must be paid first. `null`: not said. */
+  /** Kept for callers; the button no longer waits on the listing mode (App Review 132211). */
+  readonly mode?: string | null;
+  readonly helpUrl?: string | null;
   readonly connectAllowed?: boolean | null;
-  /** Where Shopify's way back lands: Studio, or onboarding's step 2 (it claims the store). */
   readonly flow?: ConnectFlow;
+  /** A DISCONNECTED or broken store: "Reconnect", to the same start. */
+  readonly reconnect?: boolean;
 }) {
   const t = useTranslations('capabilities.shopify');
   const tc = useTranslations('billing.connector');
-  const [failed, setFailed] = useState<'forbidden' | 'failed' | 'core_plan_required' | null>(null);
-  const [isPending, startTransition] = useTransition();
 
   if (connectAllowed === false) {
     return (
@@ -56,25 +50,47 @@ export function ShopifyConnect({
     );
   }
 
-  if (mode !== 'listing') {
-    return (
-      <p className={styles.connectNote} data-testid="shopify-not-published">
-        {mode === null ? t('unread') : t('startsInShopify')}{' '}
-        {helpUrl && mode !== null ? (
-          <a href={helpUrl} target="_blank" rel="noopener noreferrer" data-testid="shopify-help">
-            {t('help')}
-          </a>
-        ) : null}
-      </p>
-    );
-  }
+  /*
+   * ★★ ALWAYS A REAL BUTTON (App Review 132211, 2.1.1): /install/start ends on
+   * a Shopify page whatever the listing's state, so "installation starts in
+   * Shopify" in words alone is gone - Connect, or Reconnect, starts it here.
+   */
   return (
     <div className={styles.connectFoot}>
+      <ShopifyStartButton
+        label={reconnect ? t('reconnect') : t('connect')}
+        flow={flow}
+        testId="shopify-start"
+      />
+    </div>
+  );
+}
+
+/**
+ * The one start: asks the server for Shopify's page, then goes there. A
+ * refusal is said beside it, by its reason; the button stays.
+ */
+export function ShopifyStartButton({
+  label,
+  flow = 'redesign_studio',
+  testId,
+  note = true,
+}: {
+  readonly label: string;
+  readonly flow?: ConnectFlow;
+  readonly testId: string;
+  readonly note?: boolean;
+}) {
+  const t = useTranslations('capabilities.shopify');
+  const [failed, setFailed] = useState<'forbidden' | 'failed' | 'core_plan_required' | null>(null);
+  const [isPending, startTransition] = useTransition();
+  return (
+    <>
       <button
         type="button"
         className={styles.connectButton}
         disabled={isPending}
-        data-testid="shopify-start"
+        data-testid={testId}
         onClick={() => {
           setFailed(null);
           startTransition(async () => {
@@ -84,121 +100,16 @@ export function ShopifyConnect({
           });
         }}
       >
-        {isPending ? t('opening') : t('connect')}
+        {isPending ? t('opening') : label}
       </button>
       {failed ? (
         <span className={styles.connectProblem} role="alert" data-testid="shopify-problem">
           {t(`error.${failed}`)}
         </span>
-      ) : (
+      ) : note ? (
         <span className={styles.connectNote}>{t('note')}</span>
-      )}
-    </div>
-  );
-}
-
-/**
- * Back from Shopify with `pending=1`: a store waiting to be claimed - to
- * replace the one connected now, or one that did not finish - or, when the
- * page found no approval, why there is nothing to claim. No design yet
- * (Omer): a sentence and a button, in 10's existing shape. Nothing is
- * replaced before the press.
- *
- * ★ ONE component for all three, holding what the claim did (prod,
- *   2026-10-29). A successful claim spends the cookie and revalidates the
- *   page, which then reads "no approval" - and when this was two components,
- *   the page swapped the claimed banner for "That approval has expired or was
- *   already used" right after a claim that worked. Here an ok claim is said,
- *   whatever the page reads after it; "gone" is only what the page found on
- *   arrival. Then the browser leaves the pending URL: to Shopify's plan page
- *   when the server owes one, else this page without `pending` - where the
- *   store's state is the server's to say.
- */
-export function ShopifyPending({
-  pending,
-  replace,
-  helpUrl,
-}: {
-  /** The server's read on arrival: the store's domain, `'gone'`, or `null` (unread). */
-  readonly pending: string | 'gone' | null;
-  readonly replace: boolean;
-  readonly helpUrl: string | null;
-}) {
-  const t = useTranslations('capabilities.shopify.pending');
-  const router = useRouter();
-  const pathname = usePathname();
-  const search = useSearchParams();
-  const [result, setResult] = useState<ShopifyClaim | null>(null);
-  const [claimed, setClaimed] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const shopDomain = typeof pending === 'string' && pending !== 'gone' ? pending : null;
-  /* `reason=claim` that met another store: the question becomes "replace it?". */
-  const conflict = result && !result.ok && result.reason === 'another_store_connected';
-  const replacing = replace || Boolean(conflict);
-
-  const claim = () => {
-    if (shopDomain === null) return;
-    startTransition(async () => {
-      const done = await claimShopifyInstall(replacing);
-      setResult(done);
-      if (!done.ok) return;
-      setClaimed(shopDomain);
-      // A plan is owed: Shopify's page is the next step, so go there.
-      if (done.planSelectionUrl) {
-        window.location.assign(done.planSelectionUrl);
-        return;
-      }
-      // Off the pending URL: the approval is spent, and the page says the store's state.
-      const rest = new URLSearchParams(search.toString());
-      rest.delete('pending');
-      rest.delete('reason');
-      const query = rest.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname);
-    });
-  };
-
-  if (claimed !== null) {
-    return (
-      <p className={styles.landing} data-outcome="ok" role="status" data-testid="shopify-claimed">
-        {t('done', { shop: claimed })}
-      </p>
-    );
-  }
-  if (shopDomain === null) {
-    return <ShopifyPendingGone read={pending === 'gone'} helpUrl={helpUrl} />;
-  }
-  return (
-    <div className={styles.landing} data-outcome="problem" data-testid="shopify-pending">
-      <span data-testid="shopify-pending-lead">
-        {conflict
-          ? result.currentShop
-            ? t('conflictNamed', { current: result.currentShop })
-            : t('conflict')
-          : replace
-            ? t('replaceLead', { shop: shopDomain })
-            : t('finishLead', { shop: shopDomain })}
-      </span>
-      <button
-        type="button"
-        className={styles.connectButton}
-        disabled={isPending}
-        data-testid="shopify-claim"
-        onClick={claim}
-      >
-        {conflict
-          ? t('replaceIt')
-          : replace
-            ? t('replace', { shop: shopDomain })
-            : t('finish', { shop: shopDomain })}
-      </button>
-      {result && !result.ok && !conflict ? (
-        <span className={styles.connectProblem} role="alert" data-testid="shopify-claim-problem">
-          {result.reason === 'another_store_connected' && result.currentShop
-            ? t('error.anotherNamed', { current: result.currentShop, shop: shopDomain })
-            : t(`error.${result.reason}`, { shop: shopDomain })}
-        </span>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -325,18 +236,24 @@ export function ShopifyPendingGone({
 }) {
   const t = useTranslations('capabilities.shopify.pending');
   return (
-    <p className={styles.landing} data-outcome="problem" data-testid="shopify-pending-gone">
-      {read ? t('gone') : t('unread')}{' '}
-      {helpUrl ? (
-        <a
-          href={helpUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="shopify-pending-help"
-        >
-          {t('listing')}
-        </a>
-      ) : null}
-    </p>
+    <div className={styles.landing} data-outcome="problem" data-testid="shopify-pending-gone">
+      <span>
+        {read ? t('gone') : t('unread')}{' '}
+        {helpUrl ? (
+          <a
+            href={helpUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="shopify-pending-help"
+          >
+            {t('listing')}
+          </a>
+        ) : null}
+      </span>
+      {/* No text-only state (App Review 132211): Connect starts over, on Shopify's page. */}
+      <span className={styles.claimActions}>
+        <ShopifyStartButton label={t('connectAgain')} testId="shopify-pending-start" note={false} />
+      </span>
+    </div>
   );
 }
