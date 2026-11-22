@@ -138,6 +138,8 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
     .get({
       endpoint: integrationEndpoints.shopifyCustomAppRequest(),
       payload: merchantRequestReadSchema,
+      // `enabled` sits beside `data` (beaecd42): unwrapped, the client would drop it - read whole.
+      raw: true,
     })
     .catch((cause: unknown) => {
       logger.warn('capabilities.shopify_custom_app_request_unread', {

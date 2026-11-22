@@ -73,7 +73,11 @@ afterEach(() => {
 
 describe('★★ attach - asked, then claimed', () => {
   it('nothing is claimed before the press; then claim(false), and to the store’s page', async () => {
-    claimShopifyInstall.mockResolvedValue({ ok: true, planSelectionUrl: null });
+    claimShopifyInstall.mockResolvedValue({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
     draw(pending());
     expect(screen.getByTestId('shopify-claim-lead')).toHaveTextContent(
       'You approved new.myshopify.com in Shopify. Connect it to this workspace?',
@@ -85,6 +89,29 @@ describe('★★ attach - asked, then claimed', () => {
       'new.myshopify.com is connected.',
     );
     expect(push).toHaveBeenCalledWith('/studio/capabilities?system=shopify');
+  });
+
+  it('★ awaiting the grant (private store, entitlement manual): to the store’s page, which says so', async () => {
+    claimShopifyInstall.mockResolvedValue({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: true,
+    });
+    draw(pending());
+    await userEvent.click(screen.getByTestId('shopify-claim-go'));
+    expect(push).toHaveBeenCalledWith('/studio/capabilities?system=shopify&claimed=awaiting_grant');
+  });
+
+  it('custom_app_for_another_workspace: its own line', async () => {
+    claimShopifyInstall.mockResolvedValueOnce({
+      ok: false,
+      reason: 'custom_app_for_another_workspace',
+    });
+    draw(pending());
+    await userEvent.click(screen.getByTestId('shopify-claim-go'));
+    expect(screen.getByTestId('shopify-claim-problem')).toHaveTextContent(
+      'new.myshopify.com was set up for a different GOTCHA workspace, so it can’t be connected here.',
+    );
   });
 
   it('a plan owed: straight to Shopify’s hosted pricing page', async () => {
@@ -122,7 +149,11 @@ describe('★★ attach - asked, then claimed', () => {
 
 describe('★★ replace - Omer’s question, in a dialog', () => {
   it('action replace: the dialog names both stores; Replace claims with replace: true', async () => {
-    claimShopifyInstall.mockResolvedValue({ ok: true, planSelectionUrl: null });
+    claimShopifyInstall.mockResolvedValue({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
     draw(
       pending({
         action: 'replace',
@@ -164,7 +195,11 @@ describe('★★ replace - Omer’s question, in a dialog', () => {
       'Replace old.myshopify.com with new.myshopify.com?',
     );
     expect(screen.queryByTestId('shopify-claim-problem')).toBeNull();
-    claimShopifyInstall.mockResolvedValueOnce({ ok: true, planSelectionUrl: null });
+    claimShopifyInstall.mockResolvedValueOnce({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
     await userEvent.click(screen.getByTestId('shopify-replace-go'));
     expect(claimShopifyInstall).toHaveBeenLastCalledWith(true);
   });
@@ -238,7 +273,11 @@ describe('★★ every refusal is its own sentence, with a way on', () => {
     claimShopifyInstall.mockResolvedValueOnce({ ok: false, reason: 'billing_unavailable' });
     draw(pending());
     await userEvent.click(screen.getByTestId('shopify-claim-go'));
-    claimShopifyInstall.mockResolvedValueOnce({ ok: true, planSelectionUrl: null });
+    claimShopifyInstall.mockResolvedValueOnce({
+      ok: true,
+      planSelectionUrl: null,
+      awaitingGrant: false,
+    });
     await userEvent.click(screen.getByTestId('shopify-claim-retry'));
     expect(claimShopifyInstall).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId('shopify-claimed')).toBeInTheDocument();

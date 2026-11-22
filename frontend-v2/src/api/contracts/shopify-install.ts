@@ -54,14 +54,22 @@ const shopifyPage = z
 export const claimAnswerSchema = z
   .looseObject({
     data: z
-      .looseObject({ planSelectionUrl: shopifyPage.optional().default(null) })
-      .catch({ planSelectionUrl: null }),
+      .looseObject({
+        planSelectionUrl: shopifyPage.optional().default(null),
+        billingState: z.string().nullable().catch(null).default(null),
+      })
+      .catch({ planSelectionUrl: null, billingState: null }),
   })
-  .transform((a) => ({ planSelectionUrl: a.data.planSelectionUrl ?? null }));
+  .transform((a) => ({
+    planSelectionUrl: a.data.planSelectionUrl ?? null,
+    // A private (custom) store with entitlement "manual": connected, the Shopify features wait (beaecd42).
+    awaitingGrant: a.data.billingState === 'CUSTOM_APP_AWAITING_GRANT',
+  }));
 
 /** What a claim came to, as the screen tells it. */
 export type ClaimRefusal =
   | 'replace_required'
+  | 'custom_app_for_another_workspace'
   | 'core_plan_required'
   | 'held_by_other_workspace'
   | 'expired'
@@ -75,6 +83,8 @@ export type ClaimRefusal =
  */
 export function claimRefusalOf(status: number | undefined, code: string | undefined): ClaimRefusal {
   if (code === 'replace_required' || code === 'another_store_connected') return 'replace_required';
+  // A private app made for a different workspace's request (beaecd42).
+  if (code === 'custom_app_for_another_workspace') return 'custom_app_for_another_workspace';
   if (code === 'core_plan_required' || status === 402) return 'core_plan_required';
   if (code === 'held_by_other_workspace' || code === 'shop_connected_to_another_workspace') {
     return 'held_by_other_workspace';

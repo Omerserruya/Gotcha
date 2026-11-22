@@ -22,6 +22,7 @@ const draw = (request: MerchantRequest | null | undefined) =>
 const req = (over: Partial<MerchantRequest> = {}): MerchantRequest => ({
   status: 'requested',
   shopDomain: 'my-store.myshopify.com',
+  requestedAt: null,
   linkExpiresAt: null,
   installLink: null,
   ...over,

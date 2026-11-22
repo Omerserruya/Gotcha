@@ -287,8 +287,10 @@
         "forbidden": "You don’t have permission to connect systems.",
         "failed": "{shop} wasn’t connected. Try again.",
         "replace_required": "Another store is connected here. Replace it to connect {shop}.",
-        "blocked": "{shop} can’t be connected to this workspace right now."
-      }
+        "blocked": "{shop} can’t be connected to this workspace right now.",
+        "custom_app_for_another_workspace": "{shop} was set up for a different GOTCHA workspace, so it can’t be connected here."
+      },
+      "awaitingGrant": "Your Shopify store is connected. GOTCHA is enabling its Shopify features, and we’ll let you know when they’re on."
     },
     "private": {
       "label": "Your store’s Shopify address",

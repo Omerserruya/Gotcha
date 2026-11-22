@@ -6,7 +6,11 @@ import { oauthFailure } from '@/features/capabilities/oauth';
 import { DisconnectSystem } from '@/features/capabilities/DisconnectSystem';
 import { OAuthLanding } from '@/features/capabilities/OAuthLanding';
 import { ReconnectSystem } from '@/features/capabilities/ReconnectSystem';
-import { ShopifyBillingVerify, ShopifyPendingGone } from '@/features/capabilities/ShopifyConnect';
+import {
+  ShopifyAwaitingGrant,
+  ShopifyBillingVerify,
+  ShopifyPendingGone,
+} from '@/features/capabilities/ShopifyConnect';
 import { CapabilityScreen } from '@/features/capabilities/CapabilityScreen';
 import { IntegrationRail } from '@/features/capabilities/IntegrationRail';
 import { selectSystem } from '@/features/capabilities/select-system';
@@ -70,6 +74,8 @@ export default async function Page({
     readonly reason?: string;
     /** Back from Shopify's plan page (backend bb4acc12): `billing=verify&shop=`. */
     readonly billing?: string;
+    /** `awaiting_grant` after a private store's claim: a fixed marker, it only picks a sentence. */
+    readonly claimed?: string;
     readonly shop?: string;
     /** A disconnect done here, and whether Shopify's storefront chat went off with it. */
     readonly disconnected?: string;
@@ -186,6 +192,7 @@ export default async function Page({
                   }
                 />
               ) : null}
+              {onShopify && params.claimed === 'awaiting_grant' ? <ShopifyAwaitingGrant /> : null}
               {onShopify && params.billing === 'verify' ? (
                 <ShopifyBillingVerify
                   shop={params.shop ?? null}

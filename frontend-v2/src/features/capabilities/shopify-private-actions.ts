@@ -6,7 +6,7 @@ import { isApiError } from '@/api/client/api-error';
 import { serverApi } from '@/api/client/server-api';
 import { signInIfSignedOut } from '@/api/client/signed-out';
 import {
-  merchantRequestSchema,
+  merchantRequestSentSchema,
   myshopifyOf,
   requestRefusalOf,
   type MerchantRequest,
@@ -29,7 +29,7 @@ export async function requestShopifyPrivateApp(raw: string): Promise<PrivateRequ
   try {
     const request = await serverApi().post({
       endpoint: integrationEndpoints.shopifyCustomAppRequest(),
-      payload: merchantRequestSchema,
+      payload: merchantRequestSentSchema,
       body: { shopDomain },
     });
     revalidatePath('/[locale]', 'layout');

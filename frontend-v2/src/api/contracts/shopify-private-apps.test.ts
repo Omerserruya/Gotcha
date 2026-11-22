@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   appLinkBody,
+  consoleListSchema,
   consoleRefusalOf,
   isShopifyInstallLink,
   merchantRequestReadSchema,
@@ -41,12 +42,16 @@ describe('★★ an install link is Shopify’s admin, https only', () => {
   it('a link the server sends that is not one is dropped, never drawn as a button', () => {
     expect(
       merchantRequestReadSchema.parse({
-        status: 'link_sent',
-        shopDomain: 's.myshopify.com',
-        installLink: 'https://evil.example/x',
+        data: {
+          status: 'link_sent',
+          shopDomain: 's.myshopify.com',
+          installLink: 'https://evil.example/x',
+        },
+        enabled: true,
       })?.installLink,
     ).toBeNull();
-    expect(merchantRequestReadSchema.parse(null)).toBeNull();
+    // beaecd42: `{ data: null, enabled }` is "no request", read whole.
+    expect(merchantRequestReadSchema.parse({ data: null, enabled: true })).toBeNull();
   });
 });
 
@@ -80,12 +85,35 @@ describe('★ bodies and refusals', () => {
   });
 
   it.each([
-    [400, 'invalid_link'],
-    [409, 'wrong_state'],
-    [403, 'forbidden'],
-    [404, 'not_found'],
-    [500, 'failed'],
-  ] as const)('console %i -> %s', (status, want) => {
-    expect(consoleRefusalOf(status)).toBe(want);
+    [400, 'invalid_client_id', 'invalid_client_id'],
+    [400, 'invalid_client_secret', 'invalid_client_secret'],
+    [400, 'invalid_install_link', 'invalid_link'],
+    [409, 'client_id_in_use', 'client_id_in_use'],
+    [409, 'not_waiting_for_a_link', 'wrong_state'],
+    [409, 'no_link_to_replace', 'wrong_state'],
+    [409, 'nothing_to_revoke', 'wrong_state'],
+    [409, 'not_installed', 'wrong_state'],
+    [403, undefined, 'forbidden'],
+    [404, undefined, 'not_found'],
+    [500, undefined, 'failed'],
+  ] as const)('console %i %s -> %s (beaecd42)', (status, code, want) => {
+    expect(consoleRefusalOf(status, code)).toBe(want);
+  });
+
+  it('the console list is read whole: its rows, and the settings beside them', () => {
+    const list = consoleListSchema.parse({
+      data: [
+        {
+          tenantId: 't1',
+          status: 'installed',
+          revokedAt: null,
+          linkSentAt: '2026-11-22T00:00:00Z',
+        },
+      ],
+      settings: { enabled: true, entitlement: 'manual' },
+    });
+    expect(list.data[0]).toMatchObject({ tenantId: 't1', linkSentAt: '2026-11-22T00:00:00Z' });
+    expect(list.settings).toEqual({ enabled: true, entitlement: 'manual' });
+    expect(consoleListSchema.parse({ data: [] }).settings).toBeNull();
   });
 });

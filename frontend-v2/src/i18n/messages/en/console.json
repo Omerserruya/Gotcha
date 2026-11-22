@@ -916,7 +916,11 @@
       "wrong_state": "This request moved on meanwhile. Reload to see where it is.",
       "forbidden": "Only system admins can do this.",
       "not_found": "This request is gone. Reload the list.",
-      "failed": "That didn’t go through. Try again."
-    }
+      "failed": "That didn’t go through. Try again.",
+      "invalid_client_id": "The client ID isn’t valid: 8 to 128 letters, digits, - or _.",
+      "invalid_client_secret": "The client secret isn’t valid: 8 to 256 characters.",
+      "client_id_in_use": "That client ID already belongs to another app here. Check you pasted this store’s app."
+    },
+    "notEmailed": "Saved, but the email didn’t go out. Use New link to send it again."
   }
 }
