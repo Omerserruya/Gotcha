@@ -466,9 +466,13 @@ function PhoneHandoffRow({
           : readiness?.template === 'rejected'
             ? {
                 tag: tw('notYet'),
-                why: readiness.templateReason
-                  ? `${t('rejected')} ${readiness.templateReason}`
-                  : t('rejected'),
+                // Fixed and resubmitted in the number's required templates (Backend f1331cf8).
+                why: (
+                  <>
+                    {t.rich('rejected', { channels: channelsLink })}
+                    {readiness.templateReason ? ` ${readiness.templateReason}` : null}
+                  </>
+                ),
               }
             : null;
   if (stop) {
