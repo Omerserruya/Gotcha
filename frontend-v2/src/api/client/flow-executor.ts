@@ -132,6 +132,16 @@ const executorUrl = (flow: string) =>
  * executor alone: a source path there would land on the product, so no
  * outside sign-in is offered on that build.
  */
+/**
+ * Whether this build reaches the provider's own origin at all - the part of
+ * `providerOrigin()` that needs no `window`, so a server render and the
+ * browser agree. `false` on the product's proxy build (prod today, which has
+ * no separate auth build): no outside sign-in can start from it.
+ */
+export function servesSources(): boolean {
+  return EXECUTOR_BASE !== '';
+}
+
 export function providerOrigin(): string | null {
   if (EXECUTOR_BASE === '') return null;
   try {

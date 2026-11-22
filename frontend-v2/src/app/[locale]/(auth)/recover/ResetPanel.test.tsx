@@ -16,7 +16,8 @@ import { CAPTURED } from '@/api/contracts/recovery-capture';
  */
 const startFlow = vi.hoisted(() => vi.fn());
 const submitStage = vi.hoisted(() => vi.fn());
-vi.mock('@/api/client/flow-executor', () => ({ startFlow, submitStage }));
+const servesSources = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/api/client/flow-executor', () => ({ startFlow, submitStage, servesSources }));
 const acceptSetupTerms = vi.hoisted(() => vi.fn());
 vi.mock('@/api/client/setup-consent', () => ({ acceptSetupTerms }));
 
@@ -626,6 +627,15 @@ describe('★★ Google from a setup link: the Terms first, then sign-in (2026-1
     await userEvent.click(screen.getByTestId('reset-google'));
     expect(await screen.findByTestId(testid)).toBeInTheDocument();
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('⚠⚠ never on a build that cannot reach the provider (prod’s single host), whatever the flag', () => {
+    servesSources.mockReturnValueOnce(false);
+    withGoogle({ email: 'maya@avivco.il' });
+    expect(screen.queryByTestId('reset-google')).toBeNull();
+    expect(screen.queryByTestId('reset-google-hint')).toBeNull();
+    // The password path is untouched.
+    expect(screen.getByTestId('reset-open')).toBeInTheDocument();
   });
 
   it('★ never on a reset link', () => {
