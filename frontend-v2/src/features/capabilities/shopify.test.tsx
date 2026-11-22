@@ -46,7 +46,7 @@ import {
 } from './shopify-actions';
 import { ShopifyBillingVerify, ShopifyConnect, ShopifyPendingGone } from './ShopifyConnect';
 import { cookieFrom, INTENT_COOKIE } from './shopify-cookies';
-import { loadShopifyClaim } from './load-capabilities';
+import { loadShopifyAvailability, loadShopifyClaim } from './load-capabilities';
 
 beforeEach(() => {
   get.mockReset();
@@ -443,6 +443,39 @@ describe('★★ measured on dev: an arrival is always said', () => {
     expect(await screen.findByTestId('shopify-billing')).toHaveTextContent(
       'There’s no Shopify store connected to this workspace.',
     );
+  });
+});
+
+describe('★★ private apps: mode custom_app_request (2026-11-22)', () => {
+  it('Studio’s Connect is the request card - a store held here still reconnects', () => {
+    const { unmount } = intl(<ShopifyConnect mode="custom_app_request" customAppRequest={null} />);
+    expect(screen.getByTestId('shopify-private-request')).toBeInTheDocument();
+    expect(screen.queryByTestId('shopify-start')).toBeNull();
+    unmount();
+    intl(<ShopifyConnect mode="custom_app_request" customAppRequest={null} reconnect />);
+    expect(screen.getByTestId('shopify-start')).toHaveTextContent('Reconnect Shopify');
+  });
+
+  it('the availability read brings the request with the mode; any other mode asks nothing more', async () => {
+    get.mockResolvedValueOnce({ mode: 'custom_app_request', helpUrl: null });
+    get.mockResolvedValueOnce({ status: 'requested', shopDomain: 's.myshopify.com' });
+    expect(await loadShopifyAvailability()).toMatchObject({
+      mode: 'custom_app_request',
+      customAppRequest: { status: 'requested', shopDomain: 's.myshopify.com' },
+    });
+    expect((get.mock.calls[1]![0] as { endpoint: { path: string } }).endpoint.path).toBe(
+      '/api/connectors/shopify/custom-app/request',
+    );
+    get.mockClear();
+    get.mockResolvedValueOnce({ mode: 'listing', helpUrl: null });
+    expect(await loadShopifyAvailability()).toEqual({ mode: 'listing', helpUrl: null });
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('a request that cannot be read is undefined - "unread", never "none"', async () => {
+    get.mockResolvedValueOnce({ mode: 'custom_app_request', helpUrl: null });
+    get.mockRejectedValueOnce(new ApiError({ kind: 'server', status: 500 }));
+    expect((await loadShopifyAvailability())?.customAppRequest).toBeUndefined();
   });
 });
 

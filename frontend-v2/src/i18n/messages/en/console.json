@@ -17,7 +17,9 @@
     "aiFailures": "Failed AI actions",
     "aiFailuresLine": "The AI's tool calls that failed across tenants, by tool and error.",
     "signup": "Self sign-up",
-    "signupLine": "Who can open an account alone, how long the trial lasts and when a card is needed."
+    "signupLine": "Who can open an account alone, how long the trial lasts and when a card is needed.",
+    "shopifyApps": "Shopify private apps",
+    "shopifyAppsLine": "Merchants’ requests for a private install, before the App Store listing is live."
   },
   "tenants": {
     "title": "Tenants",
@@ -851,5 +853,70 @@
       "trialCredits": "Trial credits"
     },
     "envOff": "Self sign-up is off for this environment in the server settings. You can save here, but it won't take effect until it is turned on there."
+  },
+  "shopifyApps": {
+    "pageTitle": "Shopify private apps",
+    "description": "For each request, create a custom app in the Partner Dashboard and paste it here: the merchant gets the install link by email.",
+    "settingsTitle": "Who can ask",
+    "enabled": "Merchants can ask for a private install",
+    "entitlementLabel": "Who gets it",
+    "entitlement": {
+      "included": "Every workspace that asks",
+      "manual": "Only workspaces granted here"
+    },
+    "save": "Save",
+    "saved": "Saved.",
+    "settingsUnread": "We couldn’t read the settings. Reload to try again.",
+    "requestsTitle": "Requests",
+    "requestsUnread": "We couldn’t read the requests. Reload to try again.",
+    "requestsNone": "No requests yet.",
+    "noShop": "No store named",
+    "status": {
+      "requested": "Waiting for a link",
+      "link_sent": "Link sent",
+      "installed": "Installed",
+      "revoked": "Revoked"
+    },
+    "requestedOn": "asked {day}",
+    "expiresOn": "link valid until {day}",
+    "installedOn": "installed {day}",
+    "clientId": "Client ID",
+    "step": {
+      "link": "Paste the app and send the link",
+      "newLink": "New link",
+      "revoke": "Revoke",
+      "grant": "Grant"
+    },
+    "field": {
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "clientSecretHint": "Sent once and never shown again.",
+      "installLink": "Install link",
+      "installLinkHint": "From the Partner Dashboard. It starts with https://admin.shopify.com/",
+      "installLinkWrong": "Paste the link from the Partner Dashboard. It starts with https://admin.shopify.com/",
+      "expires": "Link expires",
+      "expiresHint": "Optional. Left empty, the server’s default applies."
+    },
+    "confirm": {
+      "link": "Store the app for {shop} and email the install link to {workspace}?",
+      "newLink": "Email a new install link for {shop} to {workspace}?",
+      "revoke": "Revoke the private app for {shop} ({workspace})?",
+      "grant": "Let {workspace} ask for a private install?"
+    },
+    "go": {
+      "link": "Send the link",
+      "newLink": "Send the new link",
+      "revoke": "Revoke",
+      "grant": "Grant"
+    },
+    "cancel": "Cancel",
+    "done": "Done.",
+    "refused": {
+      "invalid_link": "The server refused the link: it must be https on admin.shopify.com.",
+      "wrong_state": "This request moved on meanwhile. Reload to see where it is.",
+      "forbidden": "Only system admins can do this.",
+      "not_found": "This request is gone. Reload the list.",
+      "failed": "That didn’t go through. Try again."
+    }
   }
 }

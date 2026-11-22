@@ -985,6 +985,8 @@ export const integrationEndpoints = {
   shopifyClaim: () => endpoint('/api/connectors/shopify/install/claim'),
   /** "Not now" / Cancel on a pending install: forgets it, touches no store (204). */
   shopifyPendingDismiss: () => endpoint('/api/connectors/shopify/install/pending/dismiss'),
+  /** This workspace's private-app request: GET it, POST one (contracts/shopify-private-apps.ts). */
+  shopifyCustomAppRequest: () => endpoint('/api/connectors/shopify/custom-app/request'),
   /**
    * Back from Shopify's plan page (backend bb4acc12 lands it on 10 with
    * `?billing=verify&shop=`). Re-reads the subscription from Shopify; `shop`
@@ -2265,6 +2267,11 @@ export const consoleEndpoints = {
   aiAlerts: () => endpoint('/api/system/ai-actions/alerts'),
   /** Self sign-up's switch, trial and card day (contracts/self-signup.ts). */
   signUpSettings: () => endpoint('/api/system/self-signup'),
+  /** Shopify private apps (contracts/shopify-private-apps.ts): the switch, the requests, and each step. */
+  shopifyPrivateAppsSettings: () => endpoint('/api/system/shopify-private-apps'),
+  shopifyCustomApps: () => endpoint('/api/system/shopify-custom-apps'),
+  shopifyCustomAppStep: (tenantId: string, step: 'link' | 'new-link' | 'revoke' | 'grant') =>
+    endpoint('/api/system/shopify-custom-apps/{tenantId}/{step}', { tenantId, step }),
 } as const;
 
 /**

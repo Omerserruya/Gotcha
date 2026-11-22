@@ -17,7 +17,9 @@
     "aiFailures": "פעולות AI שנכשלו",
     "aiFailuresLine": "קריאות של ה‑AI לכלים שנכשלו בכל הארגונים, לפי כלי ושגיאה.",
     "signup": "הרשמה עצמית",
-    "signupLine": "מי יכול לפתוח חשבון לבד, כמה זמן נמשך הניסיון ומתי נדרש כרטיס."
+    "signupLine": "מי יכול לפתוח חשבון לבד, כמה זמן נמשך הניסיון ומתי נדרש כרטיס.",
+    "shopifyApps": "אפליקציות Shopify פרטיות",
+    "shopifyAppsLine": "בקשות של עסקים להתקנה פרטית, עד שהאפליקציה תפורסם בחנות האפליקציות."
   },
   "tenants": {
     "title": "ארגונים",
@@ -851,5 +853,70 @@
       "trialCredits": "קרדיט לתקופת הניסיון"
     },
     "envOff": "ההרשמה העצמית כבויה בסביבה הזו בהגדרות השרת. אפשר לשמור כאן, אבל זה לא ישפיע עד שהיא תופעל שם."
+  },
+  "shopifyApps": {
+    "pageTitle": "אפליקציות Shopify פרטיות",
+    "description": "לכל בקשה יוצרים אפליקציה מותאמת ב‑Partner Dashboard ומדביקים אותה כאן: העסק מקבל את קישור ההתקנה במייל.",
+    "settingsTitle": "מי יכולים לבקש",
+    "enabled": "עסקים יכולים לבקש התקנה פרטית",
+    "entitlementLabel": "למי זה ניתן",
+    "entitlement": {
+      "included": "כל סביבת עבודה שמבקשת",
+      "manual": "רק סביבות עבודה שאושרו כאן"
+    },
+    "save": "שמירה",
+    "saved": "נשמר.",
+    "settingsUnread": "לא הצלחנו לקרוא את ההגדרות. טענו מחדש כדי לנסות שוב.",
+    "requestsTitle": "בקשות",
+    "requestsUnread": "לא הצלחנו לקרוא את הבקשות. טענו מחדש כדי לנסות שוב.",
+    "requestsNone": "עדיין אין בקשות.",
+    "noShop": "לא צוינה חנות",
+    "status": {
+      "requested": "ממתינה לקישור",
+      "link_sent": "הקישור נשלח",
+      "installed": "הותקנה",
+      "revoked": "בוטלה"
+    },
+    "requestedOn": "התבקשה ב‑{day}",
+    "expiresOn": "הקישור בתוקף עד {day}",
+    "installedOn": "הותקנה ב‑{day}",
+    "clientId": "Client ID",
+    "step": {
+      "link": "הדבקת האפליקציה ושליחת הקישור",
+      "newLink": "קישור חדש",
+      "revoke": "ביטול הגישה",
+      "grant": "מתן גישה"
+    },
+    "field": {
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "clientSecretHint": "נשלח פעם אחת ולא מוצג שוב.",
+      "installLink": "קישור ההתקנה",
+      "installLinkHint": "מה‑Partner Dashboard. הוא מתחיל ב‑https://admin.shopify.com/",
+      "installLinkWrong": "צריך להדביק את הקישור מה‑Partner Dashboard. הוא מתחיל ב‑https://admin.shopify.com/",
+      "expires": "תוקף הקישור",
+      "expiresHint": "לא חובה. בלי תאריך, חלה ברירת המחדל של השרת."
+    },
+    "confirm": {
+      "link": "לשמור את האפליקציה של {shop} ולשלוח את קישור ההתקנה במייל אל {workspace}?",
+      "newLink": "לשלוח במייל אל {workspace} קישור התקנה חדש ל‑{shop}?",
+      "revoke": "לבטל את האפליקציה הפרטית של {shop} ({workspace})?",
+      "grant": "לאפשר ל‑{workspace} לבקש התקנה פרטית?"
+    },
+    "go": {
+      "link": "שליחת הקישור",
+      "newLink": "שליחת הקישור החדש",
+      "revoke": "ביטול הגישה",
+      "grant": "מתן גישה"
+    },
+    "cancel": "ביטול",
+    "done": "בוצע.",
+    "refused": {
+      "invalid_link": "השרת לא קיבל את הקישור: הוא חייב להיות https ב‑admin.shopify.com.",
+      "wrong_state": "הבקשה התקדמה בינתיים. טענו מחדש כדי לראות איפה היא עומדת.",
+      "forbidden": "רק מנהלי מערכת יכולים לעשות את זה.",
+      "not_found": "הבקשה הזו כבר לא קיימת. טענו מחדש את הרשימה.",
+      "failed": "זה לא עבר. נסו שוב."
+    }
   }
 }

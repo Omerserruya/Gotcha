@@ -10,6 +10,8 @@ import { startOAuth, startWooOAuth } from '@/features/capabilities/connect-actio
 import { ConnectForm } from '@/features/capabilities/ConnectForm';
 import type { ShopifyAvailability } from '@/features/capabilities/load-capabilities';
 import { startShopifyInstall } from '@/features/capabilities/shopify-actions';
+import { ShopifyPrivateRequest } from '@/features/capabilities/ShopifyPrivateRequest';
+import { CUSTOM_APP_MODE } from '@/api/contracts/shopify-private-apps';
 
 import { connectKind } from './connect-kind';
 import styles from './SystemsStep.module.css';
@@ -108,6 +110,10 @@ export function SystemsConnect({
      * live listing the start still answers a reconnect or an install link,
      * and only an honest not_published is said - after the press.
      */
+    // Private apps: before the listing is live, a new store asks (a store held here reconnects).
+    if (shopify?.mode === CUSTOM_APP_MODE && !reconnect) {
+      return <ShopifyPrivateRequest request={shopify.customAppRequest} />;
+    }
     // GOTCHA Core first (split billing): said instead of a button that would 402.
     if (shopify?.connectAllowed === false) {
       return (

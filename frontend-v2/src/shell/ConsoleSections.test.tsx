@@ -38,15 +38,16 @@ const show = (badges?: Record<string, number>) =>
   );
 
 describe('★★ ConsoleSections', () => {
-  it('lists "Failed AI actions" as the seventh section, current on its page', () => {
+  it('lists "Failed AI actions" as the eighth section, current on its page', () => {
     show();
     const links = screen.getAllByRole('link');
-    // Self sign-up (17eb8385, Omer 2026-11-22) is the fifth: seven sections.
-    expect(links).toHaveLength(7);
+    // Self sign-up (17eb8385) fifth, Shopify private apps (2026-11-22) sixth: eight sections.
+    expect(links).toHaveLength(8);
     expect(links[4]).toHaveAttribute('href', '/system/signup');
-    expect(links[6]).toHaveTextContent(consoleEn.sections.aiFailures);
-    expect(links[6]).toHaveAttribute('href', '/system/ai-failures');
-    expect(links[6]).toHaveAttribute('aria-current', 'page');
+    expect(links[5]).toHaveAttribute('href', '/system/shopify-apps');
+    expect(links[7]).toHaveTextContent(consoleEn.sections.aiFailures);
+    expect(links[7]).toHaveAttribute('href', '/system/ai-failures');
+    expect(links[7]).toHaveAttribute('aria-current', 'page');
   });
 
   it('★ a count above 0 is drawn beside its section, named for a screen reader', () => {
