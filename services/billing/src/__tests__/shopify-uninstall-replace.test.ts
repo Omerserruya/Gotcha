@@ -25,7 +25,9 @@ vi.mock("@chatcenter/shared", async () => {
     providerSubscription: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     tenantEntitlement: {
       deleteMany: async (a: any) => {
-        const gone = H.ents.filter((e) => e.tenantId === a.where.tenantId && e.source === a.where.source);
+        const gone = H.ents.filter((e) => e.tenantId === a.where.tenantId && e.source === a.where.source
+          && (a.where.reason === undefined || e.reason === a.where.reason)
+          && (!a.where.entitlementKey?.in || a.where.entitlementKey.in.includes(e.key)));
         H.ents = H.ents.filter((e) => !gone.includes(e));
         return { count: gone.length };
       },
@@ -38,10 +40,10 @@ vi.mock("@chatcenter/shared", async () => {
       },
     },
   };
-  return { prisma, setTenantEntitlement: vi.fn() };
+  return { prisma, setTenantEntitlement: vi.fn(async (e: any) => { H.ents.push({ tenantId: e.tenantId, source: e.source, key: e.key, reason: e.reason }); }) };
 });
 
-import { handleCommerceUninstall } from "../services/provider-subscription.service";
+import { handleCommerceUninstall, grantCustomAppEntitlements, revokeCustomAppEntitlements } from "../services/provider-subscription.service";
 
 const ENTS = () => [
   { tenantId: "T", source: "SHOPIFY_SUBSCRIPTION", key: "shopify_catalog_sync" },
@@ -87,5 +89,23 @@ describe("an uninstall in a workspace that replaced its store", () => {
   it("a Replace with no grant: nothing to spend", async () => {
     H.grants = [];
     expect((await handleCommerceUninstall({ platform: "SHOPIFY" as any, externalShopId: "111", replaced: true })).grantRevoked).toBe(false);
+  });
+});
+
+describe("a per-merchant custom app's grant (2026-11-22)", () => {
+  it("★ granted as ADDON with its reason, the four Shopify keys; revoked alone, nothing else touched", async () => {
+    H.ents = [{ tenantId: "T", source: "ADDON", key: "whatsapp", reason: "promo" }];
+    expect(await grantCustomAppEntitlements("T", "connect")).toBe(4);
+    expect(H.ents.filter((e) => e.reason === "shopify_custom_app").map((e) => [e.source, e.key]).sort()).toEqual([
+      ["ADDON", "shopify_catalog_sync"], ["ADDON", "shopify_order_actions"], ["ADDON", "shopify_order_read"], ["ADDON", "shopify_storefront_widget"],
+    ]);
+    expect(await revokeCustomAppEntitlements("T")).toBe(4);
+    expect(H.ents).toEqual([{ tenantId: "T", source: "ADDON", key: "whatsapp", reason: "promo" }]);
+  });
+  it("an uninstall revokes it too", async () => {
+    H.ents = [{ tenantId: "T", source: "ADDON", key: "shopify_order_read", reason: "shopify_custom_app" }];
+    const r = await handleCommerceUninstall({ platform: "SHOPIFY" as any, externalShopId: "111" });
+    expect(r.revoked).toBe(1);
+    expect(H.ents).toEqual([]);
   });
 });

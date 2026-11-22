@@ -29,6 +29,7 @@ import {
   getShopifyAppIdentity,
   buildThemeEditorDeepLink,
   type ProductSnapshot, readDurableSetting, asksToHidePoweredBy, POWERED_BY_LOCKED_CODE } from "@chatcenter/shared";
+import { appForShop } from "@chatcenter/shared/src/lib/shopify-custom-app";
 import {
   listChannels,
   loadChannel,
@@ -412,10 +413,12 @@ router.get(
     // is not configured we say so plainly instead of handing the merchant
     // a link that silently opens the wrong screen.
     const chatApp = getShopifyAppIdentity();
+    // The embed belongs to the app the store installed: its per-merchant custom app when it has one.
+    const storeApp = shop ? await appForShop(shop).catch(() => null) : null;
     const deepLink = shop
       ? buildThemeEditorDeepLink({
           shopDomain: shop,
-          clientId: chatApp.clientId,
+          clientId: storeApp?.clientId || chatApp.clientId,
           blockHandle: chatApp.blockHandle,
         })
       : null;

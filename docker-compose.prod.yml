@@ -430,6 +430,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Per-merchant Shopify custom apps (2026-11-22): where "a store is waiting for a link" is emailed. Unset: the console list only.
+      SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL: ${SHOPIFY_CUSTOM_APP_NOTIFY_EMAIL:-}
       SYSTEM_ADMIN_SETUP_SECRET: ${SYSTEM_ADMIN_SETUP_SECRET:?required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

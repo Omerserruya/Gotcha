@@ -19,6 +19,7 @@ import { requestShopifySelfUninstall, type SelfUninstallOutcome } from "./connec
 import { releaseReplacedStoreChat } from "./shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "./shopify-billing-bridge.service";
 import { completeShopifyUninstall } from "../routes/shopify-webhooks";
+import { revokeCustomAppEntitlements } from "./shopify-custom-app-billing.service";
 
 export interface RetiredStore {
   shopDomain: string;
@@ -50,6 +51,8 @@ export async function retireReplacedStore(input: {
   // Uninstalled before (DISCONNECTED): its own webhook already did step 2's Shopify-side work. What is
   // left: billing spends the grandfather grant (a new store must not inherit it), and its chat leftovers.
   await notifyShopifyUninstalled({ shopDomain, replaced: true, tenantId });
+  // A per-merchant custom app's grant (2026-11-22) has no Shopify subscription behind it: revoked here too.
+  await revokeCustomAppEntitlements(tenantId).catch(() => 0);
   await releaseReplacedStoreChat({ tenantId, shopDomain }).catch(() => ({ released: false }));
   console.log(`[shopify-replace] tenant=${tenantId} cleared the leftovers of uninstalled ${shopDomain}`);
   return { shopDomain, shopify: null, outcome: "leftovers_cleared" };

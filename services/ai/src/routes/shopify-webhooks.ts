@@ -43,6 +43,8 @@ import {
   disableChatForUninstalledShop,
 } from "../services/shopify-chat-install.service";
 import { notifyShopifyUninstalled } from "../services/shopify-billing-bridge.service";
+import { customAppForShop } from "@chatcenter/shared/src/lib/shopify-custom-app";
+import { revokeCustomAppEntitlements } from "../services/shopify-custom-app-billing.service";
 import { cartEventFromShopifyCheckout, cartCompletionFromShopifyOrder, orderEventFromShopifyOrder } from "../services/shopify-cart-events";
 import { withErrorCode } from "../lib/error-code";
 import {
@@ -72,8 +74,16 @@ interface VerifiedWebhook {
   body: any;
 }
 
-function verify(req: Request, res: Response, secret: string, expectedTopic: Topic): VerifiedWebhook | null {
-  if (!secret) {
+/**
+ * A delivery for this shop: verified with the secrets of the apps that serve it (its per-merchant custom
+ * app, 2026-11-22, and the official app). `secret` is the official secret the caller names; a custom app's
+ * is added for its own shop only. A signature of an app we do not know is never accepted.
+ */
+async function verify(req: Request, res: Response, secret: string, expectedTopic: Topic): Promise<VerifiedWebhook | null> {
+  const shopHeader = normalizeShopifyShopDomain(req.get("x-shopify-shop-domain") ?? (req.body as any)?.shop_domain);
+  const custom = await customAppForShop(shopHeader).catch(() => null);
+  const secrets = [custom?.clientSecret, secret].filter((s): s is string => !!s);
+  if (!secrets.length) {
     // Refusing is the only safe answer: without the secret we cannot tell a
     // real Shopify delivery from a forged one, and processing an unverified
     // uninstall would let anyone disable any merchant's chat.
@@ -82,7 +92,7 @@ function verify(req: Request, res: Response, secret: string, expectedTopic: Topi
     return null;
   }
   const raw = (req as any).rawBody as Buffer | undefined;
-  if (!verifyShopifyWebhookHmac(raw, req.get("x-shopify-hmac-sha256"), secret)) {
+  if (!secrets.some((s) => verifyShopifyWebhookHmac(raw, req.get("x-shopify-hmac-sha256"), s))) {
     console.warn(`[shopify-webhook] ${expectedTopic} rejected: bad hmac`);
     res.status(401).json({ error: "unverified" });
     return null;
@@ -192,7 +202,7 @@ const chat = Router();
  * GOTCHA for orders and refunds, that keeps working.
  */
 chat.post("/app-uninstalled", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "app/uninstalled");
+  const hook = await verify(req, res, getShopifyAppIdentity().clientSecret, "app/uninstalled");
   if (!hook) return;
 
   // Answer first, work second: Shopify's delivery timeout is short and a
@@ -222,7 +232,7 @@ chat.post("/app-uninstalled", async (req: Request, res: Response) => {
  * which is exactly what this handler produces.
  */
 chat.post("/customers-data-request", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "customers/data_request");
+  const hook = await verify(req, res, getShopifyAppIdentity().clientSecret, "customers/data_request");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -237,7 +247,7 @@ chat.post("/customers-data-request", async (req: Request, res: Response) => {
 
 /** Mandatory compliance: erase a shopper's data. */
 chat.post("/customers-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "customers/redact");
+  const hook = await verify(req, res, getShopifyAppIdentity().clientSecret, "customers/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -256,7 +266,7 @@ chat.post("/customers-redact", async (req: Request, res: Response) => {
  * one storefront may never reach another tenant's data.
  */
 chat.post("/shop-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, getShopifyAppIdentity().clientSecret, "shop/redact");
+  const hook = await verify(req, res, getShopifyAppIdentity().clientSecret, "shop/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("chat", hook.webhookId)) return;
@@ -320,7 +330,7 @@ const core = Router();
  * to serve NEW storefront chat stops.
  */
 core.post("/app-uninstalled", async (req: Request, res: Response) => {
-  const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "app/uninstalled");
+  const hook = await verify(req, res, process.env.SHOPIFY_API_SECRET || "", "app/uninstalled");
   if (!hook) return;
   if (await alreadyProcessed("core", hook.webhookId)) {
     res.status(200).json({ ok: true });
@@ -419,6 +429,13 @@ export async function completeShopifyUninstall(hook: {
   if (toolsRemoved.removed > 0) {
     console.log(`[shopify-webhook] removed ${toolsRemoved.removed} tenant tool assignment(s) for tenant=${match.tenantId} after uninstall`);
   }
+  // A store on a per-merchant custom app (2026-11-22): GOTCHA's own grant of the Shopify capabilities
+  // goes with the store, as Shopify's subscription does for the official app. Nothing else held it.
+  const revokedCustom = await revokeCustomAppEntitlements(match.tenantId).catch((err: any) => {
+    console.warn(`[shopify-webhook] custom-app grant not revoked for tenant=${match.tenantId}:`, err?.message);
+    return 0;
+  });
+  if (revokedCustom > 0) console.log(`[shopify-webhook] revoked the custom-app grant (${revokedCustom}) for tenant=${match.tenantId}`);
   // The extension left with the app, so the storefront chat goes too.
   const chatDisabled = (await disableChatForUninstalledShop(shop)).disabled;
   return { tenantId: match.tenantId, outcome: chatDisabled ? "disconnected+chat_disabled" : "disconnected" };
@@ -430,7 +447,7 @@ export async function completeShopifyUninstall(hook: {
  * the tenant that owns the shop and recorded for the erasure pipeline.
  */
 core.post("/customers-data-request", async (req: Request, res: Response) => {
-  const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "customers/data_request");
+  const hook = await verify(req, res, process.env.SHOPIFY_API_SECRET || "", "customers/data_request");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("core", hook.webhookId)) return;
@@ -438,7 +455,7 @@ core.post("/customers-data-request", async (req: Request, res: Response) => {
 });
 
 core.post("/customers-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "customers/redact");
+  const hook = await verify(req, res, process.env.SHOPIFY_API_SECRET || "", "customers/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("core", hook.webhookId)) return;
@@ -446,7 +463,7 @@ core.post("/customers-redact", async (req: Request, res: Response) => {
 });
 
 core.post("/shop-redact", async (req: Request, res: Response) => {
-  const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", "shop/redact");
+  const hook = await verify(req, res, process.env.SHOPIFY_API_SECRET || "", "shop/redact");
   if (!hook) return;
   res.status(200).json({ ok: true });
   if (await alreadyProcessed("core", hook.webhookId)) return;
@@ -478,7 +495,7 @@ type CommerceJob = { name: "cart-event" | "order-event"; data: any };
 
 function commerceRoute(topic: Topic, toJobs: (tenantId: string, body: any) => Array<CommerceJob | null>) {
   return async (req: Request, res: Response) => {
-    const hook = verify(req, res, process.env.SHOPIFY_API_SECRET || "", topic);
+    const hook = await verify(req, res, process.env.SHOPIFY_API_SECRET || "", topic);
     if (!hook) return;
     res.status(200).json({ ok: true });
     if (await alreadyProcessed("core", hook.webhookId)) return;

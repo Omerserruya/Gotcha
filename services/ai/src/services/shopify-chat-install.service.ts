@@ -46,6 +46,7 @@ import { resolveShopifyStore } from "./shopify-catalog.service";
 import { executeAdapterTool, loadConnection } from "./connectors/integration-framework";
 import { withErrorCode, ERROR_CODES_KNOWN } from "../lib/error-code";
 import { PENDING_CLAIM_IDENTITY } from "./shopify-install-intent.service";
+import { appForShop } from "@chatcenter/shared/src/lib/shopify-custom-app";
 
 export type InstallStatus = "PENDING" | "ACTIVE" | "UNINSTALLED";
 
@@ -714,7 +715,8 @@ export async function activationSnapshot(installation: ChatInstallation): Promis
     verifiedDomains: installation.verifiedDomains,
     themeEditorDeepLink: buildThemeEditorDeepLink({
       shopDomain: installation.shopDomain,
-      clientId: cfg.clientId,
+      // The embed belongs to the app the store installed (its per-merchant custom app, 2026-11-22).
+      clientId: (await appForShop(installation.shopDomain).catch(() => null))?.clientId || cfg.clientId,
       blockHandle: cfg.blockHandle,
     }),
     lastHeartbeatAt: heartbeat ?? null,

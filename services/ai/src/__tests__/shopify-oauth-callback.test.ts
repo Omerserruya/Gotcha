@@ -42,6 +42,10 @@ const H = vi.hoisted(() => {
     linkCalls: [] as any[],
     /** The store a connect would REPLACE. null = nothing to replace. */
     replacing: { current: null as string | null },
+    /** The app that signed (2026-11-22): a per-merchant custom app when set, else the real resolution. */
+    customApp: { current: null as any },
+    customOutcomes: [] as string[],
+    installed: [] as string[],
     /** The workspace's own store (App Review 132211): currentStoreOf. */
     current: { current: null as any },
     retired: [] as any[],
@@ -70,8 +74,16 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       H.permission.granted ? next() : res.status(403).json({ error: "forbidden" }),
     mintOAuthState: () => ({ state: "minted-state", jti: "jti-1" }),
     consumeOAuthState: vi.fn(async () => H.stateResult.current),
+    verifyOAuthCallbackForShop: async (q: any) => {
+      const r: any = await (actual as any).verifyOAuthCallbackForShop(q);
+      return r.ok && H.customApp.current ? { ...r, app: H.customApp.current } : r;
+    },
   };
 });
+vi.mock("../services/shopify-custom-app-billing.service", () => ({
+  customAppBillingOutcome: async (t: string) => { H.customOutcomes.push(t); return { state: "CUSTOM_APP_GRANTED", requiresPlanSelection: false, planSelectionUrl: null, grandfathered: false, connectionId: null }; },
+  markCustomAppInstalled: async (t: string) => { H.installed.push(t); },
+}));
 
 vi.mock("../services/connector-connection.service", () => ({
   findCatalog: vi.fn(async () => ({ id: "cat-shopify" })),
@@ -210,6 +222,9 @@ beforeEach(() => {
   H.replacing.current = null;
   H.current.current = null;
   H.retired.length = 0;
+  H.customApp.current = null;
+  H.customOutcomes.length = 0;
+  H.installed.length = 0;
   H.linkCalls.length = 0;
   H.pendingCalls.length = 0;
   H.exchange.mockResolvedValue({ accessToken: "shpat_verysecret", scope: "read_orders" });
@@ -575,5 +590,40 @@ describe("App Review 132211: the signed-in path (Connect, Reconnect)", () => {
     expect(H.retired).toEqual([]);
     expect(H.linkCalls).toEqual([]);
     expect(H.pendingCalls.length).toBe(1);
+  });
+});
+
+describe("a per-merchant custom app (2026-11-22)", () => {
+  const CUSTOM = { kind: "custom", clientId: "custom_client_1", clientSecret: "custom-secret", tenantId: "tenant-A" };
+  it("★ its own credentials for the exchange, no Shopify Billing, GOTCHA's grant, the record installed, the client id kept with the token", async () => {
+    H.customApp.current = CUSTOM;
+    H.stateResult.current = { ...WITH_INTENT, claims: { ...WITH_INTENT.claims, appClientId: "custom_client_1" } };
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.status).toBe(302);
+    expect(H.exchange).toHaveBeenCalledWith(expect.objectContaining({ clientId: "custom_client_1", clientSecret: "custom-secret" }));
+    expect(H.billingCalls).toEqual([]);
+    expect(H.customOutcomes).toEqual(["tenant-A"]);
+    expect(H.linkCalls[0].credentials).toMatchObject({ accessToken: "shpat_verysecret", appClientId: "custom_client_1" });
+    expect(H.installed).toEqual(["tenant-A"]);
+  });
+  it("★ a callback signed by a different app than the install began with is refused", async () => {
+    H.customApp.current = CUSTOM;
+    H.stateResult.current = WITH_INTENT;
+    const res = await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(res.headers.location).toContain("error=invalid_state");
+    expect(H.exchange).not.toHaveBeenCalled();
+  });
+  it("★ a custom app made for another workspace is never linked here", async () => {
+    H.customApp.current = { ...CUSTOM, tenantId: "tenant-B" };
+    H.stateResult.current = { ...WITH_INTENT, claims: { ...WITH_INTENT.claims, appClientId: "custom_client_1" } };
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.linkCalls).toEqual([]);
+    expect(H.customOutcomes).toEqual([]);
+  });
+  it("the official app: Shopify Billing as before, nothing custom", async () => {
+    await request(app()).get(`/api/connectors/shopify/oauth/callback?${callback()}`);
+    expect(H.billingCalls.length).toBe(1);
+    expect(H.customOutcomes).toEqual([]);
+    expect(H.linkCalls[0].credentials).not.toHaveProperty("appClientId");
   });
 });

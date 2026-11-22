@@ -45,6 +45,8 @@ import {
   getShopifyAppIdentity,
   normalizeShopifyShopDomain,
   verifyOAuthCallbackHmac,
+  verifyOAuthCallbackForShop,
+  appForShop,
   buildShopifyAuthorizeUrl,
   singleValue,
 } from "@chatcenter/shared";
@@ -70,6 +72,7 @@ import {
 } from "../services/shopify-install-intent.service";
 import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
 import { retireReplacedStore } from "../services/shopify-store-replace.service";
+import { customAppBillingOutcome, markCustomAppInstalled } from "../services/shopify-custom-app-billing.service";
 import { shopifyUninstallResponse } from "../services/connectors/shopify-self-uninstall.service";
 import { shopifyApiVersion } from "@chatcenter/shared";
 import { splitErrorCode } from "../lib/error-code";
@@ -682,6 +685,8 @@ router.get(
       return;
     }
 
+    // The shop's own app: a store on a per-merchant custom app reauthorizes through it (2026-11-22).
+    const app = await appForShop(shop);
     const { state } = mintOAuthState({
       tenantId: req.tenantId!,
       provider: "shopify",
@@ -689,11 +694,12 @@ router.get(
       flow: parseFlow(req.query.flow),
       userId: (req as any).user?.userId,
       hasIntent: true,
+      ...(app.kind === "custom" ? { appClientId: app.clientId } : {}),
     });
 
     const url = buildShopifyAuthorizeUrl({
       shop,
-      clientId: identity.clientId,
+      clientId: app.clientId,
       scopes: SHOPIFY_OAUTH_SCOPES,
       redirectUri: identity.redirectUri,
       state,
@@ -727,8 +733,9 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
   try {
     const identity = getShopifyAppIdentity();
 
-    // 1. Signature. A forged callback dies here, before `state` is even read.
-    const signed = verifyOAuthCallbackHmac(req.query as Record<string, unknown>, identity.clientSecret);
+    // 1. Signature. A forged callback dies here, before `state` is even read. Verified with the app that
+    //    serves this shop (its per-merchant custom app, else the official app, 2026-11-22).
+    const signed = await verifyOAuthCallbackForShop(req.query as Record<string, unknown>);
     if (!signed.ok) {
       console.warn(`[shopify oauth] callback rejected: ${signed.reason}`);
       // An unsigned return is an approval we cannot match: v2's invalid_state.
@@ -752,7 +759,13 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
     const payload = consumed.claims;
     flow = payload.flow;
 
-    // 3. The state was minted for ONE store.
+    // 3. The state was minted for ONE store, through ONE app.
+    const app = signed.app;
+    if ((payload.appClientId ?? null) !== (app.kind === "custom" ? app.clientId : null)) {
+      console.warn("[shopify oauth] callback signed by a different app than the install started with");
+      rejectCallback(res, "shopify", "invalid_state");
+      return;
+    }
     if (normalizeShopifyShopDomain(payload.shop) !== shop) {
       console.warn("[shopify oauth] callback shop does not match the shop bound into state");
       rejectCallback(res, "shopify", "invalid_state");
@@ -761,13 +774,15 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
 
     // 4. Exchange. The token never leaves this function except into
     //    encryptCredentials - not into a log line, not into a redirect.
-    const creds = await exchangeShopifyCode({
+    const exchanged = await exchangeShopifyCode({
       shop,
       code,
-      clientId: identity.clientId,
-      clientSecret: identity.clientSecret,
+      clientId: app.clientId,
+      clientSecret: app.clientSecret,
     });
-    if (!creds) { oauthFail(res, "shopify", flow, 400, "token_exchange_failed"); return; }
+    if (!exchanged) { oauthFail(res, "shopify", flow, 400, "token_exchange_failed"); return; }
+    // A custom-app token is refreshed with that app's credentials: the connection remembers which app.
+    const creds = app.kind === "custom" ? { ...exchanged, appClientId: app.clientId } : exchanged;
 
     // ── Workspace ──
     //
@@ -878,7 +893,14 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       // The three acquisition paths converge here: billing does not depend on
       // where the merchant came from, so `acquisitionSource` is recorded for
       // later analysis and reads on nothing.
-      outcome = await resolveShopifyBillingOutcome({
+      // A per-merchant custom app (2026-11-22): GOTCHA's grant, no Shopify Billing; only its own workspace.
+      if (app.kind === "custom" && app.tenantId !== tenantId) {
+        await refuse("shop_connected_elsewhere");
+        return;
+      }
+      outcome = app.kind === "custom"
+        ? (await customAppBillingOutcome(tenantId)) as any
+        : await resolveShopifyBillingOutcome({
         tenantId,
         shopDomain: shop,
         accessToken: creds.accessToken,
@@ -926,6 +948,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       oauthFail(res, "shopify", flow, 500, "link_failed", `shopify_link_failed:${linked.reason}`);
       return;
     }
+    if (app.kind === "custom") await markCustomAppInstalled(tenantId).catch(() => undefined);
 
     // A merchant who owes Shopify a plan is sent to Shopify's own hosted plan
     // page. One who is grandfathered, already paying, or on a deployment with

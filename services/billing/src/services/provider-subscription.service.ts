@@ -526,6 +526,31 @@ export async function syncProviderSubscription(input: {
  * typo - or an edit to an env var - would be a way to hand out arbitrary
  * entitlements without touching code or review.
  */
+/**
+ * A store connected through a per-merchant custom app (2026-11-22, Omer, path A): Shopify cannot bill it
+ * (a custom distribution app has no Billing API), so GOTCHA grants the four Shopify-funded capabilities.
+ * Source ADDON with reason CUSTOM_APP_GRANT_REASON: that exact pair is what the Shopify gate
+ * (getShopifyAuthorization) accepts besides Shopify's own two sources. No provider is called.
+ */
+export const CUSTOM_APP_GRANT_REASON = "shopify_custom_app";
+export async function grantCustomAppEntitlements(tenantId: string, by: string): Promise<number> {
+  for (const key of SHOPIFY_FUNDED_ENTITLEMENTS) {
+    await setTenantEntitlement({
+      tenantId, key, valueType: "BOOLEAN", value: true, source: "ADDON",
+      reason: CUSTOM_APP_GRANT_REASON, createdBy: `billing:shopify-custom-app:${by}`.slice(0, 120),
+    });
+  }
+  return SHOPIFY_FUNDED_ENTITLEMENTS.length;
+}
+
+/** Revoke the custom-app grant (uninstall, Replace, the console's revoke). Only those rows. */
+export async function revokeCustomAppEntitlements(tenantId: string): Promise<number> {
+  const r = await prisma.tenantEntitlement.deleteMany({
+    where: { tenantId, source: "ADDON", reason: CUSTOM_APP_GRANT_REASON, entitlementKey: { in: [...SHOPIFY_FUNDED_ENTITLEMENTS] } },
+  });
+  return r.count;
+}
+
 export async function grantShopifyEntitlements(
   tenantId: string,
   providerSubscriptionId: string,
@@ -657,7 +682,8 @@ export async function handleCommerceUninstall(input: {
   const revoked = liveOther
     ? 0
     : await revokeShopifyEntitlements(conn.tenantId)
-      + (await prisma.tenantEntitlement.deleteMany({ where: { tenantId: conn.tenantId, source: "SHOPIFY_GRANDFATHERED" } })).count;
+      + (await prisma.tenantEntitlement.deleteMany({ where: { tenantId: conn.tenantId, source: "SHOPIFY_GRANDFATHERED" } })).count
+      + (await revokeCustomAppEntitlements(conn.tenantId));
   let grantRevoked = false;
   if (input.replaced) {
     const r = await prisma.shopifyGrandfatherGrant.updateMany({

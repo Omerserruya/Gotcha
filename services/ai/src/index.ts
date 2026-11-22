@@ -33,6 +33,7 @@ import embeddedChatRouter from "./routes/embedded-chat";
 import shopifyChatPublicRoutes from "./routes/shopify-chat-public";
 import shopifyChatInstallRoutes from "./routes/shopify-chat-install";
 import shopifyInstallRoutes from "./routes/shopify-install";
+import shopifyCustomAppRoutes from "./routes/shopify-custom-app";
 import shopifyWebhookRoutes from "./routes/shopify-webhooks";
 import shopifyLiveChatRoutes from "./routes/shopify-live-chat";
 import websiteWidgetRoutes from "./routes/website-widget";
@@ -148,6 +149,7 @@ app.use("/api", customDbAdminRoutes);
 // install handler must not be shadowed by that router's authenticated
 // `/connectors/:slug/...` patterns, which would answer 401 to Shopify.
 app.use("/api", shopifyInstallRoutes);
+app.use("/api", shopifyCustomAppRoutes);
 app.use("/api", connectorsAdminRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
 // Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve

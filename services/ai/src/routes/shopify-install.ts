@@ -46,6 +46,8 @@ import {
   shopifyApiVersion,
   resolveAppPublicUrl,
   verifyAppEntryHmac,
+  verifyAppEntryForShop,
+  appForShop,
   buildShopifyAuthorizeUrl,
   singleValue,
   parseSessionCookie,
@@ -53,6 +55,7 @@ import {
   writeDurableSetting,
   normalizeShopifyShopDomain,
   coreAllowsShopifyConnect,
+  readPrivateAppsSettings,
 } from "@chatcenter/shared";
 import { isRedesignSystemsFlow, redesignSystemsPath } from "../services/redesign-return";
 import {
@@ -79,6 +82,8 @@ import {
 } from "../services/shopify-connection-link.service";
 import { resolveShopifyBillingOutcome, CrossTenantShopError } from "../services/shopify-billing-bridge.service";
 import { retireReplacedStore } from "../services/shopify-store-replace.service";
+import { customAppBillingOutcome, markCustomAppInstalled } from "../services/shopify-custom-app-billing.service";
+import { customAppForShop } from "@chatcenter/shared/src/lib/shopify-custom-app";
 
 const router = Router();
 
@@ -238,7 +243,9 @@ router.get(
     // claim says reconnected. Nothing is typed: the shop is the workspace's own, from its row.
     const known = await currentStoreOf(req.tenantId!).catch(() => null);
     const identity = getShopifyAppIdentity();
-    if (known && identity.clientId && identity.redirectUri) {
+    // The store's own app: a per-merchant custom app when it has one (2026-11-22), else the official app.
+    const knownApp = known ? await appForShop(known.shopDomain) : null;
+    if (known && knownApp?.clientId && identity.redirectUri) {
       const { state } = mintOAuthState({
         tenantId: req.tenantId!,
         provider: "shopify",
@@ -247,8 +254,9 @@ router.get(
         userId: (req as any).user?.userId,
         intentHandle: handle,
         hasIntent: true,
+        ...(knownApp.kind === "custom" ? { appClientId: knownApp.clientId } : {}),
       });
-      const url = buildShopifyAuthorizeUrl({ shop: known.shopDomain, clientId: identity.clientId, scopes: SHOPIFY_OAUTH_SCOPES, redirectUri: identity.redirectUri, state });
+      const url = buildShopifyAuthorizeUrl({ shop: known.shopDomain, clientId: knownApp.clientId, scopes: SHOPIFY_OAUTH_SCOPES, redirectUri: identity.redirectUri, state });
       if (url) {
         res.json({ url, mode: "reconnect" });
         return;
@@ -297,11 +305,21 @@ router.get(
   resolveTenant,
   requireOnboardingOrActiveTenant(),
   canConnectSystems,
-  async (_req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const entry = resolveShopifyInstallEntry();
+    // No live listing, the platform's private apps switched on, and no store here: Connect asks for a
+    // store link (a per-merchant custom app, 2026-11-22). The request itself: POST .../custom-app/request.
+    let mode: string = entry.mode;
+    if (entry.mode !== "listing") {
+      const [settings, current] = await Promise.all([
+        readPrivateAppsSettings().catch(() => ({ enabled: false })),
+        currentStoreOf(req.tenantId!).catch(() => null),
+      ]);
+      if (settings.enabled && current?.status !== "CONNECTED") mode = "custom_app_request";
+    }
     res.json({
       data: {
-        mode: entry.mode,
+        mode,
         url: entry.url,
         // Where an operator can point a merchant while the listing is not
         // public - during App Store review this is the install link from the
@@ -374,10 +392,9 @@ router.get("/connectors/shopify/billing/return", async (req: Request, res: Respo
 router.get("/connectors/shopify/install", async (req: Request, res: Response) => {
   const identity = getShopifyAppIdentity();
 
-  const verified = verifyAppEntryHmac(
-    req.query as Record<string, unknown>,
-    identity.clientSecret,
-  );
+  // Verified with the app that serves this shop: its per-merchant custom app when it has one
+  // (2026-11-22), else the official app. A signature of an app we do not know is never accepted.
+  const verified = await verifyAppEntryForShop(req.query as Record<string, unknown>);
   if (!verified.ok) {
     // Logged precisely, answered vaguely. `reason` distinguishes a forged
     // signature from a stale one for us; the browser learns only that the
@@ -389,8 +406,9 @@ router.get("/connectors/shopify/install", async (req: Request, res: Response) =>
     return;
   }
   const shop = verified.shop;
+  const app = verified.app;
 
-  if (!identity.clientId || !identity.redirectUri) {
+  if (!app.clientId || !identity.redirectUri) {
     console.error("[shopify install] SHOPIFY_API_KEY / SHOPIFY_REDIRECT_URI not configured");
     res.redirect(installErrorRedirect("not_configured"));
     return;
@@ -428,11 +446,13 @@ router.get("/connectors/shopify/install", async (req: Request, res: Response) =>
     userId: intent?.userId,
     intentHandle: intent ? String(intentHandle) : undefined,
     hasIntent: Boolean(intent),
+    // The app this install runs through: the callback must be signed by the same one.
+    ...(app.kind === "custom" ? { appClientId: app.clientId } : {}),
   });
 
   const url = buildShopifyAuthorizeUrl({
     shop,
-    clientId: identity.clientId,
+    clientId: app.clientId,
     scopes: SHOPIFY_OAUTH_SCOPES,
     redirectUri: identity.redirectUri,
     state,
@@ -633,9 +653,18 @@ router.post(
     }
 
     const accessToken = await peekPendingAccessToken(handle);
+    // A store on a per-merchant custom app (2026-11-22): made for ONE workspace, and billed by GOTCHA
+    // (no Shopify Billing for custom distribution), never authorized by the OAuth alone.
+    const customApp = await customAppForShop(summary.shopDomain).catch(() => null);
+    if (customApp && customApp.tenantId !== req.tenantId) {
+      res.status(409).json({ error: "custom_app_for_another_workspace" });
+      return;
+    }
     let outcome: Awaited<ReturnType<typeof resolveShopifyBillingOutcome>> = null;
     try {
-      outcome = accessToken
+      outcome = customApp
+        ? (await customAppBillingOutcome(req.tenantId!)) as any
+        : accessToken
         ? await resolveShopifyBillingOutcome({
             tenantId: req.tenantId!,
             shopDomain: summary.shopDomain,
@@ -706,6 +735,7 @@ router.post(
     // The installation is now a connection, so the cookie must not survive to
     // offer it again on the next page load.
     clearPendingInstallCookie(res);
+    if (customApp) await markCustomAppInstalled(req.tenantId!).catch(() => undefined);
 
     res.json({
       data: {

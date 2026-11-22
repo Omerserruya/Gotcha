@@ -43,6 +43,9 @@ const H = vi.hoisted(() => {
     toolRowsRemoval: v.fn(async () => ({ count: 68 })),
     /** Does the tenant hold the Connector's order reading? */
     entitled: { yes: true },
+    /** The shop's per-merchant custom app (2026-11-22): its secret, for that shop only. */
+    custom: { current: null as any },
+    customRevoked: [] as string[],
   };
 });
 
@@ -88,6 +91,14 @@ vi.mock("../services/shopify-billing-bridge.service", async (importOriginal) => 
   return { ...actual, notifyShopifyUninstalled: vi.fn(async () => {}) };
 });
 
+vi.mock("@chatcenter/shared/src/lib/shopify-custom-app", async (orig) => ({
+  ...(await orig<any>()),
+  customAppForShop: async (shop: string) => (H.custom.current && H.custom.current.shop === shop ? H.custom.current : null),
+}));
+vi.mock("../services/shopify-custom-app-billing.service", () => ({
+  revokeCustomAppEntitlements: async (t: string) => { H.customRevoked.push(t); return 4; },
+}));
+
 import router from "../routes/shopify-webhooks";
 
 function app() {
@@ -109,6 +120,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   H.entitled.yes = true;
   H.seen.clear();
+  H.custom.current = null;
+  H.customRevoked = [];
   H.installation.current = { id: "i1", shopDomain: SHOP, tenantId: "t1", status: "ACTIVE" };
   H.markUninstalled.mockResolvedValue({ id: "i1", shopDomain: SHOP, tenantId: "t1", status: "UNINSTALLED" });
   H.disableChatOnUninstall.mockResolvedValue({ disabled: true });
@@ -406,3 +419,21 @@ describe("★ orders → order events", () => {
   });
 });
 
+describe("a per-merchant custom app's webhooks (2026-11-22)", () => {
+  it("★ signed with the shop's custom app secret: accepted; the uninstall revokes GOTCHA's grant", async () => {
+    H.custom.current = { shop: SHOP, kind: "custom", clientId: "c1", clientSecret: "custom-secret", tenantId: "t1" };
+    const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "custom-secret");
+    expect(res.status).toBe(200);
+    expect(H.customRevoked).toEqual(["t1"]);
+  });
+  it("★ a custom app's secret signs for its own shop only", async () => {
+    H.custom.current = { shop: "other.myshopify.com", kind: "custom", clientId: "c1", clientSecret: "custom-secret", tenantId: "t9" };
+    const res = await post("/api/connectors/shopify/webhooks/app-uninstalled", "custom-secret");
+    expect(res.status).toBe(401);
+  });
+  it("an unknown secret is refused, the official one still works", async () => {
+    H.custom.current = { shop: SHOP, kind: "custom", clientId: "c1", clientSecret: "custom-secret", tenantId: "t1" };
+    expect((await post("/api/connectors/shopify/webhooks/app-uninstalled", "someone-elses")).status).toBe(401);
+    expect((await post("/api/connectors/shopify/webhooks/app-uninstalled", "core-app-secret", { shop_domain: SHOP }, { "X-Shopify-Webhook-Id": "delivery-2" })).status).toBe(200);
+  });
+});

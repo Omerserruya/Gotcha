@@ -33,7 +33,7 @@ import { issueContinuationLink, revokeLinksForCheckout } from "../services/conti
 import { activateManualContract, manualContractsForTenant, ManualContractRefused } from "../services/manual-contract.service";
 import { emitBillingEvent } from "../lib/events";
 import { onShopifyConnected } from "../services/shopify-post-install.service";
-import { handleCommerceUninstall } from "../services/provider-subscription.service";
+import { handleCommerceUninstall, grantCustomAppEntitlements, revokeCustomAppEntitlements } from "../services/provider-subscription.service";
 import {
   getShopifyAccessSnapshot,
   serializeSnapshot,
@@ -530,6 +530,23 @@ router.post("/internal/billing/shopify/connected", async (req, res) => {
  * Idempotent: an unknown or already-disconnected shop answers 200 with
  * `revoked: 0`. Shopify retries webhooks, and a retry must not be an error.
  */
+/**
+ * A store connected through a per-merchant custom app (2026-11-22): grant or revoke GOTCHA's own grant of
+ * the four Shopify capabilities. No provider is called.
+ */
+router.post("/internal/billing/shopify/custom-app/grant", async (req, res) => {
+  const tenantId = typeof req.body?.tenantId === "string" ? req.body.tenantId : "";
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  const granted = await grantCustomAppEntitlements(tenantId, String(req.body?.by ?? "system"));
+  return res.json({ data: { granted } });
+});
+router.post("/internal/billing/shopify/custom-app/revoke", async (req, res) => {
+  const tenantId = typeof req.body?.tenantId === "string" ? req.body.tenantId : "";
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  const revoked = await revokeCustomAppEntitlements(tenantId);
+  return res.json({ data: { revoked } });
+});
+
 router.post("/internal/billing/shopify/uninstalled", async (req, res) => {
   // `tenantId` + `replaced` (App Review 132211): the workspace replaced this store; the lookup is
   // then that workspace's own connection only, never another workspace's row for the same domain.
