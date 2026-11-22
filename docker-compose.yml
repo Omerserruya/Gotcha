@@ -302,6 +302,11 @@ services:
       # service gets this token - no other service may create identities.
       AUTHENTIK_URL: ${AUTHENTIK_URL:-http://authentik-server:9000}
       AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:-${AUTHENTIK_BOOTSTRAP_TOKEN:-}}
+      # Sign in with Google. The slug of the Google source in Authentik (empty =
+      # the feature is off), and the pk of the unbound "has a usable password"
+      # expression policy the disconnect rule asks (empty = nobody can disconnect).
+      AUTHENTIK_GOOGLE_SOURCE_SLUG: ${AUTHENTIK_GOOGLE_SOURCE_SLUG:-}
+      AUTHENTIK_USABLE_PASSWORD_POLICY_PK: ${AUTHENTIK_USABLE_PASSWORD_POLICY_PK:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-gotcha-app}
       # BFF app-session (migration §A5). INERT unless SESSION_COOKIE_CREATE=true.
       # Server-side token exchange reuses AUTHENTIK_URL (internal DNS) above.

@@ -51,7 +51,7 @@ describe("listUserSourceConnections", () => {
   it("asks for one person's connections and returns them in our shape", async () => {
     stubFetch(() => ({ status: 200, body: { pagination: { current: 1, total_pages: 1 }, results: [row(31, 7)] } }));
     const out = await listUserSourceConnections(7);
-    expect(out).toEqual([{ id: "31", sourceSlug: "google", sourceName: "Google", createdAt: "2026-11-20T09:15:00.000000Z" }]);
+    expect(out).toEqual([{ id: "31", sourceSlug: "google", sourceName: "Google", sourcePk: "aaaa", createdAt: "2026-11-20T09:15:00.000000Z" }]);
     expect(calls[0].url).toBe("http://authentik-server:9000/api/v3/sources/user_connections/all/?user=7&page=1&page_size=100");
   });
 

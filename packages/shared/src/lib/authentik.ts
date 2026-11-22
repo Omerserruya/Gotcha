@@ -15,6 +15,8 @@ export interface AuthentikIdentity {
   pk: number;
   email: string;
   username: string;
+  /** Authentik's own `uid` for the user (its token identifiers are built from it). Only where it was read. */
+  uid?: string;
 }
 
 function baseUrl(): string {
@@ -78,7 +80,11 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   let body: any;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) {
-    throw new Error(`[authentik] ${options.method || "GET"} ${path} -> ${res.status}: ${JSON.stringify(body)}`);
+    // The status rides on the error so a caller can tell "not there" (404) from "could not ask".
+    throw Object.assign(
+      new Error(`[authentik] ${options.method || "GET"} ${path} -> ${res.status}: ${JSON.stringify(body)}`),
+      { status: res.status },
+    );
   }
   return body as T;
 }
@@ -512,7 +518,10 @@ export async function findIdentityBySubject(subject: string): Promise<AuthentikI
   const res = await api<{ results: any[] }>(`/core/users/?uuid=${encodeURIComponent(subject)}`);
   const u = res.results?.find((x) => x.uuid === subject);
   if (!u) return null;
-  return { subject: u.uuid, pk: u.pk, email: u.email, username: u.username };
+  return {
+    subject: u.uuid, pk: u.pk, email: u.email, username: u.username,
+    ...(typeof u.uid === "string" && u.uid ? { uid: u.uid } : {}),
+  };
 }
 
 export type RemovableDeviceType = "totp" | "webauthn" | "static";
@@ -631,6 +640,8 @@ export interface AuthentikSourceConnection {
   id: string;
   sourceSlug: string;
   sourceName: string;
+  /** The source's own pk, as Authentik wrote it ("" when it did not). Compare with sameAuthentikId. */
+  sourcePk: string;
   /** When the connection was made (ISO), or null when Authentik did not say. */
   createdAt: string | null;
 }
@@ -655,6 +666,7 @@ export async function listUserSourceConnections(userPk: number): Promise<Authent
       id: String(r.pk),
       sourceSlug: String(r.source_obj?.slug ?? ""),
       sourceName: String(r.source_obj?.name ?? ""),
+      sourcePk: String(r.source ?? r.source_obj?.pk ?? ""),
       createdAt: typeof r.created === "string" ? r.created : null,
     }));
 }
@@ -697,5 +709,72 @@ export async function hasUsablePassword(userPk: number): Promise<boolean | null>
   } catch (err: any) {
     console.warn(`[authentik] usable-password read failed for pk=${userPk}: ${err?.message ?? err}`);
     return null;
+  }
+}
+
+// ─── The sign-in that just happened ──────────────────────────────────────────
+
+/**
+ * Are two Authentik ids the same thing? Authentik writes one UUID two ways: the
+ * API answers it with dashes, an event's context holds its bare hex. An empty
+ * id is never the same as anything, itself included.
+ */
+export function sameAuthentikId(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown) => String(v ?? "").replace(/-/g, "").trim().toLowerCase();
+  const x = norm(a);
+  return x !== "" && x === norm(b);
+}
+
+/** What Authentik recorded about one successful sign-in. */
+export interface AuthentikSignIn {
+  /** The login event's id: one per sign-in, so it is what a record of the sign-in is counted by. */
+  eventId: string;
+  /** When (ISO), or null when Authentik did not say. */
+  at: string | null;
+  /** The outside source the person came in through (its pk), or null for a sign-in on Authentik's own form. */
+  sourcePk: string | null;
+  /** True only when Authentik says the password stage did it. */
+  byPassword: boolean;
+}
+
+/**
+ * The newest successful sign-in of one identity, or null when there is none in
+ * its latest events.
+ *
+ * Authentik's `action` filter is "contains", so `login` brings `login_failed`
+ * too, and its `username` filter also matches a name typed on a failed form.
+ * Both are checked again here: only a `login` whose user is this pk counts.
+ * Throws when the IdP cannot be asked.
+ */
+export async function readLatestSignIn(userPk: number, username: string): Promise<AuthentikSignIn | null> {
+  const res = await api<{ results?: any[] }>(
+    `/events/events/?action=login&username=${encodeURIComponent(username)}&ordering=-created&page_size=20`,
+  );
+  const e = (res?.results ?? []).find((r) => r && r.action === "login" && r.user?.pk === userPk && r.pk != null);
+  if (!e) return null;
+  const source = e.context?.source;
+  const sourcePk = source && typeof source === "object" && source.pk != null && String(source.pk) !== "" ? String(source.pk) : null;
+  return {
+    eventId: String(e.pk),
+    at: typeof e.created === "string" ? e.created : null,
+    sourcePk,
+    byPassword: e.context?.auth_method === "password",
+  };
+}
+
+/**
+ * Remove the one-time "set a password" token Authentik holds for a person
+ * (the one createRecoveryLink mints; Authentik keeps one per person, named
+ * "<uid>-password-reset"). True when one was removed, false when there was
+ * none. Throws when the IdP cannot be asked.
+ */
+export async function deleteRecoveryToken(uid: string): Promise<boolean> {
+  if (!/^[a-f0-9]{16,128}$/.test(String(uid))) throw new Error("[authentik] uid is not a uid");
+  try {
+    await api(`/core/tokens/${uid}-password-reset/`, { method: "DELETE" });
+    return true;
+  } catch (err: any) {
+    if (err?.status === 404) return false;
+    throw err;
   }
 }

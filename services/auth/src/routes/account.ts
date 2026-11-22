@@ -31,6 +31,9 @@ import {
   listUserSourceConnections,
   deleteOAuthSourceConnection,
   hasUsablePassword,
+  readLatestSignIn,
+  sameAuthentikId,
+  deleteRecoveryToken,
   mfaRequirementFor,
   isEnrolledWithRecovery,
   isSupportedLocale,
@@ -44,7 +47,7 @@ const router = Router();
 router.use(authenticate);
 
 /** Resolve the caller's Authentik pk (or null) from their identity's subject. */
-async function callerIdentity(req: Request): Promise<{ pk: number; username: string; email: string } | null> {
+async function callerIdentity(req: Request): Promise<{ pk: number; username: string; email: string; subject: string; uid?: string } | null> {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
     select: { identity: { select: { authentikSubject: true } } },
@@ -52,7 +55,9 @@ async function callerIdentity(req: Request): Promise<{ pk: number; username: str
   const subject = user?.identity?.authentikSubject;
   if (!subject) return null;
   const identity = await findIdentityBySubject(subject);
-  return identity ? { pk: identity.pk, username: identity.username, email: identity.email } : null;
+  return identity
+    ? { pk: identity.pk, username: identity.username, email: identity.email, subject: identity.subject, uid: identity.uid }
+    : null;
 }
 
 // ─── Profile ───────────────────────────────────────────────────────────────
@@ -455,6 +460,157 @@ router.delete("/sign-in-connections/google", async (req: Request, res: Response)
   } catch {
     res.status(502).json({ error: "idp_unavailable" });
   }
+});
+
+// ─── The sign-in that just happened ──────────────────────────────────────────
+//
+// Authentik signs people in; GOTCHA only writes down that it happened. The
+// app's sign-in callback calls this once, with the new access token, right
+// after Authentik hands it over. It signs nothing, and it never stands between
+// a person and their session: every step is best effort, and the answer is
+// always a 200.
+//
+// What it does, each part on its own:
+//   1. Reads from Authentik HOW the person came in (its newest login event),
+//      and writes one audit line per sign-in, counted by that event's id.
+//   2. After a Google sign-in, writes "connection added" the first time this
+//      connection is seen, counted by the connection's id.
+//   3. Marks the person's live setup links as used: they are in, so an
+//      invitation still sitting in their inbox has done its job.
+//   4. After a new Google sign-in, removes the one-time "set a password" token
+//      Authentik may still hold for them from the setup screen.
+//   5. Answers the "connect Google" question when the callback carries one.
+
+type SignInMethod = "google" | "password" | "unknown";
+type ConnectVerdict = "connected" | "other_account" | null;
+
+/** With no login event to count by, at most one sign-in line per person in this window. */
+const SIGN_IN_NO_EVENT_WINDOW_MS = 60_000;
+
+/** Run one best-effort step. A failure is logged and never reaches the caller. */
+async function quietly(what: string, fn: () => Promise<unknown>): Promise<void> {
+  try { await fn(); } catch (err: any) { console.warn(`[sign-in] ${what} failed: ${err?.message ?? err}`); }
+}
+
+/** A date Authentik gave, or undefined when it is not one. */
+function dateOf(iso: string | null | undefined): Date | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/**
+ * How the person came in. A sign-in through an outside source is "google" only
+ * when that source is the one their Google connection belongs to; through any
+ * other source it is "unknown", never "password".
+ */
+function signInMethod(
+  signIn: { sourcePk: string | null; byPassword: boolean } | null,
+  google: { sourcePk: string } | undefined,
+): SignInMethod {
+  if (!signIn) return "unknown";
+  if (signIn.sourcePk) return google && sameAuthentikId(signIn.sourcePk, google.sourcePk) ? "google" : "unknown";
+  return signIn.byPassword ? "password" : "unknown";
+}
+
+/**
+ * The answer to "I pressed Connect Google as person X, then signed in": the
+ * same person came back through Google ("connected"), or Google signed in
+ * somebody else ("other_account"). Anything that was not a Google sign-in is
+ * no answer at all: a password sign-in by another person on a shared machine
+ * says nothing about the connect that was started there.
+ */
+function connectVerdict(method: SignInMethod, callerSubject: string, connectSubject: unknown): ConnectVerdict {
+  if (method !== "google") return null;
+  if (typeof connectSubject !== "string" || !connectSubject.trim() || connectSubject.length > 128) return null;
+  return sameAuthentikId(connectSubject, callerSubject) ? "connected" : "other_account";
+}
+
+router.post("/security/sign-in", async (req: Request, res: Response): Promise<void> => {
+  const answer: { method: SignInMethod; google: ConnectVerdict } = { method: "unknown", google: null };
+  if ((req.user as any)?.isInternal) { res.json(answer); return; }
+  const { userId, tenantId } = req.user!;
+  try {
+    const slug = googleSourceSlug();
+    const identity = await callerIdentity(req).catch(() => null);
+    const [connections, signIn] = identity
+      ? await Promise.all([
+          slug ? listUserSourceConnections(identity.pk).catch(() => []) : Promise.resolve([]),
+          readLatestSignIn(identity.pk, identity.username).catch(() => null),
+        ])
+      : [[], null];
+    const google = slug ? connections.find((c) => c.sourceSlug === slug) : undefined;
+    answer.method = signInMethod(signIn, google);
+    if (identity) answer.google = connectVerdict(answer.method, identity.subject, req.body?.connectSubject);
+
+    // One person can hold a membership row in several workspaces; a line written
+    // under any of them counts as written, and a link issued for any of them is theirs.
+    const identityId = req.user!.identityId;
+    const rows = identityId
+      ? await withCrossTenantAccess(() => prisma.user.findMany({ where: { identityId }, select: { id: true } })).catch(() => [])
+      : [];
+    const userIds = Array.from(new Set([userId, ...rows.map((r) => r.id)]));
+    const now = new Date();
+
+    // Counted first: whether this sign-in is NEW decides the token step below. A
+    // callback can also arrive with no new sign-in behind it (the app session
+    // ended, Authentik's did not), and then the newest login event is an old one.
+    let newSignIn = false;
+    await quietly("audit", async () => {
+      const seen = await withCrossTenantAccess(() => prisma.auditLog.findFirst({
+        where: {
+          action: AuditAction.AUTH_LOGIN_SUCCEEDED,
+          actorId: { in: userIds },
+          ...(signIn
+            ? { metadata: { path: ["loginEventId"], equals: signIn.eventId } }
+            : { createdAt: { gte: new Date(now.getTime() - SIGN_IN_NO_EVENT_WINDOW_MS) } }),
+        },
+        select: { id: true },
+      }));
+      if (seen) return;
+      await writeAudit({
+        tenantId, actorType: "user", actorId: userId,
+        action: AuditAction.AUTH_LOGIN_SUCCEEDED, targetType: "user", targetId: userId,
+        metadata: { method: answer.method, ...(signIn ? { loginEventId: signIn.eventId } : {}) },
+        at: dateOf(signIn?.at),
+      });
+      newSignIn = true;
+    });
+
+    await Promise.all([
+      quietly("connection audit", async () => {
+        if (answer.method !== "google" || !google) return;
+        const seen = await withCrossTenantAccess(() => prisma.auditLog.findFirst({
+          where: {
+            action: AuditAction.SIGN_IN_CONNECTION_ADDED,
+            actorId: { in: userIds },
+            metadata: { path: ["connectionId"], equals: google.id },
+          },
+          select: { id: true },
+        }));
+        if (seen) return;
+        await writeAudit({
+          tenantId, actorType: "user", actorId: userId,
+          action: AuditAction.SIGN_IN_CONNECTION_ADDED, targetType: "user", targetId: userId,
+          metadata: { self: true, provider: "google", connectionId: google.id },
+          at: dateOf(google.createdAt),
+        });
+      }),
+      quietly("setup links", () => withCrossTenantAccess(() => prisma.setupLink.updateMany({
+        where: { userId: { in: userIds }, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      }))),
+      quietly("recovery token", async () => {
+        // Only for a Google sign-in seen here for the first time: a password link the
+        // person asked for AFTER an old Google sign-in is theirs to use.
+        if (!newSignIn || answer.method !== "google" || !identity?.uid) return;
+        await deleteRecoveryToken(identity.uid);
+      }),
+    ]);
+  } catch (err: any) {
+    console.warn(`[sign-in] record failed: ${err?.message ?? err}`);
+  }
+  res.json(answer);
 });
 
 // ─── Email change (verified, self-service) ───────────────────────────────────
