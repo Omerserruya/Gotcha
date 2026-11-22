@@ -51,3 +51,7 @@ docs/.api-extract/
 # Where design exports get dropped before `npm run design:sync` picks up
 # what it needs. The sources it keeps live in landing/design/.
 /incoming/
+
+# Demo pages dropped on dev (served at /demo/<id>); only the empty folder is kept.
+/demo-pages/*
+!/demo-pages/.gitkeep

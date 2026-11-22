@@ -174,6 +174,20 @@ http {
         "~^/if/flow/(?<rflow>gotcha-recovery-self|gotcha-recovery)/\|(?<rtok>[^|]+)$" "/recover?flow=$rflow&flow_token=$rtok";
     }
 
+    # ★ The flow that follows "Sign in with Google" runs on the APP's own
+    # sign-in screen (2026-11-22). After Google's callback Authentik sends the
+    # browser to <auth host>/if/flow/default-source-authentication/?<args> and
+    # has no setting to point it elsewhere. That one address goes to the app's
+    # /sign-in screen, which drives the flow through /auth-api/ (two-step, a
+    # refusal). The query string passes as it came, byte for byte: it is taken
+    # from $args, which nginx never decodes. ONLY this slug: every other
+    # /if/flow/ stays Authentik's. Used on the auth host alone.
+    map "$uri|$args" $source_flow_go {
+        default "";
+        "~^/if/flow/default-source-authentication/\|$" "/sign-in?flow=default-source-authentication";
+        "~^/if/flow/default-source-authentication/\|(?<sfargs>.+)$" "/sign-in?flow=default-source-authentication&$sfargs";
+    }
+
     # ★ A sign-out that finds no Authentik session goes back to the app (2026-10-23).
     # The login stage's session lasts until the browser closes unless "remember
     # me" was ticked, so the app session can outlive it. RP-initiated logout then
@@ -2255,6 +2269,62 @@ http {
             proxy_read_timeout 3600s;
         }
 
+        # ─── Demo pages: /demo/<id> (2026-11-22) ─────────────────
+        # A demo page is a folder of files on the host, mounted read-only at
+        # /srv/demo-pages (the compose file names the host folder). No service
+        # and no database: nginx serves the file or answers 404.
+        #
+        # The id is exactly 10 characters of [a-z0-9]. Under an id only two
+        # things exist: the page itself (/demo/<id>, /demo/<id>/ or
+        # /demo/<id>/index.html) and files under /demo/<id>/assets/. Everything
+        # else under /demo is 404 here. `^~` keeps this server's regex locations
+        # out, and nothing falls through to the catch-all below.
+        #
+        # A raw address with a dot segment ("/demo/x/../../y", also written
+        # %2e or %2f) is refused before nginx resolves it, so it cannot leave
+        # /demo and land on the catch-all. It runs before any location, also on
+        # the way to the 404 page, so this one answer is nginx's bare 404.
+        if ($request_uri ~* "^/demo/(?:.*(?:/|%2f))?(?:\.|%2e)(?:\.|%2e)(?:/|%2f|\?|$)") {
+            return 404;
+        }
+        location = /demo {
+            return 404;
+        }
+        location ^~ /demo/ {
+            root /srv/demo-pages;
+            # No http-level mime.types in this config (see the widget).
+            include /etc/nginx/mime.types;
+            # A link in the drop folder never reaches a file outside it.
+            disable_symlinks on from=$document_root;
+
+            # A location with its own add_header inherits none, so this
+            # server's headers are repeated word for word, then the two a demo
+            # page adds: never indexed, never cached.
+            # One difference, here only: script-src also allows blob:. An
+            # exported page starts its runtime from blob: script URLs, and
+            # without it the browser refuses the runtime and the page shows its
+            # raw template text. The server's own policy stays as it is.
+            # scripts/gateway/check-demo-pages.sh fails when they drift apart.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com https://connect.facebook.net blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il https://www.facebook.com https://web.facebook.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+            add_header X-Robots-Tag "noindex, nofollow" always;
+            add_header Cache-Control "no-store" always;
+
+            location ~ "^/demo/(?<demo_id>[a-z0-9]{10})(?:/(?:index\.html)?)?$" {
+                try_files /$demo_id/index.html =404;
+            }
+            # No segment starts with a dot (no hidden file), and the address
+            # never ends in a slash (no directory, so no listing).
+            location ~ "^/demo/(?<demo_id>[a-z0-9]{10})/assets/(?<demo_asset>[^/.][^/]*(?:/[^/.][^/]*)*)$" {
+                try_files /$demo_id/assets/$demo_asset =404;
+            }
+            return 404;
+        }
+
         # ─── The app (catch-all) ─────────────────────────
         location / {
             # Old app paths 302 to their place in this one (the $v2_dest map).
@@ -2293,6 +2363,12 @@ http {
         # $signout_lost_go). The app session is already gone by then.
         if ($signout_lost_go) {
             return 302 https://dev.gotcha.co.il/sign-in;
+        }
+
+        # After "Sign in with Google" -> the app's sign-in screen, the query
+        # string untouched (see $source_flow_go).
+        if ($source_flow_go != "") {
+            return 302 https://dev.gotcha.co.il$source_flow_go;
         }
 
         # ════════════════════════════════════════════════════════════════════

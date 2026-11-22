@@ -224,6 +224,10 @@ services:
       # nginx template has no /api/docs location, so the spec is unreachable in
       # production by construction rather than by a runtime check.
       - ./docs:/usr/share/nginx/api-docs:ro
+      # Demo pages (/demo/<id>): the same location as prod, from a dev folder.
+      # DEMO_PAGES_DIR names another one; the default is ./demo-pages, kept in
+      # the repo empty so docker never creates it owned by root.
+      - ${DEMO_PAGES_DIR:-./demo-pages}:/srv/demo-pages:ro
     environment:
       AUTH_PORT: ${AUTH_PORT:-4001}
       CONVERSATION_PORT: ${CONVERSATION_PORT:-4002}
