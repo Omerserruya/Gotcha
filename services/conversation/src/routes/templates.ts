@@ -331,6 +331,15 @@ export async function websitePhoneHandoffOn(tenantId: string, channelAccountId: 
   return wa.enabled && wa.phoneHandoff && wa.channelAccountId === channelAccountId;
 }
 
+/** This number already has a website_handoff template (W2), in any state. */
+async function handoffTemplateExists(tenantId: string, channelAccountId: string): Promise<boolean> {
+  const row = await prisma.messageTemplate.findFirst({
+    where: { tenantId, channel: "WHATSAPP" as any, name: REQUIRED_TEMPLATES.website_handoff.name, channelAccountId },
+    select: { id: true },
+  });
+  return !!row;
+}
+
 /** The public voice address, or null when it is not configured (production without VOICE_PUBLIC_URL). */
 function voiceOrigin(): string | null {
   try { return resolveVoicePublicUrl(); } catch (e) { if (e instanceof AppOriginError) return null; throw e; }
@@ -353,10 +362,12 @@ router.get("/required", authenticate, resolveTenant, requireOnboardingOrActiveTe
     const defaultLanguage = languagesFor(tenant?.defaultLocale)[0];
     const languages: TemplateLanguage[] = asked ? [asked as TemplateLanguage] : [defaultLanguage];
     // missed_call only while a voice number uses it (B1).
-    // website_handoff only on the number the widget's "leave your number" uses, while it is on (W2).
+    // website_handoff on the number the widget's "leave your number" uses while it is on (W2), and on a
+    // number that already has the template in any state: a rejected one stays listed after the option
+    // is switched off, so the person can fix it and switch the option on again (no dead end).
     const roles = requiredRolesFor({
       voiceMissedCall: await voiceMissedCallInUse(tenantId),
-      websitePhoneHandoff: await websitePhoneHandoffOn(tenantId, account.id),
+      websitePhoneHandoff: (await websitePhoneHandoffOn(tenantId, account.id)) || (await handoffTemplateExists(tenantId, account.id)),
     });
     const origin = voiceOrigin();
     const names = roles.map((r) => REQUIRED_TEMPLATES[r].name);

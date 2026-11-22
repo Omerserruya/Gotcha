@@ -324,6 +324,18 @@ describe("website_handoff: required only on the number the widget's \"leave your
     expect(items[2]).toMatchObject({ name: "website_chat_handoff", language: "he", category: "UTILITY", state: "missing", body: HE, buttons: [{ type: "QUICK_REPLY", text: "להמשך השיחה" }] });
   });
 
+  it("★ no dead end: a REJECTED template stays listed with its reason after the option is switched off", async () => {
+    H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: false }));
+    H.templates = [{ id: "x9", tenantId: "T", channel: "WHATSAPP", channelAccountId: "ca1", name: "website_chat_handoff", language: "he", status: "REJECTED", rejectionReason: "INVALID_FORMAT", body: HE, buttons: [] }];
+    const item = (await getRequired()).body.data.items.find((i: any) => i.role === "website_handoff");
+    expect(item).toMatchObject({ state: "rejected", reason: "INVALID_FORMAT", templateId: "x9" });
+  });
+
+  it("another number's template does not list it here", async () => {
+    H.templates = [{ id: "x9", tenantId: "T", channel: "WHATSAPP", channelAccountId: "ca2", name: "website_chat_handoff", language: "he", status: "REJECTED" }];
+    expect((await getRequired()).body.data.items.map((i: any) => i.role)).toEqual(["reopen", "followup"]);
+  });
+
   it("an English workspace gets the matching English wording", async () => {
     H.locale = "en";
     H.accounts.push(webchat({ enabled: true, channelAccountId: "ca1", phoneHandoff: true }));
