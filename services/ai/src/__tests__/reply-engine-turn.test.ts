@@ -5472,3 +5472,92 @@ describe("the model's own close_conversation, through a whole turn", () => {
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
   });
 });
+
+// The customer's message, the draft and the sent text are the replay's own (prod replay 2026-11-22). The state holds the
+// product as the earlier turn stored it: the store's price then, in the store's own writing.
+describe("prod replay 2026-11-22, through a whole turn: a product an earlier turn showed", () => {
+  const INCOMING = "איזה גוון מייקאפ יתאים לעור שלי?";
+  const DRAFT = "יש לנו מייקאפ טינט שמתאים כמעט לכולן ומשנה גוון מלבן לצבע העור. אם הכוונה למייקאפ אחר, כתבי איזה מוצר ואכוון לפי הגוונים שלו.";
+  const SENT = "מייקאפ טינט מתאים כמעט לכולן, הוא משנה גוון מלבן לצבע העור ומחירו 178 ₪. אם התכוונת למייקאפ אחר, כתבו איזה מוצר ואכוון אותך לפי הגוונים שלו.";
+  const shown = [{ ref: "id:501", title: "מייקאפ טינט", price: "160.20", currency: "ILS", productId: "501", variantId: null, at: "2026-11-22T08:00:00.000Z" }];
+  const withShown = async (offeredItems: any[], fn: () => Promise<void>) => {
+    const { prisma } = await import("@chatcenter/shared");
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems, pending: [], turnCount: 4 });
+    h.history = [{ direction: "INBOUND", body: INCOMING, metadata: null }];
+    // The document gives the regular price.
+    h.chunks = [{ content: "מייקאפ טינט: משנה גוון מלבן לצבע העור, מתאים כמעט לכולן. מחיר: 178 ₪." }];
+    try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
+  };
+  // Everything the model was told across the turn (the calls share one growing list).
+  const told = () => h.calls.at(-1).messages.map((m: any) => String(m.content ?? "")).join("\n");
+  const firstKinds = (r: any) => r.trace.gate3.problems.map((p: any) => p.kind);
+  const say = (...replies: string[]) => { for (const [i, reply] of replies.entries()) h.responses.push({ toolCalls: [respond(`m${i}`, { reply })] }); };
+
+  it("★ the draft is never told to name products with prices: the shown product is its name", async () => {
+    await withShown(shown, async () => {
+      say(DRAFT, DRAFT.replace("כתבי", "אפשר לכתוב"));
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: INCOMING }, "autonomous");
+      expect(firstKinds(r)).not.toContain("nameless_products");
+      expect(told()).not.toContain("without naming any");
+      expect(r.reply).toBe(DRAFT.replace("כתבי", "אפשר לכתוב"));
+      expect(h.responses).toHaveLength(0);
+    });
+  });
+
+  it("★ the control: with nothing shown before, the same draft is products without a name, and no document price is asked for", async () => {
+    await withShown([], async () => {
+      say(DRAFT, DRAFT, DRAFT);
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: INCOMING }, "autonomous");
+      expect(firstKinds(r)).toContain("nameless_products");
+      expect(told()).toContain("You present products without naming any.");
+      expect(told()).toContain("each with the price the search gave for it (never a price from a document)");
+    });
+  });
+
+  it("★ the document's price for the shown product is caught, and the rewrite is given the price read then", async () => {
+    await withShown(shown, async () => {
+      say(SENT, SENT.replace("178", "160.20"));
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: INCOMING }, "autonomous");
+      expect(firstKinds(r)).toContain("price_against_store");
+      expect(told()).toContain("The store's price: מייקאפ טינט: 160.20. Give that one;");
+      expect(r.reply).toBe(SENT.replace("178", "160.20"));
+      // The engine's own read came after the draft, under its own id.
+      expect(r.trace.toolsAtFirstGate).toBe(0);
+      expect(r.trace.tools.map((t: any) => t.callId)).toEqual(["auto_store_1"]);
+    });
+    // Without the earlier read the document's price went out (the defect).
+    await withShown([], async () => {
+      h.responses.length = 0;
+      say(SENT, SENT);
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: INCOMING }, "autonomous");
+      expect(firstKinds(r)).not.toContain("price_against_store");
+    });
+  });
+
+  it("★ a rewrite that says the document's price again does not send it", async () => {
+    await withShown(shown, async () => {
+      say(SENT, SENT, SENT);
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: INCOMING }, "autonomous");
+      expect(String(r.reply ?? "")).not.toContain("178");
+      expect(told()).toContain("these sentences had to be cut (price_against_store");
+    });
+  });
+
+  it("★ the trace says how many calls ran before the first draft was checked", async () => {
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("s2", { reply: "יש Canvas Tote ב-₪79.", cards: ["PRODUCT_1"] })] });
+    const searched = await runReplyEngineTurn(opts, "autonomous");
+    expect(searched.trace.toolsAtFirstGate).toBe(1);
+    expect(searched.trace.tools.map((t: any) => t.callId)).toEqual(["s1"]);
+  });
+
+  it("★ a product read this turn: the correction gives its price in the store's own writing", async () => {
+    // The store writes "79.90"; a reply that says it that way is grounded, "79.9" is another string.
+    h.groundList = [{ title: "Canvas Tote", price: "79.90" as any }];
+    h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query: "תיק בד" })] }, { toolCalls: [respond("s2", { reply: "יש Canvas Tote ב-₪89." })] }, { toolCalls: [respond("s3", { reply: "יש Canvas Tote ב-₪79.90." })] });
+    const r = await runReplyEngineTurn(opts, "autonomous");
+    expect(firstKinds(r)).toContain("price_against_store");
+    expect(told()).toContain("The store's price: Canvas Tote: 79.90. Give that one;");
+    expect(String(r.reply ?? "")).toContain("79.90");
+    expect(String(r.reply ?? "")).not.toContain("89");
+  });
+});

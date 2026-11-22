@@ -170,7 +170,7 @@ export type ClaimProblem =
   | { kind: "option_without_variation"; claims: string[] }
   | { kind: "not_narrowed"; extra: string[] }
   | { kind: "ungrounded_source"; claims: string[] }
-  | { kind: "price_against_store"; claims: string[] }
+  | { kind: "price_against_store"; claims: string[]; store?: string[] }
   | { kind: "order_state_unread"; claims: string[] }
   | { kind: "claims_attachment"; claims: string[] }
   | { kind: "device_mismatch"; claims: string[] }
@@ -201,6 +201,8 @@ export interface EngineTurnTrace {
   stageMs: Record<string, number>;
   rounds: number;
   tools: ToolRunRecord[];
+  /** How many of `tools` ran before the first draft was checked; the rest ran after it (log only). */
+  toolsAtFirstGate?: number;
   gate3: Gate3Verdict & { rewrite: "none" | "rewritten" | "cleaned" | "cleaned_partial" | "fallback" | "silent" };
   tokens: { input: number; output: number; cached: number };
   toolsOffered: number;

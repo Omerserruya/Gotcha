@@ -240,28 +240,48 @@ export function storeRequestsLine(calls: StoreSearchCall[]): string {
   }).join("; ");
 }
 
+/** A call the engine made itself (its lookups before a rewrite), not the model: the ids it gives them. */
+export const engineCall = (t: any): boolean => /^auto_/.test(String(t?.callId ?? ""));
+/**
+ * A turn's calls in two parts: up to the first draft's check, and after it. A trace that does not say where the
+ * draft was (an older one) is all first part.
+ */
+export function aroundDraft<T>(trace: any): { before: T[]; after: T[] } {
+  const all = (Array.isArray(trace?.tools) ? trace.tools : []) as T[];
+  const at = Number.isInteger(trace?.toolsAtFirstGate) && trace.toolsAtFirstGate >= 0 ? Number(trace.toolsAtFirstGate) : all.length;
+  return { before: all.slice(0, at), after: all.slice(at) };
+}
+
 export function searchLine(trace: any, storeCalls: StoreSearchCall[] = []): string {
   const asked = Array.isArray(trace?.searchArgs) && trace.searchArgs.length ? searchArgsLine(trace.searchArgs) : "";
-  const ran = (Array.isArray(trace?.tools) ? trace.tools : [])
+  const product = (list: any[]) => list
     .filter((t: any) => /(?:list_products|search_products|get_product|complementary_products)$/.test(String(t?.tool ?? "")))
     .map((t: any) => {
       // The first three products it returned (C pinned rating: which two titles answered every appliance).
       const titles = [...String(t.content ?? "").matchAll(/PRODUCT_\d+:\s*"([^"]+)"/g)].slice(0, 3).map((m) => JSON.stringify(m[1].slice(0, 60)));
-      return `${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)}${t.idOrigin ? ` id=${t.idOrigin}` : ""} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
+      return `${engineCall(t) ? "engine: " : ""}${String(t.tool).replace(/^.*\./, "")} ${JSON.stringify(t.args ?? {}).slice(0, 120)}${t.idOrigin ? ` id=${t.idOrigin}` : ""} -> ${t.outcome ?? "?"}${t.resultCount != null ? ` (${t.resultCount})` : ""}${titles.length ? ` [${titles.join(", ")}]` : ""}`;
     });
+  const parts = aroundDraft<any>(trace);
+  const ran = product(parts.before);
+  // A call after the first draft's check never shaped that draft (prod replay 2026-11-22: a search the engine
+  // ran for the rewrite read as the model's own).
+  const later = product(parts.after);
   // "sent": the args the store got, cleaned; "model args": what the model asked for (an audience there may
   // never have been sent).
   // "store requests": each search call as the store's connector got it, answered from the cached catalogue
   // (local), by the store (live), or not asked because the call's live requests were used up (capped).
-  return [asked ? `sent: ${asked}` : "", ran.length ? `model args: ${ran.join("; ")}` : "", storeCalls.length ? `store requests: ${storeRequestsLine(storeCalls)}` : ""].filter(Boolean).join(" | ") || "none";
+  return [asked ? `sent: ${asked}` : "", ran.length ? `model args: ${ran.join("; ")}` : "", later.length ? `after the draft: ${later.join("; ")}` : "", storeCalls.length ? `store requests: ${storeRequestsLine(storeCalls)}` : ""].filter(Boolean).join(" | ") || "none";
 }
 
 export function stagesLine(trace: any): string {
   const st = trace?.stageMs ?? {};
   const marks = Object.entries(st).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => `${k}=${Number(v)}`).join(" ");
   // Argument NAMES only (never values: a search value is the customer's words).
-  const tools = ((trace?.tools ?? []) as any[]).map((x) => `${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}${x.args && Object.keys(x.args).length ? `:{${Object.keys(x.args).join(",")}}` : ""}`).join(" ");
-  return `- stages: ${marks || "-"} | rounds=${trace?.rounds ?? "?"} rewriteRounds=${trace?.rewriteRounds ?? 0} autoLookupMs=${trace?.autoLookupMs ?? 0} rewriteMs=${trace?.rewriteMs ?? 0} | tools: ${tools || "-"}`;
+  const each = (list: any[]) => list.map((x) => `${engineCall(x) ? "engine:" : ""}${x.tool}:${x.outcome ?? x.decision ?? "?"}:${Number(x.ms) || 0}ms${x.retried ? ":retried" : ""}${x.args && Object.keys(x.args).length ? `:{${Object.keys(x.args).join(",")}}` : ""}`).join(" ");
+  const parts = aroundDraft<any>(trace);
+  const tools = each(parts.before);
+  const later = each(parts.after);
+  return `- stages: ${marks || "-"} | rounds=${trace?.rounds ?? "?"} rewriteRounds=${trace?.rewriteRounds ?? 0} autoLookupMs=${trace?.autoLookupMs ?? 0} rewriteMs=${trace?.rewriteMs ?? 0} | tools: ${tools || "-"}${later ? ` | after the draft: ${later}` : ""}`;
 }
 
 /** The report's path: --out as given, "{run}" in it replaced by the run's time; by default /tmp/replay-v2-<time>.md. */

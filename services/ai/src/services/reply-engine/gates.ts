@@ -545,20 +545,54 @@ const numbersIn = (t: string) => new Set((String(t ?? "").match(/\d+(?:[.,]\d+)?
 // A product's price from the knowledge while the store says otherwise (prod replay 2026-11-17, NE'A:
 // 178 from a document, the store 160.20): the store wins, and a product price needs a store read.
 const PRICE_IN = /(?:₪\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:₪|ש["״']?ח|NIS|ILS|shekels?))/giu;
-export function priceAgainstStore(reply: string, candidates: Array<{ title: string; price?: number | null; was?: number | null }>, tools: ToolRunRecord[], storeOffered: boolean): string[] {
+// The product may be one an earlier turn read (prod replay 2026-11-22, the same conversation: no read this turn, the
+// rewrite named the shown product and gave it the document's 178): the price read then is carried in the state, and
+// it wins the same way. A regular price alone is no price of a product on sale: it counts only next to the sale price.
+const SHIPPING_PRICE = /(?<![\u0590-\u05FF])[ושכלבמה]{0,3}(?:משלוח|משלוחים|שליח|שליחות)(?![\u0590-\u05FF])|\b(?:shipping|delivery)\b/iu;
+/** A price stays in the form it was read in ("160.20"): that form is what grounds a price the reply says. */
+export type StorePrice = { title: string; price?: number | string | null; was?: number | string | null };
+const sameTitle = (a: unknown, b: unknown) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
+/** The products of earlier turns that this turn did not read again: this turn's read is the newer one. */
+const carriedOnly = (candidates: StorePrice[], carried: StorePrice[]) => carried.filter((c) => c?.title && !candidates.some((k) => sameTitle(k?.title, c.title)));
+export function priceAgainstStore(reply: string, candidates: StorePrice[], tools: ToolRunRecord[], storeOffered: boolean, carried: StorePrice[] = []): string[] {
   const read = tools.some((t) => /list_products|search_products|get_product|variation/i.test(t.tool) && t.outcome === "ok");
   const toolText = tools.map((t) => String(t.content ?? "")).join("\n");
   const out: string[] = [];
+  const near = (a: unknown, p: number) => a != null && Math.abs(Number(a) - p) < 0.01;
+  const said = [...String(reply ?? "").matchAll(PRICE_IN)].map((m) => Number(String(m[1] ?? m[2]).replace(",", ".")));
+  // Its price; or its regular price when the reply gives the sale price too.
+  const own = (c: StorePrice, p: number) => near(c.price, p) || (near(c.was, p) && said.some((q) => near(c.price, q)));
+  const names = (x: string, c: StorePrice) => !!c?.title && x.toLowerCase().includes(String(c.title).toLowerCase());
+  const earlier = carriedOnly(candidates, carried);
+  const notDocumentText = tools.filter((t) => !/(?:^|\.)search_knowledge$/.test(t.tool)).map((t) => String(t.content ?? "")).join("\n");
+  // What the store's own product reads of this turn said (a read that brought no candidate still read a price).
+  const storeText = tools.filter((t) => /list_products|search_products|get_product|variation/i.test(t.tool) && t.outcome === "ok").map((t) => String(t.content ?? "")).join("\n");
   for (const x of String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []) {
     const prices = [...x.matchAll(PRICE_IN)].map((m) => Number(String(m[1] ?? m[2]).replace(",", ".")));
     if (!prices.length) continue;
-    const named = candidates.filter((c) => c?.title && x.toLowerCase().includes(String(c.title).toLowerCase()) && c.price != null);
+    const named = candidates.filter((c) => names(x, c) && c.price != null);
     // The store's own price for a product this sentence names, and the sentence says another.
-    if (named.length && prices.some((p) => !named.some((c) => Math.abs(Number(c.price) - p) < 0.01 || (c.was != null && Math.abs(Number(c.was) - p) < 0.01)))) { out.push(x.trim().slice(0, 120)); continue; }
+    if (named.length && prices.some((p) => !named.some((c) => own(c, p)))) { out.push(x.trim().slice(0, 120)); continue; }
+    // A product an earlier turn read, named with a price, and none of the sentence's prices is the one read then.
+    // A sentence about shipping may give the shipping's price beside the product's name.
+    const shown = named.length || SHIPPING_PRICE.test(x) ? [] : earlier.filter((c) => names(x, c));
+    const priced = shown.filter((c) => c.price != null);
+    if (priced.length && !prices.some((p) => priced.some((c) => near(c.price, p)) || storeText.includes(String(p)))) { out.push(x.trim().slice(0, 120)); continue; }
     // A product price with no store read at all, from a document only.
-    if (storeOffered && !read && PRODUCT_NOUN.test(x) && prices.some((p) => !toolText.includes(String(p)))) out.push(x.trim().slice(0, 120));
+    if (storeOffered && !read && PRODUCT_NOUN.test(x) && prices.some((p) => !toolText.includes(String(p)))) { out.push(x.trim().slice(0, 120)); continue; }
+    // A shown product whose price was never read: its price needs a store read of this turn, whatever else was
+    // read; a document searched this turn is a document still.
+    if (storeOffered && shown.length > 0 && !priced.length && prices.some((p) => !notDocumentText.includes(String(p)))) out.push(x.trim().slice(0, 120));
   }
   return out;
+}
+/** The store's own price of each product the reply names, for the correction: "<title>: 160.20 (regular 178)". */
+export function storePricesNamed(reply: string, candidates: StorePrice[], carried: StorePrice[] = []): string[] {
+  const text = String(reply ?? "").toLowerCase();
+  const n = (v: unknown) => String(v).trim();
+  return [...candidates, ...carriedOnly(candidates, carried)]
+    .filter((c) => c?.title && c.price != null && text.includes(String(c.title).toLowerCase()))
+    .map((c) => `${c.title}: ${n(c.price)}${c.was != null && !(Math.abs(Number(c.was) - Number(c.price)) < 0.01) ? ` (regular ${n(c.was)})` : ""}`);
 }
 
 // An order's state stated while every order lookup this turn failed (prod replay 2026-11-17, Urban:
@@ -1453,7 +1487,9 @@ export interface Gate3Input {
   /** Inactive (cancelled, failed, refunded) order numbers seen in earlier turns of this conversation. */
   knownInactiveOrders?: string[];
   /** This turn's products with their store prices (the store wins over a document's price). */
-  candidatePrices?: Array<{ title: string; price?: number | null }>;
+  candidatePrices?: StorePrice[];
+  /** The products earlier turns showed, each with the price read then (null when none was read). */
+  carriedPrices?: StorePrice[];
   /** The customer came back on the subject of an open team item. */
   onOpenItem?: boolean;
   /** The open team items' text (state.pending), for a payment question already being checked. */
@@ -1539,7 +1575,9 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   // (dev round k5 on 0b5f2b46).
   else if (bareTeamLine(reply) && infoQuestion(i.incomingMessage) && !productAskNow(i.incomingMessage ?? "") && knowledgeSpeaksTo(i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "knowledge_has_it" });
   if (couponSourceMissed(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"))) problems.push({ kind: "coupon_source" });
-  if (namelessProducts(reply, i.incomingMessage, i.cards, i.candidateTitles ?? [], !!i.listAppended)) problems.push({ kind: "nameless_products" });
+  // A product an earlier turn showed is a name too (prod replay 2026-11-22: the draft named the shown product, was
+  // told to name products with their prices, and the rewrite took a price from a document).
+  if (namelessProducts(reply, i.incomingMessage, i.cards, [...(i.candidateTitles ?? []), ...(i.carriedPrices ?? []).map((c) => c.title)], !!i.listAppended)) problems.push({ kind: "nameless_products" });
   const tips = unsafeTips(reply, i.knowledge ?? "", !!i.safety);
   if (tips.length) problems.push({ kind: "unsafe_tip", claims: tips });
   const echoed = i.customerText != null ? echoedSizes(reply, i.customerText, i.sourceText ?? "", i.candidateTitles ?? []) : [];
@@ -1560,8 +1598,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (inactive.length) problems.push({ kind: "inactive_order_unlabelled", claims: inactive });
   const source = ungroundedSource(i.incomingMessage, reply, [...(i.recentInbound ?? []).slice(-4, -1), ...(i.previousBotReplies ?? []).slice(-2)].join("\n"), i.knowledge ?? "");
   if (source.length) problems.push({ kind: "ungrounded_source", claims: source });
-  const priceClash = priceAgainstStore(reply, i.candidatePrices ?? [], i.tools, i.toolsOffered.some((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n)));
-  if (priceClash.length) problems.push({ kind: "price_against_store", claims: priceClash });
+  const priceClash = priceAgainstStore(reply, i.candidatePrices ?? [], i.tools, i.toolsOffered.some((n) => /(?:^|\.)(?:list_products|search_products)$/.test(n)), i.carriedPrices ?? []);
+  if (priceClash.length) problems.push({ kind: "price_against_store", claims: priceClash, store: storePricesNamed(reply, i.candidatePrices ?? [], i.carriedPrices ?? []) });
   const orderState = orderStateWithoutLookup(reply, i.tools);
   if (orderState.length) problems.push({ kind: "order_state_unread", claims: orderState });
   const media = claimsAttachment(reply, i.recentInbound ?? [i.incomingMessage]);
@@ -2126,7 +2164,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "device_mismatch") lines.push(`- You offered a product for another device than the customer's (${p.claims.join("; ")}). Offer only what fits their own device, from the search or the knowledge's device table; if nothing does, say so and ask.`);
     if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
     if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Say it is not known here and put the question in team_question; never guess a source.`);
-    if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). Read the product (search or get_product) and give the store's price.`);
+    if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). ${p.store?.length ? `The store's price: ${p.store.join("; ")}. Give that one; a regular price only next to it, as the price before the sale.` : "Read the product (search or get_product) and give the store's price."}`);
     if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
@@ -2136,7 +2174,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "dangling_reference") lines.push(`- These sentences point at a list or cards that this message does not carry (${p.claims.join("; ")}). Name the items themselves in the text, or leave the pointer out.`);
     if (p.kind === "no_recommendation") lines.push("- The customer asked you to recommend. Pick one or two of the products the search returned and say why, from their own data (price, size, level, features); or, if you truly cannot choose, ask ONE question that decides it. Never neither.");
     if (p.kind === "card_reference") lines.push("- No picture or card goes out with this reply: do not refer to one (\"בתמונה\", \"מצורף\"). Name the product instead.");
-    if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with its price, or put their keys in cards.");
+    if (p.kind === "nameless_products") lines.push("- You present products without naming any. Name one to three of the products the search returned, each with the price the search gave for it (never a price from a document), or put their keys in cards.");
     if (p.kind === "ignored_yes") lines.push("- The customer said yes to your own offer of a person (or that it is urgent). Hand over now: set handoff, and say a person from the team will continue here.");
     if (p.kind === "gave_up_search") lines.push("- The store search took too long. Answer from the business's knowledge first (a device, size or compatibility table answers it; name the fitting products from it). Else call the search once more with a narrower query (one or two words, per_page 5). Never say you could not check, and do not send it to the team.");
     if (p.kind === "noun_not_tried") lines.push("- Your search was narrower than her ask and came back empty; the store was searched for the product itself above. Answer from what it returned: say which of them come in what she asked for, or which colours or options they do come in. No team hand-over when the products answer it.");

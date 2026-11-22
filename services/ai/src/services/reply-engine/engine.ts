@@ -704,6 +704,10 @@ export const listAsk = (incoming: string): boolean => searchHasFilter({}, incomi
 /** The kind of product a cheap ask names ("חולצה" in "יש חולצה זולה?"), or none ("מה הכי זול אצלכם?"). */
 export const cheapNoun = (incoming: string): string | null => headNoun(normalizeQuotes(String(incoming ?? "")).replace(CHEAP_WORD, " ").replace(CHEAP_FILL, " "));
 const priceOf = (c: any): number | null => (c?.priceOnSite || c?.price == null || !Number.isFinite(Number(c.price)) || Number(c.price) <= 0 ? null : Number(c.price));
+/** The products earlier turns showed, each with the price read then as it was stored (none when the price was never read). */
+export function carriedPricesOf(offered: Array<{ title?: string | null; price?: number | string | null }> | null | undefined): Array<{ title: string; price: number | string | null }> {
+  return (offered ?? []).map((o) => ({ title: String(o?.title ?? "").trim(), price: priceOf(o) == null ? null : (o.price as number | string) })).filter((o) => o.title);
+}
 /** The products that can be shown (titled, in stock) and carry a price, cheapest first. */
 export function cheapestFirst<T extends { title?: string; price?: number | null; inventoryState?: string; priceOnSite?: boolean }>(list: T[]): T[] {
   return list.map((c, i) => ({ c, i, p: priceOf(c) })).filter((x) => x.c?.title && x.c.inventoryState !== "out_of_stock" && x.p != null).sort((a, b) => a.p! - b.p! || a.i - b.i).map((x) => x.c);
@@ -2075,7 +2079,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     customerText: inbound.join("\n"),
     openTeamText: openTeam.join("\n"),
     knownInactiveOrders: String(state.facts?.[INACTIVE_ORDERS_FACT] ?? "").split(",").filter(Boolean),
-    candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? Number(c.price) : null, was: c?.discount?.was != null && !c?.priceOnSite ? Number(c.discount.was) : null })).filter((c: any) => c.title),
+    candidatePrices: candidates.map((c: any) => ({ title: String(c?.title ?? ""), price: c?.price != null && !c?.priceOnSite ? c.price : null, was: c?.discount?.was != null && !c?.priceOnSite ? c.discount.was : null })).filter((c: any) => c.title),
+    carriedPrices: carriedPricesOf(state.offeredItems),
     onOpenItem: openTeam.some((t) => sameIssue(t, String(opts.incomingMessage ?? ""))),
     safety: safetyConversation,
     searchFailed: turnTools.records.some((r) => /list_products|search_products/.test(r.tool) && (r.outcome === "timeout" || r.outcome === "error")),
@@ -2091,6 +2096,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   let escalation: AIBotReplyResult["escalation"] = turnTools.escalation as any;
   let verdict = output ? gate3(g3Input(output)) : { ok: false, problems: [{ kind: "style" as const, codes: ["empty"] }] };
+  // Log only: the calls made up to the first draft's check. Every later one ran after the draft.
+  trace.toolsAtFirstGate = turnTools.records.length;
   // The canned team line goes out at most once per conversation (prod replay 2:
   // it replaced real answers turn after turn). Ours in the history, or the state's mark.
   const cannedSent = !!state.facts?.[CANNED_SENT_FACT] || history.some((m: any) => m.direction === "OUTBOUND" && isCannedTeamLine(m.body));
