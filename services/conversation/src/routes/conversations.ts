@@ -141,18 +141,22 @@ router.get("/unread-counts", async (req: Request, res: Response) => {
 });
 
 /**
- * PUT /:id/relevance { category: "business" | "personal" } -> { data: relevance }
+ * PUT /:id/relevance { category: "business" | "personal" } -> { data: relevance, senderRule? }
  * A person's override of the relevance label (2026-11-17). Sticks: the classifier never relabels it.
  * 404 when the conversation is not this viewer's to see.
+ * senderRule (2026-11-22), beside `data` and only when the mark changed what the sender rule does: "applied"
+ * (a personal mark: this sender's new conversations on this channel come in as personal) or "lifted" (a
+ * business mark that ends that). Absent in every other case: email, a channel with no relevance filter, a
+ * first business mark. The service decides it; this route only passes it on.
  */
 router.put("/:id/relevance", async (req: Request, res: Response) => {
   try {
     const category = typeof req.body?.category === "string" ? req.body.category : "";
-    const relevance = await conversationService.setRelevanceOverride(req.tenantId!, req.params.id as string, category, {
+    const result = await conversationService.setRelevanceOverride(req.tenantId!, req.params.id as string, category, {
       userId: req.user!.userId, role: req.user!.role, departmentId: (req.user as any)?.departmentId,
     });
-    if (!relevance) { res.status(404).json({ error: "Conversation not found" }); return; }
-    res.json({ data: relevance });
+    if (!result?.relevance) { res.status(404).json({ error: "Conversation not found" }); return; }
+    res.json(result.senderRule ? { data: result.relevance, senderRule: result.senderRule } : { data: result.relevance });
   } catch (err: any) {
     if (err?.status === 400) { res.status(400).json({ error: err.message }); return; }
     console.error("Relevance override error:", err);
