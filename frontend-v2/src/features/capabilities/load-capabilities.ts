@@ -135,9 +135,10 @@ export async function loadShopifyAvailability(): Promise<ShopifyAvailability | n
  * nothing to claim (404/410) or the read failed. Never throws.
  */
 export const loadShopifyClaim = cache(async (): Promise<PendingInstall | null> => {
-  const pending = (await cookies()).get(PENDING_COOKIE)?.value;
-  if (!pending) return null;
   try {
+    // Inside the try: every app page waits on this, so even the cookie read must not throw.
+    const pending = (await cookies()).get(PENDING_COOKIE)?.value;
+    if (!pending) return null;
     return await serverApi().get({
       endpoint: integrationEndpoints.shopifyPending(),
       // `{ data: {...} }`, unwrapped by the client (ca1156f9).

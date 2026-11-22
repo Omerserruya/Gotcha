@@ -31,7 +31,15 @@ describe('★★ the fonts are the repo’s own', () => {
 
   it('every family the tokens name has faces; the Hebrew ones cover Hebrew', () => {
     const named = [...families.matchAll(/--font-[a-z-]+: '?([^';]+?)'?;/g)].map(([, f]) => f);
-    expect(named).toHaveLength(5);
+    // Six: Google Sans joined for Google's own sign-in button (81c7c4e9, OFL 1.1, served from here).
+    expect(named).toEqual([
+      'Archivo',
+      'Heebo',
+      'Instrument Serif',
+      'Frank Ruhl Libre',
+      'IBM Plex Mono',
+      'Google Sans',
+    ]);
     for (const family of named) {
       expect(
         faces.some((f) => f.family === family),

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';
 import { useRef, type ReactNode } from 'react';
@@ -247,7 +247,12 @@ describe('★★ TopicReview', () => {
     await userEvent.click(screen.getByTestId('topic-reject-t1'));
     expect(rejectTopic).toHaveBeenCalledWith('imp1', 't1');
     expect(screen.getByRole('alert')).toHaveTextContent(T.refused.failed);
-    expect(approveButton()).toBeEnabled();
+    /*
+     * The refusal is drawn before the transition settles; `busy` clears just
+     * after. Under a loaded run that gap is visible: wait for the state, not a
+     * longer clock (release 65268aa0, 2026-11-22).
+     */
+    await waitFor(() => expect(approveButton()).toBeEnabled());
   });
 
   it('★★ the most-asked 30 first; "Show more" draws the rest', async () => {

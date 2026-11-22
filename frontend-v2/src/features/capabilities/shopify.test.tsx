@@ -472,6 +472,14 @@ describe('★★ the pending install, read whole (App Review 132211)', () => {
     expect(call.headers.cookie).toBe('gotcha_shopify_pending=p1');
   });
 
+  it('★ every app page waits on it: a cookie read that throws is no prompt, never a crash', async () => {
+    jar.get.mockImplementation(() => {
+      throw new Error('cookies() outside a request');
+    });
+    await expect(loadShopifyClaim()).resolves.toBeNull();
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it('an action we do not know is no prompt - never a guess', async () => {
     jar.get.mockReturnValue({ value: 'p1' });
     get.mockResolvedValueOnce({ shopDomain: 'new.myshopify.com', action: 'merge' });
