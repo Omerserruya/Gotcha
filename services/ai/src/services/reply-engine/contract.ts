@@ -172,7 +172,7 @@ export type ClaimProblem =
   | { kind: "not_narrowed"; extra: string[] }
   | { kind: "ungrounded_source"; claims: string[] }
   | { kind: "price_against_store"; claims: string[]; store?: string[] }
-  | { kind: "order_state_unread"; claims: string[] }
+  | { kind: "order_state_unread"; claims: string[]; noLookup?: true }
   | { kind: "claims_attachment"; claims: string[] }
   | { kind: "device_mismatch"; claims: string[] }
   | { kind: "ungrounded_negative_fit"; claims: string[]; fits?: string[] }

@@ -1668,9 +1668,10 @@ describe("657e5f85 rating: engine passes", () => {
   it("★ the turn a charge complaint opens: no state or cause, a person takes it", async () => {
     h.responses.push({ toolCalls: [respond("op1", { reply: "ההזמנה 97858 בוטלה כי התשלום לא נקלט במערכת." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים ואין לי הזמנה" }, "autonomous");
+    // An order's and a payment's state with no lookup this turn is no fact (2026-11-23): it never goes out.
+    expect(r.trace.gate3.problems.find((p: any) => p.kind === "order_state_unread")).toMatchObject({ noLookup: true });
     expect(r.reply ?? "").not.toMatch(/בוטלה|לא נקלט/);
     handedOver(r);
-    expect(r.trace.teamQuestion).toBeTruthy();
   });
   it("★ a direct ask next to an old team item is never left without a reply, and gets no holding line", async () => {
     const { prisma } = await import("@chatcenter/shared");

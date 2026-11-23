@@ -688,6 +688,23 @@ export function orderStateWithoutLookup(reply: string, tools: ToolRunRecord[]): 
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => ORDER_STATE.test(x) && ORDER_WORD.test(x)).map((x) => x.trim().slice(0, 120));
 }
 
+/**
+ * An order's state, or a payment's, stated with NO order lookup this turn (2026-11-23: "ההזמנה בוטלה כי התשלום לא
+ * נקלט" went out on "תעדכנו בבקשה ושלחו לי מספר הזמנה"; the old hold used to replace it in a held chat). Nothing
+ * grounds it: not the bot's own earlier lines, not a guess. Only her own words stand: a sentence that repeats a
+ * state she stated herself ("you said it was cancelled") is hers. A failed lookup is orderStateWithoutLookup's.
+ */
+const PAYMENT_STATE = /(?<![\u0590-\u05FF])[וש]?(?:ה)?(?:תשלום|חיוב)\s+(?:לא\s+)?(?:נקלט|נקלטה|עבר|התקבל|בוצע|אושר)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:לא\s+)?נקלט\s+(?:ה)?(?:תשלום|חיוב)(?![\u0590-\u05FF])|\b(?:the\s+)?payment\s+(?:was\s+|has\s+been\s+|wasn'?t\s+|was\s+not\s+)?(?:received|declined|not received|processed)\b/iu;
+export function orderStateUnlooked(reply: string, tools: ToolRunRecord[], herWords: string[] = []): string[] {
+  const looked = tools.some((t) => (ORDER_LOOKUP_TOOL.test(t.tool) || /tracking|fulfil?lment|shipment/i.test(t.tool)) && (t.outcome === "ok" || t.outcome === "empty"));
+  if (looked || tools.some((t) => t.outcome === "ok" && PAYMENT_EVIDENCE.test(String(t.content ?? "")))) return [];
+  const hers = herWords.join("\n");
+  const said = (x: string) => { const m = (x.match(ORDER_STATE) ?? x.match(PAYMENT_STATE))?.[0]; return !!m && hers.includes(m.trim()); };
+  return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [])
+    .filter((x) => ((ORDER_STATE.test(x) && ORDER_WORD.test(x)) || PAYMENT_STATE.test(x)) && !said(x))
+    .map((x) => x.trim().slice(0, 120));
+}
+
 /** Sentences stating a number with a unit that no evidence this turn holds. */
 export function ungroundedNumbers(reply: string, evidence: string): string[] {
   const known = numbersIn(evidence);
@@ -1689,6 +1706,10 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (priceClash.length) problems.push({ kind: "price_against_store", claims: priceClash, store: storePricesNamed(reply, i.candidatePrices ?? [], i.carriedPrices ?? []) });
   const orderState = orderStateWithoutLookup(reply, i.tools);
   if (orderState.length) problems.push({ kind: "order_state_unread", claims: orderState });
+  else {
+    const unlooked = orderStateUnlooked(reply, i.tools, i.recentInbound ?? [i.incomingMessage]);
+    if (unlooked.length) problems.push({ kind: "order_state_unread", claims: unlooked, noLookup: true });
+  }
   const media = claimsAttachment(reply, i.recentInbound ?? [i.incomingMessage]);
   if (media.length) problems.push({ kind: "claims_attachment", claims: media });
   const optionClaims = optionClaimsWithoutVariations(reply, i.incomingMessage, i.tools);
@@ -2124,7 +2145,9 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   }
   // An order said to be missing: the customer's own orders, by the identity the channel proves (no selector).
   const ownOrders = toolsOffered.find((n) => /(?:list_customer_orders|get_customer_orders|find_latest_order)$/.test(n));
-  if (ownOrders && absence && absence.claims.some((c) => ORDER_ABSENCE.test(c)) && !done.some((t) => ORDER_LOOKUP_TOOL.test(t.tool))) {
+  // An order's state said with no lookup (2026-11-23): her own orders first, the same read.
+  const stateUnlooked = problems.some((p: any) => p.kind === "order_state_unread" && p.noLookup);
+  if (ownOrders && ((absence && absence.claims.some((c) => ORDER_ABSENCE.test(c))) || stateUnlooked) && !done.some((t) => ORDER_LOOKUP_TOOL.test(t.tool))) {
     out.unshift({ id: "auto_orders_1", function: { name: ownOrders, arguments: JSON.stringify({}) } });
   }
   // An explanation the model answered without a lookup: the knowledge, by the customer's words.
@@ -2255,7 +2278,8 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
     if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Do not guess a source: if the knowledge does not say, hand over (set handoff).`);
     if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). ${p.store?.length ? `The store's price: ${p.store.join("; ")}. Give that one; a regular price only next to it, as the price before the sale.` : "Read the product (search or get_product) and give the store's price."}`);
-    if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Never state the order's state: try the lookup once more, and if it still fails hand over (set handoff).`);
+    if (p.kind === "order_state_unread" && p.noLookup) lines.push(`- You stated an order's or a payment's state that no lookup this turn returned (${p.claims.join("; ")}). The customer's own orders were looked up now when that tool is offered: answer only from what came back; if nothing did, never state it, ask for the order number or hand over (set handoff).`);
+    else if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Never state the order's state: try the lookup once more, and if it still fails hand over (set handoff).`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
     if (p.kind === "partial_return_policy") lines.push("- The business has both returns and exchanges: give both, each with its time limit, from the knowledge.");

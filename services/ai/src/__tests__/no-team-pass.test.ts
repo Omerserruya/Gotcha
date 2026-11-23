@@ -115,3 +115,19 @@ describe("★ D2b passCovered: answered means no pass (the prod lines)", () => {
     expect(shortFollowUp("אני מחפשת משטח הזזה למיקסר הגדול שלי שעומד ליד הכיור במטבח")).toBe(false);
   });
 });
+
+describe("★ an order's or a payment's state with no lookup this turn is never sent (2026-11-23, the old hold masked it)", () => {
+  it("the prod line, and the English one", async () => {
+    const { orderStateUnlooked } = await import("../services/reply-engine/gates");
+    expect(orderStateUnlooked("ההזמנה בוטלה כי התשלום לא נקלט.", [], ["תעדכנו בבקשה ושלחו לי מספר הזמנה"])).toEqual(["ההזמנה בוטלה כי התשלום לא נקלט."]);
+    expect(orderStateUnlooked("התשלום לא עבר, אז כדאי לנסות שוב.", [], ["מה קורה?"])).toHaveLength(1);
+    expect(orderStateUnlooked("Your order was shipped yesterday.", [], ["any news?"])).toHaveLength(1);
+  });
+  it("not after a lookup that answered, not when it repeats her own words, not on a policy sentence", async () => {
+    const { orderStateUnlooked } = await import("../services/reply-engine/gates");
+    const ok = [{ tool: "woocommerce.get_order", outcome: "ok", content: "{\"status\":\"cancelled\"}" } as any];
+    expect(orderStateUnlooked("ההזמנה בוטלה.", ok, ["מה עם ההזמנה?"])).toEqual([]);
+    expect(orderStateUnlooked("מבינים שההזמנה בוטלה, מצטערים.", [], ["ההזמנה בוטלה בלי שביקשתי"])).toEqual([]);
+    expect(orderStateUnlooked("משלוחים יוצאים בימים א עד ה.", [], ["מתי שולחים?"])).toEqual([]);
+  });
+});
