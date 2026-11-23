@@ -18,7 +18,7 @@ import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowe
 import { resolveProductRef, salePriceLine } from "../product-search.service";
 import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
-import { takeShowLine, ungroundedPrices, stripPrices, asksSomething } from "../reply-style-check.service";
+import { takeShowLine, ungroundedPrices, stripPrices, asksSomething, styleCustomerAddress } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
 import { getCrmAdapter } from "../connectors/crm-adapter-resolver";
 import { invalidateCrmPrefetch } from "../crm-prefetch.service";
@@ -1702,7 +1702,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const ownerRules = readOwnerRules(config as any, (policyRow as any)?.data ?? null);
   if (hasOwnerRules(ownerRules)) (trace as any).ownerRules = ownerRuleCounts(ownerRules);
   // A rule of the owner's that sets how the customer is addressed: that form is no style fault this turn.
-  const ownerAddress = ownerAddressForm(ownerRules.rules);
+  // Or the employee's own setting (style.customerAddress, Omer 2026-11-23); a rule that sets a form wins.
+  const styleAddress = styleCustomerAddress((config as any).style);
+  const ownerAddress = ownerAddressForm(ownerRules.rules) ?? styleAddress;
   if (ownerAddress) (trace as any).ownerAddress = ownerAddress;
   const wooTurn = shopifyTurn ? null : wooRaw;
   Object.assign(stageMs, Object.fromEntries(Object.entries(loadMs).map(([k, v]) => [`load_${k}`, v])));
@@ -1901,6 +1903,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
 
   // ── Prompt ──
   const prefix = buildStablePrefix({
+    customerAddress: styleAddress,
     agent: { name: config.name, role: config.role, roleMission: skills.find((k) => k.source === "role")?.whenToUse ?? null, persona: (config as any).persona, goal: (config as any).goal, successCriteria: (config as any).successCriteria, salesContext: (config as any).salesContext, escalationMessage: config.escalationMessage },
     // The documents' street address too when the profile's has no house number (prod replay 11,
     // Tehila: the profile says only "הסטודיו נמצא בנהריה").

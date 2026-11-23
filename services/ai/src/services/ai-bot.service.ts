@@ -124,7 +124,7 @@ import { mergeKnowledgeFields, isShopFloor } from "./prompt-builder.service";
 import { loadRecentHistory, historyChatMessages, buildStateNote, DEFAULT_TIME_ZONE } from "./conversation-history.service";
 import { classifySituation } from "./historical-intelligence/brand-voice";
 import { capped } from "./judgement-cap";
-import { checkReplyStyle, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, stepsAsked, stepsOnLines, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards, unbackedOffer, shownOptionsOf, fixHebrewForms } from "./reply-style-check.service";
+import { checkReplyStyle, styleCustomerAddress, FIXED_IN_CODE, fixInCode, SHOW_ME, addsNothing, GIFT_WITH_BUDGET, takeShowLine, dropIgnoredSizeQuestion, normalizePunctuation, finalTextIssues, stepsAsked, stepsOnLines, dropBrokenSentences, safeTurnLine, finalRewriteInstruction, type FinalGateContext, asksToResend, sendAgainLine, choiceAckLine, buildStyleCorrective, polishReply, closeAfterThanks, closingReplyFor, stripStrayClose, askedColours, variationsOfferColour, stripTrailingOffer, stripTrailingPush, asksToShowInstead, asksSomething, DONT_MIND, notFoundByNameLine, finalizeRewrite, cannotArrangeLine, cardSendTrouble, stripCardSendTrouble, pointsToCardsBelow, dropBelow, cardsAgainLine, cardsAboveLine, lookItUpLine, proseOutnumbersCards, unbackedOffer, shownOptionsOf, fixHebrewForms } from "./reply-style-check.service";
 import { tenantTimeZone } from "./assistant-query.service";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -3427,7 +3427,7 @@ async function generateAIBotReplyInner(
   // to infer from the transcript, last before it writes (recency wins).
   chatMessages.push({
     role: "system",
-    content: buildStateNote({ rows: messages as any, now: Date.now(), timeZone: historyTimeZone, customerForm: ctxSlot.grammaticalAddress ?? null }),
+    content: buildStateNote({ rows: messages as any, now: Date.now(), timeZone: historyTimeZone, customerForm: ctxSlot.grammaticalAddress ?? null, addressForm: styleCustomerAddress((config as any).style) }),
   });
 
   // Stop asking and show (Omer, 2026-10-26: "לא משנה האמת" got the same
@@ -5598,6 +5598,7 @@ async function generateAIBotReplyInner(
         isFirstReply: priorOutbound.length === 0,
         incomingMessage: opts.incomingMessage ?? "",
         customerForm: ctxSlot.grammaticalAddress ?? null,
+        addressForm: styleCustomerAddress((config as any).style),
         employeeGender: /^(f|female|feminine|woman)/.test(g) ? "feminine" : /^(m|male|masculine|man)/.test(g) ? "masculine" : null,
         employeeName: config.name,
         productFactsAvailable: !!productEnvelope
@@ -6036,6 +6037,7 @@ async function generateAIBotReplyInner(
     try {
       const gateCards = (productTurn?.staged.length ?? 0) > 0;
       const gateCtx: FinalGateContext = {
+        addressForm: styleCustomerAddress((config as any).style),
         locale: replyLocale,
         isFirstReply: !(messages as any[]).some((m) => m.direction === "OUTBOUND"),
         incomingMessage: opts.incomingMessage ?? "",

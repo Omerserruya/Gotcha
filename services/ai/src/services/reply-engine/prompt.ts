@@ -142,6 +142,8 @@ export function voiceForPrompt(voice: unknown): string {
 }
 
 export interface PrefixInput {
+  /** The employee's customer-address setting: "feminine", or null for the neutral default (Omer 2026-11-23). */
+  customerAddress?: "feminine" | null;
   agent: { name: string; role: string; roleMission?: string | null; persona?: any; goal?: string | null; successCriteria?: string | null; salesContext?: any; escalationMessage?: string | null };
   company: CompanyContext | null;
   locale: "he" | "en";
@@ -169,6 +171,9 @@ export function buildStablePrefix(p: PrefixInput): string {
   const parts: string[] = [PLATFORM_RULES];
   if (p.locale === "he" && HEBREW) {
     parts.push(HEBREW);
+    if (p.customerAddress === "feminine") {
+      parts.push("## Addressing the customer (the business's setting)\nThis business addresses its customers in the feminine form. Address the customer in the feminine (\"תרצי\", \"את מחפשת\", \"שלחי לי\", \"בשבילך\"), never in the masculine and never with a slash form. This replaces the neutral-address rule above.");
+    }
     parts.push(
       "## Never write (the platform rejects these)\n" +
       "- \"מצאתי\" to narrate a search (\"לא מצאתי\" for an honest not-found is fine), \"שים לב\", \"מעדיף\" or \"מעדיפה\" to the customer, a slash form, a semicolon.\n" +

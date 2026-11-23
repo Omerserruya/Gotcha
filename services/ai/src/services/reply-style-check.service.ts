@@ -51,6 +51,11 @@ export interface StyleCheckContext {
   incomingMessage: string;
   /** Kept for callers; the customer is always addressed neutrally (Omer, 2026-10-26), whatever form they use. */
   customerForm?: { form: string; confidence: string } | null;
+  /**
+   * The employee's setting (style.customerAddress, Omer 2026-11-23): "feminine" addresses the customer in the feminine,
+   * so only the masculine is a gendered address; neutral wording is always fine. Absent: neutral (the default).
+   */
+  addressForm?: "feminine" | "masculine" | null;
   /** The employee's own configured grammatical gender, if any. */
   employeeGender?: "feminine" | "masculine" | null;
   employeeName?: string | null;
@@ -123,6 +128,13 @@ const SLASH = new RegExp(`[${HE}]{2,12}\\/(?:[${HE}]{1,3}|את|אתה)(?![${HE}]
  * neutralSecondPerson) is built from the same lists, and a test holds the two together: a word added here with
  * no neutral form there fails it (prod replay e, L1677: "כתוב לי" was flagged and went out as written).
  */
+/** The employee's customer-address setting (AIAgent.style.customerAddress): "feminine", or null for the neutral default. */
+export function styleCustomerAddress(style: unknown): "feminine" | null {
+  let s: any = style;
+  if (typeof s === "string") { try { s = JSON.parse(s); } catch { s = null; } }
+  return s && typeof s === "object" && s.customerAddress === "feminine" ? "feminine" : null;
+}
+
 export const ADDRESS_WORDS = {
   masculine: ["אם מחפש", "אם אתה", "כשאתה", "תשלח", "תבחר", "תוכל", "תרצה", "תגיד", "תכתוב", "תלחץ", "תזמין", "אתה מעוניין", "אתה מחפש", "מעוניין לשמוע", "אם תרצה"],
   feminine: ["אם מחפשת", "אם את מחפשת", "כשאת", "תשלחי", "תבחרי", "תוכלי", "תרצי", "תגידי", "תכתבי", "תזמיני", "את מעוניינת", "את מחפשת", "אם תרצי"],
@@ -557,9 +569,14 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // 2026-10-26; eval e11 F03 "תוכל לבחור", B04 "מעדיפה"): following the
   // customer's form guessed wrong too often to be worth it.
   if (ctx.locale === "he") {
-    hit("gendered_address", toCustomer(MASC_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_MASC));
-    hit("gendered_address", toCustomer(FEM_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_FEM) ?? plain.match(FEM_PRONOUN));
-    hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER) ?? plain.match(PARTICIPLE_IN_QUESTION));
+    if (ctx.addressForm) {
+      // The business addresses its customers in one form: only the other one is a fault.
+      hit("gendered_address", addressFormsUsed(plain)[ctx.addressForm === "feminine" ? "masculine" : "feminine"]);
+    } else {
+      hit("gendered_address", toCustomer(MASC_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_MASC));
+      hit("gendered_address", toCustomer(FEM_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_FEM) ?? plain.match(FEM_PRONOUN));
+      hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER) ?? plain.match(PARTICIPLE_IN_QUESTION));
+    }
   }
 
   if (ctx.employeeGender === "feminine") hit("self_gender", plain.match(SELF_MASC) ?? plain.match(SELF_SHOW_MASC));

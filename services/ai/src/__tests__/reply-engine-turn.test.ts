@@ -5854,6 +5854,28 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(r2.reply ?? "").not.toMatch(/77/);
   });
 
+  it("★ B: the employee addresses customers in the feminine: \"תרצי\" goes out as written, the masculine is still fixed", async () => {
+    h.agentExtra = { style: { customerAddress: "feminine" } };
+    h.responses.push({ toolCalls: [respond("fa1", { reply: "תרצי לראות עוד דגמים בגוון הזה?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יפה, יש עוד?" }, "autonomous");
+    expect(r.trace.gate3.problems).toEqual([]);
+    expect(r.reply).toBe("תרצי לראות עוד דגמים בגוון הזה?");
+    expect((r.trace as any).ownerAddress).toBe("feminine");
+    expect(String(h.calls[0].messages[0].content)).toMatch(/addresses its customers in the feminine form/);
+    h.responses.length = 0; h.calls.length = 0;
+    h.responses.push({ toolCalls: [respond("fa2", { reply: "תרצה לראות עוד דגמים בגוון הזה?" })] }, { toolCalls: [respond("fa3", { reply: "תרצי לראות עוד דגמים בגוון הזה?" })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "יפה, יש עוד?" }, "autonomous");
+    expect(r2.trace.gate3.problems.some((p: any) => p.kind === "style" && p.codes.includes("gendered_address"))).toBe(true);
+    expect(r2.reply ?? "").not.toMatch(/תרצה/);
+  });
+
+  it("★ B default: no setting, the feminine is a fault as before", async () => {
+    h.responses.push({ toolCalls: [respond("fn1", { reply: "תרצי לראות עוד דגמים בגוון הזה?" })] }, { toolCalls: [respond("fn2", { reply: "רוצים לראות עוד דגמים בגוון הזה?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יפה, יש עוד?" }, "autonomous");
+    expect(r.trace.gate3.problems.some((p: any) => p.kind === "style" && p.codes.includes("gendered_address"))).toBe(true);
+    expect(r.reply ?? "").not.toMatch(/תרצי/);
+  });
+
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
     h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
     await runReplyEngineTurn(opts, "autonomous");
