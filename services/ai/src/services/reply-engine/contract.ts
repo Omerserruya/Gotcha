@@ -151,6 +151,7 @@ export type ClaimProblem =
   | { kind: "noun_not_tried"; noun: string }
   /** A delivery or order question answered "no info" or sent to the team without the order/tracking tools. */
   | { kind: "unread_order" }
+  | { kind: "unlooked_pass" }
   /** A coupon or policy question sent to the team without searching the knowledge. */
   | { kind: "unread_knowledge" }
   | { kind: "gave_up_search"; fromKnowledge?: boolean }

@@ -60,7 +60,7 @@ export const RESPOND_TOOL = {
         },
         handoff: { type: ["string", "null"], description: "ONLY for an explicit ask for a person, a strong complaint, a damaged item or a late order, or one of the business's own numbered hand-over rules: a short reason. It silences you for the rest of the chat. Otherwise null." },
         handoff_rule: { type: ["integer", "null"], description: "When the handoff follows one of the business's own numbered hand-over rules: that rule's number. Otherwise null (also when there is no such list)." },
-        team_question: { type: ["string", "null"], description: "A question the team must answer later (a discount, instalments, a detail you could not find). You keep the conversation. Otherwise null." },
+        team_question: { type: ["string", "null"], description: "Only with handoff: the customer's question that the knowledge, the product and the order tools did not answer after you looked, for the owner's list. Setting it hands the conversation to a person. Otherwise null." },
         cards: { type: "array", items: { type: "string" }, description: "PRODUCT_n keys to show as cards (card channels only)." },
       },
       required: ["reply", "state_update", "claims", "handoff", "handoff_rule", "team_question", "cards"],

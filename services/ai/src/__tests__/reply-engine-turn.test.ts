@@ -32,6 +32,8 @@ const h = vi.hoisted(() => ({
   lexicalFor: null as null | ((q: string) => any[]),
   policy: {} as Record<string, string>,
   teamQuestions: [] as any[],
+  /** Every automatic knowledge lookup's arguments (the gap flag among them). */
+  retrieveCalls: [] as any[],
   historyQueries: [] as any[],
   failReads: 0,
   chunks: null as any,
@@ -155,7 +157,7 @@ vi.mock("../services/discovery-integration.service", () => ({
   }))(h.groundSeq.length ? h.groundSeq.shift()! : h.groundTitle),
 }));
 vi.mock("../services/knowledge.service", () => ({
-  retrieveRelevantChunks: async () => h.chunks ?? [], buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
+  retrieveRelevantChunks: async (...a: any[]) => { h.retrieveCalls.push(a); return h.chunks ?? []; }, buildKnowledgeContext: (c: any[]) => c.map((x) => x.content).join("\n"), shouldRecordKnowledgeGap: () => false,
   lexicalKnowledge: async (_t: string, q: string) => (h.lexicalFor ? h.lexicalFor(q) : h.lexical), mergeKnowledge: (v: any[], l: any[]) => [...v, ...l],
   knowledgeLimit: () => 5, documentAddress: async () => h.docAddress,
 }));
@@ -182,9 +184,20 @@ import { runReplyEngineTurn } from "../services/reply-engine/engine";
 const opts = { tenantId: "t1", conversationId: "c1", aiAgentId: "ag1", incomingMessage: "יש לכם תיק בד?" };
 const tc = (id: string, name: string, args: any) => ({ id, function: { name, arguments: JSON.stringify(args) } });
 const respond = (id: string, a: any) => tc(id, "respond", { state_update: { stage: "choosing", intent: "תיק בד", facts: {}, pending: [] }, claims: [], handoff: null, cards: [], ...a });
+// Omer 2026-11-23: nothing is "passed to the team" any more. A turn answers, or it hands over: the approved line ends
+// the reply, the escalation carries it word for word for the worker, and no team claim is left.
+const HAND = "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.";
+const TEAM_CLAIM = /צוות|תגיע כאן|בבדיקה|ממתינים|נחזור|בבירור/;
+const handedOver = (r: any) => {
+  expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
+  expect(String(r.reply ?? "").endsWith(HAND)).toBe(true);
+  expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
+  expect(r.escalation?.customerLine).toBe(r.reply);
+  expect(r.escalation?.announce).toBe(true);
+};
 
 beforeEach(() => {
-  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries", "settingReads"] as const) (h as any)[k].length = 0;
+  for (const k of ["responses", "calls", "scopeSeen", "dispatched", "submitted", "upserts", "audits", "staged", "teamQuestions", "historyQueries", "settingReads", "retrieveCalls"] as const) (h as any)[k].length = 0;
   h.offerClose = false;
   h.channel = "WEBCHAT";
   h.idleRow = null;
@@ -268,7 +281,7 @@ describe("one v2 turn, live", () => {
     expect(r.trace.rounds).toBe(2);
   });
 
-  it("Gate 3: one targeted rewrite, then the safe reply; nothing asked for a person, so a team question, not a handoff", async () => {
+  it("Gate 3: one targeted rewrite, then the safe reply: nothing can be said, so a real hand-over (no team question any more)", async () => {
     h.responses.push(
       { toolCalls: [respond("r1", { reply: "אפשר לשלם בתשלומים, ₪120 לחודש." })] },
       { toolCalls: [respond("r2", { reply: "בטח, ₪150 בלבד לחודש." })] },
@@ -281,7 +294,9 @@ describe("one v2 turn, live", () => {
     expect(h.calls[2].messages.find((m: any) => m.role === "system" && /could not be sent as written/.test(m.content))?.content).toMatch(/Write the full answer/);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(r.reply).not.toMatch(/₪/);
-    expect(r.escalation).toBeNull();
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
+    // The question is on the owner's list, from the hand-over turn.
     expect(h.teamQuestions).toHaveLength(1);
   });
 
@@ -295,7 +310,7 @@ describe("one v2 turn, live", () => {
     expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
   });
 
-  it("a handoff nobody asked for is rewritten into an answer plus a team question (eval: discount, instalments)", async () => {
+  it("a handoff nobody asked for is rewritten once; a rewrite that still cannot answer is the hand-over (eval: discount, instalments)", async () => {
     const q = { ...opts, incomingMessage: "אפשר לשלם בתשלומים?" };
     h.responses.push(
       { toolCalls: [respond("h1", { reply: "מעבירים אותך לנציג שימשיך מכאן.", handoff: "instalments question" })] },
@@ -304,10 +319,12 @@ describe("one v2 turn, live", () => {
     const r = await runReplyEngineTurn(q, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");
     expect(r.trace.gate3.rewrite).toBe("rewritten");
-    expect(r.escalation).toBeNull();
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
     expect(h.teamQuestions[0]).toMatchObject({ question: "האם אפשר לשלם בתשלומים?", askerKey: "c1" });
+    // No "checking with the team" item is kept: the hand-over is the follow-up.
     const saved = h.upserts[0].create;
-    expect(saved.pending.map((p: any) => p.kind)).toContain("promise");
+    expect(saved.pending.map((p: any) => p.kind)).not.toContain("promise");
   });
 
   it("a failed store read is retried once and logged with its outcome", async () => {
@@ -505,38 +522,45 @@ describe("prod replay 2026-11-16 defects, through a whole turn", () => {
     try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
   };
 
-  it("★ the same team question on a later turn is NOT recorded again, and the open one stays", async () => {
+  it("★ an item \"checking with the team\" from before 2026-11-23 is dropped: not shown to the model, not saved again", async () => {
     await withOpenTeamQuestion(async () => {
-      h.responses.push({ toolCalls: [respond("t1", { reply: "אנחנו פתוחים בימים א עד ה.", team_question: "הכיסא הגיע פגום וחסר בורג, הלקוח מחכה" })] });
+      h.responses.push({ toolCalls: [respond("t1", { reply: "אנחנו פתוחים בימים א עד ה." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה שעות הפתיחה?" }, "autonomous");
-      expect(h.teamQuestions).toEqual([]);
-      expect(r.trace.teamQuestion).toBeNull();
-      expect(r.trace.teamQuestionRepeat).toBe(true);
+      expect(r.reply).toBe("אנחנו פתוחים בימים א עד ה.");
+      expect(r.escalation).toBeNull();
+      expect(JSON.stringify(h.calls[0].messages)).not.toContain("checking with the team");
       const saved = h.upserts[0].create;
-      expect(saved.pending.filter((p: any) => String(p.text).startsWith("checking with the team: "))).toHaveLength(1);
+      expect(saved.pending.filter((p: any) => String(p.text).startsWith("checking with the team: "))).toHaveLength(0);
     });
   });
 
-  it("★ saying again \"I passed it to the team\" is rewritten into an answer to the new message", async () => {
+  it("★ \"I passed it to the team\" with no search this turn: the knowledge is searched and the rewrite answers", async () => {
     await withOpenTeamQuestion(async () => {
       h.responses.push(
         { toolCalls: [respond("t2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט." })] },
         { toolCalls: [respond("t3", { reply: "אנחנו פתוחים בימים א עד ה." })] },
       );
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה שעות הפתיחה?" }, "autonomous");
-      expect((r.trace.gate3.problems.find((p: any) => p.kind === "style") as any)?.codes).toContain("repeated_team_line");
+      expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unlooked_pass");
+      expect(r.trace.tools.some((t: any) => t.tool === "search_knowledge")).toBe(true);
       expect(r.trace.gate3.rewrite).toBe("rewritten");
       expect(r.reply).toBe("אנחנו פתוחים בימים א עד ה.");
+      expect(r.escalation).toBeNull();
     });
   });
 
-  it("a NEW, different question still goes to the team while another is open", async () => {
+  it("a question still not known after the search is a hand-over, and goes on the owner's list", async () => {
     await withOpenTeamQuestion(async () => {
-      h.responses.push({ toolCalls: [respond("t4", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "האם אפשר לשלם בתשלומים?" })] });
+      h.responses.push(
+        { toolCalls: [respond("t4", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "האם אפשר לשלם בתשלומים?" })] },
+        { toolCalls: [respond("t5", { reply: "אין לנו כאן מידע על תשלומים.", team_question: "האם אפשר לשלם בתשלומים?" })] },
+      );
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
+      handedOver(r);
+      // The rewrite's "we have no information" is an ungrounded absence and is cut: the approved line alone.
+      expect(r.reply).toBe(HAND);
       expect(h.teamQuestions).toHaveLength(1);
       expect(r.trace.teamQuestion).toBe("האם אפשר לשלם בתשלומים?");
-      expect(r.trace.gate3.rewrite).toBe("none");
     });
   });
 
@@ -628,15 +652,15 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
   });
 ;
 
-  it("★ the canned line goes out once: it is marked in the state (hidden from the model)", async () => {
+  it("★ the fallback's team line is a hand-over now: the approved line, the team told", async () => {
     h.responses.push(
       { toolCalls: [respond("c1", { reply: "אפשר לשלם בתשלומים, ₪120 לחודש." })] },
       { toolCalls: [respond("c2", { reply: "בטח, ₪150 בלבד לחודש." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
     expect(r.trace.gate3.rewrite).toBe("fallback");
-    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
-    expect(h.upserts[0].create.facts._cannedTeamLineAt).toBeTruthy();
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
   });
 
   it("★ the canned line already went out and she brought nothing new: nothing is sent, and nothing goes to the team", async () => {
@@ -666,8 +690,9 @@ describe("prod replay 2 (2026-11-16): a canned team line never replaces a real a
         { toolCalls: [respond("c6", { reply: "בטח, ₪150 בלבד." })] },
       );
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני רוצה לדבר עם נציג" }, "autonomous");
-      expect(r.reply).toBeNull();
-      expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
+      // The worker sends this line word for word (it used to write its own).
+      handedOver(r);
+      expect(r.reply).toBe(HAND);
     });
   });
 
@@ -855,7 +880,7 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     h.responses.push({ toolCalls: [respond("q1", { reply: "זה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט.", team_question: "חיוב כפול" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
     expect(r.escalation?.reason).toMatch(/^ai_handoff:the customer accepted/);
-    expect(r.reply).toBe("מעבירים לנציג מהצוות שימשיך איתך כאן.");
+    expect(r.reply).toBe("מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.");
   });
 
   it("★ the same paragraph twice: rewritten, else nothing is sent", async () => {
@@ -869,10 +894,11 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
       { toolCalls: [respond("d1", { reply: para })] },
       { toolCalls: [respond("d2", { reply: para })] },
     );
-    // A question is never met with silence: the team line once (2c57725b rating).
+    // A question is never met with silence (2c57725b rating): with nothing new to say, a person takes it.
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "נו?" }, "autonomous");
     expect(r.trace.gate3.rewrite).not.toBe("silent");
-    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
   });
 
   it("★ the same paragraph twice on a plain nudge: nothing is sent", async () => {
@@ -904,21 +930,19 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     expect(r2.reply).not.toMatch(/הוא במבצע/);
   });
 
-  it("★ holding mode: the customer's digits go to the open payment item; the reply says nothing of the charge", async () => {
+  it("★ a charge complaint with card digits, an old team item open: the item is ignored, the payment guesses never go out, a person takes it", async () => {
     const { prisma } = await import("@chatcenter/shared");
     const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
     try {
       h.responses.push({ toolCalls: [respond("hm1", { reply: "תודה! ייתכן שאישור הויזה זמני ואינו חיוב סופי, והבדיקה מול ספק התשלום בתהליך." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "4 ספרות אחרונות 4155" }, "autonomous");
-      expect(r.reply).toMatch(new RegExp(`^${HOLD_ACK_HE}`));
-      expect(r.reply).toMatch(/בבדיקה אצל הצוות/);
+      void HOLD_ACK_HE;
+      handedOver(r);
       expect(r.reply).not.toMatch(/ויזה|ספק התשלום|זמני/);
       const up = h.upserts[h.upserts.length - 1];
       const saved: any[] = up?.create?.pending ?? up?.update?.pending ?? [];
-      expect(saved.find((p: any) => /חויבתי פעמיים/.test(p.text))?.text).toMatch(/4155/);
-      // One item: no second one opened for the digits.
-      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(1);
+      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(0);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
@@ -929,7 +953,7 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     expect(r.reply).toMatch(/9-17/);
   });
 
-  it("★ holding mode: a team question the model raises on the held subject goes into the open item", async () => {
+  it("★ a team question the model raises next to an old team item: a hand-over, the question on the owner's list, no item kept", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 3 });
     try {
@@ -937,9 +961,9 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "4 ספרות אחרונות 4155" }, "autonomous");
       const up = h.upserts[h.upserts.length - 1];
       const saved: any[] = up?.create?.pending ?? up?.update?.pending ?? [];
-      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(1);
-      expect(saved[0].text).toMatch(/4155/);
-      expect(r.trace.teamQuestion ?? null).toBeNull();
+      expect(saved.filter((p: any) => p.kind === "promise")).toHaveLength(0);
+      handedOver(r);
+      expect(h.teamQuestions).toHaveLength(1);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
@@ -953,7 +977,7 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
-  it("★ a question after the canned line: a new question goes to the team; its repeat gets the holding line once, then silence", async () => {
+  it("★ a question nothing answers is a hand-over every time it comes, never a holding line or silence", async () => {
     const { prisma } = await import("@chatcenter/shared");
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
     const q = "איפה מזינים את הקופון?";
@@ -962,18 +986,15 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
       st([]);
       h.responses.push({ toolCalls: [respond("h1", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h2", { reply: "בטח, ₪150 בלבד." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
-      expect(r.reply).toBe("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.");
+      handedOver(r);
       expect(r.trace.teamQuestion).toBeTruthy();
       const item = [{ kind: "promise", text: `checking with the team: ${q}`, at: new Date().toISOString() }];
       st(item);
       const holding = stillCheckingLine(q, "he");
       h.responses.push({ toolCalls: [respond("h3", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h4", { reply: "בטח, ₪150 בלבד." })] });
       const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
-      expect(r2.reply).toBe(holding);
-      h.history = [{ direction: "INBOUND", body: q, metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
-      h.responses.push({ toolCalls: [respond("h5", { reply: "התיק עולה ₪120." })] }, { toolCalls: [respond("h6", { reply: "בטח, ₪150 בלבד." })] });
-      const r3 = await runReplyEngineTurn({ ...opts, incomingMessage: q }, "autonomous");
-      expect(r3.reply ?? null).toBeNull();
+      handedOver(r2);
+      expect(r2.reply).not.toBe(holding);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
@@ -987,7 +1008,7 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
-  it("★ holding mode: a thanks gets a short welcome once, then nothing; the holding line at most every third turn", async () => {
+  it("★ an old team item open: a thanks gets its welcome with the stale \"still with the team\" cut; a status ask is a hand-over", async () => {
     const { prisma } = await import("@chatcenter/shared");
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
     const item = "חויבתי פעמיים ואין הזמנה";
@@ -1001,19 +1022,20 @@ describe("prod replay 6 (2026-11-16), through a whole turn", () => {
       h.history = [...h.history, { direction: "INBOUND", body: "תודה", metadata: null }, { direction: "OUTBOUND", body: "בשמחה!", senderName: "AI Bot", metadata: null }];
       h.responses.push({ toolCalls: [respond("t2", { reply: "בשמחה!" })] });
       const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה רבה" }, "autonomous");
-      expect(r2.reply ?? null).toBeNull();
-      // A status ask right after a holding line: not the line again.
+      expect(r2.escalation).toBeNull();
+      expect(r2.reply ?? "").not.toMatch(TEAM_CLAIM);
+      // "Still being checked" promises a check nobody is doing: a person takes the status ask.
       h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: holding, senderName: "AI Bot", metadata: null }];
       h.responses.push({ toolCalls: [respond("t3", { reply: "החיוב עדיין בבדיקה." })] });
       const r3 = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
-      expect(r3.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
+      handedOver(r3);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
-  it("★ a failed payment method: the guesses are cut, the question goes to the team with the fixed line", async () => {
+  it("★ a failed payment method: the guesses are cut and a person takes it (no tool can fix a payment)", async () => {
     h.responses.push({ toolCalls: [respond("p1", { reply: "האם גם אחד מהם נכשל? ייתכן שהתשלום לא עבר בגלל תקלה." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ניסיתי לשלם בביימי וזה נכשל" }, "autonomous");
-    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    handedOver(r);
     expect(r.reply).not.toMatch(/ייתכן|נכשל\?/);
     expect(r.trace.teamQuestion).toBeTruthy();
   });
@@ -1045,26 +1067,24 @@ describe("prod replay 7 (2026-11-17), through a whole turn", () => {
     ];
     h.responses.push({ toolCalls: [respond("y1", { reply: "את הקופון מזינים בעמוד התשלום, בשדה קוד קופון." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
-    expect(r.reply).toBe("מעבירים לנציג מהצוות שימשיך איתך כאן.");
+    expect(r.reply).toBe("מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.");
     expect(r.escalation?.reason).toMatch(/^ai_handoff:/);
   });
 
-  it("★ \"no information\" on an open complaint: the question goes to the team, and the reply says so", async () => {
+  it("★ \"no information\" on a late order: a person takes it (a late order is a hand-over, no knowledge gap)", async () => {
     h.responses.push({ toolCalls: [respond("e1", { reply: "מצטערים, אין לי מידע על זה." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ההזמנה עדיין לא הגיעה, כבר שבועיים" }, "autonomous");
-    expect((r.trace as any).deadEndToTeam).toBe(true);
-    expect(h.teamQuestions).toHaveLength(1);
-    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    handedOver(r);
   });
 });
 
 describe("prod replay 8 (2026-11-17), through a whole turn", () => {
-  it("★ a call request the reply ignores: recorded for the team, and the reply says so", async () => {
+  it("★ a call request the reply ignores: there is no call tool, so a person takes it", async () => {
     h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה לעזור כאן בצ'אט." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יכול להתקשר אלי?" }, "autonomous");
     expect((r.trace as any).callToTeam).toBe(true);
     expect(h.teamQuestions[0].question).toMatch(/^call request:/);
-    expect(r.reply).toMatch(/הבקשה לשיחה/);
+    handedOver(r);
   });
 });
 
@@ -1095,10 +1115,10 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     expect((r.trace as any).safetyHandoff).toBe(true);
     expect(r.escalation?.reason).toMatch(/^ai_handoff:safety/);
     // Replay 13: the stop-use line only when the customer's own message describes the issue ("30 על 40" does not).
-    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים לנציג מהצוות שימשיך איתך כאן.");
+    expect(r.reply).toBe("תודה על הפרטים, זה עוזר להבין. מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.");
   });
 
-  it("★ \"already with the team\" for another subject: this ask is recorded as a new team question", async () => {
+  it("★ \"already with the team\" for another subject: a hand-over, this ask on the owner's list", async () => {
     const { prisma } = await import("@chatcenter/shared");
     const OPEN = { kind: "promise", text: "checking with the team: הקופון WELCOME10 לא עובד בתשלום", at: new Date().toISOString() };
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
@@ -1106,9 +1126,9 @@ describe("prod replay 9 (2026-11-17), through a whole turn", () => {
     let r: any;
     try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "ומה עם משלוח לאילת?" }, "autonomous"); }
     finally { (prisma as any).conversationState.findUnique = async () => null; }
-    expect((r.trace as any).newSubjectToTeam).toBe(true);
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
     expect(h.teamQuestions.map((q) => q.question)).toEqual(["ומה עם משלוח לאילת?"]);
-    expect(r.reply).toBe("העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.");
   });
 });
 
@@ -1163,7 +1183,7 @@ describe("prod replay 11 rating: safety sticks", () => {
     expect(r2.reply).not.toMatch(/להפסיק להשתמש/);
   });
   it("★ the first sight of a safety word saves the fact", async () => {
-    h.responses.push({ toolCalls: [respond("z2", { reply: "מצטערים לשמוע, מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "tipping" })] });
+    h.responses.push({ toolCalls: [respond("z2", { reply: "מצטערים לשמוע, מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "tipping" })] });
     await runReplyEngineTurn({ ...opts, incomingMessage: "המכשיר נהפך על המשטח" }, "autonomous");
     expect(h.upserts[0].create.facts._safetyAt).toBeTruthy();
   });
@@ -1277,18 +1297,14 @@ describe("the model reads the email as a forwarded notification (prod replay 202
 });
 
 describe("a needless handoff takes its words with it (prod replay 2026-11-17, Smoovee)", () => {
-  it("★ \"passed to the team\" left behind becomes a real team question; \"a person continues\" is cut", async () => {
+  it("★ a hand-over for a question the model could not answer, said twice: a real hand-over, the team sentence cut", async () => {
     h.responses.push(
       { toolCalls: [respond("n1", { reply: "מבינים. העברנו את הבדיקה לצוות. נציג מהצוות ימשיך איתך כאן.", handoff: "check" })] },
       { toolCalls: [respond("n2", { reply: "מבינים. העברנו את הבדיקה לצוות. נציג מהצוות ימשיך איתך כאן.", handoff: "check" })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי זה יגיע?" }, "autonomous");
-    expect(r.escalation ?? null).toBeNull();
-    expect(r.reply).not.toMatch(/ימשיך איתך/);
-    // "Passed to the team" is kept only together with a real team question.
-    // The model's own sentence (not a canned team line), now true.
-    expect(r.reply).toMatch(/העברנו את הבדיקה לצוות/);
-    expect((r.trace as any).teamQuestion).toBeTruthy();
+    handedOver(r);
+    expect(r.reply).not.toMatch(/ימשיך איתך|העברנו את הבדיקה/);
   });
 });
 
@@ -1330,7 +1346,7 @@ describe("2f6ff7e3 rating: engine passes", () => {
 });
 
 describe("2f6ff7e3 rating: whole turns", () => {
-  it("★ a repeat team question with new digits updates the open item", async () => {
+  it("★ a repeat of an old team question with new digits: no item is updated or kept, a person takes it", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: התשלום בביימי לא עבר", at: new Date().toISOString() }], turnCount: 3 });
     h.responses.push({ toolCalls: [respond("d1", { reply: "תודה על הפרטים.", team_question: "התשלום בביימי לא עבר" })] });
@@ -1339,8 +1355,8 @@ describe("2f6ff7e3 rating: whole turns", () => {
     finally { (prisma as any).conversationState.findUnique = async () => null; }
     const saved = h.upserts.at(-1);
     const pending = (saved?.update?.pending ?? saved?.create?.pending ?? []) as any[];
-    expect(rr?.trace?.teamQuestionRepeat).toBe(true);
-    expect(pending.some((p) => /customer gave: 4155/.test(String(p.text)))).toBe(true);
+    expect(pending.some((p) => p.kind === "promise")).toBe(false);
+    handedOver(rr);
   });
   it("★ the tenant's own team member on WhatsApp: no model call, no reply", async () => {
     const { prisma } = await import("@chatcenter/shared");
@@ -1372,9 +1388,9 @@ describe("4511b79c rating: engine passes", () => {
     // A call request: the engine adds its own team line, and one was already sent in this conversation.
     h.responses.push({ toolCalls: [respond("c1", { reply: "בשמחה." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר שתתקשרו אליי לגבי משלוח לאילת?" }, "autonomous");
-    // A new request is passed to the team now and says so; "still being checked" is only for an open item.
-    expect(r.reply ?? "").toMatch(/העברתי לצוות את הבקשה לשיחה/);
-    expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה אצל הצוות/);
+    // A call request: no call tool, so a person takes it now; never "still being checked".
+    handedOver(r);
+    expect(r.reply ?? "").not.toMatch(/עדיין בבדיקה/);
     expect(r.reply ?? "").not.toMatch(/"/);
   });
   it("★ the same team line again on a repeat: it names what is checked instead", async () => {
@@ -1390,14 +1406,14 @@ describe("4511b79c rating: engine passes", () => {
       expect(r.reply ?? "").not.toMatch(/העברתי את השאלה לצוות/);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
-  it("★ back on an open team subject: the reply says it is with the team", async () => {
+  it("★ back on an old team subject: the old item is not repeated to the customer", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: הגוון של קרם הלחות", at: new Date().toISOString() }], turnCount: 4 });
     h.responses.push({ toolCalls: [respond("o1", { reply: "אשמח לעזור עוד." })] });
     let r: any;
     try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם הגוון של קרם הלחות?" }, "autonomous"); }
     finally { (prisma as any).conversationState.findUnique = async () => null; }
-    expect(r.reply).toMatch(/בבדיקה אצל הצוות/);
+    expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
   });
 });
 
@@ -1412,11 +1428,10 @@ describe("e78b114c rating: engine passes", () => {
     expect(r.reply ?? null).toBeNull();
     expect(String((r.trace as any).gate1)).toMatch(/^human_owned/);
   });
-  it("★ a team question recorded this turn is told to the customer", async () => {
+  it("★ a team question recorded this turn is a hand-over: the fixed line, its own text never quoted", async () => {
     h.responses.push({ toolCalls: [respond("q1", { reply: "מבינים.", team_question: "חיוב כפול בביימי" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים בביימי" }, "autonomous");
-    // A fixed line: the team question's own text is never quoted to the customer.
-    expect(r.reply).toMatch(/העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט\./);
+    handedOver(r);
     expect(r.reply).not.toMatch(/חיוב כפול בביימי/);
   });
 });
@@ -1509,8 +1524,10 @@ describe("b8ec6dcf rating: engine passes", () => {
     try {
       h.responses.push({ toolCalls: [respond("pa1", { reply: "לא אמורה להיות כפילות בהזמנה החדשה." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אם אזמין שוב תהיה כפילות?" }, "autonomous");
-      expect(r.reply).toMatch(new RegExp(HOLD_ADVICE_HE.slice(0, 20)));
-      expect(r.reply).not.toMatch(/לא אמורה להיות כפילות/);
+      // The old item is gone, and with it the fixed hold advice; the unbacked "no duplicate" never goes out.
+      void HOLD_ADVICE_HE;
+      expect(r.reply ?? "").not.toMatch(/לא אמורה להיות כפילות/);
+      expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
@@ -1535,24 +1552,20 @@ describe("7af7c6d7 rating: engine passes", () => {
     await withHeld({}, async () => {
       h.responses.push({ toolCalls: [respond("q1", { reply: "לא אמורה להיות כפילות." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אם הזמין שנית שלא יהיה כפילות" }, "autonomous");
-      expect(r.reply).toMatch(new RegExp(HOLD_ADVICE_HE.slice(0, 20)));
+      void HOLD_ADVICE_HE;
+      expect(r.reply ?? "").not.toMatch(/לא אמורה להיות כפילות/);
+      expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
     });
   });
-  it("★ the holding line at most every third turn, counted in the state (a replay's history is another engine's)", async () => {
-    await withHeld({ _holdLineTurn: "9" }, async () => {
-      h.responses.push({ toolCalls: [respond("q2", { reply: "החיוב עדיין בבדיקה." })] });
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
-      expect(r.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
-    });
-    await withHeld({ _holdLineTurn: "6" }, async () => {
-      h.responses.push({ toolCalls: [respond("q3", { reply: "החיוב עדיין בבדיקה." })] });
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
-      // The line was the last message sent (nothing since turn 6): the second fixed line, never the same one
-      // (C pinned rating c24439a1).
-      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
-      const up = h.upserts[h.upserts.length - 1];
-      expect((up?.create ?? up?.update)?.facts?._spokeTurn).toBe("10");
-    });
+  it("★ \"still being checked\" on a status ask is a hand-over now, whatever the old hold counters say", async () => {
+    for (const turn of ["9", "6"]) {
+      await withHeld({ _holdLineTurn: turn }, async () => {
+        h.responses.push({ toolCalls: [respond(`q${turn}`, { reply: "החיוב עדיין בבדיקה." })] });
+        const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
+        handedOver(r);
+        expect(r.reply).toBe(HAND);
+      });
+    }
   });
   it("★ 'I've added it to the check' only when something new was added", async () => {
     const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
@@ -1562,11 +1575,12 @@ describe("7af7c6d7 rating: engine passes", () => {
       expect(r.reply ?? "").not.toMatch(new RegExp(HOLD_ACK_HE.slice(0, 12)));
     }, " (customer gave: 4155)");
   });
-  it("★ the thanks once, counted in the state too", async () => {
+  it("★ a thanks next to an old team item is answered plainly: no hold counter silences it, nobody is handed it", async () => {
     await withHeld({ _thanksTurn: "9" }, async () => {
       h.responses.push({ toolCalls: [respond("q6", { reply: "בשמחה!" })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
-      expect(r.reply ?? null).toBeNull();
+      expect(r.reply).toBe("בשמחה!");
+      expect(r.escalation).toBeNull();
     });
   });
   it("★ a link sent earlier in a card's metadata: never 'there is no link'", async () => {
@@ -1598,27 +1612,23 @@ describe("d7782dd2 rating: engine passes", () => {
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: held, at: new Date().toISOString() }], turnCount: 10 });
     try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
   };
-  it("★ the thanks once per hold", async () => {
+  it("★ a thanks is answered plainly (there is no hold any more)", async () => {
     await withHeld({ _thanksTurn: "5" }, async () => {
       h.responses.push({ toolCalls: [respond("d1", { reply: "בשמחה!" })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "שיהיה תודה" }, "autonomous");
-      expect(r.reply ?? null).toBeNull();
+      expect(r.reply).toBe("בשמחה!");
+      expect(r.escalation).toBeNull();
     });
   });
-  it("★ a restatement after a silent turn gets a holding line (the second one after the first); right after one, nothing", async () => {
-    await withHeld({ _holdLineTurn: "8", _spokeTurn: "8" }, async () => {
-      h.responses.push({ toolCalls: [respond("d2", { reply: "לא נוצרה הזמנה, נכון." })] });
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
-      // The line at 8, silent at 9: the second line at 10, never the same one twice in a row (C pinned rating).
-      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
-      const up = h.upserts[h.upserts.length - 1];
-      expect((up?.create ?? up?.update)?.facts?._spokeTurn).toBe("10");
-    });
-    await withHeld({ _holdLineTurn: "9", _spokeTurn: "9" }, async () => {
-      h.responses.push({ toolCalls: [respond("d3", { reply: "לא נוצרה הזמנה, נכון." })] });
-      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
-      expect(r.reply ?? null).toBeNull();
-    });
+  it("★ a restatement next to an old team item: no holding line, whatever the old counters say", async () => {
+    for (const turn of ["8", "9"]) {
+      await withHeld({ _holdLineTurn: turn, _spokeTurn: turn }, async () => {
+        h.responses.push({ toolCalls: [respond(`d${turn}`, { reply: "לא נוצרה הזמנה, נכון." })] });
+        const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
+        expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
+        expect(r.reply ?? "").not.toMatch(/אני כאן/);
+      });
+    }
   });
   it("★ a count is set to its list", async () => {
     h.responses.push({ toolCalls: [respond("cn1", { reply: "יש 3 גוונים: Sand, Medium ו-Hony, Medium Dark." })] });
@@ -1642,36 +1652,37 @@ describe("93f9fdff rating: engine passes", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה רואים את המוצר?" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/https:\/\/chanivainberger\.co\.(?!il)/);
   });
-  it("★ holding mode: a size sentence does not hang on the holding line", async () => {
+  it("★ \"still being checked\" with an aside: a hand-over, the claim cut", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
     try {
       h.responses.push({ toolCalls: [respond("hz1", { reply: "אגב, יש לנו גם תיקי בד חדשים בקולקציה. החיוב עדיין בבדיקה." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
-      expect(r.reply ?? "").not.toMatch(/תיקי בד/);
+      handedOver(r);
+      expect(r.reply ?? "").not.toMatch(/בבדיקה/);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 });
 
 describe("657e5f85 rating: engine passes", () => {
-  it("★ the turn a charge complaint opens: no state or cause, the team has it", async () => {
+  it("★ the turn a charge complaint opens: no state or cause, a person takes it", async () => {
     h.responses.push({ toolCalls: [respond("op1", { reply: "ההזמנה 97858 בוטלה כי התשלום לא נקלט במערכת." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "חויבתי פעמיים ואין לי הזמנה" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/בוטלה|לא נקלט/);
-    expect(r.reply ?? "").toMatch(/צוות/);
+    handedOver(r);
     expect(r.trace.teamQuestion).toBeTruthy();
   });
-  it("★ holding mode's floor: a direct ask is never left without a reply", async () => {
+  it("★ a direct ask next to an old team item is never left without a reply, and gets no holding line", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _holdLineTurn: "7", _spokeTurn: "7" }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
     try {
       h.responses.push({ toolCalls: [respond("fl1", { reply: "ההזמנה בוטלה כי התשלום לא נקלט." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תעדכנו בבקשה ושלחו לי מספר הזמנה" }, "autonomous");
-      // Never left without a reply; the line was the last sent, so the second line (C pinned rating).
-      expect(r.reply ?? "").toMatch(/אני כאן, ותשובת הצוות תגיע כאן בצ'אט/);
+      expect(String(r.reply ?? "").trim()).not.toBe("");
+      expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
-  it("★ holding mode's floor after the gate went silent: the bot quiet 2+ turns gets the holding line", async () => {
+  it("★ the bot with nothing new to say after a silent turn: a person takes it, never a holding line", async () => {
     const { prisma } = await import("@chatcenter/shared");
     const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: { _cannedTeamLineAt: new Date().toISOString(), _spokeTurn: "7" }, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
@@ -1679,7 +1690,7 @@ describe("657e5f85 rating: engine passes", () => {
       h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "נו", metadata: null }];
       h.responses.push({ toolCalls: [respond("fs1", { reply: para })] }, { toolCalls: [respond("fs2", { reply: para })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
-      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      handedOver(r);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
   it("★ the fallback never lists products of another kind than the customer's noun", async () => {
@@ -1722,14 +1733,16 @@ describe("ed780586 rating: engine passes", () => {
       { toolCalls: [respond("it2", { reply: "למיקסר מתאים Canvas Tote." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר, טוסטר ובלנדר" }, "autonomous");
-    expect(r.reply).toMatch(/שאר הפריטים/);
+    // Items the reply could not answer: a person takes them (never "the rest went to the team").
+    handedOver(r);
+    expect(r.reply).not.toMatch(/שאר הפריטים/);
     expect(String(r.trace.teamQuestion ?? "")).toMatch(/טוסטר/);
   });
-  it("★ a restock ask with no data: the team, never 'check the product page'", async () => {
+  it("★ a restock ask with no data: a person takes it, never 'check the product page'", async () => {
     h.responses.push({ toolCalls: [respond("rs1", { reply: "בדקי בדף המוצר, שם מופיע המלאי." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יתחדש המלאי של אליס שחור?" }, "autonomous");
     expect(r.reply).not.toMatch(/בדף המוצר/);
-    expect(r.reply).toMatch(/העברתי את (?:זה|השאלה) לצוות/);
+    handedOver(r);
   });
   it("★ 'yes' after an offer to ask the team is no handoff", async () => {
     h.history = [{ direction: "INBOUND", body: "יש הנחה?", metadata: null }, { direction: "OUTBOUND", body: "לבדוק את זה עם הצוות?", senderName: "AI Bot", metadata: null }];
@@ -1764,10 +1777,10 @@ describe("ed780586 rating: engine passes", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
     expect(r.escalation ?? null).toBeNull();
   });
-  it("★ a restock ask the gate lets through still goes to the team", async () => {
+  it("★ a restock ask the gate lets through still reaches a person", async () => {
     h.responses.push({ toolCalls: [respond("rs2", { reply: "המלאי מתעדכן מדי פעם." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יחזור למלאי האליס השחור?" }, "autonomous");
-    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    handedOver(r);
   });
   it("★ an orphan 'if it's another model' is dropped", async () => {
     h.responses.push({ toolCalls: [respond("or1", { reply: "כדאי לנקות את התחתית במים ולייבש היטב. אם זה דגם אחר, אפשר לכתוב לנו את שמו." })] });
@@ -1783,22 +1796,23 @@ describe("83086356 rating: engine passes", () => {
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: חויבתי פעמיים ואין הזמנה", at: new Date().toISOString() }], turnCount: 10 });
     try { await fn(); } finally { (prisma as any).conversationState.findUnique = async () => null; }
   };
-  it("★ an imperative ask after a silent gate gets the holding line", async () => {
+  it("★ an imperative ask after a silent gate: a person takes it, never a holding line", async () => {
     await withHeld({ _holdLineTurn: "7", _spokeTurn: "9", _cannedTeamLineAt: new Date().toISOString() }, async () => {
       const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
       h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }];
       h.responses.push({ toolCalls: [respond("im1", { reply: para })] }, { toolCalls: [respond("im2", { reply: para })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תעדכנו בבקשה ושלחו לי מספר הזמנה" }, "autonomous");
-      expect(r.reply ?? "").toMatch(/בבדיקה אצל הצוות/);
+      handedOver(r);
     });
   });
-  it("★ a thanks after a silent gate in a hold gets the welcome once", async () => {
+  it("★ a thanks after a silent gate next to an old team item: no holding line, nobody handed it", async () => {
     await withHeld({ _cannedTeamLineAt: new Date().toISOString(), _spokeTurn: "9" }, async () => {
       const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
       h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }];
       h.responses.push({ toolCalls: [respond("th1", { reply: para })] }, { toolCalls: [respond("th2", { reply: para })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה" }, "autonomous");
-      expect(r.reply).toBe("בשמחה!");
+      expect(r.escalation).toBeNull();
+      expect(r.reply ?? "").not.toMatch(TEAM_CLAIM);
     });
   });
   it("★ sizes the reply answered by device name get no second line", async () => {
@@ -1895,12 +1909,12 @@ describe("052f53ad rating: engine passes", () => {
     expect(r.reply ?? "").not.toMatch(/evil\.example/);
     expect((r.trace as any).urlsRepaired?.dropped).toBe(1);
   });
-  it("★ a how-to or safety question answered 'no information': the team in the same turn, the question may follow", async () => {
+  it("★ a how-to or safety question answered 'no information': a person in the same turn, no question of ours left over the line", async () => {
     // No safety word: the how-to rule itself.
     h.responses.push({ toolCalls: [respond("hs1", { reply: "אין לי כאן הנחיה למיקום המעצורים. מה הדגם?" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה שמים את המעצורים?" }, "autonomous");
-    expect(r.reply).toMatch(/מה הדגם/);
-    expect(r.reply).toMatch(/העברתי את זה לצוות/);
+    handedOver(r);
+    expect(r.reply).toBe(`אין לי כאן הנחיה למיקום המעצורים. ${HAND}`);
     expect((r.trace as any).howToToTeam).toBe(true);
     // A tipping appliance: the safety handoff, in the same turn.
     h.responses.push({ toolCalls: [respond("hs2", { reply: "אין לי כאן הנחיה למיקום המעצורים. מה הדגם?" })] });
@@ -2071,14 +2085,14 @@ describe("urlfix: links whole, verified, never glued", () => {
 
 /** Narrow prod hotfix on 7c476131 (Smoovee live, 2026-11-18). */
 describe("smoovee live hotfix: engine passes", () => {
-  it("★ a return request: the team now, the failure narration and the re-asked reason cut", async () => {
+  it("★ a return request: the policy, then a person (no return tool), the failure narration and the re-asked reason cut", async () => {
     h.lexical = [{ content: "מדיניות החזרות: אפשר להחזיר תוך 14 יום מקבלת המוצר.", score: 0.9, documentTitle: "returns", chunkIndex: 1, documentId: "d" }];
     h.responses.push({ toolCalls: [respond("rt1", { reply: "כרגע לא הצלחתי לבדוק את פרטי העסקה. מה סיבת ההחזרה? אפשר להחזיר תוך 14 יום." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני רוצה להחזיר את הזמנה 97837 כי זה לא מתאים" }, "autonomous");
     expect(r.reply).not.toMatch(/לא הצלחתי/);
     expect(r.reply).not.toMatch(/סיבת ההחזרה/);
     expect(r.reply).toMatch(/14 יום/);
-    expect(r.reply).toMatch(/העברתי את הבקשה לצוות/);
+    handedOver(r);
     expect(r.trace.teamQuestion).toMatch(/return request/);
   });
   it("★ a statement of interest asks the team nothing", async () => {
@@ -2106,7 +2120,7 @@ describe("smoovee live hotfix: engine passes", () => {
 
 /** Smoovee 376b13 (prod 2026-11-18): get_order 97837 timed out at 8s; "לא הצלחתי לבדוק", no team. */
 describe("an order read that fails is the team's", () => {
-  it("★ one retry on a timeout; still nothing: a team item naming the order, the fixed line, no 'could not check'", async () => {
+  it("★ one retry on a timeout; still nothing: a person takes it, the order named for them, no 'could not check'", async () => {
     process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
     process.env.REPLY_ENGINE_ORDER_TIMEOUT_MS = "600";
     h.slowOrders = 2;
@@ -2120,9 +2134,10 @@ describe("an order read that fails is the team's", () => {
     expect(r.trace.tools.filter((x: any) => x.tool === "woocommerce.get_order").map((x: any) => x.outcome)).toEqual(["timeout"]);
     expect(h.dispatched.filter((d: any) => d.name === "woocommerce.get_order")).toHaveLength(2);
     expect(r.trace.teamQuestion).toMatch(/woocommerce\.get_order 97837 timeout/);
-    expect(r.reply).toMatch(/העברתי את זה לצוות/);
-    // The model is told the team gets it, never "say you could not check it".
-    expect(JSON.stringify(h.calls.at(-1)?.messages ?? [])).toMatch(/the team gets this order now/);
+    handedOver(r);
+    expect(r.reply).not.toMatch(/בודקת/);
+    // The model is told to try once more and then hand over, never "say you could not check it".
+    expect(JSON.stringify(h.calls.at(-1)?.messages ?? [])).toMatch(/hand over \(set handoff\)/);
   });
   it("★ the order read waits longer than other reads (600 here against 500)", async () => {
     process.env.REPLY_ENGINE_TOOL_TIMEOUT_MS = "500";
@@ -2222,13 +2237,17 @@ describe("1771ba14 items and the 87076cab replay: wiring", () => {
       expect(r.reply ?? "").not.toContain(line);
     });
   });
-  it("★ a held return and 'how do I return it?': the steps from the policy and the team's part, never silence", async () => {
+  it("★ 'how do I return it?' answered \"the return is being checked\": the knowledge is searched and the steps are the answer", async () => {
     h.lexical = [{ content: "מדיניות החזרות: אפשר להחזיר תוך 14 יום באריזה המקורית, דמי משלוח 25 ש\"ח.", score: 0.9, documentTitle: "returns", chunkIndex: 1, documentId: "d" }];
     await withState(held("החזר כספי על המשטח, לא מתאים למיקסר"), async () => {
-      h.responses.push({ toolCalls: [respond("rh1", { reply: "ההחזרה בבדיקה." })] });
+      h.responses.push(
+        { toolCalls: [respond("rh1", { reply: "ההחזרה בבדיקה." })] },
+        { toolCalls: [respond("rh2", { reply: "אפשר להחזיר תוך 14 יום באריזה המקורית, ודמי המשלוח 25 ש\"ח." })] },
+      );
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אוקיי. מה לעשות? איך להחזיר את המוצר ולהזדכות על המחיר?" }, "autonomous");
+      expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unlooked_pass");
       expect(r.reply ?? "").toMatch(/14 יום/);
-      expect(r.reply ?? "").toMatch(/את פרטי הזיכוי הצוות יאשר כאן/);
+      expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
     });
   });
   it("★ the model talking about its own tools is cut", async () => {
@@ -2302,7 +2321,7 @@ describe("C pinned rating c24439a1: wiring", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מיקסר 30x22 טוסטר 24x15" }, "autonomous");
     expect(r.reply ?? "").toMatch(/30×22: סמובי אליס/);
   });
-  it("★ 5: the hold line was the last message SENT (a silent turn since): the second line, never the same one", async () => {
+  it("★ 5: \"still being checked\" after an old holding line: a person takes it, neither holding line again", async () => {
     const line = "החיוב עדיין בבדיקה אצל הצוות, והתשובה תגיע כאן בצ'אט.";
     const { HOLD_LINE_ALT } = await import("../services/reply-engine/engine");
     h.history = [
@@ -2316,13 +2335,14 @@ describe("C pinned rating c24439a1: wiring", () => {
       h.responses.push({ toolCalls: [respond("al1", { reply: "החיוב עדיין נבדק." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם החיוב?" }, "autonomous");
       expect(r.reply ?? "").not.toContain(line);
-      expect(r.reply ?? "").toContain(HOLD_LINE_ALT.he);
+      expect(r.reply ?? "").not.toContain(HOLD_LINE_ALT.he);
+      handedOver(r);
     });
   });
 });
 
 describe("C pinned rating c24439a1: the holding floor", () => {
-  it("★ 5b: the floor after the gate went silent: the second line when the line was the last message sent", async () => {
+  it("★ 5b: after the gate went silent next to an old item: a person takes it, no holding line", async () => {
     const { HOLD_LINE_ALT } = await import("../services/reply-engine/engine");
     const { prisma } = await import("@chatcenter/shared");
     const para = "כדי לבדוק את החיוב צריך את ארבע הספרות האחרונות של הכרטיס ששימש לתשלום.";
@@ -2332,8 +2352,8 @@ describe("C pinned rating c24439a1: the holding floor", () => {
       h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: para, senderName: "AI Bot", metadata: null }, { direction: "INBOUND", body: "נו", metadata: null }];
       h.responses.push({ toolCalls: [respond("fa1", { reply: para })] }, { toolCalls: [respond("fa2", { reply: para })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "לא יצאה הזמנה" }, "autonomous");
-      expect(r.reply ?? "").toContain(HOLD_LINE_ALT.he);
-      expect(r.reply ?? "").not.toMatch(/בבדיקה אצל הצוות/);
+      expect(r.reply ?? "").not.toContain(HOLD_LINE_ALT.he);
+      handedOver(r);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 });
@@ -2476,7 +2496,8 @@ describe("replay d (the cab0f40e rating) through a whole turn", () => {
     h.responses.push({ toolCalls: [respond("dq1", { reply: body })] }, { toolCalls: [respond("dq2", { reply: body })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך אדע מה התת גוון שלי?" }, "autonomous");
     expect((r.reply ?? "").trim()).not.toBe("מה נראה אצלך?");
-    expect(r.reply ?? "").toMatch(/לצוות|https?:\/\//);
+    // Nothing of the draft stands: a person takes it (it used to be the team line).
+    handedOver(r);
   });
   it("★ 2b: a short clarifying question the model wrote with no gate cut is sent as it is", async () => {
     // An explanation ask, so only "no cut this turn" keeps the model's question.
@@ -2486,10 +2507,11 @@ describe("replay d (the cab0f40e rating) through a whole turn", () => {
     expect(Number((r.trace as any).cutSentences ?? 0)).toBe(0);
     expect((r.reply ?? "").trim()).toBe("לאיזה מכשיר?");
   });
-  it("★ 4: the team pass once in a reply", async () => {
+  it("★ 4: a reply that passes it to the team twice: a real hand-over, no team sentence left", async () => {
     h.responses.push({ toolCalls: [respond("tp1", { reply: "אפשר להעביר את זה לצוות, והתשובה תגיע כאן בצ'אט. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "משלוח לאילת" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש משלוח לאילת?" }, "autonomous");
-    expect((r.reply ?? "").match(/לצוות/g) ?? []).toHaveLength(1);
+    expect((r.reply ?? "").match(/לצוות/g) ?? []).toHaveLength(0);
+    handedOver(r);
     expect(r.reply ?? "").not.toMatch(/אפשר להעביר/);
   });
   it("★ 5 and 6: a story mention and a seller's pitch get no reply; a customer's ask with a service word is answered", async () => {
@@ -2527,26 +2549,25 @@ describe("replay e: engine passes", () => {
   };
   const savedPending = (): any[] => { const up = h.upserts[h.upserts.length - 1]; return up?.create?.pending ?? up?.update?.pending ?? []; };
 
-  it("★ 3: \"כן מעדיפה להיות שקטה\" in a hold is peace of mind: the fixed noted line, the note on the item, never \"we'll keep quiet\"", async () => {
+  it("★ 3: \"כן מעדיפה להיות שקטה\" next to an old team item: no held line, no item kept, no team claim", async () => {
     const { HOLD_SETTLED_HE, SETTLED_NOTE } = await import("../services/reply-engine/gates");
     await withState(held, async () => {
       h.responses.push({ toolCalls: [respond("e1", { reply: "בסדר גמור, נשאיר את זה בשקט ולא נשלח הודעות נוספות." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן מעדיפה להיות שקטה" }, "autonomous");
-      expect(r.reply).toContain(HOLD_SETTLED_HE);
-      expect(r.reply).not.toMatch(/בשקט|לא נשלח/);
-      const item = savedPending().find((p: any) => /חויבתי פעמיים/.test(p.text));
-      expect(item.text).toContain(SETTLED_NOTE);
-      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(1);
+      void SETTLED_NOTE;
+      expect(r.reply ?? "").not.toContain(HOLD_SETTLED_HE);
+      expect(String(r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
+      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(0);
     });
   });
 
-  it("★ 3: a yes to the bot's own urgency question in a hold: the same noted line", async () => {
+  it("★ 3: a yes to the bot's old urgency question: no held line any more", async () => {
     const { HOLD_SETTLED_HE } = await import("../services/reply-engine/gates");
     h.history = [{ direction: "INBOUND", body: "חויבתי פעמיים", metadata: null }, { direction: "OUTBOUND", body: "החיוב בבדיקה אצל הצוות. זה דחוף עבורך?", senderName: "AI Bot", metadata: null }];
     await withState(held, async () => {
       h.responses.push({ toolCalls: [respond("e2", { reply: "בסדר." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "כן" }, "autonomous");
-      expect(r.reply).toContain(HOLD_SETTLED_HE);
+      expect(r.reply ?? "").not.toContain(HOLD_SETTLED_HE);
     });
   });
 
@@ -2572,13 +2593,14 @@ describe("replay e: engine passes", () => {
     });
   });
 
-  it("★ 4: a photo in a hold: the acknowledgement, and the item records it", async () => {
+  it("★ 4: a photo next to an old team item: the model's own acknowledgement, no item kept", async () => {
     const { HOLD_ACK_HE } = await import("../services/reply-engine/gates");
     await withState(held, async () => {
       h.responses.push({ toolCalls: [respond("e5", { reply: "קיבלתי את התמונה." })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "[image]" }, "autonomous");
-      expect(r.reply).toMatch(new RegExp(`^${HOLD_ACK_HE}`));
-      expect(savedPending().find((p: any) => /חויבתי פעמיים/.test(p.text)).text).toContain("customer sent 1 attachment");
+      void HOLD_ACK_HE;
+      expect(r.reply).toBe("קיבלתי את התמונה.");
+      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(0);
     });
   });
 
@@ -2708,11 +2730,11 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     }
   });
 
-  it("★ (rating 9480dfb2, near-blocker 6) a waiting claim with no hand-over is cut; nothing left, the team line", async () => {
+  it("★ (rating 9480dfb2, near-blocker 6) a waiting claim with no hand-over is cut; nothing left, a real hand-over", async () => {
     h.responses.push({ toolCalls: [respond("wt1", { reply: "נציגינו עסוקים בפניות קודמות ויתפנו בהקדם." })] }, { toolCalls: [respond("wt2", { reply: "נציגינו עסוקים בפניות קודמות ויתפנו בהקדם." })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש חדש?" }, "autonomous");
     expect(r.reply ?? "").not.toMatch(/עסוקים|יתפנו/);
-    expect(r.escalation).toBeNull();
+    handedOver(r);
   });
 
   it("★ (rating 9480dfb2, near-blocker 4) a fallback list after a cut fit claim says the fit is unconfirmed", async () => {
@@ -2739,7 +2761,7 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     h.responses.push({ toolCalls: [respond("lp1", { reply })] }, { toolCalls: [respond("lp2", { reply })] }, { toolCalls: [respond("lp3", { reply })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון?" }, "autonomous");
     expect(r.reply).not.toBe("נכון, לא צירפנו סרטון.");
-    expect(r.reply ?? "").toMatch(/צוות/);
+    handedOver(r);
   });
 
   it("★ (rating 9480dfb2, near-blocker 5) every size answered by the table: no team pass, no team question", async () => {
@@ -2774,7 +2796,7 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     expect(r.reply ?? "").not.toMatch(/^\s*וגם/);
   });
 
-  it("★ (dev live round on b369e939, 1) a video ask shaped like a product ask gets the team line, never the product question", async () => {
+  it("★ (dev live round on b369e939, 1) a video ask shaped like a product ask: a person, never the product question", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", stage: "choosing", intent: "Zip Hoodie", facts: {}, offeredItems: [{ ref: "id:9", title: "Zip Hoodie", productId: "9", at: new Date().toISOString() }], pending: [], turnCount: 3 });
     try {
@@ -2782,18 +2804,18 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
       h.responses.push({ toolCalls: [respond("vd1", { reply: no })] }, { toolCalls: [respond("vd2", { reply: no })] }, { toolCalls: [respond("vd3", { reply: no })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש לכם סרטון הדרכה לכביסה?" }, "autonomous");
       expect(r.reply ?? "").not.toMatch(/לאיזה דגם|באיזו מידה/);
-      expect(r.reply ?? "").toMatch(/צוות|https?:\/\//);
+      handedOver(r);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
-  it("★ (dev live round on b369e939, 2) a video ask whose answer was cut gets the team line and a team question", async () => {
+  it("★ (dev live round on b369e939, 2) a video ask whose answer was cut: the grounded tip, then a person", async () => {
     const reply = "אין לנו כרגע סרטון הדרכה לכביסה. כדאי לפעול לפי תווית הטיפול שעל הקפוצ'ון, כי הוראות הכביסה תלויות בה.";
     h.responses.push({ toolCalls: [respond("vc1", { reply })] }, { toolCalls: [respond("vc2", { reply })] }, { toolCalls: [respond("vc3", { reply })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה איך מכבסים אותו" }, "autonomous");
     if (Number((r.trace as any).cutSentences ?? 0) > 0 || r.trace.gate3.rewrite === "fallback") {
-      expect(r.reply ?? "").toMatch(/צוות/);
+      handedOver(r);
       expect(r.trace.teamQuestion ?? null).not.toBeNull();
-      // The grounded rest stays in front of the team line (rating b369e939: NE'A's usage tip was lost).
+      // The grounded rest stays in front of the line (rating b369e939: NE'A's usage tip was lost).
       if (r.trace.gate3.rewrite !== "fallback") expect(r.reply ?? "").toMatch(/תווית הטיפול/);
     } else {
       throw new Error(`the absence was not cut: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
@@ -2827,16 +2849,16 @@ describe("dev live round on 9480dfb2: the product in focus", () => {
     expect(r.reply).toBe("אנחנו פתוחים א-ה 9-17.");
   });
 
-  it("★ (48f3a261 verify, 7) a second video ask while one is open joins it: the holding line, no second team question", async () => {
+  it("★ (48f3a261 verify, 7) a second video ask next to an old item: a person takes it, the ask on the owner's list", async () => {
     const { prisma } = await import("@chatcenter/shared");
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [{ kind: "promise", text: "checking with the team: האם יש סרטון הדרכה לטוש הגבות", at: new Date().toISOString() }], turnCount: 4 });
     try {
       const pass = "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
       h.responses.push({ toolCalls: [respond("j1", { reply: pass, team_question: "איפה הסרטון" })] }, { toolCalls: [respond("j2", { reply: pass, team_question: "איפה הסרטון" })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איפה הסרטון" }, "autonomous");
-      expect(h.teamQuestions).toHaveLength(0);
+      expect(h.teamQuestions).toHaveLength(1);
       expect(r.reply ?? "").not.toBe(pass);
-      expect((r.trace as any).teamItemJoined).toBe(true);
+      handedOver(r);
     } finally { (prisma as any).conversationState.findUnique = async () => null; }
   });
 
@@ -2877,14 +2899,14 @@ describe("rating of the d2f10620 prod replay, through a whole turn", () => {
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אני לא טובה בלראות באתר וכו.." }, "autonomous");
     expect((r.reply ?? "").trim()).not.toBe("🙂");
   });
-  it("★ B1b: a direct video ask after the team pass is never silent: the still-checking line", async () => {
+  it("★ B1b: a direct video ask after an old team pass is never silent: a person, never the still-checking line", async () => {
     await withState({ facts: { _cannedTeamLineAt: new Date().toISOString() }, pending: [{ kind: "promise", text: "checking with the team: האם יש סרטון הדרכה לטוש הגבות", at: new Date().toISOString() }] }, async () => {
       const no = "אין לנו סרטון הדרכה לטוש.";
       h.responses.push({ toolCalls: [respond("s1", { reply: no })] }, { toolCalls: [respond("s2", { reply: no })] }, { toolCalls: [respond("s3", { reply: no })] });
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אשמח לסרטון הדרכה" }, "autonomous");
       expect((r.reply ?? "").trim()).not.toBe("");
-      // The still-checking line for the open item, never a fresh "passed to the team".
-      expect(r.reply).toMatch(/עדיין בבדיקה/);
+      expect(r.reply).not.toMatch(/עדיין בבדיקה/);
+      handedOver(r);
     });
   });
   it("★ B1c: a condition left without its claim is never sent", async () => {
@@ -2962,11 +2984,11 @@ describe("rating of the d2f10620 prod replay, through a whole turn", () => {
     expect(r.reply ?? "").not.toMatch(/999/);
   });
 
-  it("★ queue 7: a team question opened now is told to her", async () => {
+  it("★ queue 7: a question no tool answers (a restock date) is a hand-over, never \"passed to the team\"", async () => {
     h.responses.push({ toolCalls: [respond("t1", { reply: "אין לנו כרגע תאריך מאומת לחידוש המלאי בשחור.", team_question: "מתי צפוי חידוש מלאי של התיק בצבע שחור?" })] });
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי יחזור למלאי בצבע שחור?" }, "autonomous");
-    if (r.trace.teamQuestion) expect(r.reply).toMatch(/לצוות/);
-    else throw new Error(`no team question was opened: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
+    if (r.trace.teamQuestion) handedOver(r);
+    else throw new Error(`no question was recorded: ${JSON.stringify(r.trace.gate3)} ${r.reply}`);
   });
 });
 
@@ -3332,23 +3354,23 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
 
   it("★ a hand-over that names the owner's enabled rule stands, and its number is printed", async () => {
     owner();
-    h.responses.push({ toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: 1 })] });
+    h.responses.push({ toolCalls: [respond("w1", { reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "wholesale order", handoff_rule: 1 })] });
     const r = await runReplyEngineTurn(wholesale, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
     expect(r.escalation?.reason).toMatch(/^ai_handoff:wholesale order/);
     expect((r.trace as any).ownerHandoverRule).toBe(1);
-    expect(r.reply).toContain("נציג מהצוות");
+    expect(r.reply).toBe(HAND);
   });
 
-  it("★ the same hand-over with no number is judged as today: no citation, no exemption", async () => {
+  it("★ the same hand-over with no number is judged as today (no citation, no exemption): rewritten, and a rewrite that passes it on is the hand-over", async () => {
     owner();
     h.responses.push(
-      { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order" })] },
+      { toolCalls: [respond("w1", { reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "wholesale order" })] },
       { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
     );
     const r = await runReplyEngineTurn(wholesale, "autonomous");
     expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("needless_handoff");
-    expect(r.escalation).toBeNull();
+    handedOver(r);
     expect((r.trace as any).ownerHandoverRule).toBeUndefined();
     // The rewrite is told the one other reason, and that the owner's rules still hold.
     const note = h.calls[1].messages.slice(1).map((m: any) => String(m.content ?? "")).join("\n");
@@ -3364,7 +3386,7 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
     for (const n of [2, 0, 7]) {
       h.responses.length = 0;
       h.responses.push(
-        { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: n })] },
+        { toolCalls: [respond("w1", { reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "wholesale order", handoff_rule: n })] },
         { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
       );
       const r = await runReplyEngineTurn(wholesale, "autonomous");
@@ -3376,7 +3398,7 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
   it("★ a business with no hand-over rules: a cited number changes nothing, and the correction names no such list", async () => {
     h.agentExtra = { customGuardrails: RULES };
     h.responses.push(
-      { toolCalls: [respond("w1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "wholesale order", handoff_rule: 1 })] },
+      { toolCalls: [respond("w1", { reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "wholesale order", handoff_rule: 1 })] },
       { toolCalls: [respond("w2", { reply: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", team_question: "רשת חנויות שמבקשת לעבוד בסיטונאות" })] },
     );
     const r = await runReplyEngineTurn(wholesale, "autonomous");
@@ -3486,7 +3508,7 @@ describe("the owner's own rules arrive (2026-11-19)", () => {
   it("★ the first draft was stopped for something else and the rewrite says the word: its sentence is cut and the marker shows", async () => {
     never("זול");
     h.responses.push(
-      { toolCalls: [respond("n1", { reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", handoff: "price" })] },
+      { toolCalls: [respond("n1", { reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", handoff: "price" })] },
       { toolCalls: [respond("n2", { reply: "מבינים, זה לא הכי זול. אפשר לבדוק יחד מה מתאים לתקציב שלך, לפי הסכום שנוח לך להוציא עכשיו." })] },
     );
     const r = await runReplyEngineTurn({ ...opts, incomingMessage: NOT_CHEAP }, "autonomous");
@@ -3561,13 +3583,13 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
     return runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
   };
 
-  it("★ L774: the fixed line already went out, a team question is open, and she writes something new: a line, never silence", async () => {
+  it("★ L774: the fixed line already went out, an old team item is open, and she writes something new: never silence, a person takes it", async () => {
     await withState({ pending: [TEAM] }, async () => {
       const r = await turn("אני לא טובה בלראות באתר וכו..", CANNED);
       expect(r.trace.gate3.rewrite).not.toBe("silent");
-      expect(r.reply).toBe(PASSED);
-      expect((r.trace as any).silenceAvoided).toBe(true);
-      expect(r.escalation).toBeNull();
+      void PASSED;
+      handedOver(r);
+      expect(r.reply).toBe(HAND);
       expect(h.teamQuestions.map((q: any) => q.question)).toEqual(["אני לא טובה בלראות באתר וכו.."]);
     });
   });
@@ -3591,12 +3613,12 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
     });
   });
 
-  it("★ no team question open and the line would be the last one said again: the other line, and the team gets it", async () => {
+  it("★ the old line was the last one said and she writes something new: a person takes it, the question on the owner's list", async () => {
     await withState({}, async () => {
       const r = await turn("אני לא טובה בלראות באתר וכו..", PASSED);
-      expect(r.reply).toBe(CANNED);
+      handedOver(r);
+      expect(r.reply).toBe(HAND);
       expect(h.teamQuestions).toHaveLength(1);
-      expect((r.trace as any).silenceAvoided).toBe(true);
     });
   });
 
@@ -3604,65 +3626,48 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
   const ITEM = "הלקוחה שואלת אם אפשר לקבל חשבונית על שם העסק";
   const OPEN_ITEM = { ...TEAM, text: `checking with the team: ${ITEM}` };
 
-  it("★ her words are about the open item and its holding line was the last thing said: the other holding line, and her words join the item", async () => {
+  it("★ her words are about an old item and its holding line was the last thing said: a person takes it, no item is kept or updated", async () => {
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
     const held = stillCheckingLine(ITEM, "he");
     const said = "חשבונית על שם העסק שלי, עוסק מורשה";
     await withState({ pending: [OPEN_ITEM] }, async () => {
       const r = await turn(said, held, "אפשר לקבל חשבונית על שם העסק?");
-      expect(r.reply).toBe("אני כאן, ותשובת הצוות תגיע כאן בצ'אט ברגע שתהיה.");
-      expect((r.trace as any).silenceAvoided).toBe(true);
-      // The line says the team has it, so the team is given what she wrote: on the item, one update line, no new item.
-      expect((r.trace as any).teamItemUpdated).toEqual([said]);
-      const promises = savedPending().filter((p: any) => String(p.text).startsWith("checking with the team: "));
-      expect(promises).toHaveLength(1);
-      expect(promises[0].text).toBe(`${OPEN_ITEM.text} (customer added: "${said}")`);
-      expect(h.teamQuestions).toHaveLength(1);
-      expect(h.teamQuestions[0].question).toContain(`(update: the customer gave ${said})`);
-      expect(r.trace.teamQuestion).toBeNull();
-    });
-  });
-
-  it("★ a question on the open item gets its still-checking line: a number she gave joins the item, a rewording does not", async () => {
-    const { stillCheckingLine } = await import("../services/reply-engine/engine");
-    await withState({ pending: [OPEN_ITEM] }, async () => {
-      const r = await turn("מה עם החשבונית על שם העסק? ח.פ 514889231", CANNED, "אפשר לקבל חשבונית על שם העסק?");
-      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
-      expect((r.trace as any).silenceAvoided).toBeUndefined();
-      expect((r.trace as any).teamItemUpdated).toEqual(["514889231"]);
-      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(`${OPEN_ITEM.text} (customer gave: 514889231)`);
-      expect(h.teamQuestions).toHaveLength(1);
-      expect(h.teamQuestions[0].question).toContain("(update: the customer gave 514889231)");
-    });
-    await withState({ pending: [OPEN_ITEM] }, async () => {
-      h.responses.length = 0; h.upserts.length = 0; h.teamQuestions.length = 0;
-      const r = await turn("מה קורה עם החשבונית על שם העסק?", CANNED, "אפשר לקבל חשבונית על שם העסק?");
-      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
+      handedOver(r);
       expect((r.trace as any).teamItemUpdated).toBeUndefined();
-      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
-      expect(h.teamQuestions).toHaveLength(0);
+      expect(savedPending().filter((p: any) => String(p.text).startsWith("checking with the team: "))).toHaveLength(0);
+      expect(h.teamQuestions).toHaveLength(1);
     });
   });
 
-  it("★ nothing new on the open item (the message she already wrote, a thanks): nothing joins it", async () => {
+  it("★ a question on an old item, with a number or reworded: a person takes it, never its still-checking line", async () => {
     const { stillCheckingLine } = await import("../services/reply-engine/engine");
+    for (const ask of ["מה עם החשבונית על שם העסק? ח.פ 514889231", "מה קורה עם החשבונית על שם העסק?"]) {
+      await withState({ pending: [OPEN_ITEM] }, async () => {
+        h.responses.length = 0; h.upserts.length = 0; h.teamQuestions.length = 0;
+        const r = await turn(ask, CANNED, "אפשר לקבל חשבונית על שם העסק?");
+        expect(r.reply).not.toBe(stillCheckingLine(ITEM, "he"));
+        handedOver(r);
+        expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(0);
+      });
+    }
+  });
+
+  it("★ the same question again: a person takes it; a thanks: nothing, nobody handed it", async () => {
     const again = "מה עם החשבונית על שם העסק? ח.פ 514889231";
     await withState({ pending: [OPEN_ITEM] }, async () => {
       const r = await turn(again, CANNED, again);
-      expect(r.reply).toBe(stillCheckingLine(ITEM, "he"));
+      handedOver(r);
       expect((r.trace as any).teamItemUpdated).toBeUndefined();
-      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
-      expect(h.teamQuestions).toHaveLength(0);
+      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(0);
     });
     await withState({ pending: [OPEN_ITEM] }, async () => {
       h.responses.length = 0; h.upserts.length = 0; h.teamQuestions.length = 0;
       const r = await turn("תודה רבה", CANNED, again);
       expect(r.reply).toBeNull();
-      expect((r.trace as any).teamItemUpdated).toBeUndefined();
-      expect(savedPending().find((p: any) => String(p.text).includes(ITEM))?.text).toBe(OPEN_ITEM.text);
-      // A thanks is no question for the team: nothing recorded, no new item.
+      expect(r.escalation).toBeNull();
+      // A thanks is no question: nothing recorded, no item kept.
       expect(h.teamQuestions).toHaveLength(0);
-      expect(savedPending()).toHaveLength(1);
+      expect(savedPending().filter((p: any) => p.kind === "promise")).toHaveLength(0);
     });
   });
 
@@ -3679,9 +3684,9 @@ describe("silence only when the customer brought nothing new (2026-11-19, prod r
       return runReplyEngineTurn({ ...opts, incomingMessage: incoming }, "autonomous");
     };
     const said = await run("אני לא זוכרת מאיזה מייל הזמנתי");
-    expect(said.reply).toBe(CANNED);
+    handedOver(said);
+    expect(said.reply).toBe(HAND);
     expect(said.trace.gate3.rewrite).not.toBe("silent");
-    expect((said.trace as any).silenceAvoided).toBe(true);
     const nudge = await run("נו");
     expect(nudge.reply).toBeNull();
     expect(nudge.trace.gate3.rewrite).toBe("silent");
@@ -3857,7 +3862,7 @@ describe("only style was wrong with the draft: the turn never ends in the produc
     expect((eight.trace as any).styleOnlyKept).toBe(true);
   });
 
-  it("★ the cut sentence was the team pass on an ask: what is left is not the answer, so the turn ends as it did before", async () => {
+  it("★ the draft's team pass on an ask, next to an old item: no team sentence goes out, whatever is left", async () => {
     // An item is open with the team, and the draft says "passed to the team" again beside eight words of its own.
     const OPEN = { kind: "promise", text: "checking with the team: הלקוחה שואלת אם יש גוון כהה יותר במייקאפ", at: new Date().toISOString() };
     const PASS = "למייקאפ טינט יש פטנט שינוי גוון שמתאים כמעט לכולן. השאלה כבר אצל הצוות, והתשובה תגיע כאן בצ'אט.";
@@ -3865,14 +3870,10 @@ describe("only style was wrong with the draft: the turn never ends in the produc
     (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", facts: {}, offeredItems: [], pending: [OPEN], turnCount: 3 });
     let t: any;
     try { t = await turn(ASK, PASS, PASS, PASS); } finally { (prisma as any).conversationState.findUnique = async () => null; }
-    // Style only, and what is left has eight words and is no fragment: only the lost pass keeps it from going out.
-    expect(t.r.trace.gate3).toMatchObject({ problems: [{ kind: "style", codes: ["repeated_team_line"] }], rewrite: "fallback" });
-    expect((t.r.trace as any).fallbackKinds).toEqual(["thin_or_empty"]);
-    expect(t.r.reply).toBe(LIST);
-    expect(t.r.reply).not.toContain("פטנט שינוי גוון");
-    expect((t.r.trace as any).styleOnlyKept).toBeUndefined();
-    expect(t.cuts.markers ?? []).not.toContain("styleOnlyKept");
-    expect(t.calls).toBe(4);
+    // No open item any more: the pass with no search is an unlooked pass, and no team sentence survives.
+    expect(t.r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unlooked_pass");
+    expect(String(t.r.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM);
+    void LIST;
   });
 });
 
@@ -5092,7 +5093,9 @@ describe("a draft that hedges on the fit of what was found never gets the produc
   const PENS = [{ title: "טוש גבות חום", price: 79 }, { title: "טוש גבות שחור", price: 149 }, { title: "קונסילר לעיניים", price: 99 }];
   const PEN_DATA = [{ content: "טוש גבות: מיועד לגבות.", score: 0.9, documentTitle: "מוצרים", chunkIndex: 1, documentId: "f" }];
   const LIST = /הנה כמה אפשרויות|אין לנו אישור שהם מתאימים/;
-  const TEAM = "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.";
+  // Was the team line (2026-11-23: there is none). With nothing left to say on a product ask: the question that moves
+  // the choice on, never the list and never a team claim.
+  const noAnswer = (x: any) => { expect(String(x.reply ?? "").replace(HAND, "")).not.toMatch(TEAM_CLAIM); expect(String(x.reply ?? "")).not.toMatch(LIST); };
   const turn = async (incoming: string, query: string, list: any[], ...drafts: string[]) => {
     h.groundList = list;
     h.responses.push({ toolCalls: [tc("s1", "woocommerce.list_products", { query })] }, ...drafts.map((d, i) => ({ toolCalls: [respond(`d${i}`, { reply: d })] })));
@@ -5126,18 +5129,18 @@ describe("a draft that hedges on the fit of what was found never gets the produc
     expect(cards).toEqual(["201"]);
   });
 
-  it("★ with nothing left of the hedged draft, the turn goes to the team with no products, never to the list", async () => {
+  it("★ with nothing left of the hedged draft, no products and never the list", async () => {
     h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
     // The owner's list cuts the whole sentence, the hedge with it.
     const gone = "לא מצוין שהטושים מתאימים לעיניים, ויש עליהם אחריות לשנה.";
     const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, gone, gone, gone);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(t.hedgeKept).toBeUndefined();
-    expect(r.reply).toBe(TEAM);
+    noAnswer(r);
     expect(cards).toEqual([]);
   });
 
-  it("★ a bare hedge of a few words, or one that leans on the cut sentence, is no answer: the team line, no products", async () => {
+  it("★ a bare hedge of a few words, or one that leans on the cut sentence, is no answer: no products, no list", async () => {
     h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
     // Five words are left.
     const short = "לא ידוע אם הטושים מתאימים לעיניים. על טוש גבות שחור יש אחריות לשנה.";
@@ -5147,13 +5150,13 @@ describe("a draft that hedges on the fit of what was found never gets the produc
       const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, draft, draft, draft);
       expect(r.trace.gate3.rewrite).toBe("fallback");
       expect(t.hedgeKept).toBeUndefined();
-      expect(r.reply).toBe(TEAM);
+      noAnswer(r);
       expect(cards).toEqual([]);
       again();
     }
   });
 
-  it("★ a remnant that lost the hedge is not the hedged answer: the team line, no products", async () => {
+  it("★ a remnant that lost the hedge is not the hedged answer: no products, no list", async () => {
     h.chunks = PEN_DATA; h.policyRow = { data: { blockedTopics: ["אחריות"] } };
     // The owner's list cuts the hedge sentence, which named the black pen; the brown pen's sentence is left, and alone
     // it would read as an offer.
@@ -5161,7 +5164,7 @@ describe("a draft that hedges on the fit of what was found never gets the produc
     const { r, t, cards } = await turn("יש טוש לעיניים?", "טוש", PENS, draft, draft, draft);
     expect(r.trace.gate3.rewrite).toBe("fallback");
     expect(t.hedgeKept).toBeUndefined();
-    expect(r.reply).toBe(TEAM);
+    noAnswer(r);
     expect(cards).toEqual([]);
   });
 
@@ -5177,13 +5180,13 @@ describe("a draft that hedges on the fit of what was found never gets the produc
     // The first draft hedged and the rewrite claimed the fit.
     const first = await turn("יש טוש לעיניים?", "טוש", PENS, gone, fits, fits);
     expect(first.r.trace.gate3.rewrite).toBe("fallback");
-    expect(first.r.reply).toBe(TEAM);
+    noAnswer(first.r);
     expect(first.cards).toEqual([]);
     again();
     // Only the rewrite hedged.
     const second = await turn("יש טוש לעיניים?", "טוש", PENS, fits, gone, gone);
     expect(second.r.trace.gate3.rewrite).toBe("fallback");
-    expect(second.r.reply).toBe(TEAM);
+    noAnswer(second.r);
     expect(second.cards).toEqual([]);
   });
 
@@ -5559,5 +5562,107 @@ describe("prod replay 2026-11-22, through a whole turn: a product an earlier tur
     expect(told()).toContain("The store's price: Canvas Tote: 79.90. Give that one;");
     expect(String(r.reply ?? "")).toContain("79.90");
     expect(String(r.reply ?? "")).not.toContain("89");
+  });
+});
+
+/**
+ * Omer 2026-11-23 ("ממש לא"): the bot takes load off the team and never adds any. It searches before it says it does
+ * not know; what is truly missing after the lookup is a REAL hand-over (the approved line, the team told); nothing is
+ * ever "passed to the team" to be answered later. The cases are the prod ones of 2026-11-16..23.
+ */
+describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)", () => {
+  it("★ Alea thickness: the reply answers it and says it waits for the team, with no search: the knowledge is searched, the answer stands, no hand-over", async () => {
+    h.lexical = [{ content: "Q: מה עובי החומר פי וי סי? A: עובי החומר 2.2 - 2.5 מ\"מ.", score: 0.9, documentTitle: "שאלות", chunkIndex: 3, documentId: "d" }];
+    h.responses.push(
+      { toolCalls: [respond("al1", { reply: "העובי הוא 2.2-2.5 מ\"מ. לגבי העובי, השאלה כבר ממתינה לתשובת הצוות." })] },
+      { toolCalls: [respond("al2", { reply: "עובי החומר הוא 2.2-2.5 מ\"מ." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה העובי של השטיח?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unlooked_pass");
+    const kb = r.trace.tools.find((t: any) => t.tool === "search_knowledge");
+    expect(kb).toBeTruthy();
+    expect(r.reply).toBe("עובי החומר הוא 2.2-2.5 מ\"מ.");
+    expect(r.escalation).toBeNull();
+    expect(h.teamQuestions).toHaveLength(0);
+  });
+
+  it("★ the rewrite still passes it on after the search: the answer kept, the pass cut, a real hand-over", async () => {
+    h.lexical = [{ content: "Q: מה עובי החומר? A: עובי החומר 2.2 - 2.5 מ\"מ.", score: 0.9, documentTitle: "שאלות", chunkIndex: 3, documentId: "d" }];
+    const both = "העובי הוא 2.2-2.5 מ\"מ. לגבי עמידות לשמן, עדיין ממתינים לתשובת הצוות.";
+    h.responses.push({ toolCalls: [respond("al3", { reply: both })] }, { toolCalls: [respond("al4", { reply: both })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה העובי והאם הוא עמיד לשמן?" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).toBe(`העובי הוא 2.2-2.5 מ"מ. ${HAND}`);
+    expect(h.teamQuestions).toHaveLength(1);
+  });
+
+  it("★ Smoovee coupon: \"I passed it to the team\" with no search; the knowledge has it, so it is answered", async () => {
+    h.lexical = [{ content: "איך מקבלים קוד קופון? נרשמים לניוזלטר באתר, והקוד להטבה ברכישה הראשונה נשלח למייל.", score: 0.9, documentTitle: "קופונים", chunkIndex: 1, documentId: "d" }];
+    h.responses.push(
+      { toolCalls: [respond("cp1", { reply: "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." })] },
+      { toolCalls: [respond("cp2", { reply: "נרשמים לניוזלטר באתר, והקוד נשלח למייל." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "איך מקבלים קוד קופון?" }, "autonomous");
+    expect(r.trace.tools.some((t: any) => t.tool === "search_knowledge")).toBe(true);
+    expect(r.reply).toBe("נרשמים לניוזלטר באתר, והקוד נשלח למייל.");
+    expect(r.escalation).toBeNull();
+  });
+
+  it("★ the reservist discount, truly missing: searched, still not known, a hand-over and the question on the owner's list", async () => {
+    h.responses.push(
+      { toolCalls: [tc("rv0", "search_knowledge", { query: "הנחת מילואים" })] },
+      { toolCalls: [respond("rv1", { reply: "לא ידוע לנו על הנחה למשרתי מילואים.", team_question: "האם יש הנחה למשרתי מילואים?" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "יש הנחה למילואימניקים?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("unlooked_pass");
+    handedOver(r);
+    expect(h.teamQuestions.map((q: any) => q.question)).toEqual(["האם יש הנחה למשרתי מילואים?"]);
+  });
+
+  it("★ every prod pass line, whatever the model wrote, ends as a real hand-over with nothing about a team left", async () => {
+    const lines = [
+      "לגבי העובי, השאלה כבר ממתינה לתשובת הצוות.",
+      "הבקשה לבדוק את הקופון עדיין בטיפול הצוות.",
+      "העניין כבר בבדיקה אצלם, ונעדכן כאן בצ'אט.",
+      "ההנחיות המעשיות למסירה או לאיסוף עדיין בבירור מול הצוות.",
+      "הצוות עדיין בודק אם סמובי אליס זמינה בשחור.",
+      "אפשר לבדוק את זה מול הצוות.",
+      "נבדוק מול הצוות את צפי ההזמנה, והתשובה תגיע כאן בצ'אט.",
+      "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.",
+    ];
+    for (const line of lines) {
+      h.responses.length = 0; h.teamQuestions.length = 0;
+      h.responses.push({ toolCalls: [tc(`k${line.length}`, "search_knowledge", { query: "x" })] }, { toolCalls: [respond(`p${line.length}`, { reply: line })] }, { toolCalls: [respond(`q${line.length}`, { reply: line })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה עם זה?" }, "autonomous");
+      handedOver(r);
+      expect(r.reply, line).toBe(HAND);
+    }
+  });
+
+  it("★ a plain answer: no hand-over, and the automatic lookup records no gap (only a hand-over turn does)", async () => {
+    h.responses.push({ toolCalls: [respond("pa1", { reply: "אנחנו פתוחים א-ה 9-17." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם פתוחים?" }, "autonomous");
+    expect(r.escalation).toBeNull();
+    expect(h.retrieveCalls.length).toBeGreaterThan(0);
+    expect(h.retrieveCalls.every((a: any[]) => a[4]?.record === false)).toBe(true);
+    expect(h.teamQuestions).toHaveLength(0);
+  });
+
+  it("★ the turn audit carries the model's search_knowledge query, its outcome and its hits", async () => {
+    h.responses.push({ toolCalls: [tc("au0", "search_knowledge", { query: "זמני משלוח לאילת" })] }, { toolCalls: [respond("au1", { reply: "המשלוח לאילת מגיע תוך 3-5 ימי עסקים." })] });
+    await runReplyEngineTurn({ ...opts, incomingMessage: "תוך כמה זמן מגיע לאילת?" }, "autonomous");
+    const calls = h.audits.find((a) => a.data.action === "ai.bot_turn")?.data.metadata.toolCalls ?? [];
+    const kb = calls.find((c: any) => c.tool === "search_knowledge");
+    expect(kb).toMatchObject({ q: "זמני משלוח לאילת" });
+    expect(["ok", "empty", "timeout"]).toContain(kb.outcome);
+    expect(typeof kb.resultCount).toBe("number");
+  });
+
+  it("★ the prompt teaches no team pass and gives the approved line", async () => {
+    h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
+    await runReplyEngineTurn(opts, "autonomous");
+    const sys = String(h.calls[0].messages[0].content);
+    expect(sys).not.toMatch(/העברתי את השאלה לצוות|checking with the team|say you will check with the team/);
+    expect(sys).toContain(HAND);
   });
 });

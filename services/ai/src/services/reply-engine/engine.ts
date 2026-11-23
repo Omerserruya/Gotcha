@@ -16,7 +16,7 @@ import { executeCustomApiTool } from "../connectors/custom-api.service";
 import { executeAdapterTool } from "../connectors/integration-framework";
 import { enrichProductSearchArgs, isComplementaryTool, complementaryAnchorAllowed, isProductSearchTool } from "../discovery-integration.service";
 import { resolveProductRef, salePriceLine } from "../product-search.service";
-import { retrieveRelevantChunks, buildKnowledgeContext, shouldRecordKnowledgeGap, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
+import { retrieveRelevantChunks, buildKnowledgeContext, lexicalKnowledge, mergeKnowledge, knowledgeLimit, documentAddress } from "../knowledge.service";
 import { humanizeReply } from "../reply-style";
 import { takeShowLine, ungroundedPrices, stripPrices, asksSomething } from "../reply-style-check.service";
 import { skillApprovalReason } from "../skill-runtime.service";
@@ -38,7 +38,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -371,6 +371,11 @@ export function dedupeSentences(reply: string): string {
 
 /** Parse the model's `respond` arguments, tolerantly. */
 const TEAM_PROMISE_PREFIX = "checking with the team: ";
+/**
+ * The hand-over line, word for word as Omer approved it (2026-11-23). Every hand-over says it; nothing is ever
+ * "passed to the team" to be answered later (there is no team question any more: missing = a real hand-over).
+ */
+export const HANDOFF_LINE = { he: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", en: "A person from the team will continue with you here." } as const;
 
 /** The team questions still open in this conversation's state (younger than TEAM_OPEN_MS). */
 /** The frame words of a model's team question ("הלקוחה שואלת אם..."), never her topic. */
@@ -1556,7 +1561,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The vector search and the keyword fallback together (prod replay 5: the address and a pickup city missed).
     timed("knowledge", Promise.all([
       retrieveRelevantChunks(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id, {
-        record: lane === "live" && shouldRecordKnowledgeGap({ sandbox: !!opts.sandbox?.enabled, customerExternalId: conversation.customerExternalId, message: opts.incomingMessage }),
+        // No gap from the automatic lookup (2026-11-23: 68 Smoovee clusters for 44 real misses): the hand-over turn records it.
+        record: false,
         askerKey: opts.conversationId,
       }).catch(() => [] as any[]),
       lexicalKnowledge(opts.tenantId, String(opts.incomingMessage ?? "").slice(0, 500), 5, config.id).catch(() => [] as any[]),
@@ -1677,6 +1683,8 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
 
   const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw, policyRow] = await loadAll;
+  // A "checking with the team" item from before 2026-11-23 is not shown to the model and not saved again.
+  if (Array.isArray((state as any)?.pending)) (state as any).pending = (state as any).pending.filter((p: any) => !isTeamPromise(p));
   // What the owner wrote: the employee's rules, the enabled hand-over rules, the never-say list (owner-rules.ts).
   const ownerRules = readOwnerRules(config as any, (policyRow as any)?.data ?? null);
   if (hasOwnerRules(ownerRules)) (trace as any).ownerRules = ownerRuleCounts(ownerRules);
@@ -2020,7 +2028,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const approvalPending = turnTools.approvals.length > 0;
   // A question the team already has from this conversation (prod replay 2026-11-16:
   // one damaged-delivery thread recorded the same question on 8 turns in a row).
-  const openTeam = openTeamQuestions(state);
+  // None any more (Omer 2026-11-23): an item recorded before the change is dropped at load, so no holding line,
+  // "still with the team" or 72 h idle block comes from it.
+  const openTeam: string[] = [];
   const teamAlreadyOpen = openTeam.length > 0;
   // A second link or video ask while one is open is the same item (prod replay of b369e939, NE'A: "איפה הסרטון" opened
   // a second team question): no new question; the reply says it is still being checked.
@@ -2285,7 +2295,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       const again = autoStore.length && autoStore.every((x) => x.outcome === "empty") && original ? gate3(g3Input(original)) : null;
       if (again?.ok) { second = original; (trace as any).passedAfterLookup = true; }
       // A lookup only the model can make (which product, which order) gets one tool round, if there is time for two calls.
-      const modelRead = !again?.ok && left() > 9000 && first.problems.some((p) => (p.kind === "unread_product" && !auto.length) || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
+      const modelRead = !again?.ok && left() > 9000 && first.problems.some((p) => (p.kind === "unread_product" && !auto.length) || p.kind === "unread_order" || (!auto.length && (p.kind === "unread_knowledge" || p.kind === "unlooked_pass" || p.kind === "gave_up_search" || p.kind === "ungrounded_absence" || p.kind === "no_search")));
       let r: any = again?.ok ? null : await rewriteCall(modelRead ? "required" : forceRespond);
       if (r && modelRead) {
         const calls: ModelToolCall[] = (r.toolCalls ?? []) as any;
@@ -2565,14 +2575,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // The customer's words call for a person (asked for one, damage, a late order).
           output = { reply: cannedSent ? "" : safeFallback(locale), stateUpdate: {}, claims: [], handoff: "reply_failed_checks", cards: [] };
           cannedNow = !cannedSent;
-        } else if (!cannedSent) {
-          // Nothing calls for a person: a question for the team, and the AI keeps the chat.
+        } else if (!cannedSent && !productAskNow(opts.incomingMessage ?? "")) {
+          // Nothing could be said: the safe line, which the end of the turn makes a real hand-over (2026-11-23).
           output = { reply: safeFallback(locale, teamAlreadyOpen), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
           cannedNow = true;
         } else if (productAskNow(opts.incomingMessage ?? "")) {
           // Never silent on a product ask (prod replay 2026-11-17, Tehila): one question that moves the
-          // choice on, and the question still reaches the team.
-          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: teamAlreadyOpen ? null : question, cards: [] };
+          // choice on. No team question (2026-11-23): a shopper is helped to choose, not handed over.
+          output = { reply: productQuestionLine(locale), stateUpdate: {}, claims: [], handoff: null, teamQuestion: null, cards: [] };
         } else if (asked || !quietOk) {
           // The canned line already went out: a question still gets one holding line (not twice in a row),
           // and so does anything new the customer wrote.
@@ -2868,7 +2878,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // The lines the engine adds are in the reply's own language (eval 2026-11-17: an English line
   // inside a Hebrew reply when the customer's last words were Latin, a product name or "ok").
   const lineLocale: "he" | "en" = output?.reply && /[\u0590-\u05FF]/.test(output.reply) ? "he" : output?.reply && /[A-Za-z]{2,}/.test(output.reply) && !/[\u0590-\u05FF]/.test(output.reply) ? "en" : locale;
-  const handoffLine = lineLocale === "he" ? "מעבירים לנציג מהצוות שימשיך איתך כאן." : "A person from the team will continue with you here.";
+  const handoffLine = HANDOFF_LINE[lineLocale];
   if (output && !turnTools.escalation) {
     // Only the bot's last message, and only a real offer of a person (rating ed780586: "כן" became a handoff).
     const accepted = ignoredYes(opts.incomingMessage ?? "", previousBotReplies.at(-1) ?? "", false, false);
@@ -3291,9 +3301,39 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     if (c) offered.push({ ref: `id:${c.productId}`, title: c.title, price: c.price ?? null, currency: c.currency ?? null, productId: c.productId ?? null, variantId: c.variantId ?? null, at: now });
   }
 
+  // ── Nothing is "passed to the team" (Omer 2026-11-23) ──
+  // A reply that still says the team has it, is checking, will answer, or that an answer will come here, and any
+  // question recorded for the team, is a real hand-over now: its team sentences go, what it really answered stays,
+  // and the approved line ends it. Every writer above (the model, the engine's rules, the fixed lines) ends here.
+  const handLoc: "he" | "en" = reply && /[\u0590-\u05FF]/.test(reply) ? "he" : reply && /[A-Za-z]{2,}/.test(reply) ? "en" : locale === "en" ? "en" : "he";
+  // "I do not have that information" after the turn's lookups is the same: missing = a real hand-over.
+  // A thanks or a goodbye asks nothing: a stale "still being checked" in its reply is cut, nobody is handed it.
+  if (!final.handoff && !escalation && !final.teamQuestion && customerAck(String(opts.incomingMessage ?? "")) && claimsTeam(reply ?? "")) {
+    reply = withoutTeamClaims(reply ?? "") || (locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE);
+    (trace as any).teamClaimCutOnThanks = true;
+  }
+  if (!final.handoff && !escalation && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
+    const asked = String(final.teamQuestion ?? opts.incomingMessage ?? "").slice(0, 300);
+    final = { ...final, handoff: `not answered after looking: ${asked}`.slice(0, 300), teamQuestion: final.teamQuestion ?? (String(opts.incomingMessage ?? "").slice(0, 300) || null) };
+    (trace as any).teamPassToHandoff = true;
+  }
+  if (final.handoff || escalation) {
+    // The customer gets what was really answered and the approved line, nothing about the team or a later answer.
+    // The engine's stop-use advice on a safety case stays, word for word (it says a person will check, and one will).
+    const stopUse = (String(reply ?? "").match(/[^.!?\n]*(?:להפסיק להשתמש|stop using)[^.!?\n]*[.!?]?/giu) ?? []).map((x) => x.trim());
+    let kept = withoutTeamClaims(dropPersonPromises(stopUse.reduce((t, x) => t.replace(x, ""), String(reply ?? ""))));
+    // Handed over by the engine: no question of ours is left hanging over the line (the person asks what they need).
+    if ((trace as any).teamPassToHandoff) kept = (kept.match(/[^.!?\n]+[.!?]*\s*/g) ?? []).filter((x) => !/\?\s*$/.test(x)).join("").trim();
+    kept = [kept, ...stopUse].filter(Boolean).join(" ").trim();
+    const line = HANDOFF_LINE[handLoc];
+    reply = kept && !kept.includes(line) ? `${kept.replace(/[\s]+$/, "")}${/[.!?]$/.test(kept.trim()) ? "" : "."} ${line}` : kept.includes(line) ? kept : line;
+  }
   if (final.handoff && !escalation) {
     escalation = { reason: `ai_handoff:${final.handoff.slice(0, 80)}`, priority: "medium", summary: final.handoff.slice(0, 300) } as any;
   }
+  // The worker sends THIS line (not a generated one) and tells the team: no v2 hand-over is silent to the admins
+  // (2026-11-23: it went out with notify off, so conversation.escalated never fired for one).
+  if (escalation) escalation = { ...(escalation as any), customerLine: reply, announce: true } as any;
   const firstApproval = turnTools.approvals[0];
   const awaitingApproval = lane === "live" && firstApproval
     ? { approvalRequestId: firstApproval.approvalRequestId, tool: firstApproval.tool, reason: "requires_approval" }
@@ -3324,10 +3364,9 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       if (lane === "live") void recordUnansweredQuestion({ tenantId: opts.tenantId, question: `${upd.text} (update: the customer gave ${upd.added.join(", ")})`.slice(0, 300), reason: "no_knowledge", askerKey: opts.conversationId });
     }
   }
-  const teamPromise = newTeamQuestion
-    ? [{ kind: "promise" as const, text: `${TEAM_PROMISE_PREFIX}${newTeamQuestion.slice(0, 200)}`, at: now }]
-    : [];
-  if (newTeamQuestion && lane === "live") {
+  // No team item is kept any more: the hand-over is the follow-up (Omer 2026-11-23).
+  const teamPromise: Array<{ kind: "promise"; text: string; at: string }> = [];
+  if (newTeamQuestion && final.handoff && lane === "live") {
     void recordUnansweredQuestion({ tenantId: opts.tenantId, question: newTeamQuestion, reason: "no_knowledge", askerKey: opts.conversationId });
   }
 
@@ -3369,7 +3408,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           engine: "v2", promptVersion: ENGINE_PROMPT_VERSION, aiAgentId: config.id, model, stageMs, rounds: trace.rounds,
           tokens: trace.tokens,
           // A refused call keeps its query and the reason (dev round k5 on 0b5f2b46: a denied search with neither).
-          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined, idOrigin: r.idOrigin, ...(r.decision === "deny" ? { q: String((r.args as any)?.query ?? "").slice(0, 60), reason: (() => { try { return String(JSON.parse(String(r.content ?? "{}"))?.reason ?? "").slice(0, 100); } catch { return ""; } })() } : {}) })),
+          toolCalls: turnTools.records.map((r) => ({ tool: r.tool, decision: r.decision === "allow" ? "executed" : r.decision, outcome: r.outcome, ms: r.ms, resultCount: r.resultCount, retried: r.retried || undefined, idOrigin: r.idOrigin, ...(r.tool === "search_knowledge" ? { q: String((r.args as any)?.query ?? "").slice(0, 120) } : {}), ...(r.decision === "deny" ? { q: String((r.args as any)?.query ?? "").slice(0, 60), reason: (() => { try { return String(JSON.parse(String(r.content ?? "{}"))?.reason ?? "").slice(0, 100); } catch { return ""; } })() } : {}) })),
           gate3: trace.gate3, teamQuestion: final.teamQuestion ?? undefined,
           escalation, toolsOffered: trace.toolsOffered, state: { stage: next.stage, intent: next.intent },
           // What the cleanup cut and why, the bot's own words only (internal: never read by a customer or tenant screen).

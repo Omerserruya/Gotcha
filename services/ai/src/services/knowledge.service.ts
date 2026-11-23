@@ -396,9 +396,18 @@ export async function documentAddress(tenantId: string, aiAgentId?: string | nul
   return value;
 }
 
+/** The v2 wording of the knowledge block: "the team will answer" becomes the hand-over (Omer 2026-11-23). */
+export function v2HandOver(block: string): string {
+  return block
+    .replace("Say plainly that you do not have that information here, and offer to have the team get back to them.", "If no tool result answers it either, hand over to a person (set handoff); never say the team will get back to them.")
+    .replace("say you do not have that information and offer to have the team answer.", "hand over to a person (set handoff); never say the team will answer.")
+    .replace("say you do not have that information and offer to have the team answer; do not answer with the nearest policy", "hand over to a person (set handoff); do not answer with the nearest policy")
+    .replace(" and put the conflict in team_question so the owner can fix it.", ".");
+}
+
 export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAllWeak?: boolean; conflicts?: "surface" | "team" } = {}): string {
   if (chunks.length === 0) return "";
-  if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return NO_KNOWLEDGE_MATCH_BLOCK;
+  if (opts.dropWhenAllWeak && chunks.every((c) => typeof c.score === "number" && c.score < KNOWLEDGE_GAP_SCORE)) return opts.conflicts === "team" ? v2HandOver(NO_KNOWLEDGE_MATCH_BLOCK) : NO_KNOWLEDGE_MATCH_BLOCK;
 
   // A source that scored below the gap line is probably about something else
   // (Tehila 2026-11-03: "איפה יש נקודות מכירה" was answered from the shipping
@@ -412,6 +421,12 @@ export function buildKnowledgeContext(chunks: SearchResult[], opts: { dropWhenAl
     ? "\nNone of the sources below clearly matches this question. Unless one of them states the answer outright, say you do not have that information and offer to have the team answer.\n"
     : "";
 
+  // Reply engine v2 (conflicts "team"): there is no team answer later, a missing answer is a hand-over (2026-11-23).
+  if (opts.conflicts === "team") return v2HandOver(knowledgeBlock(contextParts, allWeak, opts));
+  return knowledgeBlock(contextParts, allWeak, opts);
+}
+
+function knowledgeBlock(contextParts: string[], allWeak: string, opts: { conflicts?: "surface" | "team" }): string {
   return `## KNOWLEDGE BASE CONTEXT (HIGH PRIORITY)
 
 The text below is the PRIMARY source of truth for this turn. It overrides your general knowledge and any prior assumptions about this organization, its products, prices, policies, processes, and people.

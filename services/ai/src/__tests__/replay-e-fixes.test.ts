@@ -1985,7 +1985,7 @@ describe("commit 4: where a product id came from, and the page as background (pr
     expect(searchLine({ tools: [{ tool: "woocommerce.list_products", args: { query: "contour" }, outcome: "ok", resultCount: 3, content: "" }] })).toBe('model args: list_products {"query":"contour"} -> ok (3)');
     expect(searchLine({ tools: [tool] })).toBe('model args: get_product {"product_id":"1112"} -> ok (1)');
     expect(reportHeadLine("m-1")).toBe(`Model: m-1. Prompt: ${ENGINE_PROMPT_VERSION}. Lane: replay (writes simulated, platform-paid).`);
-    expect(ENGINE_PROMPT_VERSION).toBe("reply-engine-v2.1");
+    expect(ENGINE_PROMPT_VERSION).toBe("reply-engine-v2.2");
   });
 
   it("★ origin: the engine asks it from the model's arguments and what the turn showed, and the trace keeps it", async () => {

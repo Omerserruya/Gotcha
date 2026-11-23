@@ -983,14 +983,21 @@ describe("prod replay 8 (2026-11-17)", () => {
   const kinds = (ps: any[]) => ps.map((p) => p.kind);
   const styleCodes = (ps: any[]) => ps.filter((p) => p.kind === "style").flatMap((p) => p.codes);
 
-  it("★ v2's knowledge rule: never mention sources; the specific policy wins and the conflict goes to the team. Legacy unchanged", async () => {
+  it("★ v2's knowledge rule: never mention sources; the specific policy wins; nothing goes to a team, a missing answer is a hand-over. Legacy unchanged", async () => {
     const { buildKnowledgeContext } = await import("../services/knowledge.service");
     const chunks = [{ content: "x", score: 0.6, documentTitle: "FAQ", chunkIndex: 0 }];
     const v2 = buildKnowledgeContext(chunks as any, { conflicts: "team" });
     expect(v2).toMatch(/Never mention sources/);
-    expect(v2).toMatch(/team_question/);
+    expect(v2).not.toMatch(/team_question|offer to have the team/);
+    expect(v2).toMatch(/hand over to a person \(set handoff\)/);
     expect(v2).not.toMatch(/surface the disagreement/);
+    // Legacy keeps its own wording, team offer included.
     expect(buildKnowledgeContext(chunks as any)).toMatch(/surface the disagreement/);
+    expect(buildKnowledgeContext(chunks as any)).toMatch(/offer to have the team answer/);
+    // All weak: v2 hands over, legacy offers the team.
+    const weak = [{ content: "x", score: 0.1, documentTitle: "FAQ", chunkIndex: 0 }];
+    expect(buildKnowledgeContext(weak as any, { dropWhenAllWeak: true, conflicts: "team" })).toMatch(/hand over to a person \(set handoff\); never say the team will get back/);
+    expect(buildKnowledgeContext(weak as any, { dropWhenAllWeak: true })).toMatch(/offer to have the team get back to them/);
   });
 
   it("★ talk of sources, and a tool failure told to the customer, are style problems and are cut", async () => {
@@ -2977,8 +2984,9 @@ describe("C pinned rating c24439a1: units", () => {
   it("★ 6: general know-how is never a team question, a follow-up on it is answered", async () => {
     const { PLATFORM_RULES } = await import("../services/reply-engine/prompt");
     const all = PLATFORM_RULES;
-    expect(all).toMatch(/never a team question: answer it yourself/);
-    expect(all).toMatch(/unless you can answer it now from the knowledge, a tool or general know-how/);
+    expect(all).toMatch(/It is not a fact about this store: answer it yourself/);
+    // There is no team question at all any more (2026-11-23).
+    expect(all).toMatch(/Never say something was passed to the team, that the team is checking, or that an answer will come later/);
   });
 });
 

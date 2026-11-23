@@ -395,7 +395,8 @@ export interface AIBotReplyResult {
    * these first, then `reply`. Empty/absent for the normal single-message case.
    */
   interimMessages?: string[];
-  escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string } | null;
+  /** customerLine / announce: reply engine v2's exact hand-over text, and "tell the team" (the worker does both). */
+  escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string; customerLine?: string; announce?: boolean } | null;
   awaitingApproval: { approvalRequestId: string; tool: string; reason: string } | null;
   toolCallLog: Array<{
     tool: string;

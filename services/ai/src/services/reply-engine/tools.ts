@@ -263,7 +263,10 @@ async function runOne(env: RunnerEnv, call: ModelToolCall): Promise<ToolRunRecor
     const out = q ? await withTimeout(deps.knowledge(env.tenantId, q, env.aiAgentId).catch(() => ""), env.toolTimeoutMs) : "";
     const text = out === TIMEOUT ? "" : out;
     if (text) env.turn.knowledgeText.push(text);
-    return rec("allow", text || "No document matched. Do not guess the answer; offer to check with the team.");
+    // Its outcome and hits on the turn audit (2026-11-23: every search read "executed" with no count, so a miss and
+    // a found-but-passed answer could not be told apart).
+    const hits = (text.match(/^### Source \d+:/gm) ?? []).length;
+    return { ...rec("allow", text || "No document matched. Do not guess the answer. If the product or order tools cannot answer it either, hand over: set handoff."), outcome: out === TIMEOUT ? "timeout" as const : hits ? "ok" as const : "empty" as const, resultCount: hits };
   }
 
   // ── Gate 2 + execution ──
@@ -417,7 +420,7 @@ export function crossCustomerNote(): string {
     reason: "access_denied_cross_customer",
     note:
       "This lookup is allowed only for this chat's own customer, and what was given did not match. Reveal nothing about it and do not retry with a phone number or an email. " +
-      "If the customer has not given the order number yet, ask for it and look the order up by that number. If an order number was already refused, say the team will check the order and put it in team_question. Not a reason to hand over.",
+      "If the customer has not given the order number yet, ask for it and look the order up by that number. If an order number was already refused, look up the customer's own orders (no selector); if that finds nothing either, hand over.",
   });
 }
 
@@ -503,7 +506,7 @@ export const ORDER_READ_TIMEOUT_MS = 10_000;
 /** REPLY_ENGINE_ORDER_TIMEOUT_MS, 100 to 60000; else 10s (and one retry: 20s worst case). */
 export const orderReadTimeoutMs = (env: NodeJS.ProcessEnv = process.env) => { const n = Number(env.REPLY_ENGINE_ORDER_TIMEOUT_MS); return Number.isFinite(n) && n >= 100 && n <= 60000 ? n : ORDER_READ_TIMEOUT_MS; };
 /** An order read that failed goes to the team (the engine records the item): the model says so, nothing else. */
-export const ORDER_FAILED_NOTE = "The order could not be read right now. Do not guess its state and do not say you could not check it: the team gets this order now, say it was passed to the team.";
+export const ORDER_FAILED_NOTE = "The order could not be read right now. Do not guess its state. Try the lookup once more; if it fails again, hand over (set handoff): a person continues with it here.";
 
 export async function runToolRound(env: RunnerEnv, calls: ModelToolCall[]): Promise<ToolRunRecord[]> {
   const out = await Promise.all(calls.map((c) => runOne(env, c)));

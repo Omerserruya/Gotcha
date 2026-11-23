@@ -133,7 +133,7 @@ describe("a hand-over the owner asked for", () => {
   it("★ through gate3 with a whole turn's evidence: cited in range passes, uncited or out of range does not", () => {
     const knowledge = "משלוחים: עד 5 ימי עסקים, 29 ש\"ח, חינם מעל 300 ש\"ח. החזרות: עד 14 יום מקבלת המוצר. שעות פעילות: א-ה 9:00-17:00. הזמנות סיטונאיות מטופלות על ידי הצוות.";
     const base: any = {
-      reply: "מעבירים לנציג מהצוות שימשיך איתך כאן.", claims: [], cards: [], candidateCount: 0, tools: [], grounding: knowledge, knowledge, sourceText: knowledge,
+      reply: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", claims: [], cards: [], candidateCount: 0, tools: [], grounding: knowledge, knowledge, sourceText: knowledge,
       locale: "he", incomingMessage: recent[0], recentInbound: ["היי", ...recent], isFirstReply: false, employeeGender: "feminine", employeeName: "נועה",
       toolsOffered: ["woocommerce.list_products", "search_knowledge"], shopFloor: true, handedOff: true, approvalPending: false, handoff: "wholesale order",
     };

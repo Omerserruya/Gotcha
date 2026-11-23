@@ -93,8 +93,8 @@ const NO_INFO = /אין (?:לי|לנו)(?: כאן)? (?:מידע|פרטים|פי�
 // A handoff silences the AI for the rest of the conversation, so it is kept for
 // these only (Omer via the Supervisor, 2026-11-16): an explicit ask for a person,
 // a strong complaint, a damaged item, a late order. Not for a tool that failed,
-// a discount, instalments or care details: those are answered, or checked with
-// the team as a question (respond.team_question) while the AI keeps the chat.
+// a discount, instalments or care details: those are answered after a lookup. What
+// is truly not there after the lookup is the hand-over too (Omer 2026-11-23).
 const ASKS_FOR_PERSON = /(?<![\u0590-\u05FF])(?:נציג|נציגה|נציגים|בן אדם|בנאדם|אדם אמיתי|מישהו אמיתי|אנושי|אנושית|לדבר עם (?:מישהו|מישהי|מנהל|מנהלת|אחראי)|תעבירו אותי|להעביר אותי|מנהל|מנהלת)(?![\u0590-\u05FF])|\b(?:human|real person|representative|agent|someone real|talk to (?:a|someone)|manager|speak to)\b/iu;
 // Damage, prod replay 2026-11-16: "לא מחוברים", "מפורק", "חסר" (a missing part) and
 // "הגיע הרוס" were missed, so a damaged delivery was argued out of its handoff
@@ -190,6 +190,38 @@ const TEAM_PASS_ANY = /(?<![\u0590-\u05FF])[וש]?(?:נעביר|אעביר|נש�
 /** The reply already says the team has it (or will): no team line is appended. */
 export const teamPassIn = (reply: string) => TEAM_LINE.test(reply ?? "") || WE_WILL_WITH_TEAM.test(reply ?? "") || TEAM_PASS_ANY.test(reply ?? "");
 export const removeTeamLines = (reply: string) => (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"\'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*\s*/g) ?? [String(reply ?? "")]).filter((x) => !TEAM_LINE.test(x)).reduce(joinKept, "").trim();
+
+/**
+ * Any line that says the team has it, will answer, is checking, or that an answer will come here (Omer 2026-11-23:
+ * there is no "team question" any more; such a line becomes a real handoff). From the prod lines of 2026-11-16..23
+ * ("עדיין ממתינים לתשובת הצוות", "בטיפול הצוות", "בבירור מול הצוות", "ונעדכן כאן בצ'אט", "אפשר לבדוק מול הצוות").
+ * Never the approved handoff line ("מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.").
+ */
+const TEAM_WAIT = new RegExp([
+  "(?<![\\u0590-\\u05FF])[וש]?(?:ממתינ(?:ים|ה|ות)?|מחכים)\\s+(?:ל|עוד\\s+ל)?(?:תשובת\\s+ה?צוות|תשובה\\s+מה?צוות|מה?צוות)",
+  "(?<![\\u0590-\\u05FF])[וש]?ב?טיפול\\s+(?:של\\s+)?ה?צוות",
+  "(?<![\\u0590-\\u05FF])(?:בבירור|בבדיקה|פתוח|פתוחה|בירור)\\s+(?:מול|אצל|עם)\\s+(?:ה?צוות|אצלם)",
+  "(?<![\\u0590-\\u05FF])בבדיקה\\s+אצלם",
+  "(?<![\\u0590-\\u05FF])[וש]?(?:תשובת\\s+ה?צוות|תשובה\\s+מה?צוות|מענה\\s+מה?צוות)",
+  "(?<![\\u0590-\\u05FF])ו?ה?תשובה\\s+(?:של\\s+ה?צוות\\s+)?תגיע\\s+(?:לכאן|כאן)",
+  "(?<![\\u0590-\\u05FF])[וש]?(?:נעדכן|יעדכנו|נחזור|יחזרו|יענו)\\s+(?:אותך\\s+|אותכם\\s+)?כאן\\s+ב?צ['׳]?אט",
+  "(?<![\\u0590-\\u05FF])[וש]?(?:ל|ש)?(?:בדוק|לבדוק|לברר|לשאול|אבדוק|אברר|אשאל|נבדוק|נברר|נשאל)\\s+(?:[\\u0590-\\u05FF]+\\s+){0,3}?(?:מול|עם|את)\\s+ה?צוות",
+  "(?<![\\u0590-\\u05FF])(?:להעביר|שאעביר|שנעביר|אעביר|נעביר)\\s+(?:את\\s+)?(?:[\\u0590-\\u05FF]+\\s+){0,3}?(?:ל|אל\\s+)ה?צוות",
+  "(?<![\\u0590-\\u05FF])(?:ה)?צוות\\s+(?:עדיין|כבר)\\s+(?:בודק|בודקים|מברר|מבררים|מטפל|מטפלים)",
+  // "החיוב עדיין בבדיקה.", "ההחזרה בבדיקה." (holding lines): a check someone is doing, said without the team.
+  "(?<=^|[.!?]\\s{0,3})(?:אני\\s+|אנחנו\\s+)?(?:בודק|בודקת|בודקים|מברר|מבררת|מבררים)\\s+(?:את|מול|עם|אם|כרגע|עכשיו)(?![\\u0590-\\u05FF])",
+  "(?<![\\u0590-\\u05FF])[וש]?(?:עדיין\\s+)?(?:בבדיקה|בבירור|נבדק|נבדקת|נבדקים)(?=\\s*[.!?,]|\\s*$|\\s+(?:אצל|מול|עם|כרגע|עכשיו)(?![\\u0590-\\u05FF]))",
+  "\\b(?:the team(?:'s)? answer|waiting (?:for|on) the team|with the team|the team is (?:still )?(?:checking|looking)|(?:ask|check) with the team|(?:the )?answer will come here)\\b",
+].join("|"), "iu");
+/** The reply says the team has it, is on it, or will answer (any wording above, or the older lines). */
+export const claimsTeam = (reply: string) => teamPassIn(reply) || TEAM_WAIT.test(reply ?? "");
+/** The reply without its team sentences: what it really answered stays. */
+export const withoutTeamClaims = (reply: string) => {
+  let t = removeTeamLines(String(reply ?? ""));
+  // A "we will keep it quiet" promise goes too: the person who continues decides that.
+  for (const re of [TEAM_WAIT, TEAM_PASS_ANY, WE_WILL_WITH_TEAM, SILENCE_PROMISE]) t = dropSentencesBy(t, re);
+  return t.trim();
+};
 
 // A material answered from the business description without reading the product (prod replay 12:
 // "stainless steel" from the product data in one conversation, something else from the description in another).
@@ -348,6 +380,18 @@ export function knowledgeAnswersIt(reply: string, incoming: string, teamQuestion
 /** A coupon or policy question sent to the team without searching the knowledge. */
 export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
   if (!teamQuestion || !COUPON_ASK.test(incoming ?? "")) return false;
+  return toolsOffered.includes("search_knowledge") && !tools.some((t) => t.tool === "search_knowledge");
+}
+
+/**
+ * The reply says it does not know (not "not in stock", not "not available in that size"): "אין לי כאן הסבר",
+ * "לא ידוע לנו מתי", "עדיין אין לנו מידע", "אין לנו מספר ימים קבוע" (prod lines 2026-11-16..23).
+ */
+const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b/iu;
+export const saysNotKnown = (reply: string) => NOT_KNOWN.test(reply ?? "");
+/** The reply says it does not know, or passes it on, and search_knowledge was offered but not called this turn. */
+export function unlookedPass(reply: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
+  if (!(teamQuestion || claimsTeam(reply) || saysNotKnown(reply))) return false;
   return toolsOffered.includes("search_knowledge") && !tools.some((t) => t.tool === "search_knowledge");
 }
 
@@ -1559,6 +1603,10 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion || (!!i.teamAlreadyOpen && TEAM_LINE.test(reply)))) problems.push({ kind: "unread_knowledge" });
   else if (unreadOrder(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_order" });
   else if (unreadKnowledge(i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unread_knowledge" });
+  // Omer 2026-11-23: no "I don't know", no pass and no hand-over for missing information before the business's
+  // knowledge was searched THIS turn, whatever the topic (the topic lists above missed thickness, transparency,
+  // sizes and discounts: 13 of 44 Smoovee team turns never searched).
+  if (!problems.some((p) => /^unread_|^gave_up_search$/.test(p.kind)) && unlookedPass(reply, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unlooked_pass" });
   if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson, citesOwnerHandover(i.handoffRule, i.ownerHandoverRules))) problems.push({ kind: "needless_handoff" });
   // Products this turn mean a search ran.
   const recommendUnsearched = ASKS_RECOMMEND.test(i.incomingMessage ?? "") && i.toolsOffered.some((n) => /list_products|search_products/i.test(n)) && !i.tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
@@ -2043,7 +2091,7 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   // An explanation the model answered without a lookup: the knowledge, by the customer's words.
   if (explain && (has("no_search") || has("ungrounded_absence") || has("gave_up_search")) && !has("unread_knowledge") && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
-  } else if ((has("unread_knowledge") || has("unread_product")) && toolsOffered.includes("search_knowledge") && !(has("unread_product") && done.some((t) => t.tool === "search_knowledge"))) {
+  } else if ((has("unread_knowledge") || has("unread_product") || has("unlooked_pass") || has("needless_handoff")) && toolsOffered.includes("search_knowledge") && !((has("unread_product") || has("unlooked_pass") || has("needless_handoff")) && done.some((t) => t.tool === "search_knowledge"))) {
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
   } else if (problems.some((p: any) => p.kind === "gave_up_search" && p.fromKnowledge) && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
     // The store timed out and the knowledge speaks of it: the business's own tables answer it (prod rating 2026-11-17).
@@ -2141,16 +2189,17 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
   for (const p of problems) {
     if (p.kind === "owner_never") lines.push(neverSaidNote(p.claims));
     if (p.kind === "ungrounded_price") lines.push(`- These prices are not in any tool result or the knowledge: ${p.prices.join(", ")}. Remove them or state only prices a tool returned.`);
-    if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn, or that the team cannot be reached (${p.claims.join("; ")}). Say only what really happened; the team can always be reached: set team_question and say it is with the team.`);
-    if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Answer from what you know; if the team must answer (a discount, instalments, a detail not in the product text), say you will check with the team and put the question in team_question. A tool that failed is not a reason: say you could not check it right now." + (owner?.handover ? " The one other reason is one of the business's own numbered hand-over rules: only if one of them truly is the reason, keep the handoff and set handoff_rule to its number." : ""));
-    if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell say the team will check.");
-    if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it put the question in team_question.");
+    if (p.kind === "unsupported_action") lines.push(`- You said something was done that no tool did this turn, or that the team cannot be reached (${p.claims.join("; ")}). Say only what really happened. When it truly needs a person, hand over: set handoff.`);
+    if (p.kind === "needless_handoff") lines.push("- Do NOT hand this over: a handoff silences you for the rest of the chat, and the customer did not ask for a person. Set handoff to null. Look first (the knowledge search results are above; the product or the order tool when it is about one) and answer from what you find. Only if they truly do not have it, say plainly that you do not have that information here, nothing more (never that the team will check or answer). A tool that failed once is not a reason: try it once more." + (owner?.handover ? " The one other reason is one of the business's own numbered hand-over rules: only if one of them truly is the reason, keep the handoff and set handoff_rule to its number." : ""));
+    if (p.kind === "unread_order") lines.push("- The customer asked about their order or delivery. Look it up first: call the order or tracking tool now (ask for the order number or phone only if you truly need it), answer from what it returns, and only if it cannot tell hand over (set handoff).");
+    if (p.kind === "unread_knowledge") lines.push("- The customer asked about the business itself (an address, hours, pickup, shipping, returns, contact, a coupon or a policy). Call search_knowledge now and answer from it, or from the business details you were given; only if neither has it hand over (set handoff).");
+    if (p.kind === "unlooked_pass") lines.push("- You said you do not know, or that someone will check, without searching the business's knowledge. Its search results are above now: answer from them (and from the product or order tools when it is about a product or an order). Only if none of them has it, hand over: set handoff. Never say the team will check, answer later or get back to the customer.");
     if (p.kind === "ungrounded_absence" && p.claims.some((c) => ADDRESS_DENIED.test(c))) lines.push("- The business's address IS in the business details above: give it.");
     if (p.kind === "ungrounded_absence" && p.claims.some((c) => ORDER_ABSENCE.test(c))) lines.push("- You said there is no order, or it cannot be located, without looking: the customer's own orders (by the number they write from) were looked up now; answer from what came back, and ask for the order number only if nothing did.");
     if (p.kind === "ungrounded_absence") lines.push(`- You said we do not have or sell something (${p.claims.join("; ")}), but no search as broad as that claim ran this turn (an empty search for more words proves nothing about the category), or it returned them. Look at what the broader search returned and show those products; if truly nothing, say you did not find it by that name and ask.`);
     if (p.kind === "no_search") lines.push("- The customer told you what they want (a category, a colour, a size). Search the store with their words now and show what fits; ask at most one short question, never for a photo you already asked for.");
     if (p.kind === "unsafe_tip") lines.push(`- This is a safety conversation: give no usage tip the business's knowledge does not state (${p.claims.join("; ")}). Say to stop using it until a person from the team checks, and that a person will continue here.`);
-    if (p.kind === "coupon_source") lines.push("- The customer asks where to GET it, not where or how to use it. Say how it is obtained if the knowledge or the business details say; otherwise put the question in team_question. Do not repeat how to use it.");
+    if (p.kind === "coupon_source") lines.push("- The customer asks where to GET it, not where or how to use it. Say how it is obtained if the knowledge or the business details say; otherwise hand over (set handoff). Do not repeat how to use it.");
     if (p.kind === "knowledge_has_it") lines.push("- The store search did not answer, but the business's knowledge above already answers this (a compatibility or size table): answer from it, and do not send it to the team.");
     if (p.kind === "echoed_size") lines.push(`- A product's size comes from the product data, never from the number the customer typed (${p.claims.join("; ")}). State the size the search returned, or that it is not listed.`);
     if (p.kind === "ungrounded_number") lines.push(`- These numbers are in no tool result, the knowledge or the business details (${p.claims.join("; ")}). State only numbers a tool or the knowledge gives; otherwise leave the number out or say you will check.`);
@@ -2163,9 +2212,9 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "ungrounded_negative_fit") lines.push(`- You said a product does not fit with nothing showing it (${p.claims.join("; ")}). Say it does not fit only when its own text says so or its size is smaller than the customer's base.${(p as any).fits?.length ? ` By size, these take the customer's base: ${(p as any).fits.join(", ")}.` : ""}`);
     if (p.kind === "device_mismatch") lines.push(`- You offered a product for another device than the customer's (${p.claims.join("; ")}). Offer only what fits their own device, from the search or the knowledge's device table; if nothing does, say so and ask.`);
     if (p.kind === "claims_attachment") lines.push("- No photo, video or file came from the customer in their last messages: do not say one was received. Answer what they wrote.");
-    if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Say it is not known here and put the question in team_question; never guess a source.`);
+    if (p.kind === "ungrounded_source") lines.push(`- You said where it is obtained (${p.claims.join("; ")}), and the knowledge does not say so. Do not guess a source: if the knowledge does not say, hand over (set handoff).`);
     if (p.kind === "price_against_store") lines.push(`- A product's price comes from the store's own data, not a document (${p.claims.join("; ")}). ${p.store?.length ? `The store's price: ${p.store.join("; ")}. Give that one; a regular price only next to it, as the price before the sale.` : "Read the product (search or get_product) and give the store's price."}`);
-    if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Say it is being checked and put it in team_question (or hand over if the customer is upset); never state the order's state.`);
+    if (p.kind === "order_state_unread") lines.push(`- The order lookup failed this turn, so its state is not known (${p.claims.join("; ")}). Never state the order's state: try the lookup once more, and if it still fails hand over (set handoff).`);
     if (p.kind === "option_without_variation") lines.push(`- You stated stock or a price for one option (a colour, a size, a model) from the parent product only (${p.claims.join("; ")}). Read that option's own data first (the product's variations or variants) and answer from it; if you cannot, say what the product page shows in general and that the option itself will be checked.`);
     if (p.kind === "not_narrowed") lines.push(`- The customer gave a detail that only some of the products match. Name only the ones that match it, one or two, and leave out ${p.extra.map((t) => `"${t}"`).join(", ")}.`);
     if (p.kind === "partial_return_policy") lines.push("- The business has both returns and exchanges: give both, each with its time limit, from the knowledge.");
@@ -2189,7 +2238,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
       if (c.has("self_gender")) lines.push("- Speak of yourself in your configured gender, or neutrally.");
       if (c.has("banned_phrase") || c.has("self_intro")) lines.push("- Drop stock phrases and self-introductions; answer directly.");
       if (c.has("card_narration")) lines.push("- Do not describe the cards, their pictures or buttons; they are on screen.");
-      if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: say the question went to the team and the answer will come here in the chat (\"העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט\").");
+      if (c.has("callback_promise")) lines.push("- No \"נחזור אליך\" or any callback: answer it now, or hand over (set handoff); nobody answers later in this chat.");
       if (c.has("foreign_script")) lines.push("- A character from another alphabet slipped into a word: rewrite the reply in the customer's language only.");
       if (c.has("failure_narration")) lines.push("- Never tell the customer a tool or the catalogue failed. Search again narrower, or ask one question about what they want, or show the closest products from earlier in this conversation.");
       if (c.has("statement_question")) lines.push("- \"יש כמה ...\" about the products you show is a statement: end it with a full stop, not a question mark.");
@@ -2199,7 +2248,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
       if (c.has("odd_hedge")) lines.push("- No hedge that predicts a fault the data does not state (\"ייתכן שהמוצר יזוז\", \"it might break\").");
       if (c.has("broken_hebrew")) lines.push("- \"מה לא היה בסדר\" (or \"מה לא עבד\"), not \"מה לא מרוצה\".");
       if (c.has("internal_reasoning")) lines.push("- Never narrate your own choice (\"they don't match what you described, so I won't offer them\"). Search again with the customer's own words for the item; show what fits, or ask one question about what they want.");
-      if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule and put the conflict in team_question.");
+      if (c.has("internal_jargon")) lines.push("- Do not explain how the system works (linked details, identity, access) and never mention sources or documents (\"another source says\"): when the business's texts disagree, give the more specific policy's rule.");
       if (c.has("mixed_language")) lines.push("- Write the whole reply in the customer's language: one sentence is in another language.");
       if (c.has("familiar_address")) lines.push("- Do not call the customer \"אחי\", \"מותק\", \"נשמה\" or the like: friendly, not familiar.");
       if (c.has("wrong_identity")) lines.push("- You are this business's assistant under your own configured name only: never present yourself as another person or by a team member's name.");
@@ -2224,7 +2273,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
       if (c.has("false_absence")) lines.push("- An empty search is not proof the store lacks it: say you did not find it by that name.");
       if (c.has("empty")) lines.push("- The reply was empty: write the message to the customer.");
       if (c.has("simulation_leak")) lines.push("- Never mention a test, a simulation or that something was not really done: write to the customer as in any real conversation.");
-      if (c.has("repeated_team_line")) lines.push("- The team already has this question: do not say again that you passed it on, and do not set team_question for it again. Answer this new message itself.");
+      if (c.has("repeated_team_line")) lines.push("- Never say the team has it, is checking or will answer: answer this message itself, or hand over (set handoff).");
     }
   }
   // The owner's rules hold for the rewritten reply too (they sit in the prefix; this names them at the point of the rewrite).
