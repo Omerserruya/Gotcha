@@ -706,6 +706,9 @@ router.post("/:id/readiness-questions/answer", authenticate, resolveTenant, requ
 });
 
 // ─── Update AI Agent ─────────────────────────────────────────
+/** The hire sheet's bound on an employee's name (HireSheet maxLength). */
+const MAX_AGENT_NAME = 120;
+
 router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
@@ -751,6 +754,24 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     const updateData: Record<string, any> = {};
     for (const k of AGENT_EDITABLE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
+
+    // The name keeps the hire's rules on a rename: trimmed, never empty, at
+    // most MAX_AGENT_NAME (HireSheet's limit). An empty name was stored as
+    // sent, and the inbox and routing showed an employee with no name.
+    if (Object.prototype.hasOwnProperty.call(bodySrc, "name")) {
+      const name = typeof bodySrc.name === "string" ? bodySrc.name.trim() : "";
+      if (!name || name.length > MAX_AGENT_NAME) {
+        res.status(400).json({
+          error: name ? `The name is longer than ${MAX_AGENT_NAME} characters` : "A name is required",
+          field: "name",
+          code: "INVALID_NAME",
+          reason: name ? "too_long" : "empty",
+          max: MAX_AGENT_NAME,
+        });
+        return;
+      }
+      updateData.name = name;
     }
 
     // "Says it's AI when asked" (A3b): a boolean kept inside persona, merged so
