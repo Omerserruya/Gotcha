@@ -1,7 +1,7 @@
 /** The replay script's plan: which turns, cut where, by which employee; never sandbox, test or imported. */
 import { describe, it, expect, vi } from "vitest";
 vi.mock("../services/connectors", () => ({}));
-vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn() }));
+vi.mock("../services/reply-engine/engine", () => ({ runReplyEngineTurn: vi.fn(), HANDOFF_LINE: { he: "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.", en: "A person from the team will continue with you here." } }));
 import { parseArgs, planReplay, gateAsOf, stagesLine, searchLine, reportPath } from "../scripts/replay-v2";
 
 const at = (m: number) => new Date(Date.UTC(2026, 10, 10, 10, m));
@@ -197,5 +197,49 @@ describe("the calls of a turn, around its first draft (log only)", () => {
     // No mark of the draft: one part, as before, the engine's own still marked.
     expect(searchLine({ tools: [model, own] })).toBe('model args: list_products {"query":"x"} -> ok (2) ["A"]; engine: list_products {"query":"y"} -> ok (1)');
     expect(searchLine({ tools: [knowledge], toolsAtFirstGate: 0 })).toBe("none");
+  });
+});
+
+describe("★ --turns: the 51 team-pass turns, replayed exactly, with a before/after verdict (2026-11-23)", () => {
+  const HAND = "מעבירים אותך עכשיו לטיפול של נציג אנושי שימשיך מכאן.";
+  it("args: --turns alone is enough; ids from a file", async () => {
+    expect(parseArgs(["--turns", "m1,m2"])).toMatchObject({ turns: ["m1", "m2"], tenants: [] });
+    expect(() => parseArgs(["--dry"])).toThrow(/--turns/);
+    expect(parseArgs(["--tenants", "t1"]).turns).toBeNull();
+  });
+  it("the tenants and conversations come from the messages, and only the pinned messages are replayed", async () => {
+    const calls: any = { conv: [], msg: [] };
+    const thread = [
+      { id: "m1", direction: "INBOUND", body: "מה העובי?", createdAt: at(1) },
+      { id: "m2", direction: "OUTBOUND", body: "העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט.", createdAt: at(2), senderName: "AI Bot" },
+      { id: "m3", direction: "INBOUND", body: "ומה עם הקצוות?", createdAt: at(3) },
+    ];
+    const d: any = {
+      aIAgent: { findFirst: async () => ({ id: "noa" }) },
+      conversation: { findMany: async (a: any) => { calls.conv.push(a); return [{ id: "c9", assignedAiAgentId: "maya" }]; } },
+      message: {
+        findMany: async (a: any) => { calls.msg.push(a); return a.where.id ? [{ id: "m1", tenantId: "tA", conversationId: "c9" }] : thread; },
+        findFirst: async () => null,
+      },
+      conversationHandover: { findMany: async () => [] },
+    };
+    const plan = await planReplay(parseArgs(["--turns", "m1,missing"]), d);
+    expect([...plan.keys()]).toEqual(["tA"]);
+    expect(calls.conv[0].where).toMatchObject({ tenantId: "tA", id: { in: ["c9"] } });
+    expect(calls.conv[0].take).toBeUndefined();
+    const turns = plan.get("tA")!;
+    expect(turns.map((t) => t.messageId)).toEqual(["m1"]);
+    expect(turns[0].sentAfter).toEqual(["AI Bot: העברתי את השאלה לצוות, והתשובה תגיע כאן בצ'אט."]);
+  });
+  it("the verdict: live's team pass against v2's answer or real hand-over; pass lines and unbacked transfer claims counted", async () => {
+    const { teamPassVerdict } = await import("../scripts/replay-v2");
+    const pass = ["AI Bot: העובי 2.2-2.5 מ\"מ. לגבי הקצוות, עדיין ממתינים לתשובת הצוות."];
+    expect(teamPassVerdict(pass, "העובי הוא 2.2-2.5 מ\"מ.", null)).toEqual({ before: "team_pass", after: "answered", passLines: 0, transferClaim: false });
+    expect(teamPassVerdict(pass, `העובי הוא 2.2-2.5 מ"מ. ${HAND}`, { reason: "ai_handoff:x" })).toEqual({ before: "team_pass", after: "handoff", passLines: 0, transferClaim: false });
+    // A v2 reply that still passes it on, with or without a hand-over behind it.
+    expect(teamPassVerdict(pass, "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", null)).toEqual({ before: "team_pass", after: "answered", passLines: 1, transferClaim: true });
+    expect(teamPassVerdict(pass, "נציג מהצוות ימשיך איתך כאן.", null).transferClaim).toBe(true);
+    expect(teamPassVerdict([], null, null)).toEqual({ before: "nothing", after: "silent", passLines: 0, transferClaim: false });
+    expect(teamPassVerdict(["AI Bot: מעבירים אותך לנציג אנושי שימשיך לטפל בבקשה."], HAND, { reason: "x" }).before).toBe("handoff");
   });
 });

@@ -4,6 +4,12 @@
  * container (it needs its env and its code):
  *
  *   npx tsx src/scripts/replay-v2.ts --tenants <id,id> [--per-tenant 15] [--cap 150] [--dry] [--keep] [--out /tmp/replay-v2.md]
+ *   npx tsx src/scripts/replay-v2.ts --turns @/tmp/turns.txt [--dry] [--out ...]
+ *
+ * --turns pins exact turns: the customer messages' ids (one per line or comma separated, or @file). Their
+ * tenants and conversations come from the messages, and only those messages are replayed (each with its whole
+ * history as of it). The report then adds a team-pass verdict per turn (2026-11-23, Omer's rule: answer, or a
+ * real hand-over; never "passed to the team"): what live sent against what v2 does now.
  *
  * What it does, per tenant: the last N conversations with at least one customer
  * message (no sandbox, test or imported ones); for each customer message, in
@@ -31,14 +37,16 @@ import { cacheCounts, searchRequestCounts } from "../services/connectors/woocomm
 import { WARM_EVERY_MS, warmWooCachesOnce } from "../services/woo-cache-warmer.service";
 import { runReplyEngineTurn } from "../services/reply-engine/engine";
 import { ENGINE_PROMPT_VERSION } from "../services/reply-engine/prompt";
-import { isCannedTeamLine, automatedInbound } from "../services/reply-engine/gates";
+import { isCannedTeamLine, automatedInbound, claimsTeam, promisesPerson } from "../services/reply-engine/gates";
+import { HANDOFF_LINE } from "../services/reply-engine/engine";
 
-interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null; ids: string[] | null }
+interface Args { tenants: string[]; perTenant: number; cap: number; dry: boolean; keep: boolean; out: string; before: Date | null; ids: string[] | null; turns: string[] | null }
 
 export function parseArgs(argv: string[]): Args {
   const get = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : undefined; };
   const tenants = String(get("--tenants") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (!tenants.length) throw new Error("--tenants <id,id> is required");
+  const turns = parseIds(get("--turns"));
+  if (!tenants.length && !turns) throw new Error("--tenants <id,id> (or --turns) is required");
   const n = (v: string | undefined, d: number) => (v && Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : d);
   return {
     tenants,
@@ -53,7 +61,33 @@ export function parseArgs(argv: string[]): Args {
     before: parseBefore(get("--before")),
     // A pinned set: exactly these conversations (2026-11-18: --before still drifted as last messages moved).
     ids: parseIds(get("--ids")),
+    // Pinned turns: exactly these customer messages (2026-11-23: the 51 team-pass turns of the Q1b list).
+    turns,
   };
+}
+
+/** One sentence per element (the reply's own sentence split, links kept whole). */
+const sentencesOf = (t: string) => (String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).map((x) => x.trim()).filter(Boolean);
+
+export interface TeamPassVerdict {
+  /** What live sent after the message: a team pass, a hand-over line, an answer, or nothing. */
+  before: "team_pass" | "handoff" | "answer" | "nothing";
+  /** What v2 does now: a real hand-over (an escalation), an answer, or silence. */
+  after: "handoff" | "answered" | "silent";
+  /** Sentences of v2's reply that still say the team has it, will answer, or is checking: must be 0. */
+  passLines: number;
+  /** v2 says a person or the team has it with no hand-over behind it: must never happen. */
+  transferClaim: boolean;
+}
+/** The team-pass verdict of one replayed turn (2026-11-23). */
+export function teamPassVerdict(sentAfter: string[], reply: string | null | undefined, escalation: unknown): TeamPassVerdict {
+  const live = sentAfter.map((x) => x.replace(/^[^:]{0,40}:\s*/, ""));
+  const before = !live.length ? "nothing" : live.some((x) => claimsTeam(x)) ? "team_pass" : live.some((x) => promisesPerson(x)) ? "handoff" : "answer";
+  const text = String(reply ?? "");
+  const own = text.replace(HANDOFF_LINE.he, "").replace(HANDOFF_LINE.en, "");
+  const passLines = sentencesOf(own).filter((x) => claimsTeam(x)).length;
+  const handedOver = !!escalation;
+  return { before, after: handedOver ? "handoff" : text.trim() ? "answered" : "silent", passLines, transferClaim: !handedOver && (passLines > 0 || promisesPerson(own)) };
 }
 
 /** "--ids a,b,c" or "--ids @file" (one id per line or comma separated); null when absent; empty is refused. */
@@ -294,7 +328,19 @@ export function reportPath(out: string | undefined, now = new Date()): string {
 export async function planReplay(args: Args, db: any = prisma): Promise<Map<string, PlannedTurn[]>> {
   const plan = new Map<string, PlannedTurn[]>();
   let total = 0;
-  for (const tenantId of args.tenants) {
+  // Pinned turns: their tenants and conversations come from the messages themselves.
+  let pinned: Set<string> | null = null;
+  let tenants = args.tenants;
+  let ids = args.ids;
+  if (args.turns) {
+    const rows: Array<{ id: string; tenantId: string; conversationId: string | null }> = await db.message.findMany({ where: { id: { in: args.turns } }, select: { id: true, tenantId: true, conversationId: true } });
+    pinned = new Set(rows.map((r) => r.id));
+    tenants = [...new Set(rows.map((r) => r.tenantId))];
+    ids = [...new Set(rows.map((r) => r.conversationId).filter((x): x is string => !!x))];
+    const missing = args.turns.filter((x) => !pinned!.has(x));
+    if (missing.length) console.warn(`[replay] ${missing.length} of the pinned turns are not messages: ${missing.slice(0, 5).join(",")}`);
+  }
+  for (const tenantId of tenants) {
     const fallbackAgent = await db.aIAgent.findFirst({ where: { tenantId, status: "ACTIVE" }, orderBy: { createdAt: "asc" }, select: { id: true } });
     const convs = await db.conversation.findMany({
       where: {
@@ -302,10 +348,10 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
         NOT: { customerExternalId: { startsWith: "sandbox:" } },
         messages: { some: { direction: "INBOUND" } },
         // Pinned ids: exactly those (every one of them, whatever the per-tenant count); else the newest before --before.
-        ...(args.ids ? { id: { in: args.ids } } : args.before ? { lastMessageAt: { lt: args.before } } : {}),
+        ...(ids ? { id: { in: ids } } : args.before ? { lastMessageAt: { lt: args.before } } : {}),
       },
       orderBy: { lastMessageAt: "desc" },
-      ...(args.ids ? {} : { take: args.perTenant }),
+      ...(ids ? {} : { take: args.perTenant }),
       select: { id: true, assignedAiAgentId: true, channel: true, customerExternalId: true },
     });
     const turns: PlannedTurn[] = [];
@@ -340,6 +386,7 @@ export async function planReplay(args: Args, db: any = prisma): Promise<Map<stri
       for (let i = 0; i < msgs.length; i++) {
         const m: any = msgs[i];
         if (m.direction !== "INBOUND" || !String(m.body ?? "").trim() || (m.messageType ?? "text") === "system") continue;
+        if (pinned && !pinned.has(m.id)) continue;
         if (total >= args.cap) continue;
         const firstOfConv = !msgs.slice(0, i).some((x: any) => x.direction === "OUTBOUND");
         // Automated mail is skipped exactly as live skips it (the engine's own check, before any model call).
@@ -404,6 +451,8 @@ async function main() {
   const md: string[] = [`# Reply engine v2 replay (${new Date().toISOString()})`, "", reportHeadLine(process.env.REPLY_ENGINE_MODEL || process.env.OPENAI_DEFAULT_MODEL || "default"), ""];
   const summaries: TenantSummary[] = [];
   const replayed = new Set<string>();
+  // The team-pass verdicts of a --turns run (numbers only: safe for the console).
+  const passTally = { turns: 0, before: { team_pass: 0, handoff: 0, answer: 0, nothing: 0 }, after: { handoff: 0, answered: 0, silent: 0 }, passLines: 0, transferClaims: 0, knowledgeSearched: 0, unlookedPass: 0 };
   // From here on as the server: the same warm pass on the same timer, while the turns run.
   const warmer = startReplayWarmer(async () => console.log(`[replay] re-warmed ${await warmPass()}`));
   const searches = watchStoreSearches(getAdapter("woocommerce"));
@@ -474,6 +523,16 @@ async function main() {
         }
         const teamQ = r.trace?.teamQuestion ?? null;
         if (teamQ) s.teamQuestions++;
+        const verdict = args.turns ? teamPassVerdict(t.sentAfter, r.reply, r.escalation) : null;
+        if (verdict) {
+          passTally.turns++;
+          passTally.before[verdict.before]++;
+          passTally.after[verdict.after]++;
+          passTally.passLines += verdict.passLines;
+          if (verdict.transferClaim) passTally.transferClaims++;
+          if (tools.some((x) => x.tool === "search_knowledge")) passTally.knowledgeSearched++;
+          if ((r.trace?.gate3?.problems ?? []).some((p: any) => p.kind === "unlooked_pass")) passTally.unlookedPass++;
+        }
         if (r.trace?.teamQuestionRepeat) s.teamQuestionRepeats++;
         md.push(
           `**Customer:** ${oneLine(t.body)}`,
@@ -487,6 +546,7 @@ async function main() {
           ...(r.trace?.gate1 && r.trace.gate1 !== "reply" ? [`- gate1: ${r.trace.gate1} (no model call)`] : []),
           `- gate3: ${r.trace?.gate3?.rewrite ?? "?"}${r.trace?.gate3?.problems?.length ? ` [${r.trace.gate3.problems.map((p: any) => p.kind).join(", ")}]` : ""}${cutLine(r.trace)}`,
           `- handoff: ${handoff ?? "none"}; team question: ${teamQ ? oneLine(teamQ, 200) : r.trace?.teamQuestionRepeat ? "(repeat of the open one, not recorded)" : "none"}`,
+          ...(verdict ? [`- team pass: live ${verdict.before} -> v2 ${verdict.after}; pass lines ${verdict.passLines}; transfer claim without a hand-over: ${verdict.transferClaim ? "YES" : "no"}`] : []),
           `- rounds ${r.trace?.rounds ?? "?"}, ${took}ms`,
           stagesLine(r.trace),
           // Always a search line (rating 1771ba14: none for the "בובות" turn): the args the store was asked, and
@@ -517,6 +577,13 @@ async function main() {
 
   md.push("## Summary", "", "| tenant | turns | errors | handoffs | team questions (new) | repeats | gate3 rewrites | cleaned | gate3 fallbacks | silent | canned lines | tool errors | p50 ms | p95 ms |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of summaries) md.push(`| ${s.tenantId} | ${s.turns} | ${s.errors} | ${s.handoffs} | ${s.teamQuestions} | ${s.teamQuestionRepeats} | ${s.rewrites} | ${s.cleaned} | ${s.fallbacks} | ${s.silent} | ${s.cannedLines} | ${s.toolErrors} | ${s.p50} | ${s.p95} |`);
+  if (args.turns) {
+    md.push("", "## Team pass, before and after (Omer 2026-11-23: answer, or a real hand-over)", "",
+      "| turns | live: team pass | live: hand-over | live: answer | v2: answered | v2: hand-over | v2: silent | v2 pass lines (must be 0) | v2 transfer claims without a hand-over (must be 0) | knowledge searched | unlooked_pass fired |",
+      "|---|---|---|---|---|---|---|---|---|---|---|",
+      `| ${passTally.turns} | ${passTally.before.team_pass} | ${passTally.before.handoff} | ${passTally.before.answer} | ${passTally.after.answered} | ${passTally.after.handoff} | ${passTally.after.silent} | ${passTally.passLines} | ${passTally.transferClaims} | ${passTally.knowledgeSearched} | ${passTally.unlookedPass} |`);
+    console.log(`[replay] team pass ${JSON.stringify(passTally)}`);
+  }
   // Ends with a newline, so a report cat'ed after another starts on a line of its own.
   fs.writeFileSync(args.out, md.join("\n") + "\n");
 
