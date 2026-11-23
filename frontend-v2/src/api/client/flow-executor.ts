@@ -133,17 +133,42 @@ const executorUrl = (flow: string) =>
  * outside sign-in is offered on that build.
  */
 /**
+ * ★ The provider's origin on the PRODUCT's proxy build (2026-11-23): prod
+ *   draws the panel on the app host and keeps the executor on `/auth-api/`
+ *   (same-origin, so the flow cookie goes with it), while a source's login
+ *   path is served only by the provider's own host. Authentik's session
+ *   cookie is scoped to the apex on prod (AUTHENTIK_COOKIE_DOMAIN), so the
+ *   flow Google resumes on the app is the one the auth host planned.
+ *
+ *   Inlined at build time, like the base above. Unset is today's build
+ *   exactly: no source offered. Only an http(s) origin counts; anything else
+ *   reads as unset, never as a guess.
+ */
+const SOURCE_ORIGIN = process.env.NEXT_PUBLIC_SOURCE_ORIGIN ?? '';
+
+function configuredSourceOrigin(): string | null {
+  if (SOURCE_ORIGIN === '') return null;
+  try {
+    const url = new URL(SOURCE_ORIGIN);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether this build reaches the provider's own origin at all - the part of
  * `providerOrigin()` that needs no `window`, so a server render and the
- * browser agree. `false` on the product's proxy build (prod today, which has
- * no separate auth build): no outside sign-in can start from it.
+ * browser agree. On the product's proxy build only when
+ * NEXT_PUBLIC_SOURCE_ORIGIN names that origin; otherwise no outside sign-in
+ * can start from it.
  */
 export function servesSources(): boolean {
-  return EXECUTOR_BASE !== '';
+  return EXECUTOR_BASE !== '' || configuredSourceOrigin() !== null;
 }
 
 export function providerOrigin(): string | null {
-  if (EXECUTOR_BASE === '') return null;
+  if (EXECUTOR_BASE === '') return configuredSourceOrigin();
   try {
     return new URL(EXECUTOR_BASE, window.location.origin).origin;
   } catch {
