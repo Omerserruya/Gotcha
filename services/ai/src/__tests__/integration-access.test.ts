@@ -319,3 +319,40 @@ describe("the employee's own rules (B4)", () => {
     expect(isDbNull(H.created[1].customGuardrails)).toBe(true);
   });
 });
+
+describe("PATCH: the name keeps the hire's rules (2026-11-23)", () => {
+  const patch = (body: any) => request(app()).patch("/api/ai-agents/maya").send(body);
+
+  it("★ a rename is stored trimmed", async () => {
+    const r = await patch({ name: "  מאיה משירות הלקוחות  " });
+    expect(r.status).toBe(200);
+    expect(H.updated.at(-1).name).toBe("מאיה משירות הלקוחות");
+    expect(H.agents[0].name).toBe("מאיה משירות הלקוחות");
+  });
+
+  it("★ nothing left once trimmed, or not text: 400 INVALID_NAME and nothing stored", async () => {
+    for (const name of ["", "   ", "\n\t", null, 7, ["Maya"]]) {
+      const r = await patch({ name, tone: "warm" });
+      expect(r.status, JSON.stringify(name)).toBe(400);
+      expect(r.body).toMatchObject({ code: "INVALID_NAME", field: "name", reason: "empty", max: 120 });
+    }
+    expect(H.updated).toEqual([]);
+    expect(H.agents[0].name).toBe("Maya");
+  });
+
+  it("★ 120 characters pass (counted after the trim); 121 is 400 too_long", async () => {
+    expect((await patch({ name: `  ${"מ".repeat(120)}  ` })).status).toBe(200);
+    expect(H.updated.at(-1).name).toHaveLength(120);
+    H.updated = [];
+    const r = await patch({ name: "מ".repeat(121) });
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ code: "INVALID_NAME", reason: "too_long", max: 120 });
+    expect(H.updated).toEqual([]);
+  });
+
+  it("a PATCH without a name leaves it alone", async () => {
+    expect((await patch({ tone: "warm" })).status).toBe(200);
+    expect(H.updated.at(-1)).not.toHaveProperty("name");
+    expect(H.agents[0].name).toBe("Maya");
+  });
+});
