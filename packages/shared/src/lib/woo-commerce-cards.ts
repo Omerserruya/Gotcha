@@ -24,9 +24,16 @@ export interface WooCardVariant {
   title: string;
   price: string | null;
   compareAtPrice: string | null;
+  /** In stock (not "outofstock"): what the card says about stock. */
   available: boolean;
   options: string[];
-  requiresSellingPlan: false;
+  /**
+   * True when the store does not sell it through a cart: in stock with no
+   * price ("price on request", purchasable false). The widget then offers no
+   * Add to Cart and no stock label; the name is the Shopify card's, whose
+   * selling-plan items cannot be carted from the chat either (2026-11-23).
+   */
+  requiresSellingPlan: boolean;
 }
 
 export interface WooProductCard {
@@ -78,7 +85,11 @@ function httpsUrl(v: unknown): string | null {
   }
 }
 
-const purchasable = (p: any) => p?.purchasable !== false && p?.stock_status !== "outofstock";
+// Stock and "sold through a cart" are two facts (2026-11-23): an in-stock
+// product with no price (price on request, common in bridal and luxury) is
+// purchasable:false, and read as one fact its card said "אזל מהמלאי".
+const inStock = (p: any) => p?.stock_status !== "outofstock";
+const notCartable = (p: any) => p?.purchasable === false;
 
 /**
  * One card from a Woo product (REST v3) and, for a variable product, its
@@ -118,9 +129,9 @@ export function buildWooProductCard(
           title: options.join(" / ") || String(raw.name ?? ""),
           price: str(v.price),
           compareAtPrice: vSale ? str(v.regular_price) : null,
-          available: purchasable(v),
+          available: inStock(v),
           options,
-          requiresSellingPlan: false as const,
+          requiresSellingPlan: notCartable(v),
         };
       });
   } else {
@@ -129,12 +140,12 @@ export function buildWooProductCard(
       title: String(raw.name ?? ""),
       price: str(raw.price),
       compareAtPrice: onSale ? str(raw.regular_price) : null,
-      available: purchasable(raw),
+      available: inStock(raw),
       options: [],
-      requiresSellingPlan: false,
+      requiresSellingPlan: notCartable(raw),
     }];
   }
-  const available = type === "variable" ? variants.some((v) => v.available) : purchasable(raw);
+  const available = type === "variable" ? variants.some((v) => v.available) : inStock(raw);
   return {
     productId,
     handle: String(raw.slug ?? ""),
@@ -170,7 +181,7 @@ export function projectWooCommerce(
       selectedVariantId: c.selectedVariantId, optionNames: c.optionNames, reason: c.reason,
       variants: (c.variants ?? []).map((v) => ({
         variantId: v.variantId, title: v.title, price: v.price, compareAtPrice: v.compareAtPrice,
-        available: v.available, options: v.options, requiresSellingPlan: false,
+        available: v.available, options: v.options, requiresSellingPlan: v.requiresSellingPlan === true,
       })),
     })),
   };

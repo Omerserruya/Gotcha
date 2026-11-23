@@ -868,6 +868,21 @@ describe("product card", () => {
     expect(shadow.querySelector(".card-pr")!.textContent).not.toMatch(/\$|120/);
   });
 
+  // 2026-11-23: an in-stock WooCommerce product with no price (price on
+  // request) came as available:false and read "Sold out". The server now
+  // sends it in stock and not cartable (requiresSellingPlan), the shape
+  // projectWooCommerce emits; this bundle must show neither label nor button.
+  it("price on request: in stock, not cartable: no Sold out, no Add to Cart, no number", async () => {
+    const product = makeProduct({
+      price: null, compareAtPrice: null, available: true, optionNames: [], selectedVariantId: "9001",
+      variants: [{ variantId: "9001", title: "Default", price: null, compareAtPrice: null, available: true, options: [], requiresSellingPlan: true }],
+    });
+    const { shadow } = await cardHarness(product);
+    expect(shadow.querySelector(".tag-out")).toBeNull();
+    expect(Array.from(shadow.querySelectorAll("button")).some((b) => b.textContent === "Add to cart")).toBe(false);
+    expect(shadow.querySelector(".card-pr")!.textContent).not.toMatch(/\d/);
+  });
+
   it("a card without priceOnSite keeps its price, even when the flag is absent", async () => {
     const { shadow } = await cardHarness(makeProduct({ priceOnSite: undefined }));
     expect(shadow.querySelector(".pr-site")).toBeNull();
