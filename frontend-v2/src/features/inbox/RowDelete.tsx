@@ -145,10 +145,17 @@ function SwipeDelete({
 
   return (
     <div className={styles.rowDelete} data-testid={`row-delete-${id}`}>
-      <span className={styles.rowDeleteBehind} aria-hidden="true">
-        <Trash2 size={16} />
-        {t('confirm')}
-      </span>
+      {/* Only while the row is dragged: at rest there is nothing behind it to show (prod, 11-23). */}
+      {dx > 0 ? (
+        <span
+          className={styles.rowDeleteBehind}
+          aria-hidden="true"
+          data-testid={`row-delete-behind-${id}`}
+        >
+          <Trash2 size={16} />
+          {t('confirm')}
+        </span>
+      ) : null}
       <div
         className={styles.rowDeleteFront}
         style={dx ? { transform: `translateX(${dx}px)` } : undefined}
