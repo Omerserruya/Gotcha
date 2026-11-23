@@ -167,8 +167,11 @@ export const cancelRequest = (t: string) => CANCEL_REQUEST.test(normalizeQuotes(
  * A handoff the customer's own words do not call for. One that names an owner hand-over rule loaded this turn
  * (`ownerRuleCited`, a number in range; never read from text) is the owner's decision and stands.
  */
-export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean, ownerRuleCited = false): boolean {
+export function needlessHandoff(handoff: string | null | undefined, recentInbound: string[], toolsAskedPerson: boolean, ownerRuleCited = false, notKnownAfterSearch = false): boolean {
   if (!handoff) return false;
+  // Omer 2026-11-23: an action no tool does (an exchange, a code to resend, "have someone contact me") is a person's,
+  // and so is what the knowledge search did not find. The gate rewrote both into "contact customer service".
+  if (notKnownAfterSearch || actionWanted(recentInbound)) return false;
   if (toolsAskedPerson) return false;
   if (ownerRuleCited) return false;
   if (safetyCase(recentInbound)) return false;
@@ -211,6 +214,13 @@ const TEAM_WAIT = new RegExp([
   // "החיוב עדיין בבדיקה.", "ההחזרה בבדיקה." (holding lines): a check someone is doing, said without the team.
   "(?<=^|[.!?]\\s{0,3})(?:אני\\s+|אנחנו\\s+)?(?:בודק|בודקת|בודקים|מברר|מבררת|מבררים)\\s+(?:את|מול|עם|אם|כרגע|עכשיו)(?![\\u0590-\\u05FF])",
   "(?<![\\u0590-\\u05FF])[וש]?(?:עדיין\\s+)?(?:בבדיקה|בבירור|נבדק|נבדקת|נבדקים)(?=\\s*[.!?,]|\\s*$|\\s+(?:אצל|מול|עם|כרגע|עכשיו)(?![\\u0590-\\u05FF]))",
+  // The load pushed back (Omer 2026-11-23: never "contact customer service", never "check the product page", never an
+  // empty "we can carry on here"): either an answer, or a person takes it.
+  "(?<![\\u0590-\\u05FF])(?:כדאי|מומלץ|אפשר|ניתן|יש|צריך)\\s+(?:גם\\s+)?ל?(?:פנות|ליצור\\s+קשר|לכתוב|להתקשר)\\s+(?:ישירות\\s+)?(?:ל|אל|עם|מול)ה?(?:שירות\\s+(?:ה)?לקוחות|תמיכה|צוות)",
+  "(?<![\\u0590-\\u05FF])ל?פנות\\s+לשירות\\s+(?:ה)?לקוחות",
+  "(?<![\\u0590-\\u05FF])(?:אפשר|כדאי|מומלץ|ניתן)\\s+לבדוק[^.!?\\n]{0,40}(?:בדף|בעמוד)\\s+(?:ה)?מוצר",
+  "(?<![\\u0590-\\u05FF])(?:אפשר|נשמח|ניתן)\\s+להמשיך\\s+(?:את\\s+)?(?:ה)?טיפול",
+  "\\b(?:contact (?:our )?customer (?:service|support)|check the product page)\\b",
   "\\b(?:the team(?:'s)? answer|waiting (?:for|on) the team|with the team|the team is (?:still )?(?:checking|looking)|(?:ask|check) with the team|(?:the )?answer will come here)\\b",
 ].join("|"), "iu");
 /** The reply says the team has it, is on it, or will answer (any wording above, or the older lines). */
@@ -387,7 +397,7 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
  * The reply says it does not know (not "not in stock", not "not available in that size"): "אין לי כאן הסבר",
  * "לא ידוע לנו מתי", "עדיין אין לנו מידע", "אין לנו מספר ימים קבוע" (prod lines 2026-11-16..23).
  */
-const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b/iu;
+const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b|(?<![֐-׿])אין\s+(?:לי\s+|לנו\s+)?כאן\s+(?:מידע|פרטים|הסבר)(?![֐-׿])|(?<![֐-׿])לא\s+נמסר\s+(?:לנו|לי)(?![֐-׿])|(?<![֐-׿])(?:לא|אינו|אינה|אינם)\s+(?:מפורט|מפורטת|מפורטים|מפורטות)(?![֐-׿])|(?<![֐-׿])לא\s+ידוע\s+(?:לנו\s+|לי\s+)?(?:אם|מתי|למה|כמה|איך)(?![֐-׿])|(?<![֐-׿])לא\s+מופיע\s+(?:לי|לנו|אצלי|אצלנו|כאן)\s+(?:איך|מתי|למה|אם|מה|כמה)(?![֐-׿])/iu;
 export const saysNotKnown = (reply: string) => NOT_KNOWN.test(reply ?? "");
 // ── D2 / D2b (2026-11-23) ──
 // Words that say nothing about WHAT was asked: the pass's own wording, question and filler words.
@@ -403,6 +413,22 @@ export function contentKeys(t: string): string[] {
 /** A short follow-up ("והוא שקוף?", "ומה העובי?"): five content words at most. */
 export const shortFollowUp = (t: string) => { const n = contentKeys(t).length; return n > 0 && n <= 5; };
 const sentencesIn = (t: string) => String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
+/**
+ * The customer asks for something done that a person does (2026-11-23, the replay of the team-pass turns): an
+ * exchange, a return, a cancellation or a change; that someone contact her; a code or coupon that never came; a login
+ * that fails. With no tool that did it this turn (and none waiting for approval), the turn is a hand-over.
+ * Her last two messages: "אשמח שיצרו איתי קשר" follows "ברצוני לבצע החלפה".
+ */
+const ACTION_WANT = /(?<![\u0590-\u05FF])(?:ברצוני|רוצה|רוצים|אשמח|מבקש|מבקשת|צריך|צריכה|אפשר)\s+(?:ל)?(?:בצע\s+|לבצע\s+)?(?:החלפה|להחליף|החזרה|להחזיר|לבטל|ביטול|לשנות|שינוי|זיכוי)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אשמח|תוכלו|אפשר|רוצה|מבקש|מבקשת)\s+ש?(?:יצרו|תיצרו|יחזרו|תחזרו|יתקשרו|תתקשרו|ליצור|לחזור|להתקשר)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:ה)?(?:קוד|קופון)[^.!?\n]{0,30}לא\s+(?:הגיע|נשלח|התקבל|עובד)|(?<![\u0590-\u05FF])לא\s+(?:הגיע|קיבלתי|נשלח)\s+(?:לי\s+)?(?:את\s+)?(?:ה)?(?:קוד|קופון)|(?<![\u0590-\u05FF])(?:נרשמתי|הירשמתי)[^.!?\n]{0,30}לא\s+(?:הגיע|נשלח|קיבלתי)|(?<![\u0590-\u05FF])לא\s+(?:מצליח|מצליחה)\s+(?:להתחבר|להיכנס)|\b(?:i want to (?:exchange|return|cancel)|(?:please )?(?:contact|call) me|(?:the )?code (?:never came|didn'?t (?:arrive|come)))\b/iu;
+export const actionWanted = (recentInbound: string[]) => recentInbound.slice(-2).some((m) => ACTION_WANT.test(normalizeQuotes(String(m ?? ""))));
+// "Why / when" answered only with "the final price is on the page and at checkout" (Smoovee 40%, 2026-11-23).
+const WHY_WHEN = /(?<![\u0590-\u05FF])[וש]?(?:למה|מדוע|מתי|איך\s+זה|איפה\s+מתבטא(?:ת)?)(?![\u0590-\u05FF])|\b(?:why|when)\b/iu;
+const CHECKOUT_LINE = /(?:המחיר\s+(?:ה)?(?:סופי|מעודכן)\s+(?:אמור\s+)?(?:מופיע|להופיע|יופיע|מוצג|מתעדכן)|ההנחה\s+(?:ה)?(?:סופית\s+)?(?:אמורה\s+)?(?:מופיעה|להופיע|תופיע)|מחושב(?:ות|ת|ים)?\s+בדף\s+המוצר\s+ובקופה)/u;
+export function checkoutOnly(reply: string, incoming: string): boolean {
+  if (!WHY_WHEN.test(String(incoming ?? "")) || !CHECKOUT_LINE.test(String(reply ?? ""))) return false;
+  return !dropSentencesBy(answerOnly(reply), CHECKOUT_LINE).replace(/[.\s]+/g, "");
+}
+
 /** The reply without its pass and its "not known" sentences: what it really answered. */
 export const answerOnly = (reply: string) => dropSentencesBy(withoutTeamClaims(reply), NOT_KNOWN).trim();
 /**
@@ -1646,7 +1672,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (i.businessAddress) absent.push(...addressDenied(reply));
   // A caveat that limits a claim ("אין במידע אישור לשימוש מתחת לעיניים") is never cut as an absence: cutting it turns
   // the rest into the claim (prod replay of 9480dfb2, NE'A).
-  const claimedAbsent = absent.filter((x) => !caveatHolds(x, `${i.knowledge ?? ""}\n${i.grounding ?? ""}\n${i.tools.map((t) => String(t.content ?? "")).join("\n")}`));
+  // "I have no information on X" is no claim that X does not exist (2026-11-23: cutting it left a dodge in its place).
+  const claimedAbsent = absent.filter((x) => !NOT_KNOWN.test(x) && !caveatHolds(x, `${i.knowledge ?? ""}\n${i.grounding ?? ""}\n${i.tools.map((t) => String(t.content ?? "")).join("\n")}`));
   if (claimedAbsent.length) problems.push({ kind: "ungrounded_absence", claims: claimedAbsent });
 
   // An absence after narrow empty searches only, her noun never searched alone (dev round k8 on f46b5a49).
@@ -1663,7 +1690,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   // knowledge was searched THIS turn, whatever the topic (the topic lists above missed thickness, transparency,
   // sizes and discounts: 13 of 44 Smoovee team turns never searched).
   if (!problems.some((p) => /^unread_|^gave_up_search$/.test(p.kind)) && unlookedPass(reply, i.tools, i.toolsOffered, !!i.teamQuestion)) problems.push({ kind: "unlooked_pass" });
-  if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson, citesOwnerHandover(i.handoffRule, i.ownerHandoverRules))) problems.push({ kind: "needless_handoff" });
+  if (needlessHandoff(i.handoff, i.recentInbound ?? [i.incomingMessage], !!i.toolsNeedPerson, citesOwnerHandover(i.handoffRule, i.ownerHandoverRules), i.tools.some((t) => t.tool === "search_knowledge") && NOT_KNOWN.test(reply))) problems.push({ kind: "needless_handoff" });
   // Products this turn mean a search ran.
   const recommendUnsearched = ASKS_RECOMMEND.test(i.incomingMessage ?? "") && i.toolsOffered.some((n) => /list_products|search_products/i.test(n)) && !i.tools.some((t) => /list_products|search_products|get_product/i.test(t.tool));
   if (!i.candidateCount && (recommendUnsearched || photoInsteadOfSearch(reply, i.incomingMessage, i.tools, i.toolsOffered, !!i.teamQuestion) || purchaseWithoutSearch(i.incomingMessage, i.tools, i.toolsOffered)

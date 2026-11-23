@@ -38,7 +38,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, passCovered, answerOnly, shortFollowUp, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, passCovered, answerOnly, shortFollowUp, actionWanted, checkoutOnly, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -2830,14 +2830,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
         if (onSubject && output.teamQuestion) { output = { ...output, teamQuestion: null }; heldMerged = true; (trace as any).holding.teamQuestionMerged = true; }
       }
     } else if (holdingItem([String(opts.incomingMessage ?? "")]) && aboutHeld(String(opts.incomingMessage ?? "")) && !generalPolicyAsk(String(opts.incomingMessage ?? ""), [knowledge ?? "", ...turnTools.knowledgeText].join("\n"))) {
-      // The turn the item OPENS is held too (rating 657e5f85: "בוטלה כי התשלום לא נקלט" on the first turn of a
-      // charge complaint): no state or cause; the team has it, and the reply says so.
-      const holdLoc: "he" | "en" = locale === "en" ? "en" : "he";
-      const told = holdLoc === "en" ? "I've passed this to the team, and the answer will come here in the chat." : "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.";
-      const rest = holdReply(text, "", { details: false, locale: holdLoc, keepOther: asksOtherTopic(String(opts.incomingMessage ?? "")) });
-      text = rest || told;
-      if (!output.handoff && !output.teamQuestion) output = { ...output, teamQuestion: String(opts.incomingMessage ?? "").slice(0, 300) };
-      heldTurn = true;
+      // A charge, a damaged item or a safety case that opens (what used to open a hold): there is no hold any more
+      // (2026-11-23), a person takes it now. What the reply really answered stays (a warranty, the policy); a payment
+      // or an order state no tool returned is cut by the gates (ungrounded_payment, order_state_unread).
+      if (!output.handoff) output = { ...output, handoff: "a charge, damage or safety case: a person takes it" };
       (trace as any).holdingOpened = true;
     }
     // An apology or thanks alone, the rest cut, on a real question is no answer (rating 83086356: "נכון, סליחה
@@ -2914,7 +2910,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   // a collaboration inquiry). A sticky safety conversation still hands over (above).
   (trace as any).safetyWord = safetyWord(inbound.slice(-10));
   if (output?.reply && safetyConversation && !hasStopUse(output.reply) && customerDescribesUse(String(opts.incomingMessage ?? ""), [knowledge ?? "", ...turnTools.knowledgeText].join("\n")) && !hasStopUse(previousBotReplies.at(-1) ?? "")) {
-    output = { ...output, reply: `${output.reply.trim()} ${lineLocale === "he" ? "עד שנציג מהצוות יבדוק, מומלץ להפסיק להשתמש בזה." : "Until a person from the team checks it, it is best to stop using it."}` };
+    output = { ...output, reply: `${output.reply.trim()} ${lineLocale === "he" ? "בינתיים מומלץ להפסיק להשתמש בזה." : "Meanwhile, it is best to stop using it."}` };
     (trace as any).stopUseAdded = true;
   }
   // "Already with the team" only for the SAME subject as an open team item (prod replay 9: a
@@ -3327,7 +3323,13 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   }
   // D2b, answered means no pass: the reply already answers what she asked from the business's own texts, and its
   // pass names nothing she asked that the answer leaves open: the pass is cut and the answer stands (no hand-over).
-  if (!final.handoff && !escalation && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
+  // An action no tool did (none waiting for approval either), or a "why / when" answered only by "see the checkout":
+  // a person's (2026-11-23).
+  const wrote = turnTools.records.some((t) => t.decision === "allow" && t.outcome === "ok" && !/(?:^|\.)(?:get_|list_|search_|find_|read_|lookup)/.test(String(t.tool).split(".").pop() ?? "") && t.tool !== "search_knowledge" && t.tool !== "read_skill");
+  const actionNoTool = !wrote && !turnTools.approvals.length && actionWanted([...inbound, String(opts.incomingMessage ?? "")].filter((x, k, all) => all.lastIndexOf(x) === k));
+  const dodge = checkoutOnly(reply ?? "", String(opts.incomingMessage ?? ""));
+  if (dodge) reply = "";
+  if (!final.handoff && !escalation && !actionNoTool && !dodge && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
     const sources = [knowledge ?? "", ...turnTools.knowledgeText, ...turnTools.records.map((r) => String(r.content ?? "")), JSON.stringify((candidates as any[]).map((c: any) => ({ title: c?.title, price: c?.price })))].join("\n");
     if (passCovered(reply ?? "", String(opts.incomingMessage ?? ""), final.teamQuestion, sources)) {
       reply = answerOnly(reply ?? "");
@@ -3335,7 +3337,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
       (trace as any).teamPassCutAnswered = true;
     }
   }
-  if (!final.handoff && !escalation && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
+  if (!final.handoff && !escalation && (actionNoTool || dodge || !!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
     const asked = String(final.teamQuestion ?? opts.incomingMessage ?? "").slice(0, 300);
     final = { ...final, handoff: `not answered after looking: ${asked}`.slice(0, 300), teamQuestion: final.teamQuestion ?? (String(opts.incomingMessage ?? "").slice(0, 300) || null) };
     (trace as any).teamPassToHandoff = true;
@@ -3344,9 +3346,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     // The customer gets what was really answered and the approved line, nothing about the team or a later answer.
     // The engine's stop-use advice on a safety case stays, word for word (it says a person will check, and one will).
     const stopUse = (String(reply ?? "").match(/[^.!?\n]*(?:להפסיק להשתמש|stop using)[^.!?\n]*[.!?]?/giu) ?? []).map((x) => x.trim());
-    let kept = withoutTeamClaims(dropPersonPromises(stopUse.reduce((t, x) => t.replace(x, ""), String(reply ?? ""))));
-    // Handed over by the engine: no question of ours is left hanging over the line (the person asks what they need).
-    if ((trace as any).teamPassToHandoff) kept = (kept.match(/[^.!?\n]+[.!?]*\s*/g) ?? []).filter((x) => !/\?\s*$/.test(x)).join("").trim();
+    let kept = withoutTeamClaims(dropPersonPromises(stopUse.reduce((t, x) => t.replace(x, ""), String(reply ?? "")).replace(HANDOFF_LINE.he, "").replace(HANDOFF_LINE.en, "")));
+    // Handed over by the engine: no question of ours is left hanging over the line (the person asks what they need), nor a
+    // bare "not known" whose question went with it ("לא נמסר לנו.").
+    if ((trace as any).teamPassToHandoff) kept = (kept.match(/[^.!?\n]+[.!?]*\s*/g) ?? []).filter((x) => !/\?\s*$/.test(x) && !(saysNotKnown(x) && x.trim().split(/\s+/).length <= 4)).join("").trim();
     kept = [kept, ...stopUse].filter(Boolean).join(" ").trim();
     const line = HANDOFF_LINE[handLoc];
     reply = kept && !kept.includes(line) ? `${kept.replace(/[\s]+$/, "")}${/[.!?]$/.test(kept.trim()) ? "" : "."} ${line}` : kept.includes(line) ? kept : line;

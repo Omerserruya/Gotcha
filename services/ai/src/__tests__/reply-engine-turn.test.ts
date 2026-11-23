@@ -557,8 +557,8 @@ describe("prod replay 2026-11-16 defects, through a whole turn", () => {
       );
       const r = await runReplyEngineTurn({ ...opts, incomingMessage: "אפשר לשלם בתשלומים?" }, "autonomous");
       handedOver(r);
-      // The rewrite's "we have no information" is an ungrounded absence and is cut: the approved line alone.
-      expect(r.reply).toBe(HAND);
+      // "We have no information" is honest, never an absence claim (2026-11-23): it stays, then the approved line.
+      expect(r.reply).toBe(`אין לנו כאן מידע על תשלומים. ${HAND}`);
       expect(h.teamQuestions).toHaveLength(1);
       expect(r.trace.teamQuestion).toBe("האם אפשר לשלם בתשלומים?");
     });
@@ -5690,6 +5690,104 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(String(auto?.args?.query ?? "")).toMatch(/שטיח PVC למטבח/);
     expect(r.reply).toBe("כן, החומר עמיד לכתמי שמן ומים.");
     expect(r.escalation).toBeNull();
+  });
+
+  // The read-only prod replay of 2870df08 (Supervisor, 2026-11-23): what was still wrong, line by line.
+  it("★ replay a: an exchange, \"אשמח שיצרו איתי קשר\", answered \"we can carry on here\": a person takes it", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "שלום, עשיתי הזמנה וברצוני לבצע החלפה. כתבתי לכם גם במייל", metadata: null },
+      { direction: "OUTBOUND", body: "אפשר להחליף בתיאום מול שירות הלקוחות, בעלות 35 ש\"ח למשלוח.", senderName: "AI Bot", metadata: null },
+      { direction: "INBOUND", body: "תודה, אשמח שיצרו איתי קשר", metadata: null },
+    ];
+    h.responses.push({ toolCalls: [tc("ra0", "search_knowledge", { query: "החלפה" })] }, { toolCalls: [respond("ra1", { reply: "אפשר להמשיך את הטיפול בהחלפה כאן בצ'אט." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "תודה, אשמח שיצרו איתי קשר" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
+  });
+
+  it("★ replay b: a code that never came is resent by a person, never \"contact customer service\"", async () => {
+    for (const asked of ["נרשמתי והוא לא נשלח", "לא הגיע לי למייל"]) {
+      h.responses.length = 0;
+      h.history = [{ direction: "INBOUND", body: "איך מקבלים קוד הנחה?", metadata: null }, { direction: "OUTBOUND", body: "נרשמים לניוזלטר, והקוד נשלח למייל.", senderName: "AI Bot", metadata: null }];
+      h.responses.push({ toolCalls: [tc("rb0", "search_knowledge", { query: "קוד" })] }, { toolCalls: [respond("rb1", { reply: "מצטערים שהקוד לא הגיע. לפי מה שמופיע אצלנו, כדאי לפנות לשירות הלקוחות כדי שיבדקו את העניין ויבקשו קוד חדש." })] });
+      const r = await runReplyEngineTurn({ ...opts, incomingMessage: asked }, "autonomous");
+      handedOver(r);
+      expect(r.reply ?? "", asked).not.toMatch(/שירות הלקוחות/);
+    }
+    // The model's own hand-over for it is not "needless" any more.
+    h.responses.length = 0;
+    h.responses.push({ toolCalls: [respond("rb2", { reply: `מצטערים שהקוד לא הגיע. ${HAND}`, handoff: "the coupon code never arrived" })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "הקוד לא הגיע לי למייל" }, "autonomous");
+    expect(r2.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
+    handedOver(r2);
+  });
+
+  it("★ replay c: \"when does the 40% start?\" answered only by \"the final price is on the page and at checkout\": a person", async () => {
+    h.responses.push({ toolCalls: [tc("rc0", "search_knowledge", { query: "מבצע 40%" })] }, { toolCalls: [respond("rc1", { reply: "לפי המידע באתר, המחיר הסופי אמור להופיע בדף המוצר ובקופה." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מתי אתם מתחילים את מבצע 40% הנחה כי שמתי בסל וזה לא יורד לפי 49%" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).toBe(HAND);
+  });
+
+  it("★ replay d: \"a special discount on several pads? not given to us\": a person", async () => {
+    h.responses.push({ toolCalls: [tc("rd0", "search_knowledge", { query: "הנחה כמה משטחים" })] }, { toolCalls: [respond("rd1", { reply: "איזה כיף. יש הנחה מיוחדת על כמה משטחים? לא נמסר לנו. אילו משטחים מעניינים אותך?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הי אני מתעניינת בכמה משטחים, יש הנחה?" }, "autonomous");
+    handedOver(r);
+    // The question went (the person asks it), and the bare "not given to us" with it.
+    expect(r.reply).toBe(`איזה כיף. ${HAND}`);
+  });
+
+  it("★ replay e: the white one's availability \"not detailed, check the product page\": a person, never the page", async () => {
+    h.responses.push({ toolCalls: [tc("re0", "search_knowledge", { query: "אליס לבן" })] }, { toolCalls: [respond("re1", { reply: "בדף אליס מופיעים גם לבן וגם שחור, אבל זמינות הלבן עצמו לא מפורטת. אפשר לבדוק את הצבעים והמלאי בדף המוצר." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "רציתי לבדוק צפי למוצר הזה בלבן" }, "autonomous");
+    handedOver(r);
+    // The honest "not detailed" stays; "check the product page" never goes out.
+    expect(r.reply).toBe(`בדף אליס מופיעים גם לבן וגם שחור, אבל זמינות הלבן עצמו לא מפורטת. ${HAND}`);
+  });
+
+  it("★ replay f: \"I meant 37%\": the model's own hand-over after the search stands; the rewrite's \"no information here\" too", async () => {
+    h.responses.push({ toolCalls: [tc("rf0", "search_knowledge", { query: "37%" })] }, { toolCalls: [respond("rf1", { reply: `אה, התכוונת להנחה של 37%. לא מופיע לי איך מקבלים אותה, אז ${HAND}`, handoff: "37% not in the knowledge" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "התכוותי ל 37 אחוז" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).not.toContain("needless_handoff");
+    handedOver(r);
+    h.responses.length = 0;
+    h.responses.push({ toolCalls: [tc("rf2", "search_knowledge", { query: "37%" })] }, { toolCalls: [respond("rf3", { reply: "ההנחה שמופיעה כרגע באתר היא על מוצרים מסוימים. אם התכוונת להטבה אחרת של 37%, אין כאן מידע איך מקבלים אותה." })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "התכוותי ל 37 אחוז" }, "autonomous");
+    handedOver(r2);
+  });
+
+  it("★ replay, the broken wheel: the approved line ENDS the reply; the stop-use advice before it, without the team", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "הגלגל של המשטח נשבר והמכשיר נופל", metadata: null },
+      { direction: "OUTBOUND", body: "אפשר לשלוח תמונה של הגלגל?", senderName: "AI Bot", metadata: null },
+    ];
+    h.lexical = [{ content: "אחריות: על הגלגלים יש אחריות למשך 5 שנים.", score: 0.9, documentTitle: "אחריות", chunkIndex: 1, documentId: "dw" }];
+    h.responses.push({ toolCalls: [respond("rw1", { reply: "מצטערים על זה. יש אחריות לגלגלים למשך 5 שנים." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הגלגל שבור והמשטח נופל כשאני משתמשת בו" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).not.toMatch(/צוות/);
+    expect((r.trace as any).stopUseAdded).toBe(true);
+    expect(r.reply).toBe(`מצטערים על זה. יש אחריות לגלגלים למשך 5 שנים. בינתיים מומלץ להפסיק להשתמש בזה. ${HAND}`);
+  });
+
+  it("★ an exchange asked for, answered with the policy only: the policy stays, and a person does the exchange", async () => {
+    h.lexical = [{ content: "החלפות: אפשר להחליף תוך 14 יום באריזה המקורית.", score: 0.9, documentTitle: "החלפות", chunkIndex: 1, documentId: "dx" }];
+    h.responses.push({ toolCalls: [tc("x0", "search_knowledge", { query: "החלפה" })] }, { toolCalls: [respond("x1", { reply: "אפשר להחליף תוך 14 יום באריזה המקורית." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "ברצוני להחליף את המשטח למידה אחרת" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).toBe(`אפשר להחליף תוך 14 יום באריזה המקורית. ${HAND}`);
+  });
+
+  it("★ the line inside the model's reply, the stop-use advice appended after it: the line still ends the reply", async () => {
+    h.history = [
+      { direction: "INBOUND", body: "הגלגל של המשטח נשבר והמכשיר נופל", metadata: null },
+      { direction: "OUTBOUND", body: "אפשר לשלוח תמונה של הגלגל?", senderName: "AI Bot", metadata: null },
+    ];
+    h.lexical = [{ content: "אחריות: על הגלגלים יש אחריות למשך 5 שנים.", score: 0.9, documentTitle: "אחריות", chunkIndex: 1, documentId: "dw" }];
+    h.responses.push({ toolCalls: [respond("rw2", { reply: `מצטערים על זה. יש אחריות לגלגלים למשך 5 שנים. ${HAND}`, handoff: "a broken wheel" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הגלגל שבור והמשטח נופל כשאני משתמשת בו" }, "autonomous");
+    expect((r.trace as any).stopUseAdded).toBe(true);
+    expect(r.reply).toBe(`מצטערים על זה. יש אחריות לגלגלים למשך 5 שנים. בינתיים מומלץ להפסיק להשתמש בזה. ${HAND}`);
   });
 
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
