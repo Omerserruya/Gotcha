@@ -1857,9 +1857,14 @@
     direction: ltr;
   }
 
+  /*
+   * Opaque and above the strip: `inherit` was transparent on the phone's list,
+   * so every row showed the red strip at rest (prod, 11-23).
+   */
   .rowDeleteFront {
     position: relative;
-    background-color: inherit;
+    z-index: 1;
+    background-color: var(--row-delete-ground, var(--panel-base));
     touch-action: pan-y;
     transition: transform var(--duration-fast) var(--easing-standard);
   }
@@ -1870,6 +1875,7 @@
 
   .rowDeleteHover {
     position: absolute;
+    z-index: 2;
     inset-block-start: var(--space-8);
     inset-inline-end: var(--space-8);
     display: none;
@@ -1885,7 +1891,8 @@
     color: var(--alert-text);
   }
 
-  @media (hover: hover) {
+  /* A mouse only: a phone that reports hover never draws the trash button. */
+  @media (hover: hover) and (pointer: fine) {
     .rowDelete:hover .rowDeleteHover,
     .rowDeleteHover:focus-visible {
       display: inline-flex;

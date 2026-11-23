@@ -62,6 +62,23 @@ describe('★★ swipe right to delete (2026-11-22)', () => {
     expect(screen.queryByTestId('row-delete-c1')).toBeNull();
   });
 
+  it('⚠⚠ at rest nothing of the delete strip is drawn: no label, no strip (prod, 11-23)', () => {
+    show();
+    expect(screen.queryByTestId('row-delete-behind-c1')).toBeNull();
+    expect(screen.queryByText('מחיקה')).toBeNull();
+  });
+
+  it('★ the strip shows only while the row is dragged right, and leaves when let go', () => {
+    show();
+    const front = screen.getByTestId('row-link').parentElement as HTMLElement;
+    fireEvent.pointerDown(front, { pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(front, { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 10 });
+    expect(screen.getByTestId('row-delete-behind-c1')).toHaveTextContent('מחיקה');
+    fireEvent.pointerUp(front, { pointerType: 'touch', pointerId: 1, clientX: 40, clientY: 10 });
+    expect(screen.queryByTestId('row-delete-behind-c1')).toBeNull();
+    expect(screen.queryByText('מחיקה')).toBeNull();
+  });
+
   it('★★ a swipe past the threshold asks first, in Omer’s words', () => {
     show();
     swipe(SWIPE_THRESHOLD + 10);

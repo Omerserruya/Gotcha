@@ -46,6 +46,8 @@
 
   /* ── The list ──────────────────────────────────────────────────────── */
   .list {
+    /* The swiped row's own ground (RowDelete), never transparent over the strip. */
+    --row-delete-ground: var(--mobile-ground);
     margin: 0;
     padding: 0;
     list-style: none;
