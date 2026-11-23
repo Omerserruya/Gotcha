@@ -55,7 +55,11 @@ interface AIBotReplyResult {
   reply: string | null;
   /** Short acks (e.g. "one moment, checking") to send as their own bubble(s) before `reply`. */
   interimMessages?: string[];
-  escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string } | null;
+  /**
+   * customerLine: the exact text to send (reply engine v2: what it answered plus the approved hand-over line), instead
+   * of a generated one. announce: tell the team (conversation.escalated); the AI turn did not (2026-11-23).
+   */
+  escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string; customerLine?: string; announce?: boolean } | null;
   awaitingApproval: { approvalRequestId: string; tool: string; reason: string } | null;
   toolCallLog: Array<{
     tool: string;
@@ -413,7 +417,8 @@ export async function processAIBot(
       summary: result.escalation.summary,
       // The AI announces the escalations it decides in a turn; a billing block
       // returns before that, so the worker announces it.
-      notify: /^billing_blocked/.test(String(result.escalation.reason ?? "")),
+      notify: /^billing_blocked/.test(String(result.escalation.reason ?? "")) || result.escalation.announce === true,
+      customerLine: typeof result.escalation.customerLine === "string" ? result.escalation.customerLine : undefined,
     });
     return true;
   }
@@ -1076,7 +1081,7 @@ async function escalateToHuman(
   sendContext: SendContext,
   fallbackMessage: string,
   aiAgentId?: string,
-  reason?: { case: string; summary?: string; notify?: boolean },
+  reason?: { case: string; summary?: string; notify?: boolean; customerLine?: string },
 ): Promise<void> {
   // A hidden conversation is not escalated: no handoff line to the customer, no team alert.
   if (await isConversationHidden(tenantId, conversationId, prisma)) {
@@ -1098,7 +1103,8 @@ async function escalateToHuman(
   // the agent's voice. Falls back to the agent's configured static
   // `escalationMessage` if the oneshot fails - never block the actual
   // escalation just because copywriting hiccupped.
-  let escalationMessage = await generateEscalationHandoff(
+  // The engine's own fixed line when it gave one (Omer's approved wording, 2026-11-23); else generated as before.
+  let escalationMessage = reason?.customerLine?.trim() || await generateEscalationHandoff(
     tenantId,
     conversationId,
     aiAgentId,

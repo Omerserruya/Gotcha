@@ -14,8 +14,8 @@ describe("★ worker handoffs notify", () => {
     expect(src).toContain("if (reason?.notify !== false) {");
     expect(src).toContain("emitEscalated({ tenantId, conversationId, agentId: aiAgentId, reason: reason?.case ?? \"handoff\", summary: reason?.summary });");
   });
-  it("an AI-decided escalation is announced by the AI, a billing block by the worker", () => {
-    expect(src).toContain('notify: /^billing_blocked/.test(String(result.escalation.reason ?? "")),');
+  it("an AI-decided escalation is announced by the AI; a billing block, and a reply engine v2 hand-over (announce), by the worker", () => {
+    expect(src).toContain('notify: /^billing_blocked/.test(String(result.escalation.reason ?? "")) || result.escalation.announce === true,');
   });
   it("AI units exhausted is labelled a billing block, not an AI failure", () => {
     expect(src).toContain('const unitsOut = /^ai_units:/.test(String(err.response?.data?.error ?? ""));');
