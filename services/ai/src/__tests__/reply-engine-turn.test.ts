@@ -5842,6 +5842,18 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(r.reply).toBe("בכיף. אילו משטחים מעניינים אותך?");
   });
 
+  it("★ her own words never ground a fact: \"זה עץ?\" with no material in the data is no source for \"עשוי מעץ\", nor her price for a price", async () => {
+    h.lexical = [{ content: "משטח הזזה למכשירי מטבח, גלגלים מסתובבים.", score: 0.9, documentTitle: "מוצר", chunkIndex: 1, documentId: "dn" }];
+    h.responses.push({ toolCalls: [tc("e0", "search_knowledge", { query: "עץ" })] }, { toolCalls: [respond("e1", { reply: "כן, המשטח עשוי מעץ." })] }, { toolCalls: [respond("e2", { reply: "כן, המשטח עשוי מעץ." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "המשטח הזה עשוי מעץ?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_attribute");
+    expect(r.reply ?? "").not.toMatch(/עשוי מעץ/);
+    h.responses.length = 0;
+    h.responses.push({ toolCalls: [respond("e3", { reply: "כן, הוא עולה ₪77." })] }, { toolCalls: [respond("e4", { reply: "כן, הוא עולה ₪77." })] });
+    const r2 = await runReplyEngineTurn({ ...opts, incomingMessage: "ראיתי שהתיק עולה ₪77, נכון?" }, "autonomous");
+    expect(r2.reply ?? "").not.toMatch(/77/);
+  });
+
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
     h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
     await runReplyEngineTurn(opts, "autonomous");

@@ -2038,6 +2038,14 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     ...turnTools.knowledgeText,
     ...chat.filter((m) => m.role === "user").map((m) => m.content),
   ].join("\n");
+  // The same without her messages: a fact about the business or a product is never grounded by her own words.
+  const businessGroundingNow = () => [
+    ...turnTools.records.map((r) => r.content),
+    JSON.stringify((turnTools.envelope?.candidates ?? []).map((c: any) => ({ title: c.title, price: c.price, currency: c.currency, ...(c.discount?.was != null ? { regular_price: c.discount.was } : {}) }))),
+    renderState(state),
+    knowledge ?? "",
+    ...turnTools.knowledgeText,
+  ].join("\n");
   const approvalPending = turnTools.approvals.length > 0;
   // A question the team already has from this conversation (prod replay 2026-11-16:
   // one damaged-delivery thread recorded the same question on 8 turns in a row).
@@ -2072,6 +2080,7 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
     candidateCount: candidates.length,
     tools: turnTools.records,
     grounding: groundingNow(),
+    businessGrounding: businessGroundingNow(),
     locale,
     incomingMessage: opts.incomingMessage ?? "",
     isFirstReply: !history.some((m: any) => m.direction === "OUTBOUND"),

@@ -1618,6 +1618,12 @@ export interface Gate3Input {
   tools: ToolRunRecord[];
   /** Everything a price or product may come from: tool results, state, knowledge, the conversation. */
   grounding: string;
+  /**
+   * The same evidence without the customer's own messages (2026-11-23): what grounds a fact about the business or a
+   * product (a price, a material, a property, a fit). Her words never do: her "זה עץ?" is no source for "wood". Her own
+   * numbers (the sizes she gave) still ground an echo of them (customerText, ungroundedNumbers).
+   */
+  businessGrounding?: string;
   locale: "he" | "en";
   incomingMessage: string;
   isFirstReply: boolean;
@@ -1685,7 +1691,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   const reply = String(i.reply ?? "").trim();
   if (!reply) return { ok: false, problems: [{ kind: "style", codes: ["empty"] }] };
 
-  const prices = ungroundedPrices(reply, i.grounding);
+  const facts = i.businessGrounding ?? i.grounding;
+  const prices = ungroundedPrices(reply, facts);
   if (prices.length) problems.push({ kind: "ungrounded_price", prices });
 
   // The owner's never list is enforced, not only shown to the model (2026-11-19): a listed word in the reply is a
@@ -1797,8 +1804,8 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   if (unnamedRecommendation(reply, i.candidateTitles ?? [])) problems.push({ kind: "unnamed_recommendation" });
   if (partialReturnPolicy(reply, i.incomingMessage, i.knowledge ?? "")) problems.push({ kind: "partial_return_policy" });
   const mismatch = deviceMismatch(reply, i.incomingMessage, i.grounding ?? "");
-  const negFit = ungroundedNegativeFit(reply, i.incomingMessage, i.candidateTitles ?? [], i.grounding ?? "");
-  const posFit = ungroundedPositiveFit(reply, i.incomingMessage, i.candidateTitles ?? [], i.grounding ?? "", i.knowledge ?? "");
+  const negFit = ungroundedNegativeFit(reply, i.incomingMessage, i.candidateTitles ?? [], facts ?? "");
+  const posFit = ungroundedPositiveFit(reply, i.incomingMessage, i.candidateTitles ?? [], facts ?? "", i.knowledge ?? "");
   if (posFit.length) problems.push({ kind: "ungrounded_positive_fit", claims: posFit } as any);
   const wrongType = wrongProductType(reply, i.incomingMessage, i.candidateTitles ?? []);
   if (negFit.length) problems.push({ kind: "ungrounded_negative_fit", claims: negFit, fits: fittingBySize(i.incomingMessage, i.candidateTitles ?? []).slice(0, 3) } as any);
@@ -1806,7 +1813,7 @@ export function gate3(input: Gate3Input): Gate3Verdict {
   // An attribute nothing states, a price that is another product's (prod 2026-11-18).
   const derived = derivedMeasure(reply, `${i.grounding ?? ""}\n${i.knowledge ?? ""}`);
   if (derived.length) problems.push({ kind: "derived_measure", claims: derived } as any);
-  const attr = ungroundedAttribute(reply, `${i.grounding ?? ""}\n${i.knowledge ?? ""}\n${(i.candidateTitles ?? []).join("\n")}`, i.incomingMessage, i.candidateTitles ?? []);
+  const attr = ungroundedAttribute(reply, `${facts ?? ""}\n${i.knowledge ?? ""}\n${(i.candidateTitles ?? []).join("\n")}`, i.incomingMessage, i.candidateTitles ?? []);
   if (attr.length) problems.push({ kind: "ungrounded_attribute", claims: attr } as any);
   const otherPrice = priceOfOtherProduct(reply, i.candidates ?? []);
   if (otherPrice.length) problems.push({ kind: "price_of_other_product", claims: otherPrice } as any);
@@ -2920,9 +2927,13 @@ function productSubject(sentence: string, evidence: string, titles: string[]): b
 }
 // A Hebrew colour is grounded by its English name in an English catalogue ("תכלת" by "Light Blue", "כחול-לבן" by "Blue
 // Stripe ... blue-and-white", dev round on 51d0273e).
-const COLOUR_EN: Record<string, string[]> = { שחור: ["black"], לבן: ["white", "ivory", "cream"], אדום: ["red", "burgundy"], כחול: ["blue", "navy", "denim"], ירוק: ["green", "olive", "khaki"], צהוב: ["yellow", "mustard"], ורוד: ["pink", "rose", "blush"], אפור: ["grey", "gray", "charcoal", "melange"], חום: ["brown", "tan", "camel", "chocolate"], סגול: ["purple", "lilac", "violet"], כתום: ["orange", "rust"], זהב: ["gold"], כסף: ["silver"], "בז'": ["beige", "sand", "nude"], תכלת: ["light blue", "sky blue", "baby blue"] };
+const COLOUR_EN: Record<string, string[]> = { שחור: ["black"], לבן: ["white", "ivory", "cream"], אדום: ["red", "burgundy"], כחול: ["blue", "navy", "denim"], ירוק: ["green", "olive", "khaki"], צהוב: ["yellow", "mustard"], ורוד: ["pink", "rose", "blush"], אפור: ["grey", "gray", "charcoal", "melange"], חום: ["brown", "tan", "camel", "chocolate", "coffee", "mocha", "cocoa", "chestnut", "espresso", "caramel"], סגול: ["purple", "lilac", "violet"], כתום: ["orange", "rust"], זהב: ["gold"], כסף: ["silver"], "בז'": ["beige", "sand", "nude"], תכלת: ["light blue", "sky blue", "baby blue"] };
+// A colour's names in a Hebrew catalogue that are not the colour word ("עיפרון פירסט קופי" is brown): 2026-11-23, once
+// the customer's own "גוון חום" stopped grounding the product's colour.
+const COLOUR_HE_NAMES: Record<string, string[]> = { חום: ["קפה", "קופי", "שוקולד", "שוקולדי", "מוקה", "קקאו", "קרמל", "ערמון", "אספרסו"] };
 function colourInEvidence(c: string, evidence: string): boolean {
   if (COLOUR_RE(c).test(evidence)) return true;
+  if ((COLOUR_HE_NAMES[c] ?? []).some((n) => new RegExp(`(?<![\\u0590-\\u05FF])[והבלמש]?${n}(?![\\u0590-\\u05FF])`, "u").test(evidence))) return true;
   const ev = evidence.toLowerCase();
   return (COLOUR_EN[c] ?? []).some((en) => new RegExp(`\\b${en}\\b`, "i").test(ev));
 }

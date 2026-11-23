@@ -179,3 +179,12 @@ describe("★ the 01c861e0 replay (2026-11-23): a material only from the data; n
     expect(withoutInventedOfferQuestion(v2, ["יש הנחה אם קונים כמה?"])).toBe(v2);
   });
 });
+
+describe("★ a colour's catalogue names ground it, once her words no longer do (2026-11-23)", () => {
+  it("\"פירסט קופי\" / \"first coffee\" is brown; a black title is not", async () => {
+    const { ungroundedAttribute } = await import("../services/reply-engine/gates");
+    expect(ungroundedAttribute("העיפרון הזה בגוון חום.", "קיט בייסיק לשפתיים ועיפרון פירסט קופי")).toEqual([]);
+    expect(ungroundedAttribute("העיפרון הזה בגוון חום.", "עיפרון first coffee")).toEqual([]);
+    expect(ungroundedAttribute("העיפרון הזה בגוון חום.", "עיפרון שחור")).toEqual(["העיפרון הזה בגוון חום."]);
+  });
+});
