@@ -5,6 +5,9 @@ import { disclosesAi, type Employee } from '@/api/contracts/employees';
  * sends. Each field is one of `PATCH /api/ai-agents/:id`'s, under its own
  * name (read in `services/ai/src/routes/ai-agents.ts`):
  *
+ *   name             `name` - trimmed, never empty, at most MAX_NAME (the
+ *                    hire's own rules: the route checks none of them; a
+ *                    rename also relabels its routing rule)
  *   responsibility   `identity.responsibility` - the whole `identity` is
  *                    sent back, since PATCH replaces the object
  *   tone             `tone`
@@ -28,6 +31,9 @@ import { disclosesAi, type Employee } from '@/api/contracts/employees';
  * field ever held one.
  */
 
+/** The hire's bound on a name (HireSheet), kept on a rename: the route sets none. */
+export const MAX_NAME = 120;
+
 /** The route's bounds on `escalationRules`. */
 export const MAX_RULES = 50;
 export const MAX_RULE_LABEL = 300;
@@ -43,6 +49,7 @@ export type DraftRule = Readonly<Record<string, unknown>> & {
 };
 
 export type ProfileDraft = {
+  readonly name: string;
   readonly responsibility: string;
   readonly tone: string;
   readonly disclosesAi: boolean;
@@ -58,12 +65,13 @@ export type ProfileDraft = {
 };
 
 export type ProfileField =
-  'responsibility' | 'tone' | 'disclosesAi' | 'handover' | 'access' | 'limits';
+  'name' | 'responsibility' | 'tone' | 'disclosesAi' | 'handover' | 'access' | 'limits';
 
 /** `access`: the employee's allowlist as read (`GET /:id/integration-access`), or `null`. */
 export function draftOf(employee: Employee, access: readonly string[] | null = null): ProfileDraft {
   return {
     access,
+    name: employee.name,
     responsibility: employee.identity?.responsibility ?? '',
     tone: employee.tone,
     disclosesAi: disclosesAi(employee),
@@ -97,6 +105,16 @@ export function rulesProblem(rules: readonly DraftRule[]): 'empty' | 'tooMany' |
 }
 
 /**
+ * Why the name cannot be saved as it is, or `null`: none left once trimmed
+ * (the route would store an empty name), or longer than the hire allows.
+ */
+export function nameProblem(name: string): 'empty' | 'tooLong' | null {
+  if (name.trim() === '') return 'empty';
+  if (name.trim().length > MAX_NAME) return 'tooLong';
+  return null;
+}
+
+/**
  * Why its own rules cannot be saved as they are, or `null`: a rule with no
  * words, one over the route's length, or more than it keeps.
  */
@@ -118,6 +136,7 @@ export function changesIn(
 ): readonly ProfileField[] {
   const stored = draftOf(employee, storedAccess);
   const changed: ProfileField[] = [];
+  if (draft.name.trim() !== stored.name.trim()) changed.push('name');
   if (draft.responsibility.trim() !== stored.responsibility.trim()) changed.push('responsibility');
   if (draft.tone !== stored.tone) changed.push('tone');
   if (draft.disclosesAi !== stored.disclosesAi) changed.push('disclosesAi');
@@ -139,7 +158,9 @@ export function editPatch(
 ): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const field of changesIn(employee, draft, storedAccess)) {
-    if (field === 'responsibility') {
+    if (field === 'name') {
+      patch.name = draft.name.trim();
+    } else if (field === 'responsibility') {
       patch.identity = { ...employee.identity, responsibility: draft.responsibility.trim() };
     } else if (field === 'tone') {
       patch.tone = draft.tone;

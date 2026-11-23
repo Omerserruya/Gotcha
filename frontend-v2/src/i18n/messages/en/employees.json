@@ -360,6 +360,8 @@
     "apply": "Changes apply from its next reply",
     "applyOpen": "Changes apply from its next reply - in {count, plural, one {its # open conversation} other {its # open conversations}} too",
     "edited": "Last edited {when}",
+    "name": "Name",
+    "nameNeeded": "It needs a name.",
     "responsible": "Responsible for",
     "responsiblePlaceholder": "What this employee is responsible for - e.g. questions after a purchase",
     "how": "How it answers",
@@ -429,6 +431,7 @@
       "saving": "Saving…"
     },
     "field": {
+      "name": "Its name",
       "responsibility": "What it is responsible for",
       "tone": "Its tone",
       "disclosesAi": "Whether it says it's AI",

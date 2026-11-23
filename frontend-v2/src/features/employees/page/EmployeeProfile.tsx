@@ -22,7 +22,9 @@ import {
   draftOf,
   editPatch,
   limitsProblem,
+  MAX_NAME,
   MAX_RULE_LABEL,
+  nameProblem,
   rulesProblem,
   type ProfileDraft,
 } from './profile-plan';
@@ -35,6 +37,7 @@ import { EmployeeToolLevels, type ToolLevelRow } from './EmployeeToolLevels';
  * The employee page's Profile tab (Omer, 2026-10-13, E3/E6): every regular
  * setting as ONE list, top to bottom, and one Save for all of it.
  *
+ *   Name                `name` (Omer, 2026-11-23): the hire's rules
  *   Responsible for     `identity.responsibility`
  *   How it answers      tone; the language line (a rule, never a choice);
  *                       "Says it's AI when asked" as a real switch
@@ -76,7 +79,8 @@ export function EmployeeProfile({
   const [draft, setDraft] = useState<ProfileDraft>(() => draftOf(employee, stored));
   const set = (patch: Partial<ProfileDraft>) => setDraft((d) => ({ ...d, ...patch }));
   const changes = changesIn(employee, draft, stored);
-  const problem = rulesProblem(draft.rules) ?? limitsProblem(draft.limits);
+  const named = nameProblem(draft.name);
+  const problem = named ?? rulesProblem(draft.rules) ?? limitsProblem(draft.limits);
   const [confirming, setConfirming] = useState(false);
   const [refused, setRefused] = useState<Exclude<EmployeeEditResult, { ok: true }> | null>(null);
   const [saved, setSaved] = useState(false);
@@ -145,6 +149,26 @@ export function EmployeeProfile({
               </span>
             ) : null}
           </p>
+
+          {/* Its name (Omer, 2026-11-23): the hire's rules - required, at most MAX_NAME. */}
+          <section className={styles.section} data-testid="profile-name-section">
+            <h2 className={styles.title}>{t('name')}</h2>
+            <input
+              className={styles.field}
+              value={draft.name}
+              maxLength={MAX_NAME}
+              aria-label={t('name')}
+              aria-invalid={named === null ? undefined : true}
+              dir={typedDir(draft.name)}
+              data-testid="profile-name"
+              onChange={(e) => set({ name: e.target.value })}
+            />
+            {named === 'empty' ? (
+              <p className={styles.problem} data-testid="profile-name-needed">
+                {t('nameNeeded')}
+              </p>
+            ) : null}
+          </section>
 
           <section className={styles.section} data-testid="profile-responsible">
             <h2 className={styles.title}>{t('responsible')}</h2>

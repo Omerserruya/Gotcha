@@ -102,6 +102,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Tools and the hando
       s.getAttribute('data-testid'),
     );
     expect(parts).toEqual([
+      'profile-name-section',
       'profile-responsible',
       'profile-how',
       'profile-tools',
@@ -119,6 +120,7 @@ describe('★★ the Profile tab is ONE list, top to bottom, Tools and the hando
       [...list.querySelectorAll(':scope > section')].map((s) => s.getAttribute('data-testid')),
     ).toEqual([
       'profile-readiness',
+      'profile-name-section',
       'profile-responsible',
       'profile-how',
       'profile-tools',
@@ -444,5 +446,35 @@ describe('★ a business system someone disconnected reads "Disconnected" - neve
     expect(screen.getByTestId('profile-system-shopify')).toHaveTextContent('מנותקת');
     expect(screen.getByTestId('profile-system-shopify')).not.toHaveTextContent('נכשלת');
     expect(screen.getByTestId('profile-system-woocommerce')).toHaveTextContent('מחוברת, אבל נכשלת');
+  });
+});
+
+describe('★★ the name is edited here, saved with the rest (Omer, 2026-11-23)', () => {
+  it('shows the stored name; a new one is saved trimmed, and named in the confirm', async () => {
+    profile();
+    const field = screen.getByTestId('profile-name');
+    expect(field).toHaveValue('Maya');
+    await userEvent.clear(field);
+    await userEvent.type(field, ' Ronnie ');
+    await userEvent.click(screen.getByTestId('profile-save'));
+    expect(await screen.findByTestId('profile-confirm-changes')).toHaveTextContent('Its name');
+    await userEvent.click(screen.getByTestId('profile-confirm-save'));
+    expect(save.mock.calls[0]![1]).toEqual({ name: 'Ronnie' });
+  });
+
+  it('⚠⚠ an empty name: said under the field, and Save stays off', async () => {
+    profile();
+    await userEvent.clear(screen.getByTestId('profile-name'));
+    expect(screen.getByTestId('profile-name-needed')).toHaveTextContent('It needs a name.');
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
+    await userEvent.type(screen.getByTestId('profile-name'), '   ');
+    expect(screen.getByTestId('profile-save')).toBeDisabled();
+  });
+
+  it('the field holds no more than the hire allows, in Hebrew too', () => {
+    profile({}, {}, 'he');
+    const field = screen.getByTestId('profile-name');
+    expect(field).toHaveAttribute('maxLength', '120');
+    expect(field).toHaveAccessibleName('שם');
   });
 });
