@@ -9,7 +9,7 @@
  * budget allows a turn.
  */
 import { checkAiAllowed } from "@chatcenter/shared";
-import { ungroundedPrices, stripPrices, checkReplyStyle, addressFormsUsed, ADDRESS_WORDS, type StyleViolationKind } from "../reply-style-check.service";
+import { ungroundedPrices, stripPrices, checkReplyStyle, addressFormsUsed, ADDRESS_WORDS, thirdPersonSubjectBefore, type StyleViolationKind } from "../reply-style-check.service";
 import { validateActionHonesty } from "../action-honesty.service";
 import type { Claim, ClaimProblem, Gate3Verdict, ToolRunRecord } from "./contract";
 import { citesOwnerHandover, OWNER_RULES_REWRITE_LINE, neverSaid, neverSaidNote, type AddressForm } from "./owner-rules";
@@ -1189,13 +1189,29 @@ const KEEN_TO_HEAR = new RegExp(`(?<![${HEB}])([ושכלבהמ]?)(מעוניין
 const OPENS_QUESTION = new RegExp(`(^|[.!?,:;\\n\\u2013\\u2014-]\\s*)(${said(ADDRESS_WORDS.openingQuestion)})(?![${HEB}])(?=[^.!?\\n]*[?\\u061F])`, "gu");
 const AFTER_QUESTION_WORD = new RegExp(`((?<![${HEB}])(?:${ADDRESS_WORDS.questionWords.join("|")})\\s[^.!?\\n]{0,30}?(?<![${HEB}])(?<!(?:${ADDRESS_WORDS.otherSubjects.join("|")})\\s))(${said(ADDRESS_WORDS.afterQuestionWord)})(?![${HEB}])(?=[^.!?\\n]*[?\\u061F])`, "gu");
 const INSIDE_QUESTION = new RegExp(`((?<![${HEB}])או\\s+|,\\s*)(${said(ADDRESS_WORDS.insideQuestion)})(?![${HEB}])(?=[^.!?\\u061F\\n]*[?\\u061F])`, "gu");
+/** The legacy final gate's findings are a gendered address and nothing else: its neutral form fixes it in code. */
+export const genderedOnly = (issues: string[]) => issues.length > 0 && issues.every((x) => x === "gendered");
+/**
+ * After the legacy final gate's one rewrite (2026-11-23): a style problem alone (a gendered word, a stock phrase)
+ * never costs the turn its answer. A clean rewrite goes; a rewrite whose only problems are style goes with its address
+ * made neutral; a draft whose only problems were style goes neutral; only a reply that is broken gets the safe line.
+ */
+export function afterFinalRewrite(draftIssues: string[], left: string[], candidate: string): "candidate" | "neutral_candidate" | "neutral_draft" | "safe" {
+  const styleOnly = (xs: string[]) => xs.length > 0 && xs.every((x) => x === "gendered" || x === "calque");
+  if (!left.length && String(candidate ?? "").trim()) return "candidate";
+  if (styleOnly(left) && String(candidate ?? "").trim()) return "neutral_candidate";
+  if (styleOnly(draftIssues)) return "neutral_draft";
+  return "safe";
+}
 /** Second-person gendered verbs and participles as the plural ("תשלחי" -> "תשלחו"). Participles only where the customer is the subject ("את מחפשת", a question). */
 export function neutralSecondPerson(s: string): string {
   // A sentence the plural reached says "לכם" too, never "כתבו ... יש לך" (prod replay of 9480dfb2, NE'A).
   const parts = String(s ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[֐-׿0-9])\.(?=[֐-׿0-9]))+[.!?]*\s*|\n+/g) ?? [String(s ?? "")];
   return parts.map((p) => {
     const q = neutralSecondPersonPart(p);
-    return q === p ? p : q.replace(/(?<![֐-׿])(ו?)(?:לך)(?![֐-׿])/gu, "$1לכם").replace(/(?<![֐-׿])(ו?)(?:אלייך|אליך)(?![֐-׿])/gu, "$1אליכם");
+    const r = q === p ? p : q.replace(/(?<![֐-׿])(ו?)(?:לך)(?![֐-׿])/gu, "$1לכם").replace(/(?<![֐-׿])(ו?)(?:אלייך|אליך)(?![֐-׿])/gu, "$1אליכם");
+    // The feminine "to you" spelled with its yod, in a sentence nothing else changed: the neutral spelling (2026-11-23).
+    return r.replace(/(?<![֐-׿])(ו?)אלייך(?![֐-׿])/gu, "$1אליך").replace(/(?<![֐-׿])(ו?)עלייך(?![֐-׿])/gu, "$1עליך");
   }).join("");
 }
 function neutralSecondPersonPart(s: string): string {
@@ -1208,6 +1224,8 @@ function neutralSecondPersonPart(s: string): string {
     .replace(IF_SAID, (_m, lead: string, w: string) => `${lead}${PARTICIPLE_PLURAL[w]}`)
     .replace(KEEN_TO_HEAR, (_m, lead: string, w: string) => `${lead}${PARTICIPLE_PLURAL[w]}`)
     .replace(VERB_SAID, (m, v: string, w: string, at: number, all: string) => {
+      // "שהנציגה תוכל": the subject's own verb, not an address (2026-11-23).
+      if (!v && thirdPersonSubjectBefore(all.slice(0, at))) return m;
       if (PRESSED_ONLY.includes(w) && !PRESSED_NEXT.test(next(all, at, m))) return m;
       if (ORDERS.has(w)) order = true;
       return `${v}${TO_PLURAL[w]}`;

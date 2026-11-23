@@ -146,6 +146,31 @@ const alts = (words: readonly string[]) => words.join("|");
 /** Second-person forms that choose a gender, addressed to the customer. A bare imperative is in the lists below. */
 const MASC_TO_CUSTOMER = w(alts(ADDRESS_WORDS.masculine));
 const FEM_TO_CUSTOMER = w(alts(ADDRESS_WORDS.feminine));
+/**
+ * A subject of its own right before the verb (2026-11-23, Demo 2 booking: "כדי שהנציגה תוכל לחזור אלייך" was read as
+ * "תוכל" to a man, and the turn became the safe line): a definite noun ("שהנציגה", "הצוות", "השליח") or a third-person
+ * pronoun. "תוכל" there is the third person's ("she will be able"), never an address. "האם", "הנה", "היום"... are no
+ * subject ("האם תוכל לשלוח?" is to the customer).
+ */
+const SUBJECT_STOP = "(?!(?:אם|נה|יום|ערב|בוקר|לילה|רבה|שבוע|כי|לא|יי|תי)(?![${HE}]))";
+const THIRD_SUBJECT = new RegExp([
+  // A definite noun that opens the sentence or the clause ("השליחה תוכל", "כדי שהצוות יוכל"), never one inside a
+  // phrase ("בעמוד המוצר תוכל לבחור" is to the customer, eval e11 F03).
+  `(?:^|[.!?,:;\\n]\\s*|(?<![${HE}])(?:כדי|ברגע|כך|אחרי|לפני|אז|ואז|גם|רק)\\s+)ו?ה${SUBJECT_STOP}[${HE}]{2,}\\s+$`,
+  `(?<![${HE}])ו?כ?שה${SUBJECT_STOP}[${HE}]{2,}\\s+$`,
+  `(?<![${HE}])ו?(?:היא|הוא|הם|הן)\\s+$`,
+].join("|"), "u");
+export const thirdPersonSubjectBefore = (before: string) => THIRD_SUBJECT.test(String(before ?? ""));
+/** The first match that is addressed to the customer, not to a subject of its own. */
+function toCustomer(re: RegExp, text: string): RegExpMatchArray | null {
+  for (const m of text.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`))) {
+    if (!thirdPersonSubjectBefore(text.slice(0, m.index))) return m;
+  }
+  return null;
+}
+/** The feminine "to you" / "on you" with its yod ("אלייך", "עלייך"): the neutral spelling is "אליך", "עליך". */
+const FEM_PRONOUN = new RegExp(`(?<![${HE}])ו?(?:אלייך|עלייך)(?![${HE}])`, "u");
+
 /** "את רוצה", "אתה מחפש": a pronoun and a present-tense verb to the customer (eval e11 E01, F01). */
 const PRONOUN_TO_CUSTOMER = new RegExp(`(?<![${HE}])(?:אתה|את)\\s+(?:${alts(ADDRESS_WORDS.afterPronoun)})(?![${HE}])`, "u");
 // About someone else, "איזה צבע היא מעדיפה?" (urban-e33), is not to the customer.
@@ -532,8 +557,8 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   // 2026-10-26; eval e11 F03 "תוכל לבחור", B04 "מעדיפה"): following the
   // customer's form guessed wrong too often to be worth it.
   if (ctx.locale === "he") {
-    hit("gendered_address", plain.match(MASC_TO_CUSTOMER) ?? plain.match(IMPERATIVE_MASC));
-    hit("gendered_address", plain.match(FEM_TO_CUSTOMER) ?? plain.match(IMPERATIVE_FEM));
+    hit("gendered_address", toCustomer(MASC_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_MASC));
+    hit("gendered_address", toCustomer(FEM_TO_CUSTOMER, plain) ?? plain.match(IMPERATIVE_FEM) ?? plain.match(FEM_PRONOUN));
     hit("gendered_address", plain.match(PRONOUN_TO_CUSTOMER) ?? plain.match(PARTICIPLE_TO_CUSTOMER) ?? plain.match(PARTICIPLE_IN_QUESTION));
   }
 

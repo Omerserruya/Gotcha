@@ -135,7 +135,7 @@ import { runShadowEvaluationInBackground, toShadowContext } from "./reasoner/sha
 import { agentLoopMode } from "./agent-loop/flags";
 import { replyEngineMode, runReplyEngineTurn } from "./reply-engine";
 import { machineInbound } from "./reply-engine/engine";
-import { automatedInbound } from "./reply-engine/gates";
+import { automatedInbound, neutralSecondPerson, genderedOnly, afterFinalRewrite } from "./reply-engine/gates";
 import { agentKernelEligible } from "./agent-loop/operation-status"; // TEMPORARY migration routing floor
 import { runAgentLoopForBotTurn } from "./agent-loop/bot-loop-adapter";
 import { executeAction, type PlannedAction } from "./action-executor.service";
@@ -6060,7 +6060,13 @@ async function generateAIBotReplyInner(
       }
       replyText = normalizePunctuation(replyText);
       const issues = finalTextIssues(replyText, gateCtx);
-      if (issues.length) {
+      // A gendered address and nothing else: its neutral form, word for word the rest (2026-11-23, Demo 2: a booking
+      // question became the safe line "אפשר לפרט קצת יותר מה מחפשים?" mid-flow). No rewrite, never the safe line.
+      const neutral = genderedOnly(issues) ? normalizePunctuation(neutralSecondPerson(replyText)) : null;
+      if (neutral && !finalTextIssues(neutral, gateCtx).length) {
+        console.warn(`[ai-bot] final gate: gendered address made neutral conv=${opts.conversationId}`);
+        replyText = neutral;
+      } else if (issues.length) {
         const dropped = dropBrokenSentences(replyText, gateCtx);
         if (dropped) {
           console.warn(`[ai-bot] final gate: dropped a broken sentence (${issues.join(", ")}) conv=${opts.conversationId}`);
@@ -6080,7 +6086,13 @@ async function generateAIBotReplyInner(
           const candidate = normalizePunctuation(humanizeReply(polishReply(takeShowLine(again.content ?? "").text, { locale: replyLocale, incomingMessage: opts.incomingMessage ?? "" })) ?? "");
           const left = finalTextIssues(candidate, gateCtx);
           const cardCount = (productTurn?.staged ?? []).reduce((n, r: any) => n + (((r?.metadata as any)?.commerce?.products?.length) ?? 1), 0);
-          replyText = left.length ? safeTurnLine(replyLocale, { cardsShown: gateCards, cardCount }) : candidate;
+          // A style problem alone (a gendered word, a stock phrase) never costs the turn its answer: the rewrite, or the
+          // draft, goes with its address made neutral (2026-11-23). The safe line is for a reply that is broken.
+          const pick = afterFinalRewrite(issues, left, candidate);
+          replyText = pick === "candidate" ? candidate
+            : pick === "neutral_candidate" ? normalizePunctuation(neutralSecondPerson(candidate))
+            : pick === "neutral_draft" ? normalizePunctuation(neutralSecondPerson(replyText))
+            : safeTurnLine(replyLocale, { cardsShown: gateCards, cardCount });
           console.warn(`[ai-bot] final gate: ${issues.join(", ")} → ${left.length ? `safe line (rewrite still ${left.join(", ")})` : "one clean rewrite"} conv=${opts.conversationId}`);
         }
       }
