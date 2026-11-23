@@ -502,3 +502,66 @@ describe('★★ a flow started from a link carries the link’s query (password
     expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/default-recovery-flow\/$/);
   });
 });
+
+describe('★★ where a source starts: the provider’s origin, per build (2026-11-23)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('⚠⚠ neither set (today’s product build): no source is offered, the executor on the proxy', async () => {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_FLOW_EXECUTOR_BASE', undefined);
+    vi.stubEnv('NEXT_PUBLIC_SOURCE_ORIGIN', undefined);
+    const m = await import('./flow-executor');
+    expect(m.servesSources()).toBe(false);
+    expect(m.providerOrigin()).toBeNull();
+  });
+
+  it('★★ the product build with NEXT_PUBLIC_SOURCE_ORIGIN: sources start there, the executor stays on /auth-api/', async () => {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '');
+    vi.stubEnv('NEXT_PUBLIC_FLOW_EXECUTOR_BASE', undefined);
+    vi.stubEnv('NEXT_PUBLIC_SOURCE_ORIGIN', 'https://auth.gotcha.co.il');
+    const m = await import('./flow-executor');
+    expect(m.servesSources()).toBe(true);
+    expect(m.providerOrigin()).toBe('https://auth.gotcha.co.il');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({}), { headers: { 'Content-Type': 'application/json' } }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    await m.startFlow();
+    // Same-origin, so the flow cookie goes with it: never the auth host.
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      '/auth-api/flows/executor/default-authentication-flow/',
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it('only the origin of it, and a value that is not an http(s) origin reads as unset', async () => {
+    for (const [raw, want] of [
+      ['https://auth.gotcha.co.il/some/path?x=1', 'https://auth.gotcha.co.il'],
+      ['javascript:alert(1)', null],
+      ['auth.gotcha.co.il', null],
+      ['', null],
+    ] as const) {
+      vi.resetModules();
+      vi.stubEnv('NEXT_PUBLIC_FLOW_EXECUTOR_BASE', undefined);
+      vi.stubEnv('NEXT_PUBLIC_SOURCE_ORIGIN', raw);
+      const m = await import('./flow-executor');
+      expect(m.providerOrigin(), raw).toBe(want);
+      expect(m.servesSources(), raw).toBe(want !== null);
+    }
+  });
+
+  it('the auth build keeps its own: the executor base decides, whatever the source origin says', async () => {
+    vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_FLOW_EXECUTOR_BASE', '/api/v3');
+    vi.stubEnv('NEXT_PUBLIC_SOURCE_ORIGIN', 'https://elsewhere.example');
+    const m = await import('./flow-executor');
+    expect(m.servesSources()).toBe(true);
+    expect(m.providerOrigin()).toBe(window.location.origin);
+  });
+});

@@ -83,6 +83,10 @@ ARG NEXT_PUBLIC_REALTIME_URL
 # gateway proxy the product origin needs; set means the executor is reachable
 # natively because the page and the identity provider share an origin.
 ARG NEXT_PUBLIC_FLOW_EXECUTOR_BASE
+# The product build's way to the provider's own host for "Sign in with Google"
+# (prod: https://auth.gotcha.co.il). The executor stays on the proxy. Unset
+# means no outside sign-in is offered, exactly as before (2026-11-23).
+ARG NEXT_PUBLIC_SOURCE_ORIGIN
 ARG NEXT_PUBLIC_APP_ENV
 ARG NEXT_PUBLIC_RELEASE
 ARG NEXT_PUBLIC_SENTRY_DSN
