@@ -810,12 +810,27 @@ describe("★ POST /lead: the assignee's phone hears the form (mobile push)", ()
     expect(INBOUND.calls[0]).toMatchObject({ queued: true, input: { conversation: { id: "conv9", assignedAgentId: null, isHandedOver: true } } });
   });
 
-  it("the AI still handling it: the rule queues nothing", async () => {
+  // The form hands the chat to the team, and the bot answers nothing that is
+  // handed over (incoming.worker). A handledBy still reading "ai_agent" is
+  // the bot's last turn, not the bot holding it: since 2026-11-03 a person on
+  // it, or the handover, wins over it (inbound-push.ts).
+  it("handledBy still reads ai_agent: the form handed it over, so it is announced", async () => {
     H.conversationRow.current = { id: "conv8", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "ai_agent", origin: "LIVE" };
     await lead();
     H.conversationRow.current = { id: "conv10", tenantId: "t1", customerName: "Shopper", assignedAgentId: null, handledBy: "ai_agent", origin: "LIVE" };
     await lead();
-    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false]);
+    expect(INBOUND.calls.map((c) => c.queued)).toEqual([true, true]);
+    expect(INBOUND.calls[1].input.conversation).toMatchObject({ id: "conv10", assignedAgentId: null, isHandedOver: true });
+  });
+
+  it("not real traffic: a sandbox, a test chat or imported history queues nothing", async () => {
+    H.conversationRow.current = { id: "conv11", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "sandbox", origin: "LIVE" };
+    await lead();
+    H.conversationRow.current = { id: "conv12", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "human", origin: "LIVE", isTest: true };
+    await lead();
+    H.conversationRow.current = { id: "conv13", tenantId: "t1", customerName: "Shopper", assignedAgentId: "matan", handledBy: "human", origin: "HISTORICAL_IMPORT" };
+    await lead();
+    expect(INBOUND.calls.map((c) => c.queued)).toEqual([false, false, false]);
   });
 
   it("a failing publish never breaks the form", async () => {

@@ -996,8 +996,9 @@ router.post("/lead", conversationLimiter, async (req: Request, res: Response) =>
     });
     // The form is the shopper writing, and it never passes the incoming
     // worker. The update above just handed the chat to the team, so it
-    // reaches the assignee's phone, else the team's (unless the bot still
-    // holds it). The row read before that update does not say so yet.
+    // reaches the assignee's phone, else the team's (never for a sandbox, a
+    // test chat or imported history). The row read before that update does
+    // not say so yet.
     emitInboundMessage({
       tenantId: session.tenantId,
       conversation: { ...conversation, isHandedOver: true },
