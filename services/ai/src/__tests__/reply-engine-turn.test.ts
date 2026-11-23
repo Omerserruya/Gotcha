@@ -5790,6 +5790,42 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(r.reply).toBe(`מצטערים על זה. יש אחריות לגלגלים למשך 5 שנים. בינתיים מומלץ להפסיק להשתמש בזה. ${HAND}`);
   });
 
+  it("★ replay 5517 #1: the model wrote the line after \"אז\": no \", אז.\" is left before the approved line", async () => {
+    h.responses.push({ toolCalls: [tc("z0", "search_knowledge", { query: "מבצע 40%" })] }, { toolCalls: [respond("z1", { reply: `מצטערים על הבלבול. אין לנו מידע מתי ההנחה תופיע באתר, אז ${HAND}`, handoff: "the 40% sale date is not in the knowledge" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "קיבלתי במייל שיש 40% הנחה וזה לא מעודכן באתר, מתי זה יהיה מעודכן?" }, "autonomous");
+    handedOver(r);
+    expect(r.reply).toBe(`מצטערים על הבלבול. אין לנו מידע מתי ההנחה תופיע באתר. ${HAND}`);
+  });
+
+  it("★ replay 5517 #2: \"is it wood?\" whose drafts both fail never gets a bare product list: a person takes the question", async () => {
+    h.groundTitle = "סמובי גפן - משטח הזזה 20*30 ס\"מ";
+    const wrong = "המשטח מבמבוק עשוי עץ. אפשר לראות את צורתם בתמונות המוצר באתר.";
+    h.responses.push({ toolCalls: [tc("w0", "search_knowledge", { query: "במבוק עץ" })] }, { toolCalls: [respond("w1", { reply: wrong })] }, { toolCalls: [respond("w2", { reply: wrong })] }, { toolCalls: [respond("w3", { reply: wrong })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי אשמח לדעת המשטח בגוון במבוק כהה זה עץ ? והיכן ניתן לראות את צורת מבנה הגלגלים ?" }, "autonomous");
+    expect(r.reply ?? "").not.toMatch(/הנה כמה אפשרויות/);
+    expect(r.reply ?? "").not.toMatch(/עשוי עץ/);
+    handedOver(r);
+  });
+
+  it("★ replay 5517 #2: \"is it wood?\" answered with no product read: the engine reads the product, and the answer from it stands", async () => {
+    h.groundTitle = "סמובי גפן - משטח הזזה 20*30 ס\"מ";
+    h.responses.push(
+      { toolCalls: [respond("m1", { reply: "המשטח מבמבוק עשוי עץ." })] },
+      { toolCalls: [respond("m2", { reply: "הגוון במבוק כהה הוא מראה של עץ, אבל המשטח עשוי מפרספקס." })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "המשטח בגוון במבוק כהה זה עץ ?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("unread_product");
+    expect(r.trace.tools.some((t: any) => /list_products|get_product/.test(t.tool))).toBe(true);
+  });
+
+  it("★ replay 5517 #3: a product interest that asked nothing: the volunteered \"not known\" goes, and it asks what she needs", async () => {
+    h.responses.push({ toolCalls: [tc("n0", "search_knowledge", { query: "משטחים" })] }, { toolCalls: [respond("n1", { reply: "לא נמסר אם יש הנחה מיוחדת בקנייה של כמה משטחים. כדאי להירשם לניוזלטר באתר כדי להתעדכן במבצעים ובהטבות." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הי אני מתעניינת בכמה משטחים" }, "autonomous");
+    expect(r.escalation).toBeNull();
+    expect(r.reply ?? "").not.toMatch(/לא נמסר/);
+    expect(r.reply ?? "").toMatch(/\?$/);
+  });
+
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
     h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
     await runReplyEngineTurn(opts, "autonomous");

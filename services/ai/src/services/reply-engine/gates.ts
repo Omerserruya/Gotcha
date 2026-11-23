@@ -225,17 +225,30 @@ const TEAM_WAIT = new RegExp([
 ].join("|"), "iu");
 /** The reply says the team has it, is on it, or will answer (any wording above, or the older lines). */
 export const claimsTeam = (reply: string) => teamPassIn(reply) || TEAM_WAIT.test(reply ?? "");
+/**
+ * A connector left hanging where a cut ended a clause (2026-11-23: "אין לנו מידע מתי ההנחה תופיע באתר, אז." once the
+ * hand-over line the model wrote after "אז" was taken out): the connector goes, the sentence ends.
+ */
+export const dropDanglingConnectors = (t: string) => String(t ?? "")
+  .replace(/[,\s]*(?<![\u0590-\u05FF])(?:ולכן|לכן|ואז|אז|אבל|אך|כי|ו)\s*(?=[.!?](?:\s|$)|$)/gu, "")
+  .replace(/[,\s]*,\s*(?=[.!?](?:\s|$)|$)/gu, "")
+  .trim();
 /** The reply without its team sentences: what it really answered stays. */
 export const withoutTeamClaims = (reply: string) => {
   let t = removeTeamLines(String(reply ?? ""));
   // A "we will keep it quiet" promise goes too: the person who continues decides that.
   for (const re of [TEAM_WAIT, TEAM_PASS_ANY, WE_WILL_WITH_TEAM, SILENCE_PROMISE]) t = dropSentencesBy(t, re);
-  return t.trim();
+  return dropDanglingConnectors(t);
 };
 
 // A material answered from the business description without reading the product (prod replay 12:
 // "stainless steel" from the product data in one conversation, something else from the description in another).
-const MATERIAL_ASK = /(?<![\u0590-\u05FF])(?:חומר|מאיזה\s+חומר|עשוי|עשויה|עשויים|ממה\s+(?:זה|הוא|היא)\s+עשוי)(?![\u0590-\u05FF])|\b(?:material|made of|made from)\b/iu;
+const MATERIAL_ASK = /(?<![\u0590-\u05FF])(?:חומר|מאיזה\s+חומר|עשוי|עשויה|עשויים|ממה\s+(?:זה|הוא|היא)\s+עשוי)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:זה|הוא|היא|הם|הן)\s+(?:מ|עשוי\s+מ|עשויה\s+מ)?(?:עץ|פלסטיק|מתכת|ברזל|נירוסטה|זכוכית|פרספקס|אקריל|עור|בד|כותנה|במבוק|סיליקון|גומי|אלומיניום|פלדה|קרטון|פשתן|צמר)\s*\?|\b(?:material|made of|made from|is it (?:wood|plastic|metal|glass|leather|cotton|bamboo))\b/iu;
+/**
+ * A question about a fact of the product itself (2026-11-23, Smoovee: "הגוון במבוק כהה זה עץ? והיכן ניתן לראות את צורת
+ * מבנה הגלגלים?"): when both drafts fail, a list of products is no answer to it; a person takes it.
+ */
+export const productFactQuestion = (incoming: string) => /\?/.test(String(incoming ?? "")) && (MATERIAL_ASK.test(incoming ?? "") || /(?<![\u0590-\u05FF])(?:היכן|איפה)\s+(?:ניתן|אפשר)\s+לראות(?![\u0590-\u05FF])/u.test(incoming ?? ""));
 // A price ask about the product in focus answered with no price, or with a request for its name or link (dev round k3
 // on b3d2bbf3: "כמה היא עולה?" right after two shirts were named, only the knowledge searched).
 const PRICE_ASK = /(?<![\u0590-\u05FF])(?:כמה\s+(?:זה\s+|היא\s+|הוא\s+|הם\s+|הן\s+)?(?:עולה|עולים|עולות)|מה\s+(?:ה)?מחיר|ה?מחיר\s+של)(?![\u0590-\u05FF])|\b(?:how much|what(?:'s| is) the price|price of)\b/iu;
@@ -397,7 +410,7 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
  * The reply says it does not know (not "not in stock", not "not available in that size"): "אין לי כאן הסבר",
  * "לא ידוע לנו מתי", "עדיין אין לנו מידע", "אין לנו מספר ימים קבוע" (prod lines 2026-11-16..23).
  */
-const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b|(?<![֐-׿])אין\s+(?:לי\s+|לנו\s+)?כאן\s+(?:מידע|פרטים|הסבר)(?![֐-׿])|(?<![֐-׿])לא\s+נמסר\s+(?:לנו|לי)(?![֐-׿])|(?<![֐-׿])(?:לא|אינו|אינה|אינם)\s+(?:מפורט|מפורטת|מפורטים|מפורטות)(?![֐-׿])|(?<![֐-׿])לא\s+ידוע\s+(?:לנו\s+|לי\s+)?(?:אם|מתי|למה|כמה|איך)(?![֐-׿])|(?<![֐-׿])לא\s+מופיע\s+(?:לי|לנו|אצלי|אצלנו|כאן)\s+(?:איך|מתי|למה|אם|מה|כמה)(?![֐-׿])/iu;
+const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b|(?<![֐-׿])אין\s+(?:לי\s+|לנו\s+)?כאן\s+(?:מידע|פרטים|הסבר)(?![֐-׿])|(?<![֐-׿])לא\s+נמסר\s+(?:לנו|לי)(?![֐-׿])|(?<![֐-׿])(?:לא|אינו|אינה|אינם)\s+(?:מפורט|מפורטת|מפורטים|מפורטות)(?![֐-׿])|(?<![֐-׿])לא\s+ידוע\s+(?:לנו\s+|לי\s+)?(?:אם|מתי|למה|כמה|איך)(?![֐-׿])|(?<![֐-׿])לא\s+מופיע\s+(?:לי|לנו|אצלי|אצלנו|כאן)\s+(?:איך|מתי|למה|אם|מה|כמה)(?![֐-׿])|(?<![֐-׿])לא\s+נמסר\s+(?:אם|מתי|כמה|איך)(?![֐-׿])/iu;
 export const saysNotKnown = (reply: string) => NOT_KNOWN.test(reply ?? "");
 // ── D2 / D2b (2026-11-23) ──
 // Words that say nothing about WHAT was asked: the pass's own wording, question and filler words.
@@ -428,6 +441,14 @@ export function checkoutOnly(reply: string, incoming: string): boolean {
   if (!WHY_WHEN.test(String(incoming ?? "")) || !CHECKOUT_LINE.test(String(reply ?? ""))) return false;
   return !dropSentencesBy(answerOnly(reply), CHECKOUT_LINE).replace(/[.\s]+/g, "");
 }
+
+/**
+ * A "not known" she never asked for (2026-11-23, "הי אני מתעניינת בכמה משטחים" got "לא נמסר אם יש הנחה מיוחדת בקנייה
+ * של כמה משטחים."): on a turn that asks nothing, a not-known sentence is volunteered, and it goes.
+ */
+/** She says what she is interested in, asking nothing yet ("אני מתעניינת בכמה משטחים"). */
+export const productInterest = (incoming: string) => /(?<![\u0590-\u05FF])(?:מתעניינ(?:ת|ים|ות)?|מחפש(?:ת|ים|ות)?|מעוניינ(?:ת|ים)?|רוצה\s+לקנות|רוצה\s+להזמין)(?![\u0590-\u05FF])|\b(?:interested in|looking for)\b/iu.test(String(incoming ?? ""));
+export const withoutUnaskedNotKnown = (reply: string) => dropDanglingConnectors(dropSentencesBy(String(reply ?? ""), NOT_KNOWN));
 
 /** The reply without its pass and its "not known" sentences: what it really answered. */
 export const answerOnly = (reply: string) => dropSentencesBy(withoutTeamClaims(reply), NOT_KNOWN).trim();

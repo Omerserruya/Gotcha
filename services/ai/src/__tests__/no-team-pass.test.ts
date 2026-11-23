@@ -131,3 +131,26 @@ describe("★ an order's or a payment's state with no lookup this turn is never 
     expect(orderStateUnlooked("משלוחים יוצאים בימים א עד ה.", [], ["מתי שולחים?"])).toEqual([]);
   });
 });
+
+describe("★ the 551794cd replay's last three (2026-11-23)", () => {
+  it("1: a connector a cut left hanging goes (ו, אבל, אז, כי, לכן), and only at a sentence end", async () => {
+    const { dropDanglingConnectors } = await import("../services/reply-engine/gates");
+    expect(dropDanglingConnectors("מצטערים על הבלבול. אין לנו מידע מתי ההנחה תופיע באתר, אז.")).toBe("מצטערים על הבלבול. אין לנו מידע מתי ההנחה תופיע באתר.");
+    for (const c of ["ו", "אבל", "אז", "כי", "לכן", "ולכן"]) expect(dropDanglingConnectors(`אין לנו מידע על זה, ${c}`), c).toBe("אין לנו מידע על זה");
+    expect(dropDanglingConnectors("אין לנו מידע על זה, אז. אפשר להזמין באתר.")).toBe("אין לנו מידע על זה. אפשר להזמין באתר.");
+    // Never a connector inside a sentence, or a word that ends with those letters.
+    expect(dropDanglingConnectors("אז מה מתאים לך? כי זה תלוי במידה.")).toBe("אז מה מתאים לך? כי זה תלוי במידה.");
+    expect(dropDanglingConnectors("זה מגיע מאז.")).toBe("זה מגיע מאז.");
+  });
+  it("2: \"זה עץ?\" is a question about the product itself", async () => {
+    const { productFactQuestion } = await import("../services/reply-engine/gates");
+    expect(productFactQuestion("היי אשמח לדעת המשטח בגוון במבוק כהה זה עץ ? והיכן ניתן לראות את צורת מבנה הגלגלים ?")).toBe(true);
+    expect(productFactQuestion("יש לכם משטח למיקסר?")).toBe(false);
+  });
+  it("3: a not-known she never asked for goes; the rest stays", async () => {
+    const { withoutUnaskedNotKnown, saysNotKnown } = await import("../services/reply-engine/gates");
+    const v2 = "לא נמסר אם יש הנחה מיוחדת בקנייה של כמה משטחים. כדאי להירשם לניוזלטר באתר כדי להתעדכן במבצעים ובהטבות.";
+    expect(saysNotKnown(v2)).toBe(true);
+    expect(withoutUnaskedNotKnown(v2)).toBe("כדאי להירשם לניוזלטר באתר כדי להתעדכן במבצעים ובהטבות.");
+  });
+});

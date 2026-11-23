@@ -38,7 +38,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, passCovered, answerOnly, shortFollowUp, actionWanted, checkoutOnly, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, passCovered, answerOnly, shortFollowUp, actionWanted, checkoutOnly, productFactQuestion, withoutUnaskedNotKnown, productInterest, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -2556,6 +2556,10 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
           // stopper or coupon question, with the model in the results).
           && productAskNow(opts.incomingMessage ?? "") && !namedInResults(String(opts.incomingMessage ?? ""), candidates)) {
           output = { reply: notFoundReply(locale, String(opts.incomingMessage ?? "")), stateUpdate: {}, claims: [], handoff: null, cards: [] };
+        } else if (grounded && !hedgedDraft && productFactQuestion(String(opts.incomingMessage ?? ""))) {
+          // A question about the product itself, both drafts failed: the list would lose it (2026-11-23). A person takes it.
+          output = { reply: "", stateUpdate: {}, claims: [], handoff: null, teamQuestion: question, cards: [] };
+          (trace as any).factQuestionToPerson = true;
         } else if (grounded && !hedgedDraft) {
           // Never when a draft hedged on the fit (above): the list would offer the very products it hedged on, so the
           // turn goes on to the lines below, which show none.
@@ -3320,6 +3324,15 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (!final.handoff && !escalation && !final.teamQuestion && customerAck(String(opts.incomingMessage ?? "")) && claimsTeam(reply ?? "")) {
     reply = withoutTeamClaims(reply ?? "") || (locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE);
     (trace as any).teamClaimCutOnThanks = true;
+  }
+  // A "not known" on a turn that asks nothing is volunteered: it goes, and a product interest gets the question that
+  // moves the choice on (2026-11-23).
+  // Only a message that states an interest and asks nothing ("אני מתעניינת בכמה משטחים"): a follow-up that asks
+  // nothing on its face ("התכוונתי ל-37 אחוז") still carries her earlier question.
+  if (!final.handoff && !escalation && !final.teamQuestion && saysNotKnown(reply ?? "") && productInterest(String(opts.incomingMessage ?? "")) && !asksSomething(String(opts.incomingMessage ?? "")) && !imperativeAsk(String(opts.incomingMessage ?? ""))) {
+    const left = withoutUnaskedNotKnown(reply ?? "");
+    reply = !/\?/.test(left) ? [left, productQuestionLine(locale === "en" ? "en" : "he")].filter(Boolean).join(" ") : left;
+    (trace as any).unaskedNotKnownCut = true;
   }
   // D2b, answered means no pass: the reply already answers what she asked from the business's own texts, and its
   // pass names nothing she asked that the answer leaves open: the pass is cut and the answer stands (no hand-over).
