@@ -7,9 +7,11 @@ import {
   draftOf,
   editPatch,
   limitsProblem,
+  MAX_NAME,
   MAX_LIMIT_LENGTH,
   MAX_LIMITS,
   MAX_RULES,
+  nameProblem,
   newRule,
   rulesProblem,
 } from './profile-plan';
@@ -56,6 +58,7 @@ describe('★ the draft starts as stored; nothing is a change until it differs',
     const d = draftOf(e);
     expect(
       changesIn(e, {
+        name: 'Maya',
         responsibility: 'Everything',
         tone: 'formal',
         disclosesAi: false,
@@ -159,6 +162,7 @@ describe('★ nothing writes what the page does not edit', () => {
       'access',
       'disclosesAi',
       'limits',
+      'name',
       'responsibility',
       'rules',
       'tone',
@@ -166,6 +170,7 @@ describe('★ nothing writes what the page does not edit', () => {
     const all = editPatch(
       e,
       {
+        name: 'Maya',
         responsibility: 'x',
         tone: 'formal',
         disclosesAi: false,
@@ -226,5 +231,29 @@ describe('★★ E4 (2026-10-14) - its own rules, the whole list, saved with the
       'tooMany',
     );
     expect([MAX_LIMITS, MAX_LIMIT_LENGTH]).toEqual([20, 280]);
+  });
+});
+
+describe('★★ its name (Omer, 2026-11-23): the hire’s rules, since the route checks none', () => {
+  it('a new name is sent trimmed, under `name`, first in the page’s order', () => {
+    const e = employee();
+    const d = { ...draftOf(e), name: '  Ronnie ', tone: 'formal' };
+    expect(changesIn(e, d)).toEqual(['name', 'tone']);
+    expect(editPatch(e, d)).toEqual({ name: 'Ronnie', tone: 'formal' });
+  });
+
+  it('whitespace around the same name is not a change, and sends nothing', () => {
+    const e = employee();
+    const d = { ...draftOf(e), name: ' Maya  ' };
+    expect(changesIn(e, d)).toEqual([]);
+    expect(editPatch(e, d)).toEqual({});
+  });
+
+  it('⚠⚠ empty, or only spaces, cannot be saved; nor longer than the hire allows', () => {
+    expect(nameProblem('')).toBe('empty');
+    expect(nameProblem('   ')).toBe('empty');
+    expect(nameProblem('x'.repeat(MAX_NAME))).toBeNull();
+    expect(nameProblem('x'.repeat(MAX_NAME + 1))).toBe('tooLong');
+    expect(nameProblem(' רוני ')).toBeNull();
   });
 });
