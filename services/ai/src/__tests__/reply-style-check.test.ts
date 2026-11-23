@@ -395,3 +395,33 @@ describe("★ L01c Y4", () => {
     expect(kinds("לרצונך שאציג את הכרטיס?")).toContain("banned_phrase");
   });
 });
+
+describe("a banned entry is a whole phrase, not a substring (2026-11-23, GOTCHA Demo 2: every veil reply became the safe line)", () => {
+  const veil = { incomingMessage: "תוך כמה זמן מגיעה הינומה ברקמה אישית?" };
+  it("הינומה and הינומות are a veil, not הינו or הינה", () => {
+    expect(kinds("הינומה ברקמה אישית מגיעה תוך 10-14 ימי עסקים מרגע ההזמנה.", veil)).not.toContain("banned_phrase");
+    expect(kinds("יש לנו כמה הינומות ברקמה אישית, באורך קצר וארוך.", veil)).not.toContain("banned_phrase");
+    expect(kinds("ההינומה הארוכה מגיעה עם סרט סאטן.", veil)).not.toContain("banned_phrase");
+    expect(kinds("הכל לפי ההחלטה שלך, ובהחלטה על אורך ההינומה כדאי למדוד קודם.", veil)).not.toContain("banned_phrase");
+  });
+  it("הינו, הינה and בהחלט alone are still caught, with a prefix letter too", () => {
+    expect(kinds("המוצר הינו עמיד במים.")).toContain("banned_phrase");
+    expect(kinds("ההינומה הינה בעבודת יד.", veil)).toContain("banned_phrase");
+    expect(kinds("זה סט שהינו מושלם לכלה.")).toContain("banned_phrase");
+    expect(kinds("בהחלט! יש ב-M")).toContain("banned_phrase");
+    expect(kinds("כן, ובהחלט אפשר להזמין.")).toContain("banned_phrase");
+    expect(kinds("אנא שלחו את מספר ההזמנה")).toContain("banned_phrase");
+    expect(kinds("להלן האפשרויות:")).toContain("banned_phrase");
+  });
+  it("an entry ending in a lone ו still takes the next word, and card nouns keep their plural", () => {
+    expect(kinds("במידה וזה לא מתאים, אפשר להחליף.")).toContain("banned_phrase");
+    expect(kinds("להציג כרטיסים של שתי האופציות?")).toContain("banned_phrase");
+    expect(kinds("אל תהססו לכתוב לנו")).toContain("banned_phrase");
+    expect(kinds("נמצא שניים שמתאימים לך")).toContain("banned_phrase");
+  });
+  it("a longer word that only contains an entry is not that entry", () => {
+    expect(kinds("זה שעון אנאלוגי עם רצועת עור.")).not.toContain("banned_phrase");
+    expect(kinds("שמלת דיאנא מגיעה בלבן ובשמנת.")).not.toContain("banned_phrase");
+    expect(kinds("ההחלטה בהחלטה משותפת שלכם")).not.toContain("banned_phrase");
+  });
+});

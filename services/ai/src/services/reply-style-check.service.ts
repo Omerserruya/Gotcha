@@ -92,8 +92,26 @@ const w = (alts: string) => new RegExp(`(?<![${HE}])[ושכלבהמ]?(?:${alts})
 const GREETING_START = /^(?:היי+|הי|שלום|אהלן|הלו|בוקר טוב|ערב טוב|צהריים טובים|hi+|hey+|hello|good (?:morning|afternoon|evening))(?=[\s,.!?:;🙂😊]|$)/iu;
 const SELF_INTRO = /(?:^|[\s,.!])(?:אני|כאן)\s+(?:נועה|נועא|מאיה|[A-Z][a-z]+)\s+(?:מ|מצוות|מהצוות|ה)|I(?:'m| am) [A-Z][a-z]+ (?:from|with|at)/u;
 
-export const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן", "עצם שמתאים", "עצם שיתאים", "להקפאה"];
+export const BANNED_HE = ["אשמח לעזור", "אשמח לסייע", "בהחלט", "שאלה מצוינת", "עליי לבדוק", "הינו", "הינה", "על מנת", "במידה ו", "אנא", "מתנצלת על אי הנוחות", "מתנצל על אי הנוחות", "אל תהסס", "אל תהססי", "אל תהססו", "יש לך שאלות נוספות", "המוצר זמין במלאי", "תודה על פנייתך", "אני כאן אם", "במה אוכל לעזור", "איך אפשר לעזור", "מה אפשר לעזור", "עשה רושם", "עושה רושם", "השגנו", "חקרתי", "זיהיתי", "טוב שאלה", "לא משוחק", "ראו למטה", "ראו מטה", "ראוי למטה", "כרטיס המוצר למטה", "בכרטיס למטה", "רואים את כרטיס", "ראה למטה", "ראי למטה", "ראה את הכרטיס", "אותו מטה", "לשלוח שוב את כרטיס", "לשלוח שוב את הכרטיס", "שאעזור להוסיף", "לעזור להוסיף", "חיפוש ראשוני", "בחיפוש הראשוני", "ככרטיס", "להציג כרטיס", "להציג את הכרטיס", "לשלוח כרטיס", "לשלוח את כרטיס", "רואים למטה", "תראו אותו למטה", "יש לשלוח", "יש למלא", "יש לפנות", "נמצאו שתי אופציות", "אופציות רלוונטיות", "להציג את כרטיס", "כרטיס המוצר כדי", "אנחנו לא יכולים לעשות זאת", "לא ניתן לבצע את הבקשה", "נחפר", "כדי שבדיקה תתחיל", "לרצונך", "נקודת התחלה", "הראינו", "נמצא שני", "נמצא שתי", "נמצא שלוש", "נמצא כמה", "קיבלתי את התקציב", "להלן", "עצם שמתאים", "עצם שיתאים", "להקפאה"];
 export const BANNED_EN = ["happy to help", "great question", "i hope this helps", "don't hesitate", "do you have any other questions", "thank you for reaching out", "how can i help you today"];
+/**
+ * A banned entry as a whole Hebrew phrase (2026-11-23): a plain substring made
+ * "הינו" fire inside "הינומה" (veil) and "בהחלט" inside "בהחלטה", and every
+ * reply about a veil ended as the safe line. One attached prefix letter is
+ * allowed in front, like w(). The end is a word end, except an entry ending in
+ * a lone "ו" (it attaches to the next word: "במידה וזה") and a card noun,
+ * which keeps its plural ("להציג כרטיסים", "נמצא שניים", "נמצא שלושה").
+ */
+const BANNED_ENDINGS: ReadonlyArray<[RegExp, string]> = [[/כרטיס$/u, "(?:י|ים)?"], [/^שני$/u, "(?:ים)?"], [/^שלוש$/u, "(?:ה)?"]];
+const bannedRe = (entry: string): RegExp => {
+  const words = entry.trim().split(/\s+/);
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const last = words[words.length - 1];
+  if (last === "ו") return new RegExp(`(?<![${HE}])[ושכלבהמ]?${words.slice(0, -1).map(esc).join("\\s+")}\\s+ו`, "u");
+  const ending = BANNED_ENDINGS.find(([re]) => re.test(last))?.[1] ?? "";
+  return new RegExp(`(?<![${HE}])[ושכלבהמ]?${words.map(esc).join("\\s+")}${ending}(?![${HE}])`, "u");
+};
+const BANNED_HE_RE = new Map(BANNED_HE.map((b) => [b, bannedRe(b)] as const));
 
 /**
  * "תרצה/י", "אתה/את", "מעדיף/ה": a gender ending after a slash, 1-3 letters.
@@ -505,7 +523,8 @@ export function checkReplyStyle(draft: string, ctx: StyleCheckContext): StyleVio
   const helloBack = ctx.isFirstReply && GREETING_ONLY.test(ctx.incomingMessage);
   for (const b of ctx.locale === "he" ? BANNED_HE : BANNED_EN) {
     if (helloBack && /אפשר לעזור|how can i help/i.test(b)) continue;
-    if (lower.includes(b.toLowerCase())) { hit("banned_phrase", b); break; }
+    const said = ctx.locale === "he" ? BANNED_HE_RE.get(b)!.test(plain) : lower.includes(b.toLowerCase());
+    if (said) { hit("banned_phrase", b); break; }
   }
 
   hit("slash_form", plain.match(SLASH));
