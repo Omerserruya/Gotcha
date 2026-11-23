@@ -5826,6 +5826,22 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(r.reply ?? "").toMatch(/\?$/);
   });
 
+  it("★ replay 01c8 #1: \"bamboo is wood\" against the spec \"בסיס: פרספקס\" never goes out, nor \"see it on the site\"", async () => {
+    h.lexical = [{ content: "מפרט טכני בסיס : פרספקס גלגלים : פלדת אל חלד מכוסה פלסטיק", score: 0.9, documentTitle: "מפרט", chunkIndex: 1, documentId: "ds" }];
+    const wrong = "כן, משטח הבמבוק עשוי מעץ. אפשר לראות תמונות של המשטחים באתר סמובי.";
+    h.responses.push({ toolCalls: [tc("b0", "search_knowledge", { query: "במבוק" })] }, { toolCalls: [respond("b1", { reply: wrong })] }, { toolCalls: [respond("b2", { reply: "הגוון במבוק כהה הוא מראה של עץ, אבל המשטח עצמו עשוי מפרספקס, והגלגלים מפלדת אל חלד מכוסה פלסטיק." })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "היי אשמח לדעת המשטח בגוון במבוק כהה זה עץ ? והיכן ניתן לראות את צורת מבנה הגלגלים ?" }, "autonomous");
+    expect(r.trace.gate3.problems.map((p: any) => p.kind)).toContain("ungrounded_attribute");
+    expect(r.reply ?? "").not.toMatch(/עשוי מעץ|באתר סמובי/);
+  });
+
+  it("★ replay 01c8 #2: an interest that raised no discount gets no invented \"is there a discount?\"", async () => {
+    h.responses.push({ toolCalls: [tc("d0", "search_knowledge", { query: "משטחים" })] }, { toolCalls: [respond("d1", { reply: "בכיף. יש הנחה מיוחדת בקנייה של כמה משטחים? אילו משטחים מעניינים אותך?" })] });
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "הי אני מתעניינת בכמה משטחים" }, "autonomous");
+    expect(r.escalation).toBeNull();
+    expect(r.reply).toBe("בכיף. אילו משטחים מעניינים אותך?");
+  });
+
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
     h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
     await runReplyEngineTurn(opts, "autonomous");

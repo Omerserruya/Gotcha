@@ -220,6 +220,8 @@ const TEAM_WAIT = new RegExp([
   "(?<![\\u0590-\\u05FF])ל?פנות\\s+לשירות\\s+(?:ה)?לקוחות",
   "(?<![\\u0590-\\u05FF])(?:אפשר|כדאי|מומלץ|ניתן)\\s+לבדוק[^.!?\\n]{0,40}(?:בדף|בעמוד)\\s+(?:ה)?מוצר",
   "(?<![\\u0590-\\u05FF])(?:אפשר|נשמח|ניתן)\\s+להמשיך\\s+(?:את\\s+)?(?:ה)?טיפול",
+  // "אפשר לראות תמונות של המשטחים באתר" with no link: the work is handed back (a link of its own is an answer).
+  "(?<![\\u0590-\\u05FF])(?:אפשר|ניתן|כדאי|מומלץ)\\s+לראות(?:(?!https?:)[^.!?\\n]){0,50}(?:באתר|בדף|בעמוד)(?![\\u0590-\\u05FF])(?![^.!?\\n]*https?:)",
   "\\b(?:contact (?:our )?customer (?:service|support)|check the product page)\\b",
   "\\b(?:the team(?:'s)? answer|waiting (?:for|on) the team|with the team|the team is (?:still )?(?:checking|looking)|(?:ask|check) with the team|(?:the )?answer will come here)\\b",
 ].join("|"), "iu");
@@ -446,6 +448,16 @@ export function checkoutOnly(reply: string, incoming: string): boolean {
  * A "not known" she never asked for (2026-11-23, "הי אני מתעניינת בכמה משטחים" got "לא נמסר אם יש הנחה מיוחדת בקנייה
  * של כמה משטחים."): on a turn that asks nothing, a not-known sentence is volunteered, and it goes.
  */
+/**
+ * A question about the business's offers the customer never raised, asked as if by her (2026-11-23: "יש הנחה מיוחדת
+ * בקנייה של כמה משטחים?" on "אני מתעניינת בכמה משטחים"): that sentence goes.
+ */
+const OFFER_QUESTION = /(?<![\u0590-\u05FF])(?:האם\s+)?(?:יש|קיימת|קיים)\s+(?:לכם\s+|גם\s+)?[^.!?\n]{0,40}(?:הנחה|הנחות|מבצע|מבצעים|קופון|הטבה|הטבות|משלוח\s+חינם)[^.!?\n]*\?/u;
+const OFFER_WORDS = /(?<![\u0590-\u05FF])[והבלמש]?(?:הנח|מבצע|קופון|הטב|חינם|זול|מחיר)/u;
+export function withoutInventedOfferQuestion(reply: string, herWords: string[]): string {
+  if (herWords.some((m) => OFFER_WORDS.test(String(m ?? "")))) return String(reply ?? "");
+  return dropDanglingConnectors(dropSentencesBy(String(reply ?? ""), OFFER_QUESTION));
+}
 /** She says what she is interested in, asking nothing yet ("אני מתעניינת בכמה משטחים"). */
 export const productInterest = (incoming: string) => /(?<![\u0590-\u05FF])(?:מתעניינ(?:ת|ים|ות)?|מחפש(?:ת|ים|ות)?|מעוניינ(?:ת|ים)?|רוצה\s+לקנות|רוצה\s+להזמין)(?![\u0590-\u05FF])|\b(?:interested in|looking for)\b/iu.test(String(incoming ?? ""));
 export const withoutUnaskedNotKnown = (reply: string) => dropDanglingConnectors(dropSentencesBy(String(reply ?? ""), NOT_KNOWN));
@@ -2336,7 +2348,7 @@ export function correctionNote(problems: ClaimProblem[], locale: "he" | "en", ow
     if (p.kind === "ungrounded_payment") lines.push(`- You stated a payment or charge status (${p.claims.join("; ")}) that no tool result this turn shows. ${p.teamOpen ? "The team is already checking the payment: say it is being checked and the answer will come here." : "Read the order (its payment data) first, or say the team will check it; never say it was or was not charged, or that they can order again, without that."}`);
     if (p.kind === "inactive_order_unlabelled") lines.push(`- An order you mention is cancelled, failed or refunded (${p.claims.join("; ")}): say so with its number; never give it as their order as if it were active.`);
     if ((p.kind as string) === "derived_measure") lines.push(`- You worked out a measurement the data does not give (${(p as any).claims.join("; ")}). Give only the sizes the product data states; never compute a side, a diagonal or a folded size.`);
-    if ((p.kind as string) === "ungrounded_attribute") lines.push(`- You stated a property nothing in the data states (${(p as any).claims.join("; ")}). Say a product is transparent, a colour, resistant or anti-slip only when its own text or the knowledge says so; otherwise say you do not have that detail.`);
+    if ((p.kind as string) === "ungrounded_attribute") lines.push(`- You stated a property nothing in the data states (${(p as any).claims.join("; ")}). A material only as the product's own data names it (its base, its material field: "בסיס: פרספקס" means it is made of perspex, whatever its colour is called). Say a product is transparent, a colour, resistant or anti-slip only when its own text or the knowledge says so; otherwise say you do not have that detail.`);
     if ((p.kind as string) === "price_of_other_product") lines.push(`- A price is not the price of the product you named (${(p as any).claims.join("; ")}). Give each product its own price from its own data.`);
     if (p.kind === "ungrounded_positive_fit") lines.push(`- You said a product fits a device with nothing showing it (${p.claims.join("; ")}). Say it fits only when the product's own text or the business's device table names that device, or its size takes the customer's base. Never reason from a similar or other model.`);
     if (p.kind === "ungrounded_negative_fit") lines.push(`- You said a product does not fit with nothing showing it (${p.claims.join("; ")}). Say it does not fit only when its own text says so or its size is smaller than the customer's base.${(p as any).fits?.length ? ` By size, these take the customer's base: ${(p as any).fits.join(", ")}.` : ""}`);
@@ -2914,10 +2926,28 @@ function colourInEvidence(c: string, evidence: string): boolean {
   const ev = evidence.toLowerCase();
   return (COLOUR_EN[c] ?? []).some((en) => new RegExp(`\\b${en}\\b`, "i").test(ev));
 }
+/**
+ * What a product is made of stands only on the data's own material (2026-11-23, Smoovee: "כן, משטח הבמבוק עשוי מעץ"
+ * while the spec says "בסיס: פרספקס"; "במבוק" is the colour's name). A material the reply says it is MADE of: when
+ * the data names a material in a field ("בסיס:", "חומר:", "עשוי מ"), it must be one of those; with no such field, the
+ * word must be in the data at all.
+ */
+const MATERIAL_WORDS = "עץ|פלסטיק|מתכת|ברזל|נירוסטה|זכוכית|פרספקס|אקריל|עור|בד|כותנה|במבוק|סיליקון|גומי|אלומיניום|פלד(?:ה|ת)|קרטון|פשתן|צמר|pvc|wood|plastic|metal|glass|leather|cotton|bamboo|acrylic|silicone|steel";
+const MADE_OF = new RegExp(`(?<![\\u0590-\\u05FF])(?:עשוי(?:ה|ים|ות)?|מיוצר(?:ת|ים|ות)?)\\s+(?:מ|מן\\s+|כולו\\s+מ|כולה\\s+מ)(${MATERIAL_WORDS})(?![\\u0590-\\u05FF])|\\bmade (?:of|from) (${MATERIAL_WORDS})\\b`, "giu");
+const MATERIAL_FIELD = new RegExp(`(?<![\\u0590-\\u05FF])(?:עשוי(?:ה|ים|ות)?|חומר(?:ים)?|בסיס|מיוצר(?:ת)?|material|made of)\\s*[:\\-]?\\s*(?:מ|מן\\s+)?(${MATERIAL_WORDS})(?![\\u0590-\\u05FF])`, "giu");
+const materialKey = (m: string) => m.toLowerCase().replace(/^פלדת$/u, "פלדה");
+export function materialClaimContradicted(sentence: string, evidence: string): boolean {
+  const said = [...String(sentence ?? "").matchAll(MADE_OF)].map((m) => materialKey(m[1] ?? m[2] ?? ""));
+  if (!said.length) return false;
+  const ev = String(evidence ?? "");
+  const field = new Set([...ev.matchAll(MATERIAL_FIELD)].map((m) => materialKey(m[1])));
+  return said.some((m) => (field.size ? !field.has(m) : !ev.toLowerCase().includes(m)));
+}
 export function ungroundedAttribute(reply: string, evidence: string, incoming = "", titles: string[] = []): string[] {
   const ev = unfinal(String(evidence ?? "").toLowerCase());
   return (String(reply ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? []).filter((x) => {
     if (NOT_A_CLAIM.test(x) || NO_INFO.test(x)) return false;
+    if (materialClaimContradicted(x, String(evidence ?? ""))) return true;
     const t = unfinal(x.toLowerCase());
     if (ATTRIBUTES.some((re) => { const u = new RegExp(unfinal(re.source), re.flags); return u.test(t) && !u.test(ev); })) return true;
     // A colour the data does not give. In a general explanation a colour that is said of no product passes ("איך אדע

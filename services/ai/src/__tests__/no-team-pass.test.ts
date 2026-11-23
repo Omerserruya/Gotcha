@@ -154,3 +154,28 @@ describe("★ the 551794cd replay's last three (2026-11-23)", () => {
     expect(withoutUnaskedNotKnown(v2)).toBe("כדאי להירשם לניוזלטר באתר כדי להתעדכן במבצעים ובהטבות.");
   });
 });
+
+describe("★ the 01c861e0 replay (2026-11-23): a material only from the data; no invented offer question", () => {
+  const SPEC = "מפרט טכני בסיס : פרספקס גלגלים : פלדת אל חלד מכוסה פלסטיק רוחב : 34 ס\"מ";
+  it("\"כן, משטח הבמבוק עשוי מעץ\" against \"בסיס: פרספקס\" is contradicted; the true sentence is not", async () => {
+    const { materialClaimContradicted, ungroundedAttribute } = await import("../services/reply-engine/gates");
+    expect(materialClaimContradicted("כן, משטח הבמבוק עשוי מעץ.", SPEC)).toBe(true);
+    expect(materialClaimContradicted("הגוון במבוק כהה הוא מראה של עץ, אבל המשטח עצמו עשוי מפרספקס.", SPEC)).toBe(false);
+    expect(materialClaimContradicted("הגלגלים עשויים פלדת אל חלד.", SPEC)).toBe(false);
+    // No field: the word must be in the data at all.
+    expect(materialClaimContradicted("התיק עשוי מעור.", "Canvas Tote, בד קנבס עבה.")).toBe(true);
+    expect(materialClaimContradicted("התיק עשוי מבד קנבס.", "Canvas Tote, בד קנבס עבה.")).toBe(false);
+    expect(ungroundedAttribute("כן, משטח הבמבוק עשוי מעץ. אפשר להזמין באתר.", SPEC, "המשטח בגוון במבוק כהה זה עץ ?")).toEqual(["כן, משטח הבמבוק עשוי מעץ."]);
+  });
+  it("\"see the pictures on the site\" with no link hands the work back; with a link it is an answer", async () => {
+    const { claimsTeam } = await import("../services/reply-engine/gates");
+    expect(claimsTeam("אפשר לראות תמונות של המשטחים באתר סמובי.")).toBe(true);
+    expect(claimsTeam("אפשר לראות את כל הצבעים כאן: https://smoovee-ltd.com/he/product/alice/")).toBe(false);
+  });
+  it("the offer question she never asked goes; one she raised stays", async () => {
+    const { withoutInventedOfferQuestion } = await import("../services/reply-engine/gates");
+    const v2 = "היי, בכיף. יש הנחה מיוחדת בקנייה של כמה משטחים? אילו משטחים מעניינים אותך?";
+    expect(withoutInventedOfferQuestion(v2, ["הי אני מתעניינת בכמה משטחים"])).toBe("היי, בכיף. אילו משטחים מעניינים אותך?");
+    expect(withoutInventedOfferQuestion(v2, ["יש הנחה אם קונים כמה?"])).toBe(v2);
+  });
+});
