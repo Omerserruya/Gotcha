@@ -389,6 +389,45 @@ export function unreadKnowledge(incoming: string, tools: ToolRunRecord[], toolsO
  */
 const NOT_KNOWN = /(?<![\u0590-\u05FF])(?:עדיין\s+)?אין\s+(?:לי|לנו|ברשותי)\s+(?:כאן\s+|כרגע\s+|עדיין\s+)?(?:מידע|פרטים|פירוט|הסבר|הנחיה|הנחיות|תשובה|נתון|נתונים)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])לא\s+(?:ידוע|ברור)\s+(?:לי|לנו)(?![\u0590-\u05FF])|(?<![\u0590-\u05FF])(?:אין|לא)\s[^.!?\n]{1,40}?\sשמופיע(?:ה|ים|ות)?\s+(?:אצלנו|אצלי|כאן)(?![\u0590-\u05FF])|\b(?:i|we) (?:don't|do not) have (?:that |this |any |the )?(?:information|details)\b/iu;
 export const saysNotKnown = (reply: string) => NOT_KNOWN.test(reply ?? "");
+// ── D2 / D2b (2026-11-23) ──
+// Words that say nothing about WHAT was asked: the pass's own wording, question and filler words.
+const KEY_STOP = new Set(["לגבי", "שאלה", "צוות", "עדיין", "ממתי", "תשוב", "תגיע", "בצאט", "כאן", "אפשר", "רוצה", "אשמח", "לבדו", "בדיק", "מול", "את", "של", "עם", "על", "יש", "אין", "לנו", "לי", "מה", "איך", "האם", "זה", "הוא", "היא", "גם", "כבר", "רק", "אם", "כי", "אבל", "מתי", "איפה", "כמה", "בבקש", "תודה", "העבר", "מעבי", "מידע", "ידוע", "מצוי", "פרטי", "הסבר", "לטיפ", "נציג", "אנוש", "שימש", "מכאן", "עכשי", "אותך", "the", "and", "for", "with", "team", "answer", "here", "about"]);
+/** The content keys of a text: its words of 3+ letters, one attached prefix letter off, cut to 4 letters (a stem). */
+export function contentKeys(t: string): string[] {
+  const words = String(t ?? "").replace(/['"׳״]/g, "").toLowerCase().match(/[\u0590-\u05FFa-z]{3,}/gu) ?? [];
+  return words
+    .map((w) => (/^[והבלמשכ][\u0590-\u05FF]{3,}$/u.test(w) ? w.slice(1) : w))
+    .map((w) => w.slice(0, 4))
+    .filter((k) => k.length >= 3 && !KEY_STOP.has(k));
+}
+/** A short follow-up ("והוא שקוף?", "ומה העובי?"): five content words at most. */
+export const shortFollowUp = (t: string) => { const n = contentKeys(t).length; return n > 0 && n <= 5; };
+const sentencesIn = (t: string) => String(t ?? "").match(/(?:https?:\/\/[^\s]*[^\s.!?,;:)\]"'״]|[^.!?\n]|(?<=[A-Za-z0-9])\.(?=[A-Za-z0-9])|(?<=[\u0590-\u05FF0-9])\.(?=[\u0590-\u05FF0-9]))+[.!?]*/g) ?? [];
+/** The reply without its pass and its "not known" sentences: what it really answered. */
+export const answerOnly = (reply: string) => dropSentencesBy(withoutTeamClaims(reply), NOT_KNOWN).trim();
+/**
+ * D2b (Omer 2026-11-23, "answered means no pass"): the reply already answers what the customer asked this turn
+ * from the business's own texts, and its pass (or the team question, or its "not known") names nothing she asked
+ * that the answer leaves open. Then the pass is cut and the answer stands: no hand-over. The prod cases: Alea gave
+ * the thickness and still waited for the team on it; Smoovee said how to get the code and passed "where the form is".
+ * `sources`: the knowledge, the search results, the tools' results and the products (never the customer's words).
+ */
+export function passCovered(reply: string, incoming: string, teamQuestion: string | null | undefined, sources: string): boolean {
+  const all = sentencesIn(reply).map((x) => x.trim()).filter(Boolean);
+  const pass = all.filter((x) => claimsTeam(x) || NOT_KNOWN.test(x));
+  const rest = answerOnly(reply);
+  if (!rest) return false;
+  const src = String(sources ?? "");
+  const srcKeys = new Set(contentKeys(src));
+  const restKeys = new Set(contentKeys(rest));
+  const numbers = rest.match(/\d+(?:[.,]\d+)?/g) ?? [];
+  const grounded = numbers.some((n) => src.includes(n)) || [...restKeys].filter((k) => srcKeys.has(k)).length >= 2;
+  if (!grounded) return false;
+  const asked = new Set(contentKeys(incoming));
+  const open = [...pass, String(teamQuestion ?? "")].flatMap(contentKeys).filter((k) => asked.has(k) && !restKeys.has(k));
+  return open.length === 0;
+}
+
 /** The reply says it does not know, or passes it on, and search_knowledge was offered but not called this turn. */
 export function unlookedPass(reply: string, tools: ToolRunRecord[], toolsOffered: string[], teamQuestion = false): boolean {
   if (!(teamQuestion || claimsTeam(reply) || saysNotKnown(reply))) return false;
@@ -2092,7 +2131,9 @@ export function autoLookups(problems: ClaimProblem[], incoming: string, toolsOff
   if (explain && (has("no_search") || has("ungrounded_absence") || has("gave_up_search")) && !has("unread_knowledge") && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
   } else if ((has("unread_knowledge") || has("unread_product") || has("unlooked_pass") || has("needless_handoff")) && toolsOffered.includes("search_knowledge") && !((has("unread_product") || has("unlooked_pass") || has("needless_handoff")) && done.some((t) => t.tool === "search_knowledge"))) {
-    out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });
+    // D2 (2026-11-23): a short follow-up is searched with the product the conversation is about ("והוא שקוף?").
+    const focusQ = subject && shortFollowUp(words) && !words.includes(String(subject)) ? `${words} ${String(subject).slice(0, 80)}` : words;
+    out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: focusQ }) } });
   } else if (problems.some((p: any) => p.kind === "gave_up_search" && p.fromKnowledge) && toolsOffered.includes("search_knowledge") && !done.some((t) => t.tool === "search_knowledge")) {
     // The store timed out and the knowledge speaks of it: the business's own tables answer it (prod rating 2026-11-17).
     out.push({ id: "auto_knowledge_1", function: { name: "search_knowledge", arguments: JSON.stringify({ query: words }) } });

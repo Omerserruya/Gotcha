@@ -5658,6 +5658,39 @@ describe("no team pass: look first, then answer or hand over (Omer 2026-11-23)",
     expect(typeof kb.resultCount).toBe("number");
   });
 
+  it("★ D2b: a searched turn whose reply answers it and still waits for the team on it: the pass is cut, the answer stands", async () => {
+    h.lexical = [{ content: "Q: מה עובי החומר פי וי סי? A: עובי החומר 2.2 - 2.5 מ\"מ.", score: 0.9, documentTitle: "שאלות", chunkIndex: 3, documentId: "d" }];
+    h.responses.push(
+      { toolCalls: [tc("db0", "search_knowledge", { query: "עובי" })] },
+      { toolCalls: [respond("db1", { reply: "עובי החומר הוא 2.2-2.5 מ\"מ. לגבי העובי, השאלה כבר ממתינה לתשובת הצוות.", team_question: "מה העובי" })] },
+    );
+    const r = await runReplyEngineTurn({ ...opts, incomingMessage: "מה העובי?" }, "autonomous");
+    expect((r.trace as any).teamPassCutAnswered).toBe(true);
+    expect(r.reply).toBe("עובי החומר הוא 2.2-2.5 מ\"מ.");
+    expect(r.escalation).toBeNull();
+    expect(h.teamQuestions).toHaveLength(0);
+  });
+
+  it("★ D2: a short follow-up is searched with the product in focus (the automatic lookup and the forced search)", async () => {
+    const { prisma } = await import("@chatcenter/shared");
+    const seen: string[] = [];
+    h.lexicalFor = (q: string) => { seen.push(q); return /שטיח PVC/.test(q) && /שמן/.test(q) ? [{ content: "החומר עמיד לכתמי שמן ומים, ניקוי במטלית לחה.", score: 0.8, documentTitle: "שטיחים", chunkIndex: 7, documentId: "d7" }] : []; };
+    (prisma as any).conversationState.findUnique = async () => ({ tenantId: "t1", intent: "שטיח PVC למטבח", facts: {}, offeredItems: [{ ref: "id:5", title: "שטיח PVC למטבח", productId: "5" }], pending: [], turnCount: 3 });
+    h.responses.push(
+      { toolCalls: [respond("df1", { reply: "העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט." })] },
+      { toolCalls: [respond("df2", { reply: "כן, החומר עמיד לכתמי שמן ומים." })] },
+    );
+    let r: any;
+    try { r = await runReplyEngineTurn({ ...opts, incomingMessage: "והוא עמיד לשמן?" }, "autonomous"); }
+    finally { (prisma as any).conversationState.findUnique = async () => null; h.lexicalFor = null; }
+    expect(seen.some((q) => /והוא עמיד לשמן\? שטיח PVC למטבח/.test(q))).toBe(true);
+    expect((r.trace as any).focusKnowledge).toBe(1);
+    const auto = r.trace.tools.find((t: any) => t.tool === "search_knowledge");
+    expect(String(auto?.args?.query ?? "")).toMatch(/שטיח PVC למטבח/);
+    expect(r.reply).toBe("כן, החומר עמיד לכתמי שמן ומים.");
+    expect(r.escalation).toBeNull();
+  });
+
   it("★ the prompt teaches no team pass and gives the approved line", async () => {
     h.responses.push({ toolCalls: [respond("pr1", { reply: "בטח." })] });
     await runReplyEngineTurn(opts, "autonomous");

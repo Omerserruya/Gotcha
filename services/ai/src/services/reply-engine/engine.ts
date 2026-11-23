@@ -38,7 +38,7 @@ import { autoReply, oneTimeCode, sellerPitch, storyMentionOnly } from "../conver
 import { relevanceChannel } from "@chatcenter/shared/src/lib/conversation-relevance";
 import { relevanceClassifyEnabled } from "@chatcenter/shared";
 import { newTurnTools, runToolRound, lookupExtraMs, LOOKUP_MS, ORDER_READ as ORDER_READ_TOOL, type ModelToolCall, type RunnerEnv } from "./tools";
-import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
+import { notProductMatter, nothingNewFromCustomer, asksAboutProduct, ofHerKindStrict, sameAcrossLanguages, infoQuestion, knowledgeSpeaksTo, sharedTitleNounOk, teamPassIn, claimsTeam, withoutTeamClaims, saysNotKnown, passCovered, answerOnly, shortFollowUp, automatedInbound, MODEL_SAYS_AUTOMATED, endsWithCannedTeamLine, inactiveOrdersIn, ackOnly, picksProduct, paymentProblem, productAskNow, dropPersonPromises, removeTeamLines, normalizeQuotes, gate1, gate3, correctionNote, safeFallback, groundedProductFallback, needlessHandoff, cleanStyle, factualProblems, isCannedTeamLine, tooThin, stripFactProblems, stripForeignScript, autoLookups, notFoundReply, normalizeDashes, promisesPerson, ignoredYes, noInfo, teamLineIn, safetyCase, statusAsk, hasStopUse, safetyWord, customerDescribesUse, stripDirectives, orderTurn, dropDanglingPrice, fixNearTitles, holdingItem, holdReply, bringsDetails, aboutHeld, dropUnaskedName, signedNames, customerAck, proceduralAsk, THANKS_REPLY_HE, THANKS_REPLY_EN, refuseWrite, paymentMethodFailure, cutPaymentFailure, fixListCount, repairUrls, spaceSentences, joinKept, offTopicHoldReply, howToLink, returnRequest, FAILURE_TOLD, gaveReason, dropSentencesMatching, asksReasonRe, namedOnce, asksOtherTopic, headNoun, ofNoun, deviceFitAsk, offeredPerson, unansweredItems, restockAsk, repeatsQuestion, productsOfNoun, dropOrphanConditional, RETURNS_WORK_RE, NO_INFO_RE, dropSentencesBy, imperativeAsk, ADDED_CLAIM, sizedItems, smallestFitting, sizePair, namesItem, apologyOnly, padsFromText, howToSafetyAsk, padLabel, noHowToInfo, nounKeys, padName, dropBrokenFragments, SILENCE_PROMISE, returnSteps, returnHowToAsk, isReturnSubject, wantsItSettled, HOLD_SETTLED_HE, HOLD_SETTLED_EN, SETTLED_NOTE, nameSizeLines, colourList, referredCandidates, focusTitle, nonProductAsk, fixCardCount, dropOrphanAlso, videoAsk, storeQueryOf, caveatHolds, fitNotStated, attributeOnlyAsk, fallbackQueryOf, describingWord, cleanStoreQuery, storeQueryWords } from "./gates";
 
 export interface EngineTurnOpts {
   tenantId: string;
@@ -1685,6 +1685,19 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   const [state, history, contactRow, company, shopifyTurn, calendar, pendingApprovals, connectedStores, knowledgeChunks, docAddress, wooRaw, policyRow] = await loadAll;
   // A "checking with the team" item from before 2026-11-23 is not shown to the model and not saved again.
   if (Array.isArray((state as any)?.pending)) (state as any).pending = (state as any).pending.filter((p: any) => !isTeamPromise(p));
+  // D2 (2026-11-23): a short follow-up ("והוא שקוף?", "ומה העובי?") searched alone finds nothing of the product it is
+  // about; the business's texts are also read with the product in focus (the keyword search only: no second embedding).
+  {
+    const asked = String(opts.incomingMessage ?? "");
+    const focus = nonProductAsk(asked) ? null : focusTitle(focusTitlesOf(state.facts), state.intent, state.offeredItems?.at(-1)?.title);
+    if (focus && shortFollowUp(asked) && !asked.includes(focus)) {
+      const more: any[] = await lexicalKnowledge(opts.tenantId, `${asked.slice(0, 200)} ${focus.slice(0, 80)}`, 3, config.id).catch(() => []);
+      const key = (c: any) => `${c.documentId ?? c.documentTitle}#${c.chunkIndex}`;
+      const seen = new Set((knowledgeChunks as any[]).map(key));
+      const added = (Array.isArray(more) ? more : []).filter((c) => !seen.has(key(c))).slice(0, 2);
+      if (added.length) { (knowledgeChunks as any[]).push(...added); (trace as any).focusKnowledge = added.length; }
+    }
+  }
   // What the owner wrote: the employee's rules, the enabled hand-over rules, the never-say list (owner-rules.ts).
   const ownerRules = readOwnerRules(config as any, (policyRow as any)?.data ?? null);
   if (hasOwnerRules(ownerRules)) (trace as any).ownerRules = ownerRuleCounts(ownerRules);
@@ -3311,6 +3324,16 @@ async function runTurn(opts: EngineTurnOpts, mode: ReplyEngineMode, lane: StateL
   if (!final.handoff && !escalation && !final.teamQuestion && customerAck(String(opts.incomingMessage ?? "")) && claimsTeam(reply ?? "")) {
     reply = withoutTeamClaims(reply ?? "") || (locale === "en" ? THANKS_REPLY_EN : THANKS_REPLY_HE);
     (trace as any).teamClaimCutOnThanks = true;
+  }
+  // D2b, answered means no pass: the reply already answers what she asked from the business's own texts, and its
+  // pass names nothing she asked that the answer leaves open: the pass is cut and the answer stands (no hand-over).
+  if (!final.handoff && !escalation && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
+    const sources = [knowledge ?? "", ...turnTools.knowledgeText, ...turnTools.records.map((r) => String(r.content ?? "")), JSON.stringify((candidates as any[]).map((c: any) => ({ title: c?.title, price: c?.price })))].join("\n");
+    if (passCovered(reply ?? "", String(opts.incomingMessage ?? ""), final.teamQuestion, sources)) {
+      reply = answerOnly(reply ?? "");
+      final = { ...final, teamQuestion: null };
+      (trace as any).teamPassCutAnswered = true;
+    }
   }
   if (!final.handoff && !escalation && (!!final.teamQuestion || claimsTeam(reply ?? "") || saysNotKnown(reply ?? ""))) {
     const asked = String(final.teamQuestion ?? opts.incomingMessage ?? "").slice(0, 300);

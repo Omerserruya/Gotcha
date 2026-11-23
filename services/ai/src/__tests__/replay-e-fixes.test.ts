@@ -85,11 +85,11 @@ describe("1 (verify of d5f288f6): a prefix letter comes off only where the searc
 
 describe("2: a full answer before a bare team line", () => {
   it("★ a question about the product itself: the engine reads the product in focus and the knowledge (Smoovee stopper)", () => {
-    expect(q(autoLookups([{ kind: "unread_product" }, { kind: "no_search" }] as any, "יש לזה פקק?", WOO, [], "סמובי אליס"))).toEqual([["woocommerce.list_products", "סמובי אליס"], ["search_knowledge", "יש לזה פקק?"]]);
+    expect(q(autoLookups([{ kind: "unread_product" }, { kind: "no_search" }] as any, "יש לזה פקק?", WOO, [], "סמובי אליס"))).toEqual([["woocommerce.list_products", "סמובי אליס"], ["search_knowledge", "יש לזה פקק? סמובי אליס"]]);
     expect(q(autoLookups([{ kind: "unread_product" }] as any, "יש לזה פקק?", WOO, [], "סמובי אליס"))[0]).toEqual(["woocommerce.list_products", "סמובי אליס"]);
     expect(q(autoLookups([{ kind: "unread_product" }] as any, "מאיזה חומר השרשרת?", WOO, []))[0]).toEqual(["woocommerce.list_products", "שרשרת"]);
     // Read already this turn: no second store read.
-    expect(q(autoLookups([{ kind: "unread_product" }] as any, "יש לזה פקק?", WOO, [{ tool: "woocommerce.list_products", outcome: "ok", args: { query: "סמובי" } } as any], "סמובי אליס"))).toEqual([["search_knowledge", "יש לזה פקק?"]]);
+    expect(q(autoLookups([{ kind: "unread_product" }] as any, "יש לזה פקק?", WOO, [{ tool: "woocommerce.list_products", outcome: "ok", args: { query: "סמובי" } } as any], "סמובי אליס"))).toEqual([["search_knowledge", "יש לזה פקק? סמובי אליס"]]);
   });
   it("★ a derived measure loses its clause, the stated measure stays (Tehila triangle)", () => {
     const src = "מטפחת משולש 70x70 ס\"מ";

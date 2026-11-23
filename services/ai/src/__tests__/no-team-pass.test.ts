@@ -77,3 +77,41 @@ describe("★ unlookedPass: no pass and no \"I don't know\" before the knowledge
     expect(unlookedPass("המידה הזו לא זמינה כרגע.", [], ["search_knowledge"])).toBe(false);
   });
 });
+
+describe("★ D2b passCovered: answered means no pass (the prod lines)", () => {
+  const ALEA_KB = "Q: מה עובי החומר פי וי סי? A: עובי החומר 2.2 - 2.5 מ\"מ. ניקוי: מטלית לחה בלבד. החומר עמיד לחום עד 70 מעלות. מתאים למטבח, גם לאזור הכיור והגז.";
+  const ALEA_1205 = "שטיח PVC למטבח מתאים גם לאזור הכיור והגז. העובי הוא 2.2-2.5 מ\"מ, והניקוי במטלית לחה בלבד. לגבי מניעת החלקה על שיש, קצוות ועמידות לכתמי שמן, עדיין ממתינים לתשובת הצוות.";
+  it("Alea 23.11 12:05: asked about the sink and the stove, answered from the knowledge; the pass is about what she did not ask now", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    expect(passCovered(ALEA_1205, "אפשר לשים אותו ליד הכיור והגז?", null, ALEA_KB)).toBe(true);
+  });
+  it("the same reply when she asked about oil now: the pass is her question, so it is not covered (a hand-over)", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    expect(passCovered(ALEA_1205, "והוא עמיד לכתמי שמן?", null, ALEA_KB)).toBe(false);
+  });
+  it("Alea 23.11 12:07: the thickness was given and it still waited for the team on it", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    expect(passCovered("עובי החומר הוא 2.2-2.5 מ\"מ. לגבי העובי, השאלה כבר ממתינה לתשובת הצוות.", "מה העובי?", null, ALEA_KB)).toBe(true);
+  });
+  it("Smoovee 22.11 11:00: how to get the code answered; the form's place was never asked", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    const kb = "איך מקבלים קוד הנחה? נרשמים לניוזלטר באתר, והקוד להטבה ברכישה הראשונה נשלח למייל.";
+    const reply = "אפשר להירשם לניוזלטר באתר, והקוד להטבה ברכישה הראשונה נשלח למייל. לא ידוע לי איפה בדיוק נמצא טופס ההרשמה באתר, ואעביר לצוות את השאלה על מיקום ההרשמה.";
+    expect(passCovered(reply, "איך מקבלים קוד הנחה?", null, kb)).toBe(true);
+  });
+  it("never when what is left is not in the business's texts, or nothing is left", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    expect(passCovered("בדרך כלל זה מגיע מהר. העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מתי זה מגיע?", null, "מדיניות החזרות: 14 יום.")).toBe(false);
+    expect(passCovered("העברתי את זה לצוות, והתשובה תגיע כאן בצ'אט.", "מה העובי?", null, ALEA_KB)).toBe(false);
+  });
+  it("a team question on her own ask is not covered by an answer to something else", async () => {
+    const { passCovered } = await import("../services/reply-engine/gates");
+    expect(passCovered("עובי החומר הוא 2.2-2.5 מ\"מ.", "יש הנחה למשרתי מילואים?", "האם יש הנחה למשרתי מילואים?", ALEA_KB)).toBe(false);
+  });
+  it("shortFollowUp: a few words only", async () => {
+    const { shortFollowUp } = await import("../services/reply-engine/gates");
+    expect(shortFollowUp("והוא שקוף?")).toBe(true);
+    expect(shortFollowUp("ומה העובי?")).toBe(true);
+    expect(shortFollowUp("אני מחפשת משטח הזזה למיקסר הגדול שלי שעומד ליד הכיור במטבח")).toBe(false);
+  });
+});
