@@ -475,6 +475,27 @@ function requiresFunnel(role: string | undefined | null): boolean {
 //   requireCapacity("limit:ai_employees") - is there headroom under the limit?
 // Both return a structured 402 the frontend can act on. Hiding the "New
 // employee" button is not enforcement; this is.
+/** The hire sheet's bound on an employee's name (HireSheet maxLength). */
+const MAX_AGENT_NAME = 120;
+
+/**
+ * An employee's name as the hire and a rename store it: trimmed, never empty,
+ * at most MAX_AGENT_NAME. Returns the name, or the 400 body that refuses it.
+ */
+function checkAgentName(raw: unknown): { name: string } | { refusal: Record<string, unknown> } {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  if (name && name.length <= MAX_AGENT_NAME) return { name };
+  return {
+    refusal: {
+      error: name ? `The name is longer than ${MAX_AGENT_NAME} characters` : "A name is required",
+      field: "name",
+      code: "INVALID_NAME",
+      reason: name ? "too_long" : "empty",
+      max: MAX_AGENT_NAME,
+    },
+  };
+}
+
 router.post(
   "/",
   authenticate,
@@ -489,7 +510,7 @@ router.post(
   async (req: Request, res: Response) => {
   try {
     const {
-      name, role, description, avatarColor, status,
+      role, description, avatarColor, status,
       tone, languages, style, escalationRules,
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
@@ -500,10 +521,14 @@ router.post(
       knowledgeBaseIds, toolIds, integrationAccess,
     } = req.body;
 
-    if (!name) {
-      res.status(400).json({ error: "Name is required" });
+    // The hire sheet's rules, kept by the API too: trimmed, never empty, at
+    // most MAX_AGENT_NAME. A blank or 5000-character name was stored as sent.
+    const checkedName = checkAgentName(req.body?.name);
+    if ("refusal" in checkedName) {
+      res.status(400).json(checkedName.refusal);
       return;
     }
+    const name = checkedName.name;
 
     // The employee's own rules: a list of text within the limits, or refused (B4).
     let rules: string[] | null = null;
@@ -706,9 +731,6 @@ router.post("/:id/readiness-questions/answer", authenticate, resolveTenant, requ
 });
 
 // ─── Update AI Agent ─────────────────────────────────────────
-/** The hire sheet's bound on an employee's name (HireSheet maxLength). */
-const MAX_AGENT_NAME = 120;
-
 router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), requirePermissionOrRole("ai:employees:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const existing = await prisma.aIAgent.findFirst({
@@ -760,18 +782,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // most MAX_AGENT_NAME (HireSheet's limit). An empty name was stored as
     // sent, and the inbox and routing showed an employee with no name.
     if (Object.prototype.hasOwnProperty.call(bodySrc, "name")) {
-      const name = typeof bodySrc.name === "string" ? bodySrc.name.trim() : "";
-      if (!name || name.length > MAX_AGENT_NAME) {
-        res.status(400).json({
-          error: name ? `The name is longer than ${MAX_AGENT_NAME} characters` : "A name is required",
-          field: "name",
-          code: "INVALID_NAME",
-          reason: name ? "too_long" : "empty",
-          max: MAX_AGENT_NAME,
-        });
+      const checked = checkAgentName(bodySrc.name);
+      if ("refusal" in checked) {
+        res.status(400).json(checked.refusal);
         return;
       }
-      updateData.name = name;
+      updateData.name = checked.name;
     }
 
     // "Says it's AI when asked" (A3b): a boolean kept inside persona, merged so

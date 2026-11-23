@@ -356,3 +356,31 @@ describe("PATCH: the name keeps the hire's rules (2026-11-23)", () => {
     expect(H.agents[0].name).toBe("Maya");
   });
 });
+
+describe("POST: the hire's name rules, kept by the API too (2026-11-23)", () => {
+  const hire = (body: any) => request(app()).post("/api/ai-agents").send({ goal: "help", ...body });
+
+  it("★ the name is stored trimmed", async () => {
+    const r = await hire({ name: "  נועה מהמכירות  " });
+    expect(r.status).toBeLessThan(300);
+    expect(H.created[0].name).toBe("נועה מהמכירות");
+  });
+
+  it("★ missing, blank or not text: 400 INVALID_NAME and nothing created", async () => {
+    for (const body of [{}, { name: "" }, { name: "   " }, { name: null }, { name: 7 }, { name: ["Noa"] }]) {
+      const r = await hire(body);
+      expect(r.status, JSON.stringify(body)).toBe(400);
+      expect(r.body).toMatchObject({ code: "INVALID_NAME", field: "name", reason: "empty", max: 120 });
+    }
+    expect(H.created).toEqual([]);
+  });
+
+  it("★ 120 characters pass (counted after the trim); 121 is 400 too_long", async () => {
+    expect((await hire({ name: `  ${"נ".repeat(120)}  ` })).status).toBeLessThan(300);
+    expect(H.created[0].name).toHaveLength(120);
+    const r = await hire({ name: "נ".repeat(121) });
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ code: "INVALID_NAME", reason: "too_long", max: 120 });
+    expect(H.created).toHaveLength(1);
+  });
+});
