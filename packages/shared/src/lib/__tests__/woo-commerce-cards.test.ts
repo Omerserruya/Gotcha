@@ -50,6 +50,40 @@ describe("★ buildWooProductCard", () => {
   });
 });
 
+describe("★ price on request: in stock but not sold through a cart (2026-11-23, bridal and luxury stores)", () => {
+  // WooCommerce sends purchasable:false for a product with no price.
+  const onRequest = (o: any = {}) => simple({ price: "", regular_price: "", sale_price: "", purchasable: false, ...o });
+  it("in stock: no stock label (available) and no Add to Cart (requiresSellingPlan), no price", () => {
+    const c = buildWooProductCard(onRequest(), null, { storeUrl: STORE, currency: "ILS" })!;
+    expect(c.available).toBe(true);
+    expect(c.price).toBeNull();
+    expect(c.variants).toEqual([{ variantId: "41", title: "Oak Lamp", price: null, compareAtPrice: null, available: true, options: [], requiresSellingPlan: true }]);
+  });
+  it("out of stock stays out of stock, cartable or not", () => {
+    expect(buildWooProductCard(onRequest({ stock_status: "outofstock" }), null, { storeUrl: STORE, currency: "ILS" })!.available).toBe(false);
+    expect(buildWooProductCard(simple({ stock_status: "outofstock" }), null, { storeUrl: STORE, currency: "ILS" })!.variants[0]).toMatchObject({ available: false, requiresSellingPlan: false });
+  });
+  it("an ordinary product is unchanged: in stock and cartable", () => {
+    expect(buildWooProductCard(simple(), null, { storeUrl: STORE, currency: "ILS" })!.variants[0]).toMatchObject({ available: true, requiresSellingPlan: false });
+  });
+  it("a variable product: each variation on its own", () => {
+    const c = buildWooProductCard(variable(), [variation(51, "S", { price: "", purchasable: false }), variation(52, "M", { stock_status: "outofstock" }), variation(53, "L")], { storeUrl: STORE, currency: null })!;
+    expect(c.variants.map((v) => [v.variantId, v.available, v.requiresSellingPlan])).toEqual([["51", true, true], ["52", false, false], ["53", true, false]]);
+    expect(c.available).toBe(true);
+  });
+  it("the visitor's card carries it, and an old stored card (always false) stays cartable", () => {
+    const card = buildWooProductCard(onRequest(), null, { storeUrl: STORE, currency: "ILS" })!;
+    const meta = { commerce: { kind: "woo_commerce", storeUrl: STORE, channelAccountId: "ca1", products: [card], addToCartEnabled: true, source: "ai" } };
+    const out = projectWooCommerce(meta, { storeUrl: STORE, channelAccountId: "ca1" })!;
+    expect(out.products[0]).toMatchObject({ available: true, price: null, variants: [{ available: true, requiresSellingPlan: true }] });
+    const old = { commerce: { ...meta.commerce, products: [{ ...card, variants: [{ ...card.variants[0], requiresSellingPlan: false }] }] } };
+    expect((projectWooCommerce(old, { storeUrl: STORE, channelAccountId: "ca1" })!.products[0] as any).variants[0].requiresSellingPlan).toBe(false);
+  });
+  it("the cart link still refuses it on the server", () => {
+    expect(wooCartLine({ storeUrl: STORE, product: onRequest(), variation: null, variantId: null, quantity: 1 })).toEqual({ ok: false, reason: "not_for_sale" });
+  });
+});
+
 describe("★ projectWooCommerce", () => {
   const card = buildWooProductCard(simple(), null, { storeUrl: STORE, currency: "ILS" })!;
   const meta = { source: "ai_bot", commerce: { kind: "woo_commerce", storeUrl: STORE, channelAccountId: "ca_web", products: [card], addToCartEnabled: true, source: "ai" } };
