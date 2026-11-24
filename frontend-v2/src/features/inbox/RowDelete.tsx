@@ -1,6 +1,6 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
+import { Mail, MailOpen, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import {
   createContext,
@@ -14,7 +14,11 @@ import {
 import { Dialog, DialogClose, DialogContent } from '@/design-system/primitives/overlay/Dialog';
 import { useSupport } from '@/support/support-context';
 
-import { deleteConversation } from './conversation-actions';
+import {
+  deleteConversation,
+  markConversationRead,
+  markConversationUnread,
+} from './conversation-actions';
 import styles from './Inbox.module.css';
 
 /**
@@ -32,14 +36,44 @@ import styles from './Inbox.module.css';
  *   confirm would promise more than happens. The list passes `enabled` false.
  * ★ Never in support mode (the platform refuses support_denied:delete).
  * ★ "Right" is the hand's direction on the glass, in Hebrew too.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ SWIPE LEFT: MARK UNREAD, OR READ AGAIN (Omer, 2026-11-24, the phone)
+ * ════════════════════════════════════════════════════════════════════════════
+ * "סמן כלא נקרא" on a read row, "סמן כנקרא" on an unread one. No confirm:
+ * it is only a mark, for this person, and the next swipe undoes it.
+ *
+ * ★ The routes are the menu's: `POST /:id/unread` sets the manual mark,
+ *   `DELETE /:id/unread` clears it and moves the read point. Both push
+ *   `conversation:updated` to the person's own room, so their other devices
+ *   refresh the row and the counts (ListLive, the rail counts).
+ * ★ The row turns AT ONCE: the mark is held here until the server's own
+ *   answer for the row changes (the refresh after the write), and given back
+ *   if the write fails, with the menu's failure line.
+ * ★ The map, physical and the same in both languages: right deletes, left
+ *   marks. WhatsApp in Hebrew mirrors its list the same way (read actions
+ *   from the left swipe, delete from the right), and the delete swipe was
+ *   already right in Hebrew.
+ * ★ Offered to everyone who reads the list (`read` set), admin or not, and
+ *   in support mode too: it changes nothing but the viewer's own mark.
  */
 
-/** How far the row must travel before letting go opens the confirm. */
+/** How far the row must travel before letting go acts. */
 export const SWIPE_THRESHOLD = 80;
 const SWIPE_MAX = 120;
 
 type Notice = { readonly text: string; readonly failed: boolean } | null;
 const NoticeContext = createContext<(notice: Notice) => void>(() => {});
+
+/**
+ * The row's read mark while a swipe's write is on its way: `true` unread,
+ * `false` read, `null` the server's own answer. Read by the row's badge.
+ */
+const ReadOverrideContext = createContext<boolean | null>(null);
+
+export function useReadOverride(): boolean | null {
+  return useContext(ReadOverrideContext);
+}
 
 /**
  * Where "deleted" (or why not) is said: around the list, because the row
@@ -73,6 +107,7 @@ export function RowDelete({
   id,
   open,
   enabled,
+  read,
   children,
 }: {
   readonly id: string;
@@ -80,28 +115,36 @@ export function RowDelete({
   readonly open: boolean;
   /** An admin, on a row that did not continue from the website. */
   readonly enabled: boolean;
+  /** The swipe-left read mark (the phone's list): the row's unread, as the server gave it. */
+  readonly read?: { readonly unread: boolean };
   readonly children: ReactNode;
 }) {
   const refused = useSupport().refuses('delete');
-  // Nothing to delete with: the row exactly as it was, nothing mounted.
-  if (!enabled || refused) return <>{children}</>;
+  const canDelete = enabled && !refused;
+  // Nothing to swipe for: the row exactly as it was, nothing mounted.
+  if (!canDelete && read === undefined) return <>{children}</>;
   return (
-    <SwipeDelete id={id} open={open}>
+    <SwipeRow id={id} open={open} canDelete={canDelete} read={read}>
       {children}
-    </SwipeDelete>
+    </SwipeRow>
   );
 }
 
-function SwipeDelete({
+function SwipeRow({
   id,
   open,
+  canDelete,
+  read,
   children,
 }: {
   readonly id: string;
   readonly open: boolean;
+  readonly canDelete: boolean;
+  readonly read: { readonly unread: boolean } | undefined;
   readonly children: ReactNode;
 }) {
   const t = useTranslations('inbox.queue.swipeDelete');
+  const tr = useTranslations('inbox.queue.swipeRead');
   const tm = useTranslations('inbox.queue.menu');
   const say = useContext(NoticeContext);
   const [dx, setDx] = useState(0);
@@ -109,6 +152,20 @@ function SwipeDelete({
   const [busy, setBusy] = useState(false);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const moved = useRef(false);
+
+  /*
+   * The swipe's mark, until the server's answer for the row changes. Reset
+   * while rendering (not in an effect) so the row never draws a stale mark
+   * for a frame after the refresh lands.
+   */
+  const serverUnread = read?.unread ?? false;
+  const [override, setOverride] = useState<boolean | null>(null);
+  const [seen, setSeen] = useState(serverUnread);
+  if (seen !== serverUnread) {
+    setSeen(serverUnread);
+    setOverride(null);
+  }
+  const unread = override ?? serverUnread;
 
   const down = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse') return;
@@ -125,14 +182,28 @@ function SwipeDelete({
       start.current = null;
       return;
     }
-    if (x > 6) moved.current = true;
-    setDx(Math.max(0, Math.min(SWIPE_MAX, x)));
+    if (Math.abs(x) > 6) moved.current = true;
+    const min = read ? -SWIPE_MAX : 0;
+    const max = canDelete ? SWIPE_MAX : 0;
+    setDx(Math.max(min, Math.min(max, x)));
   };
   const up = () => {
-    const far = dx >= SWIPE_THRESHOLD;
+    const deleting = canDelete && dx >= SWIPE_THRESHOLD;
+    const marking = read !== undefined && dx <= -SWIPE_THRESHOLD;
     start.current = null;
     setDx(0);
-    if (far) setConfirming(true);
+    if (deleting) setConfirming(true);
+    if (marking) void toggleRead();
+  };
+
+  const toggleRead = async () => {
+    const next = !unread;
+    setOverride(next);
+    const result = next ? await markConversationUnread(id) : await markConversationRead(id);
+    if (!result.ok) {
+      setOverride(null);
+      say({ text: tm('failed'), failed: true });
+    }
   };
 
   const remove = async () => {
@@ -143,8 +214,14 @@ function SwipeDelete({
     say(result.ok ? { text: t('deleted'), failed: false } : { text: tm('failed'), failed: true });
   };
 
+  const readLabel = unread ? tr('read') : tr('unread');
+
   return (
-    <div className={styles.rowDelete} data-testid={`row-delete-${id}`}>
+    <div
+      className={styles.rowDelete}
+      data-testid={`row-delete-${id}`}
+      data-read-override={override === null ? undefined : override ? 'unread' : 'read'}
+    >
       {/* Only while the row is dragged: at rest there is nothing behind it to show (prod, 11-23). */}
       {dx > 0 ? (
         <span
@@ -154,6 +231,18 @@ function SwipeDelete({
         >
           <Trash2 size={16} />
           {t('confirm')}
+        </span>
+      ) : null}
+      {/* Swiped left: the mark it will set, as an icon only (the Supervisor's brief). */}
+      {dx < 0 ? (
+        <span
+          className={styles.rowReadBehind}
+          aria-hidden="true"
+          title={readLabel}
+          data-action={unread ? 'read' : 'unread'}
+          data-testid={`row-read-behind-${id}`}
+        >
+          {unread ? <MailOpen size={20} /> : <Mail size={20} />}
         </span>
       ) : null}
       <div
@@ -173,48 +262,52 @@ function SwipeDelete({
           }
         }}
       >
-        {children}
+        <ReadOverrideContext.Provider value={override}>{children}</ReadOverrideContext.Provider>
       </div>
-      <button
-        type="button"
-        className={styles.rowDeleteHover}
-        aria-label={t('confirm')}
-        title={t('confirm')}
-        onClick={() => setConfirming(true)}
-        data-testid={`row-delete-button-${id}`}
-      >
-        <Trash2 size={14} aria-hidden="true" />
-      </button>
-
-      <Dialog open={confirming} onOpenChange={(next) => (busy ? null : setConfirming(next))}>
-        <DialogContent
-          title={t('title')}
-          description={t('body')}
-          data-testid={`row-delete-confirm-${id}`}
+      {canDelete ? (
+        <button
+          type="button"
+          className={styles.rowDeleteHover}
+          aria-label={t('confirm')}
+          title={t('confirm')}
+          onClick={() => setConfirming(true)}
+          data-testid={`row-delete-button-${id}`}
         >
-          <div className={styles.confirmActions}>
-            <DialogClose asChild>
+          <Trash2 size={14} aria-hidden="true" />
+        </button>
+      ) : null}
+
+      {canDelete ? (
+        <Dialog open={confirming} onOpenChange={(next) => (busy ? null : setConfirming(next))}>
+          <DialogContent
+            title={t('title')}
+            description={t('body')}
+            data-testid={`row-delete-confirm-${id}`}
+          >
+            <div className={styles.confirmActions}>
+              <DialogClose asChild>
+                <button
+                  type="button"
+                  className={styles.verbButton}
+                  disabled={busy}
+                  data-testid="row-delete-cancel"
+                >
+                  {t('cancel')}
+                </button>
+              </DialogClose>
               <button
                 type="button"
-                className={styles.verbButton}
+                className={styles.confirmDanger}
                 disabled={busy}
-                data-testid="row-delete-cancel"
+                onClick={() => void remove()}
+                data-testid="row-delete-go"
               >
-                {t('cancel')}
+                {t('confirm')}
               </button>
-            </DialogClose>
-            <button
-              type="button"
-              className={styles.confirmDanger}
-              disabled={busy}
-              onClick={() => void remove()}
-              data-testid="row-delete-go"
-            >
-              {t('confirm')}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

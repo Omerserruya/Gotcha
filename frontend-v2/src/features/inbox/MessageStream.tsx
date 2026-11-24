@@ -20,6 +20,7 @@ import styles from './Inbox.module.css';
 import { ContactCards, LocationCard, MessageMedia, ProductCards } from './MessageMedia';
 import { isLocationMessage, isPlaceholderCaption, mediaKind, quoteOf } from './media';
 import { ReplyButton } from './ReplyButton';
+import { SwipeReply } from './SwipeReply';
 import { STREAM_SCROLLER } from './stream-scroller';
 import { sendFailure } from './send-failure';
 import { streamUndelivered } from './undelivered';
@@ -457,27 +458,38 @@ export async function MessageStream({
                 this conversation - the send route refuses a quote of it
                 (400, Backend). No Reply on it.
               */}
-              {message.originChannel ? null : (
-                <ReplyButton
-                  target={{
-                    id: message.id,
-                    who:
-                      message.direction === 'INBOUND'
-                        ? t('stream.quote.customer')
-                        : (senderLabel(message) ?? t('stream.quote.team')),
-                    preview: (() => {
-                      const quoted = quoteOf(message);
-                      return quoted === null
-                        ? t('stream.quote.noText')
-                        : 'text' in quoted
-                          ? quoted.text.slice(0, 140)
-                          : t(`stream.quote.kind.${quoted.kind}`);
-                    })(),
-                  }}
-                  label={t('stream.reply')}
-                  description={t('stream.replyTo')}
-                />
-              )}
+              {message.originChannel
+                ? null
+                : (() => {
+                    const target = {
+                      id: message.id,
+                      who:
+                        message.direction === 'INBOUND'
+                          ? t('stream.quote.customer')
+                          : (senderLabel(message) ?? t('stream.quote.team')),
+                      preview: (() => {
+                        const quoted = quoteOf(message);
+                        return quoted === null
+                          ? t('stream.quote.noText')
+                          : 'text' in quoted
+                            ? quoted.text.slice(0, 140)
+                            : t(`stream.quote.kind.${quoted.kind}`);
+                      })(),
+                    };
+                    /*
+                      The phone has no hover bar: the message is swiped to
+                      reply, WhatsApp's way (SwipeReply, 2026-11-24).
+                    */
+                    return variant === 'phone' ? (
+                      <SwipeReply target={target} />
+                    ) : (
+                      <ReplyButton
+                        target={target}
+                        label={t('stream.reply')}
+                        description={t('stream.replyTo')}
+                      />
+                    );
+                  })()}
             </li>
           );
         })(),

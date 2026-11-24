@@ -1858,6 +1858,22 @@
   }
 
   /*
+   * Swiped left (the phone's list): the read mark, an icon at the right edge
+   * the row has left. Like the delete strip, drawn only while dragged.
+   */
+  .rowReadBehind {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    direction: ltr;
+    padding-inline: var(--space-24);
+    background-color: var(--row-read-ground, var(--panel-field));
+    color: var(--row-read-text, var(--text-default));
+  }
+
+  /*
    * Opaque and above the strip: `inherit` was transparent on the phone's list,
    * so every row showed the red strip at rest (prod, 11-23).
    */
@@ -2505,6 +2521,8 @@
     flex: 1;
     min-block-size: 0;
     overflow-y: auto;
+    /* A message swiped to reply never scrolls the stream sideways (SwipeReply). */
+    overflow-x: hidden;
     overscroll-behavior: contain;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
@@ -2902,5 +2920,28 @@
 
   .composer[data-variant='phone'] .composerActions {
     order: 4;
+  }
+
+  /* ── Swipe a message to reply (SwipeReply, the phone) ──────────────── */
+  .stream[data-variant='phone'] .message:not([data-swiping]) {
+    transition: transform var(--duration-fast) var(--easing-standard);
+  }
+
+  .swipeReply {
+    position: absolute;
+    inset-block-start: 50%;
+    translate: 0 -50%;
+    display: flex;
+    color: var(--mobile-accent, var(--text-muted));
+    pointer-events: none;
+  }
+
+  .swipeReply:empty {
+    display: none;
+  }
+
+  /* The arrow points back along the line: mirrored in Hebrew. */
+  .swipeReply:dir(rtl) svg {
+    transform: scaleX(-1);
   }
 }
