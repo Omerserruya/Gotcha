@@ -11,7 +11,7 @@ vi.mock('@/features/capabilities/WooFirewallHelp', () => ({
   WooFirewallHelp: () => <div data-testid="woo-firewall-help" />,
 }));
 
-import { linkOf, WOO_LINK_KEY, WooConnectFlow } from './WooConnectFlow';
+import { linkOf, sameStore, storeHostKey, WOO_LINK_KEY, WooConnectFlow } from './WooConnectFlow';
 
 const SITE = 'https://shop.example.com';
 const RETURN = 'https://shop.example.com/wp-admin/admin.php?page=gotcha';
@@ -58,6 +58,41 @@ describe('★★ what WordPress sent - checked before a button is offered', () =
     [{ ...ASKED, nonce: null }, false],
   ])('%j → %s', (asked, ok) => {
     expect(linkOf(asked) !== null).toBe(ok);
+  });
+});
+
+describe('storeHostKey: one store with or without www', () => {
+  it.each([
+    ['https://binyaminamarket.co.il', 'binyaminamarket.co.il'],
+    ['https://www.binyaminamarket.co.il', 'binyaminamarket.co.il'],
+    ['https://WWW.Binyaminamarket.CO.IL/shop/', 'binyaminamarket.co.il'],
+    ['https://shop.example.com:443', 'shop.example.com'],
+    ['http://shop.example.com:80', 'shop.example.com'],
+    ['https://shop.example.com:8443', 'shop.example.com:8443'],
+    ['https://www.shop.example.com:8443', 'shop.example.com:8443'],
+    ['https://www.www.example.com', 'www.example.com'],
+    ['https://www.', 'www.'],
+    ['https://www.com', 'www.com'],
+    ['www.binyaminamarket.co.il', 'binyaminamarket.co.il'],
+    [' https://www.shop.example.com ', 'shop.example.com'],
+    ['', ''],
+    ['ftp://www.example.com', ''],
+    ['not a url', ''],
+  ])('%s -> %s', (url, key) => {
+    expect(storeHostKey(url)).toBe(key);
+  });
+
+  it.each([
+    ['https://binyaminamarket.co.il', 'https://www.binyaminamarket.co.il', true],
+    ['https://www.binyaminamarket.co.il', 'https://binyaminamarket.co.il', true],
+    ['https://shop.example.com:443', 'https://www.shop.example.com', true],
+    ['https://shop.example.com', 'https://example.com', false],
+    ['https://shop.example.com', 'https://www.example.com', false],
+    ['https://shop.example.com:8443', 'https://shop.example.com', false],
+    ['https://www.example.com.evil.net', 'https://example.com', false],
+    ['not a url', 'also not', false],
+  ])('%s and %s: same store %s', (a, b, same) => {
+    expect(sameStore(a, b)).toBe(same);
   });
 });
 
@@ -120,6 +155,34 @@ describe('★★ "Connect to GOTCHA" from the WooCommerce plugin', () => {
       "The store didn't approve GOTCHA",
     );
     expect(screen.getByTestId('woo-connect-approve')).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'the store bare, WordPress with www',
+      'https://www.shop.example.com',
+      'https://shop.example.com',
+    ],
+    [
+      'the store with www, WordPress bare',
+      'https://shop.example.com',
+      'https://www.shop.example.com',
+    ],
+  ])('★ %s: this store, and Connect', (_, site, store) => {
+    const asked = { site, returnUrl: `${site}/wp-admin/admin.php?page=gotcha`, nonce: NONCE };
+    show({ asked, store });
+    expect(screen.getByTestId('woo-connect-store')).toHaveTextContent(
+      'is connected to this workspace.',
+    );
+    expect(screen.getByTestId('woo-connect-yes')).toBeInTheDocument();
+  });
+
+  it('another subdomain of the same domain is still another store', () => {
+    show({ store: 'https://example.com' });
+    expect(screen.getByTestId('woo-connect-store')).toHaveTextContent(
+      'connected to another store, example.com',
+    );
+    expect(screen.queryByTestId('woo-connect-yes')).toBeNull();
   });
 
   it('another store on this workspace: said - and no button that can only fail', () => {

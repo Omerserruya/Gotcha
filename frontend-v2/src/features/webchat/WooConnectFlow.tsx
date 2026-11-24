@@ -30,6 +30,31 @@ const BACK_ERRORS = ['denied', 'insufficient_permissions', 'store_firewall_chall
 const host = (url: string) => (URL.canParse(url) ? new URL(url).host.toLowerCase() : '');
 
 /**
+ * Which store a URL names, for "this store or another": the host, lowercased,
+ * without one leading `www.` (kept when what is left has no dot). URL already
+ * drops the scheme's own default port, so `:443` on https is the bare host and
+ * `:8443` is another store. A bare domain is read as https. `''` for anything
+ * that is not an http(s) URL. The same rule, by the same name, on the server's
+ * bind check. Only for comparing: titles and copy keep the host as sent.
+ */
+export function storeHostKey(url: string): string {
+  const raw = url.trim();
+  const full = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  if (!URL.canParse(full)) return '';
+  const u = new URL(full);
+  if (!/^https?:$/.test(u.protocol)) return '';
+  const h = u.host.toLowerCase();
+  const rest = h.slice(4);
+  return h.startsWith('www.') && rest.includes('.') ? rest : h;
+}
+
+/** The same store, by storeHostKey; two unreadable URLs are not the same store. */
+export function sameStore(a: string, b: string): boolean {
+  const k = storeHostKey(a);
+  return k !== '' && k === storeHostKey(b);
+}
+
+/**
  * A link WordPress could have sent: an http(s) site, and a way back on the
  * same host under `/wp-admin/` - what the route will check (§2.3). Anything
  * else is not offered a button that can only fail.
@@ -163,7 +188,7 @@ export function WooConnectFlow({
         ? 'unknown'
         : store === 'none'
           ? 'none'
-          : host(store) === site
+          : sameStore(store, link.site)
             ? 'this'
             : 'other';
   const backError =
