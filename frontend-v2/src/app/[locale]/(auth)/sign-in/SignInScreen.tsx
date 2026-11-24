@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from 'react';
 
 import { SignInPanel, type SignInScreenName } from '@/features/auth/SignInPanel';
+import { useOutsideTheApp } from '@/shell/mobile/web-only';
 
 import styles from './SignIn.module.css';
 
@@ -74,6 +75,8 @@ export function SignInScreen({
   readonly footnote: ReactNode;
 }) {
   const [screen, setScreen] = useState<SignInScreenName>('signIn');
+  /* No Google inside the app: it would finish in the system browser (useOutsideTheApp). */
+  const outsideTheApp = useOutsideTheApp();
 
   return (
     <div className={styles.frame}>
@@ -116,6 +119,7 @@ export function SignInScreen({
             flow={flow}
             flowQuery={flowQuery}
             followGoogle={followGoogle}
+            offerGoogle={outsideTheApp}
             onScreen={setScreen}
           />
 

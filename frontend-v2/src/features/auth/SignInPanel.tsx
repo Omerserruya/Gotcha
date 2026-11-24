@@ -152,6 +152,7 @@ export function SignInPanel({
   flow,
   flowQuery,
   followGoogle = false,
+  offerGoogle = true,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
@@ -198,6 +199,13 @@ export function SignInPanel({
    * rather than asking for a second press. Nothing to follow, the form shows.
    */
   readonly followGoogle?: boolean;
+  /**
+   * Whether Google may be offered at all. The composition root answers it:
+   * `false` inside the app, where Google would finish in the system browser
+   * and leave the app signed out (`useOutsideTheApp`). Default `true`: the
+   * panel alone, as its own tests render it, behaves as on the website.
+   */
+  readonly offerGoogle?: boolean;
 }) {
   const t = useTranslations('auth');
   const [step, setStep] = useState<FlowStep | null>(null);
@@ -240,7 +248,9 @@ export function SignInPanel({
    * effect), so reading the provider's origin from `window` here is safe.
    */
   const googleUrl =
-    step?.kind === 'identify' ? googleSourceUrl(step.challenge.sources, providerOrigin()) : null;
+    offerGoogle && step?.kind === 'identify'
+      ? googleSourceUrl(step.challenge.sources, providerOrigin())
+      : null;
 
   /*
    * `void` and a plain effect rather than a transition: this runs once on mount

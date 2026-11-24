@@ -470,6 +470,18 @@ describe('★★ one way in - unless the stage offers Google (Omer, 2026-11-22)'
     expect(screen.queryByTestId('google-sign-in')).toBeNull();
   });
 
+  it('⚠⚠ draws no Google when told not to offer it (inside the app)', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} offerGoogle={false} />
+      </NextIntlClientProvider>,
+    );
+    await screen.findByTestId('sign-in-form');
+    expect(screen.queryByTestId('google-sign-in')).toBeNull();
+    expect(screen.queryByText('or')).toBeNull();
+  });
+
   it('★★ pressing Google keeps the "stay signed in" answer for the trip, and says it is leaving', async () => {
     startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
     show();
@@ -639,6 +651,22 @@ describe('★★ ?google=start: the press already happened on the setup page', (
       expect(assign).toHaveBeenCalledWith(`${PROVIDER}/source/oauth/login/google/`),
     );
     expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠⚠ not offered (inside the app): it never leaves for Google, whatever the query says', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel
+          handOverHref={HANDOVER}
+          recoverPath={RECOVER}
+          followGoogle
+          offerGoogle={false}
+        />
+      </NextIntlClientProvider>,
+    );
+    await screen.findByTestId('sign-in-form');
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('⚠⚠ with no Google offered, it does nothing but show the form', async () => {

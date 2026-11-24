@@ -21,6 +21,25 @@ const unchanging = () => () => {};
  *   never appears, not even for the moment before hydration.
  */
 export function usePurchaseLinksAllowed(): boolean {
+  return useOutsideTheApp();
+}
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * ★★ NO GOOGLE SIGN-IN INSIDE THE APP (Omer, 2026-11-24)
+ * ════════════════════════════════════════════════════════════════════════════
+ * In the app, Google's page is not one of the hosts the WebView keeps, so the
+ * shell hands it to the system browser: the person signs in THERE, Google
+ * returns them there, and the app stays signed out. Keeping Google inside the
+ * WebView is no answer either: Google refuses sign-in from an embedded WebView
+ * (403 disallowed_useragent). And an app that offers Google sign-in owes Apple
+ * a Sign in with Apple beside it (App Store 4.8). So the app offers email and
+ * password only; the website and the web /m keep Google.
+ *
+ * Same rule as the purchase links: false in the first HTML and in the app,
+ * true once the browser knows it is not the app.
+ */
+export function useOutsideTheApp(): boolean {
   return useSyncExternalStore(
     unchanging,
     () => nativePlatform() === null,

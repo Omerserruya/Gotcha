@@ -28,8 +28,18 @@ import { describe, expect, it, vi } from 'vitest';
  * it when the stage changes, and a stub makes that the only variable.
  */
 vi.mock('@/features/auth/SignInPanel', () => ({
-  SignInPanel: ({ onScreen }: { onScreen?: (screen: 'signIn' | 'secondFactor') => void }) => (
-    <button type="button" onClick={() => onScreen?.('secondFactor')}>
+  SignInPanel: ({
+    onScreen,
+    offerGoogle,
+  }: {
+    onScreen?: (screen: 'signIn' | 'secondFactor') => void;
+    offerGoogle?: boolean;
+  }) => (
+    <button
+      type="button"
+      data-offer-google={String(offerGoogle)}
+      onClick={() => onScreen?.('secondFactor')}
+    >
       advance
     </button>
   ),
@@ -145,6 +155,38 @@ describe('⚠⚠ the form column is not the same width on both screens', () => {
     expect(/\.form\s*\{[^}]*inline-size:\s*400px/.test(css)).toBe(true);
     expect(/\.form\[data-screen='secondFactor'\]\s*\{[^}]*inline-size:\s*430px/.test(css)).toBe(
       true,
+    );
+  });
+});
+
+describe('⚠⚠ no Google inside the app (Omer, 2026-11-24)', () => {
+  /*
+   * In the app Google opened in the system browser, signed the person in
+   * THERE, and left the app signed out. The screen tells the panel not to
+   * offer it; the website keeps it.
+   */
+  it('⚠⚠ inside the app: the panel is told not to offer Google', () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => 'ios',
+      Plugins: {},
+    };
+    try {
+      show();
+      expect(screen.getByRole('button', { name: 'advance' })).toHaveAttribute(
+        'data-offer-google',
+        'false',
+      );
+    } finally {
+      delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+    }
+  });
+
+  it('★ in a browser: the panel may offer it', () => {
+    show();
+    expect(screen.getByRole('button', { name: 'advance' })).toHaveAttribute(
+      'data-offer-google',
+      'true',
     );
   });
 });
