@@ -18,7 +18,6 @@ import { OrRule } from '@/design-system/patterns/OrRule';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { safeLinkUrl } from '@/lib/safe-url';
-import { useOutsideTheApp } from '@/shell/mobile/web-only';
 
 import { SecondFactor } from './SecondFactor';
 
@@ -153,6 +152,7 @@ export function SignInPanel({
   flow,
   flowQuery,
   followGoogle = false,
+  offerGoogle = true,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
@@ -199,6 +199,13 @@ export function SignInPanel({
    * rather than asking for a second press. Nothing to follow, the form shows.
    */
   readonly followGoogle?: boolean;
+  /**
+   * Whether Google may be offered at all. The composition root answers it:
+   * `false` inside the app, where Google would finish in the system browser
+   * and leave the app signed out (`useOutsideTheApp`). Default `true`: the
+   * panel alone, as its own tests render it, behaves as on the website.
+   */
+  readonly offerGoogle?: boolean;
 }) {
   const t = useTranslations('auth');
   const [step, setStep] = useState<FlowStep | null>(null);
@@ -240,10 +247,8 @@ export function SignInPanel({
    * A stage only ever exists in the browser (the flow is started by an
    * effect), so reading the provider's origin from `window` here is safe.
    */
-  /* Not in the app: Google would finish in the system browser (see useOutsideTheApp). */
-  const outsideTheApp = useOutsideTheApp();
   const googleUrl =
-    outsideTheApp && step?.kind === 'identify'
+    offerGoogle && step?.kind === 'identify'
       ? googleSourceUrl(step.challenge.sources, providerOrigin())
       : null;
 

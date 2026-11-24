@@ -470,21 +470,16 @@ describe('★★ one way in - unless the stage offers Google (Omer, 2026-11-22)'
     expect(screen.queryByTestId('google-sign-in')).toBeNull();
   });
 
-  it('⚠⚠ draws no Google inside the app: Google would finish in the system browser and leave the app signed out', async () => {
-    (window as unknown as { Capacitor?: unknown }).Capacitor = {
-      isNativePlatform: () => true,
-      getPlatform: () => 'ios',
-      Plugins: {},
-    };
-    try {
-      startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
-      show();
-      await screen.findByTestId('sign-in-form');
-      expect(screen.queryByTestId('google-sign-in')).toBeNull();
-      expect(screen.queryByText('or')).toBeNull();
-    } finally {
-      delete (window as unknown as { Capacitor?: unknown }).Capacitor;
-    }
+  it('⚠⚠ draws no Google when told not to offer it (inside the app)', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel handOverHref={HANDOVER} recoverPath={RECOVER} offerGoogle={false} />
+      </NextIntlClientProvider>,
+    );
+    await screen.findByTestId('sign-in-form');
+    expect(screen.queryByTestId('google-sign-in')).toBeNull();
+    expect(screen.queryByText('or')).toBeNull();
   });
 
   it('★★ pressing Google keeps the "stay signed in" answer for the trip, and says it is leaving', async () => {
@@ -658,20 +653,20 @@ describe('★★ ?google=start: the press already happened on the setup page', (
     expect(assign).toHaveBeenCalledTimes(1);
   });
 
-  it('⚠⚠ inside the app it never leaves for Google, whatever the query says', async () => {
-    (window as unknown as { Capacitor?: unknown }).Capacitor = {
-      isNativePlatform: () => true,
-      getPlatform: () => 'android',
-      Plugins: {},
-    };
-    try {
-      startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
-      following();
-      await screen.findByTestId('sign-in-form');
-      expect(assign).not.toHaveBeenCalled();
-    } finally {
-      delete (window as unknown as { Capacitor?: unknown }).Capacitor;
-    }
+  it('⚠⚠ not offered (inside the app): it never leaves for Google, whatever the query says', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel
+          handOverHref={HANDOVER}
+          recoverPath={RECOVER}
+          followGoogle
+          offerGoogle={false}
+        />
+      </NextIntlClientProvider>,
+    );
+    await screen.findByTestId('sign-in-form');
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('⚠⚠ with no Google offered, it does nothing but show the form', async () => {
