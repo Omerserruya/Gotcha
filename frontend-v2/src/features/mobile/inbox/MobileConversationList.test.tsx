@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { createTranslator } from 'next-intl';
-import type { ReactNode } from 'react';
+import { render as renderBare, screen } from '@testing-library/react';
+import { createTranslator, NextIntlClientProvider } from 'next-intl';
+import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import channels from '@/i18n/messages/he/channels.json';
@@ -23,6 +23,16 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 import { MobileConversationList } from './MobileConversationList';
+
+/* Every row now mounts the swipe (a client component): it reads its words from the provider. */
+const render = (ui: ReactElement) =>
+  renderBare(ui, {
+    wrapper: ({ children }) => (
+      <NextIntlClientProvider locale="he" messages={{ inbox }}>
+        {children}
+      </NextIntlClientProvider>
+    ),
+  });
 
 /** The tag under an unheld handoff, as the phone draws it (2026-11-15). */
 const handoff = {

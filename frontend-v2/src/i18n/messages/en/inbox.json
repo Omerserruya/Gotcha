@@ -196,6 +196,10 @@
       "confirm": "Delete",
       "cancel": "Cancel",
       "deleted": "The conversation was deleted."
+    },
+    "swipeRead": {
+      "unread": "Mark as unread",
+      "read": "Mark as read"
     }
   },
   "identity": {

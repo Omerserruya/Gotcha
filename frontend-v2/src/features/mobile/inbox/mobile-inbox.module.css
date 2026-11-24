@@ -48,6 +48,11 @@
   .list {
     /* The swiped row's own ground (RowDelete), never transparent over the strip. */
     --row-delete-ground: var(--mobile-ground);
+
+    /* Swiped left: the read mark's strip, in the list's accent (RowDelete). */
+    --row-read-ground: var(--mobile-accent);
+    --row-read-text: var(--mobile-surface);
+
     margin: 0;
     padding: 0;
     list-style: none;
@@ -139,9 +144,16 @@
     color: var(--text-subtle);
   }
 
-  .row[data-unread] .time {
+  .row[data-unread] .time,
+  [data-read-override='unread'] .row .time {
     color: var(--mobile-accent);
     font-weight: var(--font-weight-semibold);
+  }
+
+  /* Swiped to read: the time loses its accent at once, before the list's refresh. */
+  [data-read-override='read'] .row[data-unread] .time {
+    color: var(--text-subtle);
+    font-weight: inherit;
   }
 
   .tick {

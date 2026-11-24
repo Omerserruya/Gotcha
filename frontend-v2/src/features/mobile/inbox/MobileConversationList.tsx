@@ -5,7 +5,6 @@ import {
   channelAccountName,
   channelName,
   type ConversationRow,
-  UNREAD_BADGE_MAX,
   unreadMark,
 } from '@/api/contracts/inbox';
 import { relevanceTag } from '@/features/inbox/relevance';
@@ -23,6 +22,7 @@ import { listTime } from '@/lib/list-time';
 import ui from '../mobile-ui.module.css';
 import styles from './mobile-inbox.module.css';
 import { rowOwner } from './row-owner';
+import { RowUnreadMark } from './RowUnreadMark';
 
 /**
  * The conversations, as `GOTCHA Mobile App.dc.html` lists them: the person on
@@ -98,11 +98,15 @@ export async function MobileConversationList({
           const kind = relevance ? relevanceTag(row) : null;
           return (
             <li key={row.id}>
-              {/* Swipe right to delete (2026-11-22): admins only, never a thread from the website. */}
+              {/*
+                Swipe right to delete (2026-11-22): admins only, never a thread from the website.
+                Swipe left to mark unread, or read again (2026-11-24): everyone, a mark of their own.
+              */}
               <RowDelete
                 id={row.id}
                 open={row.status !== 'CLOSED'}
                 enabled={isAdmin(role) && row.continuedFrom === null}
+                read={{ unread: mark !== null }}
               >
                 <Link
                   href={`/m/inbox/${row.id}` as '/m/inbox'}
@@ -151,21 +155,16 @@ export async function MobileConversationList({
                           inbox(`stream.quote.kind.${said.kind}`)
                         )}
                       </span>
-                      {mark === null ? null : mark.kind === 'count' ? (
-                        <span className={styles.badge}>
-                          {/* "99+" is a number: kept left-to-right, or Hebrew draws "+99". */}
-                          <span aria-hidden="true" dir="ltr">
-                            {mark.count > UNREAD_BADGE_MAX ? `${UNREAD_BADGE_MAX}+` : mark.count}
-                          </span>
-                          <span className="srOnly">
-                            {inbox('queue.unreadMessages', { count: mark.count })}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className={styles.dot}>
-                          <span className="srOnly">{inbox('queue.unread')}</span>
-                        </span>
-                      )}
+                      {/* The server's mark, or the one a swipe has just set (RowUnreadMark). */}
+                      <RowUnreadMark
+                        mark={mark}
+                        unreadLabel={inbox('queue.unread')}
+                        countLabel={
+                          mark?.kind === 'count'
+                            ? inbox('queue.unreadMessages', { count: mark.count })
+                            : null
+                        }
+                      />
                     </span>
                     {owner === null && account === null && kind === null ? null : (
                       <span className={ui.tags}>

@@ -442,6 +442,39 @@ describe('★ every message offers Reply, describing itself to the composer', ()
   });
 });
 
+describe('★★ the phone swipes a message to reply - no hover bar (2026-11-24)', () => {
+  it('★★ phone: a swipe that names the message, and no Reply button', async () => {
+    render(
+      await MessageStream({
+        messages: [message({ direction: 'INBOUND', body: 'Where is my parcel?' })],
+        channel: 'WHATSAPP',
+        variant: 'phone',
+      }),
+    );
+    expect(screen.getByTestId('swipe-reply-m1')).toBeInTheDocument();
+    expect(screen.queryByTestId('reply-m1')).toBeNull();
+    // The swipe lives inside the message it moves.
+    expect(screen.getByTestId('message-m1')).toContainElement(screen.getByTestId('swipe-reply-m1'));
+  });
+
+  it('★ the website keeps the button, and draws no swipe', async () => {
+    await show([message({ direction: 'INBOUND', body: 'Where is my parcel?' })]);
+    expect(screen.getByTestId('reply-m1')).toBeInTheDocument();
+    expect(screen.queryByTestId('swipe-reply-m1')).toBeNull();
+  });
+
+  it('⚠⚠ a website row merged into the thread: no swipe either (the send refuses its quote)', async () => {
+    render(
+      await MessageStream({
+        messages: [message({ direction: 'INBOUND', originChannel: 'WEBCHAT' })],
+        channel: 'WHATSAPP',
+        variant: 'phone',
+      }),
+    );
+    expect(screen.queryByTestId('swipe-reply-m1')).toBeNull();
+  });
+});
+
 describe('★★ media in the stream, as 02 draws it - never "A photo." when the photo is here', () => {
   it('a photo: the picture itself, opening whole in a new tab; the adapter’s "[Image]" not printed', async () => {
     await show([
