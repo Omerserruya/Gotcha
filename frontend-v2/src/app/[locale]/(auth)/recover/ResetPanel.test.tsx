@@ -638,6 +638,22 @@ describe('★★ Google from a setup link: the Terms first, then sign-in (2026-1
     expect(screen.getByTestId('reset-open')).toBeInTheDocument();
   });
 
+  it('⚠⚠ never inside the app: the password path only', () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => 'ios',
+      Plugins: {},
+    };
+    try {
+      withGoogle({ email: 'maya@avivco.il' });
+      expect(screen.queryByTestId('reset-google')).toBeNull();
+      expect(screen.queryByTestId('reset-google-hint')).toBeNull();
+      expect(screen.getByTestId('reset-open')).toBeInTheDocument();
+    } finally {
+      delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+    }
+  });
+
   it('★ never on a reset link', () => {
     withGoogle({ email: null }, 'reset');
     expect(screen.queryByTestId('reset-google')).toBeNull();

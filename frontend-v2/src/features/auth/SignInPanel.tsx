@@ -18,6 +18,7 @@ import { OrRule } from '@/design-system/patterns/OrRule';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { safeLinkUrl } from '@/lib/safe-url';
+import { useOutsideTheApp } from '@/shell/mobile/web-only';
 
 import { SecondFactor } from './SecondFactor';
 
@@ -239,8 +240,12 @@ export function SignInPanel({
    * A stage only ever exists in the browser (the flow is started by an
    * effect), so reading the provider's origin from `window` here is safe.
    */
+  /* Not in the app: Google would finish in the system browser (see useOutsideTheApp). */
+  const outsideTheApp = useOutsideTheApp();
   const googleUrl =
-    step?.kind === 'identify' ? googleSourceUrl(step.challenge.sources, providerOrigin()) : null;
+    outsideTheApp && step?.kind === 'identify'
+      ? googleSourceUrl(step.challenge.sources, providerOrigin())
+      : null;
 
   /*
    * `void` and a plain effect rather than a transition: this runs once on mount

@@ -18,6 +18,7 @@ import { OrRule } from '@/design-system/patterns/OrRule';
 import { Button } from '@/design-system/primitives/button/Button';
 import { Text } from '@/design-system/primitives/text/Text';
 import { UserText } from '@/design-system/primitives/text/UserText';
+import { useOutsideTheApp } from '@/shell/mobile/web-only';
 import { TermsBox } from '@/shell/terms/TermsBox';
 
 import {
@@ -171,6 +172,8 @@ export function ResetPanel({
 
   /* Pressed Google: the Terms are being recorded, then the page leaves. */
   const [leaving, setLeaving] = useState(false);
+  /* Not in the app: Google would finish in the system browser (see useOutsideTheApp). */
+  const outsideTheApp = useOutsideTheApp();
 
   /*
    * ═════════════════════════════════════════════════════════════════════════
@@ -188,7 +191,7 @@ export function ResetPanel({
    *   The Google sign-in retires the link, and reopened it reads "used".
    */
   async function continueWithGoogle() {
-    if (!google || !accepted || link.kind !== 'setup') return;
+    if (!google || !outsideTheApp || !accepted || link.kind !== 'setup') return;
     setLeaving(true);
     setPhase({ name: 'opening' });
     if (started === null) {
@@ -408,7 +411,7 @@ export function ResetPanel({
           the proxy build (prod, one host) ?google=start would land on a
           plain form, so the option is not offered whatever the flag says.
         */}
-        {needsTerms && google && servesSources() ? (
+        {needsTerms && google && outsideTheApp && servesSources() ? (
           <>
             <OrRule word={tg('or')} />
             <GoogleButton
