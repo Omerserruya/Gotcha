@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Capacitor
 import QuickLook
 import UIKit
@@ -27,7 +28,8 @@ public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NavigationPolicyPlugin"
     public let jsName = "NavigationPolicy"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "openDocument", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "openDocument", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "authenticate", returnType: CAPPluginReturnPromise)
     ]
 
     private var appOrigin: URL?
@@ -36,6 +38,8 @@ public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
     private var locales: [String] = ["he", "en"]
     /// Quick Look holds its data source weakly: keep the open one alive here.
     private var preview: DocumentPreview?
+    /// The running auth session: released when it ends, or it is deallocated mid-flow.
+    private var authSession: ASWebAuthenticationSession?
 
     override public func load() {
         let config = getConfig()
@@ -141,6 +145,46 @@ public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
         }.resume()
     }
 
+    /// "Continue with Google" inside the app (Omer, 2026-11-24). Google refuses
+    /// an embedded WebView, so the sign-in runs in the system's auth browser
+    /// and comes back on our own scheme with a one-time code the page trades
+    /// for the session (frontend-v2 auth/app-handoff.ts).
+    ///
+    /// EPHEMERAL on purpose: no Safari cookies, so no Authentik session of
+    /// somebody else's for the Google account to be linked to. Only the app's
+    /// own start route on the app origin is opened, and only `gotcha` comes
+    /// back. Resolves { url }, or rejects "cancelled" / "refused" / "failed".
+    /// Android does the same with @capacitor/browser and appUrlOpen.
+    @objc func authenticate(_ call: CAPPluginCall) {
+        guard let raw = call.getString("url"), let url = URL(string: raw), let origin = appOrigin,
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == origin.host?.lowercased(),
+              url.path.hasSuffix("/api/bff/app-sign-in/start"),
+              call.getString("callbackScheme") == "gotcha" else {
+            call.reject("refused")
+            return
+        }
+        DispatchQueue.main.async {
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "gotcha") { [weak self] callback, error in
+                self?.authSession = nil
+                if let callback = callback {
+                    call.resolve(["url": callback.absoluteString])
+                } else if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
+                    call.reject("cancelled")
+                } else {
+                    call.reject("failed")
+                }
+            }
+            session.prefersEphemeralWebBrowserSession = true
+            session.presentationContextProvider = self
+            self.authSession = session
+            if !session.start() {
+                self.authSession = nil
+                call.reject("failed")
+            }
+        }
+    }
+
     /// Letters, digits, dot, dash, underscore; never a hidden or empty name.
     private static func safeName(_ raw: String) -> String {
         var out = ""
@@ -156,6 +200,13 @@ public class NavigationPolicyPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         if out.isEmpty || out.hasPrefix(".") { out = "document" + out }
         return out
+    }
+}
+
+/// The auth browser is shown over the app's own window.
+extension NavigationPolicyPlugin: ASWebAuthenticationPresentationContextProviding {
+    public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        bridge?.viewController?.view.window ?? ASPresentationAnchor()
     }
 }
 

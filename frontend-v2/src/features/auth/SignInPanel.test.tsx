@@ -928,3 +928,73 @@ describe('★ recovery’s stages, named since password reset screen two, still 
     },
   );
 });
+
+describe('★★ Google inside the app: a button that runs the phone’s auth browser (2026-11-24)', () => {
+  const native = (onGoogle: () => Promise<'signed_in' | 'cancelled' | 'failed'>) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel
+          handOverHref={HANDOVER}
+          recoverPath={RECOVER}
+          offerGoogle={false}
+          onGoogle={onGoogle}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it('★★ a BUTTON, not a link, when the stage offers Google', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    native(vi.fn());
+    const google = await screen.findByTestId('google-sign-in');
+    expect(google.tagName).toBe('BUTTON');
+    expect(google).not.toHaveAttribute('href');
+    expect(google).toHaveTextContent('Continue with Google');
+  });
+
+  it('⚠⚠ the stage offers no Google: no button, whatever the app can do', async () => {
+    startFlow.mockResolvedValue(identify());
+    native(vi.fn());
+    await screen.findByTestId('sign-in-form');
+    expect(screen.queryByTestId('google-sign-in')).toBeNull();
+  });
+
+  it('★★ pressed: says it is leaving, runs the trip, and leaves the navigation to the root', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    const onGoogle = vi.fn(async () => 'signed_in' as const);
+    native(onGoogle);
+    await userEvent.click(await screen.findByTestId('google-sign-in'));
+    expect(onGoogle).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('google-sign-in')).toHaveTextContent('Taking you to Google…');
+    expect(screen.queryByTestId('sign-in-problem')).toBeNull();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['cancelled', messages.google.cancelled],
+    ['failed', messages.google.failed],
+  ] as const)('★ %s: the button is back, with the existing line', async (outcome, line) => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    native(async () => outcome);
+    await userEvent.click(await screen.findByTestId('google-sign-in'));
+    expect(await screen.findByTestId('sign-in-problem')).toHaveTextContent(line);
+    expect(screen.getByTestId('google-sign-in')).toHaveTextContent('Continue with Google');
+    expect(screen.getByTestId('google-sign-in')).toBeEnabled();
+  });
+
+  it('⚠⚠ ?google=start never follows a link inside the app', async () => {
+    startFlow.mockResolvedValue(identify({ sources: [GOOGLE_SOURCE] }));
+    render(
+      <NextIntlClientProvider locale="en" messages={{ auth: messages }}>
+        <SignInPanel
+          handOverHref={HANDOVER}
+          recoverPath={RECOVER}
+          followGoogle
+          offerGoogle={false}
+          onGoogle={vi.fn()}
+        />
+      </NextIntlClientProvider>,
+    );
+    await screen.findByTestId('google-sign-in');
+    expect(assign).not.toHaveBeenCalled();
+  });
+});

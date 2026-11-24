@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { SignInPanel, type SignInScreenName } from '@/features/auth/SignInPanel';
+import { appPath } from '@/lib/base-path';
+import { safeInternalPath } from '@/lib/safe-url';
+import { appGoogleAvailable, signInWithGoogleInApp } from '@/shell/mobile/app-google';
 import { useOutsideTheApp } from '@/shell/mobile/web-only';
 
 import styles from './SignIn.module.css';
@@ -75,8 +78,30 @@ export function SignInScreen({
   readonly footnote: ReactNode;
 }) {
   const [screen, setScreen] = useState<SignInScreenName>('signIn');
-  /* No Google inside the app: it would finish in the system browser (useOutsideTheApp). */
+  /* No Google LINK inside the app: it would finish in the system browser (useOutsideTheApp). */
   const outsideTheApp = useOutsideTheApp();
+  /*
+   * ★★ GOOGLE IN THE APP, THE PHONE'S WAY (Omer, 2026-11-24): a build that can
+   *   run the phone's auth browser gets the button back as a native trigger
+   *   (`shell/mobile/app-google`). An older store build cannot, and keeps none.
+   *   False in the first HTML, decided once the bridge is there.
+   */
+  const appGoogle = useSyncExternalStore(
+    noSubscription,
+    () => appGoogleAvailable(),
+    () => false,
+  );
+  const onGoogle = appGoogle
+    ? async () => {
+        // The page's own language, read when pressed (the path's first segment).
+        const head = window.location.pathname.split('/').slice(1, 3);
+        const locale = head.includes('en') ? 'en' : 'he';
+        const outcome = await signInWithGoogleInApp(locale);
+        if (outcome === 'signed_in')
+          window.location.assign(appPath(landingInApp(returnTo, locale)));
+        return outcome;
+      }
+    : undefined;
 
   return (
     <div className={styles.frame}>
@@ -120,6 +145,7 @@ export function SignInScreen({
             flowQuery={flowQuery}
             followGoogle={followGoogle}
             offerGoogle={outsideTheApp}
+            onGoogle={onGoogle}
             onScreen={setScreen}
           />
 
@@ -128,4 +154,17 @@ export function SignInScreen({
       </main>
     </div>
   );
+}
+
+const noSubscription = () => () => {};
+
+/**
+ * Where the app goes once Google has signed it in: back to the phone screen it
+ * came from, else the inbox. Never a website page - the app would hand that to
+ * the system browser (NavigationPolicy).
+ */
+export function landingInApp(returnTo: string | undefined, locale: string): `/${string}` {
+  const safe = safeInternalPath(returnTo);
+  if (safe && /^\/(he|en)\/m(\/|$|\?)/.test(safe)) return safe as `/${string}`;
+  return `/${locale}/m/inbox`;
 }

@@ -9,6 +9,13 @@ import {
   termsPendingCookieOptions,
   unsealConnectIntent,
 } from '@/auth/google-sign-in';
+import {
+  APP_HANDOFF_COOKIE,
+  APP_HANDOFF_COOKIE_PATH,
+  APP_HANDOFF_RETURN,
+  sealHandoffCode,
+  unsealHandoffStart,
+} from '@/auth/app-handoff';
 import { LOGIN_STATE_COOKIE, LOGIN_STATE_COOKIE_PATH, unsealLoginState } from '@/auth/login-state';
 import { authorizationCodeGrant, oidcConfiguration } from '@/auth/oidc';
 import {
@@ -211,6 +218,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : connectSubject !== null && record?.method === 'google'
       ? CONNECT_LANDING
       : loginState.r;
+
+  /*
+   * ══════════════════════════════════════════════════════════════════════
+   * ★★ THE APP'S SIGN-IN: THE COOKIES GO TO THE APP, NOT TO THIS BROWSER
+   * ══════════════════════════════════════════════════════════════════════
+   * Started by /api/bff/app-sign-in/start in the phone's auth browser. The
+   * session, the ID token and the Terms marker go into a 60-second code
+   * bound to the app's verifier, handed back on the app's scheme; the app
+   * redeems it inside its WebView (`auth/app-handoff.ts`). Nothing is set
+   * here: this browser is not where the person works.
+   */
+  const appChallenge = await unsealHandoffStart(request.cookies.get(APP_HANDOFF_COOKIE)?.value);
+  if (appChallenge) {
+    const code = await sealHandoffCode(appChallenge, {
+      s: sealed,
+      i: sealedIdToken,
+      t: record?.termsRequired === true,
+    });
+    const back = new URL(APP_HANDOFF_RETURN);
+    back.searchParams.set('code', code);
+    const toTheApp = NextResponse.redirect(back.toString());
+    toTheApp.cookies.delete({ name: APP_HANDOFF_COOKIE, path: APP_HANDOFF_COOKIE_PATH });
+    toTheApp.cookies.delete({ name: LOGIN_STATE_COOKIE, path: LOGIN_STATE_COOKIE_PATH });
+    logger.info('auth.callback.app_handoff', { sessionId: session.sid });
+    return uncached(toTheApp);
+  }
 
   const response = NextResponse.redirect(appUrl(landing as `/${string}`, env.APP_ORIGIN));
   const cookieOptions = sessionCookieOptions();

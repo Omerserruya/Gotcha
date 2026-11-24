@@ -74,7 +74,7 @@ jobs:
             -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias=upload \
             -Pandroid.injected.signing.key.password="$STORE_PASSWORD" \
-            -Pandroid.injected.version.code=$(( ${{ github.run_number }} + 100 ))
+            -PgotchaVersionCode=$(( ${{ github.run_number }} + 100 ))
           rm "$RUNNER_TEMP/upload.p12"
 
       - name: Check the signature

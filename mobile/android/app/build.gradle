@@ -7,7 +7,10 @@ android {
         applicationId "il.co.gotcha.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // The release workflow passes -PgotchaVersionCode (run number + 100).
+        // android.injected.version.code is ignored by bundleRelease, which is
+        // how the first Play upload went out as versionCode 1 (2026-11-18).
+        versionCode Integer.parseInt((project.findProperty('gotchaVersionCode') ?: '1').toString())
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

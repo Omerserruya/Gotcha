@@ -31,13 +31,16 @@ vi.mock('@/features/auth/SignInPanel', () => ({
   SignInPanel: ({
     onScreen,
     offerGoogle,
+    onGoogle,
   }: {
     onScreen?: (screen: 'signIn' | 'secondFactor') => void;
     offerGoogle?: boolean;
+    onGoogle?: () => Promise<string>;
   }) => (
     <button
       type="button"
       data-offer-google={String(offerGoogle)}
+      data-native-google={String(onGoogle !== undefined)}
       onClick={() => onScreen?.('secondFactor')}
     >
       advance
@@ -45,7 +48,13 @@ vi.mock('@/features/auth/SignInPanel', () => ({
   ),
 }));
 
-const { SignInScreen } = await import('./SignInScreen');
+const appGoogle = vi.hoisted(() => ({ available: false }));
+vi.mock('@/shell/mobile/app-google', () => ({
+  appGoogleAvailable: () => appGoogle.available,
+  signInWithGoogleInApp: vi.fn(),
+}));
+
+const { SignInScreen, landingInApp } = await import('./SignInScreen');
 
 const show = () =>
   render(
@@ -188,5 +197,39 @@ describe('⚠⚠ no Google inside the app (Omer, 2026-11-24)', () => {
       'data-offer-google',
       'true',
     );
+  });
+});
+
+describe('★★ Google in the app, the phone’s way (2026-11-24)', () => {
+  it('★★ a build that can run the auth browser: the panel gets the native trigger', () => {
+    appGoogle.available = true;
+    try {
+      show();
+      expect(screen.getByRole('button', { name: 'advance' })).toHaveAttribute(
+        'data-native-google',
+        'true',
+      );
+    } finally {
+      appGoogle.available = false;
+    }
+  });
+
+  it('⚠⚠ an older store build, or a browser: no trigger', () => {
+    show();
+    expect(screen.getByRole('button', { name: 'advance' })).toHaveAttribute(
+      'data-native-google',
+      'false',
+    );
+  });
+
+  it.each([
+    [undefined, '/he/m/inbox'],
+    ['/he/m/inbox/c1', '/he/m/inbox/c1'],
+    ['/en/m/approvals', '/en/m/approvals'],
+    ['/inbox', '/he/m/inbox'],
+    ['//evil.example', '/he/m/inbox'],
+    ['/he/mx', '/he/m/inbox'],
+  ])('★ after Google the app lands on a phone screen: %s -> %s', (returnTo, landing) => {
+    expect(landingInApp(returnTo, 'he')).toBe(landing);
   });
 });

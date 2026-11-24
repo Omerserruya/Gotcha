@@ -48,6 +48,8 @@ interface PushNotificationsPlugin {
 
 interface BrowserPlugin {
   open(options: { url: string }): Promise<void>;
+  close?(): Promise<void>;
+  addListener?(event: 'browserFinished', fn: () => void): Promise<Listener> | Listener;
 }
 
 /** @capacitor/app: the Android Back button. */
@@ -57,6 +59,10 @@ interface AppPlugin {
     fn: (event: { readonly canGoBack: boolean }) => void,
   ): Promise<Listener> | Listener;
   exitApp(): Promise<void>;
+  addListener(
+    event: 'appUrlOpen',
+    fn: (event: { readonly url: string }) => void,
+  ): Promise<Listener> | Listener;
 }
 
 /** The app's own plugin (NavigationPolicyPlugin.java): a document in the phone's viewer. */
@@ -64,13 +70,25 @@ interface DocumentPlugin {
   openDocument(options: { url: string; fileName: string }): Promise<{ opened: boolean }>;
 }
 
+/** The app's own plugin (NavigationPolicyPlugin.swift): the iPhone's auth browser. */
+interface AuthPlugin {
+  authenticate(options: { url: string; callbackScheme: string }): Promise<{ url: string }>;
+}
+
+/** What the native side registered: each plugin's REAL methods (Capacitor's JSExport). */
+interface PluginHeader {
+  readonly name: string;
+  readonly methods?: readonly { readonly name: string }[];
+}
+
 interface CapacitorGlobal {
   isNativePlatform?(): boolean;
   getPlatform?(): string;
+  PluginHeaders?: readonly PluginHeader[];
   Plugins?: {
     PushNotifications?: PushNotificationsPlugin;
     Browser?: BrowserPlugin;
-    NavigationPolicy?: Partial<DocumentPlugin>;
+    NavigationPolicy?: Partial<DocumentPlugin & AuthPlugin>;
     App?: AppPlugin;
   };
 }
@@ -110,6 +128,25 @@ export function browserPlugin(): BrowserPlugin | null {
 export function documentPlugin(): DocumentPlugin | null {
   const plugin = capacitor()?.Plugins?.NavigationPolicy;
   return typeof plugin?.openDocument === 'function' ? (plugin as DocumentPlugin) : null;
+}
+
+/**
+ * Whether THIS build's native side has the method. Unlike the plugin proxy
+ * (which answers for any name, see `documentPlugin`), the headers list only
+ * what the native code registered - so an app from the store before a method
+ * shipped says no, and its page can leave the feature out.
+ */
+export function hasNativeMethod(plugin: string, method: string): boolean {
+  const header = capacitor()?.PluginHeaders?.find((h) => h.name === plugin);
+  return header?.methods?.some((m) => m.name === method) === true;
+}
+
+/** The iPhone's auth browser, or `null`: not an iPhone, or a build without it. */
+export function authPlugin(): AuthPlugin | null {
+  if (nativePlatform() !== 'ios' || !hasNativeMethod('NavigationPolicy', 'authenticate')) {
+    return null;
+  }
+  return (capacitor()?.Plugins?.NavigationPolicy as AuthPlugin | undefined) ?? null;
 }
 
 /** Where this phone's token is kept between starts, so sign-out can forget it. */

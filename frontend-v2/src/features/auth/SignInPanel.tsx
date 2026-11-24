@@ -153,6 +153,7 @@ export function SignInPanel({
   flowQuery,
   followGoogle = false,
   offerGoogle = true,
+  onGoogle,
 }: {
   /** `/api/auth/login`, already prefixed and carrying `returnTo`. */
   readonly handOverHref: string;
@@ -206,6 +207,14 @@ export function SignInPanel({
    * panel alone, as its own tests render it, behaves as on the website.
    */
   readonly offerGoogle?: boolean;
+  /**
+   * Inside the app (Omer, 2026-11-24): Google as a BUTTON that runs the
+   * phone's own auth browser, given by the composition root (the app's
+   * handoff, `shell/mobile/app-google`). Drawn only when the stage offers
+   * Google, like the link. On `signed_in` the root navigates; this keeps
+   * the busy label until the page leaves.
+   */
+  readonly onGoogle?: () => Promise<'signed_in' | 'cancelled' | 'failed'>;
 }) {
   const t = useTranslations('auth');
   const [step, setStep] = useState<FlowStep | null>(null);
@@ -247,10 +256,11 @@ export function SignInPanel({
    * A stage only ever exists in the browser (the flow is started by an
    * effect), so reading the provider's origin from `window` here is safe.
    */
-  const googleUrl =
-    offerGoogle && step?.kind === 'identify'
-      ? googleSourceUrl(step.challenge.sources, providerOrigin())
-      : null;
+  const stageGoogle =
+    step?.kind === 'identify' ? googleSourceUrl(step.challenge.sources, providerOrigin()) : null;
+  const googleUrl = offerGoogle ? stageGoogle : null;
+  /* The app's own trip, when the stage offers Google and the root gave one. */
+  const nativeGoogle = !offerGoogle && stageGoogle !== null ? (onGoogle ?? null) : null;
 
   /*
    * `void` and a plain effect rather than a transition: this runs once on mount
@@ -764,6 +774,24 @@ export function SignInPanel({
             onClick={() => {
               keepRememberAnswer(remember);
               setLeaving(true);
+            }}
+          />
+        </>
+      ) : nativeGoogle ? (
+        <>
+          <OrRule word={t('google.or')} />
+          <GoogleButton
+            label={leaving ? t('google.busy') : t('google.continue')}
+            testId="google-sign-in"
+            disabled={leaving}
+            onClick={() => {
+              setLeaving(true);
+              setProblem(null);
+              void nativeGoogle().then((outcome) => {
+                if (outcome === 'signed_in') return;
+                setLeaving(false);
+                setProblem(outcome === 'cancelled' ? t('google.cancelled') : t('google.failed'));
+              });
             }}
           />
         </>

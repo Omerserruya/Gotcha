@@ -266,3 +266,39 @@ describe('★★ Google sign-in: the record, the connect answer, the Terms (2026
     expect(deleted(response, TERMS_PENDING_COOKIE)).toBe(true);
   });
 });
+
+const { APP_HANDOFF_COOKIE, redeemHandoffCode, s256, sealHandoffStart } =
+  await import('@/auth/app-handoff');
+
+describe('★★ the app’s sign-in: the cookies go to the app, not to this browser (2026-11-24)', () => {
+  const VERIFIER = 'v'.repeat(43);
+
+  const getFromApp = async () => {
+    const request = new NextRequest(CODE_URL);
+    request.cookies.set(LOGIN_STATE_COOKIE, 'sealed');
+    request.cookies.set(APP_HANDOFF_COOKIE, await sealHandoffStart(await s256(VERIFIER)));
+    return GET(request);
+  };
+
+  it('★★ back on gotcha:// with a code that redeems to this session', async () => {
+    recordSignIn.mockResolvedValue({ method: 'google', google: null, termsRequired: true });
+    const response = await getFromApp();
+    const location = new URL(response.headers.get('location') ?? '');
+    expect(`${location.protocol}//${location.host}${location.pathname}`).toBe('gotcha://auth/done');
+    const redeemed = await redeemHandoffCode(location.searchParams.get('code') ?? '', VERIFIER);
+    expect(redeemed).toEqual({ s: 'sealed-session', i: null, t: true });
+  });
+
+  it('⚠⚠ sets no session in this browser, and spends both one-trip cookies', async () => {
+    const response = await getFromApp();
+    const set = response.headers.getSetCookie();
+    expect(set.some((line) => line.includes('sealed-session'))).toBe(false);
+    expect(response.cookies.get(APP_HANDOFF_COOKIE)?.value).toBe('');
+    expect(response.cookies.get(LOGIN_STATE_COOKIE)?.value).toBe('');
+  });
+
+  it('★ without the app’s cookie: the website’s callback, unchanged', async () => {
+    const response = await get();
+    expect(response.headers.get('location')).toBe('https://dev.gotcha.co.il/inbox');
+  });
+});
