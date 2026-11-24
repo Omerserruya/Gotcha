@@ -41,13 +41,22 @@ describe('★★ where Google can run inside the app (2026-11-24)', () => {
     expect(appGoogleAvailable()).toBe(false);
   });
 
-  it('★ Android with Browser and App (every build so far): yes', () => {
+  it('★ an Android build with the marker, Browser and App: yes', () => {
     native(
       'android',
       { Browser: { open: vi.fn(), addListener: vi.fn() }, App: { addListener: vi.fn() } },
-      [],
+      ['openDocument', 'appGoogleSignIn'],
     );
     expect(appGoogleAvailable()).toBe(true);
+  });
+
+  it('⚠⚠ the store and closed-test Android builds (no marker): no, though both plugins are there', () => {
+    native(
+      'android',
+      { Browser: { open: vi.fn(), addListener: vi.fn() }, App: { addListener: vi.fn() } },
+      ['openDocument'],
+    );
+    expect(appGoogleAvailable()).toBe(false);
   });
 
   it('⚠ a browser: no', () => {
@@ -136,7 +145,7 @@ describe('★★ the Android trip', () => {
         return listener;
       }),
     };
-    native('android', { Browser: browser, App: app }, []);
+    native('android', { Browser: browser, App: app }, ['appGoogleSignIn']);
     return { handlers, browser, listener };
   };
 

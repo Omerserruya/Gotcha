@@ -3,7 +3,7 @@
 import { redeemAppSignIn } from '@/api/client/app-sign-in';
 import { appPath } from '@/lib/base-path';
 
-import { appPlugin, authPlugin, browserPlugin, nativePlatform } from './native';
+import { appPlugin, authPlugin, browserPlugin, hasNativeMethod, nativePlatform } from './native';
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -18,9 +18,10 @@ import { appPlugin, authPlugin, browserPlugin, nativePlatform } from './native';
  *   Android  @capacitor/browser (Custom Tabs) out, @capacitor/app's
  *            appUrlOpen back: gotcha:// is the app's own intent filter.
  *
- * ★ Only where it can work: an iPhone build that has `authenticate` (an older
- *   store build answers "not here", and the page shows no Google), or an
- *   Android build with both plugins (every build so far).
+ * ★ Only in a build that registered it (Capacitor's PluginHeaders): iOS
+ *   `authenticate`, Android the `appGoogleSignIn` marker. The store and
+ *   closed-test builds before them show no Google at all (the Supervisor,
+ *   2026-11-24: nothing changes for real users until walked on a phone).
  * ★ The verifier stays in this function: only its S256 leaves the app.
  */
 
@@ -34,6 +35,9 @@ export function appGoogleAvailable(): boolean {
   const platform = nativePlatform();
   if (platform === 'ios') return authPlugin() !== null;
   if (platform === 'android') {
+    // A build that carries the marker (NavigationPolicyPlugin.java): never the
+    // store or closed-test builds before it was walked on a phone.
+    if (!hasNativeMethod('NavigationPolicy', 'appGoogleSignIn')) return false;
     const browser = browserPlugin();
     return (
       browser !== null &&

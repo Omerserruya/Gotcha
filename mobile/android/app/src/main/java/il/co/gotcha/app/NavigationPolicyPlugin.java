@@ -107,6 +107,24 @@ public class NavigationPolicyPlugin extends Plugin {
     }
 
     /**
+     * "Continue with Google" inside the app (Omer, 2026-11-24): a CAPABILITY
+     * MARKER, nothing more. The Android trip itself is the page's
+     * (@capacitor/browser out, @capacitor/app appUrlOpen back on gotcha://,
+     * see frontend-v2 shell/mobile/app-google.ts), and every build so far has
+     * both plugins. The page offers Google only when Capacitor's PluginHeaders
+     * list THIS method, so the store and closed-test builds without it show no
+     * button until a build carrying it has been walked on a phone (the
+     * Supervisor, 2026-11-24). Mirror: authenticate in
+     * NavigationPolicyPlugin.swift, which is the real trip on iOS.
+     */
+    @PluginMethod
+    public void appGoogleSignIn(PluginCall call) {
+        JSObject ready = new JSObject();
+        ready.put("ready", true);
+        call.resolve(ready);
+    }
+
+    /**
      * A message's document (a PDF), opened in the phone's own viewer, not the
      * browser: the browser only downloaded it (Omer, 2026-11-04).
      *
