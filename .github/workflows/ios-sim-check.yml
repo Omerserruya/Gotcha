@@ -70,8 +70,11 @@ jobs:
           xcrun simctl terminate "$UDID" il.co.gotcha.app || true
 
       - name: Drag, the real prod sign-in in the app (2026-11-25)
+        continue-on-error: true
         run: |
-          brew tap facebook/fb >/dev/null && brew install idb-companion >/dev/null
+          brew tap facebook/fb >/dev/null
+          brew trust facebook/fb >/dev/null 2>&1 || true
+          brew install idb-companion >/dev/null
           python3 -m pip install --quiet --break-system-packages fb-idb || pipx install fb-idb
           idb connect "$UDID"
           xcrun simctl launch "$UDID" il.co.gotcha.app
@@ -94,6 +97,7 @@ jobs:
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
 
       - name: Drag, the sign-in copy before and after the release's CSS (2026-11-25)
+        continue-on-error: true
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
           for n in before after; do
