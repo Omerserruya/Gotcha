@@ -52,6 +52,15 @@ class MainViewController: CAPBridgeViewController {
         super.viewDidLoad()
         guard let web = webView else { return }
 
+        // ★ No rubber band anywhere (Omer, 2026-11-25: the sign-in "moves").
+        // The page's own scroll areas (the inbox, a thread, long settings)
+        // scroll inside the page and keep working; only the web view's outer
+        // bounce, past the edge of a page that fits, is gone. Scrolling a page
+        // taller than the screen still scrolls.
+        web.scrollView.bounces = false
+        web.scrollView.alwaysBounceVertical = false
+        web.scrollView.alwaysBounceHorizontal = false
+
         let container = UIView(frame: web.frame)
         // The splash's colour until the page reports its own.
         let splash = UIColor(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255, alpha: 1)
