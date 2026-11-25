@@ -11,7 +11,7 @@ android {
         // android.injected.version.code is ignored by bundleRelease, which is
         // how the first Play upload went out as versionCode 1 (2026-11-18).
         versionCode Integer.parseInt((project.findProperty('gotchaVersionCode') ?: '1').toString())
-        versionName "1.0"
+        versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
