@@ -69,6 +69,16 @@ jobs:
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/1-prod.png"
           xcrun simctl terminate "$UDID" il.co.gotcha.app || true
 
+      - name: Drag, the real prod sign-in in the app (2026-11-25)
+        run: |
+          brew tap facebook/fb >/dev/null && brew install idb-companion >/dev/null
+          python3 -m pip install --quiet --break-system-packages fb-idb || pipx install fb-idb
+          idb connect "$UDID"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 20
+          simcheck/drag.sh drag-prod
+          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+
       - name: Shot 2, the conversation layout copy
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
@@ -83,39 +93,18 @@ jobs:
           sleep 15
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
 
-      - name: Drag video, the real prod sign-in (2026-11-25)
+      - name: Drag, the sign-in copy before and after the release's CSS (2026-11-25)
         run: |
-          brew tap facebook/fb >/dev/null && brew install idb-companion >/dev/null
-          python3 -m pip install --quiet --break-system-packages fb-idb || pipx install fb-idb
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
-          xcrun simctl uninstall "$UDID" il.co.gotcha.app || true
-          xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" il.co.gotcha.app
-          sleep 20
-          idb connect "$UDID"
-          W=$(idb describe --udid "$UDID" --json | python3 -c "import json,sys; d=json.load(sys.stdin); print(int(d['screen_dimensions']['width_points']))")
-          H=$(idb describe --udid "$UDID" --json | python3 -c "import json,sys; d=json.load(sys.stdin); print(int(d['screen_dimensions']['height_points']))")
-          CX=$((W/2)); Y=$((H*35/100))
-          drag() { # $1 label
-            idb ui swipe --udid "$UDID" --duration 0.8 $((W*80/100)) $Y $((W*20/100)) $Y
-            idb ui swipe --udid "$UDID" --duration 0.8 $((W*20/100)) $Y $((W*80/100)) $Y
-            idb ui swipe --udid "$UDID" --duration 0.8 $CX $((H*30/100)) $CX $((H*55/100))
-            idb ui swipe --udid "$UDID" --duration 0.8 $CX $((H*55/100)) $CX $((H*30/100))
-            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/drag-$1.png"
-          }
-          xcrun simctl io "$UDID" recordVideo --codec h264 --force "$RUNNER_TEMP/shots/drag.mp4" &
-          REC=$!
-          sleep 2
-          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/drag-0-start-keyboard.png"
-          drag 1-keyboard-open
-          # The keyboard bar's Done (the check mark), bottom-trailing above the keys.
-          idb ui tap --udid "$UDID" $((W*90/100)) $((H*58/100)) || true
-          sleep 2
-          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/drag-2-start-closed.png"
-          drag 3-keyboard-closed
-          sleep 1
-          kill -INT $REC; wait $REC || true
-          xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          for n in before after; do
+            cp simcheck/signin-$n.html "$APP/public/index.html"
+            xcrun simctl uninstall "$UDID" il.co.gotcha.app
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl launch "$UDID" il.co.gotcha.app
+            sleep 12
+            simcheck/drag.sh drag-copy-$n
+            xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          done
 
       - name: Shot 3, Continue with Google against prod (2026-11-25)
         run: |
