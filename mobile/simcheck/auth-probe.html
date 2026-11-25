@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auth probe</title>
+<style>body{margin:0;padding:120px 20px;font:15px -apple-system,sans-serif;background:#fff;color:#111}#out{white-space:pre-wrap;font:13px monospace}</style>
+</head>
+<body>
+<h1>auth probe</h1>
+<p id="out">starting</p>
+<script>
+  // The app's own call (shell/mobile/app-google.ts iosTrip), against PROD's
+  // start, with a well-formed throwaway challenge: the auth sheet should open
+  // on Google's sign-in. Nobody signs in; the run ends with the screenshot.
+  const out = (t) => { document.getElementById('out').textContent = t; };
+  setTimeout(async () => {
+    const plugins = (window.Capacitor && window.Capacitor.Plugins) || {};
+    const headers = (window.Capacitor && window.Capacitor.PluginHeaders) || [];
+    const nav = headers.find((h) => h.name === 'NavigationPolicy');
+    out('authenticate registered: ' + !!(nav && nav.methods.some((m) => m.name === 'authenticate')));
+    try {
+      const r = await plugins.NavigationPolicy.authenticate({
+        url: 'https://app.gotcha.co.il/api/bff/app-sign-in/start?challenge=' + 'A'.repeat(43) + '&locale=he',
+        callbackScheme: 'gotcha',
+      });
+      out('resolved ' + JSON.stringify(r));
+    } catch (e) {
+      out('rejected ' + (e && e.message));
+    }
+  }, 1500);
+</script>
+</body>
+</html>

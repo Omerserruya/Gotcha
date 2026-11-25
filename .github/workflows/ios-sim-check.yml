@@ -83,6 +83,18 @@ jobs:
           sleep 15
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
 
+      - name: Shot 3, Continue with Google against prod (2026-11-25)
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          cp simcheck/auth-probe.html "$APP/public/index.html"
+          xcrun simctl uninstall "$UDID" il.co.gotcha.app
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" il.co.gotcha.app
+          sleep 8
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/3-auth-a.png"
+          sleep 12
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/3-auth-b.png"
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
