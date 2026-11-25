@@ -75,3 +75,27 @@
     mask-image: linear-gradient(to bottom, black calc(100% - var(--space-32)), transparent);
   }
 }
+
+/*
+ * ★★ NO ZOOM INTO A FIELD ON AN iPHONE (Omer, TestFlight, 2026-11-25)
+ * iOS zooms the page into a text field whose text is under 16px the moment
+ * it takes focus - the sign-in's email field takes it on load - and leaves it
+ * zoomed after: the screen looked enlarged and had to be scrolled. At 16px
+ * there is no zoom. The viewport's maximum-scale would also stop it, but it
+ * stops a person's own pinch on Android too.
+ *
+ * ★ iOS only (`-webkit-touch-callout` exists nowhere else) and touch only:
+ *   every other screen keeps the design's sizes.
+ * ★ In `utilities`, the last layer, so it wins over each field's own size.
+ */
+@layer utilities {
+  @supports (-webkit-touch-callout: none) {
+    @media (pointer: coarse) {
+      input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']),
+      textarea,
+      select {
+        font-size: var(--font-size-touch-field);
+      }
+    }
+  }
+}

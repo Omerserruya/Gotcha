@@ -66,6 +66,12 @@
     --font-size-serif-display: 32px;
     --font-size-serif-inline: 16px;
     --font-size-lead: 16px;
+    /*
+     * A text field on an iPhone: Safari and the app's WebView zoom the page
+     * into any field under 16px when it takes focus, and do not zoom back
+     * (Omer on the TestFlight build, 2026-11-25: the sign-in "as if zoomed").
+     */
+    --font-size-touch-field: 16px;
     /* A section heading inside the panel - Settings' own sidebar title. */
     --font-size-heading: 19px;
     --font-size-body-lg: 15.5px;
