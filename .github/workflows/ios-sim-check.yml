@@ -3,6 +3,8 @@
 # Builds the iPhone app for the simulator from the chosen ref and takes two
 # screenshots on an iPhone Pro (Dynamic Island, home indicator):
 #   1-prod.png    the real prod page in the app (the sign-in, keyboard open)
+#   zoom-before/after.png  mobile/simcheck/zoom-*.html: a 12.5px field, then
+#                 the same at 16px (base.css's iOS rule); prints the zoom
 #   2-thread.png  mobile/simcheck/thread.html, a copy of the /m conversation
 #                 layout rules, loaded locally; it prints innerH, scrollY, the
 #                 page's env(safe-area-inset-*) and the composer's gap
@@ -82,6 +84,19 @@ jobs:
           xcrun simctl launch "$UDID" il.co.gotcha.app
           sleep 15
           xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/2-thread.png"
+
+      - name: Shots 3 and 4, the field zoom before and after (2026-11-25)
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          for n in before after; do
+            cp simcheck/zoom-$n.html "$APP/public/index.html"
+            xcrun simctl uninstall "$UDID" il.co.gotcha.app
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl launch "$UDID" il.co.gotcha.app
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/zoom-$n.png"
+            xcrun simctl terminate "$UDID" il.co.gotcha.app || true
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()

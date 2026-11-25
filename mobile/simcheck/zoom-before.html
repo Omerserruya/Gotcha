@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>before</title>
+<style>
+  /* The prod sign-in's field, as SignInPanel.module.css draws it: 12.5px. */
+  body { margin: 0; padding: 120px 24px 0; font: 13px -apple-system, sans-serif; background: #f8f7f4; color: #121212; }
+  h1 { font-size: 36px; margin: 0 0 8px; }
+  label { display: block; margin: 24px 0 6px; color: #8c887f; font-size: 11.5px; }
+  .input { box-sizing: border-box; inline-size: 100%; padding: 12px; font: inherit; font-size: 12.5px; border: 1px solid #ddd8cf; border-radius: 10px; background: #fff; }
+  button { inline-size: 100%; margin-top: 24px; padding: 14px; border: 0; border-radius: 10px; background: #111; color: #fff; font-size: 14px; }
+  #scale { position: fixed; inset-block-start: 60px; inset-inline-start: 24px; font: 600 14px monospace; color: #b00; }
+  
+</style>
+</head>
+<body>
+  <p id="scale">scale ?</p>
+  <h1>ברוכים השבים</h1>
+  <p>תחזרו ישר למקום שבו הייתם.</p>
+  <label for="e">אימייל</label>
+  <input id="e" class="input" type="email" autofocus>
+  <label for="p">סיסמה</label>
+  <input id="p" class="input" type="password">
+  <button type="button">כניסה</button>
+  <script>
+    const show = () => { document.getElementById('scale').textContent = 'scale ' + (window.visualViewport ? visualViewport.scale.toFixed(2) : '?') + ' ' + document.title; };
+    setInterval(show, 300);
+    setTimeout(() => document.getElementById('e').focus(), 1500);
+  </script>
+</body>
+</html>
