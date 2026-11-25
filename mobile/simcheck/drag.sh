@@ -27,4 +27,12 @@ xcrun simctl io "$UDID" screenshot "$OUT/$N-2-closed-start.png"
 round
 sleep 1
 xcrun simctl io "$UDID" screenshot "$OUT/$N-3-closed-after.png"
+# Frontend-Team's check: keyboard up on the password field, then closed;
+# the page must sit where it started (compare 2-closed-start with 5-...).
+idb ui tap --udid "$UDID" $CX $((H*44/100)) || true
+sleep 2
+xcrun simctl io "$UDID" screenshot "$OUT/$N-4-password-keyboard.png"
+idb ui tap --udid "$UDID" $((W*90/100)) $((H*58/100)) || true
+sleep 2
+xcrun simctl io "$UDID" screenshot "$OUT/$N-5-password-closed.png"
 kill -INT $REC; wait $REC || true
